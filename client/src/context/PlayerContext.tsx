@@ -18,6 +18,7 @@ interface PlayerState {
   showPlayer: boolean;
   showAddToPlaylist: boolean;
   favorites: Set<string>;
+  recentAlbums: Album[];
 }
 
 interface PlayerContextValue extends PlayerState {
@@ -49,6 +50,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [showPlayer, setShowPlayer] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const currentSong = queue[currentIndex] ?? null;
@@ -130,6 +132,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setShowPlayer(true);
     setShowLyrics(false);
     setShowAddToPlaylist(false);
+    setRecentAlbums((prev) => {
+      const album = song.album;
+      const filtered = prev.filter((a) => a.id !== album.id);
+      return [album, ...filtered].slice(0, 8);
+    });
   }, []);
 
   const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
@@ -172,6 +179,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         showPlayer,
         showAddToPlaylist,
         favorites,
+        recentAlbums,
         playSong,
         togglePlay,
         next: handleNext,

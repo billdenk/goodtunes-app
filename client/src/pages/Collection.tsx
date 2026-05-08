@@ -11,7 +11,7 @@ import { ALBUMS, SONGS, type Album } from "@/data/musicData";
 export function Collection() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
-  const { playSong, currentSong } = usePlayer();
+  const { playSong, currentSong, recentAlbums } = usePlayer();
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
 
   const handlePlayAll = () => {
@@ -56,18 +56,14 @@ export function Collection() {
           </button>
         </header>
 
-        <div className="relative z-10 px-5 mb-1">
-          <h2 className="text-white/50 text-sm font-medium">My Library</h2>
-        </div>
-
-        <div className="relative z-10 flex gap-3 px-5 mt-3 mb-2">
+        <div className="relative z-10 flex gap-3 px-5 mt-1 mb-3">
           <button
             type="button"
             onClick={handlePlayAll}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-sm font-semibold active:scale-[0.97] transition-transform"
             style={{ background: "rgba(49,158,216,0.18)", border: "1px solid rgba(49,158,216,0.25)" }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="#319ED8">
               <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
             </svg>
             <span style={{ color: "#319ED8" }}>Play</span>
@@ -85,17 +81,57 @@ export function Collection() {
           </button>
         </div>
 
-        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-5 pb-2 mt-3">
-          <div className="grid grid-cols-2 gap-4">
-            {ALBUMS.map((album) => (
-              <AlbumCard
-                key={album.id}
-                album={album}
-                isCurrentlyPlaying={currentSong?.albumId === album.id}
-                onPress={() => navigate(`/album/${album.id}`)}
-                onCertPress={() => setCertAlbum(album)}
-              />
-            ))}
+        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide">
+          {recentAlbums.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between px-5 mb-3">
+                <h2 className="text-white text-base font-bold">Recently Played</h2>
+              </div>
+              <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pb-1">
+                {recentAlbums.map((album) => (
+                  <button
+                    key={album.id}
+                    type="button"
+                    onClick={() => navigate(`/album/${album.id}`)}
+                    className="flex-shrink-0 flex flex-col active:scale-[0.95] transition-transform"
+                    style={{ width: 90 }}
+                  >
+                    <div
+                      className="rounded-2xl overflow-hidden mb-1.5"
+                      style={{
+                        width: 90,
+                        height: 90,
+                        boxShadow: currentSong?.albumId === album.id
+                          ? "0 0 0 2px #319ED8, 0 4px 16px rgba(0,0,0,0.5)"
+                          : "0 4px 16px rgba(0,0,0,0.4)",
+                      }}
+                    >
+                      <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
+                    </div>
+                    <p className="text-white text-[11px] font-semibold truncate leading-tight text-left">{album.title}</p>
+                    <p className="text-white/45 text-[10px] truncate leading-tight text-left mt-0.5">{album.artist}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="px-5 mb-3">
+            <h2 className="text-white text-base font-bold">My Library</h2>
+          </div>
+
+          <div className="px-5 pb-4">
+            <div className="grid grid-cols-2 gap-4">
+              {ALBUMS.map((album) => (
+                <AlbumCard
+                  key={album.id}
+                  album={album}
+                  isCurrentlyPlaying={currentSong?.albumId === album.id}
+                  onPress={() => navigate(`/album/${album.id}`)}
+                  onCertPress={() => setCertAlbum(album)}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
@@ -132,7 +168,11 @@ function AlbumCard({
         type="button"
         onClick={onPress}
         className="relative aspect-square rounded-2xl overflow-hidden active:scale-[0.97] transition-transform"
-        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
+        style={{
+          boxShadow: isCurrentlyPlaying
+            ? "0 0 0 2px #319ED8, 0 4px 20px rgba(0,0,0,0.4)"
+            : "0 4px 20px rgba(0,0,0,0.4)",
+        }}
       >
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
         {isCurrentlyPlaying && (
@@ -145,7 +185,7 @@ function AlbumCard({
                   style={{
                     background: "white",
                     height: `${h * 100}%`,
-                    animation: `equalizerBounce 0.8s ease-in-out infinite alternate`,
+                    animation: "equalizerBounce 0.8s ease-in-out infinite alternate",
                     animationDelay: `${i * 0.2}s`,
                   }}
                 />
