@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
+import { apiRequest } from "@/lib/queryClient";
 
 interface PlaylistPickerSheetProps {
   songId: string;
@@ -21,12 +22,7 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
 
   const addMutation = useMutation({
     mutationFn: async (playlistId: string) => {
-      const res = await fetch(`/api/playlists/${playlistId}/songs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ songId, position: 0 }),
-      });
-      if (!res.ok) throw new Error("Failed to add");
+      const res = await apiRequest("POST", `/api/playlists/${playlistId}/songs`, { songId, position: 0 });
       return res.json();
     },
     onSuccess: (_data, playlistId) => {

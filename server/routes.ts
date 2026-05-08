@@ -26,10 +26,30 @@ declare module "express-session" {
   }
 }
 
+// Bearer-token store (token -> userId). Survives across requests in-memory.
+const tokenStore = new Map<string, string>();
+
+function generateToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
+function getUserIdFromRequest(req: Request): string | undefined {
+  if (req.session.userId) return req.session.userId;
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith("Bearer ")) {
+    const token = auth.slice(7);
+    return tokenStore.get(token);
+  }
+  return undefined;
+}
+
 function requireAuth(req: Request, res: Response, next: Function) {
-  if (!req.session.userId) {
+  const userId = getUserIdFromRequest(req);
+  if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+  // Make downstream handlers see it as a session userId for compat
+  req.session.userId = userId;
   next();
 }
 
@@ -60,7 +80,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const hashed = await hashPassword(password);
     const user = await storage.createUser({ username, displayName, password: hashed });
     req.session.userId = user.id;
-    return res.status(201).json({ id: user.id, username: user.username, displayName: user.displayName });
+    const token = generateToken();
+    tokenStore.set(token, user.id);
+    return res.status(201).json({ id: user.id, username: user.username, displayName: user.displayName, token });
   });
 
   app.post("/api/login", async (req, res) => {
@@ -73,10 +95,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(401).json({ message: "Invalid username or password" });
     }
     req.session.userId = user.id;
-    return res.json({ id: user.id, username: user.username, displayName: user.displayName });
+    const token = generateToken();
+    tokenStore.set(token, user.id);
+    return res.json({ id: user.id, username: user.username, displayName: user.displayName, token });
   });
 
   app.post("/api/logout", (req, res) => {
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith("Bearer ")) {
+      tokenStore.delete(auth.slice(7));
+    }
     req.session.destroy(() => {
       res.json({ message: "Logged out" });
     });

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -52,16 +53,7 @@ export function Playlists() {
 
   const createMutation = useMutation({
     mutationFn: async (name: string) => {
-      const res = await fetch("/api/playlists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Failed to create playlist" }));
-        throw new Error(err.message || "Failed to create playlist");
-      }
+      const res = await apiRequest("POST", "/api/playlists", { name });
       return res.json();
     },
     onSuccess: () => {
@@ -77,7 +69,7 @@ export function Playlists() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/playlists/${id}`, { method: "DELETE", credentials: "include" });
+      await apiRequest("DELETE", `/api/playlists/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
@@ -87,13 +79,7 @@ export function Playlists() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const res = await fetch(`/api/playlists/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name }),
-      });
-      if (!res.ok) throw new Error("Failed");
+      const res = await apiRequest("PUT", `/api/playlists/${id}`, { name });
       return res.json();
     },
     onSuccess: () => {
@@ -104,7 +90,7 @@ export function Playlists() {
 
   const removeSongMutation = useMutation({
     mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
-      await fetch(`/api/playlists/${playlistId}/songs/${songId}`, { method: "DELETE", credentials: "include" });
+      await apiRequest("DELETE", `/api/playlists/${playlistId}/songs/${songId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });

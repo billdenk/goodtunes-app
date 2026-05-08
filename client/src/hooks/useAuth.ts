@@ -1,9 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, setAuthToken, getAuthToken } from "@/lib/queryClient";
 
 interface AuthUser {
   id: string;
   username: string;
   displayName: string;
+}
+
+interface AuthResponse extends AuthUser {
+  token: string;
 }
 
 export function useAuth() {
@@ -12,7 +17,11 @@ export function useAuth() {
   const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/me"],
     queryFn: async () => {
-      const res = await fetch("/api/me");
+      const token = getAuthToken();
+      const res = await fetch("/api/me", {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.status === 401) return null;
       if (!res.ok) return null;
       return res.json();
@@ -26,16 +35,20 @@ export function useAuth() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(data),
       });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.message || "Login failed");
       }
-      return res.json() as Promise<AuthUser>;
+      return res.json() as Promise<AuthResponse>;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/me"], data);
+      if (data.token) setAuthToken(data.token);
+      const { token, ...user } = data;
+      queryClient.setQueryData(["/api/me"], user);
+      queryClient.invalidateQueries();
     },
   });
 
@@ -44,24 +57,29 @@ export function useAuth() {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(data),
       });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.message || "Registration failed");
       }
-      return res.json() as Promise<AuthUser>;
+      return res.json() as Promise<AuthResponse>;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/me"], data);
+      if (data.token) setAuthToken(data.token);
+      const { token, ...user } = data;
+      queryClient.setQueryData(["/api/me"], user);
+      queryClient.invalidateQueries();
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch("/api/logout", { method: "POST" });
+      await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
+      setAuthToken(null);
       queryClient.setQueryData(["/api/me"], null);
       queryClient.clear();
     },
@@ -69,15 +87,7 @@ export function useAuth() {
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { displayName?: string; username?: string }) => {
-      const res = await fetch("/api/me", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Update failed");
-      }
+      const res = await apiRequest("PUT", "/api/me", data);
       return res.json() as Promise<AuthUser>;
     },
     onSuccess: (data) => {
