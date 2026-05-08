@@ -183,7 +183,8 @@ export function Player() {
                 className="w-11 h-11 flex items-center justify-center text-white active:text-white/60 transition-colors"
               >
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 18l8.5-6L6 6v12zm2.5-6L18 18V6z" />
+                  <path d="M6 18l8.5-6L6 6v12z" />
+                  <rect x="16" y="6" width="2" height="12" rx="1" />
                 </svg>
               </button>
 
@@ -242,11 +243,9 @@ export function Player() {
                 className="flex flex-col items-center gap-1.5 text-white/40 active:text-white/70 transition-colors"
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="18" cy="5" r="3" />
-                  <circle cx="6" cy="12" r="3" />
-                  <circle cx="18" cy="19" r="3" />
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                  <polyline points="12 3 12 14" />
+                  <polyline points="8 7 12 3 16 7" />
+                  <path d="M20 14v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5" />
                 </svg>
                 <span className="text-[10px] font-medium">Share</span>
               </button>

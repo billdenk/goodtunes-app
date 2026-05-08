@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 
 interface PlaylistPickerSheetProps {
   songId: string;
@@ -9,6 +10,7 @@ interface PlaylistPickerSheetProps {
 
 export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPickerSheetProps) {
   const [added, setAdded] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
   const { data: playlists = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/playlists"],
@@ -29,6 +31,11 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
       setTimeout(onClose, 900);
     },
   });
+
+  const handleGoToPlaylists = () => {
+    onClose();
+    navigate("/playlists");
+  };
 
   return (
     <div className="fixed inset-0 flex items-end justify-center" style={{ zIndex: 80 }}>
@@ -53,14 +60,28 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
             </svg>
           </div>
         ) : playlists.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: "rgba(255,255,255,0.06)" }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round">
+          <div className="text-center py-6">
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: "rgba(255,255,255,0.06)" }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M3 6h18M3 10h14M3 14h10M17 14v6M14 17h6" />
               </svg>
             </div>
-            <p className="text-white/40 text-sm">No playlists yet.</p>
-            <p className="text-white/25 text-xs mt-1">Create one in the Playlists tab first.</p>
+            <p className="text-white/60 text-sm font-medium mb-1">No playlists yet</p>
+            <p className="text-white/30 text-xs mb-5">Create your first playlist to start adding songs.</p>
+            <button
+              type="button"
+              onClick={handleGoToPlaylists}
+              className="flex items-center justify-center gap-2 mx-auto px-6 py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-transform"
+              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Create a Playlist
+            </button>
           </div>
         ) : (
           <div className="flex flex-col gap-2 max-h-64 overflow-y-auto scrollbar-hide">
