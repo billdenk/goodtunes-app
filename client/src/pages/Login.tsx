@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
+import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 
 export function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -28,34 +29,31 @@ export function Login() {
   return (
     <main className="min-h-screen w-full bg-[#00062B] flex justify-center items-center">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-20" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-25" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-20" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-80 h-80 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #4AFFCA, transparent)" }} />
       </div>
 
       <div className="relative w-full max-w-[390px] px-6">
         <div className="flex flex-col items-center mb-10">
-          <img src="/figmaAssets/--.svg" alt="GoodTunes" className="w-8 h-10 mb-4" />
-          <div className="text-white/30 text-xs tracking-[0.3em] uppercase font-medium mb-2">GoodTunes®</div>
-          <h1 className="text-white text-3xl font-bold text-center leading-tight">
-            Your Music.<br />Your GoodDeed™.
-          </h1>
-          <p className="text-white/50 text-sm text-center mt-3">
+          <GoodTunesLogo size="lg" className="mb-4" />
+          <p className="text-white/40 text-sm text-center mt-3">
             {mode === "login" ? "Sign in to access your collection." : "Create your account to get started."}
           </p>
         </div>
 
-        <div className="bg-white/5 rounded-2xl p-1 flex mb-6">
+        <div className="rounded-2xl p-1 flex mb-6" style={{ background: "rgba(255,255,255,0.06)" }}>
           <button
             type="button"
             onClick={() => setMode("login")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${mode === "login" ? "bg-white/10 text-white" : "text-white/40"}`}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${mode === "login" ? "bg-white/15 text-white" : "text-white/40"}`}
           >
             Sign In
           </button>
           <button
             type="button"
             onClick={() => setMode("register")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${mode === "register" ? "bg-white/10 text-white" : "text-white/40"}`}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${mode === "register" ? "bg-white/15 text-white" : "text-white/40"}`}
           >
             Create Account
           </button>
@@ -70,7 +68,7 @@ export function Login() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Your full name"
-                className="w-full bg-white/8 border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
                 style={{ background: "rgba(255,255,255,0.06)" }}
                 required
               />
@@ -97,6 +95,7 @@ export function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
+              autoComplete="current-password"
               className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
               style={{ background: "rgba(255,255,255,0.06)" }}
               required
@@ -126,8 +125,8 @@ export function Login() {
           </button>
         </form>
 
-        <p className="text-center text-white/30 text-xs mt-8">
-          GoodTunes® · Digital GoodDeed™ Platform
+        <p className="text-center text-white/20 text-xs mt-8">
+          GoodTunes®
         </p>
       </div>
     </main>

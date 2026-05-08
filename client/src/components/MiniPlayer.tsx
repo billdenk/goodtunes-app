@@ -1,5 +1,4 @@
 import { usePlayer } from "@/context/PlayerContext";
-import { formatDuration } from "@/data/musicData";
 import { useLocation } from "wouter";
 
 export function MiniPlayer() {
@@ -8,54 +7,70 @@ export function MiniPlayer() {
 
   if (!currentSong || location === "/player") return null;
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progress = duration > 0 ? currentTime / duration : 0;
 
   return (
-    <div
-      className="absolute bottom-[83px] left-0 right-0 z-30 bg-[#0D1B4B]/90 backdrop-blur-xl border-t border-white/10 cursor-pointer"
-      onClick={() => setShowPlayer(true)}
-    >
-      <div className="h-0.5 bg-white/10">
-        <div
-          className="h-full bg-[#319ED8] transition-all duration-1000"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <div className="flex items-center gap-3 px-4 py-2.5">
-        <img
-          src={currentSong.album.artwork}
-          alt={currentSong.album.title}
-          className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-        />
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-medium truncate">{currentSong.title}</p>
-          <p className="text-white/50 text-xs truncate">{currentSong.album.artist}</p>
+    <div className="absolute bottom-[83px] left-0 right-0 z-30 px-3 pb-2">
+      <div
+        className="relative rounded-2xl overflow-hidden cursor-pointer active:scale-[0.98] transition-transform"
+        style={{
+          background: "rgba(28, 28, 30, 0.85)",
+          backdropFilter: "blur(20px) saturate(180%)",
+          WebkitBackdropFilter: "blur(20px) saturate(180%)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.08) inset",
+        }}
+        onClick={() => setShowPlayer(true)}
+      >
+        <div className="flex items-center gap-3 px-3 py-3">
+          <div className="relative flex-shrink-0">
+            <img
+              src={currentSong.album.artwork}
+              alt={currentSong.album.title}
+              className="w-11 h-11 rounded-xl object-cover"
+              style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
+            />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-[13px] font-semibold truncate leading-tight">{currentSong.title}</p>
+            <p className="text-white/60 text-[12px] truncate mt-0.5 leading-tight">{currentSong.album.artist}</p>
+          </div>
+
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+              className="w-9 h-9 flex items-center justify-center text-white rounded-xl active:bg-white/10"
+            >
+              {isPlaying ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="5" y="4" width="4" height="16" rx="1.5" />
+                  <rect x="15" y="4" width="4" height="16" rx="1.5" />
+                </svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
+                </svg>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); next(); }}
+              className="w-9 h-9 flex items-center justify-center text-white rounded-xl active:bg-white/10"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 18V6l8.5 6L6 18zm9-12h2v12h-2z" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-          className="text-white p-1"
-        >
-          {isPlaying ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5.14v14l11-7-11-7z" />
-            </svg>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); next(); }}
-          className="text-white/70 p-1"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 18L14.5 12 6 6v12zm8-12v12h2V6h-2z" />
-          </svg>
-        </button>
+
+        <div className="mx-3 mb-2.5 h-0.5 rounded-full bg-white/15 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-white transition-all duration-1000"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
       </div>
     </div>
   );

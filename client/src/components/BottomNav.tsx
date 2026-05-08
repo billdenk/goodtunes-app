@@ -1,18 +1,32 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 
-const NavIcon = ({ path, label, children, active }: { path: string; label: string; children: React.ReactNode; active: boolean }) => {
+const NavItem = ({
+  path,
+  label,
+  icon,
+  active,
+}: {
+  path: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+}) => {
   const [, navigate] = useLocation();
   return (
     <button
       type="button"
       onClick={() => navigate(path)}
-      className="flex flex-col items-center gap-1 min-w-[60px]"
+      className="flex flex-col items-center gap-[3px] min-w-[64px] py-1"
     >
-      <div className={`transition-colors ${active ? "text-[#319ED8]" : "text-white/50"}`}>
-        {children}
+      <div className={`transition-all duration-150 ${active ? "text-white scale-110" : "text-white/40"}`}>
+        {icon}
       </div>
-      <span className={`text-[10px] font-medium transition-colors ${active ? "text-[#319ED8]" : "text-white/50"}`}>
+      <span
+        className={`text-[10px] font-medium transition-colors duration-150 ${
+          active ? "text-white" : "text-white/40"
+        }`}
+      >
         {label}
       </span>
     </button>
@@ -24,31 +38,73 @@ export function BottomNav() {
   const { user } = useAuth();
 
   const initials = user?.displayName
-    ? user.displayName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    ? user.displayName
+        .split(" ")
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
     : "?";
 
   return (
-    <nav className="absolute bottom-0 left-0 right-0 z-40 h-[83px] bg-gradient-to-t from-[#00062B] to-[#00062B]/80 backdrop-blur-xl border-t border-white/10 flex items-start justify-around px-4 pt-3">
-      <NavIcon path="/collection" label="Collection" active={location === "/collection" || location === "/"}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor" />
-          <rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor" />
-          <rect x="3" y="13" width="8" height="8" rx="1.5" fill="currentColor" />
-          <rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" />
-        </svg>
-      </NavIcon>
+    <nav
+      className="absolute bottom-0 left-0 right-0 z-40 flex items-start justify-around px-4 pt-3 pb-safe"
+      style={{
+        height: "83px",
+        background: "rgba(0, 6, 43, 0.88)",
+        backdropFilter: "blur(24px) saturate(180%)",
+        WebkitBackdropFilter: "blur(24px) saturate(180%)",
+        borderTop: "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
+      <NavItem
+        path="/collection"
+        label="Library"
+        active={location === "/collection" || location === "/" || location.startsWith("/album")}
+        icon={
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M3 4.5h2v15H3V4.5zm4.5 0h2v15h-2V4.5zm3.5 0h8a1 1 0 011 1v13a1 1 0 01-1 1H11V4.5z"
+              fill="currentColor"
+              opacity={location === "/collection" || location === "/" || location.startsWith("/album") ? "1" : "0.6"}
+            />
+          </svg>
+        }
+      />
 
-      <NavIcon path="/playlists" label="Playlists" active={location.startsWith("/playlist")}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M3 6h18M3 10h14M3 14h10M17 14v6M14 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      </NavIcon>
+      <NavItem
+        path="/playlists"
+        label="Playlists"
+        active={location.startsWith("/playlist")}
+        icon={
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 6h16M4 10h12M4 14h8M15 17l5-3-5-3v6z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        }
+      />
 
-      <NavIcon path="/account" label="Account" active={location === "/account"}>
-        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-[9px] font-semibold transition-colors ${location === "/account" ? "border-[#319ED8] text-[#319ED8]" : "border-white/50 text-white/50"}`}>
-          {initials}
-        </div>
-      </NavIcon>
+      <NavItem
+        path="/account"
+        label="Account"
+        active={location === "/account"}
+        icon={
+          <div
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all ${
+              location === "/account"
+                ? "bg-white text-[#00062B]"
+                : "bg-white/20 text-white"
+            }`}
+          >
+            {initials}
+          </div>
+        }
+      />
     </nav>
   );
 }

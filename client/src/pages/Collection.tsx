@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { ALBUMS, SONGS, type Album } from "@/data/musicData";
 
 export function Collection() {
@@ -40,51 +40,52 @@ export function Collection() {
     <main className="min-h-screen w-full bg-[#00062B] flex justify-center">
       <section className="relative w-full max-w-[390px] min-h-screen bg-[#00062B] text-white overflow-hidden flex flex-col">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-15" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
-          <div className="absolute top-1/2 -left-20 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
+          <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-12" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
+          <div className="absolute top-1/2 -left-20 w-64 h-64 rounded-full opacity-8" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
         </div>
 
-        <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
-          <div>
-            <p className="text-white/40 text-xs font-medium uppercase tracking-widest">GoodTunes®</p>
-            <h1 className="text-white text-2xl font-bold mt-0.5">My Collection</h1>
-          </div>
+        <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-3">
+          <GoodTunesLogo size="md" />
           <button
             type="button"
             onClick={() => navigate("/account")}
-            className="w-9 h-9 rounded-full border border-white/20 flex items-center justify-center text-xs font-semibold text-white"
-            style={{ background: "rgba(255,255,255,0.06)" }}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
+            style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)" }}
           >
             {initials}
           </button>
         </header>
 
-        <div className="relative z-10 flex gap-3 px-5 mt-4 mb-2">
+        <div className="relative z-10 px-5 mb-1">
+          <h2 className="text-white/50 text-sm font-medium">My Library</h2>
+        </div>
+
+        <div className="relative z-10 flex gap-3 px-5 mt-3 mb-2">
           <button
             type="button"
             onClick={handlePlayAll}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border border-white/20 text-white text-sm font-semibold active:scale-[0.97] transition-transform"
-            style={{ background: "rgba(255,255,255,0.06)" }}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-sm font-semibold active:scale-[0.97] transition-transform"
+            style={{ background: "rgba(49,158,216,0.18)", border: "1px solid rgba(49,158,216,0.25)" }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5.14v14l11-7-11-7z" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
             </svg>
-            Play
+            <span style={{ color: "#319ED8" }}>Play</span>
           </button>
           <button
             type="button"
             onClick={handleShuffle}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border border-white/20 text-white text-sm font-semibold active:scale-[0.97] transition-transform"
-            style={{ background: "rgba(255,255,255,0.06)" }}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-sm font-semibold active:scale-[0.97] transition-transform"
+            style={{ background: "rgba(49,158,216,0.18)", border: "1px solid rgba(49,158,216,0.25)" }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round">
+              <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
             </svg>
-            Shuffle
+            <span style={{ color: "#319ED8" }}>Shuffle</span>
           </button>
         </div>
 
-        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-5 pb-2 mt-2">
+        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-5 pb-2 mt-3">
           <div className="grid grid-cols-2 gap-4">
             {ALBUMS.map((album) => (
               <AlbumCard
@@ -131,29 +132,31 @@ function AlbumCard({
         type="button"
         onClick={onPress}
         className="relative aspect-square rounded-2xl overflow-hidden active:scale-[0.97] transition-transform"
+        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
       >
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
         {isCurrentlyPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,6,43,0.5)" }}>
-            <div className="flex gap-0.5 items-end h-5">
-              {[1, 2, 3].map((i) => (
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,6,43,0.45)" }}>
+            <div className="flex gap-[3px] items-end h-5">
+              {[0.6, 1, 0.75].map((h, i) => (
                 <div
                   key={i}
-                  className="w-1 rounded-full animate-pulse"
+                  className="w-[3px] rounded-full"
                   style={{
-                    background: "#319ED8",
-                    height: `${i * 33}%`,
-                    animationDelay: `${i * 0.15}s`,
+                    background: "white",
+                    height: `${h * 100}%`,
+                    animation: `equalizerBounce 0.8s ease-in-out infinite alternate`,
+                    animationDelay: `${i * 0.2}s`,
                   }}
                 />
               ))}
             </div>
           </div>
         )}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 left-2">
           <span
             className="text-[9px] font-bold px-2 py-0.5 rounded-full"
-            style={{ background: "rgba(0,6,43,0.7)", color: "#319ED8", border: "1px solid rgba(49,158,216,0.3)" }}
+            style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)" }}
           >
             {album.type}
           </span>
@@ -162,16 +165,6 @@ function AlbumCard({
       <div className="mt-2 px-0.5">
         <p className="text-white text-sm font-semibold leading-tight truncate">{album.title}</p>
         <p className="text-white/50 text-xs truncate mt-0.5">{album.artist}</p>
-        <button
-          type="button"
-          onClick={onCertPress}
-          className="mt-1.5 flex items-center gap-1 text-[#4AFFCA] text-[10px] font-medium"
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-          </svg>
-          GoodDeed™ No. {(album.certificateNumber ?? 1).toString().padStart(2, "0")}
-        </button>
       </div>
     </div>
   );
