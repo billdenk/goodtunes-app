@@ -1,3 +1,6 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -6,8 +9,6 @@
     all: unset;
   }
 }
-
-@import url("https://fonts.googleapis.com/css?family=Inter:var(--headings-heading-06-font-weight),var(--text-caption-01-font-weight),var(--headings-heading-03-font-weight),var(--text-LABEL-03-font-weight),var(--action-button-01-font-weight),var(--text-footnote-02-font-weight),var(--headings-heading-04-font-weight),var(--text-caption-02-font-weight)");
 
 :root {
   --action-button-01-font-family: "Inter", Helvetica;
@@ -23,10 +24,10 @@
   --action-button-02-letter-spacing: 0px;
   --action-button-02-line-height: 24px;
   --app-background: rgba(0, 6, 43, 1);
-  --backdrop-blurs-backdrop-blur-md: ;
+  --backdrop-blurs-backdrop-blur-md: blur(12px);
   --baseblack: rgba(0, 0, 0, 1);
   --basewhite: rgba(255, 255, 255, 1);
-  --body-regular-font-family: "SF Pro Text", Helvetica;
+  --body-regular-font-family: "Inter", Helvetica;
   --body-regular-font-size: 17px;
   --body-regular-font-style: normal;
   --body-regular-font-weight: 400;
@@ -102,19 +103,19 @@
   --text-caption-01-font-style: normal;
   --text-caption-01-font-weight: 400;
   --text-caption-01-letter-spacing: 0px;
-  --text-caption-01-line-height: 18px;
+  --text-caption-01-line-height: 16px;
   --text-caption-02-font-family: "Inter", Helvetica;
   --text-caption-02-font-size: 12px;
   --text-caption-02-font-style: normal;
-  --text-caption-02-font-weight: 400;
+  --text-caption-02-font-weight: 600;
   --text-caption-02-letter-spacing: 0px;
-  --text-caption-02-line-height: 18px;
+  --text-caption-02-line-height: 16px;
   --text-footnote-01-font-family: "Inter", Helvetica;
-  --text-footnote-01-font-size: 10px;
+  --text-footnote-01-font-size: 13px;
   --text-footnote-01-font-style: normal;
   --text-footnote-01-font-weight: 400;
-  --text-footnote-01-letter-spacing: 0px;
-  --text-footnote-01-line-height: 12px;
+  --text-footnote-01-letter-spacing: -0.07999999821186066px;
+  --text-footnote-01-line-height: 18px;
   --text-footnote-02-font-family: "Inter", Helvetica;
   --text-footnote-02-font-size: 10px;
   --text-footnote-02-font-style: normal;
@@ -122,27 +123,27 @@
   --text-footnote-02-letter-spacing: 0px;
   --text-footnote-02-line-height: 12px;
   --text-LABEL-02-font-family: "Inter", Helvetica;
-  --text-LABEL-02-font-size: 12px;
+  --text-LABEL-02-font-size: 11px;
   --text-LABEL-02-font-style: normal;
-  --text-LABEL-02-font-weight: 400;
-  --text-LABEL-02-letter-spacing: 0px;
-  --text-LABEL-02-line-height: 18px;
+  --text-LABEL-02-font-weight: 500;
+  --text-LABEL-02-letter-spacing: 0.06000000238418579px;
+  --text-LABEL-02-line-height: 13px;
   --text-LABEL-03-font-family: "Inter", Helvetica;
-  --text-LABEL-03-font-size: 12px;
+  --text-LABEL-03-font-size: 10px;
   --text-LABEL-03-font-style: normal;
-  --text-LABEL-03-font-weight: 400;
-  --text-LABEL-03-letter-spacing: 0px;
+  --text-LABEL-03-font-weight: 500;
+  --text-LABEL-03-letter-spacing: 0.05999999865889549px;
   --text-LABEL-03-line-height: 18px;
   --text-lg-semibold-font-family: "Inter", Helvetica;
   --text-lg-semibold-font-size: 18px;
   --text-lg-semibold-font-style: normal;
-  --text-lg-semibold-font-weight: 400;
+  --text-lg-semibold-font-weight: 600;
   --text-lg-semibold-letter-spacing: 0px;
   --text-lg-semibold-line-height: 28px;
   --text-md-semibold-font-family: "Inter", Helvetica;
   --text-md-semibold-font-size: 16px;
   --text-md-semibold-font-style: normal;
-  --text-md-semibold-font-weight: 400;
+  --text-md-semibold-font-weight: 600;
   --text-md-semibold-letter-spacing: 0px;
   --text-md-semibold-line-height: 24px;
   --text-sm-regular-font-family: "Inter", Helvetica;
@@ -154,203 +155,70 @@
   --text-xs-semibold-font-family: "Inter", Helvetica;
   --text-xs-semibold-font-size: 12px;
   --text-xs-semibold-font-style: normal;
-  --text-xs-semibold-font-weight: 400;
+  --text-xs-semibold-font-weight: 600;
   --text-xs-semibold-letter-spacing: 0px;
   --text-xs-semibold-line-height: 18px;
-  --warning-100: rgba(254, 240, 199, 1);
-  --warning-50: rgba(255, 250, 235, 1);
+  --warning-100: rgba(255, 244, 230, 1);
+  --warning-50: rgba(255, 251, 245, 1);
   --warning-600: rgba(220, 104, 3, 1);
   --white: rgba(255, 255, 255, 1);
+  --radius: 0.5rem;
+
+  --background: 223 89% 8%;
+  --foreground: 0 0% 100%;
+  --card: 223 89% 12%;
+  --card-foreground: 0 0% 100%;
+  --popover: 223 89% 10%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 204 73% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 223 50% 18%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 223 50% 15%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 204 73% 52%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 223 50% 18%;
+  --input: 223 50% 18%;
+  --ring: 204 73% 52%;
 }
 
-:root {
-  --animate-spin: spin 1s linear infinite;
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
-.animate-fade-in {
-  animation: fade-in 1s var(--animation-delay, 0s) ease forwards;
+body {
+  background-color: #00062B;
+  color: white;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overscroll-behavior: none;
 }
 
-.animate-fade-up {
-  animation: fade-up 1s var(--animation-delay, 0s) ease forwards;
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
-.animate-marquee {
-  animation: marquee var(--duration) infinite linear;
+.player-progress-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
 }
 
-.animate-marquee-vertical {
-  animation: marquee-vertical var(--duration) linear infinite;
-}
-
-.animate-shimmer {
-  animation: shimmer 8s infinite;
-}
-
-.animate-spin {
-  animation: var(--animate-spin);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
-@keyframes image-glow {
-  0% {
-    opacity: 0;
-    animation-timing-function: cubic-bezier(0.74, 0.25, 0.76, 1);
-  }
-
-  10% {
-    opacity: 0.7;
-    animation-timing-function: cubic-bezier(0.12, 0.01, 0.08, 0.99);
-  }
-
-  to {
-    opacity: 0.4;
-  }
-}
-
-@keyframes fade-in {
-  0% {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes fade-up {
-  0% {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes shimmer {
-  0%,
-  90%,
-  to {
-    background-position: calc(-100% - var(--shimmer-width)) 0;
-  }
-
-  30%,
-  60% {
-    background-position: calc(100% + var(--shimmer-width)) 0;
-  }
-}
-
-@keyframes marquee {
-  0% {
-    transform: translate(0);
-  }
-
-  to {
-    transform: translateX(calc(-100% - var(--gap)));
-  }
-}
-
-@keyframes marquee-vertical {
-  0% {
-    transform: translateY(0);
-  }
-
-  to {
-    transform: translateY(calc(-100% - var(--gap)));
-  }
-}
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 47.4% 11.2%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-
-    --card: transparent;
-    --card-foreground: 222.2 47.4% 11.2%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 100% 50%;
-    --destructive-foreground: 210 40% 98%;
-
-    --ring: 215 20.2% 65.1%;
-
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-
-    --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
-
-    --accent: 216 34% 17%;
-    --accent-foreground: 210 40% 98%;
-
-    --popover: 224 71% 4%;
-    --popover-foreground: 215 20.2% 65.1%;
-
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
-
-    --card: transparent;
-    --card-foreground: 213 31% 91%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 1.2%;
-
-    --secondary: 222.2 47.4% 11.2%;
-    --secondary-foreground: 210 40% 98%;
-
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-
-    --ring: 216 34% 17%;
-
-    --radius: 0.5rem;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings:
-      "rlig" 1,
-      "calt" 1;
-  }
+.player-progress-thumb::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  cursor: pointer;
 }
