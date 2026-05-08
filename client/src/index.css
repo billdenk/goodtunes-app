@@ -1,0 +1,356 @@
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .all-\[unset\] {
+    all: unset;
+  }
+}
+
+@import url("https://fonts.googleapis.com/css?family=Inter:var(--headings-heading-06-font-weight),var(--text-caption-01-font-weight),var(--headings-heading-03-font-weight),var(--text-LABEL-03-font-weight),var(--action-button-01-font-weight),var(--text-footnote-02-font-weight),var(--headings-heading-04-font-weight),var(--text-caption-02-font-weight)");
+
+:root {
+  --action-button-01-font-family: "Inter", Helvetica;
+  --action-button-01-font-size: 16px;
+  --action-button-01-font-style: normal;
+  --action-button-01-font-weight: 400;
+  --action-button-01-letter-spacing: 0px;
+  --action-button-01-line-height: 24px;
+  --action-button-02-font-family: "Inter", Helvetica;
+  --action-button-02-font-size: 14px;
+  --action-button-02-font-style: normal;
+  --action-button-02-font-weight: 400;
+  --action-button-02-letter-spacing: 0px;
+  --action-button-02-line-height: 24px;
+  --app-background: rgba(0, 6, 43, 1);
+  --backdrop-blurs-backdrop-blur-md: ;
+  --baseblack: rgba(0, 0, 0, 1);
+  --basewhite: rgba(255, 255, 255, 1);
+  --body-regular-font-family: "SF Pro Text", Helvetica;
+  --body-regular-font-size: 17px;
+  --body-regular-font-style: normal;
+  --body-regular-font-weight: 400;
+  --body-regular-letter-spacing: -0.40799999237060547px;
+  --body-regular-line-height: 22px;
+  --brand-600: rgba(127, 86, 217, 1);
+  --focus-rings-ring-brand-shadow-xs: 0px 0px 0px 4px rgba(158, 119, 237, 0.24), 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  --gray-100: rgba(242, 244, 247, 1);
+  --gray-200: rgba(234, 236, 240, 1);
+  --gray-300: rgba(208, 213, 221, 1);
+  --gray-400: rgba(152, 162, 179, 1);
+  --gray-600: rgba(71, 84, 103, 1);
+  --gray-700: rgba(52, 64, 84, 1);
+  --gray-900: rgba(16, 24, 40, 1);
+  --headings-heading-02-font-family: "Inter", Helvetica;
+  --headings-heading-02-font-size: 40px;
+  --headings-heading-02-font-style: normal;
+  --headings-heading-02-font-weight: 700;
+  --headings-heading-02-letter-spacing: 0px;
+  --headings-heading-02-line-height: 48px;
+  --headings-heading-03-font-family: "Inter", Helvetica;
+  --headings-heading-03-font-size: 32px;
+  --headings-heading-03-font-style: normal;
+  --headings-heading-03-font-weight: 700;
+  --headings-heading-03-letter-spacing: 0px;
+  --headings-heading-03-line-height: 40px;
+  --headings-heading-04-font-family: "Inter", Helvetica;
+  --headings-heading-04-font-size: 24px;
+  --headings-heading-04-font-style: normal;
+  --headings-heading-04-font-weight: 400;
+  --headings-heading-04-letter-spacing: 0px;
+  --headings-heading-04-line-height: 32px;
+  --headings-heading-06-font-family: "Inter", Helvetica;
+  --headings-heading-06-font-size: 18px;
+  --headings-heading-06-font-style: normal;
+  --headings-heading-06-font-weight: 400;
+  --headings-heading-06-letter-spacing: 0px;
+  --headings-heading-06-line-height: 24px;
+  --headings-heading-07-font-family: "Inter", Helvetica;
+  --headings-heading-07-font-size: 18px;
+  --headings-heading-07-font-style: normal;
+  --headings-heading-07-font-weight: 400;
+  --headings-heading-07-letter-spacing: 0px;
+  --headings-heading-07-line-height: 24px;
+  --label-colorlightprimary: rgba(0, 0, 0, 1);
+  --neutralash-03: rgba(152, 162, 179, 1);
+  --neutralash-04: rgba(234, 236, 240, 1);
+  --neutralash-05: rgba(249, 250, 251, 1);
+  --primarypetrol-blue-01: rgba(0, 6, 43, 1);
+  --primarypetrol-blue-02: rgba(29, 94, 143, 1);
+  --primarypetrol-blue-03: rgba(49, 158, 216, 1);
+  --primarypetrol-blue-05: rgba(222, 240, 249, 1);
+  --secondaryfuchsia-pink-02: rgba(127, 16, 167, 1);
+  --separator-colorlightwith-transparency: rgba(60, 60, 67, 0.36);
+  --shadows-shadow-xl: 0px 8px 8px -4px rgba(16, 24, 40, 0.03), 0px 20px 24px -4px rgba(16, 24, 40, 0.08);
+  --shadows-shadow-xs: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  --system-backgroundlightprimary: rgba(255, 255, 255, 1);
+  --tertiarygraph-green-04: rgba(74, 255, 202, 1);
+  --text-body-01-font-family: "Inter", Helvetica;
+  --text-body-01-font-size: 16px;
+  --text-body-01-font-style: normal;
+  --text-body-01-font-weight: 400;
+  --text-body-01-letter-spacing: 0px;
+  --text-body-01-line-height: 24px;
+  --text-body-02-font-family: "Inter", Helvetica;
+  --text-body-02-font-size: 14px;
+  --text-body-02-font-style: normal;
+  --text-body-02-font-weight: 400;
+  --text-body-02-letter-spacing: 0px;
+  --text-body-02-line-height: 20px;
+  --text-caption-01-font-family: "Inter", Helvetica;
+  --text-caption-01-font-size: 12px;
+  --text-caption-01-font-style: normal;
+  --text-caption-01-font-weight: 400;
+  --text-caption-01-letter-spacing: 0px;
+  --text-caption-01-line-height: 18px;
+  --text-caption-02-font-family: "Inter", Helvetica;
+  --text-caption-02-font-size: 12px;
+  --text-caption-02-font-style: normal;
+  --text-caption-02-font-weight: 400;
+  --text-caption-02-letter-spacing: 0px;
+  --text-caption-02-line-height: 18px;
+  --text-footnote-01-font-family: "Inter", Helvetica;
+  --text-footnote-01-font-size: 10px;
+  --text-footnote-01-font-style: normal;
+  --text-footnote-01-font-weight: 400;
+  --text-footnote-01-letter-spacing: 0px;
+  --text-footnote-01-line-height: 12px;
+  --text-footnote-02-font-family: "Inter", Helvetica;
+  --text-footnote-02-font-size: 10px;
+  --text-footnote-02-font-style: normal;
+  --text-footnote-02-font-weight: 400;
+  --text-footnote-02-letter-spacing: 0px;
+  --text-footnote-02-line-height: 12px;
+  --text-LABEL-02-font-family: "Inter", Helvetica;
+  --text-LABEL-02-font-size: 12px;
+  --text-LABEL-02-font-style: normal;
+  --text-LABEL-02-font-weight: 400;
+  --text-LABEL-02-letter-spacing: 0px;
+  --text-LABEL-02-line-height: 18px;
+  --text-LABEL-03-font-family: "Inter", Helvetica;
+  --text-LABEL-03-font-size: 12px;
+  --text-LABEL-03-font-style: normal;
+  --text-LABEL-03-font-weight: 400;
+  --text-LABEL-03-letter-spacing: 0px;
+  --text-LABEL-03-line-height: 18px;
+  --text-lg-semibold-font-family: "Inter", Helvetica;
+  --text-lg-semibold-font-size: 18px;
+  --text-lg-semibold-font-style: normal;
+  --text-lg-semibold-font-weight: 400;
+  --text-lg-semibold-letter-spacing: 0px;
+  --text-lg-semibold-line-height: 28px;
+  --text-md-semibold-font-family: "Inter", Helvetica;
+  --text-md-semibold-font-size: 16px;
+  --text-md-semibold-font-style: normal;
+  --text-md-semibold-font-weight: 400;
+  --text-md-semibold-letter-spacing: 0px;
+  --text-md-semibold-line-height: 24px;
+  --text-sm-regular-font-family: "Inter", Helvetica;
+  --text-sm-regular-font-size: 14px;
+  --text-sm-regular-font-style: normal;
+  --text-sm-regular-font-weight: 400;
+  --text-sm-regular-letter-spacing: 0px;
+  --text-sm-regular-line-height: 20px;
+  --text-xs-semibold-font-family: "Inter", Helvetica;
+  --text-xs-semibold-font-size: 12px;
+  --text-xs-semibold-font-style: normal;
+  --text-xs-semibold-font-weight: 400;
+  --text-xs-semibold-letter-spacing: 0px;
+  --text-xs-semibold-line-height: 18px;
+  --warning-100: rgba(254, 240, 199, 1);
+  --warning-50: rgba(255, 250, 235, 1);
+  --warning-600: rgba(220, 104, 3, 1);
+  --white: rgba(255, 255, 255, 1);
+}
+
+:root {
+  --animate-spin: spin 1s linear infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-fade-up {
+  animation: fade-up 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-marquee {
+  animation: marquee var(--duration) infinite linear;
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical var(--duration) linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 8s infinite;
+}
+
+.animate-spin {
+  animation: var(--animate-spin);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes image-glow {
+  0% {
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.74, 0.25, 0.76, 1);
+  }
+
+  10% {
+    opacity: 0.7;
+    animation-timing-function: cubic-bezier(0.12, 0.01, 0.08, 0.99);
+  }
+
+  to {
+    opacity: 0.4;
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  90%,
+  to {
+    background-position: calc(-100% - var(--shimmer-width)) 0;
+  }
+
+  30%,
+  60% {
+    background-position: calc(100% + var(--shimmer-width)) 0;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translate(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes marquee-vertical {
+  0% {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+
+    --card: transparent;
+    --card-foreground: 222.2 47.4% 11.2%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 215 20.2% 65.1%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+
+    --card: transparent;
+    --card-foreground: 213 31% 91%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 216 34% 17%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}
