@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { ALBUMS, SONGS, getSongsByAlbum, formatDuration, type Song, type Album } from "@/data/musicData";
 
 export function AlbumDetail() {
@@ -15,35 +16,10 @@ export function AlbumDetail() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showCert, setShowCert] = useState(false);
-  const [addingToPlaylist, setAddingToPlaylist] = useState<string | null>(null);
   const [showPlaylistPicker, setShowPlaylistPicker] = useState<Song | null>(null);
 
   const album = ALBUMS.find((a) => a.id === id);
   const songs = album ? getSongsByAlbum(id) : [];
-
-  const { data: playlists = [] } = useQuery<any[]>({
-    queryKey: ["/api/playlists"],
-    queryFn: async () => {
-      const res = await fetch("/api/playlists");
-      if (!res.ok) return [];
-      return res.json();
-    },
-  });
-
-  const addToPlaylistMutation = useMutation({
-    mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
-      const res = await fetch(`/api/playlists/${playlistId}/songs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ songId, position: 0 }),
-      });
-      if (!res.ok) throw new Error("Failed to add");
-      return res.json();
-    },
-    onSuccess: () => {
-      setShowPlaylistPicker(null);
-    },
-  });
 
   if (!album) {
     return (
@@ -224,41 +200,11 @@ export function AlbumDetail() {
         )}
 
         {showPlaylistPicker && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowPlaylistPicker(null)} />
-            <div className="relative w-full max-w-[390px] z-10 bg-[#0D1B4B] rounded-t-3xl p-5 pb-10">
-              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-              <h3 className="text-white font-semibold text-base mb-1">Add to Playlist</h3>
-              <p className="text-white/40 text-sm mb-4">{showPlaylistPicker.title}</p>
-              {playlists.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-white/40 text-sm">No playlists yet.</p>
-                  <button
-                    onClick={() => { setShowPlaylistPicker(null); }}
-                    className="mt-3 text-[#319ED8] text-sm"
-                  >
-                    Create one in Playlists tab
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto scrollbar-hide">
-                  {playlists.map((pl: any) => (
-                    <button
-                      key={pl.id}
-                      type="button"
-                      onClick={() => addToPlaylistMutation.mutate({ playlistId: pl.id, songId: showPlaylistPicker.id })}
-                      className="flex items-center gap-3 py-3 px-4 rounded-2xl bg-white/5 text-white text-sm font-medium text-left active:bg-white/10"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M3 6h18M3 10h14M3 14h10M17 14v6M14 17h6" strokeLinecap="round" />
-                      </svg>
-                      {pl.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <PlaylistPickerSheet
+            songId={showPlaylistPicker.id}
+            songTitle={showPlaylistPicker.title}
+            onClose={() => setShowPlaylistPicker(null)}
+          />
         )}
       </section>
     </main>

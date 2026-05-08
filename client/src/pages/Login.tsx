@@ -42,18 +42,27 @@ export function Login() {
           </p>
         </div>
 
-        <div className="rounded-2xl p-1 flex mb-6" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div className="relative flex mb-6 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.07)" }}>
+          <div
+            className="absolute top-1 bottom-1 rounded-xl transition-all duration-200"
+            style={{
+              width: "calc(50% - 4px)",
+              left: mode === "login" ? "4px" : "calc(50%)",
+              background: "rgba(255,255,255,0.15)",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+            }}
+          />
           <button
             type="button"
             onClick={() => setMode("login")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${mode === "login" ? "bg-white/15 text-white" : "text-white/40"}`}
+            className={`relative flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-150 ${mode === "login" ? "text-white" : "text-white/35"}`}
           >
             Sign In
           </button>
           <button
             type="button"
             onClick={() => setMode("register")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${mode === "register" ? "bg-white/15 text-white" : "text-white/40"}`}
+            className={`relative flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-150 ${mode === "register" ? "text-white" : "text-white/35"}`}
           >
             Create Account
           </button>

@@ -16,6 +16,8 @@ interface PlayerState {
   repeat: "none" | "all" | "one";
   showLyrics: boolean;
   showPlayer: boolean;
+  showAddToPlaylist: boolean;
+  favorites: Set<string>;
 }
 
 interface PlayerContextValue extends PlayerState {
@@ -28,6 +30,9 @@ interface PlayerContextValue extends PlayerState {
   toggleRepeat: () => void;
   setShowLyrics: (show: boolean) => void;
   setShowPlayer: (show: boolean) => void;
+  setShowAddToPlaylist: (show: boolean) => void;
+  toggleFavorite: (songId: string) => void;
+  isFavorite: (songId: string) => boolean;
   addToQueue: (song: PlayerSong) => void;
 }
 
@@ -42,6 +47,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [repeat, setRepeat] = useState<"none" | "all" | "one">("none");
   const [showLyrics, setShowLyrics] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const currentSong = queue[currentIndex] ?? null;
@@ -58,9 +65,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     clearTimer();
     intervalRef.current = setInterval(() => {
       setCurrentTime((prev) => {
-        if (prev >= duration - 1) {
-          return prev;
-        }
+        if (prev >= duration - 1) return prev;
         return prev + 1;
       });
     }, 1000);
@@ -123,17 +128,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0);
     setIsPlaying(true);
     setShowPlayer(true);
+    setShowLyrics(false);
+    setShowAddToPlaylist(false);
   }, []);
 
   const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
-
   const seekTo = useCallback((time: number) => setCurrentTime(Math.max(0, Math.min(time, duration))), [duration]);
-
   const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
-
   const toggleRepeat = useCallback(() => {
     setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"));
   }, []);
+
+  const toggleFavorite = useCallback((songId: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(songId)) {
+        next.delete(songId);
+      } else {
+        next.add(songId);
+      }
+      return next;
+    });
+  }, []);
+
+  const isFavorite = useCallback((songId: string) => favorites.has(songId), [favorites]);
 
   const addToQueue = useCallback((song: PlayerSong) => {
     setQueue((q) => [...q, song]);
@@ -152,6 +170,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         repeat,
         showLyrics,
         showPlayer,
+        showAddToPlaylist,
+        favorites,
         playSong,
         togglePlay,
         next: handleNext,
@@ -161,6 +181,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         toggleRepeat,
         setShowLyrics,
         setShowPlayer,
+        setShowAddToPlaylist,
+        toggleFavorite,
+        isFavorite,
         addToQueue,
       }}
     >
