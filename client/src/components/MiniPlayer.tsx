@@ -2,19 +2,17 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useLocation } from "wouter";
 
 export function MiniPlayer() {
-  const { currentSong, isPlaying, togglePlay, next, setShowPlayer, currentTime, duration } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, next, setShowPlayer } = usePlayer();
   const [location] = useLocation();
 
   if (!currentSong || location === "/player") return null;
 
-  const progress = duration > 0 ? currentTime / duration : 0;
-
   return (
     <div className="absolute bottom-[83px] left-0 right-0 z-30 px-4 pb-1">
       <div
-        className="relative overflow-hidden"
+        className="relative cursor-pointer active:scale-[0.98] transition-transform"
         style={{
-          borderRadius: 28,
+          borderRadius: 9999,
           background: "rgba(36, 36, 40, 0.92)",
           backdropFilter: "blur(28px) saturate(180%)",
           WebkitBackdropFilter: "blur(28px) saturate(180%)",
@@ -22,7 +20,7 @@ export function MiniPlayer() {
         }}
         onClick={() => setShowPlayer(true)}
       >
-        <div className="flex items-center gap-3 px-3 py-2.5">
+        <div className="flex items-center gap-3 pl-2 pr-3 py-2">
           <img
             src={currentSong.album.artwork}
             alt={currentSong.album.title}
@@ -39,7 +37,7 @@ export function MiniPlayer() {
             <button
               type="button"
               onClick={togglePlay}
-              className="w-10 h-10 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+              className="w-9 h-9 flex items-center justify-center text-white active:opacity-60 transition-opacity"
             >
               {isPlaying ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -55,7 +53,7 @@ export function MiniPlayer() {
             <button
               type="button"
               onClick={next}
-              className="w-10 h-10 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+              className="w-9 h-9 flex items-center justify-center text-white active:opacity-60 transition-opacity"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 18l8.5-6L6 6v12z" />
@@ -63,13 +61,6 @@ export function MiniPlayer() {
               </svg>
             </button>
           </div>
-        </div>
-
-        <div className="mx-0 h-[2px] bg-white/10 overflow-hidden" style={{ borderRadius: 0 }}>
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${progress * 100}%`, background: "rgba(255,255,255,0.55)", transition: "width 1s linear" }}
-          />
         </div>
       </div>
     </div>

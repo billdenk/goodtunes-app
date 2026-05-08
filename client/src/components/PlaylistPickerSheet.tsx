@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { usePlayer } from "@/context/PlayerContext";
 
 interface PlaylistPickerSheetProps {
   songId: string;
@@ -11,6 +12,7 @@ interface PlaylistPickerSheetProps {
 export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPickerSheetProps) {
   const [added, setAdded] = useState<string | null>(null);
   const [, navigate] = useLocation();
+  const { setShowPlayer } = usePlayer();
 
   const { data: playlistsRaw, isLoading } = useQuery<any[] | null>({
     queryKey: ["/api/playlists"],
@@ -35,6 +37,7 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
 
   const handleGoToPlaylists = () => {
     onClose();
+    setShowPlayer(false);
     navigate("/playlists?create=1");
   };
 

@@ -32,8 +32,10 @@ export function Playlists() {
 
   // Auto-open create dialog when arriving with ?create=1
   useEffect(() => {
-    if (location.includes("create=1")) {
+    if (typeof window !== "undefined" && window.location.search.includes("create=1")) {
       setShowCreate(true);
+      // Clean the URL so refresh doesn't re-trigger
+      window.history.replaceState({}, "", "/playlists");
     }
   }, [location]);
 
