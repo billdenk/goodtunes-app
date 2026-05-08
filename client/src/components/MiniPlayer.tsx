@@ -14,7 +14,7 @@ export function MiniPlayer() {
       <div
         className="relative overflow-hidden"
         style={{
-          borderRadius: 18,
+          borderRadius: 28,
           background: "rgba(36, 36, 40, 0.92)",
           backdropFilter: "blur(28px) saturate(180%)",
           WebkitBackdropFilter: "blur(28px) saturate(180%)",

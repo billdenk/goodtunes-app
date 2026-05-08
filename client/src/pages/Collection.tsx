@@ -87,7 +87,7 @@ export function Collection() {
               <div className="flex items-center justify-between px-5 mb-3">
                 <h2 className="text-white text-base font-bold">Recently Played</h2>
               </div>
-              <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pb-1">
+              <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pt-2 pb-2" style={{ marginTop: -8 }}>
                 {recentAlbums.map((album) => (
                   <button
                     key={album.id}
