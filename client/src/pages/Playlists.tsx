@@ -37,14 +37,16 @@ export function Playlists() {
     }
   }, [location]);
 
-  const { data: playlists = [], isLoading } = useQuery<Playlist[]>({
+  const { data: playlistsRaw, isLoading } = useQuery<Playlist[] | null>({
     queryKey: ["/api/playlists"],
   });
+  const playlists = playlistsRaw ?? [];
 
-  const { data: playlistSongs = [] } = useQuery<PlaylistSongEntry[]>({
+  const { data: playlistSongsRaw } = useQuery<PlaylistSongEntry[] | null>({
     queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"],
     enabled: !!selectedPlaylist,
   });
+  const playlistSongs = playlistSongsRaw ?? [];
 
   const createMutation = useMutation({
     mutationFn: async (name: string) => {

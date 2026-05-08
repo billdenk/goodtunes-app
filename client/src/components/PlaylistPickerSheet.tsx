@@ -12,9 +12,10 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
   const [added, setAdded] = useState<string | null>(null);
   const [, navigate] = useLocation();
 
-  const { data: playlists = [], isLoading } = useQuery<any[]>({
+  const { data: playlistsRaw, isLoading } = useQuery<any[] | null>({
     queryKey: ["/api/playlists"],
   });
+  const playlists = playlistsRaw ?? [];
 
   const addMutation = useMutation({
     mutationFn: async (playlistId: string) => {
