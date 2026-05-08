@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
@@ -19,32 +19,30 @@ interface PlaylistSongEntry {
 }
 
 export function Playlists() {
+  const [location] = useLocation();
   const [, navigate] = useLocation();
   const { playSong } = usePlayer();
   const queryClient = useQueryClient();
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [editName, setEditName] = useState("");
 
+  // Auto-open create dialog when arriving with ?create=1
+  useEffect(() => {
+    if (location.includes("create=1")) {
+      setShowCreate(true);
+    }
+  }, [location]);
+
   const { data: playlists = [], isLoading } = useQuery<Playlist[]>({
     queryKey: ["/api/playlists"],
-    queryFn: async () => {
-      const res = await fetch("/api/playlists");
-      if (!res.ok) return [];
-      return res.json();
-    },
   });
 
   const { data: playlistSongs = [] } = useQuery<PlaylistSongEntry[]>({
     queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"],
-    queryFn: async () => {
-      if (!selectedPlaylist) return [];
-      const res = await fetch(`/api/playlists/${selectedPlaylist.id}/songs`);
-      if (!res.ok) return [];
-      return res.json();
-    },
     enabled: !!selectedPlaylist,
   });
 
@@ -53,21 +51,29 @@ export function Playlists() {
       const res = await fetch("/api/playlists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name }),
       });
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed to create playlist" }));
+        throw new Error(err.message || "Failed to create playlist");
+      }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
       setShowCreate(false);
       setNewPlaylistName("");
+      setCreateError("");
+    },
+    onError: (err: Error) => {
+      setCreateError(err.message);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/playlists/${id}`, { method: "DELETE" });
+      await fetch(`/api/playlists/${id}`, { method: "DELETE", credentials: "include" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
@@ -80,6 +86,7 @@ export function Playlists() {
       const res = await fetch(`/api/playlists/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -93,7 +100,7 @@ export function Playlists() {
 
   const removeSongMutation = useMutation({
     mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
-      await fetch(`/api/playlists/${playlistId}/songs/${songId}`, { method: "DELETE" });
+      await fetch(`/api/playlists/${playlistId}/songs/${songId}`, { method: "DELETE", credentials: "include" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });
@@ -240,7 +247,7 @@ export function Playlists() {
           </div>
           <button
             type="button"
-            onClick={() => setShowCreate(true)}
+            onClick={() => { setShowCreate(true); setCreateError(""); }}
             className="w-9 h-9 rounded-full flex items-center justify-center text-white"
             style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
           >
@@ -268,7 +275,7 @@ export function Playlists() {
               <p className="text-white/30 text-sm mt-1 max-w-[220px]">Create a playlist and add songs from your albums</p>
               <button
                 type="button"
-                onClick={() => setShowCreate(true)}
+                onClick={() => { setShowCreate(true); setCreateError(""); }}
                 className="mt-5 px-5 py-3 rounded-2xl font-semibold text-sm text-white"
                 style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
               >
@@ -310,25 +317,43 @@ export function Playlists() {
 
         {showCreate && (
           <div className="fixed inset-0 z-50 flex items-end justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
+            <div
+              className="absolute inset-0 bg-black/60"
+              style={{ backdropFilter: "blur(4px)" }}
+              onClick={() => { setShowCreate(false); setCreateError(""); setNewPlaylistName(""); }}
+            />
             <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl p-5 pb-10 z-10">
               <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
               <h3 className="text-white font-semibold text-base mb-4">New Playlist</h3>
               <input
                 type="text"
                 value={newPlaylistName}
-                onChange={(e) => setNewPlaylistName(e.target.value)}
+                onChange={(e) => { setNewPlaylistName(e.target.value); setCreateError(""); }}
                 placeholder="Playlist name"
-                className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
-                style={{ background: "rgba(255,255,255,0.06)" }}
+                className="w-full border rounded-2xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  borderColor: createError ? "rgba(255,80,80,0.5)" : "rgba(255,255,255,0.1)",
+                }}
                 autoFocus
-                onKeyDown={(e) => e.key === "Enter" && newPlaylistName.trim() && createMutation.mutate(newPlaylistName.trim())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newPlaylistName.trim() && !createMutation.isPending) {
+                    createMutation.mutate(newPlaylistName.trim());
+                  }
+                }}
               />
+              {createError && (
+                <p className="text-red-400 text-xs mt-2">{createError}</p>
+              )}
               <button
                 type="button"
-                onClick={() => newPlaylistName.trim() && createMutation.mutate(newPlaylistName.trim())}
+                onClick={() => {
+                  if (newPlaylistName.trim() && !createMutation.isPending) {
+                    createMutation.mutate(newPlaylistName.trim());
+                  }
+                }}
                 disabled={!newPlaylistName.trim() || createMutation.isPending}
-                className="w-full mt-4 py-3.5 rounded-2xl font-semibold text-sm text-white disabled:opacity-50"
+                className="w-full mt-4 py-3.5 rounded-2xl font-semibold text-sm text-white disabled:opacity-50 transition-opacity"
                 style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
               >
                 {createMutation.isPending ? "Creating..." : "Create Playlist"}

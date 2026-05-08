@@ -34,7 +34,7 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
 
   const handleGoToPlaylists = () => {
     onClose();
-    navigate("/playlists");
+    navigate("/playlists?create=1");
   };
 
   return (

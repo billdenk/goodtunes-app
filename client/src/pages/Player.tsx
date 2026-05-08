@@ -1,3 +1,4 @@
+import { useState, useRef } from "react";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
@@ -25,6 +26,8 @@ export function Player() {
     isFavorite,
   } = usePlayer();
 
+  const [volume, setVolume] = useState(80);
+
   if (!currentSong) return null;
 
   const progress = duration > 0 ? currentTime / duration : 0;
@@ -35,6 +38,7 @@ export function Player() {
     <>
       <div className="fixed inset-0 flex justify-center" style={{ zIndex: 50 }}>
         <div className="relative w-full max-w-[390px] min-h-screen flex flex-col overflow-hidden">
+          {/* Blurred artwork background */}
           <div className="absolute inset-0">
             <img
               src={currentSong.album.artwork}
@@ -45,6 +49,7 @@ export function Player() {
             <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.5) 100%)" }} />
           </div>
 
+          {/* Top bar */}
           <div className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
             <button
               type="button"
@@ -55,9 +60,7 @@ export function Player() {
                 <path d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-            <div className="text-center">
-              <p className="text-white/50 text-xs font-medium uppercase tracking-widest">Now Playing</p>
-            </div>
+            <p className="text-white/50 text-xs font-medium uppercase tracking-widest">Now Playing</p>
             <button
               type="button"
               className="w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10 transition-colors text-white/60"
@@ -71,6 +74,7 @@ export function Player() {
           </div>
 
           <div className="relative z-10 flex-1 flex flex-col items-center px-7">
+            {/* Album art */}
             <div
               className="w-full aspect-square rounded-3xl overflow-hidden mb-7 mt-1"
               style={{
@@ -79,13 +83,10 @@ export function Player() {
                 transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)",
               }}
             >
-              <img
-                src={currentSong.album.artwork}
-                alt={currentSong.album.title}
-                className="w-full h-full object-cover"
-              />
+              <img src={currentSong.album.artwork} alt={currentSong.album.title} className="w-full h-full object-cover" />
             </div>
 
+            {/* Title + favorite */}
             <div className="w-full flex items-center justify-between mb-5">
               <div className="flex-1 min-w-0">
                 <h2 className="text-white text-xl font-bold leading-snug truncate">{currentSong.title}</h2>
@@ -108,6 +109,7 @@ export function Player() {
               </button>
             </div>
 
+            {/* Progress bar */}
             <div className="w-full mb-1">
               <div className="relative w-full h-1 rounded-full overflow-hidden cursor-pointer">
                 <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
@@ -131,6 +133,7 @@ export function Player() {
               </div>
             </div>
 
+            {/* Transport controls */}
             <div className="w-full flex items-center justify-between mb-7 mt-1">
               <button
                 type="button"
@@ -152,7 +155,8 @@ export function Player() {
                 className="w-11 h-11 flex items-center justify-center text-white active:text-white/60 transition-colors"
               >
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 6h2v12H6zm3.5 6L20 18V6z" />
+                  <rect x="6" y="6" width="2" height="12" rx="1" />
+                  <path d="M18 18l-8.5-6 8.5-6v12z" />
                 </svg>
               </button>
 
@@ -212,10 +216,11 @@ export function Player() {
               </button>
             </div>
 
+            {/* Bottom actions */}
             <div className="w-full flex items-center justify-around pb-2">
               <button
                 type="button"
-                onClick={() => { setShowLyrics(true); }}
+                onClick={() => setShowLyrics(true)}
                 className="flex flex-col items-center gap-1.5 text-white/40 active:text-white/70 transition-colors"
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -258,46 +263,173 @@ export function Player() {
         </div>
       </div>
 
-      {/* Lyrics overlay — z-index 70 ensures it sits above the player (z-50) */}
+      {/* ─── Lyrics Overlay ─── */}
       {showLyrics && currentSong.lyrics && (
         <div className="fixed inset-0 flex justify-center" style={{ zIndex: 70 }}>
           <div className="relative w-full max-w-[390px] min-h-screen flex flex-col overflow-hidden">
-            <div className="absolute inset-0">
-              <img
-                src={currentSong.album.artwork}
-                alt=""
-                className="w-full h-full object-cover scale-110"
-                style={{ filter: "blur(60px) brightness(0.18) saturate(1.2)" }}
-              />
-              <div className="absolute inset-0" style={{ background: "rgba(0,6,43,0.75)" }} />
-            </div>
 
-            <div className="relative z-10 flex items-center justify-between px-5 pt-14 pb-4">
+            {/* Colourful blurred artwork background — Apple Music style */}
+            <img
+              src={currentSong.album.artwork}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover scale-125"
+              style={{ filter: "blur(55px) saturate(1.8) brightness(0.55)" }}
+            />
+            <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)" }} />
+
+            {/* Header: small art + song info + star + ... */}
+            <div className="relative z-10 flex items-center gap-3 px-5 pt-14 pb-4">
               <button
                 type="button"
                 onClick={() => setShowLyrics(false)}
-                className="w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10"
+                className="w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0"
+                style={{ background: "rgba(0,0,0,0.35)" }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              <p className="text-white text-sm font-semibold">Lyrics</p>
-              <div className="w-9" />
+
+              <img
+                src={currentSong.album.artwork}
+                alt={currentSong.album.title}
+                className="flex-shrink-0 object-cover"
+                style={{ width: 44, height: 44, borderRadius: 10, boxShadow: "0 4px 14px rgba(0,0,0,0.5)" }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-[15px] font-bold leading-tight truncate">{currentSong.title}</p>
+                <p className="text-white/65 text-[13px] leading-tight truncate">{currentSong.album.artist}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleFavorite(currentSong.id)}
+                className="w-9 h-9 flex items-center justify-center rounded-full flex-shrink-0 active:opacity-60"
+                style={{ background: "rgba(0,0,0,0.3)" }}
+              >
+                {favorited ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="button"
+                className="w-9 h-9 flex items-center justify-center rounded-full flex-shrink-0 text-white active:opacity-60"
+                style={{ background: "rgba(0,0,0,0.3)" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="5" cy="12" r="1.8" />
+                  <circle cx="12" cy="12" r="1.8" />
+                  <circle cx="19" cy="12" r="1.8" />
+                </svg>
+              </button>
             </div>
 
-            <div className="relative z-10 px-6 pb-16 overflow-y-auto scrollbar-hide flex-1">
-              <h3 className="text-white text-xl font-bold mb-1">{currentSong.title}</h3>
-              <p className="text-white/45 text-sm mb-8">{currentSong.album.artist}</p>
-              <div className="text-white/85 text-[17px] leading-[1.9] whitespace-pre-line font-light">
+            {/* Lyrics text — scrollable */}
+            <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-6 pb-4">
+              <div className="text-white text-[22px] leading-[1.55] font-bold whitespace-pre-line">
                 {currentSong.lyrics}
+              </div>
+            </div>
+
+            {/* Bottom controls */}
+            <div className="relative z-10 px-6 pt-3 pb-8">
+              {/* Progress bar */}
+              <div className="relative w-full h-[3px] rounded-full overflow-hidden mb-2 cursor-pointer">
+                <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
+                <div
+                  className="absolute left-0 top-0 h-full rounded-full"
+                  style={{ width: `${progress * 100}%`, background: "white", transition: "width 1s linear" }}
+                />
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 100}
+                  value={currentTime}
+                  onChange={(e) => seekTo(Number(e.target.value))}
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                />
+              </div>
+              <div className="flex justify-between mb-5">
+                <span className="text-white/55 text-[11px] font-medium">{formatDuration(currentTime)}</span>
+                <span className="text-white/55 text-[11px] font-medium">-{formatDuration(Math.max(0, duration - currentTime))}</span>
+              </div>
+
+              {/* ◀◀  ▶/⏸  ▶▶ — Apple Music style, no circles */}
+              <div className="flex items-center justify-center gap-12 mb-6">
+                <button
+                  type="button"
+                  onClick={prev}
+                  className="text-white active:opacity-55 transition-opacity"
+                >
+                  <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 6h2v12H6z" />
+                    <path d="M18 18l-8.5-6 8.5-6v12z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  className="text-white active:opacity-55 transition-opacity"
+                >
+                  {isPlaying ? (
+                    <svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="5" y="4" width="4" height="16" rx="1.5" />
+                      <rect x="15" y="4" width="4" height="16" rx="1.5" />
+                    </svg>
+                  ) : (
+                    <svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={next}
+                  className="text-white active:opacity-55 transition-opacity"
+                >
+                  <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 18l8.5-6L6 6v12z" />
+                    <path d="M16 6h2v12h-2z" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Volume slider */}
+              <div className="flex items-center gap-3">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                </svg>
+                <div className="flex-1 relative h-[3px] rounded-full overflow-hidden cursor-pointer">
+                  <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
+                  <div
+                    className="absolute left-0 top-0 h-full rounded-full"
+                    style={{ width: `${volume}%`, background: "white" }}
+                  />
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                  />
+                </div>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
+                </svg>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add to Playlist sheet — z-index 80 */}
+      {/* Add to Playlist sheet */}
       {showAddToPlaylist && currentSong && (
         <PlaylistPickerSheet
           songId={currentSong.id}
