@@ -200,7 +200,7 @@ export function Playlists() {
           {editingPlaylist && (
             <div className="fixed inset-0 z-50 flex items-end justify-center">
               <div className="absolute inset-0 bg-black/60" onClick={() => setEditingPlaylist(null)} />
-              <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl p-5 pb-10 z-10">
+              <div className="relative w-full bg-[#0D1B4B] rounded-t-3xl p-5 pb-10 z-10">
                 <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
                 <h3 className="text-white font-semibold text-base mb-4">Rename Playlist</h3>
                 <input
@@ -326,7 +326,7 @@ export function Playlists() {
               style={{ backdropFilter: "blur(4px)" }}
               onClick={() => { setShowCreate(false); setCreateError(""); setNewPlaylistName(""); }}
             />
-            <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl p-5 pb-10 z-10">
+            <div className="relative w-full bg-[#0D1B4B] rounded-t-3xl p-5 pb-10 z-10">
               <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
               <h3 className="text-white font-semibold text-base mb-4">New Playlist</h3>
               <input
