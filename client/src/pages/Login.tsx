@@ -134,8 +134,8 @@ export function Login() {
           </button>
         </form>
 
-        <p className="text-center text-white/20 text-xs mt-8">
-          GoodTunes®
+        <p className="text-center text-white/30 text-[10px] mt-8 leading-snug px-4">
+          GoodTunes® and GoodDeed® are registered trademarks of GoGoods® Inc. Patent pending. All other trademarks are the property of their respective owners.
         </p>
       </div>
     </main>
