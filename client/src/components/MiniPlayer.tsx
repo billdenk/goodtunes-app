@@ -20,12 +20,12 @@ export function MiniPlayer() {
         }}
         onClick={() => setShowPlayer(true)}
       >
-        <div className="flex items-center gap-3 pl-1.5 pr-3 py-1.5">
+        <div className="flex items-center gap-3 pl-2.5 pr-3 py-2">
           <img
             src={currentSong.album.artwork}
             alt={currentSong.album.title}
             className="flex-shrink-0 object-cover"
-            style={{ width: 50, height: 50, borderRadius: 8, boxShadow: "0 3px 10px rgba(0,0,0,0.45)" }}
+            style={{ width: 40, height: 40, borderRadius: 7, boxShadow: "0 3px 10px rgba(0,0,0,0.45)" }}
           />
 
           <div className="flex-1 min-w-0">
