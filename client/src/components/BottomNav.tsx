@@ -1,5 +1,4 @@
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/useAuth";
 
 const NavItem = ({
   path,
@@ -39,16 +38,6 @@ const NavItem = ({
 
 export function BottomNav() {
   const [location, navigate] = useLocation();
-  const { user } = useAuth();
-
-  const initials = user?.displayName
-    ? user.displayName
-        .split(" ")
-        .map((w) => w[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
-    : "?";
 
   const isLibrary = location === "/collection" || location === "/" || location.startsWith("/album");
   const isPlaylists = location.startsWith("/playlist");
@@ -120,16 +109,10 @@ export function BottomNav() {
         active={isAccount}
         onClick={() => navigate("/account")}
         icon={(active) => (
-          <div
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all ${
-              active
-                ? "text-[#319ED8] ring-2 ring-[#319ED8] ring-offset-1 ring-offset-transparent"
-                : "text-white/40 ring-1 ring-white/20"
-            }`}
-            style={{ background: active ? "rgba(49,158,216,0.15)" : "rgba(255,255,255,0.08)" }}
-          >
-            {initials}
-          </div>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? "0" : "1.8"}>
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" strokeLinecap="round" fill={active ? "currentColor" : "none"} />
+          </svg>
         )}
       />
     </nav>

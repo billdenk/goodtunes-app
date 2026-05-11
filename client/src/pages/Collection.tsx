@@ -38,10 +38,10 @@ export function Collection() {
 
   return (
     <main className="min-h-screen w-full bg-[#00062B] flex justify-center">
-      <section className="relative w-full max-w-[390px] min-h-screen bg-[#00062B] text-white overflow-hidden flex flex-col">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-12" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
-          <div className="absolute top-1/2 -left-20 w-64 h-64 rounded-full opacity-8" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
+      <section className="relative w-full max-w-[390px] min-h-screen bg-[#00062B] text-white flex flex-col">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-20 right-0 w-72 h-72 rounded-full opacity-12" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
+          <div className="absolute top-1/2 left-0 w-64 h-64 rounded-full opacity-8" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
         </div>
 
         <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-3">
