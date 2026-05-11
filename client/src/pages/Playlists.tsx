@@ -30,6 +30,8 @@ export function Playlists() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [editName, setEditName] = useState("");
+  const [showAddSongs, setShowAddSongs] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
 
   // Auto-open create dialog when arriving with ?create=1
   useEffect(() => {
@@ -97,6 +99,26 @@ export function Playlists() {
     },
   });
 
+  const addSongMutation = useMutation({
+    mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
+      const res = await apiRequest("POST", `/api/playlists/${playlistId}/songs`, { songId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });
+    },
+  });
+
+  const allSongsWithAlbum = SONGS
+    .map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! }))
+    .filter((s) => s.album);
+
+  const addedSongIds = new Set(playlistSongs.map((ps) => ps.song.id));
+  const addQuery = addSearch.trim().toLowerCase();
+  const addCandidates = allSongsWithAlbum.filter((s) =>
+    !addQuery || s.title.toLowerCase().includes(addQuery) || s.album.artist.toLowerCase().includes(addQuery),
+  );
+
   const handlePlayPlaylist = () => {
     if (playlistSongs.length === 0) return;
     playSong(playlistSongs[0].song, playlistSongs.map((ps) => ps.song));
@@ -127,21 +149,34 @@ export function Playlists() {
             </button>
           </header>
 
-          {playlistSongs.length > 0 && (
-            <div className="flex gap-3 px-5 mb-4 flex-shrink-0">
+          <div className="flex gap-3 px-5 mb-4 flex-shrink-0">
+            {playlistSongs.length > 0 && (
               <button
                 type="button"
                 onClick={handlePlayPlaylist}
                 className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white"
                 style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                data-testid="button-play-all"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8 5.14v14l11-7-11-7z" />
                 </svg>
                 Play All
               </button>
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              onClick={() => { setShowAddSongs(true); setAddSearch(""); }}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white border border-white/15 active:opacity-70"
+              style={{ background: "rgba(255,255,255,0.05)" }}
+              data-testid="button-add-songs"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Add Songs
+            </button>
+          </div>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
             {playlistSongs.length === 0 ? (
@@ -152,7 +187,7 @@ export function Playlists() {
                   </svg>
                 </div>
                 <p className="text-white/40 text-sm">No songs yet</p>
-                <p className="text-white/25 text-xs mt-1">Add songs from album pages</p>
+                <p className="text-white/25 text-xs mt-1">Tap "Add Songs" to search your library</p>
               </div>
             ) : (
               playlistSongs.map((entry) => (
@@ -182,6 +217,97 @@ export function Playlists() {
 
           <MiniPlayer />
           <BottomNav />
+
+          {showAddSongs && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center">
+              <div
+                className="absolute inset-0 bg-black/60"
+                style={{ backdropFilter: "blur(4px)" }}
+                onClick={() => setShowAddSongs(false)}
+              />
+              <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-6 z-10 flex flex-col" style={{ height: "78vh" }}>
+                <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
+                <div className="flex items-center justify-between px-5 mb-3 flex-shrink-0">
+                  <h3 className="text-white font-semibold text-base">Add Songs</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSongs(false)}
+                    className="text-[#319ED8] text-sm font-semibold"
+                    data-testid="button-close-add-songs"
+                  >
+                    Done
+                  </button>
+                </div>
+
+                <div className="px-5 mb-3 flex-shrink-0">
+                  <div className="relative flex items-center" style={{ background: "rgba(255,255,255,0.07)", borderRadius: 10 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.2" strokeLinecap="round" className="ml-3 flex-shrink-0">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M20 20l-3.5-3.5" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={addSearch}
+                      onChange={(e) => setAddSearch(e.target.value)}
+                      placeholder="Search songs"
+                      className="flex-1 bg-transparent border-0 px-2.5 py-2 text-white placeholder-white/35 text-sm focus:outline-none"
+                      autoFocus
+                      data-testid="input-add-song-search"
+                    />
+                    {addSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setAddSearch("")}
+                        className="mr-2 w-5 h-5 flex items-center justify-center rounded-full"
+                        style={{ background: "rgba(255,255,255,0.18)" }}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+                          <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
+                  {addCandidates.length === 0 ? (
+                    <p className="text-white/35 text-sm text-center mt-8">No songs match "{addSearch}"</p>
+                  ) : (
+                    addCandidates.map((song) => {
+                      const already = addedSongIds.has(song.id);
+                      return (
+                        <div key={song.id} className="flex items-center gap-3 py-2.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          <img src={song.album.artwork} alt={song.album.title} className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium truncate leading-tight">{song.title}</p>
+                            <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => !already && addSongMutation.mutate({ playlistId: selectedPlaylist.id, songId: song.id })}
+                            disabled={already || addSongMutation.isPending}
+                            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-60 disabled:opacity-40"
+                            style={{ background: already ? "rgba(74,255,202,0.18)" : "rgba(49,158,216,0.22)" }}
+                            data-testid={`button-add-song-${song.id}`}
+                          >
+                            {already ? (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4AFFCA" strokeWidth="3" strokeLinecap="round">
+                                <path d="M20 6L9 17l-5-5" />
+                              </svg>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
+                                <path d="M12 5v14M5 12h14" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {editingPlaylist && (
             <div className="fixed inset-0 z-50 flex items-end justify-center">
