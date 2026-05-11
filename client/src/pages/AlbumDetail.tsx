@@ -57,8 +57,8 @@ export function AlbumDetail() {
   const totalMin = Math.floor(totalDuration / 60);
 
   return (
-    <main className="min-h-screen w-full bg-[#00062B] flex justify-center">
-      <section className="relative w-full max-w-[390px] min-h-screen bg-[#00062B] text-white flex flex-col">
+    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
+      <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
         <div className="relative flex-shrink-0">
           <div className="relative h-[340px] overflow-hidden">
             <img
