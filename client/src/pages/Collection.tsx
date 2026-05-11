@@ -16,6 +16,9 @@ export function Collection() {
   const { playSong, currentSong, recentAlbums } = usePlayer();
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<LibraryTab>("albums");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"title" | "artist">("title");
+  const [showSort, setShowSort] = useState(false);
 
   const allSongsWithAlbum = useMemo(
     () =>
@@ -32,8 +35,37 @@ export function Collection() {
       cur.albums.push(a);
       map.set(a.artist, cur);
     });
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(map.values());
   }, []);
+
+  const q = search.trim().toLowerCase();
+
+  const filteredAlbums = useMemo(() => {
+    const list = q
+      ? ALBUMS.filter((a) => a.title.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q))
+      : [...ALBUMS];
+    return list.sort((a, b) =>
+      sortBy === "artist" ? a.artist.localeCompare(b.artist) : a.title.localeCompare(b.title),
+    );
+  }, [q, sortBy]);
+
+  const filteredSongs = useMemo(() => {
+    const list = q
+      ? allSongsWithAlbum.filter(
+          (s) => s.title.toLowerCase().includes(q) || s.album.artist.toLowerCase().includes(q),
+        )
+      : [...allSongsWithAlbum];
+    return list.sort((a, b) =>
+      sortBy === "artist" ? a.album.artist.localeCompare(b.album.artist) : a.title.localeCompare(b.title),
+    );
+  }, [q, sortBy, allSongsWithAlbum]);
+
+  const filteredArtists = useMemo(() => {
+    const list = q ? artists.filter((ar) => ar.name.toLowerCase().includes(q)) : [...artists];
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [q, artists]);
+
+  const sortLabel = sortBy === "artist" ? "Artist" : "Title";
 
   const handlePlayAll = () => {
     const allSongs = SONGS.map((s) => ({
@@ -139,6 +171,82 @@ export function Collection() {
 
           <div className="px-5 mb-3 flex items-center justify-between">
             <h2 className="text-white text-base font-bold">My Library</h2>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowSort((s) => !s)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-white/70 active:opacity-60 transition-opacity"
+                style={{ background: "rgba(255,255,255,0.08)" }}
+                data-testid="button-sort"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M3 6h18M6 12h12M10 18h4" />
+                </svg>
+                Sort: {sortLabel}
+              </button>
+              {showSort && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
+                  <div
+                    className="absolute right-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[140px]"
+                    style={{
+                      background: "rgba(36, 36, 40, 0.96)",
+                      backdropFilter: "blur(24px) saturate(180%)",
+                      WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                      boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    {(["title", "artist"] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => { setSortBy(opt); setShowSort(false); }}
+                        className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-white active:bg-white/10"
+                        data-testid={`sort-${opt}`}
+                      >
+                        <span className="capitalize">{opt}</span>
+                        {sortBy === opt && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="px-5 mb-3">
+            <div className="relative flex items-center" style={{ background: "rgba(255,255,255,0.07)", borderRadius: 10 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.2" strokeLinecap="round" className="ml-3 flex-shrink-0">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search ${tab}`}
+                className="flex-1 bg-transparent border-0 px-2.5 py-2 text-white placeholder-white/35 text-sm focus:outline-none"
+                data-testid="input-library-search"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="mr-2 w-5 h-5 flex items-center justify-center rounded-full"
+                  style={{ background: "rgba(255,255,255,0.18)" }}
+                  data-testid="button-clear-search"
+                >
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="px-5 mb-4">
@@ -168,32 +276,39 @@ export function Collection() {
 
           {tab === "albums" && (
             <div className="px-5 pb-4">
-              <div className="grid grid-cols-2 gap-4">
-                {ALBUMS.map((album) => (
-                  <AlbumCard
-                    key={album.id}
-                    album={album}
-                    isCurrentlyPlaying={currentSong?.albumId === album.id}
-                    onPress={() => navigate(`/album/${album.id}`)}
-                    onCertPress={() => setCertAlbum(album)}
-                  />
-                ))}
-              </div>
+              {filteredAlbums.length === 0 ? (
+                <p className="text-white/35 text-sm text-center mt-8">No albums match "{search}"</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  {filteredAlbums.map((album) => (
+                    <AlbumCard
+                      key={album.id}
+                      album={album}
+                      isCurrentlyPlaying={currentSong?.albumId === album.id}
+                      onPress={() => navigate(`/album/${album.id}`)}
+                      onCertPress={() => setCertAlbum(album)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {tab === "songs" && (
             <div className="px-5 pb-4 flex flex-col">
-              {allSongsWithAlbum.map((song, idx) => {
+              {filteredSongs.length === 0 && (
+                <p className="text-white/35 text-sm text-center mt-8">No songs match "{search}"</p>
+              )}
+              {filteredSongs.map((song, idx) => {
                 const isActive = currentSong?.id === song.id;
                 return (
                   <button
                     key={song.id}
                     type="button"
-                    onClick={() => playSong(song, allSongsWithAlbum)}
+                    onClick={() => playSong(song, filteredSongs)}
                     className="flex items-center gap-3 py-2.5 active:opacity-60 transition-opacity text-left"
                     style={{
-                      borderBottom: idx < allSongsWithAlbum.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                      borderBottom: idx < filteredSongs.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                     }}
                     data-testid={`row-song-${song.id}`}
                   >
@@ -226,14 +341,17 @@ export function Collection() {
 
           {tab === "artists" && (
             <div className="px-5 pb-4 flex flex-col">
-              {artists.map((artist, idx) => (
+              {filteredArtists.length === 0 && (
+                <p className="text-white/35 text-sm text-center mt-8">No artists match "{search}"</p>
+              )}
+              {filteredArtists.map((artist, idx) => (
                 <button
                   key={artist.name}
                   type="button"
                   onClick={() => navigate(`/album/${artist.albums[0].id}`)}
                   className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
                   style={{
-                    borderBottom: idx < artists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                    borderBottom: idx < filteredArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                   }}
                   data-testid={`row-artist-${artist.name}`}
                 >
