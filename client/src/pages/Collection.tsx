@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,11 +8,32 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { ALBUMS, SONGS, type Album } from "@/data/musicData";
 
+type LibraryTab = "albums" | "songs" | "artists";
+
 export function Collection() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { playSong, currentSong, recentAlbums } = usePlayer();
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
+  const [tab, setTab] = useState<LibraryTab>("albums");
+
+  const allSongsWithAlbum = useMemo(
+    () =>
+      SONGS.map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! })).filter(
+        (s) => s.album,
+      ),
+    [],
+  );
+
+  const artists = useMemo(() => {
+    const map = new Map<string, { name: string; albums: Album[] }>();
+    ALBUMS.forEach((a) => {
+      const cur = map.get(a.artist) ?? { name: a.artist, albums: [] };
+      cur.albums.push(a);
+      map.set(a.artist, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
 
   const handlePlayAll = () => {
     const allSongs = SONGS.map((s) => ({
@@ -81,7 +102,7 @@ export function Collection() {
           </button>
         </div>
 
-        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide">
+        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           {recentAlbums.length > 0 && (
             <div className="mb-5">
               <div className="flex items-center justify-between px-5 mb-3">
@@ -116,23 +137,125 @@ export function Collection() {
             </div>
           )}
 
-          <div className="px-5 mb-3">
+          <div className="px-5 mb-3 flex items-center justify-between">
             <h2 className="text-white text-base font-bold">My Library</h2>
           </div>
 
-          <div className="px-5 pb-4">
-            <div className="grid grid-cols-2 gap-4">
-              {ALBUMS.map((album) => (
-                <AlbumCard
-                  key={album.id}
-                  album={album}
-                  isCurrentlyPlaying={currentSong?.albumId === album.id}
-                  onPress={() => navigate(`/album/${album.id}`)}
-                  onCertPress={() => setCertAlbum(album)}
-                />
+          <div className="px-5 mb-4">
+            <div className="relative flex p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
+              <div
+                className="absolute top-1 bottom-1 rounded-lg transition-all duration-200"
+                style={{
+                  width: "calc(33.333% - 3px)",
+                  left: tab === "albums" ? "4px" : tab === "songs" ? "calc(33.333% + 1px)" : "calc(66.666% - 2px)",
+                  background: "rgba(49,158,216,0.22)",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                }}
+              />
+              {(["albums", "songs", "artists"] as LibraryTab[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={`relative flex-1 py-2 rounded-lg text-xs font-semibold capitalize transition-colors duration-150 ${tab === t ? "text-[#319ED8]" : "text-white/45"}`}
+                  data-testid={`tab-${t}`}
+                >
+                  {t}
+                </button>
               ))}
             </div>
           </div>
+
+          {tab === "albums" && (
+            <div className="px-5 pb-4">
+              <div className="grid grid-cols-2 gap-4">
+                {ALBUMS.map((album) => (
+                  <AlbumCard
+                    key={album.id}
+                    album={album}
+                    isCurrentlyPlaying={currentSong?.albumId === album.id}
+                    onPress={() => navigate(`/album/${album.id}`)}
+                    onCertPress={() => setCertAlbum(album)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === "songs" && (
+            <div className="px-5 pb-4 flex flex-col">
+              {allSongsWithAlbum.map((song, idx) => {
+                const isActive = currentSong?.id === song.id;
+                return (
+                  <button
+                    key={song.id}
+                    type="button"
+                    onClick={() => playSong(song, allSongsWithAlbum)}
+                    className="flex items-center gap-3 py-2.5 active:opacity-60 transition-opacity text-left"
+                    style={{
+                      borderBottom: idx < allSongsWithAlbum.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                    }}
+                    data-testid={`row-song-${song.id}`}
+                  >
+                    <img src={song.album.artwork} alt={song.album.title} className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate leading-tight ${isActive ? "text-[#319ED8]" : "text-white"}`}>{song.title}</p>
+                      <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
+                    </div>
+                    {isActive && (
+                      <div className="flex gap-[2px] items-end h-3.5 mr-1">
+                        {[0.6, 1, 0.75].map((h, i) => (
+                          <div
+                            key={i}
+                            className="w-[2px] rounded-full"
+                            style={{
+                              background: "#319ED8",
+                              height: `${h * 100}%`,
+                              animation: "equalizerBounce 0.8s ease-in-out infinite alternate",
+                              animationDelay: `${i * 0.2}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {tab === "artists" && (
+            <div className="px-5 pb-4 flex flex-col">
+              {artists.map((artist, idx) => (
+                <button
+                  key={artist.name}
+                  type="button"
+                  onClick={() => navigate(`/album/${artist.albums[0].id}`)}
+                  className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
+                  style={{
+                    borderBottom: idx < artists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  }}
+                  data-testid={`row-artist-${artist.name}`}
+                >
+                  <img
+                    src={artist.albums[0].artwork}
+                    alt={artist.name}
+                    className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                    style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-semibold truncate leading-tight">{artist.name}</p>
+                    <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+                      {artist.albums.length} {artist.albums.length === 1 ? "album" : "albums"}
+                    </p>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
+                    <path d="M9 18l6-6-6-6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <MiniPlayer />

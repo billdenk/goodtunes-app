@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
-import { ALBUMS } from "@/data/musicData";
 
 export function Account() {
   const { user, logout, updateProfile, isUpdatePending, updateError } = useAuth();
@@ -32,16 +31,23 @@ export function Account() {
     : "?";
 
   return (
-    <main className="min-h-screen w-full bg-[#00062B] flex justify-center">
-      <section className="relative w-full max-w-[390px] min-h-screen bg-[#00062B] text-white flex flex-col">
+    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
+      <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-20 right-0 w-72 h-72 rounded-full opacity-15" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
           <div className="absolute bottom-40 -left-20 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
         </div>
 
-        <header className="relative z-10 px-5 pt-14 pb-2">
-          <p className="text-white/40 text-xs font-medium uppercase tracking-widest">GoodTunes®</p>
-          <h1 className="text-white text-2xl font-bold mt-0.5">Account</h1>
+        <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
+          <h1 className="text-white text-2xl font-bold">Account</h1>
+          <button
+            type="button"
+            onClick={() => navigate("/collection")}
+            className="text-[#319ED8] text-base font-medium active:opacity-60"
+            data-testid="button-account-done"
+          >
+            Done
+          </button>
         </header>
 
         <div className="relative z-10 flex flex-col items-center pt-6 pb-4 px-5">
@@ -120,31 +126,8 @@ export function Account() {
           )}
         </div>
 
-        <div className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide">
-          <div className="mb-4">
-            <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-3">My Collection</p>
-            <div className="flex flex-col gap-2">
-              {ALBUMS.map((album) => (
-                <div
-                  key={album.id}
-                  className="flex items-center gap-3 p-3 rounded-2xl"
-                  style={{ background: "rgba(255,255,255,0.04)" }}
-                >
-                  <img src={album.artwork} alt={album.title} className="w-11 h-11 rounded-xl object-cover flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{album.title}</p>
-                    <p className="text-white/40 text-xs truncate">{album.artist}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-[#4AFFCA] text-xs font-semibold">No. {(album.certificateNumber ?? 1).toString().padStart(2, "0")}</p>
-                    <p className="text-white/30 text-[10px] mt-0.5">{album.type}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-6">
+        <div className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide pb-[170px]">
+          <div className="mb-6 mt-2">
             <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-3">Settings</p>
             <div className="flex flex-col gap-1">
               {[

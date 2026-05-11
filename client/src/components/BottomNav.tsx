@@ -41,7 +41,6 @@ export function BottomNav() {
 
   const isLibrary = location === "/collection" || location === "/" || location.startsWith("/album");
   const isPlaylists = location.startsWith("/playlist");
-  const isAccount = location === "/account";
 
   return (
     <nav
@@ -103,18 +102,6 @@ export function BottomNav() {
         )}
       />
 
-      <NavItem
-        path="/account"
-        label="Account"
-        active={isAccount}
-        onClick={() => navigate("/account")}
-        icon={(active) => (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? "0" : "1.8"}>
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" strokeLinecap="round" fill={active ? "currentColor" : "none"} />
-          </svg>
-        )}
-      />
     </nav>
   );
 }
