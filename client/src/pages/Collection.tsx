@@ -17,8 +17,30 @@ export function Collection() {
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<LibraryTab>("albums");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"title" | "artist">("title");
   const [showSort, setShowSort] = useState(false);
+  const [sortByMap, setSortByMap] = useState<Record<LibraryTab, string>>({
+    albums: "title",
+    songs: "title",
+    artists: "name-asc",
+  });
+
+  const sortOptions: Record<LibraryTab, { value: string; label: string }[]> = {
+    albums: [
+      { value: "title", label: "Title" },
+      { value: "artist", label: "Artist" },
+    ],
+    songs: [
+      { value: "title", label: "Title" },
+      { value: "artist", label: "Artist" },
+    ],
+    artists: [
+      { value: "name-asc", label: "A–Z" },
+      { value: "name-desc", label: "Z–A" },
+    ],
+  };
+
+  const sortBy = sortByMap[tab];
+  const setSortBy = (v: string) => setSortByMap((m) => ({ ...m, [tab]: v }));
 
   const allSongsWithAlbum = useMemo(
     () =>
@@ -60,12 +82,15 @@ export function Collection() {
     );
   }, [q, sortBy, allSongsWithAlbum]);
 
+  const artistsSort = sortByMap.artists;
   const filteredArtists = useMemo(() => {
     const list = q ? artists.filter((ar) => ar.name.toLowerCase().includes(q)) : [...artists];
-    return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [q, artists]);
+    return list.sort((a, b) =>
+      artistsSort === "name-desc" ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name),
+    );
+  }, [q, artists, artistsSort]);
 
-  const sortLabel = sortBy === "artist" ? "Artist" : "Title";
+  const sortLabel = sortOptions[tab].find((o) => o.value === sortBy)?.label ?? "";
 
   const handlePlayAll = () => {
     const allSongs = SONGS.map((s) => ({
@@ -197,16 +222,16 @@ export function Collection() {
                       border: "1px solid rgba(255,255,255,0.08)",
                     }}
                   >
-                    {(["title", "artist"] as const).map((opt) => (
+                    {sortOptions[tab].map((opt) => (
                       <button
-                        key={opt}
+                        key={opt.value}
                         type="button"
-                        onClick={() => { setSortBy(opt); setShowSort(false); }}
+                        onClick={() => { setSortBy(opt.value); setShowSort(false); }}
                         className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-white active:bg-white/10"
-                        data-testid={`sort-${opt}`}
+                        data-testid={`sort-${opt.value}`}
                       >
-                        <span className="capitalize">{opt}</span>
-                        {sortBy === opt && (
+                        <span>{opt.label}</span>
+                        {sortBy === opt.value && (
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
                             <path d="M20 6L9 17l-5-5" />
                           </svg>
