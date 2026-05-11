@@ -36,18 +36,18 @@ export function Player() {
 
   return (
     <>
-      <div className="fixed inset-0 flex justify-center" style={{ zIndex: 50 }}>
-        <div className="relative w-full max-w-[390px] min-h-screen flex flex-col overflow-hidden">
-          {/* Blurred artwork background */}
-          <div className="absolute inset-0">
-            <img
-              src={currentSong.album.artwork}
-              alt=""
-              className="w-full h-full object-cover scale-110"
-              style={{ filter: "blur(50px) brightness(0.35) saturate(1.6)" }}
-            />
-            <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.5) 100%)" }} />
-          </div>
+      <div className="fixed inset-0 flex justify-center bg-[#00062B]" style={{ zIndex: 50 }}>
+        {/* Full-bleed blurred artwork background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src={currentSong.album.artwork}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover scale-125"
+            style={{ filter: "blur(60px) brightness(0.35) saturate(1.6)" }}
+          />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.5) 100%)" }} />
+        </div>
+        <div className="relative w-full max-w-[390px] min-h-screen flex flex-col">
 
           {/* Top bar */}
           <div className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
@@ -265,10 +265,9 @@ export function Player() {
 
       {/* ─── Lyrics Overlay ─── */}
       {showLyrics && currentSong.lyrics && (
-        <div className="fixed inset-0 flex justify-center" style={{ zIndex: 70 }}>
-          <div className="relative w-full max-w-[390px] min-h-screen flex flex-col overflow-hidden">
-
-            {/* Colourful blurred artwork background — Apple Music style */}
+        <div className="fixed inset-0 flex justify-center bg-[#00062B]" style={{ zIndex: 70 }}>
+          {/* Full-bleed blurred artwork background — Apple Music style */}
+          <div className="absolute inset-0 overflow-hidden">
             <img
               src={currentSong.album.artwork}
               alt=""
@@ -276,6 +275,8 @@ export function Player() {
               style={{ filter: "blur(55px) saturate(1.8) brightness(0.55)" }}
             />
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)" }} />
+          </div>
+          <div className="relative w-full max-w-[390px] min-h-screen flex flex-col">
 
             {/* Header: small art + song info + star + ... */}
             <div className="relative z-10 flex items-center gap-3 px-5 pt-14 pb-4">
