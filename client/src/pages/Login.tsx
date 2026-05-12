@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 export function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const { login, register, isLoginPending, isRegisterPending, loginError, registerError } = useAuth();
@@ -26,7 +27,7 @@ export function Login() {
       if (mode === "login") {
         await login({ username, password });
       } else {
-        await register({ username, displayName, password });
+        await register({ username, email, displayName, password });
       }
       navigate("/collection");
     } catch {}
@@ -79,18 +80,39 @@ export function Login() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           {mode === "register" && (
-            <div>
-              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Display Name</label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your full name"
-                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-                required
-              />
-            </div>
+            <>
+              <div>
+                <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Display Name</label>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Your full name"
+                  autoComplete="name"
+                  className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                  required
+                  data-testid="input-display-name"
+                />
+              </div>
+              <div>
+                <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                  required
+                  data-testid="input-email"
+                />
+              </div>
+            </>
           )}
 
           <div>
@@ -100,9 +122,13 @@ export function Login() {
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
               placeholder="@username"
+              autoComplete={mode === "login" ? "username" : "off"}
+              autoCapitalize="none"
+              spellCheck={false}
               className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
               style={{ background: "rgba(255,255,255,0.06)" }}
               required
+              data-testid="input-username"
             />
           </div>
 

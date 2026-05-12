@@ -69,20 +69,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   app.post("/api/register", async (req, res) => {
-    const { username, displayName, password } = req.body;
-    if (!username || !displayName || !password) {
-      return res.status(400).json({ message: "Username, display name, and password are required" });
+    const { username, email, displayName, password } = req.body;
+    if (!username || !email || !displayName || !password) {
+      return res.status(400).json({ message: "Display name, email, username, and password are required" });
     }
-    const existing = await storage.getUserByUsername(username);
-    if (existing) {
-      return res.status(400).json({ message: "Username already taken" });
+    const emailNorm = String(email).trim().toLowerCase();
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(emailNorm)) {
+      return res.status(400).json({ message: "Please enter a valid email address" });
+    }
+    const [existingUsername, existingEmail] = await Promise.all([
+      storage.getUserByUsername(username),
+      storage.getUserByEmail(emailNorm),
+    ]);
+    if (existingUsername || existingEmail) {
+      return res.status(400).json({ message: "An account with those details already exists" });
     }
     const hashed = await hashPassword(password);
-    const user = await storage.createUser({ username, displayName, password: hashed });
+    const user = await storage.createUser({ username, email: emailNorm, displayName, password: hashed });
     req.session.userId = user.id;
     const token = generateToken();
     tokenStore.set(token, user.id);
-    return res.status(201).json({ id: user.id, username: user.username, displayName: user.displayName, token });
+    return res.status(201).json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, token });
   });
 
   app.post("/api/login", async (req, res) => {
@@ -97,7 +105,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     req.session.userId = user.id;
     const token = generateToken();
     tokenStore.set(token, user.id);
-    return res.json({ id: user.id, username: user.username, displayName: user.displayName, token });
+    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, token });
   });
 
   app.post("/api/logout", (req, res) => {
@@ -113,7 +121,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/me", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(404).json({ message: "User not found" });
-    return res.json({ id: user.id, username: user.username, displayName: user.displayName });
+    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName });
   });
 
   app.put("/api/me", requireAuth, async (req, res) => {
@@ -129,7 +137,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const updated = await storage.updateUser(req.session.userId!, updates);
     if (!updated) return res.status(404).json({ message: "User not found" });
-    return res.json({ id: updated.id, username: updated.username, displayName: updated.displayName });
+    return res.json({ id: updated.id, username: updated.username, email: updated.email, displayName: updated.displayName });
   });
 
   app.get("/api/albums", requireAuth, async (_req, res) => {

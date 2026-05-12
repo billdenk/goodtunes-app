@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
   getAlbums(): Promise<Album[]>;
@@ -105,6 +106,11 @@ export class MemStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     return Array.from(this.users.values()).find((u) => u.username === username);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const lower = email.toLowerCase();
+    return Array.from(this.users.values()).find((u) => u.email.toLowerCase() === lower);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
