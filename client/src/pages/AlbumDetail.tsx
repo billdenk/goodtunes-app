@@ -88,11 +88,6 @@ export function AlbumDetail() {
 
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
-      {/* Full-bleed album artwork hero */}
-      <div className="absolute top-0 left-0 right-0 h-[340px] overflow-hidden pointer-events-none">
-        <img src={album.artwork} alt="" className="w-full h-full object-cover" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.7) 60%, #00062B 100%)" }} />
-      </div>
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
         <button
           type="button"
@@ -215,13 +210,20 @@ export function AlbumDetail() {
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
-          <div aria-hidden style={{ height: 260 }} />
+          {/* Hero artwork — scrolls with content and fades into the dark bg */}
+          <div className="relative w-full h-[300px] overflow-hidden">
+            <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(to bottom, rgba(0,6,43,0.15) 0%, rgba(0,6,43,0.35) 35%, rgba(0,6,43,0.85) 75%, #00062B 100%)",
+              }}
+            />
+          </div>
 
-          {/* Title block */}
-          <div
-            className="relative pt-5 pb-3 px-5"
-            style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 22%, #00062B 60%)" }}
-          >
+          {/* Title block — solid dark bg sits below hero */}
+          <div className="relative pt-4 pb-3 px-5 bg-[#00062B]">
             <span
               className="text-[10px] font-bold px-2.5 py-1 rounded-full mb-2 inline-block"
               style={{ background: "rgba(49,158,216,0.15)", color: "#319ED8", border: "1px solid rgba(49,158,216,0.3)" }}
