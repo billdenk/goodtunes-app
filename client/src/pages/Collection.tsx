@@ -156,8 +156,7 @@ export function Collection() {
             </div>
           )}
 
-          <div className="px-5 mb-3 flex items-center justify-between">
-            <h2 className="text-white text-base font-bold">My Collection</h2>
+          <div className="px-5 mb-3 flex items-center justify-end">
             <div className="relative">
               <button
                 type="button"
