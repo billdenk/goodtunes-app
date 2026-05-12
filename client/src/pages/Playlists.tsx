@@ -12,6 +12,80 @@ interface Playlist {
   name: string;
   userId: string;
   createdAt: string;
+  artworks?: string[];
+  songCount?: number;
+}
+
+function PlaylistArtwork({
+  artworks,
+  songCount,
+  size,
+  rounded = "rounded-xl",
+}: {
+  artworks: string[];
+  songCount: number;
+  size: number;
+  rounded?: string;
+}) {
+  const wrapperStyle: React.CSSProperties = {
+    width: size,
+    height: size,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+  };
+
+  if (songCount === 0 || artworks.length === 0) {
+    return (
+      <div
+        className={`${rounded} flex-shrink-0 flex items-center justify-center relative overflow-hidden`}
+        style={{
+          ...wrapperStyle,
+          background: "linear-gradient(135deg, #1D5E8F 0%, #4A1E8F 100%)",
+        }}
+      >
+        <svg width={size * 0.4} height={size * 0.4} viewBox="0 0 24 24" fill="white" opacity="0.85">
+          <path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (songCount < 4) {
+    return (
+      <div
+        className={`${rounded} flex-shrink-0 overflow-hidden relative`}
+        style={wrapperStyle}
+      >
+        <img src={artworks[0]} alt="" className="w-full h-full object-cover" />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(49,158,216,0.10) 0%, rgba(127,16,167,0.10) 100%)",
+          }}
+        />
+      </div>
+    );
+  }
+
+  const cells: string[] = [0, 1, 2, 3].map((i) => artworks[i % artworks.length]);
+
+  return (
+    <div
+      className={`${rounded} flex-shrink-0 overflow-hidden grid grid-cols-2 grid-rows-2 relative`}
+      style={wrapperStyle}
+    >
+      {cells.map((src, i) => (
+        <img key={i} src={src} alt="" className="w-full h-full object-cover" />
+      ))}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(49,158,216,0.10) 0%, rgba(127,16,167,0.10) 100%)",
+        }}
+      />
+    </div>
+  );
 }
 
 interface PlaylistSongEntry {
@@ -96,6 +170,7 @@ export function Playlists() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
     },
   });
 
@@ -106,6 +181,7 @@ export function Playlists() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
     },
   });
 
@@ -128,26 +204,43 @@ export function Playlists() {
     return (
       <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
         <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
-          <header className="flex items-center gap-3 px-5 pt-14 pb-4 flex-shrink-0">
-            <button type="button" onClick={() => setSelectedPlaylist(null)} className="text-white/80">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <header className="flex items-center justify-between px-5 pt-14 pb-3 flex-shrink-0">
+            <button type="button" onClick={() => setSelectedPlaylist(null)} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80" style={{ background: "rgba(255,255,255,0.08)" }} data-testid="button-back-playlist">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M15 18l-6-6 6-6" strokeLinecap="round" />
               </svg>
             </button>
-            <div className="flex-1 min-w-0">
-              <p className="text-white/40 text-xs uppercase tracking-widest">Playlist</p>
-              <h1 className="text-white text-xl font-bold truncate">{selectedPlaylist.name}</h1>
-            </div>
             <button
               type="button"
               onClick={() => { setEditingPlaylist(selectedPlaylist); setEditName(selectedPlaylist.name); }}
-              className="text-white/40 p-1"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white/70"
+              style={{ background: "rgba(255,255,255,0.08)" }}
+              data-testid="button-edit-playlist"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" />
               </svg>
             </button>
           </header>
+
+          <div className="flex flex-col items-center px-5 pb-4 flex-shrink-0">
+            <PlaylistArtwork
+              artworks={Array.from(
+                new Set(playlistSongs.map((ps) => ps.song.album.artwork))
+              ).slice(0, 4)}
+              songCount={playlistSongs.length}
+              size={180}
+              rounded="rounded-2xl"
+            />
+            <p className="text-white text-[22px] font-bold leading-tight text-center mt-4 px-4 truncate max-w-full" data-testid="text-playlist-name">
+              {selectedPlaylist.name}
+            </p>
+            <p className="text-white/45 text-xs mt-1">
+              {playlistSongs.length === 0
+                ? "Empty playlist"
+                : `${playlistSongs.length} ${playlistSongs.length === 1 ? "song" : "songs"}`}
+            </p>
+          </div>
 
           <div className="flex gap-3 px-5 mb-4 flex-shrink-0">
             {playlistSongs.length > 0 && (
@@ -397,30 +490,29 @@ export function Playlists() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {playlists.map((pl) => (
-                <button
-                  key={pl.id}
-                  type="button"
-                  onClick={() => setSelectedPlaylist(pl)}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 active:bg-white/10 transition-colors text-left"
-                >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
+              {playlists.map((pl) => {
+                const count = pl.songCount ?? 0;
+                return (
+                  <button
+                    key={pl.id}
+                    type="button"
+                    onClick={() => setSelectedPlaylist(pl)}
+                    className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 active:bg-white/10 transition-colors text-left"
+                    data-testid={`row-playlist-${pl.id}`}
                   >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.7">
-                      <path d="M3 6h18M3 10h14M3 14h10" strokeLinecap="round" />
+                    <PlaylistArtwork artworks={pl.artworks ?? []} songCount={count} size={56} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{pl.name}</p>
+                      <p className="text-white/40 text-xs mt-0.5">
+                        {count === 0 ? "Playlist" : `${count} ${count === 1 ? "song" : "songs"}`}
+                      </p>
+                    </div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
+                      <path d="M9 18l6-6-6-6" strokeLinecap="round" />
                     </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-semibold truncate">{pl.name}</p>
-                    <p className="text-white/40 text-xs mt-0.5">Playlist</p>
-                  </div>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
-                    <path d="M9 18l6-6-6-6" strokeLinecap="round" />
-                  </svg>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

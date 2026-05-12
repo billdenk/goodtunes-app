@@ -12,7 +12,7 @@ export interface IStorage {
   getSongsByAlbum(albumId: string): Promise<Song[]>;
   getSongById(id: string): Promise<Song | undefined>;
   getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]>;
-  getPlaylists(userId: string): Promise<Playlist[]>;
+  getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]>;
   getPlaylistById(id: string): Promise<Playlist | undefined>;
   createPlaylist(userId: string, name: string): Promise<Playlist>;
   updatePlaylist(id: string, name: string): Promise<Playlist | undefined>;
@@ -171,10 +171,27 @@ export class MemStorage implements IStorage {
       .filter((ua) => ua.album);
   }
 
-  async getPlaylists(userId: string): Promise<Playlist[]> {
-    return Array.from(this.playlists.values())
+  async getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]> {
+    const lists = Array.from(this.playlists.values())
       .filter((p) => p.userId === userId)
       .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+    return lists.map((p) => {
+      const entries = Array.from(this.playlistSongs.values())
+        .filter((ps) => ps.playlistId === p.id)
+        .sort((a, b) => a.position - b.position);
+      const seen = new Set<string>();
+      const artworks: string[] = [];
+      for (const ps of entries) {
+        const song = this.songs.get(ps.songId);
+        if (!song) continue;
+        const album = this.albums.get(song.albumId);
+        if (!album || seen.has(album.id)) continue;
+        seen.add(album.id);
+        artworks.push(album.artwork);
+        if (artworks.length >= 4) break;
+      }
+      return { ...p, artworks, songCount: entries.length };
+    });
   }
 
   async getPlaylistById(id: string): Promise<Playlist | undefined> {
