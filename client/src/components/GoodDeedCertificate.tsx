@@ -88,7 +88,7 @@ export function GoodDeedCertificate({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center"
+      className="fixed inset-0 z-[60] flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label="GoodDeed certificate"
@@ -99,9 +99,9 @@ export function GoodDeedCertificate({
         onClick={onClose}
       />
 
-      <div className="relative w-full z-10 animate-slide-up" style={{ paddingTop: "calc(56px + env(safe-area-inset-top, 0px))" }}>
+      <div className="relative w-full z-10 animate-slide-up">
         {/* Close + Share controls */}
-        <div className="flex items-center justify-between mb-3 px-5">
+        <div className="flex items-center justify-between mb-6 px-5">
           <button
             type="button"
             onClick={onClose}
@@ -203,7 +203,7 @@ const CertCard = forwardRef(function CertCard(
       ref={ref}
       className="flex-shrink-0 snap-start rounded-3xl overflow-hidden shadow-2xl mx-auto"
       style={{
-        width: "min(100%, calc((100dvh - 240px) * 9 / 16))",
+        width: "min(100%, calc((100dvh - 200px) * 9 / 16))",
         aspectRatio: "9 / 16",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
         backgroundColor: "#00062B",
