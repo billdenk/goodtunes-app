@@ -88,7 +88,7 @@ export function GoodDeedCertificate({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="fixed inset-0 z-[60] flex items-start justify-center"
       role="dialog"
       aria-modal="true"
       aria-label="GoodDeed certificate"
