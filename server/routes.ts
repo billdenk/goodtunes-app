@@ -227,6 +227,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const numClean = /^\d+$/.test(numRaw) ? numRaw : "1";
     const num = esc(numClean.padStart(2, "0"));
     const artParam = String(req.query.art ?? "");
+    const albumIdRaw = String(req.query.albumId ?? "");
+    const albumId = /^[a-zA-Z0-9_-]+$/.test(albumIdRaw) ? albumIdRaw : "";
 
     const origin = `${req.protocol}://${req.get("host")}`;
     const ogImage = artParam.startsWith("http")
@@ -238,6 +240,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const title = `${owner || "I"} own${owner ? "s" : ""} No. ${num} of "${album}" — GoodDeed®`;
     const description = `${album}${artist ? ` by ${artist}` : ""}. Verified ownership by GoodTunes® GoodDeed®.`;
     const url = `${origin}${req.originalUrl}`;
+    const ctaHref = albumId ? `/album/${esc(albumId)}` : "/login";
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(`<!DOCTYPE html>
@@ -258,7 +261,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   <meta name="twitter:description" content="${description}" />
   <meta name="twitter:image" content="${esc(ogImage)}" />
   <style>
-    body { margin:0; background:#00062B; color:#fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin:0; background:#00062B; color:#fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; min-height:100dvh; }
+    .wrap { min-height:100dvh; display:flex; flex-direction:column; align-items:center; padding:20px 16px calc(168px + env(safe-area-inset-bottom, 0px)); padding-top: calc(20px + env(safe-area-inset-top, 0px)); }
+    .eyebrow { font-size:13px; color:rgba(255,255,255,0.6); text-align:center; margin:0 0 14px; letter-spacing:0.01em; }
     .card { width:100%; max-width:360px; border-radius:24px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.7); background:#0D2060; }
     .art { width:100%; aspect-ratio: 1 / 1; object-fit:cover; display:block; }
     .panel { padding:24px; background:linear-gradient(135deg,#1B3A8C 0%,#4A1E8F 60%,#2A1670 100%); text-align:center; }
@@ -267,18 +273,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     .cert { margin-top:18px; font-size:13px; opacity:.8; }
     .owner { font-size:22px; font-weight:700; margin:6px 0 4px; }
     .num { font-size:28px; font-weight:700; margin-top:18px; }
+    .cta-bar { position:fixed; left:0; right:0; bottom:0; padding: 28px 16px calc(16px + env(safe-area-inset-bottom, 0px)); background:linear-gradient(to top, rgba(0,6,43,1) 55%, rgba(0,6,43,0)); z-index:50; }
+    .cta-inner { max-width:360px; margin:0 auto; }
+    .cta-title { text-align:center; color:#fff; font-size:15px; font-weight:600; margin:0 0 4px; }
+    .cta-sub { text-align:center; color:rgba(255,255,255,0.6); font-size:12px; margin:0 0 14px; }
+    .cta-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; height:50px; border-radius:9999px; color:#fff; font-size:15px; font-weight:600; text-decoration:none; background:linear-gradient(90deg, #319ED8 0%, #7F10A7 100%); box-shadow:0 8px 24px rgba(127,16,167,0.35); transition:transform .12s ease, opacity .12s ease; -webkit-tap-highlight-color:transparent; }
+    .cta-btn:active { opacity:.85; transform:scale(0.98); }
+    .cta-btn .arrow { font-size:18px; line-height:1; transform:translateY(-1px); }
   </style>
 </head>
 <body>
-  <div class="card">
-    <img class="art" src="${esc(ogImage)}" alt="${album}" />
-    <div class="panel">
-      <div class="album">${album}</div>
-      ${artist ? `<div class="artist">${artist}</div>` : ""}
-      <div class="cert">This GoodDeed® certifies that</div>
-      <div class="owner">${owner || "—"}</div>
-      <div class="cert">owns number ${num} of this series.</div>
-      <div class="num">No. ${num}</div>
+  <div class="wrap">
+    <p class="eyebrow">${owner ? `${owner} shared a GoodDeed® with you` : "A GoodDeed® was shared with you"}</p>
+    <div class="card">
+      <img class="art" src="${esc(ogImage)}" alt="${album}" />
+      <div class="panel">
+        <div class="album">${album}</div>
+        ${artist ? `<div class="artist">${artist}</div>` : ""}
+        <div class="cert">This GoodDeed® certifies that</div>
+        <div class="owner">${owner || "—"}</div>
+        <div class="cert">owns number ${num} of this series.</div>
+        <div class="num">No. ${num}</div>
+      </div>
+    </div>
+  </div>
+  <div class="cta-bar">
+    <div class="cta-inner">
+      <p class="cta-title">Want one of your own?</p>
+      <p class="cta-sub">Own a numbered, verified GoodDeed® for music you love.</p>
+      <a class="cta-btn" href="${ctaHref}">Get your GoodDeed® <span class="arrow">→</span></a>
     </div>
   </div>
 </body>
