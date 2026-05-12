@@ -6,7 +6,7 @@ import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { SONGS, ALBUMS, type Song, type Album } from "@/data/musicData";
-import { useFavoriteSongs } from "@/hooks/useFavorites";
+import { useFavoriteSongs, useFavoriteArtists } from "@/hooks/useFavorites";
 
 const FAVORITES_PLAYLIST_ID = "__favorites";
 
@@ -120,6 +120,7 @@ export function Playlists() {
   const { playSong } = usePlayer();
   const queryClient = useQueryClient();
   const favSongs = useFavoriteSongs();
+  const favArtists = useFavoriteArtists();
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -147,16 +148,25 @@ export function Playlists() {
     .map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! }))
     .filter((s) => s.album);
 
-  const favSongEntries: PlaylistSongEntry[] = allSongsWithAlbumAll
-    .filter((s) => favSongs.has(s.id))
-    .map((song) => ({ id: `fav-${song.id}`, song }));
+  const favSongEntries: PlaylistSongEntry[] = (() => {
+    const seen = new Set<string>();
+    const out: PlaylistSongEntry[] = [];
+    for (const s of allSongsWithAlbumAll) {
+      const matches = favSongs.has(s.id) || favArtists.has(s.album.artist);
+      if (matches && !seen.has(s.id)) {
+        seen.add(s.id);
+        out.push({ id: `fav-${s.id}`, song: s });
+      }
+    }
+    return out;
+  })();
 
   const isFavoritesView = selectedPlaylist?.id === FAVORITES_PLAYLIST_ID;
 
   const favoritesPlaylist: Playlist | null = favSongEntries.length > 0
     ? {
         id: FAVORITES_PLAYLIST_ID,
-        name: "Favorite Songs",
+        name: "Favorites",
         userId: "__local",
         createdAt: "",
         artworks: Array.from(new Set(favSongEntries.map((e) => e.song.album.artwork))).slice(0, 4),
