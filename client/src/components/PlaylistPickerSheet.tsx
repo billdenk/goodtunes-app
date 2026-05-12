@@ -5,12 +5,14 @@ import { usePlayer } from "@/context/PlayerContext";
 import { apiRequest } from "@/lib/queryClient";
 
 interface PlaylistPickerSheetProps {
-  songId: string;
+  songId?: string;
+  songIds?: string[];
   songTitle: string;
+  heading?: string;
   onClose: () => void;
 }
 
-export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPickerSheetProps) {
+export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClose }: PlaylistPickerSheetProps) {
   const [added, setAdded] = useState<string | null>(null);
   const [, navigate] = useLocation();
   const { setShowPlayer } = usePlayer();
@@ -22,8 +24,13 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
 
   const addMutation = useMutation({
     mutationFn: async (playlistId: string) => {
-      const res = await apiRequest("POST", `/api/playlists/${playlistId}/songs`, { songId, position: 0 });
-      return res.json();
+      const ids = songIds && songIds.length > 0 ? songIds : songId ? [songId] : [];
+      const results = [];
+      for (let i = 0; i < ids.length; i++) {
+        const res = await apiRequest("POST", `/api/playlists/${playlistId}/songs`, { songId: ids[i], position: i });
+        results.push(await res.json());
+      }
+      return results;
     },
     onSuccess: (_data, playlistId) => {
       setAdded(playlistId);
@@ -50,7 +57,7 @@ export function PlaylistPickerSheet({ songId, songTitle, onClose }: PlaylistPick
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: "rgba(255,255,255,0.2)" }} />
-        <h3 className="text-white font-semibold text-base mb-0.5">Add to Playlist</h3>
+        <h3 className="text-white font-semibold text-base mb-0.5">{heading ?? "Add to Playlist"}</h3>
         <p className="text-white/40 text-sm mb-5 truncate">{songTitle}</p>
 
         {isLoading ? (
