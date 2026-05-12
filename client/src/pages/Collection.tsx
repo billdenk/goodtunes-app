@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { ALBUMS, SONGS, type Album } from "@/data/musicData";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
@@ -13,6 +14,7 @@ type LibraryTab = "albums" | "songs" | "artists";
 export function Collection() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
+  const favArtists = useFavoriteArtists();
   const { playSong, currentSong, recentAlbums } = usePlayer();
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<LibraryTab>("albums");
@@ -362,34 +364,44 @@ export function Collection() {
               {filteredArtists.length === 0 && (
                 <p className="text-white/35 text-sm text-center mt-8">No artists match "{search}"</p>
               )}
-              {filteredArtists.map((artist, idx) => (
-                <button
-                  key={artist.name}
-                  type="button"
-                  onClick={() => navigate(`/album/${artist.albums[0].id}`)}
-                  className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
-                  style={{
-                    borderBottom: idx < filteredArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                  }}
-                  data-testid={`row-artist-${artist.name}`}
-                >
-                  <img
-                    src={artist.albums[0].artwork}
-                    alt={artist.name}
-                    className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                    style={{ border: "1px solid rgba(255,255,255,0.1)" }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-semibold truncate leading-tight">{artist.name}</p>
-                    <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
-                      {artist.albums.length} {artist.albums.length === 1 ? "album" : "albums"}
-                    </p>
-                  </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
-                    <path d="M9 18l6-6-6-6" strokeLinecap="round" />
-                  </svg>
-                </button>
-              ))}
+              {filteredArtists.map((artist, idx) => {
+                const isFav = favArtists.has(artist.name);
+                return (
+                  <button
+                    key={artist.name}
+                    type="button"
+                    onClick={() => navigate(`/artist/${encodeURIComponent(artist.name)}`)}
+                    className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
+                    style={{
+                      borderBottom: idx < filteredArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                    }}
+                    data-testid={`row-artist-${artist.name}`}
+                  >
+                    <div className="w-4 flex-shrink-0 flex items-center justify-center">
+                      {isFav && (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="#FF5470" aria-label="Favorited">
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                        </svg>
+                      )}
+                    </div>
+                    <img
+                      src={artist.albums[0].artwork}
+                      alt={artist.name}
+                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                      style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate leading-tight">{artist.name}</p>
+                      <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+                        {artist.albums.length} {artist.albums.length === 1 ? "album" : "albums"}
+                      </p>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
+                      <path d="M9 18l6-6-6-6" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -401,6 +413,11 @@ export function Collection() {
           <GoodDeedCertificate
             album={certAlbum}
             ownerName={user?.displayName || "GoodTunes Fan"}
+            identities={{
+              realName: user?.realName ?? null,
+              displayName: user?.displayName || "GoodTunes Fan",
+              username: user?.username || "you",
+            }}
             certificateNumber={certAlbum.certificateNumber ?? 1}
             certificateNumbers={certAlbum.ownedCertificates}
             onClose={() => setCertAlbum(null)}

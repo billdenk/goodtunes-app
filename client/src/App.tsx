@@ -11,6 +11,7 @@ import { Collection } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
+import { ArtistDetail } from "@/pages/ArtistDetail";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -64,6 +65,9 @@ function Router() {
         </Route>
         <Route path="/album/:id">
           <ProtectedRoute component={AlbumDetail} />
+        </Route>
+        <Route path="/artist/:slug">
+          <ProtectedRoute component={ArtistDetail} />
         </Route>
         <Route path="/playlists">
           <ProtectedRoute component={Playlists} />

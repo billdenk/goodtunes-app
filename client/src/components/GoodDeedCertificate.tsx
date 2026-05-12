@@ -1,18 +1,29 @@
-import { useState, useRef, useEffect, forwardRef, type Ref } from "react";
+import { useState, useRef, useEffect, forwardRef, useMemo, type Ref } from "react";
 import { Album } from "@/data/musicData";
+import { useAuth } from "@/hooks/useAuth";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
+
+export interface ShareIdentities {
+  realName?: string | null;
+  displayName: string;
+  username: string;
+}
 
 interface GoodDeedCertificateProps {
   album: Album;
   ownerName: string;
+  identities?: ShareIdentities;
   certificateNumber?: number;
   certificateNumbers?: number[];
   onClose: () => void;
 }
 
+type IdentityKind = "display" | "username" | "real";
+
 export function GoodDeedCertificate({
   album,
   ownerName,
+  identities,
   certificateNumber,
   certificateNumbers,
   onClose,
@@ -23,10 +34,39 @@ export function GoodDeedCertificate({
       : [certificateNumber ?? 1];
   const [shared, setShared] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [identity, setIdentity] = useState<IdentityKind>("display");
+  const [showIdentityMenu, setShowIdentityMenu] = useState(false);
+  const [addRealOpen, setAddRealOpen] = useState(false);
+  const [realDraft, setRealDraft] = useState("");
+  const [savingReal, setSavingReal] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  const { updateProfile } = useAuth();
+
   const safeIdx = Math.min(Math.max(activeIdx, 0), certs.length - 1);
+
+  const resolvedIdentities: ShareIdentities = useMemo(
+    () =>
+      identities ?? {
+        realName: null,
+        displayName: ownerName,
+        username: ownerName.toLowerCase().replace(/[^a-z0-9_]/g, "") || "you",
+      },
+    [identities, ownerName],
+  );
+
+  const displayedName = useMemo(() => {
+    if (identity === "real" && resolvedIdentities.realName) return resolvedIdentities.realName;
+    if (identity === "username") return `@${resolvedIdentities.username}`;
+    return resolvedIdentities.displayName;
+  }, [identity, resolvedIdentities]);
+
+  const identityLabel = useMemo(() => {
+    if (identity === "real" && resolvedIdentities.realName) return "Real Name";
+    if (identity === "username") return "@username";
+    return "Display Name";
+  }, [identity, resolvedIdentities.realName]);
 
   const handleScroll = () => {
     const el = scrollerRef.current;
@@ -69,13 +109,13 @@ export function GoodDeedCertificate({
     const params = new URLSearchParams({
       album: album.title,
       artist: album.artist,
-      owner: ownerName,
+      owner: displayedName,
       num: n,
       art: album.artwork,
       albumId: album.id,
     });
     const url = `${window.location.origin}/share/cert?${params.toString()}`;
-    const text = `I own No. ${n} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed®`;
+    const text = `${displayedName} owns No. ${n} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed®`;
     try {
       if (navigator.share) {
         await navigator.share({ title: "My GoodDeed® Certificate", text, url });
@@ -85,6 +125,30 @@ export function GoodDeedCertificate({
       setShared(true);
       setTimeout(() => setShared(false), 1800);
     } catch {}
+  };
+
+  const pickIdentity = (kind: IdentityKind) => {
+    if (kind === "real" && !resolvedIdentities.realName) {
+      setAddRealOpen(true);
+      setRealDraft("");
+      return;
+    }
+    setIdentity(kind);
+    setShowIdentityMenu(false);
+  };
+
+  const saveRealName = async () => {
+    const v = realDraft.trim();
+    if (!v) return;
+    setSavingReal(true);
+    try {
+      await updateProfile({ realName: v });
+      setIdentity("real");
+      setAddRealOpen(false);
+      setShowIdentityMenu(false);
+    } catch {} finally {
+      setSavingReal(false);
+    }
   };
 
   return (
@@ -101,13 +165,13 @@ export function GoodDeedCertificate({
       />
 
       <div className="relative w-full z-10 animate-slide-up">
-        {/* Close + Share controls */}
-        <div className="flex items-center justify-between mb-6 px-5">
+        {/* Top controls: close + identity + share */}
+        <div className="flex items-center justify-between mb-5 px-5 gap-2">
           <button
             type="button"
             onClick={onClose}
             aria-label={certs.length === 1 ? "Back" : "Close certificate"}
-            className="w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 shadow-lg"
+            className="w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 shadow-lg flex-shrink-0"
             style={{ background: "#ffffff", color: "#00062B" }}
             data-testid="button-close-certificate"
           >
@@ -121,32 +185,132 @@ export function GoodDeedCertificate({
               </svg>
             )}
           </button>
-          <button
-            type="button"
-            onClick={handleShare}
-            className="h-10 px-4 rounded-full flex items-center justify-center gap-1.5 text-sm font-semibold active:opacity-70 transition-opacity shadow-lg"
-            style={{
-              background: shared ? "#4AFFCA" : "#ffffff",
-              color: "#00062B",
-            }}
-            data-testid="button-share-certificate"
-          >
-            {shared ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                  <path d="M20 6L9 17l-5-5" />
+
+          <div className="flex items-center gap-2">
+            {/* Identity dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowIdentityMenu((s) => !s)}
+                aria-haspopup="menu"
+                aria-expanded={showIdentityMenu}
+                className="h-10 px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold active:opacity-70 transition-opacity shadow-lg"
+                style={{ background: "rgba(255,255,255,0.18)", color: "#fff", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.22)" }}
+                data-testid="button-identity-toggle"
+              >
+                <span className="opacity-70">As:</span>
+                <span>{identityLabel}</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                  <path d="M6 9l6 6 6-6" />
                 </svg>
-                Copied
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
-                </svg>
-                Share No. {padded(certs[safeIdx])}
-              </>
-            )}
-          </button>
+              </button>
+              {showIdentityMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => { setShowIdentityMenu(false); setAddRealOpen(false); }} />
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-2 z-40 rounded-2xl py-1 min-w-[230px] overflow-hidden"
+                    style={{
+                      background: "rgba(28, 30, 38, 0.96)",
+                      backdropFilter: "blur(28px) saturate(180%)",
+                      WebkitBackdropFilter: "blur(28px) saturate(180%)",
+                      boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <IdentityRow
+                      label="Display Name"
+                      value={resolvedIdentities.displayName}
+                      selected={identity === "display"}
+                      onClick={() => pickIdentity("display")}
+                      testId="identity-display"
+                    />
+                    <div className="h-px bg-white/8" />
+                    <IdentityRow
+                      label="Username"
+                      value={`@${resolvedIdentities.username}`}
+                      selected={identity === "username"}
+                      onClick={() => pickIdentity("username")}
+                      testId="identity-username"
+                    />
+                    <div className="h-px bg-white/8" />
+                    {addRealOpen ? (
+                      <div className="px-3.5 py-3">
+                        <p className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">Add Real Name</p>
+                        <input
+                          type="text"
+                          value={realDraft}
+                          onChange={(e) => setRealDraft(e.target.value)}
+                          placeholder="Tina Banner"
+                          autoFocus
+                          className="w-full border border-white/15 rounded-xl px-3 py-2 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
+                          style={{ background: "rgba(255,255,255,0.06)" }}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveRealName(); }}
+                          data-testid="input-real-name-inline"
+                        />
+                        <div className="flex gap-2 mt-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setAddRealOpen(false)}
+                            className="flex-1 py-2 rounded-xl text-[12px] font-semibold text-white/70 active:opacity-70"
+                            style={{ background: "rgba(255,255,255,0.08)" }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveRealName}
+                            disabled={!realDraft.trim() || savingReal}
+                            className="flex-1 py-2 rounded-xl text-[12px] font-semibold text-white disabled:opacity-50 active:opacity-80"
+                            style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                            data-testid="button-save-real-name"
+                          >
+                            {savingReal ? "Saving…" : "Save & Use"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <IdentityRow
+                        label="Real Name"
+                        value={resolvedIdentities.realName || "Add real name…"}
+                        selected={identity === "real" && !!resolvedIdentities.realName}
+                        ghost={!resolvedIdentities.realName}
+                        onClick={() => pickIdentity("real")}
+                        testId="identity-real"
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleShare}
+              className="h-10 px-4 rounded-full flex items-center justify-center gap-1.5 text-sm font-semibold active:opacity-70 transition-opacity shadow-lg flex-shrink-0"
+              style={{
+                background: shared ? "#4AFFCA" : "#ffffff",
+                color: "#00062B",
+              }}
+              data-testid="button-share-certificate"
+            >
+              {shared ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  Copied
+                </>
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
+                  </svg>
+                  Share
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Carousel */}
@@ -162,7 +326,7 @@ export function GoodDeedCertificate({
                 key={num}
                 ref={(el) => { cardRefs.current[i] = el; }}
                 album={album}
-                ownerName={ownerName}
+                ownerName={displayedName}
                 num={num}
               />
             ))}
@@ -191,6 +355,43 @@ export function GoodDeedCertificate({
         )}
       </div>
     </div>
+  );
+}
+
+function IdentityRow({
+  label,
+  value,
+  selected,
+  ghost,
+  onClick,
+  testId,
+}: {
+  label: string;
+  value: string;
+  selected: boolean;
+  ghost?: boolean;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 text-left active:bg-white/10"
+      data-testid={testId}
+    >
+      <div className="min-w-0">
+        <p className="text-white/45 text-[10px] font-semibold uppercase tracking-wider">{label}</p>
+        <p className={`text-sm truncate mt-0.5 ${ghost ? "text-white/40 italic" : "text-white"}`}>{value}</p>
+      </div>
+      <span className="w-4 flex-shrink-0 flex items-center justify-center">
+        {selected && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -240,7 +441,7 @@ const CertCard = forwardRef(function CertCard(
 
         <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
           <p className="text-white/75 text-[13px]">This GoodDeed® certifies that</p>
-          <p className="text-white text-2xl font-bold mt-1.5 leading-tight">{ownerName}</p>
+          <p className="text-white text-2xl font-bold mt-1.5 leading-tight" data-testid="text-cert-owner">{ownerName}</p>
           <p className="text-white/75 text-[13px] mt-1.5">
             owns number {certNumStr} of this series.
           </p>

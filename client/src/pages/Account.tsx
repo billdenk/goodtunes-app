@@ -10,6 +10,7 @@ export function Account() {
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [username, setUsername] = useState(user?.username || "");
+  const [realName, setRealName] = useState(user?.realName || "");
   const [saved, setSaved] = useState(false);
 
   const handleLogout = async () => {
@@ -19,7 +20,7 @@ export function Account() {
 
   const handleSave = async () => {
     try {
-      await updateProfile({ displayName, username });
+      await updateProfile({ displayName, username, realName: realName || null });
       setSaved(true);
       setEditing(false);
       setTimeout(() => setSaved(false), 2000);
@@ -64,7 +65,7 @@ export function Account() {
               <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
               <button
                 type="button"
-                onClick={() => { setEditing(true); setDisplayName(user?.displayName || ""); setUsername(user?.username || ""); }}
+                onClick={() => { setEditing(true); setDisplayName(user?.displayName || ""); setUsername(user?.username || ""); setRealName(user?.realName || ""); }}
                 className="mt-3 px-5 py-2 rounded-full border border-white/20 text-white/70 text-sm font-medium"
               >
                 Edit Profile
@@ -73,6 +74,18 @@ export function Account() {
           ) : (
             <div className="w-full flex flex-col gap-3 mt-2">
               <div>
+                <label className="text-white/40 text-xs uppercase tracking-wider block mb-1.5 ml-1">Real Name</label>
+                <input
+                  type="text"
+                  value={realName}
+                  onChange={(e) => setRealName(e.target.value)}
+                  placeholder="Used on your GoodDeed®"
+                  className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                  data-testid="input-account-real-name"
+                />
+              </div>
+              <div>
                 <label className="text-white/40 text-xs uppercase tracking-wider block mb-1.5 ml-1">Display Name</label>
                 <input
                   type="text"
@@ -80,6 +93,7 @@ export function Account() {
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#319ED8]"
                   style={{ background: "rgba(255,255,255,0.06)" }}
+                  data-testid="input-account-display-name"
                 />
               </div>
               <div>
@@ -87,9 +101,10 @@ export function Account() {
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
                   className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#319ED8]"
                   style={{ background: "rgba(255,255,255,0.06)" }}
+                  data-testid="input-account-username"
                 />
               </div>
               {updateError && (

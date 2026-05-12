@@ -6,6 +6,9 @@ import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { SONGS, ALBUMS, type Song, type Album } from "@/data/musicData";
+import { useFavoriteSongs } from "@/hooks/useFavorites";
+
+const FAVORITES_PLAYLIST_ID = "__favorites";
 
 interface Playlist {
   id: string;
@@ -21,17 +24,35 @@ function PlaylistArtwork({
   songCount,
   size,
   rounded = "rounded-xl",
+  variant,
 }: {
   artworks: string[];
   songCount: number;
   size: number;
   rounded?: string;
+  variant?: "favorites";
 }) {
   const wrapperStyle: React.CSSProperties = {
     width: size,
     height: size,
     boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
   };
+
+  if (variant === "favorites") {
+    return (
+      <div
+        className={`${rounded} flex-shrink-0 flex items-center justify-center relative overflow-hidden`}
+        style={{
+          ...wrapperStyle,
+          background: "linear-gradient(135deg, #FF5470 0%, #7F10A7 60%, #319ED8 100%)",
+        }}
+      >
+        <svg width={size * 0.46} height={size * 0.46} viewBox="0 0 24 24" fill="white" style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.3))" }}>
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+        </svg>
+      </div>
+    );
+  }
 
   if (songCount === 0 || artworks.length === 0) {
     return (
@@ -98,6 +119,7 @@ export function Playlists() {
   const [, navigate] = useLocation();
   const { playSong } = usePlayer();
   const queryClient = useQueryClient();
+  const favSongs = useFavoriteSongs();
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -119,13 +141,38 @@ export function Playlists() {
   const { data: playlistsRaw, isLoading } = useQuery<Playlist[] | null>({
     queryKey: ["/api/playlists"],
   });
-  const playlists = playlistsRaw ?? [];
+  const userPlaylists = playlistsRaw ?? [];
+
+  const allSongsWithAlbumAll = SONGS
+    .map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! }))
+    .filter((s) => s.album);
+
+  const favSongEntries: PlaylistSongEntry[] = allSongsWithAlbumAll
+    .filter((s) => favSongs.has(s.id))
+    .map((song) => ({ id: `fav-${song.id}`, song }));
+
+  const isFavoritesView = selectedPlaylist?.id === FAVORITES_PLAYLIST_ID;
+
+  const favoritesPlaylist: Playlist | null = favSongEntries.length > 0
+    ? {
+        id: FAVORITES_PLAYLIST_ID,
+        name: "Favorite Songs",
+        userId: "__local",
+        createdAt: "",
+        artworks: Array.from(new Set(favSongEntries.map((e) => e.song.album.artwork))).slice(0, 4),
+        songCount: favSongEntries.length,
+      }
+    : null;
+
+  const playlists: Playlist[] = favoritesPlaylist
+    ? [favoritesPlaylist, ...userPlaylists]
+    : userPlaylists;
 
   const { data: playlistSongsRaw } = useQuery<PlaylistSongEntry[] | null>({
     queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"],
-    enabled: !!selectedPlaylist,
+    enabled: !!selectedPlaylist && !isFavoritesView,
   });
-  const playlistSongs = playlistSongsRaw ?? [];
+  const playlistSongs: PlaylistSongEntry[] = isFavoritesView ? favSongEntries : (playlistSongsRaw ?? []);
 
   const createMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -185,9 +232,7 @@ export function Playlists() {
     },
   });
 
-  const allSongsWithAlbum = SONGS
-    .map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! }))
-    .filter((s) => s.album);
+  const allSongsWithAlbum = allSongsWithAlbumAll;
 
   const addedSongIds = new Set(playlistSongs.map((ps) => ps.song.id));
   const addQuery = addSearch.trim().toLowerCase();
@@ -226,17 +271,21 @@ export function Playlists() {
                 <path d="M15 18l-6-6 6-6" strokeLinecap="round" />
               </svg>
             </button>
-            <button
-              type="button"
-              onClick={() => { setEditingPlaylist(selectedPlaylist); setEditName(selectedPlaylist.name); }}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white/70"
-              style={{ background: "rgba(255,255,255,0.08)" }}
-              data-testid="button-edit-playlist"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" />
-              </svg>
-            </button>
+            {!isFavoritesView ? (
+              <button
+                type="button"
+                onClick={() => { setEditingPlaylist(selectedPlaylist); setEditName(selectedPlaylist.name); }}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-white/70"
+                style={{ background: "rgba(255,255,255,0.08)" }}
+                data-testid="button-edit-playlist"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" />
+                </svg>
+              </button>
+            ) : (
+              <div className="w-9 h-9" />
+            )}
           </header>
 
           <div className="flex flex-col items-center px-5 pb-4 flex-shrink-0">
@@ -247,6 +296,7 @@ export function Playlists() {
               songCount={playlistSongs.length}
               size={180}
               rounded="rounded-2xl"
+              variant={isFavoritesView ? "favorites" : undefined}
             />
             <p className="text-white text-[22px] font-bold leading-tight text-center mt-4 px-4 truncate max-w-full" data-testid="text-playlist-name">
               {selectedPlaylist.name}
@@ -285,18 +335,22 @@ export function Playlists() {
               </svg>
               Play
             </button>
-            <button
-              type="button"
-              onClick={() => { setShowAddSongs(true); setAddSearch(""); }}
-              aria-label="Add songs to playlist"
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
-              style={{ background: "rgba(255,255,255,0.08)" }}
-              data-testid="button-add-songs"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+            {!isFavoritesView ? (
+              <button
+                type="button"
+                onClick={() => { setShowAddSongs(true); setAddSearch(""); }}
+                aria-label="Add songs to playlist"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+                style={{ background: "rgba(255,255,255,0.08)" }}
+                data-testid="button-add-songs"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            ) : (
+              <div className="w-10 h-10" />
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
@@ -312,25 +366,52 @@ export function Playlists() {
               </div>
             ) : (
               playlistSongs.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-3 py-3">
-                  <img
-                    src={entry.song.album.artwork}
-                    alt={entry.song.album.title}
-                    className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{entry.song.title}</p>
-                    <p className="text-white/40 text-xs truncate">{entry.song.album.artist}</p>
-                  </div>
+                <div
+                  key={entry.id}
+                  className="flex items-center gap-3 py-3"
+                  data-testid={`row-playlist-song-${entry.song.id}`}
+                >
                   <button
                     type="button"
-                    onClick={() => removeSongMutation.mutate({ playlistId: selectedPlaylist.id, songId: entry.song.id })}
-                    className="text-white/30 p-1 flex-shrink-0"
+                    onClick={() => playSong(entry.song, playlistSongs.map((ps) => ps.song))}
+                    className="flex items-center gap-3 flex-1 min-w-0 active:opacity-60 text-left"
+                    aria-label={`Play ${entry.song.title}`}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" />
-                    </svg>
+                    <img
+                      src={entry.song.album.artwork}
+                      alt={entry.song.album.title}
+                      className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium truncate">{entry.song.title}</p>
+                      <p className="text-white/40 text-xs truncate">{entry.song.album.artist}</p>
+                    </div>
                   </button>
+                  {isFavoritesView ? (
+                    <button
+                      type="button"
+                      onClick={() => favSongs.toggle(entry.song.id)}
+                      aria-label="Remove from favorites"
+                      className="w-8 h-8 flex items-center justify-center flex-shrink-0 active:scale-[0.9] transition-transform"
+                      data-testid={`button-unfavorite-${entry.song.id}`}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF5470" stroke="#FF5470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => removeSongMutation.mutate({ playlistId: selectedPlaylist.id, songId: entry.song.id })}
+                      aria-label="Remove from playlist"
+                      className="text-white/30 p-1 flex-shrink-0"
+                      data-testid={`button-remove-song-${entry.song.id}`}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               ))
             )}
@@ -520,6 +601,7 @@ export function Playlists() {
             <div className="flex flex-col gap-2">
               {playlists.map((pl) => {
                 const count = pl.songCount ?? 0;
+                const isFav = pl.id === FAVORITES_PLAYLIST_ID;
                 return (
                   <button
                     key={pl.id}
@@ -528,11 +610,18 @@ export function Playlists() {
                     className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 active:bg-white/10 transition-colors text-left"
                     data-testid={`row-playlist-${pl.id}`}
                   >
-                    <PlaylistArtwork artworks={pl.artworks ?? []} songCount={count} size={56} />
+                    <PlaylistArtwork
+                      artworks={pl.artworks ?? []}
+                      songCount={count}
+                      size={56}
+                      variant={isFav ? "favorites" : undefined}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-white text-sm font-semibold truncate">{pl.name}</p>
                       <p className="text-white/40 text-xs mt-0.5">
-                        {count === 0 ? "Playlist" : `${count} ${count === 1 ? "song" : "songs"}`}
+                        {isFav
+                          ? `${count} favorited`
+                          : count === 0 ? "Playlist" : `${count} ${count === 1 ? "song" : "songs"}`}
                       </p>
                     </div>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">

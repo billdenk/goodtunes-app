@@ -1,18 +1,50 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { useToast } from "@/hooks/use-toast";
 
+type Mode = "login" | "register";
+type Step = 1 | 2;
+
+function suggestUsername(realName: string, email: string): string {
+  const base =
+    realName
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim()
+      .replace(/\s+/g, "") ||
+    email.split("@")[0]?.toLowerCase().replace(/[^a-z0-9]/g, "") ||
+    "";
+  return base.slice(0, 20);
+}
+
+function suggestDisplayName(realName: string): string {
+  const first = realName.trim().split(/\s+/)[0] ?? "";
+  return first || realName.trim();
+}
+
 export function Login() {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [mode, setMode] = useState<Mode>("login");
+  const [step, setStep] = useState<Step>(1);
+
+  const [loginIdent, setLoginIdent] = useState("");
   const [password, setPassword] = useState("");
+
+  const [realName, setRealName] = useState("");
+  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [usernameTouched, setUsernameTouched] = useState(false);
+  const [displayTouched, setDisplayTouched] = useState(false);
+
   const { login, register, isLoginPending, isRegisterPending, loginError, registerError } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+
+  const suggestedUsername = useMemo(() => suggestUsername(realName, email), [realName, email]);
+  const suggestedDisplay = useMemo(() => suggestDisplayName(realName), [realName]);
 
   const handleOAuth = (provider: "Google" | "Apple") => {
     toast({
@@ -21,14 +53,40 @@ export function Login() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setStep(1);
+  };
+
+  const goToStep2 = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!realName.trim() || !email.trim() || !password) return;
+    setUsername(suggestedUsername);
+    setDisplayName(suggestedDisplay);
+    setStep(2);
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalUsername = (usernameTouched ? username : suggestedUsername).toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const finalDisplay = (displayTouched ? displayName : suggestedDisplay).trim();
+    if (!finalUsername || !finalDisplay) return;
+    try {
+      await register({
+        username: finalUsername,
+        email: email.trim(),
+        displayName: finalDisplay,
+        realName: realName.trim(),
+        password,
+      });
+      navigate("/collection");
+    } catch {}
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (mode === "login") {
-        await login({ username, password });
-      } else {
-        await register({ username, email, displayName, password });
-      }
+      await login({ username: loginIdent.trim(), password });
       navigate("/collection");
     } catch {}
   };
@@ -48,7 +106,11 @@ export function Login() {
         <div className="flex flex-col items-center mb-10">
           <GoodTunesLogo size="lg" className="mb-4" />
           <p className="text-white/40 text-sm text-center mt-3">
-            {mode === "login" ? "Sign in to access your collection." : "Create your account to get started."}
+            {mode === "login"
+              ? "Sign in to access your collection."
+              : step === 1
+              ? "Create your account to get started."
+              : "Pick how you'll appear in GoodTunes®."}
           </p>
         </div>
 
@@ -64,110 +126,207 @@ export function Login() {
           />
           <button
             type="button"
-            onClick={() => setMode("login")}
+            onClick={() => switchMode("login")}
             className={`relative flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-150 ${mode === "login" ? "text-white" : "text-white/35"}`}
           >
             Sign In
           </button>
           <button
             type="button"
-            onClick={() => setMode("register")}
+            onClick={() => switchMode("register")}
             className={`relative flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-150 ${mode === "register" ? "text-white" : "text-white/35"}`}
           >
             Create Account
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          {mode === "register" && (
-            <>
-              <div>
-                <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Display Name</label>
+        {mode === "register" && (
+          <div className="flex items-center justify-center gap-2 mb-5">
+            <div className={`h-1 w-10 rounded-full ${step === 1 ? "bg-[#319ED8]" : "bg-white/15"}`} />
+            <div className={`h-1 w-10 rounded-full ${step === 2 ? "bg-[#319ED8]" : "bg-white/15"}`} />
+            <span className="text-white/40 text-[11px] ml-2">Step {step} of 2</span>
+          </div>
+        )}
+
+        {mode === "login" && (
+          <form onSubmit={handleLogin} className="flex flex-col gap-3">
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Username</label>
+              <input
+                type="text"
+                value={loginIdent}
+                onChange={(e) => setLoginIdent(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                placeholder="@username"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                required
+                data-testid="input-login-username"
+              />
+            </div>
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                required
+                data-testid="input-login-password"
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">{error}</div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isPending}
+              className="mt-2 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-50 transition-all active:scale-[0.98]"
+              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+              data-testid="button-submit-login"
+            >
+              {isPending ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+        )}
+
+        {mode === "register" && step === 1 && (
+          <form onSubmit={goToStep2} className="flex flex-col gap-3">
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Real Name</label>
+              <input
+                type="text"
+                value={realName}
+                onChange={(e) => setRealName(e.target.value)}
+                placeholder="Tina Banner"
+                autoComplete="name"
+                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                required
+                data-testid="input-real-name"
+              />
+              <p className="text-white/35 text-[11px] mt-1.5 ml-1">Used on your GoodDeed® certificate. Never shown publicly without your choice.</p>
+            </div>
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                required
+                data-testid="input-email"
+              />
+            </div>
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                minLength={6}
+                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                required
+                data-testid="input-password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="mt-2 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-50 transition-all active:scale-[0.98]"
+              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+              data-testid="button-continue-step1"
+            >
+              Continue
+            </button>
+          </form>
+        )}
+
+        {mode === "register" && step === 2 && (
+          <form onSubmit={handleRegister} className="flex flex-col gap-3">
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Username</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">@</span>
                 <input
                   type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Your full name"
-                  autoComplete="name"
-                  className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
-                  style={{ background: "rgba(255,255,255,0.06)" }}
-                  required
-                  data-testid="input-display-name"
-                />
-              </div>
-              <div>
-                <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  inputMode="email"
+                  value={usernameTouched ? username : suggestedUsername}
+                  onChange={(e) => {
+                    setUsernameTouched(true);
+                    setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""));
+                  }}
+                  placeholder="username"
                   autoCapitalize="none"
                   spellCheck={false}
-                  className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                  className="w-full border border-white/10 rounded-2xl pl-9 pr-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
                   style={{ background: "rgba(255,255,255,0.06)" }}
                   required
-                  data-testid="input-email"
+                  data-testid="input-username"
                 />
               </div>
-            </>
-          )}
-
-          <div>
-            <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
-              placeholder="@username"
-              autoComplete={mode === "login" ? "username" : "off"}
-              autoCapitalize="none"
-              spellCheck={false}
-              className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-              required
-              data-testid="input-username"
-            />
-          </div>
-
-          <div>
-            <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">
-              {error}
+              <p className="text-white/35 text-[11px] mt-1.5 ml-1">Your unique handle. You can share GoodDeeds® as @{usernameTouched ? username || "username" : suggestedUsername}.</p>
             </div>
-          )}
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Display Name</label>
+              <input
+                type="text"
+                value={displayTouched ? displayName : suggestedDisplay}
+                onChange={(e) => {
+                  setDisplayTouched(true);
+                  setDisplayName(e.target.value);
+                }}
+                placeholder="What friends call you"
+                autoComplete="off"
+                className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                required
+                data-testid="input-display-name"
+              />
+              <p className="text-white/35 text-[11px] mt-1.5 ml-1">Shown across the app and on shared GoodDeeds® by default.</p>
+            </div>
 
-          <button
-            type="submit"
-            disabled={isPending}
-            className="mt-2 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-50 transition-all active:scale-[0.98]"
-            style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
-          >
-            {isPending ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10" />
-                </svg>
-                {mode === "login" ? "Signing in..." : "Creating account..."}
-              </span>
-            ) : mode === "login" ? "Sign In" : "Create Account"}
-          </button>
-        </form>
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">{error}</div>
+            )}
+
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="px-5 py-4 rounded-2xl font-semibold text-sm text-white/80 active:scale-[0.98] transition-transform"
+                style={{ background: "rgba(255,255,255,0.08)" }}
+                data-testid="button-back-step2"
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                disabled={isPending}
+                className="flex-1 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-50 transition-all active:scale-[0.98]"
+                style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                data-testid="button-submit-register"
+              >
+                {isPending ? "Creating account..." : "Create Account"}
+              </button>
+            </div>
+          </form>
+        )}
 
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 h-px bg-white/15" />
