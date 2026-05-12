@@ -356,11 +356,8 @@ export function Playlists() {
           <div className="absolute top-20 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
         </div>
 
-        <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
-          <div>
-            <p className="text-white/40 text-xs font-medium uppercase tracking-widest">GoodTunes®</p>
-            <h1 className="text-white text-2xl font-bold mt-0.5">Playlists</h1>
-          </div>
+        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
+          <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Playlists</h1>
           <button
             type="button"
             onClick={() => { setShowCreate(true); setCreateError(""); }}

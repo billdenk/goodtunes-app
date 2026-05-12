@@ -5,7 +5,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
-import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { ALBUMS, SONGS, type Album } from "@/data/musicData";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
@@ -109,11 +108,12 @@ export function Collection() {
         }}
       >
 
-        <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-3">
-          <GoodTunesLogo size="md" />
+        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
+          <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Collection</h1>
           <button
             type="button"
             onClick={() => navigate("/account")}
+            aria-label="Account"
             className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
             style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)" }}
           >
@@ -157,7 +157,7 @@ export function Collection() {
           )}
 
           <div className="px-5 mb-3 flex items-center justify-between">
-            <h2 className="text-white text-base font-bold">My Library</h2>
+            <h2 className="text-white text-base font-bold">My Collection</h2>
             <div className="relative">
               <button
                 type="button"

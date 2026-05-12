@@ -55,7 +55,7 @@ export function BottomNav() {
     >
       <NavItem
         path="/collection"
-        label="Library"
+        label="Collection"
         active={isLibrary}
         onClick={() => navigate("/collection")}
         icon={(active) => (
