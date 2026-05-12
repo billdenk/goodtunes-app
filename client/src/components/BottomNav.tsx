@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/useAuth";
 
 const NavItem = ({
   path,
@@ -6,18 +7,21 @@ const NavItem = ({
   icon,
   active,
   onClick,
+  testId,
 }: {
   path: string;
   label: string;
   icon: (active: boolean) => React.ReactNode;
   active: boolean;
   onClick: () => void;
+  testId?: string;
 }) => {
   return (
     <button
       type="button"
       onClick={onClick}
       className="flex flex-col items-center gap-[3px] min-w-[64px] py-1"
+      data-testid={testId}
     >
       <div
         className="w-14 h-8 flex items-center justify-center rounded-2xl transition-all duration-200"
@@ -38,9 +42,15 @@ const NavItem = ({
 
 export function BottomNav() {
   const [location, navigate] = useLocation();
+  const { user } = useAuth();
 
   const isLibrary = location === "/collection" || location === "/" || location.startsWith("/album");
   const isPlaylists = location.startsWith("/playlist");
+  const isAccount = location.startsWith("/account");
+
+  const initials = user?.displayName
+    ? user.displayName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    : "?";
 
   return (
     <nav
@@ -99,6 +109,26 @@ export function BottomNav() {
               strokeLinecap="round"
             />
           </svg>
+        )}
+      />
+
+      <NavItem
+        path="/account"
+        label="You"
+        active={isAccount}
+        onClick={() => navigate("/account")}
+        testId="nav-you"
+        icon={(active) => (
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all"
+            style={{
+              background: active ? "rgba(49,158,216,0.22)" : "rgba(255,255,255,0.10)",
+              border: `1px solid ${active ? "rgba(49,158,216,0.55)" : "rgba(255,255,255,0.18)"}`,
+              color: active ? "#319ED8" : "rgba(255,255,255,0.75)",
+            }}
+          >
+            {initials}
+          </div>
         )}
       />
 

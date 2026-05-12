@@ -122,17 +122,8 @@ export function Collection() {
         }}
       >
 
-        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
+        <header className="relative z-10 flex items-end px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Collection</h1>
-          <button
-            type="button"
-            onClick={() => navigate("/account")}
-            aria-label="Account"
-            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
-            style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)" }}
-          >
-            {initials}
-          </button>
         </header>
 
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
