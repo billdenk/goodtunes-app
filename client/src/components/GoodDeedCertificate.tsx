@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, forwardRef, type Ref } from "react";
 import { Album } from "@/data/musicData";
+import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 interface GoodDeedCertificateProps {
   album: Album;
@@ -198,6 +199,10 @@ const CertCard = forwardRef(function CertCard(
         width: "100%",
         aspectRatio: "9 / 16",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
+        backgroundColor: "#00062B",
+        backgroundImage: `url(${certBgUrl})`,
+        backgroundSize: "100% 100%",
+        backgroundRepeat: "no-repeat",
       }}
     >
       {/* Top: full-bleed artwork */}
@@ -209,13 +214,10 @@ const CertCard = forwardRef(function CertCard(
         />
       </div>
 
-      {/* Bottom: gradient panel */}
+      {/* Bottom: SVG ambient background shows through */}
       <div
         className="relative w-full px-6 py-6 flex flex-col"
-        style={{
-          height: "50%",
-          background: "linear-gradient(135deg, #1B3A8C 0%, #4A1E8F 60%, #2A1670 100%)",
-        }}
+        style={{ height: "50%" }}
       >
         <div>
           <p className="text-white text-xl font-bold leading-tight">{album.title}</p>
