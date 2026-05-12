@@ -70,23 +70,64 @@ function PlaylistArtwork({
     );
   }
 
-  const cells: string[] = [0, 1, 2, 3].map((i) => artworks[i % artworks.length]);
+  const tint = (
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background:
+          "linear-gradient(135deg, rgba(49,158,216,0.10) 0%, rgba(127,16,167,0.10) 100%)",
+      }}
+    />
+  );
+
+  const unique = artworks.slice(0, 4);
+
+  if (unique.length === 1) {
+    return (
+      <div className={`${rounded} flex-shrink-0 overflow-hidden relative`} style={wrapperStyle}>
+        <img src={unique[0]} alt="" className="w-full h-full object-cover" />
+        {tint}
+      </div>
+    );
+  }
+
+  if (unique.length === 2) {
+    return (
+      <div
+        className={`${rounded} flex-shrink-0 overflow-hidden grid grid-cols-2 grid-rows-1 relative`}
+        style={wrapperStyle}
+      >
+        {unique.map((src, i) => (
+          <img key={i} src={src} alt="" className="w-full h-full object-cover" />
+        ))}
+        {tint}
+      </div>
+    );
+  }
+
+  if (unique.length === 3) {
+    return (
+      <div
+        className={`${rounded} flex-shrink-0 overflow-hidden grid grid-cols-2 grid-rows-2 relative`}
+        style={wrapperStyle}
+      >
+        <img src={unique[0]} alt="" className="w-full h-full object-cover row-span-2" />
+        <img src={unique[1]} alt="" className="w-full h-full object-cover" />
+        <img src={unique[2]} alt="" className="w-full h-full object-cover" />
+        {tint}
+      </div>
+    );
+  }
 
   return (
     <div
       className={`${rounded} flex-shrink-0 overflow-hidden grid grid-cols-2 grid-rows-2 relative`}
       style={wrapperStyle}
     >
-      {cells.map((src, i) => (
+      {unique.map((src, i) => (
         <img key={i} src={src} alt="" className="w-full h-full object-cover" />
       ))}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(49,158,216,0.10) 0%, rgba(127,16,167,0.10) 100%)",
-        }}
-      />
+      {tint}
     </div>
   );
 }
