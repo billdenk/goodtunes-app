@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,7 +17,21 @@ export function Collection() {
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<LibraryTab>("albums");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchOpen) {
+      const t = setTimeout(() => searchInputRef.current?.focus(), 30);
+      return () => clearTimeout(t);
+    }
+  }, [searchOpen]);
+
+  const closeSearch = () => {
+    setSearch("");
+    setSearchOpen(false);
+  };
   const [sortByMap, setSortByMap] = useState<Record<LibraryTab, string>>({
     albums: "title",
     songs: "title",
@@ -156,83 +170,114 @@ export function Collection() {
             </div>
           )}
 
-          <div className="px-5 mb-3 flex items-center justify-end">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowSort((s) => !s)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-white/70 active:opacity-60 transition-opacity"
-                style={{ background: "rgba(255,255,255,0.08)" }}
-                data-testid="button-sort"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M3 6h18M6 12h12M10 18h4" />
-                </svg>
-                Sort: {sortLabel}
-              </button>
-              {showSort && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
-                  <div
-                    className="absolute right-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[140px]"
-                    style={{
-                      background: "rgba(36, 36, 40, 0.96)",
-                      backdropFilter: "blur(24px) saturate(180%)",
-                      WebkitBackdropFilter: "blur(24px) saturate(180%)",
-                      boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                    }}
-                  >
-                    {sortOptions[tab].map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => { setSortBy(opt.value); setShowSort(false); }}
-                        className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-white active:bg-white/10"
-                        data-testid={`sort-${opt.value}`}
-                      >
-                        <span>{opt.label}</span>
-                        {sortBy === opt.value && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
-                            <path d="M20 6L9 17l-5-5" />
-                          </svg>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="px-5 mb-3">
-            <div className="relative flex items-center" style={{ background: "rgba(255,255,255,0.07)", borderRadius: 10 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.2" strokeLinecap="round" className="ml-3 flex-shrink-0">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.5-3.5" />
-              </svg>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={`Search ${tab}`}
-                className="flex-1 bg-transparent border-0 px-2.5 py-2 text-white placeholder-white/35 text-sm focus:outline-none"
-                data-testid="input-library-search"
-              />
-              {search && (
+          <div className="px-5 mb-3 flex items-center justify-end gap-2 min-h-[32px]">
+            {searchOpen ? (
+              <div className="flex items-center gap-2 w-full animate-in fade-in duration-150">
+                <div className="relative flex items-center flex-1" style={{ background: "rgba(255,255,255,0.09)", borderRadius: 10 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2.2" strokeLinecap="round" className="ml-3 flex-shrink-0">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" />
+                  </svg>
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={`Search ${tab}`}
+                    className="flex-1 bg-transparent border-0 px-2.5 py-2 text-white placeholder-white/35 text-sm focus:outline-none"
+                    data-testid="input-library-search"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="mr-2 w-5 h-5 flex items-center justify-center rounded-full"
+                      style={{ background: "rgba(255,255,255,0.18)" }}
+                      data-testid="button-clear-search"
+                    >
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setSearch("")}
-                  className="mr-2 w-5 h-5 flex items-center justify-center rounded-full"
-                  style={{ background: "rgba(255,255,255,0.18)" }}
-                  data-testid="button-clear-search"
+                  onClick={closeSearch}
+                  className="text-[#319ED8] text-sm font-medium px-1 active:opacity-60 transition-opacity"
+                  data-testid="button-cancel-search"
                 >
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
-                    <path d="M6 6l12 12M18 6L6 18" />
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  aria-label="Search"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white/75 active:opacity-60 transition-opacity"
+                  style={{ background: "rgba(255,255,255,0.08)" }}
+                  data-testid="button-search-toggle"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" />
                   </svg>
                 </button>
-              )}
-            </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowSort((s) => !s)}
+                    aria-label="Sort"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white/75 active:opacity-60 transition-opacity"
+                    style={{ background: "rgba(255,255,255,0.08)" }}
+                    data-testid="button-sort"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <path d="M3 6h18M6 12h12M10 18h4" />
+                    </svg>
+                  </button>
+                  {showSort && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
+                      <div
+                        className="absolute right-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[180px]"
+                        style={{
+                          background: "rgba(36, 36, 40, 0.96)",
+                          backdropFilter: "blur(24px) saturate(180%)",
+                          WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                          boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <div className="px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                          Sort by
+                        </div>
+                        {sortOptions[tab].map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => { setSortBy(opt.value); setShowSort(false); }}
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium text-white active:bg-white/10"
+                            data-testid={`sort-${opt.value}`}
+                          >
+                            <span className="w-4 flex-shrink-0 flex items-center justify-center">
+                              {sortBy === opt.value && (
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
+                                  <path d="M20 6L9 17l-5-5" />
+                                </svg>
+                              )}
+                            </span>
+                            <span>{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="px-5 mb-4">
