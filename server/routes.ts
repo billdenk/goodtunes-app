@@ -209,5 +209,81 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Removed" });
   });
 
+  // Public OpenGraph share page for a GoodDeed certificate.
+  // No auth required — link is meant to be unfurled by social platforms.
+  app.get("/share/cert", (req, res) => {
+    const esc = (s: string) =>
+      String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const album = esc(String(req.query.album ?? "GoodDeed Certificate"));
+    const artist = esc(String(req.query.artist ?? ""));
+    const owner = esc(String(req.query.owner ?? ""));
+    const numRaw = String(req.query.num ?? "1");
+    const numClean = /^\d+$/.test(numRaw) ? numRaw : "1";
+    const num = esc(numClean.padStart(2, "0"));
+    const artParam = String(req.query.art ?? "");
+
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const ogImage = artParam.startsWith("http")
+      ? artParam
+      : artParam
+        ? `${origin}${artParam.startsWith("/") ? "" : "/"}${artParam}`
+        : `${origin}/goodtunes-logo-color.png`;
+
+    const title = `${owner || "I"} own${owner ? "s" : ""} No. ${num} of "${album}" — GoodDeed®`;
+    const description = `${album}${artist ? ` by ${artist}` : ""}. Verified ownership by GoodTunes® GoodDeed®.`;
+    const url = `${origin}${req.originalUrl}`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${title}</title>
+  <meta name="description" content="${description}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${esc(ogImage)}" />
+  <meta property="og:url" content="${esc(url)}" />
+  <meta property="og:site_name" content="GoodTunes" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${esc(ogImage)}" />
+  <style>
+    body { margin:0; background:#00062B; color:#fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .card { width:100%; max-width:360px; border-radius:24px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.7); background:#0D2060; }
+    .art { width:100%; aspect-ratio: 1 / 1; object-fit:cover; display:block; }
+    .panel { padding:24px; background:linear-gradient(135deg,#1B3A8C 0%,#4A1E8F 60%,#2A1670 100%); text-align:center; }
+    .album { font-size:20px; font-weight:700; }
+    .artist { font-size:14px; opacity:.7; margin-top:4px; }
+    .cert { margin-top:18px; font-size:13px; opacity:.8; }
+    .owner { font-size:22px; font-weight:700; margin:6px 0 4px; }
+    .num { font-size:28px; font-weight:700; margin-top:18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img class="art" src="${esc(ogImage)}" alt="${album}" />
+    <div class="panel">
+      <div class="album">${album}</div>
+      ${artist ? `<div class="artist">${artist}</div>` : ""}
+      <div class="cert">This GoodDeed® certifies that</div>
+      <div class="owner">${owner || "—"}</div>
+      <div class="cert">owns number ${num} of this series.</div>
+      <div class="num">No. ${num}</div>
+    </div>
+  </div>
+</body>
+</html>`);
+  });
+
   return httpServer;
 }

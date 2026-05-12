@@ -66,12 +66,20 @@ export function GoodDeedCertificate({
 
   const handleShare = async () => {
     const n = padded(certs[safeIdx]);
+    const params = new URLSearchParams({
+      album: album.title,
+      artist: album.artist,
+      owner: ownerName,
+      num: n,
+      art: album.artwork,
+    });
+    const url = `${window.location.origin}/share/cert?${params.toString()}`;
     const text = `I own No. ${n} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed®`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "My GoodDeed® Certificate", text });
+        await navigator.share({ title: "My GoodDeed® Certificate", text, url });
       } else {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(`${text}\n${url}`);
       }
       setShared(true);
       setTimeout(() => setShared(false), 1800);
@@ -91,7 +99,7 @@ export function GoodDeedCertificate({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-[400px] z-10 animate-slide-up">
+      <div className="relative w-full z-10 animate-slide-up">
         {/* Close + Share controls */}
         <div className="flex items-center justify-between mb-3 px-5">
           <button
@@ -129,7 +137,7 @@ export function GoodDeedCertificate({
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                   <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
                 </svg>
-                Share
+                Share No. {padded(certs[safeIdx])}
               </>
             )}
           </button>
@@ -140,9 +148,9 @@ export function GoodDeedCertificate({
           ref={scrollerRef}
           onScroll={handleScroll}
           className="overflow-x-auto scrollbar-hide snap-x snap-mandatory"
-          style={{ scrollPaddingLeft: 20, WebkitOverflowScrolling: "touch" }}
+          style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <div className="flex gap-3 px-5" style={{ paddingRight: certs.length > 1 ? 44 : 20 }}>
+          <div className="flex">
             {certs.map((num, i) => (
               <CertCard
                 key={num}
