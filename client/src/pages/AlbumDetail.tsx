@@ -210,8 +210,11 @@ export function AlbumDetail() {
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
-          {/* Hero artwork — full square, edge-to-edge, fading into the dark bg */}
-          <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
+          {/* Hero artwork — full square, edge-to-edge of the viewport, fading into the dark bg */}
+          <div
+            className="relative w-screen left-1/2 -translate-x-1/2 overflow-hidden"
+            style={{ aspectRatio: "1 / 1" }}
+          >
             <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover block" />
             <div
               className="absolute inset-x-0 bottom-0"
