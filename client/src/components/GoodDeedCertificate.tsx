@@ -149,7 +149,7 @@ export function GoodDeedCertificate({
           className="overflow-x-auto scrollbar-hide snap-x snap-mandatory"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <div className="flex">
+          <div className="flex gap-4 px-1">
             {certs.map((num, i) => (
               <CertCard
                 key={num}
