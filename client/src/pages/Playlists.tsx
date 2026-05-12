@@ -276,7 +276,7 @@ export function Playlists() {
               type="button"
               onClick={handlePlayPlaylist}
               disabled={playlistSongs.length === 0}
-              className="flex-1 flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-base active:scale-[0.98] transition-transform disabled:opacity-40"
+              className="flex-1 max-w-[210px] flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-base active:scale-[0.98] transition-transform disabled:opacity-40 mx-auto"
               style={{ background: "#fff", color: "#00062B" }}
               data-testid="button-play-playlist"
             >

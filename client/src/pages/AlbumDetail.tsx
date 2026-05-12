@@ -18,6 +18,7 @@ export function AlbumDetail() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showCert, setShowCert] = useState(false);
+  const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -265,7 +266,7 @@ export function AlbumDetail() {
               <button
                 type="button"
                 onClick={handlePlayAll}
-                className="flex-1 flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-base active:scale-[0.98] transition-transform"
+                className="flex-1 max-w-[210px] flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-base active:scale-[0.98] transition-transform mx-auto"
                 style={{ background: "#fff", color: "#00062B" }}
                 data-testid="button-play-album"
               >
@@ -447,9 +448,9 @@ export function AlbumDetail() {
           <GoodDeedCertificate
             album={album}
             ownerName={user?.displayName || "GoodTunes Fan"}
-            certificateNumber={album.certificateNumber ?? 1}
-            certificateNumbers={album.ownedCertificates}
-            onClose={() => setShowCert(false)}
+            certificateNumber={singleCertNum ?? album.certificateNumber ?? 1}
+            certificateNumbers={singleCertNum !== null ? [singleCertNum] : album.ownedCertificates}
+            onClose={() => { setShowCert(false); setSingleCertNum(null); }}
           />
         )}
 
@@ -472,6 +473,7 @@ export function AlbumDetail() {
 
         {provenanceCertNum !== null && (
           <ProvenanceSheet
+            onViewGoodDeed={(n) => { setProvenanceCertNum(null); setShowCert(true); setSingleCertNum(n); }}
             album={album}
             ownerName={user?.displayName || "GoodTunes Fan"}
             certNum={provenanceCertNum}
@@ -590,11 +592,11 @@ export function AlbumDetail() {
   );
 }
 
-function ProvenanceSheet({ album, ownerName, certNum, onClose }: { album: Album; ownerName: string; certNum: number; onClose: () => void }) {
+function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }: { album: Album; ownerName: string; certNum: number; onClose: () => void; onViewGoodDeed?: (n: number) => void }) {
   const events = [
-    { date: "2024-03-12", actor: "GoodTunes® Mint", action: "Certificate #" + certNum + " minted", color: "#7F10A7" },
-    { date: "2024-08-04", actor: "Original Owner", action: `Purchased from ${album.artist}`, color: "#319ED8" },
     { date: "2025-11-21", actor: ownerName, action: "Acquired via secondary transfer", color: "#4AFFCA" },
+    { date: "2024-08-04", actor: "Original Owner", action: `Purchased from ${album.artist}`, color: "#319ED8" },
+    { date: "2024-03-12", actor: "GoodTunes® Created", action: "Certificate #" + certNum + " created", color: "#7F10A7" },
   ];
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={`Provenance for ${album.title} certificate ${certNum}`}>
@@ -609,7 +611,7 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose }: { album: Album;
           <button type="button" onClick={onClose} className="text-[#319ED8] text-sm font-semibold" data-testid="button-close-provenance">Done</button>
         </div>
 
-        <div className="px-5 mb-5 flex-shrink-0">
+        <div className="px-5 mb-4 flex-shrink-0">
           <div className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: "rgba(74,255,202,0.08)", border: "1px solid rgba(74,255,202,0.2)" }}>
             <img src={album.artwork} alt={album.title} className="w-12 h-12 rounded-xl object-cover" />
             <div className="flex-1 min-w-0">
@@ -618,6 +620,20 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose }: { album: Album;
             </div>
             <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: "rgba(74,255,202,0.18)", color: "#4AFFCA" }}>VERIFIED</span>
           </div>
+          {onViewGoodDeed && (
+            <button
+              type="button"
+              onClick={() => onViewGoodDeed(certNum)}
+              className="w-full mt-2.5 flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-semibold text-white active:opacity-70 transition-opacity"
+              style={{ background: "rgba(49,158,216,0.14)", border: "1px solid rgba(49,158,216,0.28)" }}
+              data-testid="button-view-this-gooddeed"
+            >
+              <span>View GoodDeed® No. {certNum.toString().padStart(2, "0")}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
