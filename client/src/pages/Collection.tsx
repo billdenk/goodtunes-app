@@ -7,6 +7,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { ALBUMS, SONGS, type Album } from "@/data/musicData";
+import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 type LibraryTab = "albums" | "songs" | "artists";
 
@@ -116,31 +117,15 @@ export function Collection() {
 
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div
-            className="absolute rounded-full"
-            style={{
-              top: -180,
-              right: -120,
-              width: 380,
-              height: 380,
-              background: "radial-gradient(circle, rgba(49,158,216,0.22) 0%, rgba(49,158,216,0) 65%)",
-              filter: "blur(40px)",
-            }}
-          />
-          <div
-            className="absolute rounded-full"
-            style={{
-              top: "45%",
-              left: -140,
-              width: 320,
-              height: 320,
-              background: "radial-gradient(circle, rgba(127,16,167,0.18) 0%, rgba(127,16,167,0) 65%)",
-              filter: "blur(40px)",
-            }}
-          />
-        </div>
+      <section
+        className="relative w-full max-w-[390px] h-screen text-white flex flex-col"
+        style={{
+          backgroundColor: "#00062B",
+          backgroundImage: `url(${certBgUrl})`,
+          backgroundSize: "100% 100%",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
 
         <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-3">
           <GoodTunesLogo size="md" />
