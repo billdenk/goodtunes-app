@@ -200,12 +200,28 @@ export function Playlists() {
     playSong(playlistSongs[0].song, playlistSongs.map((ps) => ps.song));
   };
 
+  const handleShufflePlaylist = () => {
+    if (playlistSongs.length === 0) return;
+    const songs = playlistSongs.map((ps) => ps.song);
+    const shuffled = [...songs];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    playSong(shuffled[0], shuffled);
+  };
+
+  const closeDetail = () => {
+    setSelectedPlaylist(null);
+    queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
+  };
+
   if (selectedPlaylist) {
     return (
       <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
         <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
           <header className="flex items-center justify-between px-5 pt-14 pb-3 flex-shrink-0">
-            <button type="button" onClick={() => setSelectedPlaylist(null)} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80" style={{ background: "rgba(255,255,255,0.08)" }} data-testid="button-back-playlist">
+            <button type="button" onClick={closeDetail} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80" style={{ background: "rgba(255,255,255,0.08)" }} data-testid="button-back-playlist">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M15 18l-6-6 6-6" strokeLinecap="round" />
               </svg>
@@ -242,32 +258,44 @@ export function Playlists() {
             </p>
           </div>
 
-          <div className="flex gap-3 px-5 mb-4 flex-shrink-0">
-            {playlistSongs.length > 0 && (
-              <button
-                type="button"
-                onClick={handlePlayPlaylist}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white"
-                style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
-                data-testid="button-play-all"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5.14v14l11-7-11-7z" />
-                </svg>
-                Play All
-              </button>
-            )}
+          <div className="flex items-center gap-4 px-5 mt-1 mb-3 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleShufflePlaylist}
+              disabled={playlistSongs.length === 0}
+              aria-label="Shuffle playlist"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0 disabled:opacity-40"
+              style={{ background: "rgba(255,255,255,0.08)" }}
+              data-testid="button-shuffle-playlist"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handlePlayPlaylist}
+              disabled={playlistSongs.length === 0}
+              className="flex-1 flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-base active:scale-[0.98] transition-transform disabled:opacity-40"
+              style={{ background: "#fff", color: "#00062B" }}
+              data-testid="button-play-playlist"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5.14v14l11-7-11-7z" />
+              </svg>
+              Play
+            </button>
             <button
               type="button"
               onClick={() => { setShowAddSongs(true); setAddSearch(""); }}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white border border-white/15 active:opacity-70"
-              style={{ background: "rgba(255,255,255,0.05)" }}
+              aria-label="Add songs to playlist"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+              style={{ background: "rgba(255,255,255,0.08)" }}
               data-testid="button-add-songs"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              Add Songs
             </button>
           </div>
 
