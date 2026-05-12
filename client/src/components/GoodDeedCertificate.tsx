@@ -203,7 +203,7 @@ const CertCard = forwardRef(function CertCard(
       ref={ref}
       className="flex-shrink-0 snap-start rounded-3xl overflow-hidden shadow-2xl mx-auto"
       style={{
-        width: "min(100%, calc((100dvh - 180px) * 9 / 16))",
+        width: "min(100%, calc((100dvh - 240px) * 9 / 16))",
         aspectRatio: "9 / 16",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
         backgroundColor: "#00062B",
