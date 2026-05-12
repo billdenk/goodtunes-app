@@ -12,6 +12,12 @@ export interface AlbumPhoto {
   caption?: string;
 }
 
+export interface CertPurchase {
+  num: number;
+  price: number;
+  date: string;
+}
+
 export interface Album {
   id: string;
   title: string;
@@ -22,6 +28,7 @@ export interface Album {
   description: string;
   certificateNumber?: number;
   ownedCertificates?: number[];
+  purchases?: CertPurchase[];
   videos?: AlbumVideo[];
   photos?: AlbumPhoto[];
 }
@@ -77,6 +84,11 @@ export const ALBUMS: Album[] = [
     description: "Sunshine, highways, and the stories only California can tell. A West Coast state of mind.",
     certificateNumber: 21,
     ownedCertificates: [21, 47, 88],
+    purchases: [
+      { num: 21, price: 12.0, date: "Aug 30, 2024" },
+      { num: 47, price: 12.0, date: "Sep 14, 2024" },
+      { num: 88, price: 14.0, date: "Nov 02, 2024" },
+    ],
     videos: [
       {
         id: "vid-4-1",

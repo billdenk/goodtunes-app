@@ -18,25 +18,37 @@ export function AlbumDetail() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showCert, setShowCert] = useState(false);
-  const [showProvenance, setShowProvenance] = useState(false);
+  const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
+  const [showOwnership, setShowOwnership] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [shareToast, setShareToast] = useState("");
   const [showPlaylistPicker, setShowPlaylistPicker] = useState<Song | null>(null);
   const [tab, setTab] = useState<MediaTab>("music");
   const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
   const [activePhoto, setActivePhoto] = useState<AlbumPhoto | null>(null);
+  const [downloadStep, setDownloadStep] = useState<"off" | "warn" | "confirm">("off");
+  const [isDownloaded, setIsDownloaded] = useState(false);
 
   const album = ALBUMS.find((a) => a.id === id);
   const songs = album ? getSongsByAlbum(id) : [];
   const hasVideos = !!album?.videos?.length;
   const hasPhotos = !!album?.photos?.length;
   const showTabs = hasVideos || hasPhotos;
+  const ownedNums = album?.ownedCertificates ?? (album?.certificateNumber ? [album.certificateNumber] : []);
+  const isMulti = ownedNums.length > 1;
 
   useEffect(() => {
     setTab("music");
     setActiveVideo(null);
     setActivePhoto(null);
-  }, [id]);
+    setShowOwnership(false);
+    setProvenanceCertNum(null);
+    setDownloadStep("off");
+    if (album) {
+      try { setIsDownloaded(localStorage.getItem(`gt:downloaded:${album.id}`) === "1"); }
+      catch { setIsDownloaded(false); }
+    }
+  }, [id, album]);
 
   useEffect(() => {
     if (tab === "video" && !hasVideos) setTab("music");
@@ -143,14 +155,39 @@ export function AlbumDetail() {
                     <div className="h-px bg-white/8" />
                     <button
                       type="button"
-                      onClick={() => { setShowMenu(false); setShowProvenance(true); }}
+                      onClick={() => {
+                        setShowMenu(false);
+                        if (isMulti) setShowOwnership(true);
+                        else setProvenanceCertNum(ownedNums[0] ?? album.certificateNumber ?? 1);
+                      }}
                       className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
                       data-testid="menu-view-provenance"
                     >
-                      <span>View Provenance</span>
+                      <span>{isMulti ? "Ownership" : "View Provenance"}</span>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round">
                         <circle cx="12" cy="12" r="9" />
                         <path d="M12 7v5l3 2" />
+                      </svg>
+                    </button>
+                    <div className="h-px bg-white/8" />
+                    <button
+                      type="button"
+                      onClick={() => { setShowMenu(false); setDownloadStep("warn"); }}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm active:bg-white/10"
+                      style={{ color: isDownloaded ? "rgba(255,255,255,0.55)" : "#FF6B6B" }}
+                      data-testid="menu-download-music"
+                      disabled={isDownloaded}
+                    >
+                      <span>{isDownloaded ? "Downloaded ✓" : "Download Music Files"}</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isDownloaded ? "#4AFFCA" : "#FF6B6B"} strokeWidth="2" strokeLinecap="round">
+                        {isDownloaded ? (
+                          <path d="M20 6L9 17l-5-5" />
+                        ) : (
+                          <>
+                            <path d="M12 4v12M7 11l5 5 5-5" />
+                            <path d="M5 20h14" />
+                          </>
+                        )}
                       </svg>
                     </button>
                     <div className="h-px bg-white/8" />
@@ -399,11 +436,45 @@ export function AlbumDetail() {
           />
         )}
 
-        {showProvenance && (
+        {provenanceCertNum !== null && (
           <ProvenanceSheet
             album={album}
             ownerName={user?.displayName || "GoodTunes Fan"}
-            onClose={() => setShowProvenance(false)}
+            certNum={provenanceCertNum}
+            onClose={() => setProvenanceCertNum(null)}
+          />
+        )}
+
+        {showOwnership && (
+          <OwnershipSheet
+            album={album}
+            ownerName={user?.displayName || "GoodTunes Fan"}
+            onClose={() => setShowOwnership(false)}
+            onSelectCert={(n) => { setShowOwnership(false); setProvenanceCertNum(n); }}
+          />
+        )}
+
+        {downloadStep === "warn" && (
+          <DownloadWarningSheet
+            stage="warn"
+            albumType={album.type}
+            onClose={() => setDownloadStep("off")}
+            onProceed={() => setDownloadStep("confirm")}
+          />
+        )}
+
+        {downloadStep === "confirm" && (
+          <DownloadWarningSheet
+            stage="confirm"
+            albumType={album.type}
+            onClose={() => setDownloadStep("off")}
+            onProceed={() => {
+              setDownloadStep("off");
+              setIsDownloaded(true);
+              try { localStorage.setItem(`gt:downloaded:${album.id}`, "1"); } catch {}
+              setShareToast("Download started — Transfer Rights removed");
+              setTimeout(() => setShareToast(""), 2400);
+            }}
           />
         )}
 
@@ -485,15 +556,14 @@ export function AlbumDetail() {
   );
 }
 
-function ProvenanceSheet({ album, ownerName, onClose }: { album: Album; ownerName: string; onClose: () => void }) {
-  const certNum = album.certificateNumber ?? 1;
+function ProvenanceSheet({ album, ownerName, certNum, onClose }: { album: Album; ownerName: string; certNum: number; onClose: () => void }) {
   const events = [
     { date: "2024-03-12", actor: "GoodTunes® Mint", action: "Certificate #" + certNum + " minted", color: "#7F10A7" },
     { date: "2024-08-04", actor: "Original Owner", action: `Purchased from ${album.artist}`, color: "#319ED8" },
     { date: "2025-11-21", actor: ownerName, action: "Acquired via secondary transfer", color: "#4AFFCA" },
   ];
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={`Provenance for ${album.title} certificate ${certNum}`}>
       <div className="absolute inset-0 bg-black/65" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
       <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh" }}>
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
@@ -529,6 +599,153 @@ function ProvenanceSheet({ album, ownerName, onClose }: { album: Album; ownerNam
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OwnershipSheet({
+  album,
+  ownerName,
+  onClose,
+  onSelectCert,
+}: {
+  album: Album;
+  ownerName: string;
+  onClose: () => void;
+  onSelectCert: (n: number) => void;
+}) {
+  const owned = album.ownedCertificates ?? [];
+  const purchasesByNum = new Map((album.purchases ?? []).map((p) => [p.num, p]));
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="Ownership">
+      <div className="absolute inset-0 bg-black/65" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
+      <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh" }}>
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
+        <div className="flex items-center justify-between px-5 mb-1 flex-shrink-0">
+          <div>
+            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Ownership</p>
+            <h3 className="text-white font-semibold text-base mt-0.5">{album.title}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="text-[#319ED8] text-sm font-semibold" data-testid="button-close-ownership">Done</button>
+        </div>
+        <p className="px-5 text-white/50 text-xs mb-4">Held by {ownerName} · {owned.length} cop{owned.length === 1 ? "y" : "ies"}</p>
+
+        <div className="px-5 mb-2 flex items-center text-[10px] font-bold uppercase tracking-widest text-white/40">
+          <div className="w-16">No.</div>
+          <div className="flex-1">Price</div>
+          <div className="w-24 text-right">Date</div>
+          <div className="w-5" />
+        </div>
+
+        <div className="flex-1 overflow-y-auto scrollbar-hide px-3">
+          {owned.map((num, i) => {
+            const p = purchasesByNum.get(num);
+            return (
+              <button
+                key={num}
+                type="button"
+                onClick={() => onSelectCert(num)}
+                className="w-full flex items-center px-2 py-3.5 rounded-xl text-left active:bg-white/5 transition-colors"
+                style={{ background: i % 2 === 0 ? "rgba(49,158,216,0.07)" : "transparent" }}
+                data-testid={`row-cert-${num}`}
+              >
+                <div className="w-16 text-white text-sm font-semibold">#{num}</div>
+                <div className="flex-1 text-white/80 text-sm">{p ? `$${p.price.toFixed(2)}` : "—"}</div>
+                <div className="w-24 text-right text-white/55 text-xs">{p?.date ?? "—"}</div>
+                <div className="w-5 flex justify-end text-white/35">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="px-5 mt-3 text-white/35 text-[11px] text-center">Tap a row to view that copy's provenance.</p>
+      </div>
+    </div>
+  );
+}
+
+function DownloadWarningSheet({
+  stage,
+  albumType,
+  onClose,
+  onProceed,
+}: {
+  stage: "warn" | "confirm";
+  albumType: "album" | "EP";
+  onClose: () => void;
+  onProceed: () => void;
+}) {
+  const isWarn = stage === "warn";
+  return (
+    <div
+      className="fixed inset-0 z-[75] flex items-center justify-center px-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={isWarn ? "Keep your Transfer Rights" : "Are you sure?"}
+      data-testid={isWarn ? "modal-download-warn" : "modal-download-confirm"}
+    >
+      <div className="absolute inset-0 bg-black/80" style={{ backdropFilter: "blur(8px)" }} onClick={onClose} />
+      <div
+        className="relative w-full max-w-[340px] z-10 rounded-3xl px-6 pt-5 pb-7"
+        style={{
+          background: "rgba(20, 24, 48, 0.96)",
+          backdropFilter: "blur(28px) saturate(180%)",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.7)",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white/80 active:opacity-70"
+          data-testid="button-close-download"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+
+        <h2 className="text-white text-2xl font-bold leading-tight mt-2">
+          {isWarn ? "Keep your Transfer Rights." : "Are you sure?"}
+        </h2>
+        <p className="text-white/75 text-sm leading-relaxed mt-3">
+          {isWarn ? (
+            <>
+              Downloading will <span className="font-semibold text-white">permanently remove</span> your ability to transfer ownership in the future. Soon, you'll be able to gift or resell your music — keeping it in the cloud ensures you don't lose the <span className="font-semibold text-white">Transfer Rights option.</span>
+            </>
+          ) : (
+            <>
+              Downloading music files will <span className="font-semibold text-white">permanently remove</span> your ability to transfer ownership of your limited edition {albumType === "EP" ? "EP" : "Album"} in the future. This cannot be undone.
+            </>
+          )}
+        </p>
+
+        <div className="flex flex-col gap-2.5 mt-6">
+          <button
+            type="button"
+            onClick={onProceed}
+            className="w-full py-3 rounded-full text-sm font-semibold text-white active:scale-[0.97] transition-transform"
+            style={{ background: "transparent", border: "1.5px solid rgba(255,255,255,0.85)" }}
+            data-testid="button-download-anyway"
+          >
+            Download Anyway
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-3 rounded-full text-sm font-semibold active:scale-[0.97] transition-transform"
+            style={{ background: "#fff", color: "#00062B" }}
+            data-testid="button-keep-transfer-rights"
+          >
+            Keep Transfer Rights
+          </button>
         </div>
       </div>
     </div>

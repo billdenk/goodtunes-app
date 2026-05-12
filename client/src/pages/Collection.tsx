@@ -434,18 +434,49 @@ function AlbumCard({
   onPress: () => void;
   onCertPress: () => void;
 }) {
+  const ownedCount = album.ownedCertificates?.length ?? 1;
+  const isMulti = ownedCount > 1;
   return (
     <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={onPress}
-        className="relative aspect-square rounded-2xl overflow-hidden active:scale-[0.97] transition-transform"
-        style={{
-          boxShadow: isCurrentlyPlaying
-            ? "0 0 0 2px #319ED8, 0 4px 20px rgba(0,0,0,0.4)"
-            : "0 4px 20px rgba(0,0,0,0.4)",
-        }}
-      >
+      <div className="relative aspect-square">
+        {isMulti && (
+          <>
+            <div
+              aria-hidden
+              className="absolute inset-0 rounded-2xl overflow-hidden"
+              style={{
+                transform: "rotate(-6deg) translate(-6px, -4px) scale(0.94)",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.45)",
+                zIndex: 0,
+              }}
+            >
+              <img src={album.artwork} alt="" className="w-full h-full object-cover opacity-85" />
+            </div>
+            {ownedCount > 2 && (
+              <div
+                aria-hidden
+                className="absolute inset-0 rounded-2xl overflow-hidden"
+                style={{
+                  transform: "rotate(5deg) translate(6px, -3px) scale(0.96)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                  zIndex: 1,
+                }}
+              >
+                <img src={album.artwork} alt="" className="w-full h-full object-cover opacity-90" />
+              </div>
+            )}
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onPress}
+          className="relative z-10 w-full h-full rounded-2xl overflow-hidden active:scale-[0.97] transition-transform"
+          style={{
+            boxShadow: isCurrentlyPlaying
+              ? "0 0 0 2px #319ED8, 0 4px 20px rgba(0,0,0,0.4)"
+              : "0 4px 20px rgba(0,0,0,0.4)",
+          }}
+        >
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
         {isCurrentlyPlaying && (
           <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,6,43,0.45)" }}>
@@ -465,15 +496,27 @@ function AlbumCard({
             </div>
           </div>
         )}
-        <div className="absolute top-2 left-2">
-          <span
-            className="text-[9px] font-bold px-2 py-0.5 rounded-full"
-            style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)" }}
-          >
-            {album.type}
-          </span>
-        </div>
-      </button>
+          <div className="absolute top-2 left-2">
+            <span
+              className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)" }}
+            >
+              {album.type}
+            </span>
+          </div>
+          {isMulti && (
+            <div className="absolute top-2 right-2">
+              <span
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
+                style={{ background: "rgba(74,255,202,0.2)", color: "#4AFFCA", border: "1px solid rgba(74,255,202,0.35)", backdropFilter: "blur(4px)" }}
+                data-testid={`badge-owned-${album.id}`}
+              >
+                ×{ownedCount}
+              </span>
+            </div>
+          )}
+        </button>
+      </div>
       <div className="mt-2 px-0.5">
         <p className="text-white text-sm font-semibold leading-tight truncate">{album.title}</p>
         <p className="text-white/50 text-xs truncate mt-0.5">{album.artist}</p>
