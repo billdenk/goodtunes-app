@@ -244,7 +244,6 @@ export function AlbumDetail() {
                     <p className={`text-sm font-medium truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}>
                       {song.title}
                     </p>
-                    <p className="text-white/40 text-xs mt-0.5">{formatDuration(song.duration)}</p>
                   </div>
                 </button>
                 <button
