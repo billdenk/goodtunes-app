@@ -1,3 +1,12 @@
+import tgPhoto1 from "@assets/640072642_25613245751711176_6571016117939262912_n_1778621365643.jpg";
+import tgPhoto2 from "@assets/634243288_25554499034252515_5558112962991228661_n_1778621377317.jpg";
+import tgPhoto3 from "@assets/659040451_18574314340025503_4062507424707663101_n_1778621388019.jpg";
+import tgPhoto4 from "@assets/653387510_18568733956025503_1400116026168525714_n_1778621392486.jpg";
+import tgPhoto5 from "@assets/496254517_9447895035339505_2309388181313327884_n_1778621409155.jpg";
+import tgVideo1Thumb from "@assets/612548086_1270168371604759_7665130374696370589_n_1778621383526.jpg";
+import tgVideo2Thumb from "@assets/629024765_18558574207025503_6255887094720167360_n_1778621397950.jpg";
+import tgVideo3Thumb from "@assets/590183285_1595547188528175_2217542122704006465_n_1778621402722.jpg";
+
 export interface AlbumVideo {
   id: string;
   title: string;
@@ -92,24 +101,32 @@ export const ALBUMS: Album[] = [
     videos: [
       {
         id: "vid-4-1",
-        title: "Pacific Drive — Official Music Video",
-        thumbnail: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png",
+        title: "Pacific Drive — Venice Beach",
+        thumbnail: tgVideo1Thumb,
         url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
         duration: "3:28",
       },
       {
         id: "vid-4-2",
-        title: "Behind the Scenes: Venice Beach",
-        thumbnail: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png",
+        title: "Live at The Corktown",
+        thumbnail: tgVideo2Thumb,
         url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
         duration: "5:12",
       },
+      {
+        id: "vid-4-3",
+        title: "Stage Lights — Full Set",
+        thumbnail: tgVideo3Thumb,
+        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        duration: "5:11",
+      },
     ],
     photos: [
-      { id: "p-4-1", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", caption: "Album cover" },
-      { id: "p-4-2", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", caption: "Studio session" },
-      { id: "p-4-3", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", caption: "On the road" },
-      { id: "p-4-4", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", caption: "Sunset shoot" },
+      { id: "p-4-1", url: tgPhoto1, caption: "In the studio" },
+      { id: "p-4-2", url: tgPhoto2, caption: "Backstage" },
+      { id: "p-4-3", url: tgPhoto3, caption: "On the road" },
+      { id: "p-4-4", url: tgPhoto4, caption: "Alleyway portrait" },
+      { id: "p-4-5", url: tgPhoto5, caption: "Up close" },
     ],
   },
 ];
