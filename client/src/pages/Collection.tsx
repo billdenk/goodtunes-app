@@ -216,11 +216,11 @@ export function Collection() {
                   type="button"
                   onClick={() => setSearchOpen(true)}
                   aria-label="Search"
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white/75 active:opacity-60 transition-opacity"
-                  style={{ background: "rgba(255,255,255,0.08)" }}
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform"
+                  style={{ background: "rgba(255,255,255,0.10)" }}
                   data-testid="button-search-toggle"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <circle cx="11" cy="11" r="7" />
                     <path d="M20 20l-3.5-3.5" />
                   </svg>
@@ -230,11 +230,11 @@ export function Collection() {
                     type="button"
                     onClick={() => setShowSort((s) => !s)}
                     aria-label="Sort"
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white/75 active:opacity-60 transition-opacity"
-                    style={{ background: "rgba(255,255,255,0.08)" }}
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform"
+                    style={{ background: "rgba(255,255,255,0.10)" }}
                     data-testid="button-sort"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                       <path d="M3 6h18M6 12h12M10 18h4" />
                     </svg>
                   </button>
