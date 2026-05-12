@@ -106,10 +106,6 @@ export function Collection() {
 
   const sortLabel = sortOptions[tab].find((o) => o.value === sortBy)?.label ?? "";
 
-  const initials = user?.displayName
-    ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
-    : "?";
-
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
       <section
