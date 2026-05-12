@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Album } from "@/data/musicData";
+import goodTunesLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 interface GoodDeedCertificateProps {
   album: Album;
@@ -107,11 +108,7 @@ export function GoodDeedCertificate({ album, ownerName, certificateNumber, onClo
               <p className="text-white text-3xl font-bold leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>
                 No. {certNumStr}
               </p>
-              <div className="flex flex-col items-end leading-none">
-                <p className="text-white text-[15px] font-bold tracking-tight">Good</p>
-                <p className="text-white text-[15px] font-bold tracking-tight">Tunes</p>
-                <p className="text-white/45 text-[7px] mt-0.5 tracking-wider">POWERED BY GoGoode</p>
-              </div>
+              <img src={goodTunesLogo} alt="GoodTunes" className="h-10 w-auto object-contain" />
             </div>
           </div>
         </div>
