@@ -6,6 +6,7 @@ interface AuthUser {
   username: string;
   email: string;
   displayName: string;
+  realName?: string | null;
 }
 
 interface AuthResponse extends AuthUser {
@@ -87,7 +88,7 @@ export function useAuth() {
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { displayName?: string; username?: string }) => {
+    mutationFn: async (data: { displayName?: string; username?: string; realName?: string | null }) => {
       const res = await apiRequest("PUT", "/api/me", data);
       return res.json() as Promise<AuthUser>;
     },
