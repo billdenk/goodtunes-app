@@ -10,135 +10,109 @@ interface GoodDeedCertificateProps {
 
 export function GoodDeedCertificate({ album, ownerName, certificateNumber, onClose }: GoodDeedCertificateProps) {
   const [shared, setShared] = useState(false);
-
-  const handleShare = async () => {
-    const text = `I own No. ${certificateNumber.toString().padStart(2, "0")} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed™`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "My GoodDeed® Certificate", text });
-        setShared(true);
-        setTimeout(() => setShared(false), 2000);
-      } catch {}
-    } else {
-      await navigator.clipboard.writeText(text);
-      setShared(true);
-      setTimeout(() => setShared(false), 2000);
-    }
-  };
-
   const certNumStr = certificateNumber.toString().padStart(2, "0");
 
+  const handleShare = async () => {
+    const text = `I own No. ${certNumStr} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed®`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "My GoodDeed® Certificate", text });
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+      setShared(true);
+      setTimeout(() => setShared(false), 1800);
+    } catch {}
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-[400px] z-10 pb-8 px-4 animate-slide-up">
-        <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ background: "linear-gradient(180deg, #0a1540 0%, #000820 100%)" }}>
-          <div className="relative h-[280px] overflow-hidden">
-            <img
-              src={album.artwork}
-              alt={album.title}
-              className="w-full h-full object-cover"
-              style={{ filter: "grayscale(30%) brightness(0.85)" }}
-            />
-            <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, rgba(0,8,32,0.95) 100%)" }} />
-            <div className="absolute bottom-4 left-4 right-4">
-              <p className="text-white text-3xl font-bold leading-tight">{album.title}</p>
-              <p className="text-white/70 text-sm mt-1">{album.artist}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/40 backdrop-blur flex items-center justify-center text-white"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/75" style={{ backdropFilter: "blur(8px)" }} onClick={onClose} />
+
+      <div className="relative w-full max-w-[360px] z-10 animate-slide-up">
+        {/* Close + Share row above the card */}
+        <div className="flex items-center justify-between mb-3 px-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(20px)" }}
+            data-testid="button-close-certificate"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={handleShare}
+            className="h-9 px-4 rounded-full flex items-center justify-center gap-1.5 text-white text-sm font-semibold active:opacity-70 transition-opacity"
+            style={{ background: shared ? "#4AFFCA" : "rgba(255,255,255,0.12)", color: shared ? "#00062B" : "#fff", backdropFilter: "blur(20px)" }}
+            data-testid="button-share-certificate"
+          >
+            {shared ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                Copied
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
+                </svg>
+                Share
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Certificate card — 9:16 keepsake */}
+        <div
+          className="rounded-3xl overflow-hidden shadow-2xl"
+          style={{ aspectRatio: "9 / 16", boxShadow: "0 30px 80px rgba(0,0,0,0.7)" }}
+        >
+          {/* Top: full-bleed artwork (top half) */}
+          <div className="relative w-full" style={{ height: "50%" }}>
+            <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
+            <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 70%, rgba(13, 32, 96, 0.4) 100%)" }} />
           </div>
 
-          <div className="px-5 py-5" style={{ background: "linear-gradient(135deg, #0D2060 0%, #1a0a5e 50%, #0D2060 100%)" }}>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="text-white/50 text-[10px] uppercase tracking-widest font-semibold mb-1">GoodDeed® Certificate</p>
-                <p className="text-white/80 text-xs leading-relaxed max-w-[220px]">
-                  This GoodDeed® certifies that
-                </p>
-                <p className="text-white text-xl font-bold mt-1">{ownerName}</p>
-                <p className="text-white/80 text-xs mt-1">
-                  owns number{" "}
-                  <span className="text-[#4AFFCA] font-semibold">
-                    {certNumStr}
-                  </span>{" "}
-                  of this series.
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-white/40 text-[10px] uppercase tracking-wider">No.</p>
-                <p className="text-white text-5xl font-bold leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>
-                  {certNumStr}
-                </p>
-              </div>
+          {/* Bottom: gradient panel */}
+          <div
+            className="relative w-full px-6 py-6 flex flex-col"
+            style={{
+              height: "50%",
+              background: "linear-gradient(135deg, #1B3A8C 0%, #4A1E8F 60%, #2A1670 100%)",
+            }}
+          >
+            {/* Top-left: album + artist */}
+            <div>
+              <p className="text-white text-xl font-bold leading-tight">{album.title}</p>
+              <p className="text-white/65 text-sm mt-0.5">{album.artist}</p>
             </div>
 
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
-              <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex-shrink-0 flex items-center justify-center">
-                <img src="/figmaAssets/--.svg" alt="GoodTunes" className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <p className="text-white/40 text-[9px] uppercase tracking-wider">Rock + GoodTunes Release {album.year}</p>
-                <p className="text-white/60 text-[10px]">Digital provenance confirmed by GoodDeed™</p>
-              </div>
-              <div className="w-12 h-12 bg-white rounded p-1 flex-shrink-0">
-                <div className="w-full h-full grid grid-cols-4 grid-rows-4 gap-0.5">
-                  {Array.from({ length: 16 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="rounded-[1px]"
-                      style={{
-                        background: [0,2,3,5,8,10,11,13,14].includes(i) ? "#000" : "#fff",
-                      }}
-                    />
-                  ))}
-                </div>
+            {/* Center: ownership statement */}
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
+              <p className="text-white/75 text-[13px]">This GoodDeed® certifies that</p>
+              <p className="text-white text-2xl font-bold mt-1.5 leading-tight">{ownerName}</p>
+              <p className="text-white/75 text-[13px] mt-1.5">
+                owns number {certNumStr} of this series.
+              </p>
+            </div>
+
+            {/* Bottom row: No. XX + GoodTunes mark */}
+            <div className="flex items-end justify-between">
+              <p className="text-white text-3xl font-bold leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>
+                No. {certNumStr}
+              </p>
+              <div className="flex flex-col items-end leading-none">
+                <p className="text-white text-[15px] font-bold tracking-tight">Good</p>
+                <p className="text-white text-[15px] font-bold tracking-tight">Tunes</p>
+                <p className="text-white/45 text-[7px] mt-0.5 tracking-wider">POWERED BY GoGoode</p>
               </div>
             </div>
-          </div>
-
-          <div className="px-5 py-4 bg-[#000820] flex gap-3">
-            <button
-              type="button"
-              onClick={handleShare}
-              className="flex-1 py-3 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
-              style={{
-                background: shared ? "#4AFFCA" : "linear-gradient(135deg, #319ED8, #7F10A7)",
-                color: shared ? "#000" : "#fff",
-              }}
-            >
-              {shared ? (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" />
-                  </svg>
-                  Share to Social
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              className="px-4 py-3 rounded-2xl border border-white/20 text-white/70 text-sm flex items-center gap-2"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-              </svg>
-              PDF
-            </button>
           </div>
         </div>
       </div>
