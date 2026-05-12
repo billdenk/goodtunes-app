@@ -238,16 +238,16 @@ export function AlbumDetail() {
           </div>
 
           {tab === "music" && (
-            <div className="flex items-center gap-3 px-5 mt-4 mb-2">
+            <div className="flex items-center gap-4 px-5 mt-4 mb-2">
               <button
                 type="button"
                 onClick={handleShuffle}
                 aria-label="Shuffle album"
-                className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
                 style={{ background: "rgba(255,255,255,0.08)" }}
                 data-testid="button-shuffle-album"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
                 </svg>
               </button>
@@ -267,11 +267,11 @@ export function AlbumDetail() {
                 type="button"
                 onClick={() => setShowAlbumPlaylistPicker(true)}
                 aria-label="Add album to a playlist"
-                className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
                 style={{ background: "rgba(255,255,255,0.08)" }}
                 data-testid="button-add-album-to-playlist"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
               </button>
