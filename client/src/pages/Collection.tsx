@@ -93,24 +93,6 @@ export function Collection() {
 
   const sortLabel = sortOptions[tab].find((o) => o.value === sortBy)?.label ?? "";
 
-  const handlePlayAll = () => {
-    const allSongs = SONGS.map((s) => ({
-      ...s,
-      album: ALBUMS.find((a) => a.id === s.albumId)!,
-    })).filter((s) => s.album);
-    if (allSongs.length > 0) playSong(allSongs[0], allSongs);
-  };
-
-  const handleShuffle = () => {
-    const allSongs = SONGS.map((s) => ({
-      ...s,
-      album: ALBUMS.find((a) => a.id === s.albumId)!,
-    })).filter((s) => s.album);
-    if (allSongs.length === 0) return;
-    const shuffled = [...allSongs].sort(() => Math.random() - 0.5);
-    playSong(shuffled[0], shuffled);
-  };
-
   const initials = user?.displayName
     ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
     : "?";
@@ -138,31 +120,6 @@ export function Collection() {
             {initials}
           </button>
         </header>
-
-        <div className="relative z-10 flex gap-3 px-5 mt-1 mb-3">
-          <button
-            type="button"
-            onClick={handlePlayAll}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-sm font-semibold active:scale-[0.97] transition-transform"
-            style={{ background: "rgba(49,158,216,0.18)", border: "1px solid rgba(49,158,216,0.25)" }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="#319ED8">
-              <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
-            </svg>
-            <span style={{ color: "#319ED8" }}>Play</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleShuffle}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-sm font-semibold active:scale-[0.97] transition-transform"
-            style={{ background: "rgba(49,158,216,0.18)", border: "1px solid rgba(49,158,216,0.25)" }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round">
-              <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-            </svg>
-            <span style={{ color: "#319ED8" }}>Shuffle</span>
-          </button>
-        </div>
 
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           {recentAlbums.length > 0 && (

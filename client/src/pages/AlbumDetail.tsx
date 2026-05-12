@@ -103,23 +103,25 @@ export function AlbumDetail() {
         <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.7) 60%, #00062B 100%)" }} />
       </div>
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
-        <div className="relative flex-shrink-0">
-          <div className="relative h-[340px] overflow-hidden">
+        <button
+          type="button"
+          onClick={() => navigate("/collection")}
+          aria-label="Back to collection"
+          className="absolute top-12 left-4 z-50 w-8 h-8 rounded-full bg-black/30 backdrop-blur flex items-center justify-center text-white"
+          data-testid="button-back-album"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
 
-            <button
-              type="button"
-              onClick={() => navigate("/collection")}
-              className="absolute top-12 left-4 w-8 h-8 rounded-full bg-black/30 backdrop-blur flex items-center justify-center text-white"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
-
-            <div className="absolute top-12 right-4 z-20">
+        <div className="absolute top-12 right-4 z-50">
               <button
                 type="button"
                 onClick={() => setShowMenu((s) => !s)}
+                aria-label="Album options"
+                aria-haspopup="menu"
+                aria-expanded={showMenu}
                 className="w-8 h-8 rounded-full bg-black/35 backdrop-blur flex items-center justify-center text-white active:opacity-70"
                 data-testid="button-album-menu"
               >
@@ -133,6 +135,7 @@ export function AlbumDetail() {
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
                   <div
+                    role="menu"
                     className="absolute right-0 top-full mt-2 z-40 rounded-2xl py-1 min-w-[230px] overflow-hidden"
                     style={{
                       background: "rgba(28, 30, 38, 0.96)",
@@ -219,10 +222,18 @@ export function AlbumDetail() {
                   </div>
                 </>
               )}
-            </div>
-          </div>
+        </div>
 
-          <div className="px-5 -mt-8 relative z-10">
+        <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
+          <div aria-hidden style={{ height: 260 }} />
+          <div
+            className="relative pt-5 pb-2"
+            style={{
+              background: "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 22%, #00062B 60%)",
+            }}
+          >
+
+          <div className="px-5 relative z-10">
             <div className="flex items-start justify-between mb-1">
               <span
                 className="text-[10px] font-bold px-2.5 py-1 rounded-full mb-2 inline-block"
@@ -315,9 +326,9 @@ export function AlbumDetail() {
               </div>
             </div>
           )}
-        </div>
+          </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide px-3" style={{ paddingBottom: 160 }}>
+          <div className="bg-[#00062B] px-3">
           {tab === "video" && hasVideos && (
             <div className="px-2 pt-2 flex flex-col gap-3" data-testid="panel-videos">
               {album.videos!.map((v) => (
@@ -426,6 +437,7 @@ export function AlbumDetail() {
               </div>
             );
           })}
+          </div>
         </div>
 
         <MiniPlayer />
