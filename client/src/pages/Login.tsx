@@ -200,7 +200,7 @@ export function Login() {
         {mode === "register" && step === 1 && (
           <form onSubmit={goToStep2} className="flex flex-col gap-3">
             <div>
-              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Real Name</label>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Name</label>
               <input
                 type="text"
                 value={realName}
@@ -212,7 +212,6 @@ export function Login() {
                 required
                 data-testid="input-real-name"
               />
-              <p className="text-white/35 text-[11px] mt-1.5 ml-1">Used on your GoodDeed® certificate. Never shown publicly without your choice.</p>
             </div>
             <div>
               <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Email</label>

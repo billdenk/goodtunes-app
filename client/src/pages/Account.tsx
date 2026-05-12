@@ -74,12 +74,12 @@ export function Account() {
           ) : (
             <div className="w-full flex flex-col gap-3 mt-2">
               <div>
-                <label className="text-white/40 text-xs uppercase tracking-wider block mb-1.5 ml-1">Real Name</label>
+                <label className="text-white/40 text-xs uppercase tracking-wider block mb-1.5 ml-1">Name</label>
                 <input
                   type="text"
                   value={realName}
                   onChange={(e) => setRealName(e.target.value)}
-                  placeholder="Used on your GoodDeed®"
+                  placeholder="Your name"
                   className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
                   style={{ background: "rgba(255,255,255,0.06)" }}
                   data-testid="input-account-real-name"
