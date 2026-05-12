@@ -60,16 +60,19 @@ export function AlbumDetail() {
   const totalMin = Math.floor(totalDuration / 60);
 
   return (
-    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
+    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
+      {/* Full-bleed album artwork hero */}
+      <div className="absolute top-0 left-0 right-0 h-[340px] overflow-hidden pointer-events-none">
+        <img
+          src={album.artwork}
+          alt=""
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.7) 60%, #00062B 100%)" }} />
+      </div>
+      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
         <div className="relative flex-shrink-0">
           <div className="relative h-[340px] overflow-hidden">
-            <img
-              src={album.artwork}
-              alt={album.title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.7) 60%, #00062B 100%)" }} />
 
             <button
               type="button"
