@@ -182,7 +182,8 @@ export class MemStorage implements IStorage {
         .sort((a, b) => a.position - b.position);
       const seen = new Set<string>();
       const artworks: string[] = [];
-      for (const ps of entries) {
+      // Pick most-recent unique album artworks first so the cover shifts as new songs are added
+      for (const ps of [...entries].reverse()) {
         const song = this.songs.get(ps.songId);
         if (!song) continue;
         const album = this.albums.get(song.albumId);

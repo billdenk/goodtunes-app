@@ -36,6 +36,7 @@ function useFavoriteSet(key: string) {
   }, [key]);
 
   const has = useCallback((id: string) => set.has(id), [set]);
+  const ordered: string[] = Array.from(set);
 
   const toggle = useCallback(
     (id: string) => {
@@ -76,7 +77,7 @@ function useFavoriteSet(key: string) {
     [key],
   );
 
-  return { set, has, toggle, add, remove };
+  return { set, ordered, has, toggle, add, remove };
 }
 
 export function useFavoriteSongs() {

@@ -70,24 +70,6 @@ function PlaylistArtwork({
     );
   }
 
-  if (songCount < 4) {
-    return (
-      <div
-        className={`${rounded} flex-shrink-0 overflow-hidden relative`}
-        style={wrapperStyle}
-      >
-        <img src={artworks[0]} alt="" className="w-full h-full object-cover" />
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(49,158,216,0.10) 0%, rgba(127,16,167,0.10) 100%)",
-          }}
-        />
-      </div>
-    );
-  }
-
   const cells: string[] = [0, 1, 2, 3].map((i) => artworks[i % artworks.length]);
 
   return (
@@ -149,13 +131,22 @@ export function Playlists() {
     .filter((s) => s.album);
 
   const favSongEntries: PlaylistSongEntry[] = (() => {
+    const byId = new Map(allSongsWithAlbumAll.map((s) => [s.id, s] as const));
     const seen = new Set<string>();
     const out: PlaylistSongEntry[] = [];
-    for (const s of allSongsWithAlbumAll) {
-      const matches = favSongs.has(s.id) || favArtists.has(s.album.artist);
-      if (matches && !seen.has(s.id)) {
-        seen.add(s.id);
-        out.push({ id: `fav-${s.id}`, song: s });
+    // Most-recent-first: newest favorited songs first, then newest favorited artists' songs
+    const recentSongIds = [...favSongs.ordered].reverse();
+    const recentArtists = [...favArtists.ordered].reverse();
+    for (const id of recentSongIds) {
+      const s = byId.get(id);
+      if (s && !seen.has(s.id)) { seen.add(s.id); out.push({ id: `fav-${s.id}`, song: s }); }
+    }
+    for (const artist of recentArtists) {
+      for (const s of allSongsWithAlbumAll) {
+        if (s.album.artist === artist && !seen.has(s.id)) {
+          seen.add(s.id);
+          out.push({ id: `fav-${s.id}`, song: s });
+        }
       }
     }
     return out;
