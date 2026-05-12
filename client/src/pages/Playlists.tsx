@@ -38,7 +38,7 @@ function PlaylistArtwork({
     boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
   };
 
-  if (variant === "favorites") {
+  if (variant === "favorites" && (songCount === 0 || artworks.length === 0)) {
     return (
       <div
         className={`${rounded} flex-shrink-0 flex items-center justify-center relative overflow-hidden`}

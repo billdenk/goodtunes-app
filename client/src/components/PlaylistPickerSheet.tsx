@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface PlaylistPickerSheetProps {
   songId?: string;
@@ -34,6 +34,8 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
     },
     onSuccess: (_data, playlistId) => {
       setAdded(playlistId);
+      queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/playlists", playlistId, "songs"] });
       setTimeout(onClose, 900);
     },
   });
