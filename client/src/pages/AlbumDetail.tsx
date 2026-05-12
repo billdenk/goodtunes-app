@@ -272,6 +272,7 @@ export function AlbumDetail() {
             album={album}
             ownerName={user?.displayName || "GoodTunes Fan"}
             certificateNumber={album.certificateNumber ?? 1}
+            certificateNumbers={album.ownedCertificates}
             onClose={() => setShowCert(false)}
           />
         )}

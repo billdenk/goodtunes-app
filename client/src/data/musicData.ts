@@ -7,6 +7,7 @@ export interface Album {
   type: "album" | "EP";
   description: string;
   certificateNumber?: number;
+  ownedCertificates?: number[];
 }
 
 export interface Song {
@@ -59,6 +60,7 @@ export const ALBUMS: Album[] = [
     type: "album",
     description: "Sunshine, highways, and the stories only California can tell. A West Coast state of mind.",
     certificateNumber: 21,
+    ownedCertificates: [21, 47, 88],
   },
 ];
 

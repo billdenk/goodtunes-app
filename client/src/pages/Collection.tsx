@@ -117,9 +117,29 @@ export function Collection() {
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
       <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-20 right-0 w-72 h-72 rounded-full opacity-12" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
-          <div className="absolute top-1/2 left-0 w-64 h-64 rounded-full opacity-8" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div
+            className="absolute rounded-full"
+            style={{
+              top: -180,
+              right: -120,
+              width: 380,
+              height: 380,
+              background: "radial-gradient(circle, rgba(49,158,216,0.22) 0%, rgba(49,158,216,0) 65%)",
+              filter: "blur(40px)",
+            }}
+          />
+          <div
+            className="absolute rounded-full"
+            style={{
+              top: "45%",
+              left: -140,
+              width: 320,
+              height: 320,
+              background: "radial-gradient(circle, rgba(127,16,167,0.18) 0%, rgba(127,16,167,0) 65%)",
+              filter: "blur(40px)",
+            }}
+          />
         </div>
 
         <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-3">
@@ -409,6 +429,7 @@ export function Collection() {
             album={certAlbum}
             ownerName={user?.displayName || "GoodTunes Fan"}
             certificateNumber={certAlbum.certificateNumber ?? 1}
+            certificateNumbers={certAlbum.ownedCertificates}
             onClose={() => setCertAlbum(null)}
           />
         )}
