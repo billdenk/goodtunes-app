@@ -1,3 +1,17 @@
+export interface AlbumVideo {
+  id: string;
+  title: string;
+  thumbnail: string;
+  url: string;
+  duration?: string;
+}
+
+export interface AlbumPhoto {
+  id: string;
+  url: string;
+  caption?: string;
+}
+
 export interface Album {
   id: string;
   title: string;
@@ -8,6 +22,8 @@ export interface Album {
   description: string;
   certificateNumber?: number;
   ownedCertificates?: number[];
+  videos?: AlbumVideo[];
+  photos?: AlbumPhoto[];
 }
 
 export interface Song {
@@ -61,6 +77,28 @@ export const ALBUMS: Album[] = [
     description: "Sunshine, highways, and the stories only California can tell. A West Coast state of mind.",
     certificateNumber: 21,
     ownedCertificates: [21, 47, 88],
+    videos: [
+      {
+        id: "vid-4-1",
+        title: "Pacific Drive — Official Music Video",
+        thumbnail: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png",
+        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        duration: "3:28",
+      },
+      {
+        id: "vid-4-2",
+        title: "Behind the Scenes: Venice Beach",
+        thumbnail: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png",
+        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+        duration: "5:12",
+      },
+    ],
+    photos: [
+      { id: "p-4-1", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", caption: "Album cover" },
+      { id: "p-4-2", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", caption: "Studio session" },
+      { id: "p-4-3", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", caption: "On the road" },
+      { id: "p-4-4", url: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", caption: "Sunset shoot" },
+    ],
   },
 ];
 

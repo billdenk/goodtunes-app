@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,7 +7,9 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
-import { ALBUMS, SONGS, getSongsByAlbum, formatDuration, type Song, type Album } from "@/data/musicData";
+import { ALBUMS, SONGS, getSongsByAlbum, formatDuration, type Song, type Album, type AlbumVideo, type AlbumPhoto } from "@/data/musicData";
+
+type MediaTab = "music" | "video" | "photos";
 
 export function AlbumDetail() {
   const { id } = useParams<{ id: string }>();
@@ -20,9 +22,26 @@ export function AlbumDetail() {
   const [showMenu, setShowMenu] = useState(false);
   const [shareToast, setShareToast] = useState("");
   const [showPlaylistPicker, setShowPlaylistPicker] = useState<Song | null>(null);
+  const [tab, setTab] = useState<MediaTab>("music");
+  const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
+  const [activePhoto, setActivePhoto] = useState<AlbumPhoto | null>(null);
 
   const album = ALBUMS.find((a) => a.id === id);
   const songs = album ? getSongsByAlbum(id) : [];
+  const hasVideos = !!album?.videos?.length;
+  const hasPhotos = !!album?.photos?.length;
+  const showTabs = hasVideos || hasPhotos;
+
+  useEffect(() => {
+    setTab("music");
+    setActiveVideo(null);
+    setActivePhoto(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (tab === "video" && !hasVideos) setTab("music");
+    if (tab === "photos" && !hasPhotos) setTab("music");
+  }, [tab, hasVideos, hasPhotos]);
 
   if (!album) {
     return (
@@ -180,34 +199,129 @@ export function AlbumDetail() {
             <p className="text-white/40 text-sm mt-2 leading-relaxed">{album.description}</p>
           </div>
 
-          <div className="flex gap-3 px-5 mt-4 mb-2">
-            <button
-              type="button"
-              onClick={handlePlayAll}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-transform"
-              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5.14v14l11-7-11-7z" />
-              </svg>
-              Play
-            </button>
-            <button
-              type="button"
-              onClick={handleShuffle}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border border-white/20 text-white text-sm font-semibold active:scale-[0.97] transition-transform"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-              </svg>
-              Shuffle
-            </button>
-          </div>
+          {tab === "music" && (
+            <div className="flex gap-3 px-5 mt-4 mb-2">
+              <button
+                type="button"
+                onClick={handlePlayAll}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-transform"
+                style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                data-testid="button-play-album"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5.14v14l11-7-11-7z" />
+                </svg>
+                Play
+              </button>
+              <button
+                type="button"
+                onClick={handleShuffle}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border border-white/20 text-white text-sm font-semibold active:scale-[0.97] transition-transform"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                data-testid="button-shuffle-album"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+                </svg>
+                Shuffle
+              </button>
+            </div>
+          )}
+
+          {showTabs && (
+            <div className="px-5 mt-4 mb-1">
+              <div
+                className="flex p-1 rounded-2xl"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+                role="tablist"
+                aria-label="Album media"
+              >
+                {([
+                  { key: "music" as const, label: "Music", show: true },
+                  { key: "video" as const, label: "Video", show: hasVideos },
+                  { key: "photos" as const, label: "Photos", show: hasPhotos },
+                ])
+                  .filter((t) => t.show)
+                  .map((t) => {
+                    const active = tab === t.key;
+                    return (
+                      <button
+                        key={t.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setTab(t.key)}
+                        className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors"
+                        style={{
+                          background: active ? "linear-gradient(135deg, #1D5E8F, #319ED8)" : "transparent",
+                          color: active ? "#fff" : "rgba(255,255,255,0.6)",
+                        }}
+                        data-testid={`tab-${t.key}`}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide pb-2 px-3">
-          {songs.map((song, i) => {
+        <div className="flex-1 overflow-y-auto scrollbar-hide px-3" style={{ paddingBottom: 160 }}>
+          {tab === "video" && hasVideos && (
+            <div className="px-2 pt-2 flex flex-col gap-3" data-testid="panel-videos">
+              {album.videos!.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setActiveVideo(v)}
+                  className="relative w-full rounded-2xl overflow-hidden text-left active:opacity-90"
+                  style={{ aspectRatio: "16 / 9" }}
+                  data-testid={`video-${v.id}`}
+                >
+                  <img src={v.thumbnail} alt={v.title} className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85) 0%, rgba(0,6,43,0.1) 60%)" }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div
+                      className="w-14 h-14 rounded-full flex items-center justify-center"
+                      style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.3)" }}
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
+                        <path d="M8 5.14v14l11-7-11-7z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="absolute bottom-2.5 left-3 right-3 flex items-end justify-between gap-2">
+                    <p className="text-white text-sm font-semibold leading-tight line-clamp-2">{v.title}</p>
+                    {v.duration && (
+                      <span className="text-[11px] font-semibold text-white px-2 py-0.5 rounded-md flex-shrink-0" style={{ background: "rgba(0,0,0,0.55)" }}>
+                        {v.duration}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tab === "photos" && hasPhotos && (
+            <div className="px-2 pt-2 grid grid-cols-2 gap-2" data-testid="panel-photos">
+              {album.photos!.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setActivePhoto(p)}
+                  className="relative rounded-2xl overflow-hidden active:opacity-80"
+                  style={{ aspectRatio: "1 / 1" }}
+                  data-testid={`photo-${p.id}`}
+                >
+                  <img src={p.url} alt={p.caption ?? ""} className="absolute inset-0 w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tab === "music" && songs.map((song, i) => {
             const isActive = currentSong?.id === song.id;
             const stripe = i % 2 === 0;
             return (
@@ -291,6 +405,74 @@ export function AlbumDetail() {
             ownerName={user?.displayName || "GoodTunes Fan"}
             onClose={() => setShowProvenance(false)}
           />
+        )}
+
+        {activeVideo && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center"
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeVideo.title}
+            data-testid="modal-video"
+          >
+            <div className="absolute inset-0 bg-black/85" style={{ backdropFilter: "blur(8px)" }} onClick={() => setActiveVideo(null)} />
+            <div className="relative w-full max-w-[390px] z-10 px-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-white text-sm font-semibold truncate pr-3">{activeVideo.title}</p>
+                <button
+                  type="button"
+                  onClick={() => setActiveVideo(null)}
+                  aria-label="Close video"
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0"
+                  style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(20px)" }}
+                  data-testid="button-close-video"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <video
+                src={activeVideo.url}
+                poster={activeVideo.thumbnail}
+                controls
+                autoPlay
+                playsInline
+                className="w-full rounded-2xl bg-black"
+                style={{ aspectRatio: "16 / 9" }}
+              />
+            </div>
+          </div>
+        )}
+
+        {activePhoto && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center"
+            role="dialog"
+            aria-modal="true"
+            aria-label={activePhoto.caption ?? "Photo"}
+            data-testid="modal-photo"
+          >
+            <div className="absolute inset-0 bg-black/90" style={{ backdropFilter: "blur(8px)" }} onClick={() => setActivePhoto(null)} />
+            <button
+              type="button"
+              onClick={() => setActivePhoto(null)}
+              aria-label="Close photo"
+              className="absolute top-12 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+              style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(20px)" }}
+              data-testid="button-close-photo"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="relative w-full max-w-[390px] z-10 px-4">
+              <img src={activePhoto.url} alt={activePhoto.caption ?? ""} className="w-full rounded-2xl object-contain" />
+              {activePhoto.caption && (
+                <p className="text-white/80 text-sm mt-3 text-center">{activePhoto.caption}</p>
+              )}
+            </div>
+          </div>
         )}
 
         {shareToast && (
