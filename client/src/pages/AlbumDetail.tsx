@@ -206,13 +206,15 @@ export function AlbumDetail() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide pb-2">
+        <div className="flex-1 overflow-y-auto scrollbar-hide pb-2 px-3">
           {songs.map((song, i) => {
             const isActive = currentSong?.id === song.id;
+            const stripe = i % 2 === 0;
             return (
               <div
                 key={song.id}
-                className="flex items-center px-5 py-3 gap-3 active:bg-white/5 transition-colors"
+                className="flex items-center px-2 py-3 gap-3 rounded-2xl transition-colors"
+                style={{ background: stripe ? "rgba(49,158,216,0.07)" : "transparent" }}
               >
                 <button
                   type="button"
