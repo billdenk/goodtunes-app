@@ -72,6 +72,7 @@ export function GoodDeedCertificate({
       owner: ownerName,
       num: n,
       art: album.artwork,
+      albumId: album.id,
     });
     const url = `${window.location.origin}/share/cert?${params.toString()}`;
     const text = `I own No. ${n} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed®`;

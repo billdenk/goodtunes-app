@@ -11,6 +11,7 @@ import { Collection } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
+import { SharedCertificate } from "@/pages/SharedCertificate";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -59,6 +60,7 @@ function Router() {
       <Switch>
         <Route path="/login" component={Login} />
         <Route path="/register" component={Login} />
+        <Route path="/share/cert" component={SharedCertificate} />
         <Route path="/collection">
           <ProtectedRoute component={Collection} />
         </Route>
