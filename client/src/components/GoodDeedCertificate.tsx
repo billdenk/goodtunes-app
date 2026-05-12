@@ -99,7 +99,7 @@ export function GoodDeedCertificate({
         onClick={onClose}
       />
 
-      <div className="relative w-full z-10 animate-slide-up" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}>
+      <div className="relative w-full z-10 animate-slide-up" style={{ paddingTop: "calc(56px + env(safe-area-inset-top, 0px))" }}>
         {/* Close + Share controls */}
         <div className="flex items-center justify-between mb-3 px-5">
           <button
