@@ -579,7 +579,10 @@ export const SONGS: Song[] = [
 // --- Nick Carter — Love Life Tragedy (album-5) ---
 // Audio is streamed directly from Dropbox via dl.dropboxusercontent.com,
 // which supports HTTP Range requests so the <audio> element can seek.
-const NC_BASE = "https://dl.dropboxusercontent.com/scl/fi";
+// Use www.dropbox.com (not dl.dropboxusercontent.com): the CDN host has been
+// returning 404 on these shared-folder files, while the www host correctly
+// 302s to a fresh CDN URL that the <audio> element can follow.
+const NC_BASE = "https://www.dropbox.com/scl/fi";
 const NICK_CARTER_TRACKS: Array<{ title: string; path?: string; rlkey?: string }> = [
   { title: "Made for Us", path: "14o098ogrdhfdgydjvrvq/Nick-Carter-Made-For-Us-REMASTER_4824.wav", rlkey: "1yq7m32vptm07kc9ysfyuveiq" },
   { title: "Nothing Without Your Love", path: "xidomh4pywldsnqhh1xwz/Nick-Carter-Nothing-Without-Your-Love-MASTER_4824.wav", rlkey: "5j5tij3qd03iepdnc11vx3z1k" },
