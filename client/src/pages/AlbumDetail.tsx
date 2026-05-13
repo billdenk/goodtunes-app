@@ -290,24 +290,22 @@ export function AlbumDetail() {
           </div>
 
           {/* Tracks */}
-          <div className="bg-[#00062B] px-3">
+          <div className="bg-[#00062B] px-5 mt-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
             {songs.map((song, i) => {
               const isActive = currentSong?.id === song.id;
               const isFav = favSongs.has(song.id);
-              const stripe = i % 2 === 0;
               return (
                 <div
                   key={song.id}
-                  className="flex items-center px-2 py-3 gap-2 rounded-2xl transition-colors"
-                  style={{ background: stripe ? "rgba(49,158,216,0.07)" : "transparent" }}
+                  className="flex items-center gap-3 h-16 active:bg-white/[0.03] transition-colors"
                   data-testid={`row-track-${song.id}`}
                 >
                   <button
                     type="button"
                     onClick={() => handlePlaySong({ ...song, album })}
-                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    className="flex items-center gap-4 flex-1 min-w-0 h-full text-left"
                   >
-                    <div className="w-7 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-6 flex-shrink-0 flex items-center justify-center">
                       {isActive ? (
                         <div className="flex gap-0.5 items-end h-4">
                           {[1, 2, 3].map((j) => (
@@ -325,13 +323,19 @@ export function AlbumDetail() {
                           ))}
                         </div>
                       ) : (
-                        <span className="text-white/30 text-sm">{song.trackNumber}</span>
+                        <span className="text-white/35 text-[15px] tabular-nums">{song.trackNumber}</span>
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}>
+                    <div className="flex-1 min-w-0 relative h-full flex items-center">
+                      <p className={`text-[15px] font-medium truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}>
                         {song.title}
                       </p>
+                      {i > 0 && (
+                        <span
+                          className="absolute left-0 right-0 top-0 h-px pointer-events-none"
+                          style={{ background: "rgba(255,255,255,0.07)" }}
+                        />
+                      )}
                     </div>
                   </button>
                   <button
@@ -339,10 +343,10 @@ export function AlbumDetail() {
                     onClick={() => favSongs.toggle(song.id)}
                     aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
                     aria-pressed={isFav}
-                    className="w-8 h-8 flex items-center justify-center flex-shrink-0 active:scale-[0.9] transition-transform"
+                    className="w-9 h-9 flex items-center justify-center flex-shrink-0 active:scale-[0.9] transition-transform"
                     data-testid={`button-favorite-song-${song.id}`}
                   >
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill={isFav ? "#FF5470" : "none"} stroke={isFav ? "#FF5470" : "rgba(255,255,255,0.4)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "#FF5470" : "none"} stroke={isFav ? "#FF5470" : "rgba(255,255,255,0.4)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                     </svg>
                   </button>
@@ -350,18 +354,19 @@ export function AlbumDetail() {
                     type="button"
                     onClick={() => setShowPlaylistPicker(song)}
                     aria-label="Add to playlist"
-                    className="w-7 h-7 flex items-center justify-center text-white/30 flex-shrink-0"
+                    className="w-7 h-9 flex items-center justify-center text-white/40 flex-shrink-0"
                     data-testid={`button-track-menu-${song.id}`}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="5" r="1" fill="currentColor" />
-                      <circle cx="12" cy="12" r="1" fill="currentColor" />
-                      <circle cx="12" cy="19" r="1" fill="currentColor" />
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="5" r="1.6" />
+                      <circle cx="12" cy="12" r="1.6" />
+                      <circle cx="12" cy="19" r="1.6" />
                     </svg>
                   </button>
                 </div>
               );
             })}
+            <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
           </div>
 
           {/* Metadata block */}
