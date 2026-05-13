@@ -31,11 +31,11 @@ const NavItem = ({
         data-testid={testId}
       >
         <div
-          className="flex items-center gap-1.5 px-3 h-9 rounded-full transition-all duration-200 text-[#319ED8]"
+          className="flex flex-col items-center justify-center gap-[3px] px-4 py-1.5 rounded-2xl transition-all duration-200 text-[#319ED8]"
           style={{ background: "rgba(49,158,216,0.18)" }}
         >
           {icon(true)}
-          <span className="text-[12px] font-semibold leading-none">{label}</span>
+          <span className="text-[10px] font-semibold leading-none">{label}</span>
         </div>
       </button>
     );
