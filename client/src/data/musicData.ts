@@ -578,28 +578,27 @@ export const SONGS: Song[] = [
 
 // --- Nick Carter — Love Life Tragedy (album-5) ---
 // Audio is streamed directly from Dropbox via dl.dropboxusercontent.com,
-// which supports HTTP Range requests so the <audio> element can seek.
-// Use www.dropbox.com (not dl.dropboxusercontent.com): the CDN host has been
-// returning 404 on these shared-folder files, while the www host correctly
-// 302s to a fresh CDN URL that the <audio> element can follow.
-const NC_BASE = "https://www.dropbox.com/scl/fi";
+// which serves audio/x-wav with proper HTTP Range support so the <audio>
+// element can seek. Links below were refreshed 2026-05-13 after the prior
+// shared-folder rlkeys expired.
+const NC_BASE = "https://dl.dropboxusercontent.com/scl/fi";
 const NICK_CARTER_TRACKS: Array<{ title: string; path?: string; rlkey?: string }> = [
-  { title: "Made for Us", path: "14o098ogrdhfdgydjvrvq/Nick-Carter-Made-For-Us-REMASTER_4824.wav", rlkey: "1yq7m32vptm07kc9ysfyuveiq" },
-  { title: "Nothing Without Your Love", path: "xidomh4pywldsnqhh1xwz/Nick-Carter-Nothing-Without-Your-Love-MASTER_4824.wav", rlkey: "5j5tij3qd03iepdnc11vx3z1k" },
-  { title: "Good Love", path: "ff5vs6m0ho4k52twj84pr/Good-Love-24Bit-Master.wav", rlkey: "z1m0hrel9vxatchpnr4jnc5l2" },
-  { title: "Hey Kid", path: "ym7byb3uptc9n4nm25p8p/Nick-Carter-Hey-Kid-MASTER_4824.wav", rlkey: "yh9dim542pbjvrtsfjx1y8n47" },
-  { title: "Searchlight", path: "ydnksacsz0y73o16vsf4w/Nick-Carter_Searchlight_REMASTER-2_4824.wav", rlkey: "789fewrp5tvwnuqyqrwxv7kzb" },
-  { title: "Never Break My Heart (Not Again)", path: "6mzfl5ryk4vf18rmarm9o/Never-Break-My-Heart-6-24Bit-Master.wav", rlkey: "uu01n7it49u00ke5ulb49qhfc" },
-  { title: "Easy (Home Version)" }, // no audio provided
-  { title: "Hurts to Love You (Remastered 2025)", path: "ae0cf2de5vlhnbdrqkvrg/Nick-Carter-Hurts-To-Love-You-REMASTER_BMN_4424.wav", rlkey: "es0cqlkny5dzeqguxt4imwnc2" },
-  { title: "Superman", path: "7evr9ms11te2ey2npqxwm/Superman-2-24Bit-Master.wav", rlkey: "jjbhl6u2pttajfsse42j1zhrq" },
-  { title: "Dirty Laundry (feat. ASHBA)", path: "vxztakkkgj1spzgi89pr8/Dirty-Laundry-2-24Bit-Master.wav", rlkey: "j8wevf9torggtya0rsu285ey7" },
-  { title: "Wild Heart", path: "un0txlxdxohpx46n8mi7a/Wildhearts-2-24Bit-Master.wav", rlkey: "6c7w5ptz89qizawp5rdg9zlyh" },
-  { title: "Cold Night (Zero Degrees)", path: "bb2qso8nuzb1a6hus2xte/Cold-NIght-7-24Bit-Master.wav", rlkey: "fj3fmig0yq5jyejz0q48kbnff" },
-  { title: "Storms", path: "ex87i96gzcfa5vsf3c1lr/Nick-Carter-Storms-MASTER_4824.wav", rlkey: "vg2g16eo9fpq264aua7bk56dm" },
-  { title: "Don\u2019t Let Go", path: "wnekgil6hhl4iufih0y4n/Nick-Carter-Don-t-Let-Go-MASTER_4824.wav", rlkey: "y7wftc1mdfyrllef6eder9tzn" },
-  { title: "Cold Night (Winter Mix)", path: "qbqpiioehvucvwxgbif17/Cold-Night-acoustic-version-24Bit-Master.wav", rlkey: "urrdz1lbd1pxef6p2u8ry51pg" },
-  { title: "Help Me (Re - Record)", path: "idlidihyjr2fwfoxd9iy6/Nick_Carter_01_Help_Me_HRA_24bit_96kHz_042925.wav", rlkey: "mgrhf5astg1llaa8zceh8su0f" },
+  { title: "Made for Us", path: "x2g5scvmvraplv7ivvfze/Nick-Carter-Made-For-Us-REMASTER_4824.wav", rlkey: "e4fcygvoxqbuzmoh6eh115tma" },
+  { title: "Nothing Without Your Love", path: "fqic08najjyppkui53rkn/Nick-Carter-Nothing-Without-Your-Love-MASTER_4824.wav", rlkey: "7undfka2sgvhjsa9j4c7nylks" },
+  { title: "Good Love", path: "w298zyauorr51pw7z8dez/Good-Love-24Bit-Master.wav", rlkey: "i0fdrur2a2m0nzojxvuxlp0ol" },
+  { title: "Hey Kid", path: "zku3e5jle91km7hilila3/Nick-Carter-Hey-Kid-MASTER_4824.wav", rlkey: "asfsln611yz69czzxm03fft0p" },
+  { title: "Searchlight", path: "qb7noy2utdoosuoc4fmaf/Nick-Carter_Searchlight_REMASTER-2_4824.wav", rlkey: "j0l7jpiq9gckfg9gpe1mipdc8" },
+  { title: "Never Break My Heart (Not Again)", path: "wfgbzfeolf7ge7w2xva73/Never-Break-My-Heart-6-24Bit-Master.wav", rlkey: "01gwmcwusph1gyhqfvru3addq" },
+  { title: "Easy (Home Version)", path: "poak2tr8vwgmvrshpsubi/Easy-4-24Bit-Master.wav", rlkey: "fj05djtj8rsecwt26ebp53hvb" },
+  { title: "Hurts to Love You (Remastered 2025)", path: "1k52fuvihhc46ojfh050z/Nick-Carter-Hurts-To-Love-You-REMASTER_BMN_4424.wav", rlkey: "xaom3s7la4duq3uqyk6acwfiz" },
+  { title: "Superman", path: "ffvy2hhhrm24wvd2h6bz2/Superman-2-24Bit-Master.wav", rlkey: "lmczfrl1sma22qdy4eb9u6ps5" },
+  { title: "Dirty Laundry (feat. ASHBA)", path: "lse9iode84uf5tnfrb7b5/Dirty-Laundry-2-24Bit-Master.wav", rlkey: "iw8fln52ylj337ug7rpoffyzx" },
+  { title: "Wild Heart", path: "a6dyofc0e47hg23st9xu4/Wildhearts-2-24Bit-Master.wav", rlkey: "9v2b7qlmgu0isembnmckdtui6" },
+  { title: "Cold Night (Zero Degrees)", path: "tka7p4i1d9th0wdw9uztf/Cold-NIght-7-24Bit-Master.wav", rlkey: "yig44bx56xhzrqrgtpb803735" },
+  { title: "Storms", path: "1u8gvmfgg0wywoqcncf8n/Nick-Carter-Storms-MASTER_4824.wav", rlkey: "kyou2jrlgrlaabaqtl6wp4kfn" },
+  { title: "Don\u2019t Let Go", path: "ta9c8yc6qetlm2vhsfstf/Nick-Carter-Don-t-Let-Go-MASTER_4824.wav", rlkey: "1fhaldrlmileb8dhyrjm13e95" },
+  { title: "Cold Night (Winter Mix)", path: "c2rlithw8qctt6ax0ezcm/Cold-Night-acoustic-version-24Bit-Master.wav", rlkey: "5ovbhhdt6t3c05sc9nxrsyozc" },
+  { title: "Help Me (Re - Record)", path: "h6gaatvz8yoo6e5gs29yg/Nick_Carter_01_Help_Me_HRA_24bit_96kHz_042925.wav", rlkey: "zowno7rvvhn86n100v9uhxbf8" },
   { title: "Take You with Me (Bonus Track)", path: "sbmp7eo3dyvzjksr3sabo/Nick-Carter-Take-Me-With-You_MASTER-v0.wav", rlkey: "dfutyuccz5squrpa29jc9bzpc" },
 ];
 
