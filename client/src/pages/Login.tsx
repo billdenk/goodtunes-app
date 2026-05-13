@@ -321,15 +321,18 @@ export function Login() {
               <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">{error}</div>
             )}
 
-            <div className="flex gap-2 mt-2">
+            <div className="flex items-center gap-3 mt-2">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="px-5 py-4 rounded-2xl font-semibold text-sm text-white/80 active:scale-[0.98] transition-transform"
-                style={{ background: "rgba(255,255,255,0.08)" }}
+                aria-label="Back"
+                className="w-14 h-14 shrink-0 rounded-full flex items-center justify-center text-white/85 hover:text-white active:scale-[0.94] transition-all"
+                style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.10)" }}
                 data-testid="button-back-step2"
               >
-                Back
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
               </button>
               <button
                 type="submit"
