@@ -97,30 +97,63 @@ export function AlbumDetail() {
           type="button"
           onClick={() => navigate("/collection")}
           aria-label="Back to collection"
-          className="absolute top-12 left-4 z-50 w-8 h-8 rounded-full bg-black/30 backdrop-blur flex items-center justify-center text-white"
+          className="absolute top-11 left-4 z-50 w-11 h-11 rounded-full backdrop-blur flex items-center justify-center text-white active:opacity-70"
+          style={{ background: "rgba(0,0,0,0.45)" }}
           data-testid="button-back-album"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
 
-        <div className="absolute top-12 right-4 z-50">
-          <button
-            type="button"
-            onClick={() => setShowMenu((s) => !s)}
-            aria-label="Album options"
-            aria-haspopup="menu"
-            aria-expanded={showMenu}
-            className="w-8 h-8 rounded-full bg-black/35 backdrop-blur flex items-center justify-center text-white active:opacity-70"
-            data-testid="button-album-menu"
+        <div className="absolute top-11 right-4 z-50">
+          {/* Apple-style pill: Share + Menu, divider between */}
+          <div
+            className="flex items-center h-11 rounded-full backdrop-blur overflow-hidden"
+            style={{ background: "rgba(0,0,0,0.45)" }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="5" cy="12" r="1.6" />
-              <circle cx="12" cy="12" r="1.6" />
-              <circle cx="19" cy="12" r="1.6" />
-            </svg>
-          </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const url = `${window.location.origin}/album/${album.id}`;
+                const shareData = { title: album.title, text: `${album.title} by ${album.artist}`, url };
+                try {
+                  if (navigator.share) await navigator.share(shareData);
+                  else {
+                    await navigator.clipboard.writeText(url);
+                    setShareToast("Link copied");
+                    setTimeout(() => setShareToast(""), 2000);
+                  }
+                } catch {}
+              }}
+              aria-label="Share album"
+              className="w-11 h-11 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+              data-testid="button-share-album"
+            >
+              {/* iOS share icon — square + up arrow */}
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 16V4" />
+                <path d="M8 8l4-4 4 4" />
+                <path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+              </svg>
+            </button>
+            <div className="w-px h-5" style={{ background: "rgba(255,255,255,0.18)" }} />
+            <button
+              type="button"
+              onClick={() => setShowMenu((s) => !s)}
+              aria-label="Album options"
+              aria-haspopup="menu"
+              aria-expanded={showMenu}
+              className="w-11 h-11 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+              data-testid="button-album-menu"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="5" cy="12" r="1.7" />
+                <circle cx="12" cy="12" r="1.7" />
+                <circle cx="19" cy="12" r="1.7" />
+              </svg>
+            </button>
+          </div>
           {showMenu && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
@@ -182,30 +215,6 @@ export function AlbumDetail() {
                         <path d="M5 20h14" />
                       </>
                     )}
-                  </svg>
-                </button>
-                <div className="h-px bg-white/8" />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setShowMenu(false);
-                    const url = `${window.location.origin}/album/${album.id}`;
-                    const shareData = { title: album.title, text: `${album.title} by ${album.artist}`, url };
-                    try {
-                      if (navigator.share) await navigator.share(shareData);
-                      else {
-                        await navigator.clipboard.writeText(url);
-                        setShareToast("Link copied");
-                        setTimeout(() => setShareToast(""), 2000);
-                      }
-                    } catch {}
-                  }}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
-                  data-testid="menu-share-album"
-                >
-                  <span>Share Album</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7F10A7" strokeWidth="2" strokeLinecap="round">
-                    <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
                   </svg>
                 </button>
               </div>
