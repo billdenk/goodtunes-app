@@ -1150,11 +1150,13 @@ function SheetShell({
       aria-label={ariaLabel}
       data-testid={testId}
     >
-      <div className="absolute inset-0 bg-black/55" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
+      {/* Backdrop dim — only behind a bottom-sheet. Full-screen sheets cover the
+          entire viewport edge-to-edge, Apple-style, so no backdrop is needed. */}
+      {!isFull && <div className="absolute inset-0 bg-black/55" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />}
       <div
         className={
           isFull
-            ? "relative w-full max-w-[390px] z-10 h-full flex flex-col overflow-hidden"
+            ? "relative w-full z-10 h-full flex flex-col overflow-hidden"
             : "relative w-full max-w-[390px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide"
         }
         style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
