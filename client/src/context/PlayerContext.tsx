@@ -131,7 +131,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentIndex(idx >= 0 ? idx : 0);
     setCurrentTime(0);
     setIsPlaying(true);
-    setShowPlayer(true);
+    // Apple Music behavior: tapping a song updates the mini-player only.
+    // The full Now Playing sheet opens only when the user taps the mini-player.
     setShowLyrics(false);
     setShowAddToPlaylist(false);
     setRecentAlbums((prev) => {
