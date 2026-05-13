@@ -107,6 +107,14 @@ export function BottomNav() {
 
   // Compact (scrolled) state — Apple-style: only the active tab's icon stays
   // visible as a small pill anchored to the LEFT. Tapping it expands the bar.
+  const glassStyle = {
+    background: "rgba(28, 30, 48, 0.55)",
+    backdropFilter: "blur(36px) saturate(200%)",
+    WebkitBackdropFilter: "blur(36px) saturate(200%)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
+  } as const;
+
   if (hidden) {
     let activeIcon = collectionIcon;
     let activeLabel = "Collection";
@@ -115,41 +123,35 @@ export function BottomNav() {
     else if (isAccount) { activeIcon = youIcon; activeLabel = "Account"; }
 
     return (
-      <button
-        type="button"
-        onClick={() => setHidden(false)}
-        aria-label={`${activeLabel} (expand navigation)`}
-        className="absolute bottom-3 left-3 z-40 flex items-center justify-center w-12 h-12 rounded-full text-[#319ED8] active:scale-95 transition-transform"
-        style={{
-          background: "rgba(28, 30, 48, 0.55)",
-          backdropFilter: "blur(36px) saturate(200%)",
-          WebkitBackdropFilter: "blur(36px) saturate(200%)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
-        }}
-        data-testid="nav-collapsed"
-      >
-        {activeIcon(true)}
-      </button>
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
+        <button
+          type="button"
+          onClick={() => setHidden(false)}
+          aria-label={`${activeLabel} (expand navigation)`}
+          className="pointer-events-auto absolute bottom-3 left-3 flex items-center justify-center w-12 h-12 rounded-full text-[#319ED8] active:scale-95 transition-transform"
+          style={glassStyle}
+          data-testid="nav-collapsed"
+        >
+          {activeIcon(true)}
+        </button>
+      </div>
     );
   }
 
   return (
-    <nav
-      className="absolute bottom-3 left-3 right-3 z-40 flex items-center justify-around px-2 py-2 rounded-full"
-      style={{
-        background: "rgba(28, 30, 48, 0.55)",
-        backdropFilter: "blur(36px) saturate(200%)",
-        WebkitBackdropFilter: "blur(36px) saturate(200%)",
-        border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
-        transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)",
-      }}
-    >
-      <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} />
-      <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} />
-      <NavItem label="Chat" active={isChat} onClick={() => navigate("/chat")} testId="nav-chat" icon={chatIcon} />
-      <NavItem label="Account" active={isAccount} onClick={() => navigate("/account")} testId="nav-you" icon={youIcon} />
-    </nav>
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
+      <nav
+        className="pointer-events-auto absolute bottom-3 left-3 right-3 flex items-center justify-around px-2 py-2 rounded-full"
+        style={{
+          ...glassStyle,
+          transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)",
+        }}
+      >
+        <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} />
+        <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} />
+        <NavItem label="Chat" active={isChat} onClick={() => navigate("/chat")} testId="nav-chat" icon={chatIcon} />
+        <NavItem label="Account" active={isAccount} onClick={() => navigate("/account")} testId="nav-you" icon={youIcon} />
+      </nav>
+    </div>
   );
 }

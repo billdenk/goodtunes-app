@@ -129,7 +129,7 @@ export function AlbumDetail() {
 
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
-      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+      <section className="relative w-full h-screen text-white flex flex-col">
         <button
           type="button"
           onClick={() => navigate("/collection")}

@@ -21,7 +21,8 @@ export function MiniPlayer() {
     : { bottom: 96, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
 
   return (
-    <div className={containerClass} style={containerStyle}>
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 pointer-events-none">
+    <div className={`pointer-events-auto ${containerClass}`} style={containerStyle}>
       <div
         className="relative cursor-pointer active:scale-[0.98] transition-transform"
         style={{
@@ -109,6 +110,7 @@ export function MiniPlayer() {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }
