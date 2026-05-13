@@ -138,39 +138,33 @@ export function Account() {
         </div>
 
         <div ref={scrollRef} className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide pb-[170px]">
-          <div className="mb-6 mt-2">
-            <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-3">Settings</p>
-            <div className="flex flex-col gap-1">
-              {[
-                { label: "Notifications", icon: "🔔" },
-                { label: "Privacy", icon: "🔒" },
-                { label: "About GoodTunes®", icon: "ℹ️" },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  className="flex items-center justify-between p-4 rounded-2xl bg-white/4 active:bg-white/8 text-left"
-                  style={{ background: "rgba(255,255,255,0.04)" }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-base">{item.icon}</span>
-                    <span className="text-white/70 text-sm">{item.label}</span>
-                  </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
-                    <path d="M9 18l6-6-6-6" strokeLinecap="round" />
-                  </svg>
-                </button>
-              ))}
-            </div>
+          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
+          <div className="rounded-2xl overflow-hidden mb-10" style={{ background: "rgba(255,255,255,0.05)" }}>
+            {["Notifications", "Privacy", "About GoodTunes®"].map((label, i, arr) => (
+              <button
+                key={label}
+                type="button"
+                className={`w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
+                style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
+              >
+                <span className="text-white text-[15px]">{label}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            ))}
           </div>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="w-full py-3.5 rounded-2xl border border-red-500/20 text-red-400 text-sm font-semibold mb-4"
-          >
-            Sign Out
-          </button>
+          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full py-3.5 text-center text-red-400 text-[15px] font-normal active:bg-white/[0.06]"
+              data-testid="button-sign-out"
+            >
+              Sign Out
+            </button>
+          </div>
 
           <p className="text-center text-white/45 text-xs pb-4">Version 1.00</p>
         </div>
