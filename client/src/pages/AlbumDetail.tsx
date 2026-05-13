@@ -1715,35 +1715,60 @@ function InAppBrowserSheet({
         </button>
       </div>
 
-      {/* Iframe area fills remaining height via flex. Many vendor sites block iframing
-          (X-Frame-Options/CSP) and still fire onLoad on a blank page, so we always show
-          a persistent "Open in browser" hint at the bottom rather than relying on load events. */}
-      <div className="flex-1 min-h-0 relative bg-white">
+      {/* Iframe area. Many vendor sites send X-Frame-Options/CSP frame-ancestors
+          to block embedding, so the iframe paints blank — the parent has no JS
+          way to detect that. We render a styled "preview" placeholder behind
+          the iframe; if the site is embeddable, the iframe paints over it; if
+          it's blocked, the placeholder shows through and looks intentional
+          rather than broken. Background is dark to match the app chrome. */}
+      <div className="flex-1 min-h-0 relative" style={{ background: "#00062B" }}>
         {safeUrl ? (
-          <iframe
-            src={safeUrl.toString()}
-            title={title}
-            className="w-full h-full border-0"
-            referrerPolicy="no-referrer-when-downgrade"
-            // Intentionally NOT setting allow-same-origin: combined with allow-scripts it
-            // would weaken sandbox isolation against arbitrary 3rd-party vendor URLs.
-            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-            data-testid="iframe-inapp-browser"
-          />
+          <>
+            {/* Blocked-state placeholder (sits behind the iframe). */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center pointer-events-none">
+              {logoUrl ? (
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(255,255,255,0.92)" }}>
+                  <img src={logoUrl} alt="" className="w-10 h-10 object-contain" />
+                </div>
+              ) : (
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(49,158,216,0.16)" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                </div>
+              )}
+              <p className="text-white text-[16px] font-semibold mb-1">{title}</p>
+              <p className="text-white/55 text-[13px] mb-5">{domain}</p>
+              <p className="text-white/45 text-[12px] leading-relaxed max-w-[260px]">
+                Many vendor sites don't allow being shown inside another app. Tap <span className="text-white/80 font-semibold">Open</span> below to view in your browser.
+              </p>
+            </div>
+            <iframe
+              src={safeUrl.toString()}
+              title={title}
+              className="w-full h-full border-0 relative"
+              referrerPolicy="no-referrer-when-downgrade"
+              // Intentionally NOT setting allow-same-origin: combined with allow-scripts it
+              // would weaken sandbox isolation against arbitrary 3rd-party vendor URLs.
+              sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              data-testid="iframe-inapp-browser"
+            />
+          </>
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center" style={{ background: "rgba(20,24,48,0.96)" }}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
             <p className="text-white text-[15px] font-semibold mb-1">Can't open this link</p>
-            <p className="text-white/55 text-[13px]">{url}</p>
+            <p className="text-white/55 text-[13px] break-all">{url}</p>
           </div>
         )}
       </div>
 
-      {/* Persistent bottom hint so users always have a way out, even when the iframe
-          renders blank (the common case for vendor sites that block embedding). */}
+      {/* Persistent bottom Open bar — always available so users have an
+          escape hatch even when the iframe renders blank. */}
       {safeUrl && (
-        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-t border-white/8" style={{ background: "rgba(20,24,48,0.96)" }}>
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-t border-white/8" style={{ background: "rgba(0,6,43,0.96)" }}>
           <p className="flex-1 text-white/65 text-[12px] leading-snug">
-            If {domain} doesn't load, open it in your browser.
+            View {domain} in your browser
           </p>
           <button
             type="button"
