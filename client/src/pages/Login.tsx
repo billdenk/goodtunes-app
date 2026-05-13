@@ -117,14 +117,7 @@ export function Login() {
 
       <div className="relative w-full max-w-[390px] px-6">
         <div className="flex flex-col items-center mb-10">
-          <GoodTunesLogo size="lg" className="mb-4" />
-          <p className="text-white/40 text-sm text-center mt-3">
-            {mode === "login"
-              ? "Sign in to access your collection."
-              : step === 1
-              ? "Create your account to get started."
-              : "Pick how you'll appear in GoodTunes®."}
-          </p>
+          <GoodTunesLogo size="lg" />
         </div>
 
         <div className="relative flex mb-6 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.07)" }}>
@@ -348,12 +341,15 @@ export function Login() {
           </form>
         )}
 
-        <div className="flex items-center gap-3 my-5">
-          <div className="flex-1 h-px bg-white/15" />
-          <span className="text-white/40 text-xs">or</span>
-          <div className="flex-1 h-px bg-white/15" />
-        </div>
+        {!(mode === "register" && step === 2) && (
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-white/15" />
+            <span className="text-white/40 text-xs">or</span>
+            <div className="flex-1 h-px bg-white/15" />
+          </div>
+        )}
 
+        {!(mode === "register" && step === 2) && (
         <div className="flex flex-col gap-2.5">
           <button
             type="button"
@@ -381,6 +377,7 @@ export function Login() {
             Continue with Apple
           </button>
         </div>
+        )}
 
         <p className="text-center text-white/30 text-[10px] mt-6 leading-snug px-4">
           GoodTunes® and GoodDeed® are registered trademarks of GoGoods® Inc. Patent pending. All other trademarks are the property of their respective owners.
