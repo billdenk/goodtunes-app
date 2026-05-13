@@ -15,12 +15,29 @@ interface PlaylistPickerSheetProps {
 export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClose }: PlaylistPickerSheetProps) {
   const [added, setAdded] = useState<string | null>(null);
   const [, navigate] = useLocation();
-  const { setShowPlayer } = usePlayer();
+  const { setShowPlayer, isFavorite, toggleFavorite } = usePlayer();
 
   const { data: playlistsRaw, isLoading } = useQuery<any[] | null>({
     queryKey: ["/api/playlists"],
   });
   const playlists = playlistsRaw ?? [];
+
+  // Favorites is a client-side virtual playlist. Show it pinned at the top.
+  const targetSongIds = songIds && songIds.length > 0 ? songIds : songId ? [songId] : [];
+  const allInFavorites = targetSongIds.length > 0 && targetSongIds.every((id) => isFavorite(id));
+  const handleToggleFavorites = () => {
+    // If every target is already favorited, treat the tap as "remove from Favorites".
+    // Otherwise, add any that aren't already favorited.
+    if (allInFavorites) {
+      targetSongIds.forEach((id) => toggleFavorite(id));
+    } else {
+      targetSongIds.forEach((id) => {
+        if (!isFavorite(id)) toggleFavorite(id);
+      });
+    }
+    setAdded("__favorites__");
+    setTimeout(onClose, 700);
+  };
 
   const addMutation = useMutation({
     mutationFn: async (playlistId: string) => {
@@ -62,6 +79,41 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
         <h3 className="text-white font-semibold text-base mb-0.5">{heading ?? "Add to Playlist"}</h3>
         <p className="text-white/40 text-sm mb-5 truncate">{songTitle}</p>
 
+        {/* Pinned: Favorites virtual playlist */}
+        {targetSongIds.length > 0 && (
+          <button
+            type="button"
+            onClick={handleToggleFavorites}
+            disabled={addMutation.isPending || (!!added && added !== "__favorites__")}
+            className="w-full flex items-center gap-3 py-3.5 px-4 rounded-2xl text-left transition-all active:scale-[0.98] mb-2"
+            style={{
+              background: allInFavorites ? "rgba(255,84,112,0.10)" : "rgba(255,255,255,0.06)",
+              border: allInFavorites ? "1px solid rgba(255,84,112,0.35)" : "1px solid rgba(255,255,255,0.06)",
+            }}
+            data-testid="row-favorites-playlist"
+          >
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: allInFavorites ? "rgba(255,84,112,0.18)" : "rgba(255,255,255,0.08)" }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={allInFavorites ? "#FF5470" : "none"} stroke={allInFavorites ? "#FF5470" : "rgba(255,255,255,0.6)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-medium leading-tight">Favorites</p>
+              <p className="text-white/40 text-xs leading-tight mt-0.5">
+                {allInFavorites ? "Already in Favorites — tap to remove" : "Your loved songs & artists"}
+              </p>
+            </div>
+            {allInFavorites && (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF5470" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+        )}
+
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <svg className="animate-spin w-5 h-5 text-white/40" viewBox="0 0 24 24" fill="none">
@@ -69,27 +121,19 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
             </svg>
           </div>
         ) : playlists.length === 0 ? (
-          <div className="text-center py-6">
-            <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-            >
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.8" strokeLinecap="round">
-                <path d="M3 6h18M3 10h14M3 14h10M17 14v6M14 17h6" />
-              </svg>
-            </div>
-            <p className="text-white/60 text-sm font-medium mb-1">No playlists yet</p>
-            <p className="text-white/30 text-xs mb-5">Create your first playlist to start adding songs.</p>
+          <div className="text-center py-4">
+            <p className="text-white/40 text-xs mb-4">No custom playlists yet.</p>
             <button
               type="button"
               onClick={handleGoToPlaylists}
-              className="flex items-center justify-center gap-2 mx-auto px-6 py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-transform"
+              className="flex items-center justify-center gap-2 mx-auto px-5 py-2.5 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-transform"
               style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+              data-testid="button-create-playlist"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              Create a Playlist
+              New Playlist
             </button>
           </div>
         ) : (
