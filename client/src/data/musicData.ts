@@ -239,7 +239,7 @@ export const TRACK_CREDITS: Record<string, TrackCredits> = {
     writers: [{ name: "Wolfgang Timber", personId: "p-wolfgang", role: "Composer · Lyricist" }],
     performers: [
       { personId: "p-tim-snider",  role: "Violin",  instrumentId: "i-violin-strad-copy" },
-      { personId: "p-joe-hall",    role: "Guitar",  instrumentId: "i-gretsch-1967-6071", tuningNotes: "Dropped D" },
+      { personId: "p-joe-hall",    role: "Guitar",  instrumentId: "i-martin-1973-d28", tuningNotes: "Dropped D" },
       { personId: "p-zach-teran",  role: "Bass",    instrumentId: "i-bass-fender-p" },
       { personId: "p-miguel-cruz", role: "Drums",   instrumentId: "i-drums-gretsch-kit" },
     ],
@@ -269,7 +269,7 @@ export const TRACK_CREDITS: Record<string, TrackCredits> = {
     ],
     performers: [
       { personId: "p-tim-snider",  role: "Violin", instrumentId: "i-violin-strad-copy" },
-      { personId: "p-joe-hall",    role: "Guitar", instrumentId: "i-gretsch-1967-6071" },
+      { personId: "p-joe-hall",    role: "Guitar", instrumentId: "i-martin-1973-d28" },
       { personId: "p-miguel-cruz", role: "Drums",  instrumentId: "i-drums-gretsch-kit" },
     ],
   },

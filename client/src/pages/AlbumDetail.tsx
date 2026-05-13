@@ -30,7 +30,22 @@ export function AlbumDetail() {
   const [songMenuFor, setSongMenuFor] = useState<Song | null>(null);
   const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
   const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song } | null>(null);
-  const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string } | null>(null);
+  const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
+  const [bookmarkedInstruments, setBookmarkedInstruments] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("gt:bookmarked-instruments");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const toggleBookmarkInstrument = (id: string) => {
+    setBookmarkedInstruments((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { window.localStorage.setItem("gt:bookmarked-instruments", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
   const [downloadedSongs, setDownloadedSongs] = useState<Set<string>>(new Set());
 
   const album = ALBUMS.find((a) => a.id === id);
@@ -596,6 +611,9 @@ export function AlbumDetail() {
           <InstrumentSheet
             instrument={instrumentSheet.instrument}
             tuningNotes={instrumentSheet.tuningNotes}
+            attribution={instrumentSheet.attribution}
+            isBookmarked={bookmarkedInstruments.has(instrumentSheet.instrument.id)}
+            onToggleBookmark={() => toggleBookmarkInstrument(instrumentSheet.instrument.id)}
             onClose={() => setInstrumentSheet(null)}
           />
         ) : performerSheet ? (
@@ -603,7 +621,7 @@ export function AlbumDetail() {
             person={performerSheet.person}
             song={performerSheet.song}
             album={album}
-            onOpenInstrument={(instrument, tuningNotes) => setInstrumentSheet({ instrument, tuningNotes })}
+            onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
             onClose={() => setPerformerSheet(null)}
           />
         ) : creditsForSong ? (
@@ -611,7 +629,7 @@ export function AlbumDetail() {
             song={creditsForSong}
             album={album}
             onOpenPerformer={(person) => setPerformerSheet({ person, song: creditsForSong })}
-            onOpenInstrument={(instrument, tuningNotes) => setInstrumentSheet({ instrument, tuningNotes })}
+            onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
             onClose={() => setCreditsForSong(null)}
           />
         ) : null}
@@ -1007,15 +1025,30 @@ function PersonAvatar({ person, size = 44 }: { person: Person; size?: number }) 
   );
 }
 
-function SheetShell({ ariaLabel, testId, onClose, children }: { ariaLabel: string; testId: string; onClose: () => void; children: ReactNode }) {
+function SheetShell({
+  ariaLabel,
+  testId,
+  onClose,
+  variant = "bottom",
+  children,
+}: {
+  ariaLabel: string;
+  testId: string;
+  onClose: () => void;
+  variant?: "bottom" | "full";
+  children: ReactNode;
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const isFull = variant === "full";
+
   return (
     <div
-      className="fixed inset-0 z-[78] flex items-end justify-center"
+      className={`fixed inset-0 z-[78] flex justify-center ${isFull ? "items-stretch" : "items-end"}`}
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
@@ -1023,10 +1056,14 @@ function SheetShell({ ariaLabel, testId, onClose, children }: { ariaLabel: strin
     >
       <div className="absolute inset-0 bg-black/55" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
       <div
-        className="relative w-full max-w-[440px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide"
-        style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: "0 -16px 40px rgba(0,0,0,0.6)" }}
+        className={
+          isFull
+            ? "relative w-full max-w-[440px] z-10 h-full overflow-y-auto scrollbar-hide"
+            : "relative w-full max-w-[440px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide"
+        }
+        style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
       >
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+        {!isFull && <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />}
         {children}
       </div>
     </div>
@@ -1067,7 +1104,7 @@ function CreditsSheet({
   song: Song;
   album: Album;
   onOpenPerformer: (person: Person) => void;
-  onOpenInstrument: (instrument: Instrument, tuningNotes?: string) => void;
+  onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
   onClose: () => void;
 }) {
   const credits = getCreditsForSong(song.id);
@@ -1156,7 +1193,7 @@ function CreditsSheet({
                   {instrument && (
                     <button
                       type="button"
-                      onClick={() => onOpenInstrument(instrument, perf.tuningNotes)}
+                      onClick={() => onOpenInstrument(instrument, perf.tuningNotes, { personId: perf.personId, songId: song.id })}
                       className="flex items-center gap-1 pl-3 -mr-1 active:opacity-70"
                       data-testid={`button-instrument-${perf.instrumentId}`}
                       aria-label={`Instrument: ${instrument.name}`}
@@ -1189,7 +1226,7 @@ function PerformerSheet({
   person: Person;
   song: Song;                  // The song we're focused on — drives "instruments on this song"
   album: Album;
-  onOpenInstrument: (instrument: Instrument, tuningNotes?: string) => void;
+  onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
   onClose: () => void;
 }) {
   const allTracks = getTracksForPerformerOnAlbum(person.id, album.id);
@@ -1203,17 +1240,13 @@ function PerformerSheet({
 
   return (
     <SheetShell ariaLabel={`${person.name} on ${song.title}`} testId="sheet-performer" onClose={onClose}>
-      <div className="flex items-center gap-3 px-5 pb-3">
-        <PersonAvatar person={person} size={56} />
-        <div className="flex-1 min-w-0">
-          <p className="text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider truncate">On "{song.title}"</p>
-          <h2 className="text-white text-[20px] font-bold leading-tight truncate">{person.name}</h2>
-        </div>
+      {/* Apple-style header: close button floats top-right, hero is a centered large avatar + name */}
+      <div className="relative">
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 active:opacity-70 flex-shrink-0"
+          className="absolute top-0 right-4 w-8 h-8 rounded-full flex items-center justify-center text-white/70 active:opacity-70"
           style={{ background: "rgba(255,255,255,0.08)" }}
           data-testid="button-performer-close"
         >
@@ -1221,6 +1254,11 @@ function PerformerSheet({
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
+        <div className="flex flex-col items-center text-center px-5 pt-2 pb-5">
+          <PersonAvatar person={person} size={112} />
+          <h2 className="text-white text-[24px] font-bold leading-tight mt-3">{person.name}</h2>
+          <p className="text-white/55 text-[13px] mt-1 truncate max-w-full">On "{song.title}"</p>
+        </div>
       </div>
 
       {/* Instrument(s) used on THIS song */}
@@ -1239,7 +1277,7 @@ function PerformerSheet({
                 <button
                   key={`inst-${i}`}
                   type="button"
-                  onClick={() => onOpenInstrument(inst, perf.tuningNotes)}
+                  onClick={() => onOpenInstrument(inst, perf.tuningNotes, { personId: person.id, songId: song.id })}
                   className="w-full flex items-center gap-3 px-5 py-2.5 text-left active:bg-white/5"
                   data-testid={`button-performer-song-instrument-${perf.instrumentId}`}
                 >
@@ -1280,25 +1318,20 @@ function PerformerSheet({
               return (
                 <div
                   key={s.id}
-                  className="flex items-center gap-3 px-5 py-2.5 active:bg-white/5"
+                  className="flex items-center gap-3 px-5 py-3 active:bg-white/5"
                   data-testid={`row-performer-track-${s.id}`}
                 >
-                  <div className="w-6 text-white/40 text-[13px] tabular-nums text-right">{s.trackNumber}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-[14px] truncate">{s.title}</p>
-                    <p className="text-white/45 text-[12px] truncate">
-                      {performer.role}
-                      {performer.tuningNotes ? ` · ${performer.tuningNotes}` : ""}
-                    </p>
-                  </div>
+                  {/* Track number color matches the album track-list (rgba(255,255,255,0.32)) */}
+                  <span className="w-6 text-[15px] tabular-nums text-right flex-shrink-0" style={{ color: "rgba(255,255,255,0.32)" }}>{s.trackNumber}</span>
+                  <p className="flex-1 min-w-0 text-white text-[15px] truncate">{s.title}</p>
                   {instrument && (
                     <button
                       type="button"
-                      onClick={() => onOpenInstrument(instrument, performer.tuningNotes)}
-                      className="flex items-center gap-1 pl-2 -mr-1 active:opacity-70"
+                      onClick={() => onOpenInstrument(instrument, performer.tuningNotes, { personId: performer.personId, songId: s.id })}
+                      className="flex items-center gap-1 pl-2 -mr-1 active:opacity-70 flex-shrink-0"
                       data-testid={`button-performer-track-instrument-${s.id}`}
                     >
-                      <span className="text-white/65 text-[13px]">{instrument.shortCategory ?? instrument.category}</span>
+                      <span className="text-white/65 text-[14px]">{instrument.shortCategory ?? instrument.category}</span>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
                         <path d="M9 6l6 6-6 6" />
                       </svg>
@@ -1343,16 +1376,109 @@ function PerformerSheet({
 function InstrumentSheet({
   instrument,
   tuningNotes,
+  attribution,
+  isBookmarked,
+  onToggleBookmark,
   onClose,
 }: {
   instrument: Instrument;
   tuningNotes?: string;
+  attribution?: { personId: string; songId: string };
+  isBookmarked: boolean;
+  onToggleBookmark: () => void;
   onClose: () => void;
 }) {
+  // Resolve attribution → who wrote the note + which song it's about.
+  // Used so a bookmarked instrument still tells you "this note was from X on Y".
+  const noteFromPerson = attribution ? PEOPLE[attribution.personId] : undefined;
+  const noteFromSong = attribution
+    ? ALBUMS.flatMap((a) => getSongsByAlbum(a.id)).find((s) => s.id === attribution.songId)
+    : undefined;
+
+  const handleShare = async () => {
+    const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+    const shareText = `${instrument.name} — featured on GoodTunes SuperCredits™`;
+    try {
+      if (typeof navigator !== "undefined" && (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share) {
+        await (navigator as Navigator & { share: (data: ShareData) => Promise<void> }).share({
+          title: instrument.name,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      }
+    } catch { /* user cancelled or share unavailable */ }
+    try {
+      await navigator.clipboard.writeText(`${shareText} — ${shareUrl}`);
+      toast({ title: "Link copied", description: instrument.name });
+    } catch {
+      toast({ title: "Share unavailable", description: "Couldn't copy link in this browser." });
+    }
+  };
+
   return (
-    <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" onClose={onClose}>
-      {/* Hero: instrument photo with X overlay in top-right corner */}
-      <div className="relative mx-5 rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
+    <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" variant="full" onClose={onClose}>
+      {/* Apple-style top bar: X on left, Share + Bookmark on right. Sticky so they stay reachable. */}
+      <div
+        className="sticky top-0 z-20 flex items-center justify-between px-3 py-2"
+        style={{ background: "rgba(20,24,48,0.85)", backdropFilter: "blur(20px) saturate(180%)" }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+          style={{ background: "rgba(255,255,255,0.10)" }}
+          data-testid="button-instrument-close"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleShare}
+            aria-label="Share"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.10)" }}
+            data-testid="button-instrument-share"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3v12" />
+              <path d="M7 8l5-5 5 5" />
+              <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={onToggleBookmark}
+            aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
+            aria-pressed={isBookmarked}
+            className="w-9 h-9 rounded-full flex items-center justify-center active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.10)" }}
+            data-testid="button-instrument-bookmark"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill={isBookmarked ? "#4AFFCA" : "none"}
+              stroke={isBookmarked ? "#4AFFCA" : "currentColor"}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-white"
+              aria-hidden="true"
+            >
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Hero photo (no overlay X — that's in the sticky bar above) */}
+      <div className="mx-5 mt-2 rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
         {instrument.photoUrl ? (
           <img src={instrument.photoUrl} alt={instrument.name} className="w-full h-full object-cover" />
         ) : (
@@ -1364,24 +1490,12 @@ function InstrumentSheet({
             </svg>
           </div>
         )}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white active:opacity-70"
-          style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)" }}
-          data-testid="button-instrument-close"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
       </div>
 
-      {/* Title block (no inline X — it's now in the photo overlay) */}
+      {/* Title block */}
       <div className="px-5 pb-3">
         <p className="text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider">{instrument.category}</p>
-        <h2 className="text-white text-[22px] font-bold leading-tight">{instrument.name}</h2>
+        <h2 className="text-white text-[24px] font-bold leading-tight">{instrument.name}</h2>
         {tuningNotes && (
           <p className="text-white/55 text-[13px] mt-1">Tuning · {tuningNotes}</p>
         )}
@@ -1391,15 +1505,26 @@ function InstrumentSheet({
       {instrument.about && (
         <>
           <div className="px-5 mt-1 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">About</div>
-          <p className="px-5 pb-3 text-white/80 text-[14px] leading-relaxed">{instrument.about}</p>
+          <p className="px-5 pb-4 text-white/80 text-[14px] leading-relaxed">{instrument.about}</p>
         </>
       )}
 
-      {/* Notes from the artist */}
+      {/* Notes from the artist — attributed (so the note still makes sense after bookmarking) */}
       {instrument.artistNote && (
         <>
           <div className="px-5 mt-1 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Notes from the artist</div>
-          <p className="px-5 pb-3 text-white/80 text-[14px] leading-relaxed italic">"{instrument.artistNote}"</p>
+          <p className="px-5 pb-3 text-white/85 text-[15px] leading-relaxed italic">"{instrument.artistNote}"</p>
+          {noteFromPerson && (
+            <div className="flex items-center gap-2.5 px-5 pb-4">
+              <PersonAvatar person={noteFromPerson} size={28} />
+              <div className="min-w-0 flex-1">
+                <p className="text-white text-[13px] font-medium truncate">{noteFromPerson.name}</p>
+                {noteFromSong && (
+                  <p className="text-white/50 text-[12px] truncate">on "{noteFromSong.title}"</p>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 
