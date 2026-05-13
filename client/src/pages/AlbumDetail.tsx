@@ -31,6 +31,7 @@ export function AlbumDetail() {
   const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
   const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
+  const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
   const [bookmarkedInstruments, setBookmarkedInstruments] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -607,13 +608,21 @@ export function AlbumDetail() {
 
         {/* Only one SuperCredits sheet is mounted at a time (instrument > performer > credits)
             so we don't stack multiple aria-modal dialogs simultaneously. */}
-        {instrumentSheet ? (
+        {inAppBrowser ? (
+          <InAppBrowserSheet
+            url={inAppBrowser.url}
+            title={inAppBrowser.title}
+            logoUrl={inAppBrowser.logoUrl}
+            onClose={() => setInAppBrowser(null)}
+          />
+        ) : instrumentSheet ? (
           <InstrumentSheet
             instrument={instrumentSheet.instrument}
             tuningNotes={instrumentSheet.tuningNotes}
             attribution={instrumentSheet.attribution}
             isBookmarked={bookmarkedInstruments.has(instrumentSheet.instrument.id)}
             onToggleBookmark={() => toggleBookmarkInstrument(instrumentSheet.instrument.id)}
+            onOpenInAppBrowser={(b) => setInAppBrowser(b)}
             onClose={() => setInstrumentSheet(null)}
           />
         ) : performerSheet ? (
@@ -1058,7 +1067,7 @@ function SheetShell({
       <div
         className={
           isFull
-            ? "relative w-full max-w-[440px] z-10 h-full overflow-y-auto scrollbar-hide"
+            ? "relative w-full max-w-[440px] z-10 h-full flex flex-col overflow-hidden"
             : "relative w-full max-w-[440px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide"
         }
         style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
@@ -1379,6 +1388,7 @@ function InstrumentSheet({
   attribution,
   isBookmarked,
   onToggleBookmark,
+  onOpenInAppBrowser,
   onClose,
 }: {
   instrument: Instrument;
@@ -1386,6 +1396,7 @@ function InstrumentSheet({
   attribution?: { personId: string; songId: string };
   isBookmarked: boolean;
   onToggleBookmark: () => void;
+  onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
   onClose: () => void;
 }) {
   // Resolve attribution → who wrote the note + which song it's about.
@@ -1418,9 +1429,9 @@ function InstrumentSheet({
 
   return (
     <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" variant="full" onClose={onClose}>
-      {/* Apple-style top bar: X on left, Share + Bookmark on right. Sticky so they stay reachable. */}
+      {/* Apple-style top bar: X on left, Share + Bookmark on right. shrink-0 so it stays pinned. */}
       <div
-        className="sticky top-0 z-20 flex items-center justify-between px-3 py-2"
+        className="flex-shrink-0 flex items-center justify-between px-3 py-2"
         style={{ background: "rgba(20,24,48,0.85)", backdropFilter: "blur(20px) saturate(180%)" }}
       >
         <button
@@ -1477,6 +1488,8 @@ function InstrumentSheet({
         </div>
       </div>
 
+      {/* Scrollable content area (header above is shrink-0) */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide pb-8">
       {/* Hero photo (no overlay X — that's in the sticky bar above) */}
       <div className="mx-5 mt-2 rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
         {instrument.photoUrl ? (
@@ -1540,38 +1553,35 @@ function InstrumentSheet({
                 className="flex items-center px-5 py-2.5 active:bg-white/5"
                 data-testid={`row-vendor-${i}`}
               >
-                {/* Tap the logo → vendor about page */}
-                <a
-                  href={v.aboutUrl ?? v.affiliateUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                {/* Tap the logo → vendor about page (opens in in-app browser sheet) */}
+                <button
+                  type="button"
+                  onClick={() => onOpenInAppBrowser({ url: v.aboutUrl ?? v.affiliateUrl, title: v.name, logoUrl: v.logoUrl })}
                   aria-label={`About ${v.name}`}
                   className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 active:opacity-70 overflow-hidden"
                   style={{ background: "rgba(255,255,255,0.92)" }}
-                  data-testid={`link-vendor-about-${i}`}
+                  data-testid={`button-vendor-about-${i}`}
                 >
                   {v.logoUrl ? (
                     <img src={v.logoUrl} alt="" className="w-7 h-7 object-contain" />
                   ) : (
                     <span className="text-[#00062B] text-[13px] font-bold">{v.name.charAt(0)}</span>
                   )}
-                </a>
-                {/* Tap the row → direct product / buy link */}
-                <a
-                  href={v.affiliateUrl}
-                  target="_blank"
-                  rel="noopener noreferrer sponsored"
-                  className="flex-1 flex items-center min-w-0 ml-3 active:opacity-80"
-                  data-testid={`link-vendor-buy-${i}`}
+                </button>
+                {/* Tap the row → direct product / buy link (opens in in-app browser sheet) */}
+                <button
+                  type="button"
+                  onClick={() => onOpenInAppBrowser({ url: v.affiliateUrl, title: v.name, logoUrl: v.logoUrl })}
+                  className="flex-1 flex items-center min-w-0 ml-3 active:opacity-80 text-left"
+                  data-testid={`button-vendor-buy-${i}`}
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-[15px] font-medium truncate">{v.name}</p>
                   </div>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/45 ml-2" aria-hidden="true">
-                    <path d="M7 17L17 7" />
-                    <path d="M7 7h10v10" />
+                    <path d="M9 6l6 6-6 6" />
                   </svg>
-                </a>
+                </button>
               </div>
             ))}
           </div>
@@ -1580,6 +1590,139 @@ function InstrumentSheet({
             Outbound links support the artist via SuperCredits™ Micro-Sponsorships. Artist receives the lion's share; GoodTunes receives a small connection fee.
           </p>
         </>
+      )}
+      </div>
+    </SheetShell>
+  );
+}
+
+/**
+ * Instagram-style in-app browser. Loads `url` in an iframe so users stay inside GoodTunes;
+ * the top bar shows the vendor logo + domain, with an "open in system browser" arrow on
+ * the right. Many vendor sites block iframing via X-Frame-Options/CSP — when that happens
+ * the iframe stays blank, so we surface a fallback CTA after a short delay so the user can
+ * still escape to their browser.
+ */
+function InAppBrowserSheet({
+  url,
+  title,
+  logoUrl,
+  onClose,
+}: {
+  url: string;
+  title: string;
+  logoUrl?: string;
+  onClose: () => void;
+}) {
+  // Validate https. We refuse to render anything we can't safely embed/open.
+  const safeUrl = (() => {
+    try {
+      const u = new URL(url);
+      if (u.protocol !== "https:") return null;
+      return u;
+    } catch { return null; }
+  })();
+
+  const domain = safeUrl ? safeUrl.hostname.replace(/^www\./, "") : url;
+
+  const openExternal = () => {
+    if (!safeUrl) return;
+    window.open(safeUrl.toString(), "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <SheetShell ariaLabel={`${title} — in-app browser`} testId="sheet-inapp-browser" variant="full" onClose={onClose}>
+      {/* Top bar — close on left, vendor logo + domain center, "open in browser" on right */}
+      <div
+        className="sticky top-0 z-20 flex items-center gap-2 px-3 py-2 border-b border-white/8"
+        style={{ background: "rgba(20,24,48,0.92)", backdropFilter: "blur(20px) saturate(180%)" }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0"
+          style={{ background: "rgba(255,255,255,0.10)" }}
+          data-testid="button-inapp-close"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          {logoUrl && (
+            <div className="w-6 h-6 rounded-md overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.92)" }}>
+              <img src={logoUrl} alt="" className="w-4 h-4 object-contain" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-white text-[14px] font-semibold truncate leading-tight">{title}</p>
+            <p className="text-white/50 text-[11px] truncate leading-tight">{domain}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={openExternal}
+          aria-label="Open in browser"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0"
+          style={{ background: "rgba(255,255,255,0.10)" }}
+          data-testid="button-inapp-open-external"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 4h6v6" />
+            <path d="M20 4l-9 9" />
+            <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Iframe area fills remaining height via flex. Many vendor sites block iframing
+          (X-Frame-Options/CSP) and still fire onLoad on a blank page, so we always show
+          a persistent "Open in browser" hint at the bottom rather than relying on load events. */}
+      <div className="flex-1 min-h-0 relative bg-white">
+        {safeUrl ? (
+          <iframe
+            src={safeUrl.toString()}
+            title={title}
+            className="w-full h-full border-0"
+            referrerPolicy="no-referrer-when-downgrade"
+            // Intentionally NOT setting allow-same-origin: combined with allow-scripts it
+            // would weaken sandbox isolation against arbitrary 3rd-party vendor URLs.
+            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+            data-testid="iframe-inapp-browser"
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center" style={{ background: "rgba(20,24,48,0.96)" }}>
+            <p className="text-white text-[15px] font-semibold mb-1">Can't open this link</p>
+            <p className="text-white/55 text-[13px]">{url}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Persistent bottom hint so users always have a way out, even when the iframe
+          renders blank (the common case for vendor sites that block embedding). */}
+      {safeUrl && (
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-t border-white/8" style={{ background: "rgba(20,24,48,0.96)" }}>
+          <p className="flex-1 text-white/65 text-[12px] leading-snug">
+            If {domain} doesn't load, open it in your browser.
+          </p>
+          <button
+            type="button"
+            onClick={openExternal}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-white text-[13px] font-semibold active:opacity-80 flex-shrink-0"
+            style={{ background: "#319ED8" }}
+            data-testid="button-inapp-bottom-open"
+          >
+            <span>Open</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 4h6v6" />
+              <path d="M20 4l-9 9" />
+              <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
+            </svg>
+          </button>
+        </div>
       )}
     </SheetShell>
   );
