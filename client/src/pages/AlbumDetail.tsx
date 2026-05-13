@@ -250,12 +250,12 @@ export function AlbumDetail() {
           </div>
 
           {/* Play / Shuffle / Add bar */}
-          <div className="flex items-center gap-4 px-5 mt-1 mb-3">
+          <div className="flex items-center justify-center gap-3 px-5 mt-1 mb-3">
             <button
               type="button"
               onClick={handleShuffle}
               aria-label="Shuffle album"
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+              className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
               style={{ background: "rgba(255,255,255,0.08)" }}
               data-testid="button-shuffle-album"
             >
@@ -266,11 +266,11 @@ export function AlbumDetail() {
             <button
               type="button"
               onClick={handlePlayAll}
-              className="flex-1 max-w-[210px] flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-base active:scale-[0.98] transition-transform mx-auto"
+              className="flex items-center justify-center gap-2 h-11 px-10 rounded-full font-semibold text-base active:scale-[0.98] transition-transform"
               style={{ background: "#fff", color: "#00062B" }}
               data-testid="button-play-album"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M8 5.14v14l11-7-11-7z" />
               </svg>
               Play
@@ -279,7 +279,7 @@ export function AlbumDetail() {
               type="button"
               onClick={() => setShowAlbumPlaylistPicker(true)}
               aria-label="Add album to a playlist"
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+              className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
               style={{ background: "rgba(255,255,255,0.08)" }}
               data-testid="button-add-album-to-playlist"
             >
