@@ -18,6 +18,8 @@ interface PlayerState {
   showLyrics: boolean;
   showPlayer: boolean;
   showAddToPlaylist: boolean;
+  showQueue: boolean;
+  autoplay: boolean;
   favorites: Set<string>;
   recentAlbums: Album[];
 }
@@ -33,6 +35,10 @@ interface PlayerContextValue extends PlayerState {
   setShowLyrics: (show: boolean) => void;
   setShowPlayer: (show: boolean) => void;
   setShowAddToPlaylist: (show: boolean) => void;
+  setShowQueue: (show: boolean) => void;
+  toggleAutoplay: () => void;
+  reorderQueue: (from: number, to: number) => void;
+  removeFromQueue: (index: number) => void;
   toggleFavorite: (songId: string) => void;
   isFavorite: (songId: string) => boolean;
   addToQueue: (song: PlayerSong) => void;
@@ -50,6 +56,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [showLyrics, setShowLyrics] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+  const [autoplay, setAutoplay] = useState(true);
   const favSongs = useFavoriteSongs();
   const favorites = favSongs.set;
   const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
@@ -159,6 +167,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setQueue((q) => [...q, song]);
   }, []);
 
+  const toggleAutoplay = useCallback(() => setAutoplay((a) => !a), []);
+
+  const reorderQueue = useCallback((from: number, to: number) => {
+    setQueue((q) => {
+      if (from === to || from < 0 || to < 0 || from >= q.length || to >= q.length) return q;
+      const next = q.slice();
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      // Keep currentIndex pointing to the same logical song
+      setCurrentIndex((idx) => {
+        if (idx === from) return to;
+        if (from < idx && to >= idx) return idx - 1;
+        if (from > idx && to <= idx) return idx + 1;
+        return idx;
+      });
+      return next;
+    });
+  }, []);
+
+  const removeFromQueue = useCallback((index: number) => {
+    setQueue((q) => {
+      if (index <= currentIndex || index >= q.length) return q; // never drop the current song
+      const next = q.slice();
+      next.splice(index, 1);
+      return next;
+    });
+  }, [currentIndex]);
+
   return (
     <PlayerContext.Provider
       value={{
@@ -173,6 +209,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         showLyrics,
         showPlayer,
         showAddToPlaylist,
+        showQueue,
+        autoplay,
         favorites,
         recentAlbums,
         playSong,
@@ -185,6 +223,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setShowLyrics,
         setShowPlayer,
         setShowAddToPlaylist,
+        setShowQueue,
+        toggleAutoplay,
+        reorderQueue,
+        removeFromQueue,
         toggleFavorite,
         isFavorite,
         addToQueue,
