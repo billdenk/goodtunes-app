@@ -1,14 +1,22 @@
 import { usePlayer } from "@/context/PlayerContext";
 import { useLocation } from "wouter";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
 
 export function MiniPlayer() {
   const { currentSong, isPlaying, togglePlay, next, setShowPlayer } = usePlayer();
   const [location] = useLocation();
+  const { hidden } = useNavVisibility();
 
   if (!currentSong || location === "/player") return null;
 
   return (
-    <div className="absolute bottom-[83px] left-0 right-0 z-30 px-4 pb-1">
+    <div
+      className="absolute left-0 right-0 z-30 px-4 pb-1"
+      style={{
+        bottom: hidden ? 12 : 83,
+        transition: "bottom 260ms cubic-bezier(0.32, 0.72, 0, 1)",
+      }}
+    >
       <div
         className="relative cursor-pointer active:scale-[0.98] transition-transform"
         style={{

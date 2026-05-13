@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -7,6 +7,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { SONGS, ALBUMS, type Song, type Album } from "@/data/musicData";
 import { useFavoriteSongs, useFavoriteArtists } from "@/hooks/useFavorites";
+import { useScrollHideNav } from "@/hooks/useNavVisibility";
 
 const FAVORITES_PLAYLIST_ID = "__favorites";
 
@@ -152,6 +153,10 @@ export function Playlists() {
   const [editName, setEditName] = useState("");
   const [showAddSongs, setShowAddSongs] = useState(false);
   const [addSearch, setAddSearch] = useState("");
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const detailScrollRef = useRef<HTMLDivElement>(null);
+  useScrollHideNav(listScrollRef);
+  useScrollHideNav(detailScrollRef);
 
   // Auto-open create dialog when arriving with ?create=1
   useEffect(() => {
@@ -395,7 +400,7 @@ export function Playlists() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
+          <div ref={detailScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-5">
             {playlistSongs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
@@ -614,7 +619,7 @@ export function Playlists() {
           </button>
         </header>
 
-        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-5 mt-4">
+        <div ref={listScrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-5 mt-4">
           {isLoading ? (
             <div className="flex flex-col gap-3">
               {[1, 2, 3].map((i) => (

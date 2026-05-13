@@ -1,5 +1,6 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
 
 const NavItem = ({
   path,
@@ -44,6 +45,8 @@ export function BottomNav() {
   const [location, navigate] = useLocation();
   const { user } = useAuth();
 
+  const { hidden } = useNavVisibility();
+
   const isLibrary = location === "/collection" || location === "/" || location.startsWith("/album");
   const isPlaylists = location.startsWith("/playlist");
   const isAccount = location.startsWith("/account");
@@ -61,6 +64,9 @@ export function BottomNav() {
         backdropFilter: "blur(24px) saturate(180%)",
         WebkitBackdropFilter: "blur(24px) saturate(180%)",
         borderTop: "1px solid rgba(255,255,255,0.08)",
+        transform: hidden ? "translateY(100%)" : "translateY(0)",
+        transition: "transform 260ms cubic-bezier(0.32, 0.72, 0, 1)",
+        pointerEvents: hidden ? "none" : "auto",
       }}
     >
       <NavItem

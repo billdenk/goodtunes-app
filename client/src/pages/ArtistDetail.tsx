@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { ALBUMS, SONGS, type Album } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
+import { useScrollHideNav } from "@/hooks/useNavVisibility";
 
 export function ArtistDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -37,6 +38,8 @@ export function ArtistDetail() {
 
   const isFav = favArtists.has(artistName);
   const heroArt = artistAlbums[0]?.artwork;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollHideNav(scrollRef);
 
   if (artistAlbums.length === 0) {
     return (
@@ -94,7 +97,7 @@ export function ArtistDetail() {
           </svg>
         </button>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }}>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }}>
           <div className="flex flex-col items-center pt-20 px-5">
             {heroArt && (
               <div

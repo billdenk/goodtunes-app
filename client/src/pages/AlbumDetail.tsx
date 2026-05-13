@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,6 +7,8 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
+import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import { useDominantColor, toneForBg } from "@/hooks/useDominantColor";
 import { ALBUMS, getSongsByAlbum, formatDuration, type Song, type Album, type AlbumVideo, type AlbumPhoto } from "@/data/musicData";
 
 export function AlbumDetail() {
@@ -30,6 +32,10 @@ export function AlbumDetail() {
 
   const album = ALBUMS.find((a) => a.id === id);
   const songs = album ? getSongsByAlbum(id) : [];
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollHideNav(scrollRef);
+  const dominant = useDominantColor(album?.artwork);
+  const tint = dominant ? toneForBg(dominant) : "#00062B";
   const ownedNums = album?.ownedCertificates ?? (album?.certificateNumber ? [album.certificateNumber] : []);
   const isMulti = ownedNums.length > 1;
 
@@ -209,44 +215,56 @@ export function AlbumDetail() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
-          {/* Hero artwork — full square, edge-to-edge of the column, fading into the dark bg */}
-          <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
-            <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover block" />
+        <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
+          {/* Tinted hero region — extracts dominant color from artwork, fades back to brand navy */}
+          <div style={{ background: tint, transition: "background 600ms ease" }}>
+            {/* Hero artwork — full square, edge-to-edge of the column, fading into the tint */}
+            <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
+              <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover block" />
+              <div
+                className="absolute inset-x-0 bottom-0"
+                style={{
+                  height: "55%",
+                  background: `linear-gradient(to bottom, transparent 0%, ${tint}73 55%, ${tint}eb 88%, ${tint} 100%)`,
+                  transition: "background 600ms ease",
+                }}
+              />
+            </div>
+
+            {/* Title block — sits on tint */}
+            <div className="relative pt-4 pb-3 px-5">
+              <span
+                className="text-[10px] font-bold px-2.5 py-1 rounded-full mb-2 inline-block"
+                style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)" }}
+              >
+                {album.type}
+              </span>
+              <h1 className="text-white text-[28px] font-bold leading-tight tracking-tight" data-testid="text-album-title">{album.title}</h1>
+              <button
+                type="button"
+                onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
+                className="mt-1 inline-flex items-center gap-0.5 text-white text-base font-medium active:opacity-70"
+                data-testid="link-album-artist"
+              >
+                {album.artist}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+              <p className="text-white/55 text-xs mt-1.5">{album.year} · {songs.length} songs · {totalMin} min</p>
+              {album.description && (
+                <p className="text-white/70 text-sm mt-3 leading-relaxed">{album.description}</p>
+              )}
+            </div>
+
+            {/* Fade from tint back to canonical brand navy before the play row */}
             <div
-              className="absolute inset-x-0 bottom-0"
               style={{
-                height: "55%",
-                background:
-                  "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.45) 50%, rgba(0,6,43,0.92) 88%, #00062B 100%)",
+                height: 64,
+                background: `linear-gradient(to bottom, ${tint} 0%, #00062B 100%)`,
+                transition: "background 600ms ease",
               }}
             />
-          </div>
-
-          {/* Title block — solid dark bg sits below hero */}
-          <div className="relative pt-4 pb-3 px-5 bg-[#00062B]">
-            <span
-              className="text-[10px] font-bold px-2.5 py-1 rounded-full mb-2 inline-block"
-              style={{ background: "rgba(49,158,216,0.15)", color: "#319ED8", border: "1px solid rgba(49,158,216,0.3)" }}
-            >
-              {album.type}
-            </span>
-            <h1 className="text-white text-[28px] font-bold leading-tight tracking-tight" data-testid="text-album-title">{album.title}</h1>
-            <button
-              type="button"
-              onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
-              className="mt-1 inline-flex items-center gap-0.5 text-[#319ED8] text-base font-medium active:opacity-70"
-              data-testid="link-album-artist"
-            >
-              {album.artist}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-            <p className="text-white/40 text-xs mt-1.5">{album.year} · {songs.length} songs · {totalMin} min</p>
-            {album.description && (
-              <p className="text-white/55 text-sm mt-3 leading-relaxed">{album.description}</p>
-            )}
           </div>
 
           {/* Play / Shuffle / Add bar */}
@@ -323,7 +341,7 @@ export function AlbumDetail() {
                           ))}
                         </div>
                       ) : (
-                        <span className="text-white/35 text-[15px] tabular-nums">{song.trackNumber}</span>
+                        <span className="text-white/45 text-[15px] tabular-nums">{song.trackNumber}</span>
                       )}
                     </div>
                     <div className="flex-1 min-w-0 relative h-full flex items-center">
@@ -371,7 +389,7 @@ export function AlbumDetail() {
 
           {/* Metadata block */}
           <div className="px-5 mt-7">
-            <p className="text-white/35 text-[11px] leading-relaxed">
+            <p className="text-white/40 text-[11px] leading-relaxed">
               <span className="block">{album.year} · GoodTunes® Records</span>
               <span className="block mt-0.5">{songs.length} {songs.length === 1 ? "song" : "songs"} · {runtime}</span>
               {ownedNums.length > 0 && (
@@ -382,9 +400,18 @@ export function AlbumDetail() {
             </p>
           </div>
 
+          {/* Editorial panel — slightly lighter shelf for Music Videos / Photos / More By */}
+          {(hasVideos || hasPhotos || hasMoreBy) && (
+          <div
+            className="mt-8 pt-7 pb-4"
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              borderTop: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
           {/* Music Videos */}
           {hasVideos && (
-            <div className="mt-9">
+            <div>
               <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Music Videos</h2>
               <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2" data-testid="section-videos">
                 {album.videos!.map((v) => (
@@ -421,7 +448,7 @@ export function AlbumDetail() {
 
           {/* Photos */}
           {hasPhotos && (
-            <div className="mt-9">
+            <div className={hasVideos ? "mt-9" : ""}>
               <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Photos</h2>
               <div className="px-5 grid grid-cols-3 gap-1.5" data-testid="section-photos">
                 {album.photos!.map((p) => (
@@ -442,7 +469,7 @@ export function AlbumDetail() {
 
           {/* More By Artist */}
           {hasMoreBy && (
-            <div className="mt-9">
+            <div className={hasVideos || hasPhotos ? "mt-9" : ""}>
               <button
                 type="button"
                 onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
@@ -473,6 +500,8 @@ export function AlbumDetail() {
                 ))}
               </div>
             </div>
+          )}
+          </div>
           )}
         </div>
 

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
+import { useScrollHideNav } from "@/hooks/useNavVisibility";
 
 export function Account() {
   const { user, logout, updateProfile, isUpdatePending, updateError } = useAuth();
@@ -26,6 +27,9 @@ export function Account() {
       setTimeout(() => setSaved(false), 2000);
     } catch {}
   };
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollHideNav(scrollRef);
 
   const initials = user?.displayName
     ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
@@ -141,7 +145,7 @@ export function Account() {
           )}
         </div>
 
-        <div className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide pb-[170px]">
+        <div ref={scrollRef} className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide pb-[170px]">
           <div className="mb-6 mt-2">
             <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-3">Settings</p>
             <div className="flex flex-col gap-1">

@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
+import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { useAuth } from "@/hooks/useAuth";
 import { Player } from "@/pages/Player";
 import { Login } from "@/pages/Login";
@@ -92,8 +93,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <PlayerProvider>
-          <Toaster />
-          <Router />
+          <NavVisibilityProvider>
+            <Toaster />
+            <Router />
+          </NavVisibilityProvider>
         </PlayerProvider>
       </TooltipProvider>
     </QueryClientProvider>

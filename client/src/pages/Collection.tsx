@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
+import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ALBUMS, SONGS, type Album } from "@/data/musicData";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
@@ -22,6 +23,8 @@ export function Collection() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showSort, setShowSort] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollHideNav(scrollRef);
 
   useEffect(() => {
     if (searchOpen) {
@@ -124,7 +127,7 @@ export function Collection() {
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Collection</h1>
         </header>
 
-        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
+        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           {recentAlbums.length > 0 && (
             <div className="mb-5">
               <div className="flex items-center justify-between px-5 mb-3">
