@@ -1275,7 +1275,6 @@ function CreditsSheet({
             })}
           </div>
 
-          <p className="px-5 pt-2 pb-1 text-white/35 text-[11px] text-center">Tap a name or an instrument for details.</p>
         </>
       )}
     </SheetShell>
