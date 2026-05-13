@@ -43,8 +43,8 @@ export function Account() {
           <div className="absolute bottom-40 -left-20 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
         </div>
 
-        <header className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
-          <h1 className="text-white text-2xl font-bold">Account</h1>
+        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
+          <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Account</h1>
           <button
             type="button"
             onClick={() => navigate("/collection")}

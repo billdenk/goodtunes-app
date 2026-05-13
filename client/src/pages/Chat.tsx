@@ -79,9 +79,8 @@ export function Chat() {
 
   return (
     <main className="relative min-h-screen w-full max-w-[440px] mx-auto bg-[#00062B] pb-[110px]">
-      <header className="sticky top-0 z-30 px-5 pt-4 pb-3" style={{ background: "rgba(0,6,43,0.92)", backdropFilter: "blur(24px) saturate(180%)" }}>
-        <h1 className="text-white text-[28px] font-bold leading-tight">Messages</h1>
-        <p className="text-white/55 text-[13px] mt-0.5">Chat with vendors and brands featured in SuperCredits™.</p>
+      <header className="relative z-10 flex items-end px-5 pt-14 pb-3">
+        <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Chat</h1>
       </header>
 
       {threads.length === 0 ? (
