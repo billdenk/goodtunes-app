@@ -230,6 +230,22 @@ export function AlbumDetail() {
                     <path d="M12 7v5l3 2" />
                   </svg>
                 </button>
+                <div className="h-px bg-white/8" />
+                <button
+                  type="button"
+                  onClick={() => { setShowMenu(false); setShowAlbumPlaylistPicker(true); }}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
+                  data-testid="menu-add-album-to-playlist"
+                >
+                  <span>Add to Playlist</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="6" x2="14" y2="6" />
+                    <line x1="3" y1="12" x2="14" y2="12" />
+                    <line x1="3" y1="18" x2="10" y2="18" />
+                    <line x1="18" y1="9" x2="18" y2="21" />
+                    <line x1="12" y1="15" x2="24" y2="15" />
+                  </svg>
+                </button>
               </div>
             </>
           )}
@@ -304,18 +320,37 @@ export function AlbumDetail() {
               </svg>
               Play
             </button>
-            <button
-              type="button"
-              onClick={() => setShowAlbumPlaylistPicker(true)}
-              aria-label="Add album to a playlist"
-              className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
-              style={{ background: "rgba(255,255,255,0.08)" }}
-              data-testid="button-add-album-to-playlist"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+            {(() => {
+              const allDownloaded = songs.length > 0 && songs.every((s) => downloadedSongs.has(s.id));
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = new Set(downloadedSongs);
+                    if (allDownloaded) songs.forEach((s) => next.delete(s.id));
+                    else songs.forEach((s) => next.add(s.id));
+                    setDownloadedSongs(next);
+                    try { localStorage.setItem(`gt:downloaded-songs:${album.id}`, JSON.stringify(Array.from(next))); } catch {}
+                  }}
+                  aria-label={allDownloaded ? "Remove album downloads" : "Download album"}
+                  aria-pressed={allDownloaded}
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+                  style={{ background: "rgba(255,255,255,0.08)" }}
+                  data-testid="button-download-album"
+                >
+                  {allDownloaded ? (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                      <path d="M5 12.5l4 4L19 7.5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v12" />
+                      <path d="M7 12.5L12 17.5l5-5" />
+                    </svg>
+                  )}
+                </button>
+              );
+            })()}
           </div>
 
           {/* Tracks */}
