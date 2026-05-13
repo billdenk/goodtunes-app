@@ -1253,7 +1253,7 @@ function CreditsSheet({
                     <PersonAvatar person={person} size={44} />
                     <div className="flex-1 min-w-0">
                       <p className="text-white text-[15px] font-semibold truncate">{person.name}</p>
-                      <p className="text-white/55 text-[12px] truncate">{perf.role}</p>
+                      <p className="text-[12px] truncate" style={{ color: "rgba(235,235,245,0.45)" }}>{perf.role}</p>
                     </div>
                   </button>
                   {instrument && (
