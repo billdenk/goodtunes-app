@@ -341,7 +341,7 @@ export function AlbumDetail() {
                           ))}
                         </div>
                       ) : (
-                        <span className="text-white/45 text-[15px] tabular-nums">{song.trackNumber}</span>
+                        <span className="text-[15px] tabular-nums" style={{ color: "rgba(255,255,255,0.32)" }}>{song.trackNumber}</span>
                       )}
                     </div>
                     <div className="flex-1 min-w-0 relative h-full flex items-center">
@@ -389,8 +389,8 @@ export function AlbumDetail() {
 
           {/* Metadata block */}
           <div className="px-5 mt-7">
-            <p className="text-white/40 text-[11px] leading-relaxed">
-              <span className="block">{album.year} · GoodTunes® Records</span>
+            <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.32)" }}>
+              <span className="block">{album.year} · {album.artist}</span>
               <span className="block mt-0.5">{songs.length} {songs.length === 1 ? "song" : "songs"} · {runtime}</span>
               {ownedNums.length > 0 && (
                 <span className="block mt-0.5">

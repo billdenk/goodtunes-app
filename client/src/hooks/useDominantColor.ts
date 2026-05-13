@@ -43,8 +43,11 @@ function hslToRgb(h: number, s: number, l: number): RGB {
 
 export function toneForBg(rgb: RGB): string {
   const { h, s, l } = rgbToHsl(rgb.r, rgb.g, rgb.b);
+  // Low saturation → image is essentially grayscale (B&W photo).
+  // Don't invent a hue; fall back to brand navy so we don't paint everything brown.
+  if (s < 0.18) return "#00062B";
   const clampedL = Math.max(0.13, Math.min(0.26, l * 0.55));
-  const clampedS = Math.max(0.25, Math.min(0.6, s));
+  const clampedS = Math.min(0.65, s);
   const out = hslToRgb(h, clampedS, clampedL);
   return `rgb(${out.r}, ${out.g}, ${out.b})`;
 }
@@ -71,16 +74,22 @@ export function useDominantColor(url: string | undefined): RGB | null {
         if (!ctx) return;
         ctx.drawImage(img, 0, 0, size, size);
         const data = ctx.getImageData(0, 0, size, size).data;
-        let r = 0, g = 0, b = 0, n = 0;
+        // Chroma-weighted average: saturated pixels dominate, so a single
+        // bright accent in a mostly-dark photo still drives the tint, and
+        // genuine B&W photos average to near-zero chroma (toneForBg falls back).
+        let r = 0, g = 0, b = 0, w = 0;
         for (let i = 0; i < data.length; i += 4) {
           if (data[i + 3] < 200) continue;
-          const max = Math.max(data[i], data[i + 1], data[i + 2]);
-          const min = Math.min(data[i], data[i + 1], data[i + 2]);
-          if (max - min < 14 && max < 40) continue;
-          if (max - min < 14 && max > 230) continue;
-          r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+          const rr = data[i], gg = data[i + 1], bb = data[i + 2];
+          const max = Math.max(rr, gg, bb);
+          const min = Math.min(rr, gg, bb);
+          if (max < 30) continue;            // near-black
+          if (max > 245 && max - min < 18) continue; // near-white
+          const chroma = max - min;
+          const weight = chroma * chroma + 4; // emphasize saturated pixels
+          r += rr * weight; g += gg * weight; b += bb * weight; w += weight;
         }
-        if (n > 0) setColor({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) });
+        if (w > 0) setColor({ r: Math.round(r / w), g: Math.round(g / w), b: Math.round(b / w) });
         // n===0 → leave color null so caller falls back to brand navy
       } catch {
         // CORS / canvas tainted — leave color null
