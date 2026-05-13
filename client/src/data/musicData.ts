@@ -52,6 +52,189 @@ export interface Song {
   audioUrl?: string;
 }
 
+// SuperCredits™
+export interface Person {
+  id: string;
+  name: string;
+  photoUrl?: string;
+  bio?: string;
+  // Used for the initial-circle avatar fallback (HSL-friendly hex from the brand palette).
+  accent?: string;
+}
+
+export interface InstrumentVendor {
+  name: string;
+  // Outbound buy link. Treat as affiliate-aware even if it's plain for now.
+  affiliateUrl: string;
+}
+
+export interface Instrument {
+  id: string;
+  name: string;            // e.g. "1967 Gretsch 6071 'Monkees' Bass Walnut"
+  category: string;        // e.g. "Bass", "Acoustic Guitar"
+  photoUrl?: string;
+  artistNote?: string;     // why this instrument was chosen for the track
+  vendor?: InstrumentVendor;
+}
+
+export interface TrackPerformer {
+  personId: string;
+  role: string;            // e.g. "Guitar", "Bass", "Composer · Violin"
+  instrumentId?: string;
+  tuningNotes?: string;    // e.g. "DADGAD", "Dropped D, capo 3"
+}
+
+export interface TrackWriter {
+  personId?: string;       // optional — sometimes writer isn't a performer
+  name: string;            // always present for display
+  role: string;            // "Composer", "Lyricist", "Producer"
+}
+
+export interface TrackCredits {
+  writers: TrackWriter[];
+  performers: TrackPerformer[];
+}
+
+export const PEOPLE: Record<string, Person> = {
+  "p-tim-snider":   { id: "p-tim-snider",   name: "Timothy Michael Snider", accent: "#319ED8" },
+  "p-wolfgang":     { id: "p-wolfgang",     name: "Wolfgang Timber",        accent: "#7F10A7" },
+  "p-joe-hall":     { id: "p-joe-hall",     name: "Joe Hall",               accent: "#4AFFCA" },
+  "p-zach-teran":   { id: "p-zach-teran",   name: "Zachary Christopher Teran", accent: "#FF5470" },
+  "p-miguel-cruz":  { id: "p-miguel-cruz",  name: "Miguel Jimenez Cruz",    accent: "#319ED8" },
+  "p-chance-utter": { id: "p-chance-utter", name: "Chance Chester Utter",   accent: "#7F10A7" },
+};
+
+export const INSTRUMENTS: Record<string, Instrument> = {
+  "i-martin-1973-d28": {
+    id: "i-martin-1973-d28",
+    name: "1973 Martin D-28",
+    category: "Acoustic Guitar",
+    artistNote: "Selected for its warm low-end and the unmistakable spruce-and-rosewood bloom that anchors the rhythm bed on this record.",
+    vendor: { name: "Martin Guitar", affiliateUrl: "https://www.martinguitar.com/" },
+  },
+  "i-gretsch-1967-6071": {
+    id: "i-gretsch-1967-6071",
+    name: "1967 Gretsch 6071 \"Monkees\" Bass Walnut",
+    category: "Hollow-body Bass",
+    artistNote: "Selecting this guitar for its unparalleled blend of classic resonance and modern versatility.",
+    vendor: { name: "Norman's Rare Guitars", affiliateUrl: "https://www.normansrareguitars.com/" },
+  },
+  "i-violin-strad-copy": {
+    id: "i-violin-strad-copy",
+    name: "German Strad-copy Violin (c. 1910)",
+    category: "Violin",
+    artistNote: "Tuned standard. Mic'd close on the bridge for the verses, room mic for the choruses.",
+    vendor: { name: "Shar Music", affiliateUrl: "https://www.sharmusic.com/" },
+  },
+  "i-bass-fender-p": {
+    id: "i-bass-fender-p",
+    name: "1976 Fender Precision Bass",
+    category: "Electric Bass",
+    artistNote: "Flatwounds, no pick. Sat right behind the kick on every track.",
+    vendor: { name: "Fender", affiliateUrl: "https://www.fender.com/" },
+  },
+  "i-drums-gretsch-kit": {
+    id: "i-drums-gretsch-kit",
+    name: "Gretsch USA Custom Kit",
+    category: "Drum Kit",
+    artistNote: "22\" kick, 13\" rack, 16\" floor. Calf heads on the toms for a softer attack.",
+    vendor: { name: "Gretsch Drums", affiliateUrl: "https://www.gretschdrums.com/" },
+  },
+  "i-perc-lp-congas": {
+    id: "i-perc-lp-congas",
+    name: "LP Matador Series Congas",
+    category: "Hand Percussion",
+    artistNote: "A pair of quintos plus a bongo for the bridge fills.",
+    vendor: { name: "Latin Percussion", affiliateUrl: "https://lpmusic.com/" },
+  },
+};
+
+// Per-song credits. Songs not in this map fall back to "Credits coming soon."
+export const TRACK_CREDITS: Record<string, TrackCredits> = {
+  // — When the World Stops —
+  "song-1-1": {
+    writers: [
+      { name: "Timothy Michael Snider", personId: "p-tim-snider", role: "Composer" },
+      { name: "Wolfgang Timber",        personId: "p-wolfgang",   role: "Composer · Lyricist" },
+    ],
+    performers: [
+      { personId: "p-tim-snider",   role: "Composer · Violin", instrumentId: "i-violin-strad-copy" },
+      { personId: "p-joe-hall",     role: "Guitar",            instrumentId: "i-martin-1973-d28",   tuningNotes: "Standard" },
+      { personId: "p-zach-teran",   role: "Bass",              instrumentId: "i-bass-fender-p" },
+      { personId: "p-miguel-cruz",  role: "Drums",             instrumentId: "i-drums-gretsch-kit" },
+      { personId: "p-chance-utter", role: "Percussion",        instrumentId: "i-perc-lp-congas" },
+    ],
+  },
+  "song-1-2": {
+    writers: [{ name: "Wolfgang Timber", personId: "p-wolfgang", role: "Composer · Lyricist" }],
+    performers: [
+      { personId: "p-tim-snider",  role: "Violin",  instrumentId: "i-violin-strad-copy" },
+      { personId: "p-joe-hall",    role: "Guitar",  instrumentId: "i-gretsch-1967-6071", tuningNotes: "Dropped D" },
+      { personId: "p-zach-teran",  role: "Bass",    instrumentId: "i-bass-fender-p" },
+      { personId: "p-miguel-cruz", role: "Drums",   instrumentId: "i-drums-gretsch-kit" },
+    ],
+  },
+  "song-1-3": {
+    writers: [
+      { name: "Timothy Michael Snider", personId: "p-tim-snider", role: "Composer" },
+    ],
+    performers: [
+      { personId: "p-tim-snider", role: "Composer · Violin", instrumentId: "i-violin-strad-copy" },
+      { personId: "p-joe-hall",   role: "Guitar",            instrumentId: "i-martin-1973-d28", tuningNotes: "DADGAD" },
+      { personId: "p-zach-teran", role: "Bass",              instrumentId: "i-bass-fender-p" },
+    ],
+  },
+  "song-1-4": {
+    writers: [{ name: "Wolfgang Timber", personId: "p-wolfgang", role: "Composer · Lyricist" }],
+    performers: [
+      { personId: "p-joe-hall",     role: "Guitar",     instrumentId: "i-martin-1973-d28" },
+      { personId: "p-zach-teran",   role: "Bass",       instrumentId: "i-bass-fender-p" },
+      { personId: "p-chance-utter", role: "Percussion", instrumentId: "i-perc-lp-congas" },
+    ],
+  },
+  "song-1-5": {
+    writers: [
+      { name: "Timothy Michael Snider", personId: "p-tim-snider", role: "Composer" },
+      { name: "Wolfgang Timber",        personId: "p-wolfgang",   role: "Composer" },
+    ],
+    performers: [
+      { personId: "p-tim-snider",  role: "Violin", instrumentId: "i-violin-strad-copy" },
+      { personId: "p-joe-hall",    role: "Guitar", instrumentId: "i-gretsch-1967-6071" },
+      { personId: "p-miguel-cruz", role: "Drums",  instrumentId: "i-drums-gretsch-kit" },
+    ],
+  },
+  "song-1-6": {
+    writers: [
+      { name: "Timothy Michael Snider", personId: "p-tim-snider", role: "Composer" },
+      { name: "Wolfgang Timber",        personId: "p-wolfgang",   role: "Composer · Lyricist" },
+    ],
+    performers: [
+      { personId: "p-tim-snider",   role: "Composer · Violin", instrumentId: "i-violin-strad-copy" },
+      { personId: "p-joe-hall",     role: "Guitar",            instrumentId: "i-martin-1973-d28" },
+      { personId: "p-zach-teran",   role: "Bass",              instrumentId: "i-bass-fender-p" },
+      { personId: "p-miguel-cruz",  role: "Drums",             instrumentId: "i-drums-gretsch-kit" },
+      { personId: "p-chance-utter", role: "Percussion",        instrumentId: "i-perc-lp-congas" },
+    ],
+  },
+};
+
+export function getCreditsForSong(songId: string): TrackCredits | undefined {
+  return TRACK_CREDITS[songId];
+}
+
+// Returns every track on the same album where `personId` is credited as a performer.
+export function getTracksForPerformerOnAlbum(personId: string, albumId: string): Array<{ song: Song; performer: TrackPerformer }> {
+  const songs = SONGS.filter((s) => s.albumId === albumId);
+  const out: Array<{ song: Song; performer: TrackPerformer }> = [];
+  for (const song of songs) {
+    const credits = TRACK_CREDITS[song.id];
+    if (!credits) continue;
+    const perf = credits.performers.find((p) => p.personId === personId);
+    if (perf) out.push({ song, performer: perf });
+  }
+  return out.sort((a, b) => a.song.trackNumber - b.song.trackNumber);
+}
+
 export const ALBUMS: Album[] = [
   {
     id: "album-1",

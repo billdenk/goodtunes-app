@@ -8,7 +8,7 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { ALBUMS, getSongsByAlbum, type Song, type Album, type AlbumVideo, type AlbumPhoto } from "@/data/musicData";
+import { ALBUMS, getSongsByAlbum, getCreditsForSong, getTracksForPerformerOnAlbum, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type TrackPerformer } from "@/data/musicData";
 
 export function AlbumDetail() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +27,9 @@ export function AlbumDetail() {
   const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [songMenuFor, setSongMenuFor] = useState<Song | null>(null);
+  const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
+  const [performerSheet, setPerformerSheet] = useState<Person | null>(null);
+  const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string } | null>(null);
   const [downloadedSongs, setDownloadedSongs] = useState<Set<string>>(new Set());
 
   const album = ALBUMS.find((a) => a.id === id);
@@ -47,6 +50,9 @@ export function AlbumDetail() {
     setShowOwnership(false);
     setProvenanceCertNum(null);
     setSongMenuFor(null);
+    setCreditsForSong(null);
+    setPerformerSheet(null);
+    setInstrumentSheet(null);
     if (album) {
       try {
         const raw = localStorage.getItem(`gt:downloaded-songs:${album.id}`);
@@ -578,10 +584,35 @@ export function AlbumDetail() {
             onAddToPlaylist={() => { setSongMenuFor(null); setShowPlaylistPicker(songMenuFor); }}
             onPlayNext={() => { playNext({ ...songMenuFor, album }); setShareToast("Playing next"); setTimeout(() => setShareToast(""), 1600); }}
             onPlayLast={() => { playLast({ ...songMenuFor, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
-            onViewCredits={() => { setShareToast("Credits coming soon"); setTimeout(() => setShareToast(""), 1800); }}
+            onViewCredits={() => { setSongMenuFor(null); setCreditsForSong(songMenuFor); }}
             onClose={() => setSongMenuFor(null)}
           />
         )}
+
+        {/* Only one SuperCredits sheet is mounted at a time (instrument > performer > credits)
+            so we don't stack multiple aria-modal dialogs simultaneously. */}
+        {instrumentSheet ? (
+          <InstrumentSheet
+            instrument={instrumentSheet.instrument}
+            tuningNotes={instrumentSheet.tuningNotes}
+            onClose={() => setInstrumentSheet(null)}
+          />
+        ) : performerSheet ? (
+          <PerformerSheet
+            person={performerSheet}
+            album={album}
+            onOpenInstrument={(instrument, tuningNotes) => setInstrumentSheet({ instrument, tuningNotes })}
+            onClose={() => setPerformerSheet(null)}
+          />
+        ) : creditsForSong ? (
+          <CreditsSheet
+            song={creditsForSong}
+            album={album}
+            onOpenPerformer={(person) => setPerformerSheet(person)}
+            onOpenInstrument={(instrument, tuningNotes) => setInstrumentSheet({ instrument, tuningNotes })}
+            onClose={() => setCreditsForSong(null)}
+          />
+        ) : null}
 
         {activeVideo && (
           <div
@@ -936,6 +967,317 @@ function SongActionSheet({
         </button>
       </div>
     </div>
+  );
+}
+
+// ──────────────────────────── SuperCredits™ ────────────────────────────
+
+function PersonAvatar({ person, size = 44 }: { person: Person; size?: number }) {
+  const initials = person.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+  if (person.photoUrl) {
+    return (
+      <img
+        src={person.photoUrl}
+        alt={person.name}
+        className="rounded-full object-cover flex-shrink-0"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return (
+    <div
+      className="rounded-full flex items-center justify-center flex-shrink-0 text-white font-semibold"
+      style={{
+        width: size,
+        height: size,
+        background: person.accent ?? "#319ED8",
+        fontSize: Math.round(size * 0.38),
+      }}
+      aria-hidden="true"
+    >
+      {initials || "•"}
+    </div>
+  );
+}
+
+function SheetShell({ ariaLabel, testId, onClose, children }: { ariaLabel: string; testId: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      className="fixed inset-0 z-[78] flex items-end justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label={ariaLabel}
+      data-testid={testId}
+    >
+      <div className="absolute inset-0 bg-black/55" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
+      <div
+        className="relative w-full max-w-[440px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide"
+        style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: "0 -16px 40px rgba(0,0,0,0.6)" }}
+      >
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; title: string; subtitle?: string; onClose: () => void }) {
+  return (
+    <div className="flex items-start gap-3 px-5 pb-4">
+      <div className="flex-1 min-w-0">
+        {eyebrow && <p className="text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider mb-1">{eyebrow}</p>}
+        <h2 className="text-white text-[20px] font-bold leading-tight">{title}</h2>
+        {subtitle && <p className="text-white/55 text-[13px] mt-1">{subtitle}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 active:opacity-70 flex-shrink-0"
+        style={{ background: "rgba(255,255,255,0.08)" }}
+        data-testid="button-sheet-close-x"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+function CreditsSheet({
+  song,
+  album,
+  onOpenPerformer,
+  onOpenInstrument,
+  onClose,
+}: {
+  song: Song;
+  album: Album;
+  onOpenPerformer: (person: Person) => void;
+  onOpenInstrument: (instrument: Instrument, tuningNotes?: string) => void;
+  onClose: () => void;
+}) {
+  const credits = getCreditsForSong(song.id);
+
+  return (
+    <SheetShell ariaLabel={`Credits for ${song.title}`} testId="sheet-credits" onClose={onClose}>
+      <SheetHeader
+        eyebrow="SuperCredits™"
+        title={song.title}
+        subtitle={`${album.artist} · ${album.title}`}
+        onClose={onClose}
+      />
+
+      {!credits ? (
+        <div className="px-5 pb-4 text-white/55 text-sm">
+          Detailed credits for this track haven't been published yet. Check back soon — every song will eventually show writers, performers, and the exact instruments they used.
+        </div>
+      ) : (
+        <>
+          {/* Writers */}
+          <div className="px-5 mt-2 mb-2 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Written by</div>
+          <div className="px-5 pb-3 space-y-1.5">
+            {credits.writers.map((w, i) => (
+              <div key={`${w.name}-${i}`} className="flex items-center justify-between text-white text-[14px]" data-testid={`row-writer-${i}`}>
+                <span>{w.name}</span>
+                <span className="text-white/45 text-[12px]">{w.role}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="h-px bg-white/8 mx-5 my-2" />
+
+          {/* Performers */}
+          <div className="px-5 mt-2 mb-2 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Performed by</div>
+          <div className="pb-2">
+            {credits.performers.map((perf) => {
+              const person = PEOPLE[perf.personId];
+              const instrument = perf.instrumentId ? INSTRUMENTS[perf.instrumentId] : undefined;
+              if (!person) return null;
+              return (
+                <div key={perf.personId} className="flex items-center gap-3 px-5 py-3 active:bg-white/5">
+                  <button
+                    type="button"
+                    onClick={() => onOpenPerformer(person)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-80"
+                    data-testid={`button-performer-${perf.personId}`}
+                  >
+                    <PersonAvatar person={person} size={44} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-[15px] font-semibold truncate">{person.name}</p>
+                      <p className="text-white/55 text-[12px] truncate">{perf.role}</p>
+                    </div>
+                  </button>
+                  {instrument && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenInstrument(instrument, perf.tuningNotes)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-white active:scale-[0.97] transition-transform max-w-[55%]"
+                      style={{ background: "rgba(49,158,216,0.18)", border: "1px solid rgba(49,158,216,0.35)" }}
+                      data-testid={`button-instrument-${perf.instrumentId}`}
+                      aria-label={`Instrument: ${instrument.name}`}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M9 18V5l12-2v13" />
+                        <circle cx="6" cy="18" r="3" fill="currentColor" />
+                        <circle cx="18" cy="16" r="3" fill="currentColor" />
+                      </svg>
+                      <span className="truncate">{instrument.name}</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="px-5 pt-2 pb-1 text-white/35 text-[11px] text-center">Tap a performer or instrument for details.</p>
+        </>
+      )}
+    </SheetShell>
+  );
+}
+
+function PerformerSheet({
+  person,
+  album,
+  onOpenInstrument,
+  onClose,
+}: {
+  person: Person;
+  album: Album;
+  onOpenInstrument: (instrument: Instrument, tuningNotes?: string) => void;
+  onClose: () => void;
+}) {
+  const tracks = getTracksForPerformerOnAlbum(person.id, album.id);
+
+  return (
+    <SheetShell ariaLabel={`${person.name} on ${album.title}`} testId="sheet-performer" onClose={onClose}>
+      <div className="flex items-center gap-3 px-5 pb-2">
+        <PersonAvatar person={person} size={56} />
+        <div className="flex-1 min-w-0">
+          <p className="text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider">On this album</p>
+          <h2 className="text-white text-[20px] font-bold leading-tight truncate">{person.name}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 active:opacity-70 flex-shrink-0"
+          style={{ background: "rgba(255,255,255,0.08)" }}
+          data-testid="button-performer-close"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {tracks.length === 0 ? (
+        <p className="px-5 py-6 text-white/55 text-sm">No detailed credits yet for this performer on this album.</p>
+      ) : (
+        <div className="pt-2 pb-2">
+          {tracks.map(({ song, performer }) => {
+            const instrument = performer.instrumentId ? INSTRUMENTS[performer.instrumentId] : undefined;
+            return (
+              <div key={song.id} className="flex items-center gap-3 px-5 py-3 active:bg-white/5" data-testid={`row-performer-track-${song.id}`}>
+                <div className="w-7 text-white/45 text-[13px] tabular-nums text-right">{song.trackNumber}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-[14px] truncate">{song.title}</p>
+                  <p className="text-white/50 text-[12px] truncate">
+                    {performer.role}
+                    {performer.tuningNotes ? ` · ${performer.tuningNotes}` : ""}
+                  </p>
+                </div>
+                {instrument && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenInstrument(instrument, performer.tuningNotes)}
+                    className="px-3 py-1.5 rounded-full text-[12px] text-white max-w-[50%] truncate active:scale-[0.97] transition-transform"
+                    style={{ background: "rgba(49,158,216,0.18)", border: "1px solid rgba(49,158,216,0.35)" }}
+                    data-testid={`button-performer-track-instrument-${song.id}`}
+                  >
+                    {instrument.name}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </SheetShell>
+  );
+}
+
+function InstrumentSheet({
+  instrument,
+  tuningNotes,
+  onClose,
+}: {
+  instrument: Instrument;
+  tuningNotes?: string;
+  onClose: () => void;
+}) {
+  return (
+    <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" onClose={onClose}>
+      {/* Hero: instrument photo or gradient placeholder */}
+      <div className="mx-5 rounded-2xl overflow-hidden mb-3" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
+        {instrument.photoUrl ? (
+          <img src={instrument.photoUrl} alt={instrument.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-white/35">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
+          </div>
+        )}
+      </div>
+
+      <SheetHeader
+        eyebrow={instrument.category}
+        title={instrument.name}
+        subtitle={tuningNotes ? `Tuning · ${tuningNotes}` : undefined}
+        onClose={onClose}
+      />
+
+      {instrument.artistNote && (
+        <p className="px-5 pb-4 text-white/80 text-[14px] leading-relaxed italic">"{instrument.artistNote}"</p>
+      )}
+
+      {instrument.vendor && (
+        <div className="px-5 pb-2">
+          <a
+            href={instrument.vendor.affiliateUrl}
+            target="_blank"
+            rel="noopener noreferrer sponsored"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-[15px] font-semibold active:scale-[0.98] transition-transform"
+            style={{ background: "#fff", color: "#00062B" }}
+            data-testid="link-instrument-buy"
+          >
+            <span>Discover at {instrument.vendor.name}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 17L17 7" />
+              <path d="M7 7h10v10" />
+            </svg>
+          </a>
+          <p className="text-white/35 text-[10px] text-center mt-3 leading-relaxed">
+            Outbound link supports the artist via SuperCredits™ Micro-Sponsorships. Artist receives the lion's share; GoodTunes takes a small connection fee.
+          </p>
+        </div>
+      )}
+    </SheetShell>
   );
 }
 
