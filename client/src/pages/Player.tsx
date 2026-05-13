@@ -1,7 +1,57 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
+
+// Build a line-level synced lyric track by evenly distributing each
+// non-header lyric line across the song's duration, with a small lead-in
+// and outro so the first line doesn't trigger at t=0 and the last line
+// doesn't trigger right at the end. Section headers ([Verse 1], [Chorus],
+// etc.) render as dimmed labels — they're not assigned a timestamp and
+// can't be tapped to seek. This is a placeholder until real per-song
+// timing arrives via the artist upload portal; at that point swap the
+// auto-distribution for a stored `syncedLyrics: { time, text }[]` array
+// and the rest of the rendering stays the same.
+type SyncedLine = {
+  text: string;
+  isHeader: boolean;
+  isEmpty: boolean;
+  time: number | null;
+};
+
+function buildSyncedLines(lyrics: string | undefined, duration: number): SyncedLine[] {
+  if (!lyrics || !duration || duration <= 0) {
+    return (lyrics ?? "").split("\n").map((line) => ({
+      text: line,
+      isHeader: /^\s*\[.*\]\s*$/.test(line),
+      isEmpty: line.trim() === "",
+      time: null,
+    }));
+  }
+  const raw = lyrics.split("\n");
+  const timeable: number[] = [];
+  raw.forEach((line, i) => {
+    const t = line.trim();
+    if (!t) return;
+    if (/^\[.*\]$/.test(t)) return;
+    timeable.push(i);
+  });
+  const lead = Math.max(2, Math.round(duration * 0.06));
+  const tail = Math.max(2, Math.round(duration * 0.04));
+  const usable = Math.max(1, duration - lead - tail);
+  const denom = Math.max(1, timeable.length - 1);
+  const timeMap: Record<number, number> = {};
+  timeable.forEach((idx, k) => {
+    const t = lead + Math.round((k / denom) * usable);
+    timeMap[idx] = Math.min(Math.max(0, duration - 1), t);
+  });
+  return raw.map((line, i) => ({
+    text: line,
+    isHeader: /^\s*\[.*\]\s*$/.test(line),
+    isEmpty: line.trim() === "",
+    time: timeMap[i] ?? null,
+  }));
+}
 
 export function Player() {
   const {
@@ -35,6 +85,29 @@ export function Player() {
   } = usePlayer();
 
   const [volume, setVolume] = useState(80);
+
+  // ── Synced lyrics (line-level, auto-distributed) ──
+  // All hooks must run before any early return to keep React's hook order
+  // stable across renders (currentSong starts null on app load, then becomes
+  // a real song once playback begins — the hook count must not change).
+  const syncedLines = useMemo(
+    () => buildSyncedLines(currentSong?.lyrics, duration),
+    [currentSong?.id, currentSong?.lyrics, duration]
+  );
+  const activeLineIdx = useMemo(() => {
+    let active = -1;
+    for (let i = 0; i < syncedLines.length; i++) {
+      const t = syncedLines[i].time;
+      if (t != null && currentTime >= t) active = i;
+    }
+    return active;
+  }, [syncedLines, currentTime]);
+  const lyricLineRefs = useRef<Array<HTMLDivElement | null>>([]);
+  useEffect(() => {
+    if (!showLyrics) return;
+    const el = lyricLineRefs.current[activeLineIdx];
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeLineIdx, showLyrics]);
 
   if (!currentSong) return null;
 
@@ -369,10 +442,69 @@ export function Player() {
               </button>
             </div>
 
-            {/* Lyrics text — scrollable */}
-            <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-6 pb-4">
-              <div className="text-white text-[22px] leading-[1.55] font-bold whitespace-pre-line">
-                {currentSong.lyrics}
+            {/* Lyrics text — scrollable, line-level synced */}
+            <div
+              className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-6"
+              style={{ paddingTop: "30vh", paddingBottom: "30vh" }}
+              data-testid="lyrics-scroll"
+            >
+              <div className="flex flex-col gap-3">
+                {syncedLines.map((line, i) => {
+                  if (line.isEmpty) {
+                    return <div key={i} className="h-2" aria-hidden />;
+                  }
+                  if (line.isHeader) {
+                    return (
+                      <div
+                        key={i}
+                        ref={(el) => { lyricLineRefs.current[i] = el; }}
+                        className="text-white/30 text-[10px] font-semibold tracking-[0.18em] uppercase pt-2"
+                        data-testid={`lyric-header-${i}`}
+                      >
+                        {line.text.replace(/^\s*\[|\]\s*$/g, "")}
+                      </div>
+                    );
+                  }
+                  const isActive = i === activeLineIdx;
+                  const isPast = activeLineIdx >= 0 && i < activeLineIdx;
+                  const seekable = line.time != null;
+                  return (
+                    <div
+                      key={i}
+                      ref={(el) => { lyricLineRefs.current[i] = el; }}
+                      role={seekable ? "button" : undefined}
+                      tabIndex={seekable ? 0 : -1}
+                      aria-current={isActive ? "true" : undefined}
+                      onClick={seekable ? () => seekTo(line.time as number) : undefined}
+                      onKeyDown={seekable ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          seekTo(line.time as number);
+                        }
+                      } : undefined}
+                      className={`select-none ${seekable ? "cursor-pointer" : "cursor-default"}`}
+                      style={{
+                        color: isActive
+                          ? "#FFFFFF"
+                          : isPast
+                            ? "rgba(255,255,255,0.32)"
+                            : "rgba(255,255,255,0.55)",
+                        fontWeight: isActive ? 800 : 700,
+                        fontSize: "22px",
+                        lineHeight: 1.32,
+                        transform: isActive ? "scale(1.04)" : "scale(1)",
+                        transformOrigin: "left center",
+                        transition: "color 350ms ease, transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1), text-shadow 350ms ease",
+                        textShadow: isActive ? "0 1px 18px rgba(74,255,202,0.18)" : "none",
+                        letterSpacing: "-0.01em",
+                      }}
+                      data-testid={`lyric-line-${i}`}
+                      data-active={isActive}
+                    >
+                      {line.text}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

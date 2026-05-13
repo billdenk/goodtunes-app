@@ -102,6 +102,54 @@ Out of scope for the demo (planned for the real build):
 - `instruments: { id, name (e.g. "1967 Gretsch 6071 'Monkees' Bass Walnut"), photoUrl, artistNote?, vendor: { name, logoUrl, affiliateUrl } }`
 - Performer ↔ track is many-to-many (same person plays multiple tracks, often on different instruments).
 
+## Backend integration plan (GoodTunes AWS)
+
+GoodTunes already runs its own AWS-backed sales + delivery pipeline for the vinyl + digital bundles sold on goodtunes.fm (no App Store cut). Audio + artwork live in S3 / CloudFront, and the team's coders already issue per-purchase entitled URLs tied to a logged-in user. This player should plug into that, **not** ship its own audio storage.
+
+### What the player needs from the existing backend
+1. **`GET /me/library`** — for the logged-in user, return the albums + tracks they're entitled to: ids, titles, artwork URLs, durations, credits payload (SuperCredits™-shaped).
+2. **`GET /stream/{trackId}`** — return a short-lived signed URL (~30s) bound to the user + track. The `<audio>` element fetches it on play; reusing it later 403s. Same pattern the GT coders already use.
+3. **Auth handoff** — SSO from goodtunes.fm (cookie / JWT / OAuth — match whatever the main site does) so the player inherits the session instead of doing its own login.
+
+Once those exist, `client/src/data/musicData.ts` becomes a fetch-from-API layer; the rest of the player (SuperCredits™, playlists, favorites, chat, mini-player, lyrics) is unchanged.
+
+### Pre-call agenda for the GT coders
+- Does the entitlements API already expose `/me/library` and `/stream/{id}`-shaped endpoints? If yes, share the JSON shapes.
+- Auth mechanism on goodtunes.fm (session cookie, JWT, OAuth)?
+- Where does this Replit player live in URL space? Subdomain (`player.goodtunes.fm`) vs path (`goodtunes.fm/play`) — affects cookie sharing + CORS.
+
+### DRM / anti-rip ladder (decision pending)
+Browsers can never be fully unrippable (analog hole), but the realistic goal is "as locked-down as Spotify Web."
+- **Tier 1 (cheap, ~weekend):** Stop serving raw Dropbox/S3 URLs. Proxy through GT backend with short-lived signed URLs, chunked range streaming, disabled right-click/drag, **per-user inaudible audio watermark** so leaks are traceable. GT is mostly here already.
+- **Tier 2 (real DRM, weeks + $):** Encrypted HLS/DASH (Shaka Packager / Bento4), license server, integrate Widevine + FairPlay + PlayReady. Self-host or use **EZDRM / BuyDRM / Axinom / Mux / Bitmovin** (~$300–$2k/mo + per-stream). Player swaps `<audio>` for **Shaka Player** or **hls.js + EME**.
+- **Tier 3:** Native iOS/Android wrapper for cert pinning, encrypted local cache, jailbreak detection. Defer until paying users + native app on roadmap.
+
+### Artist upload / review portal (Phase 2)
+Today files are manually uploaded by the GT team. Planned flow:
+- Artist-facing portal (separate surface, not inside the fan player). Uploads: masters (WAV/FLAC) → staging bucket; artwork; SuperCredits™ metadata (writers, performers, instruments + tunings + vendor links).
+- Internal review queue: GT team listens, eyeballs art, sanity-checks credits + vendor links, approves → files move staging → production, album becomes visible to entitled users.
+- Reject-with-notes path for fixes.
+- Bolt the lyrics-sync editor (see "Synced lyrics" below) onto this same upload step — auto-align runs on submit, artist nudges any drifted words before approval.
+
+## Synced lyrics (Apple-style "Sync Lyrics")
+
+Apple's karaoke-style lyrics highlighting comes in two tiers:
+- **Line-level** — each line has a start timestamp (old LRC format), current line gets larger/brighter, past lines fade. Easy.
+- **Word-level** — per-word/per-syllable timing, words light up as sung (TTML extension under the hood). Apple licenses this from **Musixmatch** (dominant) or **LyricFind** — produced by forced alignment + human QA.
+
+GoodTunes can't license Musixmatch for **pre-release indie** material (not in their catalog yet). Recommended path:
+
+### Data plan
+1. **Artist-supplied timing** — best quality, free. Upload portal accepts a CSV / DAW export of word or line timestamps if the artist already has them.
+2. **Auto-align in our backend** — open-source forced aligners (**Whisper-timestamped**, **Montreal Forced Aligner**, **aeneas**) take audio + plain lyrics text → per-word timestamps. ~80–90% accurate on clear lead vocals, gets shaky on harmonies/runs/mumbled delivery. Run at upload, store JSON next to track.
+3. **Editor in the upload portal** — lyrics on the left, waveform on the right, drag any word/line to nudge timestamp. 60-second touch-up per song. This is the long-term recommended flow.
+4. **License Musixmatch / LyricFind** — only useful post-Spotify/Apple launch when tracks are in their catalog. Skip pre-launch.
+
+### Player-side (line-level shipped today)
+The Lyrics overlay in `client/src/pages/Player.tsx` derives **round-second timestamps** from each song's `lyrics` string by evenly distributing non-header lines across `duration`, with a small lead-in (~6%) and outro (~4%). Section headers (`[Verse 1]`, `[Chorus]`, etc.) render dimmed and uppercase, are skipped during distribution, and aren't seek targets. Active line is white + bold + 1.05× scale, past lines fade to 35%, future lines sit at 55%. Auto-scrolls active line to vertical center via `scrollIntoView({ block: "center" })`. Tap any non-header line to seek to its timestamp. This is a placeholder until real per-song timing arrives via the upload portal — at that point swap the auto-distribution for the stored `syncedLyrics: { time, text }[]` array; rendering stays the same.
+
+Word-level karaoke (per-word fill animation in `#319ED8` → `#4AFFCA`) is a follow-up driven off `requestAnimationFrame(audio.currentTime)` once per-word data exists — render code is small (~1 day).
+
 ## Auth plan (when moving off in-memory store)
 
 Support email/password, **Sign in with Apple**, and **Sign in with Google**.
