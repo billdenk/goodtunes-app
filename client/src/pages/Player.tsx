@@ -94,27 +94,47 @@ export function Player() {
               <img src={currentSong.album.artwork} alt={currentSong.album.title} className="w-full h-full object-cover" />
             </div>
 
-            {/* Title + favorite */}
-            <div className="w-full flex items-center justify-between mb-5">
+            {/* Title row — favorite + more, à la Apple Music */}
+            <div className="w-full flex items-center justify-between mb-5 gap-3">
               <div className="flex-1 min-w-0">
                 <h2 className="text-white text-xl font-bold leading-snug truncate">{currentSong.title}</h2>
                 <p className="text-white/55 text-sm mt-0.5 truncate">{currentSong.album.artist}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => toggleFavorite(currentSong.id)}
-                className="ml-4 flex-shrink-0 active:scale-90 transition-transform"
-              >
-                {favorited ? (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="#319ED8" stroke="#319ED8" strokeWidth="1.5">
-                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => toggleFavorite(currentSong.id)}
+                  className="w-9 h-9 rounded-full flex items-center justify-center active:opacity-60 transition-opacity"
+                  style={{ background: "rgba(255,255,255,0.10)" }}
+                  aria-label={favorited ? "Unfavorite" : "Favorite"}
+                  aria-pressed={favorited}
+                  data-testid="button-favorite-song"
+                >
+                  {favorited ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#FF5470" stroke="#FF5470" strokeWidth="1.5">
+                      <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddToPlaylist(true)}
+                  className="w-9 h-9 rounded-full flex items-center justify-center active:opacity-60 transition-opacity text-white"
+                  style={{ background: "rgba(255,255,255,0.10)" }}
+                  aria-label="More"
+                  data-testid="button-song-more"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="5" cy="12" r="1.7" />
+                    <circle cx="12" cy="12" r="1.7" />
+                    <circle cx="19" cy="12" r="1.7" />
                   </svg>
-                ) : (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-                  </svg>
-                )}
-              </button>
+                </button>
+              </div>
             </div>
 
             {/* Progress bar */}
@@ -141,28 +161,17 @@ export function Player() {
               </div>
             </div>
 
-            {/* Transport controls */}
-            <div className="w-full flex items-center justify-between mb-7 mt-1">
-              <button
-                type="button"
-                onClick={toggleShuffle}
-                className={`w-11 h-11 flex items-center justify-center rounded-full active:bg-white/10 transition-colors ${shuffle ? "text-[#319ED8]" : "text-white/40"}`}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="16 3 21 3 21 8" />
-                  <line x1="4" y1="20" x2="21" y2="3" />
-                  <polyline points="21 16 21 21 16 21" />
-                  <line x1="15" y1="15" x2="21" y2="21" />
-                  <line x1="4" y1="4" x2="9" y2="9" />
-                </svg>
-              </button>
-
+            {/* Transport — Apple Music: just prev / play / next, centered.
+                Shuffle & Repeat live in the Up Next overlay. */}
+            <div className="w-full flex items-center justify-center gap-12 mb-7 mt-1">
               <button
                 type="button"
                 onClick={prev}
-                className="w-11 h-11 flex items-center justify-center text-white active:text-white/60 transition-colors"
+                className="text-white active:opacity-55 transition-opacity"
+                aria-label="Previous"
+                data-testid="button-prev"
               >
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="6" y="6" width="2" height="12" rx="1" />
                   <path d="M18 18l-8.5-6 8.5-6v12z" />
                 </svg>
@@ -171,19 +180,17 @@ export function Player() {
               <button
                 type="button"
                 onClick={togglePlay}
-                className="w-[72px] h-[72px] rounded-full flex items-center justify-center shadow-xl active:scale-[0.93] transition-transform"
-                style={{
-                  background: "white",
-                  boxShadow: "0 8px 30px rgba(255,255,255,0.2), 0 4px 12px rgba(0,0,0,0.4)",
-                }}
+                className="active:scale-[0.93] transition-transform text-white"
+                aria-label={isPlaying ? "Pause" : "Play"}
+                data-testid="button-play-pause"
               >
                 {isPlaying ? (
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#00062B">
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="5" y="4" width="4" height="16" rx="1.5" />
                     <rect x="15" y="4" width="4" height="16" rx="1.5" />
                   </svg>
                 ) : (
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="#00062B">
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
                   </svg>
                 )}
@@ -192,35 +199,14 @@ export function Player() {
               <button
                 type="button"
                 onClick={next}
-                className="w-11 h-11 flex items-center justify-center text-white active:text-white/60 transition-colors"
+                className="text-white active:opacity-55 transition-opacity"
+                aria-label="Next"
+                data-testid="button-next"
               >
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 18l8.5-6L6 6v12z" />
                   <rect x="16" y="6" width="2" height="12" rx="1" />
                 </svg>
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleRepeat}
-                className={`w-11 h-11 flex items-center justify-center rounded-full active:bg-white/10 transition-colors ${isRepeatActive ? "text-[#319ED8]" : "text-white/40"}`}
-              >
-                {repeat === "one" ? (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="17 1 21 5 17 9" />
-                    <path d="M3 11V9a4 4 0 014-4h14" />
-                    <polyline points="7 23 3 19 7 15" />
-                    <path d="M21 13v2a4 4 0 01-4 4H3" />
-                    <text x="9.5" y="14.5" fontSize="6" fill="currentColor" stroke="none" fontWeight="bold">1</text>
-                  </svg>
-                ) : (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="17 1 21 5 17 9" />
-                    <path d="M3 11V9a4 4 0 014-4h14" />
-                    <polyline points="7 23 3 19 7 15" />
-                    <path d="M21 13v2a4 4 0 01-4 4H3" />
-                  </svg>
-                )}
               </button>
             </div>
 
