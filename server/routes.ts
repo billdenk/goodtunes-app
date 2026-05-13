@@ -79,11 +79,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "Please enter a valid email address" });
     }
     const [existingUsername, existingEmail] = await Promise.all([
-      storage.getUserByUsername(username),
+      storage.getUserByUsername(String(username).toLowerCase()),
       storage.getUserByEmail(emailNorm),
     ]);
-    if (existingUsername || existingEmail) {
-      return res.status(400).json({ message: "An account with those details already exists" });
+    if (existingUsername && existingEmail) {
+      return res.status(400).json({ message: "That username and email are both already taken" });
+    }
+    if (existingUsername) {
+      return res.status(400).json({ message: `Username "@${username}" is already taken` });
+    }
+    if (existingEmail) {
+      return res.status(400).json({ message: "An account with that email already exists — try signing in" });
     }
     const hashed = await hashPassword(password);
     const user = await storage.createUser({ username, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
@@ -96,11 +102,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/login", async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
-      return res.status(400).json({ message: "Username and password are required" });
+      return res.status(400).json({ message: "Username or email and password are required" });
     }
-    const user = await storage.getUserByUsername(username);
+    const ident = String(username).trim();
+    const looksLikeEmail = ident.includes("@");
+    const lookup = looksLikeEmail
+      ? await storage.getUserByEmail(ident.toLowerCase())
+      : await storage.getUserByUsername(ident.toLowerCase());
+    const user = lookup ?? (looksLikeEmail ? undefined : await storage.getUserByEmail(ident.toLowerCase()));
     if (!user || !(await comparePasswords(password, user.password))) {
-      return res.status(401).json({ message: "Invalid username or password" });
+      return res.status(401).json({ message: "Invalid username/email or password" });
     }
     req.session.userId = user.id;
     const token = generateToken();

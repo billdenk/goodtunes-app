@@ -164,15 +164,16 @@ export function Login() {
         {mode === "login" && (
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
             <div>
-              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Username</label>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Username or Email</label>
               <input
                 type="text"
                 value={loginIdent}
-                onChange={(e) => setLoginIdent(e.target.value.toLowerCase().replace(/\s/g, ""))}
-                placeholder="@username"
+                onChange={(e) => setLoginIdent(e.target.value.replace(/\s/g, ""))}
+                placeholder="@username or you@example.com"
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}
+                inputMode="email"
                 className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
                 style={{ background: "rgba(255,255,255,0.06)" }}
                 required
