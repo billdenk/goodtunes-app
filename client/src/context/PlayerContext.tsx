@@ -53,6 +53,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<"none" | "all" | "one">("none");
   const [showLyrics, setShowLyrics] = useState(false);
@@ -65,8 +66,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Hidden HTMLAudioElement — never mounted to the DOM, so there's no UI change.
+  // Used when the current song has a real audioUrl. Songs without an audioUrl
+  // fall back to the simulated timer below (existing behavior).
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  if (typeof window !== "undefined" && audioRef.current === null) {
+    const a = new Audio();
+    a.preload = "metadata";
+    audioRef.current = a;
+  }
+
   const currentSong = queue[currentIndex] ?? null;
-  const duration = currentSong?.duration ?? 0;
+  const hasRealAudio = !!currentSong?.audioUrl;
+  const duration = (hasRealAudio && audioDuration != null && audioDuration > 0)
+    ? audioDuration
+    : (currentSong?.duration ?? 0);
 
   const clearTimer = useCallback(() => {
     if (intervalRef.current) {
@@ -75,6 +89,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Simulated playback timer (only used when the song has no real audioUrl)
   const startTimer = useCallback(() => {
     clearTimer();
     intervalRef.current = setInterval(() => {
@@ -86,23 +101,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [clearTimer, duration]);
 
   useEffect(() => {
-    if (isPlaying) {
-      startTimer();
-    } else {
+    if (hasRealAudio) {
+      // Real audio drives currentTime via timeupdate; no simulated timer.
       clearTimer();
+      return;
     }
+    if (isPlaying) startTimer();
+    else clearTimer();
     return clearTimer;
-  }, [isPlaying, startTimer, clearTimer]);
+  }, [isPlaying, startTimer, clearTimer, hasRealAudio]);
 
+  // Simulated-track end → next (only when not using real audio; real audio uses 'ended' event)
   useEffect(() => {
+    if (hasRealAudio) return;
     if (currentTime >= duration && duration > 0 && isPlaying) {
       handleNext();
     }
-  }, [currentTime, duration]);
+  }, [currentTime, duration, hasRealAudio]);
 
   const handleNext = useCallback(() => {
     if (repeat === "one") {
       setCurrentTime(0);
+      const a = audioRef.current;
+      if (a && hasRealAudio) { a.currentTime = 0; a.play().catch(() => {}); }
       return;
     }
     if (shuffle && queue.length > 1) {
@@ -119,11 +140,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } else {
       setIsPlaying(false);
     }
-  }, [currentIndex, queue.length, repeat, shuffle]);
+  }, [currentIndex, queue.length, repeat, shuffle, hasRealAudio]);
 
   const handlePrev = useCallback(() => {
     if (currentTime > 3) {
       setCurrentTime(0);
+      const a = audioRef.current;
+      if (a && hasRealAudio) a.currentTime = 0;
       return;
     }
     if (currentIndex > 0) {
@@ -131,8 +154,69 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setCurrentTime(0);
     } else {
       setCurrentTime(0);
+      const a = audioRef.current;
+      if (a && hasRealAudio) a.currentTime = 0;
     }
-  }, [currentIndex, currentTime]);
+  }, [currentIndex, currentTime, hasRealAudio]);
+
+  // Sync the hidden <audio> element with the current song + isPlaying state.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    if (!currentSong || !currentSong.audioUrl) {
+      // No real audio for this song — pause and clear any in-flight source.
+      a.pause();
+      if (a.src) {
+        a.removeAttribute("src");
+        a.load();
+      }
+      setAudioDuration(null);
+      return;
+    }
+
+    // Load new source if it changed
+    if (a.src !== currentSong.audioUrl) {
+      a.src = currentSong.audioUrl;
+      a.crossOrigin = "anonymous";
+      setAudioDuration(null);
+      setCurrentTime(0);
+      a.load();
+    }
+
+    if (isPlaying) {
+      a.play().catch(() => {
+        // Autoplay was blocked or load failed — flip the UI state back.
+        setIsPlaying(false);
+      });
+    } else {
+      a.pause();
+    }
+  }, [currentSong?.id, currentSong?.audioUrl, isPlaying]);
+
+  // Wire audio element events once
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onTime = () => setCurrentTime(Math.floor(a.currentTime));
+    const onMeta = () => {
+      if (Number.isFinite(a.duration)) setAudioDuration(Math.floor(a.duration));
+    };
+    const onEnded = () => handleNext();
+    const onError = () => setIsPlaying(false);
+    a.addEventListener("timeupdate", onTime);
+    a.addEventListener("loadedmetadata", onMeta);
+    a.addEventListener("durationchange", onMeta);
+    a.addEventListener("ended", onEnded);
+    a.addEventListener("error", onError);
+    return () => {
+      a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("loadedmetadata", onMeta);
+      a.removeEventListener("durationchange", onMeta);
+      a.removeEventListener("ended", onEnded);
+      a.removeEventListener("error", onError);
+    };
+  }, [handleNext]);
 
   const playSong = useCallback((song: PlayerSong, newQueue?: PlayerSong[]) => {
     const q = newQueue ?? [song];
@@ -140,6 +224,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setQueue(q);
     setCurrentIndex(idx >= 0 ? idx : 0);
     setCurrentTime(0);
+    setAudioDuration(null);
     setIsPlaying(true);
     // Apple Music behavior: tapping a song updates the mini-player only.
     // The full Now Playing sheet opens only when the user taps the mini-player.
@@ -153,7 +238,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
-  const seekTo = useCallback((time: number) => setCurrentTime(Math.max(0, Math.min(time, duration))), [duration]);
+  const seekTo = useCallback((time: number) => {
+    const clamped = Math.max(0, Math.min(time, duration));
+    setCurrentTime(clamped);
+    const a = audioRef.current;
+    if (a && hasRealAudio) a.currentTime = clamped;
+  }, [duration, hasRealAudio]);
   const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
   const toggleRepeat = useCallback(() => {
     setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"));

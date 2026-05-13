@@ -397,6 +397,17 @@ export const ALBUMS: Album[] = [
       { id: "p-4-5", url: tgPhoto5, caption: "Up close" },
     ],
   },
+  {
+    id: "album-5",
+    title: "Love Life Tragedy",
+    artist: "Nick Carter",
+    artwork:
+      "https://dl.dropboxusercontent.com/scl/fi/wr6elgai0hhxqcclpv1jk/Nick-Carter-Album-Art_JPEG.jpg?rlkey=6wjiflxzctr6lz33umsx5n6x9&dl=1",
+    year: 2025,
+    type: "album",
+    description:
+      "Love. Life. Tragedy. And everything in between. Nick Carter's most personal album to date is finally here — a raw, reflective collection of pop-rock anthems and heartfelt ballads, capturing the highs and heartbreaks of a life lived in the spotlight. With tracks like \u201CStorms,\u201D \u201CCold Night,\u201D and \u201CHurts To Love You,\u201D this album dives deep \u2013 and comes back stronger.",
+  },
 ];
 
 export const SONGS: Song[] = [
@@ -564,6 +575,42 @@ export const SONGS: Song[] = [
     lyrics: `[Verse 1]\nThis is the California way\nDream it in the light of day\nChase it down the golden road\nTill you find what you've been owed\n\n[Chorus]\nCalifornia way, California way\nEverything is gonna be okay\nJust live it and breathe it\nBelieve it today\nThe California way\n\n[Outro]\nSunshine on the mountain\nMoonlight on the bay\nEverything I've ever wanted\nIn the California way`,
   },
 ];
+
+// --- Nick Carter — Love Life Tragedy (album-5) ---
+// Audio is streamed directly from Dropbox via dl.dropboxusercontent.com,
+// which supports HTTP Range requests so the <audio> element can seek.
+const NC_BASE = "https://dl.dropboxusercontent.com/scl/fi";
+const NICK_CARTER_TRACKS: Array<{ title: string; path?: string; rlkey?: string }> = [
+  { title: "Made for Us", path: "14o098ogrdhfdgydjvrvq/Nick-Carter-Made-For-Us-REMASTER_4824.wav", rlkey: "1yq7m32vptm07kc9ysfyuveiq" },
+  { title: "Nothing Without Your Love", path: "xidomh4pywldsnqhh1xwz/Nick-Carter-Nothing-Without-Your-Love-MASTER_4824.wav", rlkey: "5j5tij3qd03iepdnc11vx3z1k" },
+  { title: "Good Love", path: "ff5vs6m0ho4k52twj84pr/Good-Love-24Bit-Master.wav", rlkey: "z1m0hrel9vxatchpnr4jnc5l2" },
+  { title: "Hey Kid", path: "ym7byb3uptc9n4nm25p8p/Nick-Carter-Hey-Kid-MASTER_4824.wav", rlkey: "yh9dim542pbjvrtsfjx1y8n47" },
+  { title: "Searchlight", path: "ydnksacsz0y73o16vsf4w/Nick-Carter_Searchlight_REMASTER-2_4824.wav", rlkey: "789fewrp5tvwnuqyqrwxv7kzb" },
+  { title: "Never Break My Heart (Not Again)", path: "6mzfl5ryk4vf18rmarm9o/Never-Break-My-Heart-6-24Bit-Master.wav", rlkey: "uu01n7it49u00ke5ulb49qhfc" },
+  { title: "Easy (Home Version)" }, // no audio provided
+  { title: "Hurts to Love You (Remastered 2025)", path: "ae0cf2de5vlhnbdrqkvrg/Nick-Carter-Hurts-To-Love-You-REMASTER_BMN_4424.wav", rlkey: "es0cqlkny5dzeqguxt4imwnc2" },
+  { title: "Superman", path: "7evr9ms11te2ey2npqxwm/Superman-2-24Bit-Master.wav", rlkey: "jjbhl6u2pttajfsse42j1zhrq" },
+  { title: "Dirty Laundry (feat. ASHBA)", path: "vxztakkkgj1spzgi89pr8/Dirty-Laundry-2-24Bit-Master.wav", rlkey: "j8wevf9torggtya0rsu285ey7" },
+  { title: "Wild Heart", path: "un0txlxdxohpx46n8mi7a/Wildhearts-2-24Bit-Master.wav", rlkey: "6c7w5ptz89qizawp5rdg9zlyh" },
+  { title: "Cold Night (Zero Degrees)", path: "bb2qso8nuzb1a6hus2xte/Cold-NIght-7-24Bit-Master.wav", rlkey: "fj3fmig0yq5jyejz0q48kbnff" },
+  { title: "Storms", path: "ex87i96gzcfa5vsf3c1lr/Nick-Carter-Storms-MASTER_4824.wav", rlkey: "vg2g16eo9fpq264aua7bk56dm" },
+  { title: "Don\u2019t Let Go", path: "wnekgil6hhl4iufih0y4n/Nick-Carter-Don-t-Let-Go-MASTER_4824.wav", rlkey: "y7wftc1mdfyrllef6eder9tzn" },
+  { title: "Cold Night (Winter Mix)", path: "qbqpiioehvucvwxgbif17/Cold-Night-acoustic-version-24Bit-Master.wav", rlkey: "urrdz1lbd1pxef6p2u8ry51pg" },
+  { title: "Help Me (Re - Record)", path: "idlidihyjr2fwfoxd9iy6/Nick_Carter_01_Help_Me_HRA_24bit_96kHz_042925.wav", rlkey: "mgrhf5astg1llaa8zceh8su0f" },
+  { title: "Take You with Me (Bonus Track)", path: "sbmp7eo3dyvzjksr3sabo/Nick-Carter-Take-Me-With-You_MASTER-v0.wav", rlkey: "dfutyuccz5squrpa29jc9bzpc" },
+];
+NICK_CARTER_TRACKS.forEach((t, i) => {
+  SONGS.push({
+    id: `song-5-${i + 1}`,
+    albumId: "album-5",
+    title: t.title,
+    trackNumber: i + 1,
+    // Placeholder duration — the player overrides this with the real duration
+    // from the audio element's metadata once the file loads.
+    duration: 210,
+    audioUrl: t.path && t.rlkey ? `${NC_BASE}/${t.path}?rlkey=${t.rlkey}&dl=1` : undefined,
+  });
+});
 
 export function getSongsByAlbum(albumId: string): Song[] {
   return SONGS.filter((s) => s.albumId === albumId).sort(
