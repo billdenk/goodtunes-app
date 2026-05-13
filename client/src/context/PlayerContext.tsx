@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
 import { Song, Album, getSongById } from "@/data/musicData";
+import { useFavoriteSongs } from "@/hooks/useFavorites";
 
 export interface PlayerSong extends Song {
   album: Album;
@@ -49,7 +50,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [showLyrics, setShowLyrics] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const favSongs = useFavoriteSongs();
+  const favorites = favSongs.set;
   const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -147,18 +149,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleFavorite = useCallback((songId: string) => {
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(songId)) {
-        next.delete(songId);
-      } else {
-        next.add(songId);
-      }
-      return next;
-    });
-  }, []);
+    favSongs.toggle(songId);
+  }, [favSongs]);
 
-  const isFavorite = useCallback((songId: string) => favorites.has(songId), [favorites]);
+  const isFavorite = useCallback((songId: string) => favSongs.has(songId), [favSongs]);
 
   const addToQueue = useCallback((song: PlayerSong) => {
     setQueue((q) => [...q, song]);

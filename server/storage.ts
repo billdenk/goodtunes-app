@@ -182,8 +182,13 @@ export class MemStorage implements IStorage {
         .sort((a, b) => a.position - b.position);
       const seen = new Set<string>();
       const artworks: string[] = [];
-      // Pick most-recent unique album artworks first so the cover shifts as new songs are added
-      for (const ps of [...entries].reverse()) {
+      // Pick most-recent unique album artworks first so the cover shifts as new songs are added.
+      // Use addedAt (insertion time) — position is not a reliable recency signal since clients
+      // can reuse position values when batch-adding songs.
+      const byRecency = [...entries].sort(
+        (a, b) => (b.addedAt?.getTime() ?? 0) - (a.addedAt?.getTime() ?? 0),
+      );
+      for (const ps of byRecency) {
         const song = this.songs.get(ps.songId);
         if (!song) continue;
         const album = this.albums.get(song.albumId);
