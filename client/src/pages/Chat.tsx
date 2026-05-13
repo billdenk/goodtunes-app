@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { BottomNav } from "@/components/BottomNav";
+import { MiniPlayer } from "@/components/MiniPlayer";
 import {
   getMessages,
   getThread,
@@ -133,6 +134,7 @@ export function Chat() {
         Demo preview. Real product will route messages to verified vendor accounts with anti-spam and notifications.
       </p>
 
+      <MiniPlayer />
       <BottomNav />
     </main>
   );
