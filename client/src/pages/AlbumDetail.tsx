@@ -8,6 +8,7 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
+import { startVendorChatAboutInstrument } from "@/lib/chatStore";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ALBUMS, getSongsByAlbum, getCreditsForSong, getTracksForPerformerOnAlbum, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type TrackPerformer } from "@/data/musicData";
 
@@ -623,6 +624,27 @@ export function AlbumDetail() {
             isBookmarked={bookmarkedInstruments.has(instrumentSheet.instrument.id)}
             onToggleBookmark={() => toggleBookmarkInstrument(instrumentSheet.instrument.id)}
             onOpenInAppBrowser={(b) => setInAppBrowser(b)}
+            onMessageVendor={(vendor) => {
+              const inst = instrumentSheet.instrument;
+              try {
+                const domain = new URL(vendor.affiliateUrl).hostname.replace(/^www\./, "");
+                const tid = startVendorChatAboutInstrument({
+                  kind: "instrument",
+                  instrumentId: inst.id,
+                  instrumentName: inst.name,
+                  instrumentCategory: inst.shortCategory ?? inst.category,
+                  instrumentPhotoUrl: inst.photoUrl,
+                  vendorName: vendor.name,
+                  vendorLogoUrl: vendor.logoUrl,
+                  vendorDomain: domain,
+                  url: vendor.affiliateUrl,
+                });
+                setInstrumentSheet(null);
+                navigate(`/chat/${encodeURIComponent(tid)}`);
+              } catch {
+                toast({ title: "Couldn't start chat", description: "Invalid vendor link." });
+              }
+            }}
             onClose={() => setInstrumentSheet(null)}
           />
         ) : performerSheet ? (
@@ -1389,6 +1411,7 @@ function InstrumentSheet({
   isBookmarked,
   onToggleBookmark,
   onOpenInAppBrowser,
+  onMessageVendor,
   onClose,
 }: {
   instrument: Instrument;
@@ -1397,6 +1420,7 @@ function InstrumentSheet({
   isBookmarked: boolean;
   onToggleBookmark: () => void;
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
+  onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
   onClose: () => void;
 }) {
   // Resolve attribution → who wrote the note + which song it's about.
@@ -1578,10 +1602,23 @@ function InstrumentSheet({
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-[15px] font-medium truncate">{v.name}</p>
                   </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/45 ml-2" aria-hidden="true">
-                    <path d="M9 6l6 6-6 6" />
+                </button>
+                {/* Chat bubble — opens a chat with this vendor seeded with the current instrument as an OG-style preview card. */}
+                <button
+                  type="button"
+                  onClick={() => onMessageVendor({ name: v.name, logoUrl: v.logoUrl, affiliateUrl: v.affiliateUrl })}
+                  aria-label={`Message ${v.name}`}
+                  className="w-9 h-9 ml-1 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
+                  style={{ background: "rgba(49,158,216,0.16)" }}
+                  data-testid={`button-vendor-message-${i}`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                 </button>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/30 ml-1" aria-hidden="true">
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
               </div>
             ))}
           </div>

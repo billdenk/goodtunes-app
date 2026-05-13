@@ -13,6 +13,7 @@ import { AlbumDetail } from "@/pages/AlbumDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
 import { ArtistDetail } from "@/pages/ArtistDetail";
+import { Chat, ChatThreadPage } from "@/pages/Chat";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -72,6 +73,12 @@ function Router() {
         </Route>
         <Route path="/playlists">
           <ProtectedRoute component={Playlists} />
+        </Route>
+        <Route path="/chat">
+          <ProtectedRoute component={Chat} />
+        </Route>
+        <Route path="/chat/:id">
+          <ProtectedRoute component={ChatThreadPage} />
         </Route>
         <Route path="/account">
           <ProtectedRoute component={Account} />

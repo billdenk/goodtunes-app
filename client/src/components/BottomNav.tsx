@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { subscribeChats, totalUnread } from "@/lib/chatStore";
 
 const NavItem = ({
   path,
@@ -49,7 +51,11 @@ export function BottomNav() {
 
   const isLibrary = location === "/collection" || location === "/" || location.startsWith("/album");
   const isPlaylists = location.startsWith("/playlist");
+  const isChat = location.startsWith("/chat");
   const isAccount = location.startsWith("/account");
+
+  const [unread, setUnread] = useState(() => totalUnread());
+  useEffect(() => subscribeChats(() => setUnread(totalUnread())), []);
 
   const initials = user?.displayName
     ? user.displayName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
@@ -115,6 +121,30 @@ export function BottomNav() {
               strokeLinecap="round"
             />
           </svg>
+        )}
+      />
+
+      <NavItem
+        path="/chat"
+        label="Chat"
+        active={isChat}
+        onClick={() => navigate("/chat")}
+        testId="nav-chat"
+        icon={(active) => (
+          <div className="relative">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? "0" : "1.8"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            {unread > 0 && (
+              <span
+                className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                style={{ background: "#FF5470", border: "1.5px solid #00062B" }}
+                aria-label={`${unread} unread`}
+              >
+                {unread}
+              </span>
+            )}
+          </div>
         )}
       />
 

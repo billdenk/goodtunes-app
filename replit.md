@@ -78,6 +78,23 @@ This is post-launch work. For now the link is a toast placeholder, but the row i
 #### Potential data source: muso.ai
 [muso.ai](https://developer.muso.ai/) has a developer API for music credits — writers, performers, instruments, sessions. They already power credits surfaces for some major streaming services. Worth evaluating when we move beyond hand-curated seed data: pull a baseline of credits from muso.ai, then let the artist override/enrich (especially the per-instrument note + tuning + vendor link, which muso.ai won't have). Auth is API-key based; check pricing tiers before committing.
 
+### Chat / vendor messaging (demo)
+
+A **Chat** tab lives in the bottom nav. It currently powers a single demo flow:
+**fan ↔ vendor about an instrument**.
+
+- Each vendor row inside an instrument sheet has a chat-bubble button. Tapping it opens (or creates) a thread with that vendor and seeds it with an Open-Graph-style preview card containing the instrument photo, category, name, and vendor link. The fan can then ask a question (e.g. "Is this still in stock?") without leaving GoodTunes.
+- Threads + messages are client-only via `localStorage` (`gt:chats`, `gt:chats-changed` event). One thread per vendor; additional instrument links append more cards into the same thread.
+- The composer is real (Apple Messages-style bubbles, blue for the fan, grey for the vendor). For the demo we trigger a single canned vendor reply ~1.5s after the fan sends a text, so the thread feels alive without a backend.
+- Bottom-nav Chat icon shows an unread badge in `#FF5470` driven by `totalUnread()`.
+- **Why this matters**: pitch-deck-grade proof that fans can reach a brand directly inside the player, instead of hunting down a contact email on the vendor's site. Pairs naturally with the SuperCredits™ Micro-Sponsorship link.
+
+Out of scope for the demo (planned for the real build):
+- Vendor accounts (separate role from listener), real inbox + thread storage, push notifications.
+- Anti-spam, rate limiting, attachments (artists will want gear photos / audio clips).
+- Vendor profile pages (logo, bio, hours, response-time SLA, instruments they specialize in). Today the row simply links into the in-app browser for the vendor's own about/buy pages.
+- **Verified-artist outreach** — gating a "Reach out about a gig" button on artist/management contact rows. Originally scoped here; explicitly **deferred** until we have a real identity-verification path (Spotify-for-Artists / distributor / label cross-check) and the moderation tooling to keep working musicians safe from spam.
+
 #### Data shape implications (when we build it)
 - `track.credits.writers: { name, role }[]`
 - `track.credits.performers: { personId, role, instrumentId, tuningNotes? }[]`
