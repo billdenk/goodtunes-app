@@ -57,28 +57,31 @@ export function Player() {
         </div>
         <div className="relative w-full max-w-[390px] min-h-screen flex flex-col">
 
-          {/* Top bar */}
-          <div className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
-            <button
-              type="button"
-              onClick={() => setShowPlayer(false)}
-              className="w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10 transition-colors"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            <p className="text-white/50 text-xs font-medium uppercase tracking-widest">Now Playing</p>
-            <button
-              type="button"
-              className="w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10 transition-colors text-white/60"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="5" cy="12" r="1.5" />
-                <circle cx="12" cy="12" r="1.5" />
-                <circle cx="19" cy="12" r="1.5" />
-              </svg>
-            </button>
+          {/* Grabber — Apple-style pull-down handle. Swipe down to dismiss. */}
+          <div
+            className="relative z-10 pt-3 pb-1 flex justify-center select-none cursor-grab active:cursor-grabbing"
+            onTouchStart={(e) => {
+              const startY = e.touches[0].clientY;
+              const onMove = (ev: TouchEvent) => {
+                const dy = ev.touches[0].clientY - startY;
+                if (dy > 80) {
+                  setShowPlayer(false);
+                  cleanup();
+                }
+              };
+              const cleanup = () => {
+                window.removeEventListener("touchmove", onMove);
+                window.removeEventListener("touchend", cleanup);
+              };
+              window.addEventListener("touchmove", onMove);
+              window.addEventListener("touchend", cleanup);
+            }}
+            onClick={() => setShowPlayer(false)}
+            role="button"
+            aria-label="Close Now Playing"
+            data-testid="grabber-now-playing"
+          >
+            <div className="w-9 h-[5px] rounded-full" style={{ background: "rgba(255,255,255,0.35)" }} />
           </div>
 
           <div className="relative z-10 flex-1 flex flex-col items-center px-7">
