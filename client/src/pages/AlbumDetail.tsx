@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useParams } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,12 +8,12 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { ALBUMS, getSongsByAlbum, formatDuration, type Song, type Album, type AlbumVideo, type AlbumPhoto } from "@/data/musicData";
+import { ALBUMS, getSongsByAlbum, type Song, type Album, type AlbumVideo, type AlbumPhoto } from "@/data/musicData";
 
 export function AlbumDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { playSong, currentSong, isPlaying, togglePlay } = usePlayer();
+  const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast } = usePlayer();
   const { user } = useAuth();
   const favSongs = useFavoriteSongs();
   const [showCert, setShowCert] = useState(false);
@@ -26,8 +26,8 @@ export function AlbumDetail() {
   const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
   const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
-  const [downloadStep, setDownloadStep] = useState<"off" | "warn" | "confirm">("off");
-  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [songMenuFor, setSongMenuFor] = useState<Song | null>(null);
+  const [downloadedSongs, setDownloadedSongs] = useState<Set<string>>(new Set());
 
   const album = ALBUMS.find((a) => a.id === id);
   const songs = album ? getSongsByAlbum(id) : [];
@@ -46,12 +46,25 @@ export function AlbumDetail() {
     setPhotoIndex(null);
     setShowOwnership(false);
     setProvenanceCertNum(null);
-    setDownloadStep("off");
+    setSongMenuFor(null);
     if (album) {
-      try { setIsDownloaded(localStorage.getItem(`gt:downloaded:${album.id}`) === "1"); }
-      catch { setIsDownloaded(false); }
+      try {
+        const raw = localStorage.getItem(`gt:downloaded-songs:${album.id}`);
+        setDownloadedSongs(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+      } catch { setDownloadedSongs(new Set()); }
     }
   }, [id, album]);
+
+  const toggleSongDownload = (songId: string) => {
+    if (!album) return;
+    setDownloadedSongs((prev) => {
+      const next = new Set(prev);
+      if (next.has(songId)) next.delete(songId);
+      else next.add(songId);
+      try { localStorage.setItem(`gt:downloaded-songs:${album.id}`, JSON.stringify(Array.from(next))); } catch {}
+      return next;
+    });
+  };
 
   if (!album) {
     return (
@@ -193,27 +206,6 @@ export function AlbumDetail() {
                     <path d="M12 7v5l3 2" />
                   </svg>
                 </button>
-                <div className="h-px bg-white/8" />
-                <button
-                  type="button"
-                  onClick={() => { setShowMenu(false); setDownloadStep("warn"); }}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm active:bg-white/10"
-                  style={{ color: isDownloaded ? "rgba(255,255,255,0.55)" : "#FF6B6B" }}
-                  data-testid="menu-download-music"
-                  disabled={isDownloaded}
-                >
-                  <span>{isDownloaded ? "Downloaded ✓" : "Download Music Files"}</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isDownloaded ? "#4AFFCA" : "#FF6B6B"} strokeWidth="2" strokeLinecap="round">
-                    {isDownloaded ? (
-                      <path d="M20 6L9 17l-5-5" />
-                    ) : (
-                      <>
-                        <path d="M12 4v12M7 11l5 5 5-5" />
-                        <path d="M5 20h14" />
-                      </>
-                    )}
-                  </svg>
-                </button>
               </div>
             </>
           )}
@@ -306,7 +298,6 @@ export function AlbumDetail() {
           <div className="bg-[#00062B] px-5 mt-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
             {songs.map((song, i) => {
               const isActive = currentSong?.id === song.id;
-              const isFav = favSongs.has(song.id);
               return (
                 <div
                   key={song.id}
@@ -353,27 +344,40 @@ export function AlbumDetail() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => favSongs.toggle(song.id)}
-                    aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
-                    aria-pressed={isFav}
+                    onClick={() => toggleSongDownload(song.id)}
+                    aria-label={downloadedSongs.has(song.id) ? "Remove download" : "Download to this device"}
+                    aria-pressed={downloadedSongs.has(song.id)}
                     className="w-9 h-9 flex items-center justify-center flex-shrink-0 active:scale-[0.9] transition-transform"
-                    data-testid={`button-favorite-song-${song.id}`}
+                    data-testid={`button-download-song-${song.id}`}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "#FF5470" : "none"} stroke={isFav ? "#FF5470" : "rgba(255,255,255,0.4)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                    </svg>
+                    {downloadedSongs.has(song.id) ? (
+                      // Downloaded: filled circle with check (Apple's "in library / downloaded")
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" fill="rgba(255,255,255,0.85)" />
+                        <path d="M8 12.5l2.8 2.8L16.5 9.5" stroke="#00062B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                      </svg>
+                    ) : (
+                      // Not downloaded: Apple's outlined circle with down arrow
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 7v8" />
+                        <path d="M8.5 11.5L12 15l3.5-3.5" />
+                      </svg>
+                    )}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowPlaylistPicker(song)}
-                    aria-label="Add to playlist"
+                    onClick={() => setSongMenuFor(song)}
+                    aria-label="Song options"
+                    aria-haspopup="dialog"
+                    aria-expanded={songMenuFor?.id === song.id}
                     className="w-7 h-9 flex items-center justify-center text-white/40 flex-shrink-0"
                     data-testid={`button-track-menu-${song.id}`}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="12" cy="5" r="1.6" />
+                      <circle cx="5" cy="12" r="1.6" />
                       <circle cx="12" cy="12" r="1.6" />
-                      <circle cx="12" cy="19" r="1.6" />
+                      <circle cx="19" cy="12" r="1.6" />
                     </svg>
                   </button>
                 </div>
@@ -554,27 +558,28 @@ export function AlbumDetail() {
           />
         )}
 
-        {downloadStep === "warn" && (
-          <DownloadWarningSheet
-            stage="warn"
-            albumType={album.type}
-            onClose={() => setDownloadStep("off")}
-            onProceed={() => setDownloadStep("confirm")}
-          />
-        )}
-
-        {downloadStep === "confirm" && (
-          <DownloadWarningSheet
-            stage="confirm"
-            albumType={album.type}
-            onClose={() => setDownloadStep("off")}
-            onProceed={() => {
-              setDownloadStep("off");
-              setIsDownloaded(true);
-              try { localStorage.setItem(`gt:downloaded:${album.id}`, "1"); } catch {}
-              setShareToast("Download started — Transfer Rights removed");
-              setTimeout(() => setShareToast(""), 2400);
+        {songMenuFor && (
+          <SongActionSheet
+            song={songMenuFor}
+            album={album}
+            isFavorite={favSongs.has(songMenuFor.id)}
+            onToggleFavorite={() => favSongs.toggle(songMenuFor.id)}
+            onShare={async () => {
+              const url = `${window.location.origin}/album/${album.id}`;
+              try {
+                if (navigator.share) await navigator.share({ title: songMenuFor.title, text: `${songMenuFor.title} — ${album.artist}`, url });
+                else {
+                  await navigator.clipboard.writeText(url);
+                  setShareToast("Link copied");
+                  setTimeout(() => setShareToast(""), 2000);
+                }
+              } catch {}
             }}
+            onAddToPlaylist={() => { setSongMenuFor(null); setShowPlaylistPicker(songMenuFor); }}
+            onPlayNext={() => { playNext({ ...songMenuFor, album }); setShareToast("Playing next"); setTimeout(() => setShareToast(""), 1600); }}
+            onPlayLast={() => { playLast({ ...songMenuFor, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
+            onViewCredits={() => { setShareToast("Credits coming soon"); setTimeout(() => setShareToast(""), 1800); }}
+            onClose={() => setSongMenuFor(null)}
           />
         )}
 
@@ -762,83 +767,173 @@ function OwnershipSheet({
   );
 }
 
-function DownloadWarningSheet({
-  stage,
-  albumType,
+function SongActionSheet({
+  song,
+  album,
+  isFavorite,
+  onToggleFavorite,
+  onShare,
+  onAddToPlaylist,
+  onPlayNext,
+  onPlayLast,
+  onViewCredits,
   onClose,
-  onProceed,
 }: {
-  stage: "warn" | "confirm";
-  albumType: "album" | "EP";
+  song: Song;
+  album: Album;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  onShare: () => void;
+  onAddToPlaylist: () => void;
+  onPlayNext: () => void;
+  onPlayLast: () => void;
+  onViewCredits: () => void;
   onClose: () => void;
-  onProceed: () => void;
 }) {
-  const isWarn = stage === "warn";
+  const close = (run?: () => void) => () => { run?.(); onClose(); };
+
+  // Esc-to-close for keyboard users.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const Row = ({ label, sublabel, icon, onClick, testId }: { label: string; sublabel?: string; icon: ReactNode; onClick: () => void; testId: string }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-5 py-3.5 active:bg-white/10"
+      data-testid={testId}
+    >
+      <span className="w-6 flex items-center justify-center text-white">{icon}</span>
+      <span className="flex-1 text-left">
+        <span className="block text-white text-[15px]">{label}</span>
+        {sublabel && <span className="block text-white/50 text-[12px] mt-0.5">{sublabel}</span>}
+      </span>
+    </button>
+  );
+
   return (
     <div
-      className="fixed inset-0 z-[75] flex items-center justify-center px-6"
+      className="fixed inset-0 z-[75] flex items-end justify-center"
       role="dialog"
       aria-modal="true"
-      aria-label={isWarn ? "Keep your Transfer Rights" : "Are you sure?"}
-      data-testid={isWarn ? "modal-download-warn" : "modal-download-confirm"}
+      aria-label={`Options for ${song.title}`}
+      data-testid="sheet-song-actions"
     >
-      <div className="absolute inset-0 bg-black/80" style={{ backdropFilter: "blur(8px)" }} onClick={onClose} />
+      <div className="absolute inset-0 bg-black/55" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
       <div
-        className="relative w-full max-w-[340px] z-10 rounded-3xl px-6 pt-5 pb-7"
-        style={{
-          background: "rgba(20, 24, 48, 0.96)",
-          backdropFilter: "blur(28px) saturate(180%)",
-          boxShadow: "0 24px 60px rgba(0,0,0,0.7)",
-          border: "1px solid rgba(255,255,255,0.08)",
-        }}
+        className="relative w-full max-w-[440px] z-10 rounded-t-3xl pt-3 pb-8"
+        style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: "0 -16px 40px rgba(0,0,0,0.6)" }}
       >
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+
+        {/* Header: artwork + title/artist */}
+        <div className="flex items-center gap-3 px-5 pb-4">
+          <img src={album.artwork} alt="" className="w-12 h-12 rounded-lg object-cover" />
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-[15px] font-semibold truncate">{song.title}</p>
+            <p className="text-white/55 text-[13px] truncate">{album.artist} · {album.title}</p>
+          </div>
+        </div>
+
+        {/* Top row: Favorite + Share — Apple's two-up layout */}
+        <div className="px-5 grid grid-cols-2 gap-2 pb-2">
+          <button
+            type="button"
+            onClick={() => { onToggleFavorite(); }}
+            aria-pressed={isFavorite}
+            className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl active:scale-[0.97] transition-transform"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+            data-testid="button-sheet-favorite"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill={isFavorite ? "#FF5470" : "none"} stroke={isFavorite ? "#FF5470" : "rgba(255,255,255,0.85)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+            <span className="text-white text-[12px] font-medium">{isFavorite ? "Favorited" : "Favorite"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={close(onShare)}
+            className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl active:scale-[0.97] transition-transform"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+            data-testid="button-sheet-share"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+              <path d="M12 16V4" />
+              <path d="M8 8l4-4 4 4" />
+              <path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+            </svg>
+            <span className="text-white text-[12px] font-medium">Share</span>
+          </button>
+        </div>
+
+        <div className="h-px bg-white/8 my-2" />
+
+        <Row
+          label="Add to Playlist"
+          testId="row-sheet-add-playlist"
+          onClick={close(onAddToPlaylist)}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="14" y2="6" />
+              <line x1="3" y1="12" x2="14" y2="12" />
+              <line x1="3" y1="18" x2="10" y2="18" />
+              <line x1="18" y1="9" x2="18" y2="21" />
+              <line x1="12" y1="15" x2="24" y2="15" />
+            </svg>
+          }
+        />
+        <Row
+          label="Play Next"
+          testId="row-sheet-play-next"
+          onClick={close(onPlayNext)}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="14" y2="6" />
+              <line x1="3" y1="12" x2="14" y2="12" />
+              <line x1="3" y1="18" x2="14" y2="18" />
+              <polygon points="18,7 22,12 18,17" fill="currentColor" stroke="none" />
+            </svg>
+          }
+        />
+        <Row
+          label="Play Last"
+          sublabel={album.title}
+          testId="row-sheet-play-last"
+          onClick={close(onPlayLast)}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="14" y2="12" />
+              <line x1="3" y1="18" x2="14" y2="18" />
+              <polygon points="18,15 22,18 18,21" fill="currentColor" stroke="none" />
+            </svg>
+          }
+        />
+        <div className="h-px bg-white/8 my-2" />
+        <Row
+          label="View Credits"
+          testId="row-sheet-credits"
+          onClick={close(onViewCredits)}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v.01M11 12h1v4h1" />
+            </svg>
+          }
+        />
+
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
-          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white/80 active:opacity-70"
-          data-testid="button-close-download"
+          className="mx-5 mt-4 w-[calc(100%-40px)] py-3 rounded-full text-white text-[15px] font-semibold active:scale-[0.98] transition-transform"
+          style={{ background: "rgba(255,255,255,0.10)" }}
+          data-testid="button-sheet-close"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          Cancel
         </button>
-
-        <h2 className="text-white text-2xl font-bold leading-tight mt-2">
-          {isWarn ? "Keep your Transfer Rights." : "Are you sure?"}
-        </h2>
-        <p className="text-white/75 text-sm leading-relaxed mt-3">
-          {isWarn ? (
-            <>
-              Downloading will <span className="font-semibold text-white">permanently remove</span> your ability to transfer ownership in the future. Soon, you'll be able to gift or resell your music — keeping it in the cloud ensures you don't lose the <span className="font-semibold text-white">Transfer Rights option.</span>
-            </>
-          ) : (
-            <>
-              Downloading music files will <span className="font-semibold text-white">permanently remove</span> your ability to transfer ownership of your limited edition {albumType === "EP" ? "EP" : "Album"} in the future. This cannot be undone.
-            </>
-          )}
-        </p>
-
-        <div className="flex flex-col gap-2.5 mt-6">
-          <button
-            type="button"
-            onClick={onProceed}
-            className="w-full py-3 rounded-full text-sm font-semibold text-white active:scale-[0.97] transition-transform"
-            style={{ background: "transparent", border: "1.5px solid rgba(255,255,255,0.85)" }}
-            data-testid="button-download-anyway"
-          >
-            Download Anyway
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3 rounded-full text-sm font-semibold active:scale-[0.97] transition-transform"
-            style={{ background: "#fff", color: "#00062B" }}
-            data-testid="button-keep-transfer-rights"
-          >
-            Keep Transfer Rights
-          </button>
-        </div>
       </div>
     </div>
   );

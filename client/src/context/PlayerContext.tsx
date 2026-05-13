@@ -42,6 +42,8 @@ interface PlayerContextValue extends PlayerState {
   toggleFavorite: (songId: string) => void;
   isFavorite: (songId: string) => boolean;
   addToQueue: (song: PlayerSong) => void;
+  playNext: (song: PlayerSong) => void;
+  playLast: (song: PlayerSong) => void;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -167,6 +169,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setQueue((q) => [...q, song]);
   }, []);
 
+  // Insert a song immediately after the currently-playing track (Apple's "Play Next").
+  // If nothing is playing, start it now so the action isn't silently a no-op.
+  const playNext = useCallback((song: PlayerSong) => {
+    setQueue((q) => {
+      if (q.length === 0) {
+        setCurrentIndex(0);
+        setIsPlaying(true);
+        return [song];
+      }
+      const next = q.slice();
+      next.splice(currentIndex + 1, 0, song);
+      return next;
+    });
+  }, [currentIndex]);
+
+  // Append to the end of the queue (Apple's "Play Last" / "Play After").
+  // Same fallback: start playback if there's nothing in the queue yet.
+  const playLast = useCallback((song: PlayerSong) => {
+    setQueue((q) => {
+      if (q.length === 0) {
+        setCurrentIndex(0);
+        setIsPlaying(true);
+        return [song];
+      }
+      return [...q, song];
+    });
+  }, []);
+
   const toggleAutoplay = useCallback(() => setAutoplay((a) => !a), []);
 
   const reorderQueue = useCallback((from: number, to: number) => {
@@ -230,6 +260,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         toggleFavorite,
         isFavorite,
         addToQueue,
+        playNext,
+        playLast,
       }}
     >
       {children}
