@@ -1141,8 +1141,8 @@ function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; 
     <div className="flex items-start gap-3 px-5 pb-4">
       <div className="flex-1 min-w-0">
         {eyebrow && <p className="text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider mb-1">{eyebrow}</p>}
-        <h2 className="text-white text-[20px] font-bold leading-tight">{title}</h2>
-        {subtitle && <p className="text-white/55 text-[13px] mt-1">{subtitle}</p>}
+        <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">{title}</h2>
+        {subtitle && <p className="text-[15px] mt-1 leading-snug" style={{ color: "rgba(235,235,245,0.55)" }}>{subtitle}</p>}
       </div>
       <button
         type="button"
@@ -1487,21 +1487,22 @@ function InstrumentSheet({
 
   return (
     <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" variant="full" onClose={onClose}>
-      {/* Apple-style top bar: X on left, Share + Bookmark on right. shrink-0 so it stays pinned. */}
+      {/* Apple-style top bar: back chevron on left (this is a sub-sheet from credits),
+          Share + Bookmark on right. shrink-0 so it stays pinned. Top padding respects safe area. */}
       <div
-        className="flex-shrink-0 flex items-center justify-between px-3 py-2"
-        style={{ background: "rgba(20,24,48,0.85)", backdropFilter: "blur(20px) saturate(180%)" }}
+        className="flex-shrink-0 flex items-center justify-between px-3 pb-2"
+        style={{ background: "rgba(20,24,48,0.85)", backdropFilter: "blur(20px) saturate(180%)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label="Back"
           className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
           style={{ background: "rgba(255,255,255,0.10)" }}
           data-testid="button-instrument-close"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" />
           </svg>
         </button>
         <div className="flex items-center gap-2">
@@ -1563,47 +1564,46 @@ function InstrumentSheet({
         )}
       </div>
 
-      {/* Title block */}
-      <div className="px-5 pb-3">
-        <p className="text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider">{instrument.category}</p>
-        <h2 className="text-white text-[24px] font-bold leading-tight">{instrument.name}</h2>
+      {/* Title block — Apple Music "About Neil Diamond" pattern: small grey eyebrow, big bold title */}
+      <div className="px-5 pb-4">
+        <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(235,235,245,0.55)" }}>{instrument.category}</p>
+        <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight">{instrument.name}</h2>
         {tuningNotes && (
-          <p className="text-white/55 text-[13px] mt-1">Tuning · {tuningNotes}</p>
+          <p className="text-[15px] mt-1.5" style={{ color: "rgba(235,235,245,0.55)" }}>Tuning · {tuningNotes}</p>
         )}
       </div>
 
-      {/* About */}
+      {/* About — Apple-style heading + body */}
       {instrument.about && (
-        <>
-          <div className="px-5 mt-1 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">About</div>
-          <p className="px-5 pb-4 text-white/80 text-[14px] leading-relaxed">{instrument.about}</p>
-        </>
+        <section className="px-5 pt-3 pb-5">
+          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About this {instrument.category.toLowerCase()}</h3>
+          <p className="text-[16px] leading-relaxed" style={{ color: "rgba(235,235,245,0.72)" }}>{instrument.about}</p>
+        </section>
       )}
 
       {/* Notes from the artist — attributed (so the note still makes sense after bookmarking) */}
       {instrument.artistNote && (
-        <>
-          <div className="px-5 mt-1 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Notes from the artist</div>
-          <p className="px-5 pb-3 text-white/85 text-[15px] leading-relaxed italic">"{instrument.artistNote}"</p>
+        <section className="px-5 pt-3 pb-5">
+          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">Notes from the artist</h3>
+          <p className="pb-3 text-[16px] leading-relaxed italic" style={{ color: "rgba(235,235,245,0.78)" }}>"{instrument.artistNote}"</p>
           {noteFromPerson && (
-            <div className="flex items-center gap-2.5 px-5 pb-4">
+            <div className="flex items-center gap-2.5">
               <PersonAvatar person={noteFromPerson} size={28} />
               <div className="min-w-0 flex-1">
-                <p className="text-white text-[13px] font-medium truncate">{noteFromPerson.name}</p>
+                <p className="text-white text-[14px] font-medium truncate">{noteFromPerson.name}</p>
                 {noteFromSong && (
-                  <p className="text-white/50 text-[12px] truncate">on "{noteFromSong.title}"</p>
+                  <p className="text-[13px] truncate" style={{ color: "rgba(235,235,245,0.55)" }}>on "{noteFromSong.title}"</p>
                 )}
               </div>
             </div>
           )}
-        </>
+        </section>
       )}
 
       {/* Where to buy — vendor list. Tap row → direct buy link. Tap logo → vendor about page. */}
       {instrument.vendors && instrument.vendors.length > 0 && (
-        <>
-          <div className="h-px bg-white/8 mx-5 mt-2 mb-1" />
-          <div className="px-5 mt-2 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Where to buy</div>
+        <section className="pt-3 pb-2">
+          <h3 className="px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Where to buy</h3>
           <div className="pb-1">
             {instrument.vendors.map((v, i) => (
               <div
@@ -1650,17 +1650,29 @@ function InstrumentSheet({
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                 </button>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/30 ml-1" aria-hidden="true">
-                  <path d="M9 6l6 6-6 6" />
-                </svg>
+                {/* "Opens in browser" indicator — circle with external-link arrow, matches the chat-bubble button style on the left */}
+                <button
+                  type="button"
+                  onClick={() => onOpenInAppBrowser({ url: v.affiliateUrl, title: v.name, logoUrl: v.logoUrl })}
+                  aria-label={`Open ${v.name} in browser`}
+                  className="w-9 h-9 ml-1 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
+                  style={{ background: "rgba(255,255,255,0.10)" }}
+                  data-testid={`button-vendor-open-${i}`}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/85" aria-hidden="true">
+                    <path d="M14 4h6v6" />
+                    <path d="M20 4L10 14" />
+                    <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+                  </svg>
+                </button>
               </div>
             ))}
           </div>
 
-          <p className="px-5 pt-3 pb-3 text-white/35 text-[10px] text-center leading-relaxed">
+          <p className="px-5 pt-4 pb-3 text-[11px] text-center leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
             Outbound links support the artist via SuperCredits™ Micro-Sponsorships. Artist receives the lion's share; GoodTunes receives a small connection fee.
           </p>
-        </>
+        </section>
       )}
       </div>
     </SheetShell>
