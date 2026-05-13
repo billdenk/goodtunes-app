@@ -58,6 +58,23 @@ Mobile-first, Apple-Music-inspired web player.
 #### Micro-Sponsorships (monetization layer for SuperCredits™)
 Outbound instrument links are affiliate links. Revenue split: **artist gets the lion's share, GoodTunes takes a small cut for the connection.** This makes credits a revenue stream for the musician, not just metadata — a real differentiator vs. Apple/Spotify. Treat affiliate URL + revenue share as part of the instrument record, not a per-link afterthought.
 
+#### Performer sheet (song-focused)
+When you tap a performer (or a writer who's also in our roster) inside SuperCredits™, the sheet that opens is **focused on the current song**, not the whole album:
+1. **Played on this song** — the instrument(s) that performer used on THIS track, each tappable into the InstrumentSheet.
+2. **Also on {album}** — other tracks on this album where they played, with light-grey track numbers matching the album track-list style.
+3. **View artist profile** — currently a placeholder toast. The full flow is described in "Artist profile + streaming-service handoff" below.
+
+#### Artist profile + streaming-service handoff
+The "View artist profile" link on a performer sheet is the seed of a much bigger flow. It belongs to GoodTunes' core sales pitch (see "Sell first. Then stream." strategy deck): **fans buy on GoodTunes pre-launch and listen here; once the album reaches Spotify / Apple Music / Pandora / Deezer / etc., we hand them off**.
+
+Planned UX:
+- **One-time service picker** — first time after we've launched to streaming, the player surfaces a pop-up: *"This album is now on streaming. Pick the service you'd like us to send you to from now on."* The user taps a service icon. We store this as their preferred streaming service.
+- **From then on**, when they tap "View artist profile" (or any cross-album link from a performer sheet), we deep-link straight into their preferred service. They can change the preference any time in user settings.
+- **Notifications** — once a fan has chosen a service, we can notify them when an artist they care about drops something new on that service. The performer sheet is the natural place to subscribe, because they're already showing intent to follow this person.
+- **Data value** — preferred-service selections are first-party data we can report back to artists (who's listening where).
+
+This is post-launch work. For now the link is a toast placeholder, but the row is intentionally there in the design so demos can point at it.
+
 #### Potential data source: muso.ai
 [muso.ai](https://developer.muso.ai/) has a developer API for music credits — writers, performers, instruments, sessions. They already power credits surfaces for some major streaming services. Worth evaluating when we move beyond hand-curated seed data: pull a baseline of credits from muso.ai, then let the artist override/enrich (especially the per-instrument note + tuning + vendor link, which muso.ai won't have). Auth is API-key based; check pricing tiers before committing.
 

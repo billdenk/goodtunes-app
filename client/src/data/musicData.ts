@@ -6,6 +6,12 @@ import tgPhoto5 from "@assets/496254517_9447895035339505_2309388181313327884_n_1
 import tgVideo1Thumb from "@assets/612548086_1270168371604759_7665130374696370589_n_1778621383526.jpg";
 import tgVideo2Thumb from "@assets/629024765_18558574207025503_6255887094720167360_n_1778621397950.jpg";
 import tgVideo3Thumb from "@assets/590183285_1595547188528175_2217542122704006465_n_1778621402722.jpg";
+import martinD28Photo from "@assets/instruments/martin-d28.jpg";
+import gretsch6071Photo from "@assets/instruments/gretsch-6071.jpg";
+import violinPhoto from "@assets/instruments/violin.jpg";
+import fenderPPhoto from "@assets/instruments/fender-p.jpg";
+import gretschKitPhoto from "@assets/instruments/gretsch-kit.jpg";
+import lpCongasPhoto from "@assets/instruments/lp-congas.jpg";
 
 export interface AlbumVideo {
   id: string;
@@ -64,17 +70,24 @@ export interface Person {
 
 export interface InstrumentVendor {
   name: string;
-  // Outbound buy link. Treat as affiliate-aware even if it's plain for now.
+  // Direct product URL for this exact instrument. Treat as affiliate-aware.
   affiliateUrl: string;
+  // Vendor's own homepage / about page. Tapping the logo opens this.
+  aboutUrl?: string;
+  // Logo URL. We default to Google's S2 favicon endpoint so we always get something
+  // recognizable without shipping a logo asset for every vendor.
+  logoUrl?: string;
 }
 
 export interface Instrument {
   id: string;
   name: string;            // e.g. "1967 Gretsch 6071 'Monkees' Bass Walnut"
   category: string;        // e.g. "Bass", "Acoustic Guitar"
+  shortCategory?: string;  // e.g. "Violin", "Guitar" — what we show inline next to a performer
   photoUrl?: string;
-  artistNote?: string;     // why this instrument was chosen for the track
-  vendor?: InstrumentVendor;
+  about?: string;          // neutral "About" copy (history, model facts)
+  artistNote?: string;     // why this artist chose THIS instrument for THIS track
+  vendors?: InstrumentVendor[];
 }
 
 export interface TrackPerformer {
@@ -104,48 +117,105 @@ export const PEOPLE: Record<string, Person> = {
   "p-chance-utter": { id: "p-chance-utter", name: "Chance Chester Utter",   accent: "#7F10A7" },
 };
 
+// Helper: stable favicon URL for a vendor. Cheap, recognizable, no asset shipping.
+const fav = (domain: string) => `https://www.google.com/s2/favicons?sz=128&domain=${domain}`;
+
 export const INSTRUMENTS: Record<string, Instrument> = {
   "i-martin-1973-d28": {
     id: "i-martin-1973-d28",
     name: "1973 Martin D-28",
     category: "Acoustic Guitar",
-    artistNote: "Selected for its warm low-end and the unmistakable spruce-and-rosewood bloom that anchors the rhythm bed on this record.",
-    vendor: { name: "Martin Guitar", affiliateUrl: "https://www.martinguitar.com/" },
+    shortCategory: "Guitar",
+    photoUrl: martinD28Photo,
+    about:
+      "The D-28 is the dreadnought that defined American acoustic guitar tone. Sitka spruce top, East Indian rosewood back and sides, and the unmistakable bloom that has anchored country, folk, and rock recordings since 1931. 1973 examples sit in the sweet spot of the post-Brazilian-rosewood era — broken-in, resonant, and increasingly collectible.",
+    artistNote:
+      "Selected for its warm low-end and the unmistakable spruce-and-rosewood bloom that anchors the rhythm bed on this record.",
+    vendors: [
+      { name: "ish.guitars",            affiliateUrl: "https://ish.guitars/products/1973-martin-d-28-acoustic-guitar",                   aboutUrl: "https://ish.guitars/",            logoUrl: fav("ish.guitars") },
+      { name: "Carter Vintage Guitars", affiliateUrl: "https://cartervintage.com/shop/martin-d-28-1974-shadetop/3C5kGDIqU4PSAX8mXAKHxZe02KK", aboutUrl: "https://cartervintage.com/",      logoUrl: fav("cartervintage.com") },
+      { name: "Martin Guitar (official)", affiliateUrl: "https://www.martinguitar.com/guitars/standard-series/d-28.html",                aboutUrl: "https://www.martinguitar.com/",   logoUrl: fav("martinguitar.com") },
+    ],
   },
   "i-gretsch-1967-6071": {
     id: "i-gretsch-1967-6071",
     name: "1967 Gretsch 6071 \"Monkees\" Bass Walnut",
     category: "Hollow-body Bass",
-    artistNote: "Selecting this guitar for its unparalleled blend of classic resonance and modern versatility.",
-    vendor: { name: "Norman's Rare Guitars", affiliateUrl: "https://www.normansrareguitars.com/" },
+    shortCategory: "Bass",
+    photoUrl: gretsch6071Photo,
+    about:
+      "The 6071 is Gretsch's hollow-body bass from the late '60s, immortalized by The Monkees' Peter Tork. Walnut finish, mute system at the bridge, and the warm thumpy tone that only a 30½-inch scale hollow can give you.",
+    artistNote:
+      "Selecting this guitar for its unparalleled blend of classic resonance and modern versatility.",
+    vendors: [
+      { name: "Norman's Rare Guitars", affiliateUrl: "https://www.normansrareguitars.com/",                aboutUrl: "https://www.normansrareguitars.com/about", logoUrl: fav("normansrareguitars.com") },
+      { name: "The Twelfth Fret",      affiliateUrl: "https://www.12fret.com/?s=gretsch+6071",            aboutUrl: "https://www.12fret.com/",                  logoUrl: fav("12fret.com") },
+      { name: "Reverb",                affiliateUrl: "https://reverb.com/marketplace?query=Gretsch%206071", aboutUrl: "https://reverb.com/",                       logoUrl: fav("reverb.com") },
+    ],
   },
   "i-violin-strad-copy": {
     id: "i-violin-strad-copy",
     name: "German Strad-copy Violin (c. 1910)",
     category: "Violin",
-    artistNote: "Tuned standard. Mic'd close on the bridge for the verses, room mic for the choruses.",
-    vendor: { name: "Shar Music", affiliateUrl: "https://www.sharmusic.com/" },
+    shortCategory: "Violin",
+    photoUrl: violinPhoto,
+    about:
+      "Late-19th and early-20th-century German workshops produced thousands of \"Strad copies\" — well-built, full-size violins built on Stradivarius patterns. They've quietly become the workhorse instrument of working studio and folk players for over a century.",
+    artistNote:
+      "Tuned standard. Mic'd close on the bridge for the verses, room mic for the choruses.",
+    vendors: [
+      { name: "Shar Music",   affiliateUrl: "https://www.sharmusic.com/violins.html", aboutUrl: "https://www.sharmusic.com/",   logoUrl: fav("sharmusic.com") },
+      { name: "Fiddlershop",  affiliateUrl: "https://fiddlershop.com/collections/violins", aboutUrl: "https://fiddlershop.com/", logoUrl: fav("fiddlershop.com") },
+      { name: "Reverb",       affiliateUrl: "https://reverb.com/marketplace?query=german%20violin", aboutUrl: "https://reverb.com/", logoUrl: fav("reverb.com") },
+    ],
   },
   "i-bass-fender-p": {
     id: "i-bass-fender-p",
     name: "1976 Fender Precision Bass",
     category: "Electric Bass",
-    artistNote: "Flatwounds, no pick. Sat right behind the kick on every track.",
-    vendor: { name: "Fender", affiliateUrl: "https://www.fender.com/" },
+    shortCategory: "Bass",
+    photoUrl: fenderPPhoto,
+    about:
+      "The Precision Bass is the bass that defined the electric bass guitar. Mid-'70s P-Basses are known for their heavier ash bodies, three-bolt necks, and that deep, throaty thump.",
+    artistNote:
+      "Flatwounds, no pick. Sat right behind the kick on every track.",
+    vendors: [
+      { name: "Fender",        affiliateUrl: "https://www.fender.com/en-US/electric-basses/precision-bass/", aboutUrl: "https://www.fender.com/",        logoUrl: fav("fender.com") },
+      { name: "Andy Baxter Bass", affiliateUrl: "https://www.andybaxterbass.com/",                            aboutUrl: "https://www.andybaxterbass.com/", logoUrl: fav("andybaxterbass.com") },
+      { name: "Reverb",        affiliateUrl: "https://reverb.com/marketplace?query=1976%20fender%20precision%20bass", aboutUrl: "https://reverb.com/",         logoUrl: fav("reverb.com") },
+    ],
   },
   "i-drums-gretsch-kit": {
     id: "i-drums-gretsch-kit",
     name: "Gretsch USA Custom Kit",
     category: "Drum Kit",
-    artistNote: "22\" kick, 13\" rack, 16\" floor. Calf heads on the toms for a softer attack.",
-    vendor: { name: "Gretsch Drums", affiliateUrl: "https://www.gretschdrums.com/" },
+    shortCategory: "Drums",
+    photoUrl: gretschKitPhoto,
+    about:
+      "Gretsch's USA Custom is built in Ridgeland, South Carolina — 6-ply maple/gum shells with the legendary Gretsch \"silver sealer\" interior. The studio kit of choice for players who want round, focused, recording-ready tone.",
+    artistNote:
+      "22\" kick, 13\" rack, 16\" floor. Calf heads on the toms for a softer attack.",
+    vendors: [
+      { name: "Gretsch Drums",     affiliateUrl: "https://www.gretschdrums.com/series/usa-custom",            aboutUrl: "https://www.gretschdrums.com/", logoUrl: fav("gretschdrums.com") },
+      { name: "Sweetwater",        affiliateUrl: "https://www.sweetwater.com/c1066--Gretsch_Drums",            aboutUrl: "https://www.sweetwater.com/",   logoUrl: fav("sweetwater.com") },
+      { name: "Bentley's Drum Shop", affiliateUrl: "https://bentleysdrumshop.com/collections/gretsch-drums", aboutUrl: "https://bentleysdrumshop.com/", logoUrl: fav("bentleysdrumshop.com") },
+    ],
   },
   "i-perc-lp-congas": {
     id: "i-perc-lp-congas",
     name: "LP Matador Series Congas",
     category: "Hand Percussion",
-    artistNote: "A pair of quintos plus a bongo for the bridge fills.",
-    vendor: { name: "Latin Percussion", affiliateUrl: "https://lpmusic.com/" },
+    shortCategory: "Percussion",
+    photoUrl: lpCongasPhoto,
+    about:
+      "The Matador Series is LP's mid-tier conga line — Siam Oak shells, traditional rims, and the rich open tone that makes them a studio standard. Used by everyone from Sheila E. to Poncho Sanchez.",
+    artistNote:
+      "A pair of quintos plus a bongo for the bridge fills.",
+    vendors: [
+      { name: "Latin Percussion", affiliateUrl: "https://lpmusic.com/collections/matador-series", aboutUrl: "https://lpmusic.com/",          logoUrl: fav("lpmusic.com") },
+      { name: "Sweetwater",       affiliateUrl: "https://www.sweetwater.com/c777--Conga_Drums",   aboutUrl: "https://www.sweetwater.com/",  logoUrl: fav("sweetwater.com") },
+      { name: "Drums Etc.",       affiliateUrl: "https://www.drumsetc.com/",                       aboutUrl: "https://www.drumsetc.com/",   logoUrl: fav("drumsetc.com") },
+    ],
   },
 };
 
