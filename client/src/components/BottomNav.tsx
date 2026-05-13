@@ -121,11 +121,11 @@ export function BottomNav() {
         aria-label={`${activeLabel} (expand navigation)`}
         className="absolute bottom-3 left-3 z-40 flex items-center justify-center w-12 h-12 rounded-full text-[#319ED8] active:scale-95 transition-transform"
         style={{
-          background: "rgba(36, 36, 40, 0.92)",
-          backdropFilter: "blur(28px) saturate(180%)",
-          WebkitBackdropFilter: "blur(28px) saturate(180%)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 8px 36px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.07) inset",
+          background: "rgba(28, 30, 48, 0.55)",
+          backdropFilter: "blur(36px) saturate(200%)",
+          WebkitBackdropFilter: "blur(36px) saturate(200%)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
         }}
         data-testid="nav-collapsed"
       >
@@ -138,11 +138,11 @@ export function BottomNav() {
     <nav
       className="absolute bottom-3 left-3 right-3 z-40 flex items-center justify-around px-2 py-2 rounded-full"
       style={{
-        background: "rgba(36, 36, 40, 0.92)",
-        backdropFilter: "blur(28px) saturate(180%)",
-        WebkitBackdropFilter: "blur(28px) saturate(180%)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        boxShadow: "0 8px 36px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.07) inset",
+        background: "rgba(28, 30, 48, 0.55)",
+        backdropFilter: "blur(36px) saturate(200%)",
+        WebkitBackdropFilter: "blur(36px) saturate(200%)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
         transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)",
       }}
     >

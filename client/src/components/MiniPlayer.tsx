@@ -26,10 +26,11 @@ export function MiniPlayer() {
         className="relative cursor-pointer active:scale-[0.98] transition-transform"
         style={{
           borderRadius: 9999,
-          background: "rgba(36, 36, 40, 0.92)",
-          backdropFilter: "blur(28px) saturate(180%)",
-          WebkitBackdropFilter: "blur(28px) saturate(180%)",
-          boxShadow: "0 8px 36px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.07) inset",
+          background: "rgba(28, 30, 48, 0.55)",
+          backdropFilter: "blur(36px) saturate(200%)",
+          WebkitBackdropFilter: "blur(36px) saturate(200%)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
         }}
         onClick={() => setShowPlayer(true)}
       >
