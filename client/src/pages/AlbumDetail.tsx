@@ -10,7 +10,7 @@ import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { startVendorChatAboutInstrument } from "@/lib/chatStore";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { ALBUMS, getSongsByAlbum, getCreditsForSong, getTracksForPerformerOnAlbum, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type TrackPerformer } from "@/data/musicData";
+import { ALBUMS, getSongsByAlbum, getCreditsForSong, getTracksForPerformerOnAlbum, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer } from "@/data/musicData";
 
 export function AlbumDetail() {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +33,7 @@ export function AlbumDetail() {
   const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
+  const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
   const [bookmarkedInstruments, setBookmarkedInstruments] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -651,6 +652,34 @@ export function AlbumDetail() {
             logoUrl={inAppBrowser.logoUrl}
             onClose={() => setInAppBrowser(null)}
           />
+        ) : vendorSheet ? (
+          <VendorSheet
+            vendor={vendorSheet.vendor}
+            instrument={vendorSheet.instrument}
+            onOpenInAppBrowser={(b) => setInAppBrowser(b)}
+            onMessageVendor={(vendor) => {
+              const inst = vendorSheet.instrument;
+              try {
+                const domain = new URL(vendor.affiliateUrl).hostname.replace(/^www\./, "");
+                const tid = startVendorChatAboutInstrument({
+                  kind: "instrument",
+                  instrumentId: inst.id,
+                  instrumentName: inst.name,
+                  instrumentCategory: inst.shortCategory ?? inst.category,
+                  instrumentPhotoUrl: inst.photoUrl,
+                  vendorName: vendor.name,
+                  vendorLogoUrl: vendor.logoUrl,
+                  vendorDomain: domain,
+                  url: vendor.affiliateUrl,
+                });
+                setVendorSheet(null);
+                navigate(`/chat/${encodeURIComponent(tid)}`);
+              } catch {
+                toast({ title: "Couldn't start chat", description: "Invalid vendor link." });
+              }
+            }}
+            onClose={() => setVendorSheet(null)}
+          />
         ) : instrumentSheet ? (
           <InstrumentSheet
             instrument={instrumentSheet.instrument}
@@ -659,6 +688,7 @@ export function AlbumDetail() {
             isBookmarked={bookmarkedInstruments.has(instrumentSheet.instrument.id)}
             onToggleBookmark={() => toggleBookmarkInstrument(instrumentSheet.instrument.id)}
             onOpenInAppBrowser={(b) => setInAppBrowser(b)}
+            onOpenVendor={(vendor) => setVendorSheet({ vendor, instrument: instrumentSheet.instrument })}
             onMessageVendor={(vendor) => {
               const inst = instrumentSheet.instrument;
               try {
@@ -1445,6 +1475,7 @@ function InstrumentSheet({
   isBookmarked,
   onToggleBookmark,
   onOpenInAppBrowser,
+  onOpenVendor,
   onMessageVendor,
   onClose,
 }: {
@@ -1454,6 +1485,7 @@ function InstrumentSheet({
   isBookmarked: boolean;
   onToggleBookmark: () => void;
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
+  onOpenVendor: (vendor: InstrumentVendor) => void;
   onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
   onClose: () => void;
 }) {
@@ -1611,10 +1643,10 @@ function InstrumentSheet({
                 className="flex items-center px-5 py-2.5 active:bg-white/5"
                 data-testid={`row-vendor-${i}`}
               >
-                {/* Tap the logo → vendor about page (opens in in-app browser sheet) */}
+                {/* Tap the logo → vendor profile sheet (Apple Music artist-style page) */}
                 <button
                   type="button"
-                  onClick={() => onOpenInAppBrowser({ url: v.aboutUrl ?? v.affiliateUrl, title: v.name, logoUrl: v.logoUrl })}
+                  onClick={() => onOpenVendor(v)}
                   aria-label={`About ${v.name}`}
                   className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 active:opacity-70 overflow-hidden"
                   style={{ background: "rgba(255,255,255,0.92)" }}
@@ -1629,7 +1661,7 @@ function InstrumentSheet({
                 {/* Tap the row → direct product / buy link (opens in in-app browser sheet) */}
                 <button
                   type="button"
-                  onClick={() => onOpenInAppBrowser({ url: v.affiliateUrl, title: v.name, logoUrl: v.logoUrl })}
+                  onClick={() => onOpenVendor(v)}
                   className="flex-1 flex items-center min-w-0 ml-3 active:opacity-80 text-left"
                   data-testid={`button-vendor-buy-${i}`}
                 >
@@ -1674,6 +1706,218 @@ function InstrumentSheet({
           </p>
         </section>
       )}
+      </div>
+    </SheetShell>
+  );
+}
+
+/**
+ * VendorSheet — Apple Music artist-page-style profile for an instrument vendor.
+ * Hero cover photo with the vendor name overlaid, About copy, location/web contact,
+ * Share + Chat actions, and a concept "Artists who use them" rail. Tapping the primary
+ * "Visit website" button opens the in-app browser.
+ */
+function VendorSheet({
+  vendor,
+  instrument,
+  onOpenInAppBrowser,
+  onMessageVendor,
+  onClose,
+}: {
+  vendor: InstrumentVendor;
+  instrument: Instrument;
+  onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
+  onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
+  onClose: () => void;
+}) {
+  const domain = (() => {
+    try { return new URL(vendor.aboutUrl ?? vendor.affiliateUrl).hostname.replace(/^www\./, ""); }
+    catch { return ""; }
+  })();
+
+  const usedBy = (vendor.usedByPersonIds ?? Object.keys(PEOPLE).slice(0, 4))
+    .map((pid) => PEOPLE[pid])
+    .filter(Boolean) as Person[];
+
+  const bio = vendor.bio
+    ?? `${vendor.name} is one of the trusted shops we link out to from SuperCredits™. Tap "Visit website" to browse their full catalog, or start a chat to ask about availability, condition, and shipping.`;
+  const tagline = vendor.tagline ?? domain;
+
+  const handleShare = async () => {
+    const shareUrl = vendor.aboutUrl ?? vendor.affiliateUrl;
+    try {
+      if (typeof navigator !== "undefined" && (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share) {
+        await (navigator as Navigator & { share: (data: ShareData) => Promise<void> }).share({
+          title: vendor.name,
+          text: `${vendor.name} on GoodTunes`,
+          url: shareUrl,
+        });
+        return;
+      }
+    } catch { /* user cancelled */ }
+    try {
+      await navigator.clipboard.writeText(`${vendor.name} — ${shareUrl}`);
+      toast({ title: "Link copied", description: vendor.name });
+    } catch {
+      toast({ title: "Share unavailable" });
+    }
+  };
+
+  return (
+    <SheetShell ariaLabel={vendor.name} testId="sheet-vendor" variant="full" onClose={onClose}>
+      {/* Top bar: floating back chevron + actions over the hero (Apple Music artist page) */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide pb-10 relative">
+        <div
+          className="sticky top-0 z-20 flex items-center justify-between px-3 pb-2"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Back"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+            data-testid="button-vendor-close"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleShare}
+              aria-label="Share"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+              data-testid="button-vendor-share"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3v12" />
+                <path d="M7 8l5-5 5 5" />
+                <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
+              aria-label={`Message ${vendor.name}`}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+              data-testid="button-vendor-chat"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Hero — full-bleed cover with vendor name overlay (gradient fade for legibility).
+            Pulled up under the sticky bar with a negative margin so the bar floats over it. */}
+        <div className="-mt-[60px] relative w-full" style={{ aspectRatio: "1 / 1.05" }}>
+          {vendor.coverUrl ? (
+            <img src={vendor.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{ background: `linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)` }}
+            >
+              {vendor.logoUrl && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-32 h-32 rounded-2xl flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.95)" }}>
+                    <img src={vendor.logoUrl} alt="" className="w-20 h-20 object-contain" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Bottom gradient → name */}
+          <div className="absolute inset-x-0 bottom-0 h-2/3" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)" }} />
+          <div className="absolute left-5 right-5 bottom-4">
+            <h2 className="text-white text-[34px] font-bold leading-tight tracking-tight" data-testid="text-vendor-name">{vendor.name}</h2>
+            {tagline && <p className="text-[15px] mt-0.5" style={{ color: "rgba(235,235,245,0.7)" }}>{tagline}</p>}
+          </div>
+        </div>
+
+        {/* Primary actions */}
+        <div className="px-5 pt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenInAppBrowser({ url: vendor.aboutUrl ?? vendor.affiliateUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
+            className="flex-1 h-11 rounded-full flex items-center justify-center gap-2 text-white text-[15px] font-semibold active:opacity-80"
+            style={{ background: "#319ED8" }}
+            data-testid="button-vendor-visit"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 4h6v6" />
+              <path d="M20 4L10 14" />
+              <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+            </svg>
+            Visit website
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenInAppBrowser({ url: vendor.affiliateUrl, title: instrument.name, logoUrl: vendor.logoUrl })}
+            className="h-11 px-4 rounded-full flex items-center justify-center text-white text-[15px] font-semibold active:opacity-80"
+            style={{ background: "rgba(255,255,255,0.10)" }}
+            data-testid="button-vendor-buy-listing"
+          >
+            View listing
+          </button>
+        </div>
+
+        {/* About — Apple "About Neil Diamond" pattern */}
+        <section className="px-5 pt-7 pb-2">
+          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About {vendor.name}</h3>
+          <p className="text-[16px] leading-relaxed" style={{ color: "rgba(235,235,245,0.72)" }}>{bio}</p>
+        </section>
+
+        {/* Contact / meta — Apple uses small uppercase labels above values on artist pages */}
+        <section className="px-5 pt-5 grid grid-cols-1 gap-4">
+          {vendor.location && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>Location</p>
+              <p className="text-white text-[16px]">{vendor.location}</p>
+            </div>
+          )}
+          {domain && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>Web</p>
+              <button
+                type="button"
+                onClick={() => onOpenInAppBrowser({ url: vendor.aboutUrl ?? vendor.affiliateUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
+                className="text-[16px] active:opacity-70"
+                style={{ color: "#319ED8" }}
+                data-testid="button-vendor-domain"
+              >
+                {domain}
+              </button>
+            </div>
+          )}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>Featured instrument</p>
+            <p className="text-white text-[16px]">{instrument.name}</p>
+          </div>
+        </section>
+
+        {/* Artists who use them — concept rail (Apple Music "Similar Artists" pattern) */}
+        {usedBy.length > 0 && (
+          <section className="pt-7">
+            <h3 className="px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Artists who use them</h3>
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide px-5 pb-1">
+              {usedBy.map((person) => (
+                <div key={person.id} className="flex-shrink-0 w-[88px] flex flex-col items-center" data-testid={`vendor-artist-${person.id}`}>
+                  <PersonAvatar person={person} size={88} />
+                  <p className="text-white text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
+                </div>
+              ))}
+            </div>
+            <p className="px-5 pt-3 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+              Concept — once vendors confirm artist relationships, they'll surface here so fans can discover who else trusts them.
+            </p>
+          </section>
+        )}
       </div>
     </SheetShell>
   );

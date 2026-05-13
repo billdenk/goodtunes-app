@@ -77,6 +77,12 @@ export interface InstrumentVendor {
   // Logo URL. We default to Google's S2 favicon endpoint so we always get something
   // recognizable without shipping a logo asset for every vendor.
   logoUrl?: string;
+  // Vendor profile fields (concept) — optional; the VendorSheet falls back gracefully when missing.
+  tagline?: string;          // one-liner under the name
+  bio?: string;              // longer "About {vendor}" copy
+  location?: string;         // e.g. "Nashville, TN"
+  coverUrl?: string;         // hero background photo (Apple Music artist style)
+  usedByPersonIds?: string[]; // ids from PEOPLE for the "Artists who use them" rail
 }
 
 export interface Instrument {
@@ -132,7 +138,16 @@ export const INSTRUMENTS: Record<string, Instrument> = {
     artistNote:
       "Selected for its warm low-end and the unmistakable spruce-and-rosewood bloom that anchors the rhythm bed on this record.",
     vendors: [
-      { name: "ish.guitars",            affiliateUrl: "https://ish.guitars/products/1973-martin-d-28-acoustic-guitar",                   aboutUrl: "https://ish.guitars/",            logoUrl: fav("ish.guitars") },
+      {
+        name: "ish.guitars",
+        affiliateUrl: "https://ish.guitars/products/1973-martin-d-28-acoustic-guitar",
+        aboutUrl: "https://ish.guitars/",
+        logoUrl: fav("ish.guitars"),
+        tagline: "Curated vintage & boutique acoustics",
+        location: "Online · Ships worldwide",
+        bio: "ish.guitars is a small-batch dealer focused on hand-picked vintage Martins, Gibsons, and boutique acoustics. Every instrument is set up in-house, photographed in detail, and described honestly — including the dings. Shipping is fully insured, and trial periods are standard.",
+        usedByPersonIds: ["p-tim-snider", "p-joe-hall", "p-wolfgang"],
+      },
       { name: "Carter Vintage Guitars", affiliateUrl: "https://cartervintage.com/shop/martin-d-28-1974-shadetop/3C5kGDIqU4PSAX8mXAKHxZe02KK", aboutUrl: "https://cartervintage.com/",      logoUrl: fav("cartervintage.com") },
       { name: "Martin Guitar (official)", affiliateUrl: "https://www.martinguitar.com/guitars/standard-series/d-28.html",                aboutUrl: "https://www.martinguitar.com/",   logoUrl: fav("martinguitar.com") },
     ],
