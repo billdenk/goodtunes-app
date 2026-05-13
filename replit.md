@@ -41,6 +41,30 @@ Mobile-first, Apple-Music-inspired web player.
 - Song row layout: track # · title · **download cloud-arrow** · ⋯ menu. Heart moved into the ⋯ sheet.
 - Song ⋯ sheet (Apple-trimmed): Favorite + Share (top two-up), then Add to Playlist · Play Next · Play Last · View Credits. Intentionally omitted: Pin Song, Create Station, Suggest Less, Rate Song.
 
+### Super Credits (planned — currently a placeholder toast)
+"View Credits" is a placeholder for now. The real feature is **Super Credits** — a richer credits experience than Apple's writer-only list. Each track shows:
+
+1. **Writers** (composer / lyricist / producer) — like Apple, but always present.
+2. **Performers**, one per row, each with:
+   - Photo (or initial in a colored circle if no photo).
+   - Name + role on this track (e.g. "Joe Hall — Guitar").
+   - The specific **instrument used on this track** (e.g. "1973 Martin D-28", "1967 Gretsch 6071 'Monkees' Bass").
+3. Tapping a performer opens their detail sheet listing **every track on this album** they played on, with the instrument used per track and any tuning/setup notes (e.g. "DADGAD", "dropped D", capo 3).
+4. Tapping an **instrument** opens an instrument sheet with:
+   - A photo of that specific instrument.
+   - Short note from the artist (why they chose it, how it was tuned/mic'd, etc.).
+   - A **"Discover more / Buy"** link out to the maker or shop (Gibson, Martin, Fender, Gretsch, Norman's Rare Guitars, etc.).
+
+#### Micro-Sponsorships (monetization layer for Super Credits)
+Outbound instrument links are affiliate links. Revenue split: **artist gets the lion's share, GoodTunes takes a small cut for the connection.** This makes credits a revenue stream for the musician, not just metadata — a real differentiator vs. Apple/Spotify. Treat affiliate URL + revenue share as part of the instrument record, not a per-link afterthought.
+
+#### Data shape implications (when we build it)
+- `track.credits.writers: { name, role }[]`
+- `track.credits.performers: { personId, role, instrumentId, tuningNotes? }[]`
+- `people: { id, name, photoUrl?, bio? }`
+- `instruments: { id, name (e.g. "1967 Gretsch 6071 'Monkees' Bass Walnut"), photoUrl, artistNote?, vendor: { name, logoUrl, affiliateUrl } }`
+- Performer ↔ track is many-to-many (same person plays multiple tracks, often on different instruments).
+
 ## Auth plan (when moving off in-memory store)
 
 Support email/password, **Sign in with Apple**, and **Sign in with Google**.
