@@ -402,7 +402,7 @@ export const ALBUMS: Album[] = [
     title: "Love Life Tragedy",
     artist: "Nick Carter",
     artwork:
-      "https://dl.dropboxusercontent.com/scl/fi/wr6elgai0hhxqcclpv1jk/Nick-Carter-Album-Art_JPEG.jpg?rlkey=6wjiflxzctr6lz33umsx5n6x9&dl=1",
+      "https://www.dropbox.com/scl/fi/wr6elgai0hhxqcclpv1jk/Nick-Carter-Album-Art_JPEG.jpg?rlkey=6wjiflxzctr6lz33umsx5n6x9&raw=1",
     year: 2025,
     type: "album",
     description:

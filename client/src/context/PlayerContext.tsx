@@ -175,10 +175,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Load new source if it changed
+    // Load new source if it changed.
+    // NOTE: do NOT set crossOrigin — Dropbox shared-link CDNs don't send
+    // Access-Control-Allow-Origin, so requesting CORS would fail the load.
+    // We don't need pixel access to the audio, so leaving it unset is fine.
     if (a.src !== currentSong.audioUrl) {
       a.src = currentSong.audioUrl;
-      a.crossOrigin = "anonymous";
       setAudioDuration(null);
       setCurrentTime(0);
       a.load();
