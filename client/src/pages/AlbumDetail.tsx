@@ -1223,7 +1223,7 @@ function CreditsSheet({
       ) : (
         <>
           {/* Writers — tappable rows with avatars (same pattern as performers below) */}
-          <div className="px-5 mt-2 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Written by</div>
+          <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Written by</h3>
           <div className="pb-2">
             {credits.writers.map((w, i) => {
               // If this writer is also in our PEOPLE roster, make the row tappable
@@ -1267,7 +1267,7 @@ function CreditsSheet({
 
           {/* Performers — Apple-style: name + role on left, instrument category text on right with chevron.
               Tap left → performer sheet. Tap right → instrument sheet. */}
-          <div className="px-5 mt-2 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Performed by</div>
+          <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Performed by</h3>
           <div className="pb-2">
             {credits.performers.map((perf) => {
               const person = PEOPLE[perf.personId];
@@ -1361,7 +1361,7 @@ function PerformerSheet({
       {/* Instrument(s) used on THIS song */}
       {onThisSong.length > 0 && (
         <>
-          <div className="px-5 mt-1 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">Played on this song</div>
+          <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Played on this song</h3>
           <div className="pb-1">
             {onThisSong.map((perf, i) => {
               const inst = perf.instrumentId ? INSTRUMENTS[perf.instrumentId] : undefined;
@@ -1405,10 +1405,7 @@ function PerformerSheet({
       {/* Other tracks on this album */}
       {otherTracks.length > 0 && (
         <>
-          <div className="h-px bg-white/8 mx-5 my-2" />
-          <div className="px-5 mt-1 mb-1 text-white/45 text-[11px] font-semibold uppercase tracking-wider">
-            Also on {album.title}
-          </div>
+          <h3 className="px-5 pt-5 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Also on {album.title}</h3>
           <div className="pb-2">
             {otherTracks.map(({ song: s, performer }) => {
               const instrument = performer.instrumentId ? INSTRUMENTS[performer.instrumentId] : undefined;
@@ -1879,13 +1876,13 @@ function VendorSheet({
         <section className="px-5 pt-5 grid grid-cols-1 gap-4">
           {vendor.location && (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>Location</p>
+              <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Location</p>
               <p className="text-white text-[16px]">{vendor.location}</p>
             </div>
           )}
           {domain && (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>Web</p>
+              <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Web</p>
               <button
                 type="button"
                 onClick={() => onOpenInAppBrowser({ url: vendor.aboutUrl ?? vendor.affiliateUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
@@ -1898,7 +1895,7 @@ function VendorSheet({
             </div>
           )}
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>Featured instrument</p>
+            <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Featured instrument</p>
             <p className="text-white text-[16px]">{instrument.name}</p>
           </div>
         </section>
