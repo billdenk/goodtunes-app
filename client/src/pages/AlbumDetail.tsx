@@ -254,7 +254,7 @@ export function AlbumDetail() {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
           {/* Hero region — brand navy throughout */}
-          <div style={{ background: tint }}>
+          <div style={{ background: tint, paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}>
             {/* Hero artwork — full square, edge-to-edge of the column, fading into the tint */}
             <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
               <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover block" />
