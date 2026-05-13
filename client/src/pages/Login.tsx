@@ -381,7 +381,7 @@ export function Login() {
 
       </div>
 
-      <p className="absolute bottom-6 left-0 right-0 text-center text-white/45 text-[10px] leading-snug px-8">
+      <p className="absolute bottom-6 left-0 right-0 text-center text-white/20 text-[10px] leading-snug px-8">
         GoodTunes® and GoodDeed® are registered trademarks of GoGoods® Inc. Patent pending. All other trademarks are the property of their respective owners.
       </p>
     </main>
