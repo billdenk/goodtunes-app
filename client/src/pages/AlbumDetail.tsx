@@ -1046,7 +1046,7 @@ function PersonAvatar({ person, size = 44 }: { person: Person; size?: number }) 
       style={{
         width: size,
         height: size,
-        background: person.accent ?? "#319ED8",
+        background: "#319ED8",
         fontSize: Math.round(size * 0.38),
       }}
       aria-hidden="true"
