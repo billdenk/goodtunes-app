@@ -14,10 +14,10 @@ export function MiniPlayer() {
   // pill on the left. When the nav is visible, the mini-player floats above
   // the nav as a full-width capsule.
   const containerClass = hidden
-    ? "absolute right-3 z-30 flex justify-end"
+    ? "absolute z-30 flex"
     : "absolute left-0 right-0 z-30 px-4 pb-1";
   const containerStyle: React.CSSProperties = hidden
-    ? { bottom: 12, left: 70, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
+    ? { bottom: 12, left: 70, right: 12, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
     : { bottom: 96, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
 
   return (
@@ -35,17 +35,21 @@ export function MiniPlayer() {
         onClick={() => setShowPlayer(true)}
       >
         {hidden ? (
-          <div className="flex items-center gap-2 pl-1.5 pr-2 py-1.5">
+          <div className="flex items-center gap-2.5 pl-1.5 pr-2 py-1.5">
             <img
               src={currentSong.album.artwork}
               alt={currentSong.album.title}
               className="flex-shrink-0 object-cover"
-              style={{ width: 36, height: 36, borderRadius: 999, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
+              style={{ width: 36, height: 36, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
             />
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-[13px] font-semibold truncate leading-tight">{currentSong.title}</p>
+              <p className="text-white/55 text-[11px] truncate leading-tight">{currentSong.album.artist}</p>
+            </div>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-              className="w-8 h-8 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+              className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white active:opacity-60 transition-opacity"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
