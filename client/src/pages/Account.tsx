@@ -36,12 +36,12 @@ export function Account() {
     : "?";
 
   return (
-    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-20 right-0 w-72 h-72 rounded-full opacity-15" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
-          <div className="absolute bottom-40 -left-20 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
-        </div>
+    <main className="relative h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-20 right-0 w-72 h-72 rounded-full opacity-15" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
+        <div className="absolute bottom-40 -left-20 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
+      </div>
+      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
 
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Account</h1>

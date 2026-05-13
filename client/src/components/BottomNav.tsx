@@ -112,7 +112,7 @@ export function BottomNav() {
     let activeLabel = "Collection";
     if (isPlaylists) { activeIcon = playlistsIcon; activeLabel = "Playlists"; }
     else if (isChat) { activeIcon = chatIcon; activeLabel = "Chat"; }
-    else if (isAccount) { activeIcon = youIcon; activeLabel = "You"; }
+    else if (isAccount) { activeIcon = youIcon; activeLabel = "Account"; }
 
     return (
       <button
@@ -149,7 +149,7 @@ export function BottomNav() {
       <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} />
       <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} />
       <NavItem label="Chat" active={isChat} onClick={() => navigate("/chat")} testId="nav-chat" icon={chatIcon} />
-      <NavItem label="You" active={isAccount} onClick={() => navigate("/account")} testId="nav-you" icon={youIcon} />
+      <NavItem label="Account" active={isAccount} onClick={() => navigate("/account")} testId="nav-you" icon={youIcon} />
     </nav>
   );
 }
