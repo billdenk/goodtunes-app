@@ -45,14 +45,6 @@ export function Account() {
 
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Account</h1>
-          <button
-            type="button"
-            onClick={() => navigate("/collection")}
-            className="text-[#319ED8] text-base font-medium active:opacity-60"
-            data-testid="button-account-done"
-          >
-            Done
-          </button>
         </header>
 
         <div className="relative z-10 flex flex-col items-center pt-6 pb-4 px-5">
