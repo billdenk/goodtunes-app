@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useParams } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -28,7 +28,7 @@ export function AlbumDetail() {
   const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
   const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
-  const [songMenuFor, setSongMenuFor] = useState<Song | null>(null);
+  const [songMenuFor, setSongMenuFor] = useState<{ song: Song; rect: DOMRect } | null>(null);
   const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
   const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
@@ -430,10 +430,10 @@ export function AlbumDetail() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSongMenuFor(song)}
+                    onClick={(e) => setSongMenuFor({ song, rect: e.currentTarget.getBoundingClientRect() })}
                     aria-label="Song options"
-                    aria-haspopup="dialog"
-                    aria-expanded={songMenuFor?.id === song.id}
+                    aria-haspopup="menu"
+                    aria-expanded={songMenuFor?.song.id === song.id}
                     className="w-7 h-9 flex items-center justify-center text-white/40 flex-shrink-0"
                     data-testid={`button-track-menu-${song.id}`}
                   >
@@ -621,30 +621,34 @@ export function AlbumDetail() {
           />
         )}
 
-        {songMenuFor && (
-          <SongActionSheet
-            song={songMenuFor}
-            album={album}
-            isFavorite={favSongs.has(songMenuFor.id)}
-            onToggleFavorite={() => favSongs.toggle(songMenuFor.id)}
-            onShare={async () => {
-              const url = `${window.location.origin}/album/${album.id}`;
-              try {
-                if (navigator.share) await navigator.share({ title: songMenuFor.title, text: `${songMenuFor.title} — ${album.artist}`, url });
-                else {
-                  await navigator.clipboard.writeText(url);
-                  setShareToast("Link copied");
-                  setTimeout(() => setShareToast(""), 2000);
-                }
-              } catch {}
-            }}
-            onAddToPlaylist={() => { setSongMenuFor(null); setShowPlaylistPicker(songMenuFor); }}
-            onPlayNext={() => { playNext({ ...songMenuFor, album }); setShareToast("Playing next"); setTimeout(() => setShareToast(""), 1600); }}
-            onPlayLast={() => { playLast({ ...songMenuFor, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
-            onViewCredits={() => { setSongMenuFor(null); setCreditsForSong(songMenuFor); }}
-            onClose={() => setSongMenuFor(null)}
-          />
-        )}
+        {songMenuFor && (() => {
+          const s = songMenuFor.song;
+          return (
+            <SongActionPopover
+              song={s}
+              album={album}
+              anchorRect={songMenuFor.rect}
+              isFavorite={favSongs.has(s.id)}
+              onToggleFavorite={() => favSongs.toggle(s.id)}
+              onShare={async () => {
+                const url = `${window.location.origin}/album/${album.id}`;
+                try {
+                  if (navigator.share) await navigator.share({ title: s.title, text: `${s.title} — ${album.artist}`, url });
+                  else {
+                    await navigator.clipboard.writeText(url);
+                    setShareToast("Link copied");
+                    setTimeout(() => setShareToast(""), 2000);
+                  }
+                } catch {}
+              }}
+              onAddToPlaylist={() => { setSongMenuFor(null); setShowPlaylistPicker(s); }}
+              onPlayNext={() => { playNext({ ...s, album }); setShareToast("Playing next"); setTimeout(() => setShareToast(""), 1600); }}
+              onPlayLast={() => { playLast({ ...s, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
+              onViewCredits={() => { setSongMenuFor(null); setCreditsForSong(s); }}
+              onClose={() => setSongMenuFor(null)}
+            />
+          );
+        })()}
 
         {/* Only one SuperCredits sheet is mounted at a time (instrument > performer > credits)
             so we don't stack multiple aria-modal dialogs simultaneously. */}
@@ -917,9 +921,15 @@ function OwnershipSheet({
   );
 }
 
-function SongActionSheet({
+// ────────────────────── Song ⋯ popover (Apple-style) ──────────────────────
+// Light glass popover anchored to the tapped ⋯ button. Opens to the left
+// of the trigger and chooses up/down placement based on available space,
+// matching iOS's Apple Music context menu.
+
+function SongActionPopover({
   song,
   album,
+  anchorRect,
   isFavorite,
   onToggleFavorite,
   onShare,
@@ -931,6 +941,7 @@ function SongActionSheet({
 }: {
   song: Song;
   album: Album;
+  anchorRect: DOMRect;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onShare: () => void;
@@ -940,93 +951,138 @@ function SongActionSheet({
   onViewCredits: () => void;
   onClose: () => void;
 }) {
-  const close = (run?: () => void) => () => { run?.(); onClose(); };
+  const POP_W = 244;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; placement: "below" | "above" } | null>(null);
 
-  // Esc-to-close for keyboard users.
+  // Animate in once mounted (so transform-origin → scale feels anchored).
+  const [shown, setShown] = useState(false);
+  useEffect(() => { const id = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(id); }, []);
+
+  // Esc-to-close + dismiss on any scroll (anchorRect is captured at click
+  // time, so once the underlying list scrolls the popover would detach from
+  // its trigger — Apple closes its context menu on scroll for the same
+  // reason).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onScroll = () => onClose();
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true); // capture to catch nested scrollers
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
   }, [onClose]);
 
-  const Row = ({ label, sublabel, icon, onClick, testId }: { label: string; sublabel?: string; icon: ReactNode; onClick: () => void; testId: string }) => (
+  // Position after layout — needs the panel's measured height.
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const h = el.offsetHeight;
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    const GAP = 8;
+    const SAFE = 12;
+    // Right-edge aligned with trigger's right edge, but kept inside the viewport.
+    const rawLeft = anchorRect.right - POP_W;
+    const left = Math.max(SAFE, Math.min(rawLeft, vw - POP_W - SAFE));
+    // Prefer below; flip above if it would clip.
+    const fitsBelow = anchorRect.bottom + GAP + h + SAFE <= vh;
+    const top = fitsBelow ? anchorRect.bottom + GAP : Math.max(SAFE, anchorRect.top - GAP - h);
+    setPos({ top, left, placement: fitsBelow ? "below" : "above" });
+  }, [anchorRect]);
+
+  const close = (run?: () => void) => () => { run?.(); onClose(); };
+
+  // Apple-style row: black icon on left, label right. Tight spacing.
+  const Row = ({ label, icon, onClick, testId }: { label: string; icon: ReactNode; onClick: () => void; testId: string }) => (
     <button
       type="button"
+      role="menuitem"
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-5 py-3.5 active:bg-white/10"
+      className="w-full flex items-center justify-between gap-3 px-4 py-2.5 active:bg-black/[0.06]"
       data-testid={testId}
     >
-      <span className="w-6 flex items-center justify-center text-white">{icon}</span>
-      <span className="flex-1 text-left">
-        <span className="block text-white text-[15px]">{label}</span>
-        {sublabel && <span className="block text-white/50 text-[12px] mt-0.5">{sublabel}</span>}
-      </span>
+      <span className="text-[15px] text-black truncate">{label}</span>
+      <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-black">{icon}</span>
     </button>
   );
 
+  const Divider = () => <div className="h-px bg-black/10 mx-3" />;
+
+  // transform-origin so the scale-in feels rooted near the trigger
+  const originY = pos?.placement === "above" ? "bottom" : "top";
+
   return (
     <div
-      className="fixed inset-0 z-[75] flex items-end justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Options for ${song.title}`}
-      data-testid="sheet-song-actions"
+      className="fixed inset-0 z-[75]"
+      role="presentation"
+      data-testid="popover-song-actions"
+      onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/55" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
+      {/* Subtle scrim — Apple barely dims; keeps the row context visible. */}
+      <div className="absolute inset-0 bg-black/15" />
       <div
-        className="relative w-full max-w-[390px] z-10 rounded-t-3xl pt-3 pb-8"
-        style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: "0 -16px 40px rgba(0,0,0,0.6)" }}
+        ref={panelRef}
+        role="menu"
+        aria-label={`Options for ${song.title}`}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute"
+        style={{
+          top: pos?.top ?? -9999,
+          left: pos?.left ?? -9999,
+          width: POP_W,
+          background: "rgba(245, 245, 247, 0.82)",
+          backdropFilter: "blur(28px) saturate(180%)",
+          WebkitBackdropFilter: "blur(28px) saturate(180%)",
+          borderRadius: 14,
+          boxShadow: "0 12px 40px rgba(0,0,0,0.32), 0 1px 0 rgba(255,255,255,0.4) inset",
+          overflow: "hidden",
+          transformOrigin: `right ${originY}`,
+          transform: shown ? "scale(1)" : "scale(0.92)",
+          opacity: shown ? 1 : 0,
+          transition: "transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 120ms ease-out",
+          visibility: pos ? "visible" : "hidden",
+        }}
       >
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
-
-        {/* Header: artwork + title/artist */}
-        <div className="flex items-center gap-3 px-5 pb-4">
-          <img src={album.artwork} alt="" className="w-12 h-12 rounded-lg object-cover" />
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-[15px] font-semibold truncate">{song.title}</p>
-            <p className="text-white/55 text-[13px] truncate">{album.artist} · {album.title}</p>
-          </div>
-        </div>
-
-        {/* Top row: Favorite + Share — Apple's two-up layout */}
-        <div className="px-5 grid grid-cols-2 gap-2 pb-2">
+        {/* Top: Favorite + Share — Apple's two-up icon-over-label header */}
+        <div className="grid grid-cols-2">
           <button
             type="button"
+            role="menuitemcheckbox"
+            aria-checked={isFavorite}
             onClick={() => { onToggleFavorite(); }}
-            aria-pressed={isFavorite}
-            className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl active:scale-[0.97] transition-transform"
-            style={{ background: "rgba(255,255,255,0.08)" }}
-            data-testid="button-sheet-favorite"
+            className="flex flex-col items-center justify-center gap-1 py-3 active:bg-black/[0.06]"
+            data-testid="button-popover-favorite"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill={isFavorite ? "#FF5470" : "none"} stroke={isFavorite ? "#FF5470" : "rgba(255,255,255,0.85)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill={isFavorite ? "#FF5470" : "none"} stroke={isFavorite ? "#FF5470" : "#000"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
-            <span className="text-white text-[12px] font-medium">{isFavorite ? "Favorited" : "Favorite"}</span>
+            <span className="text-[12px] text-black">{isFavorite ? "Favorited" : "Favorite"}</span>
           </button>
+          <div className="w-px bg-black/10 my-2" />
           <button
             type="button"
+            role="menuitem"
             onClick={close(onShare)}
-            className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl active:scale-[0.97] transition-transform"
-            style={{ background: "rgba(255,255,255,0.08)" }}
-            data-testid="button-sheet-share"
+            className="flex flex-col items-center justify-center gap-1 py-3 active:bg-black/[0.06] -ml-px"
+            data-testid="button-popover-share"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 16V4" />
               <path d="M8 8l4-4 4 4" />
               <path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
             </svg>
-            <span className="text-white text-[12px] font-medium">Share</span>
+            <span className="text-[12px] text-black">Share</span>
           </button>
         </div>
-
-        <div className="h-px bg-white/8 my-2" />
-
+        <Divider />
         <Row
           label="Add to Playlist"
-          testId="row-sheet-add-playlist"
+          testId="row-popover-add-playlist"
           onClick={close(onAddToPlaylist)}
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="6" x2="14" y2="6" />
               <line x1="3" y1="12" x2="14" y2="12" />
               <line x1="3" y1="18" x2="10" y2="18" />
@@ -1035,12 +1091,13 @@ function SongActionSheet({
             </svg>
           }
         />
+        <Divider />
         <Row
           label="Play Next"
-          testId="row-sheet-play-next"
+          testId="row-popover-play-next"
           onClick={close(onPlayNext)}
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="6" x2="14" y2="6" />
               <line x1="3" y1="12" x2="14" y2="12" />
               <line x1="3" y1="18" x2="14" y2="18" />
@@ -1050,11 +1107,10 @@ function SongActionSheet({
         />
         <Row
           label="Play Last"
-          sublabel={album.title}
-          testId="row-sheet-play-last"
+          testId="row-popover-play-last"
           onClick={close(onPlayLast)}
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="6" x2="21" y2="6" />
               <line x1="3" y1="12" x2="14" y2="12" />
               <line x1="3" y1="18" x2="14" y2="18" />
@@ -1062,28 +1118,18 @@ function SongActionSheet({
             </svg>
           }
         />
-        <div className="h-px bg-white/8 my-2" />
+        <Divider />
         <Row
           label="View SuperCredits™"
-          testId="row-sheet-credits"
+          testId="row-popover-credits"
           onClick={close(onViewCredits)}
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="9" />
               <path d="M12 8v.01M11 12h1v4h1" />
             </svg>
           }
         />
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mx-5 mt-4 w-[calc(100%-40px)] py-3 rounded-full text-white text-[15px] font-semibold active:scale-[0.98] transition-transform"
-          style={{ background: "rgba(255,255,255,0.10)" }}
-          data-testid="button-sheet-close"
-        >
-          Cancel
-        </button>
       </div>
     </div>
   );
