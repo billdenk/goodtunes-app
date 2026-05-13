@@ -19,6 +19,27 @@ const NavItem = ({
   onClick: () => void;
   testId?: string;
 }) => {
+  // Apple Music-style: when active, the icon and label sit together inside a
+  // single rounded pill. When inactive, the icon stacks above the label with
+  // no background.
+  if (active) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex items-center justify-center min-w-[64px] py-1"
+        data-testid={testId}
+      >
+        <div
+          className="flex items-center gap-1.5 px-3 h-9 rounded-full transition-all duration-200 text-[#319ED8]"
+          style={{ background: "rgba(49,158,216,0.18)" }}
+        >
+          {icon(true)}
+          <span className="text-[12px] font-semibold leading-none">{label}</span>
+        </div>
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -26,17 +47,10 @@ const NavItem = ({
       className="flex flex-col items-center gap-[3px] min-w-[64px] py-1"
       data-testid={testId}
     >
-      <div
-        className="w-14 h-8 flex items-center justify-center rounded-2xl transition-all duration-200"
-        style={active ? { background: "rgba(49,158,216,0.18)" } : {}}
-      >
-        <div className={`transition-all duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}>
-          {icon(active)}
-        </div>
+      <div className="h-8 flex items-center justify-center text-white/35 transition-all duration-150">
+        {icon(false)}
       </div>
-      <span
-        className={`text-[10px] font-medium transition-colors duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}
-      >
+      <span className="text-[10px] font-medium text-white/35 transition-colors duration-150">
         {label}
       </span>
     </button>
