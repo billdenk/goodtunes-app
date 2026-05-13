@@ -945,7 +945,7 @@ function SongActionSheet({
         />
         <div className="h-px bg-white/8 my-2" />
         <Row
-          label="View Credits"
+          label="View SuperCredits™"
           testId="row-sheet-credits"
           onClick={close(onViewCredits)}
           icon={
