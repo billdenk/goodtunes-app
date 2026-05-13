@@ -246,8 +246,10 @@ export function Player() {
                 aria-label="Lyrics"
                 data-testid="button-lyrics"
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 6h13M3 11h10M3 16h13M19 4v14M16 7l3-3 3 3M16 15l3 3 3-3" />
+                {/* Apple's "quote bubble" lyrics icon */}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v9A2.5 2.5 0 0117.5 17H13l-4 3.5V17H6.5A2.5 2.5 0 014 14.5v-9z" />
+                  <path d="M9 8.5c-1.2.4-2 1.4-2 2.6V13h2.6V10.4H8.2c0-.6.3-1.2.8-1.5l-0-.4zM15 8.5c-1.2.4-2 1.4-2 2.6V13h2.6V10.4h-1.4c0-.6.3-1.2.8-1.5l-0-.4z" fill="currentColor" stroke="none" />
                 </svg>
               </button>
               <button
@@ -257,8 +259,11 @@ export function Player() {
                 className="w-11 h-11 flex items-center justify-center text-white/30 cursor-not-allowed"
                 data-testid="button-airplay"
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1" />
+                {/* Apple's AirPlay: concentric arcs over a triangle */}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12a9 9 0 0118 0" />
+                  <path d="M6 12a6 6 0 0112 0" />
+                  <path d="M9 12a3 3 0 016 0" />
                   <polygon points="12 15 17 21 7 21 12 15" fill="currentColor" stroke="none" />
                 </svg>
               </button>
@@ -269,12 +274,14 @@ export function Player() {
                 aria-label="Up Next"
                 data-testid="button-queue"
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="3" y1="6" x2="14" y2="6" />
-                  <line x1="3" y1="12" x2="14" y2="12" />
-                  <line x1="3" y1="18" x2="14" y2="18" />
-                  <polyline points="18 9 21 6 18 3" />
-                  <path d="M21 6h-7" />
+                {/* Apple's queue / list icon — three lines with leading bullets */}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <circle cx="4" cy="6" r="1.2" />
+                  <circle cx="4" cy="12" r="1.2" />
+                  <circle cx="4" cy="18" r="1.2" />
+                  <rect x="8" y="5.2" width="13" height="1.6" rx="0.8" />
+                  <rect x="8" y="11.2" width="13" height="1.6" rx="0.8" />
+                  <rect x="8" y="17.2" width="13" height="1.6" rx="0.8" />
                 </svg>
               </button>
             </div>
@@ -573,9 +580,10 @@ export function Player() {
                 data-testid="toggle-autoplay"
                 title="Autoplay similar songs after the queue ends"
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18.178 8a6 6 0 11-1.547-2.474L20 3v5h-5" />
-                  <path d="M3 16a6 6 0 0010 4.473L13 19" />
+                {/* Apple Music "Autoplay" — two interlocked rounded ovals */}
+                <svg width="26" height="26" viewBox="0 0 32 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1.5" y="5.5" width="17" height="13" rx="6.5" />
+                  <rect x="13.5" y="5.5" width="17" height="13" rx="6.5" />
                 </svg>
               </button>
             </div>
@@ -670,29 +678,30 @@ export function Player() {
                 <span className="text-white/55 text-[11px] font-medium">-{formatDuration(Math.max(0, duration - currentTime))}</span>
               </div>
 
-              <div className="flex items-center justify-center gap-12 mb-4">
-                <button type="button" onClick={prev} className="text-white active:opacity-55 transition-opacity">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6 6h2v12H6z" />
-                    <path d="M18 18l-8.5-6 8.5-6v12z" />
+              <div className="flex items-center justify-center gap-14 mb-4">
+                {/* Queue overlay: scan-back (double triangle), play, scan-forward — Apple style */}
+                <button type="button" onClick={prev} className="text-white active:opacity-55 transition-opacity" aria-label="Previous">
+                  <svg width="34" height="34" viewBox="0 0 32 24" fill="currentColor">
+                    <path d="M15 18l-8-6 8-6v12z" />
+                    <path d="M27 18l-8-6 8-6v12z" />
                   </svg>
                 </button>
-                <button type="button" onClick={togglePlay} className="text-white active:opacity-55 transition-opacity">
+                <button type="button" onClick={togglePlay} className="text-white active:opacity-55 transition-opacity" aria-label={isPlaying ? "Pause" : "Play"}>
                   {isPlaying ? (
-                    <svg width="46" height="46" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="currentColor">
                       <rect x="5" y="4" width="4" height="16" rx="1.5" />
                       <rect x="15" y="4" width="4" height="16" rx="1.5" />
                     </svg>
                   ) : (
-                    <svg width="46" height="46" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
                     </svg>
                   )}
                 </button>
-                <button type="button" onClick={next} className="text-white active:opacity-55 transition-opacity">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6 18l8.5-6L6 6v12z" />
-                    <path d="M16 6h2v12h-2z" />
+                <button type="button" onClick={next} className="text-white active:opacity-55 transition-opacity" aria-label="Next">
+                  <svg width="34" height="34" viewBox="0 0 32 24" fill="currentColor">
+                    <path d="M5 6l8 6-8 6V6z" />
+                    <path d="M17 6l8 6-8 6V6z" />
                   </svg>
                 </button>
               </div>
