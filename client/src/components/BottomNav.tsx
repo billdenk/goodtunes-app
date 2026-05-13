@@ -66,14 +66,14 @@ export function BottomNav() {
 
   return (
     <nav
-      className="absolute bottom-0 left-0 right-0 z-40 flex items-start justify-around px-2 pt-2"
+      className="absolute bottom-4 left-3 right-3 z-40 flex items-center justify-around px-2 py-2 rounded-3xl"
       style={{
-        height: "83px",
-        background: "rgba(0, 6, 43, 0.92)",
-        backdropFilter: "blur(24px) saturate(180%)",
-        WebkitBackdropFilter: "blur(24px) saturate(180%)",
-        borderTop: "1px solid rgba(255,255,255,0.08)",
-        transform: hidden ? "translateY(100%)" : "translateY(0)",
+        background: "rgba(10, 18, 60, 0.82)",
+        backdropFilter: "blur(28px) saturate(180%)",
+        WebkitBackdropFilter: "blur(28px) saturate(180%)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 12px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3)",
+        transform: hidden ? "translateY(calc(100% + 16px))" : "translateY(0)",
         transition: "transform 260ms cubic-bezier(0.32, 0.72, 0, 1)",
         pointerEvents: hidden ? "none" : "auto",
       }}
