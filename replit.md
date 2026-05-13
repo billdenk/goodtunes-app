@@ -41,8 +41,8 @@ Mobile-first, Apple-Music-inspired web player.
 - Song row layout: track # · title · **download cloud-arrow** · ⋯ menu. Heart moved into the ⋯ sheet.
 - Song ⋯ sheet (Apple-trimmed): Favorite + Share (top two-up), then Add to Playlist · Play Next · Play Last · View Credits. Intentionally omitted: Pin Song, Create Station, Suggest Less, Rate Song.
 
-### Super Credits (planned — currently a placeholder toast)
-"View Credits" is a placeholder for now. The real feature is **Super Credits** — a richer credits experience than Apple's writer-only list. Each track shows:
+### SuperCredits™ (planned — currently a placeholder toast)
+"View Credits" is a placeholder for now. The real feature is **SuperCredits™** — a richer credits experience than Apple's writer-only list. Each track shows:
 
 1. **Writers** (composer / lyricist / producer) — like Apple, but always present.
 2. **Performers**, one per row, each with:
@@ -55,7 +55,7 @@ Mobile-first, Apple-Music-inspired web player.
    - Short note from the artist (why they chose it, how it was tuned/mic'd, etc.).
    - A **"Discover more / Buy"** link out to the maker or shop (Gibson, Martin, Fender, Gretsch, Norman's Rare Guitars, etc.).
 
-#### Micro-Sponsorships (monetization layer for Super Credits)
+#### Micro-Sponsorships (monetization layer for SuperCredits™)
 Outbound instrument links are affiliate links. Revenue split: **artist gets the lion's share, GoodTunes takes a small cut for the connection.** This makes credits a revenue stream for the musician, not just metadata — a real differentiator vs. Apple/Spotify. Treat affiliate URL + revenue share as part of the instrument record, not a per-link afterthought.
 
 #### Data shape implications (when we build it)
