@@ -180,7 +180,7 @@ export function Account() {
             Sign Out
           </button>
 
-          <p className="text-center text-white/20 text-xs pb-4">GoodTunes® v1.0 · Digital GoodDeed™</p>
+          <p className="text-center text-white/20 text-xs pb-4">Version 1.00</p>
         </div>
 
         <MiniPlayer />
