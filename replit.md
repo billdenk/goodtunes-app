@@ -58,6 +58,9 @@ Mobile-first, Apple-Music-inspired web player.
 #### Micro-Sponsorships (monetization layer for SuperCredits™)
 Outbound instrument links are affiliate links. Revenue split: **artist gets the lion's share, GoodTunes takes a small cut for the connection.** This makes credits a revenue stream for the musician, not just metadata — a real differentiator vs. Apple/Spotify. Treat affiliate URL + revenue share as part of the instrument record, not a per-link afterthought.
 
+#### Potential data source: muso.ai
+[muso.ai](https://developer.muso.ai/) has a developer API for music credits — writers, performers, instruments, sessions. They already power credits surfaces for some major streaming services. Worth evaluating when we move beyond hand-curated seed data: pull a baseline of credits from muso.ai, then let the artist override/enrich (especially the per-instrument note + tuning + vendor link, which muso.ai won't have). Auth is API-key based; check pricing tiers before committing.
+
 #### Data shape implications (when we build it)
 - `track.credits.writers: { name, role }[]`
 - `track.credits.performers: { personId, role, instrumentId, tuningNotes? }[]`
