@@ -253,8 +253,11 @@ export function AlbumDetail() {
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
-          {/* Hero region — brand navy throughout */}
-          <div style={{ background: tint, paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}>
+          {/* Hero region — brand navy throughout. Artwork bleeds to the very
+              top so over-scroll rubberband doesn't reveal a navy gap above it.
+              The floating top chrome (back / share / ⋯) handles safe-area
+              inset on its own. */}
+          <div style={{ background: tint }}>
             {/* Hero artwork — full square, edge-to-edge of the column, fading into the tint */}
             <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
               <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover block" />
