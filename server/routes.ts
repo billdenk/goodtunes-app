@@ -78,21 +78,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!emailRe.test(emailNorm)) {
       return res.status(400).json({ message: "Please enter a valid email address" });
     }
+    // Normalize username: strip leading "@", lowercase, sanitize. Persist the normalized form
+    // so signup, lookup, and login always agree on case/shape.
+    const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (usernameNorm.length < 3) {
+      return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
+    }
     const [existingUsername, existingEmail] = await Promise.all([
-      storage.getUserByUsername(String(username).toLowerCase()),
+      storage.getUserByUsername(usernameNorm),
       storage.getUserByEmail(emailNorm),
     ]);
     if (existingUsername && existingEmail) {
       return res.status(400).json({ message: "That username and email are both already taken" });
     }
     if (existingUsername) {
-      return res.status(400).json({ message: `Username "@${username}" is already taken` });
+      return res.status(400).json({ message: `Username "@${usernameNorm}" is already taken` });
     }
     if (existingEmail) {
       return res.status(400).json({ message: "An account with that email already exists — try signing in" });
     }
     const hashed = await hashPassword(password);
-    const user = await storage.createUser({ username, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
+    const user = await storage.createUser({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
     req.session.userId = user.id;
     const token = generateToken();
     tokenStore.set(token, user.id);
@@ -104,12 +110,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!username || !password) {
       return res.status(400).json({ message: "Username or email and password are required" });
     }
-    const ident = String(username).trim();
+    const raw = String(username).trim();
+    // Strip a leading "@" so "@bill" works as a username.
+    const ident = (raw.startsWith("@") ? raw.slice(1) : raw).toLowerCase();
     const looksLikeEmail = ident.includes("@");
     const lookup = looksLikeEmail
-      ? await storage.getUserByEmail(ident.toLowerCase())
-      : await storage.getUserByUsername(ident.toLowerCase());
-    const user = lookup ?? (looksLikeEmail ? undefined : await storage.getUserByEmail(ident.toLowerCase()));
+      ? await storage.getUserByEmail(ident)
+      : await storage.getUserByUsername(ident);
+    const user = lookup ?? (looksLikeEmail ? undefined : await storage.getUserByEmail(ident));
     if (!user || !(await comparePasswords(password, user.password))) {
       return res.status(401).json({ message: "Invalid username/email or password" });
     }
@@ -141,11 +149,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (displayName) updates.displayName = displayName;
     if (realName !== undefined) updates.realName = realName || null;
     if (username) {
-      const existing = await storage.getUserByUsername(username);
+      const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+      if (usernameNorm.length < 3) {
+        return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
+      }
+      const existing = await storage.getUserByUsername(usernameNorm);
       if (existing && existing.id !== req.session.userId) {
         return res.status(400).json({ message: "Username already taken" });
       }
-      updates.username = username;
+      updates.username = usernameNorm;
     }
     const updated = await storage.updateUser(req.session.userId!, updates);
     if (!updated) return res.status(404).json({ message: "User not found" });

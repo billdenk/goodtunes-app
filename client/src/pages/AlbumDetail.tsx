@@ -25,7 +25,7 @@ export function AlbumDetail() {
   const [showPlaylistPicker, setShowPlaylistPicker] = useState<Song | null>(null);
   const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
   const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
-  const [activePhoto, setActivePhoto] = useState<AlbumPhoto | null>(null);
+  const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [downloadStep, setDownloadStep] = useState<"off" | "warn" | "confirm">("off");
   const [isDownloaded, setIsDownloaded] = useState(false);
 
@@ -43,7 +43,7 @@ export function AlbumDetail() {
 
   useEffect(() => {
     setActiveVideo(null);
-    setActivePhoto(null);
+    setPhotoIndex(null);
     setShowOwnership(false);
     setProvenanceCertNum(null);
     setDownloadStep("off");
@@ -446,11 +446,11 @@ export function AlbumDetail() {
             <div className={hasVideos ? "mt-9" : ""}>
               <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Photos</h2>
               <div className="px-5 grid grid-cols-3 gap-1.5" data-testid="section-photos">
-                {album.photos!.map((p) => (
+                {album.photos!.map((p, idx) => (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => setActivePhoto(p)}
+                    onClick={() => setPhotoIndex(idx)}
                     className="relative rounded-xl overflow-hidden active:opacity-80"
                     style={{ aspectRatio: "1 / 1" }}
                     data-testid={`photo-${p.id}`}
@@ -616,34 +616,12 @@ export function AlbumDetail() {
           </div>
         )}
 
-        {activePhoto && (
-          <div
-            className="fixed inset-0 z-[70] flex items-center justify-center"
-            role="dialog"
-            aria-modal="true"
-            aria-label={activePhoto.caption ?? "Photo"}
-            data-testid="modal-photo"
-          >
-            <div className="absolute inset-0 bg-black/90" style={{ backdropFilter: "blur(8px)" }} onClick={() => setActivePhoto(null)} />
-            <button
-              type="button"
-              onClick={() => setActivePhoto(null)}
-              aria-label="Close photo"
-              className="absolute top-12 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-              style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(20px)" }}
-              data-testid="button-close-photo"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-            <div className="relative w-full max-w-[390px] z-10 px-4">
-              <img src={activePhoto.url} alt={activePhoto.caption ?? ""} className="w-full rounded-2xl object-contain" />
-              {activePhoto.caption && (
-                <p className="text-white/80 text-sm mt-3 text-center">{activePhoto.caption}</p>
-              )}
-            </div>
-          </div>
+        {photoIndex !== null && album.photos && (
+          <PhotoLightbox
+            photos={album.photos}
+            startIndex={photoIndex}
+            onClose={() => setPhotoIndex(null)}
+          />
         )}
 
         {shareToast && (
@@ -861,6 +839,188 @@ function DownloadWarningSheet({
             Keep Transfer Rights
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; startIndex: number; onClose: () => void }) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(startIndex);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [zoom, setZoom] = useState(false);
+  const lastTapRef = useRef(0);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ left: startIndex * el.clientWidth, behavior: "auto" });
+  }, [startIndex]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight" && scrollerRef.current) {
+        scrollerRef.current.scrollBy({ left: scrollerRef.current.clientWidth, behavior: "smooth" });
+      }
+      if (e.key === "ArrowLeft" && scrollerRef.current) {
+        scrollerRef.current.scrollBy({ left: -scrollerRef.current.clientWidth, behavior: "smooth" });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const handleScroll = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const i = Math.round(el.scrollLeft / el.clientWidth);
+    if (i !== index) {
+      setIndex(i);
+      setZoom(false);
+    }
+  };
+
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      setZoom((z) => !z);
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+      setTimeout(() => {
+        if (lastTapRef.current && Date.now() - lastTapRef.current >= 280) {
+          setChromeVisible((v) => !v);
+          lastTapRef.current = 0;
+        }
+      }, 290);
+    }
+  };
+
+  const current = photos[index];
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] bg-black select-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label={current?.caption ?? "Photo viewer"}
+      data-testid="modal-photo"
+    >
+      <div
+        ref={scrollerRef}
+        onScroll={handleScroll}
+        className="absolute inset-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide"
+        style={{ scrollSnapType: zoom ? "none" : "x mandatory", overflowX: zoom ? "hidden" : "auto" }}
+      >
+        {photos.map((p, i) => (
+          <div
+            key={p.id}
+            className="relative w-full h-full flex-shrink-0 snap-center flex items-center justify-center"
+            style={{ minWidth: "100%" }}
+          >
+            <button
+              type="button"
+              onClick={i === index ? handleTap : undefined}
+              onDoubleClick={i === index ? () => setZoom((z) => !z) : undefined}
+              aria-label={zoom ? "Zoom out" : "Zoom in"}
+              className="w-full h-full flex items-center justify-center bg-transparent border-0 p-0 focus:outline-none"
+              style={{ cursor: i === index ? (zoom ? "zoom-out" : "zoom-in") : "default" }}
+              tabIndex={i === index ? 0 : -1}
+            >
+              <img
+                src={p.url}
+                alt={p.caption ?? `Photo ${i + 1} of ${photos.length}`}
+                className="max-w-full max-h-full object-contain transition-transform duration-200 ease-out pointer-events-none"
+                style={{
+                  transform: i === index && zoom ? "scale(2)" : "scale(1)",
+                  transformOrigin: "center center",
+                  touchAction: "pinch-zoom",
+                }}
+                draggable={false}
+                data-testid={`lightbox-photo-${p.id}`}
+              />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {photos.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              const el = scrollerRef.current;
+              if (el) el.scrollBy({ left: -el.clientWidth, behavior: "smooth" });
+            }}
+            disabled={index === 0}
+            aria-label="Previous photo"
+            className={`hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full items-center justify-center text-white transition-opacity ${chromeVisible && index > 0 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
+            data-testid="button-prev-photo"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const el = scrollerRef.current;
+              if (el) el.scrollBy({ left: el.clientWidth, behavior: "smooth" });
+            }}
+            disabled={index === photos.length - 1}
+            aria-label="Next photo"
+            className={`hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full items-center justify-center text-white transition-opacity ${chromeVisible && index < photos.length - 1 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
+            data-testid="button-next-photo"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+          </button>
+        </>
+      )}
+
+      <div
+        className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-12 pb-4 transition-opacity duration-200 ${chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.55), transparent)" }}
+      >
+        <span className="text-white/80 text-sm font-medium tabular-nums" data-testid="text-photo-counter">
+          {index + 1} of {photos.length}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="w-10 h-10 rounded-full flex items-center justify-center text-white active:opacity-70"
+          style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
+          data-testid="button-close-photo"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div
+        className={`absolute bottom-0 left-0 right-0 z-20 px-6 pb-10 pt-6 transition-opacity duration-200 ${chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        style={{ background: "linear-gradient(to top, rgba(0,0,0,0.55), transparent)" }}
+      >
+        {current?.caption && (
+          <p className="text-white text-center text-[15px] mb-4" data-testid="text-photo-caption">{current.caption}</p>
+        )}
+        {photos.length > 1 && (
+          <div className="flex justify-center gap-1.5">
+            {photos.map((_, i) => (
+              <span
+                key={i}
+                className="rounded-full transition-all"
+                style={{
+                  width: i === index ? 18 : 6,
+                  height: 6,
+                  background: i === index ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.35)",
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
