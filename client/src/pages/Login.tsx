@@ -7,6 +7,10 @@ import { useToast } from "@/hooks/use-toast";
 type Mode = "login" | "register";
 type Step = 1 | 2;
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const isValidEmail = (v: string) => EMAIL_RE.test(v.trim());
+const isValidPassword = (v: string) => v.length >= 8 && /[a-zA-Z]/.test(v) && /\d/.test(v);
+
 function suggestUsername(realName: string, email: string): string {
   const base =
     realName
@@ -46,6 +50,15 @@ export function Login() {
   const suggestedUsername = useMemo(() => suggestUsername(realName, email), [realName, email]);
   const suggestedDisplay = useMemo(() => suggestDisplayName(realName), [realName]);
 
+  const loginValid = loginIdent.trim().length > 0 && password.length > 0;
+  const step1Valid =
+    realName.trim().length > 0 && isValidEmail(email) && isValidPassword(password);
+  const finalUsernameLive = (usernameTouched ? username : suggestedUsername)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "");
+  const finalDisplayLive = (displayTouched ? displayName : suggestedDisplay).trim();
+  const step2Valid = finalUsernameLive.length >= 3 && finalDisplayLive.length > 0;
+
   const handleOAuth = (provider: "Google" | "Apple") => {
     toast({
       title: `Continue with ${provider}`,
@@ -60,7 +73,7 @@ export function Login() {
 
   const goToStep2 = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!realName.trim() || !email.trim() || !password) return;
+    if (!step1Valid) return;
     setUsername(suggestedUsername);
     setDisplayName(suggestedDisplay);
     setStep(2);
@@ -187,8 +200,8 @@ export function Login() {
 
             <button
               type="submit"
-              disabled={isPending}
-              className="mt-2 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-50 transition-all active:scale-[0.98]"
+              disabled={isPending || !loginValid}
+              className="mt-2 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
               style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
               data-testid="button-submit-login"
             >
@@ -238,17 +251,21 @@ export function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoComplete="new-password"
-                minLength={6}
+                minLength={8}
                 className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
                 style={{ background: "rgba(255,255,255,0.06)" }}
                 required
                 data-testid="input-password"
               />
+              <p className={`text-[11px] mt-1.5 ml-1 ${password.length === 0 ? "text-white/35" : isValidPassword(password) ? "text-[#4AFFCA]" : "text-white/55"}`}>
+                At least 8 characters with a letter and a number.
+              </p>
             </div>
 
             <button
               type="submit"
-              className="mt-2 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-50 transition-all active:scale-[0.98]"
+              disabled={!step1Valid}
+              className="mt-2 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
               style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
               data-testid="button-continue-step1"
             >
@@ -316,8 +333,8 @@ export function Login() {
               </button>
               <button
                 type="submit"
-                disabled={isPending}
-                className="flex-1 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-50 transition-all active:scale-[0.98]"
+                disabled={isPending || !step2Valid}
+                className="flex-1 py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                 style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
                 data-testid="button-submit-register"
               >
