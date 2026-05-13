@@ -8,7 +8,6 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { useDominantColor, toneForBg } from "@/hooks/useDominantColor";
 import { ALBUMS, getSongsByAlbum, formatDuration, type Song, type Album, type AlbumVideo, type AlbumPhoto } from "@/data/musicData";
 
 export function AlbumDetail() {
@@ -34,8 +33,7 @@ export function AlbumDetail() {
   const songs = album ? getSongsByAlbum(id) : [];
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
-  const dominant = useDominantColor(album?.artwork);
-  const tint = dominant ? toneForBg(dominant) : "#00062B";
+  const tint = "#00062B";
   const ownedNums = album?.ownedCertificates ?? (album?.certificateNumber ? [album.certificateNumber] : []);
   const isMulti = ownedNums.length > 1;
 
@@ -216,8 +214,8 @@ export function AlbumDetail() {
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
-          {/* Tinted hero region — extracts dominant color from artwork, fades back to brand navy */}
-          <div style={{ background: tint, transition: "background 600ms ease" }}>
+          {/* Hero region — brand navy throughout */}
+          <div style={{ background: tint }}>
             {/* Hero artwork — full square, edge-to-edge of the column, fading into the tint */}
             <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
               <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover block" />
@@ -226,7 +224,6 @@ export function AlbumDetail() {
                 style={{
                   height: "55%",
                   background: `linear-gradient(to bottom, transparent 0%, ${tint}73 55%, ${tint}eb 88%, ${tint} 100%)`,
-                  transition: "background 600ms ease",
                 }}
               />
             </div>
@@ -257,14 +254,6 @@ export function AlbumDetail() {
               )}
             </div>
 
-            {/* Fade from tint back to canonical brand navy before the play row */}
-            <div
-              style={{
-                height: 64,
-                background: `linear-gradient(to bottom, ${tint} 0%, #00062B 100%)`,
-                transition: "background 600ms ease",
-              }}
-            />
           </div>
 
           {/* Play / Shuffle / Add bar */}
