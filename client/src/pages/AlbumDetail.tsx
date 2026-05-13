@@ -255,22 +255,22 @@ export function AlbumDetail() {
               type="button"
               onClick={handleShuffle}
               aria-label="Shuffle album"
-              className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+              className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
               style={{ background: "rgba(255,255,255,0.08)" }}
               data-testid="button-shuffle-album"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
               </svg>
             </button>
             <button
               type="button"
               onClick={handlePlayAll}
-              className="flex items-center justify-center gap-2 h-11 px-10 rounded-full font-semibold text-base active:scale-[0.98] transition-transform"
+              className="flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px] active:scale-[0.98] transition-transform"
               style={{ background: "#fff", color: "#00062B" }}
               data-testid="button-play-album"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
                 <path d="M8 5.14v14l11-7-11-7z" />
               </svg>
               Play
@@ -279,11 +279,11 @@ export function AlbumDetail() {
               type="button"
               onClick={() => setShowAlbumPlaylistPicker(true)}
               aria-label="Add album to a playlist"
-              className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+              className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
               style={{ background: "rgba(255,255,255,0.08)" }}
               data-testid="button-add-album-to-playlist"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
             </button>
