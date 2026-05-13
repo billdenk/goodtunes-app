@@ -36,7 +36,7 @@ export function MiniPlayer() {
         onClick={() => setShowPlayer(true)}
       >
         {hidden ? (
-          <div className="flex items-center gap-2.5 pl-2 pr-2 py-2">
+          <div className="flex items-center gap-3 pl-3 pr-2.5 py-2">
             <img
               src={currentSong.album.artwork}
               alt={currentSong.album.title}
