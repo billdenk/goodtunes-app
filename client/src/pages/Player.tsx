@@ -244,9 +244,15 @@ export function Player() {
             <div className="w-full flex items-center justify-around pb-2">
               <button
                 type="button"
-                onClick={() => setShowLyrics(true)}
-                className="w-11 h-11 flex items-center justify-center text-white/55 active:text-white transition-colors"
-                aria-label="Lyrics"
+                onClick={() => currentSong.lyrics && setShowLyrics(true)}
+                disabled={!currentSong.lyrics}
+                className={`w-11 h-11 flex items-center justify-center transition-colors ${
+                  currentSong.lyrics
+                    ? "text-white/55 active:text-white"
+                    : "text-white/20 cursor-not-allowed"
+                }`}
+                aria-label={currentSong.lyrics ? "Lyrics" : "Lyrics unavailable"}
+                title={currentSong.lyrics ? undefined : "No lyrics available"}
                 data-testid="button-lyrics"
               >
                 {/* Apple's "quote bubble" lyrics icon */}
