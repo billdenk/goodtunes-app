@@ -292,7 +292,7 @@ export function Login() {
                   data-testid="input-username"
                 />
               </div>
-              <p className="text-white/35 text-[11px] mt-1.5 ml-1">Your unique handle. You can share GoodDeeds® as @{usernameTouched ? username || "username" : suggestedUsername}.</p>
+              <p className="text-white/35 text-[11px] mt-1.5 ml-1">Your unique handle.</p>
             </div>
             <div>
               <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Display Name</label>
@@ -310,7 +310,7 @@ export function Login() {
                 required
                 data-testid="input-display-name"
               />
-              <p className="text-white/35 text-[11px] mt-1.5 ml-1">Shown across the app and on shared GoodDeeds® by default.</p>
+              <p className="text-white/35 text-[11px] mt-1.5 ml-1">This is how people will know you.</p>
             </div>
 
             {error && (
