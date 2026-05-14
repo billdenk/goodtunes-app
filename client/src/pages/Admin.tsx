@@ -1376,13 +1376,13 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
       >
         <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
           {/* Mock status bar */}
-          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-white text-[11px] font-medium">
+          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium" style={{ color: "#ffffff" }}>
             <span>9:41</span>
             <span>● ● ●</span>
           </div>
           {/* Sheet chrome — back chevron + share/bookmark hints */}
           <div className="flex-shrink-0 flex items-center justify-between px-3 pb-2">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white" style={{ background: "rgba(255,255,255,0.10)" }}>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.10)", color: "#ffffff" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
             </div>
             <div className="flex items-center gap-2">
@@ -1396,27 +1396,27 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
               {data?.photoUrl ? (
                 <img src={data.photoUrl} alt={data.name} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white/35 text-xs">No photo yet</div>
+                <div className="w-full h-full flex items-center justify-center text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>No photo yet</div>
               )}
             </div>
             <div className="px-5 pb-3">
-              <p className="text-[#4AFFCA] text-[11px] font-medium uppercase tracking-wider mb-1">{data?.shortCategory || data?.category || "Instrument"}</p>
-              <h2 className="text-white text-[22px] font-bold leading-tight">{data?.name || "Untitled instrument"}</h2>
+              <p className="text-[11px] font-medium uppercase tracking-wider mb-1" style={{ color: "#4AFFCA" }}>{data?.shortCategory || data?.category || "Instrument"}</p>
+              <h2 className="text-[22px] font-bold leading-tight" style={{ color: "#ffffff" }}>{data?.name || "Untitled instrument"}</h2>
             </div>
             {data?.about && (
               <div className="px-5 pb-4">
-                <p className="text-white/70 text-[13px] leading-relaxed whitespace-pre-wrap">{data.about}</p>
+                <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{ color: "rgba(255,255,255,0.85)" }}>{data.about}</p>
               </div>
             )}
             {data?.artistNote && (
               <div className="mx-5 mb-4 rounded-xl p-3" style={{ background: "rgba(74,255,202,0.08)", border: "1px solid rgba(74,255,202,0.18)" }}>
-                <p className="text-[#4AFFCA] text-[10px] font-medium uppercase tracking-wider mb-1">Artist note</p>
-                <p className="text-white text-[13px] leading-relaxed">{data.artistNote}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: "#4AFFCA" }}>Artist note</p>
+                <p className="text-[13px] leading-relaxed" style={{ color: "#ffffff" }}>{data.artistNote}</p>
               </div>
             )}
             {data?.vendors && data.vendors.filter((v) => !v.isHidden).length > 0 && (
               <div className="px-5 pb-3">
-                <p className="text-white/50 text-[11px] font-medium uppercase tracking-wider mb-2">Discover more / Buy</p>
+                <p className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "rgba(255,255,255,0.55)" }}>Discover more / Buy</p>
                 <div className="space-y-2">
                   {data.vendors.filter((v) => !v.isHidden).map((v) => {
                     const logo = v.logoUrl || (() => {
@@ -1426,12 +1426,12 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
                     try { host = new URL(v.affiliateUrl).hostname.replace(/^www\./, ""); } catch { /* */ }
                     return (
                       <div key={v.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: "rgba(255,255,255,0.06)" }}>
-                        {logo ? <img src={logo} alt="" className="w-9 h-9 rounded bg-white/10 object-contain" /> : <div className="w-9 h-9 rounded bg-white/10" />}
+                        {logo ? <img src={logo} alt="" className="w-9 h-9 rounded object-contain" style={{ background: "rgba(255,255,255,0.10)" }} /> : <div className="w-9 h-9 rounded" style={{ background: "rgba(255,255,255,0.10)" }} />}
                         <div className="min-w-0 flex-1">
-                          <div className="text-white text-[13px] font-medium truncate">{v.name}</div>
-                          <div className="text-white/45 text-[11px] truncate">{v.tagline || host}</div>
+                          <div className="text-[13px] font-medium truncate" style={{ color: "#ffffff" }}>{v.name}</div>
+                          <div className="text-[11px] truncate" style={{ color: "rgba(255,255,255,0.50)" }}>{v.tagline || host}</div>
                         </div>
-                        <div className="text-white/40 text-[14px]">›</div>
+                        <div className="text-[14px]" style={{ color: "rgba(255,255,255,0.45)" }}>›</div>
                       </div>
                     );
                   })}
