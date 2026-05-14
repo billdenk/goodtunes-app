@@ -50,10 +50,13 @@ export function Account() {
 
   return (
     <main className="relative h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-20 right-0 w-72 h-72 rounded-full opacity-15" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
-        <div className="absolute bottom-40 -left-20 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
-      </div>
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 130% 80% at 75% -10%, rgba(127,16,167,0.30) 0%, transparent 60%), radial-gradient(ellipse 110% 70% at 20% 110%, rgba(49,158,216,0.22) 0%, transparent 65%), linear-gradient(180deg, #0a0d4a 0%, #00062B 55%, #00041f 100%)",
+        }}
+      />
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
 
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">

@@ -109,11 +109,13 @@ export function Login() {
 
   return (
     <main className="min-h-screen w-full bg-[#00062B] flex justify-center items-center">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-25" style={{ background: "radial-gradient(circle, #319ED8, transparent)" }} />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-20" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-80 h-80 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #4AFFCA, transparent)" }} />
-      </div>
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 130% 80% at 75% -10%, rgba(127,16,167,0.30) 0%, transparent 60%), radial-gradient(ellipse 110% 70% at 20% 110%, rgba(49,158,216,0.22) 0%, transparent 65%), linear-gradient(180deg, #0a0d4a 0%, #00062B 55%, #00041f 100%)",
+        }}
+      />
 
       <div className="relative w-full max-w-[390px] px-6">
         <div className="flex flex-col items-center mb-10">

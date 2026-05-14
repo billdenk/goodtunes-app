@@ -601,9 +601,13 @@ export function Playlists() {
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
       <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #7F10A7, transparent)" }} />
-        </div>
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse 130% 80% at 75% -10%, rgba(127,16,167,0.30) 0%, transparent 60%), radial-gradient(ellipse 110% 70% at 20% 110%, rgba(49,158,216,0.22) 0%, transparent 65%), linear-gradient(180deg, #0a0d4a 0%, #00062B 55%, #00041f 100%)",
+          }}
+        />
 
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Playlists</h1>
