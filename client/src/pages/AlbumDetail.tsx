@@ -1218,7 +1218,19 @@ function SheetShell({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Lock the underlying page from scrolling while the sheet is open.
+    // Without this, iOS passes touch-drag through to the AlbumDetail page
+    // beneath the sheet, and the blurred peek at the top of the viewport
+    // visibly shifts as the body scrolls under the user's thumb.
+    const prevOverflow = document.body.style.overflow;
+    const prevTouch = document.body.style.touchAction;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = prevTouch;
+    };
   }, [onClose]);
 
   const isFull = variant === "full";
@@ -1232,15 +1244,19 @@ function SheetShell({
       data-testid={testId}
     >
       {/* Backdrop dim — only behind a bottom-sheet. Full-screen sheets cover the
-          entire viewport edge-to-edge, Apple-style, so no backdrop is needed. */}
-      {!isFull && <div className="absolute inset-0 bg-black/55" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />}
+          entire viewport edge-to-edge, Apple-style, so no backdrop is needed.
+          A solid dim (no live blur) — backdrop-filter re-samples on every paint
+          frame, which made the visible peek above the sheet wobble during
+          touch-drag on iOS. The sheet background below is already ~98% opaque
+          so the underlying page barely shows through anyway. */}
+      {!isFull && <div className="absolute inset-0 bg-black/70" onClick={onClose} />}
       <div
         className={
           isFull
             ? "relative w-full z-10 h-full flex flex-col overflow-hidden"
             : "relative w-full max-w-[390px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide"
         }
-        style={{ background: "rgba(20, 24, 48, 0.98)", backdropFilter: "blur(28px) saturate(180%)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
+        style={{ background: "rgb(20, 24, 48)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
       >
         {!isFull && <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />}
         {children}

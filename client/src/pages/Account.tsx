@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
+import { INSTRUMENTS } from "@/data/musicData";
 
 /** Profile photo is stored client-side as a data URL in localStorage (same
  *  pattern as favorites + chat). When the GT backend lands, swap for an
@@ -83,6 +84,32 @@ export function Account() {
     try { localStorage.removeItem(profilePhotoKey(user.id)); } catch {}
     setPhotoUrl(null);
   };
+
+  // Bookmarked instruments (synced with the same localStorage key used by
+  // InstrumentSheet in AlbumDetail). Re-read on focus so newly-bookmarked
+  // items show up when the user returns to this tab.
+  const [bookmarkIds, setBookmarkIds] = useState<string[]>([]);
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("gt:bookmarked-instruments");
+        setBookmarkIds(raw ? JSON.parse(raw) : []);
+      } catch { setBookmarkIds([]); }
+    };
+    load();
+    window.addEventListener("focus", load);
+    window.addEventListener("storage", load);
+    return () => {
+      window.removeEventListener("focus", load);
+      window.removeEventListener("storage", load);
+    };
+  }, []);
+  const removeBookmark = (id: string) => {
+    const next = bookmarkIds.filter((x) => x !== id);
+    setBookmarkIds(next);
+    try { localStorage.setItem("gt:bookmarked-instruments", JSON.stringify(next)); } catch {}
+  };
+  const bookmarks = bookmarkIds.map((id) => INSTRUMENTS[id]).filter(Boolean);
 
   return (
     <main className="relative h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
@@ -235,8 +262,44 @@ export function Account() {
         </div>
 
         <div ref={scrollRef} className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide pb-[170px]">
-          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
-          <div className="rounded-2xl overflow-hidden mb-10" style={{ background: "rgba(255,255,255,0.05)" }}>
+          {bookmarks.length > 0 && (
+            <>
+              <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Bookmarks</p>
+              <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
+                {bookmarks.map((inst, i) => (
+                  <div
+                    key={inst.id}
+                    className={`w-full flex items-center gap-3 px-3 py-3 ${i < bookmarks.length - 1 ? "border-b" : ""}`}
+                    style={i < bookmarks.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
+                    data-testid={`bookmark-instrument-${inst.id}`}
+                  >
+                    {inst.photoUrl ? (
+                      <img src={inst.photoUrl} alt="" className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-11 h-11 rounded-lg flex-shrink-0" style={{ background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)" }} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-[14px] font-medium truncate">{inst.name}</p>
+                      <p className="text-white/50 text-[12px] truncate">{inst.category}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeBookmark(inst.id)}
+                      aria-label={`Remove bookmark for ${inst.name}`}
+                      className="flex-shrink-0 p-2 -mr-1 active:opacity-70"
+                      data-testid={`button-remove-bookmark-${inst.id}`}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#4AFFCA" stroke="#4AFFCA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             {["Notifications", "Privacy", "About GoodTunes®"].map((label, i, arr) => (
               <button
                 key={label}
