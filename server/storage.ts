@@ -32,6 +32,21 @@ export interface IStorage {
   getSongById(id: string): Promise<Song | undefined>;
   getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]>;
 
+  // CMS mutations (admin-only at the route layer).
+  createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album>;
+  updateAlbum(id: string, data: Partial<Album>): Promise<Album | undefined>;
+  deleteAlbum(id: string): Promise<void>;
+  createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song>;
+  updateSong(id: string, data: Partial<Song>): Promise<Song | undefined>;
+  deleteSong(id: string): Promise<void>;
+
+  // Admin bootstrap
+  countAdmins(): Promise<number>;
+  setUserAdmin(userId: string, isAdmin: boolean): Promise<void>;
+  // Atomically grant admin to `userId` iff no admin currently exists. Returns
+  // true if this caller claimed the slot, false if an admin already existed.
+  tryClaimFirstAdmin(userId: string): Promise<boolean>;
+
   getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]>;
   getPlaylistById(id: string): Promise<Playlist | undefined>;
   createPlaylist(userId: string, name: string): Promise<Playlist>;
@@ -156,6 +171,71 @@ export class DbStorage implements IStorage {
     const [s] = await db.select().from(songs).where(eq(songs.id, id));
     return s;
   }
+  async createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album> {
+    const [a] = await db.insert(albums).values(data as any).returning();
+    return a;
+  }
+  async updateAlbum(id: string, data: Partial<Album>): Promise<Album | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return this.getAlbumById(id);
+    const [a] = await db.update(albums).set(rest).where(eq(albums.id, id)).returning();
+    return a;
+  }
+  async deleteAlbum(id: string): Promise<void> {
+    // Wrap the whole cascade in a transaction: if any step fails (e.g. a
+    // playlist row violates a future constraint, the connection drops), we
+    // roll back instead of leaving half-deleted state.
+    await db.transaction(async (tx) => {
+      const albumSongs = await tx
+        .select({ id: songs.id })
+        .from(songs)
+        .where(eq(songs.albumId, id));
+      for (const s of albumSongs) {
+        await tx.delete(playlistSongs).where(eq(playlistSongs.songId, s.id));
+      }
+      await tx.delete(songs).where(eq(songs.albumId, id));
+      await tx.delete(userAlbums).where(eq(userAlbums.albumId, id));
+      await tx.delete(albums).where(eq(albums.id, id));
+    });
+  }
+  async createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song> {
+    const [s] = await db.insert(songs).values(data as any).returning();
+    return s;
+  }
+  async updateSong(id: string, data: Partial<Song>): Promise<Song | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return this.getSongById(id);
+    const [s] = await db.update(songs).set(rest).where(eq(songs.id, id)).returning();
+    return s;
+  }
+  async deleteSong(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(playlistSongs).where(eq(playlistSongs.songId, id));
+      await tx.delete(songs).where(eq(songs.id, id));
+    });
+  }
+  async countAdmins(): Promise<number> {
+    const rows = await db.select({ id: users.id }).from(users).where(eq(users.isAdmin, true));
+    return rows.length;
+  }
+  async setUserAdmin(userId: string, isAdmin: boolean): Promise<void> {
+    await db.update(users).set({ isAdmin }).where(eq(users.id, userId));
+  }
+  async tryClaimFirstAdmin(userId: string): Promise<boolean> {
+    // Single statement: "promote this user, but only if no admin exists yet."
+    // Two callers racing both run this; whichever lands first sees a row
+    // count of 1, the other sees 0 because an admin now exists.
+    const result = await db.execute(
+      sql`UPDATE users SET is_admin = true
+          WHERE id = ${userId}
+            AND NOT EXISTS (SELECT 1 FROM users WHERE is_admin = true)
+          RETURNING id`,
+    );
+    // node-postgres returns rowCount; neon-style drivers return `rows`.
+    const rowCount = (result as any).rowCount ?? (result as any).rows?.length ?? 0;
+    return rowCount > 0;
+  }
+
   async getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]> {
     const rows = await db
       .select()

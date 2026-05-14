@@ -8,6 +8,7 @@ interface AuthUser {
   displayName: string;
   realName?: string | null;
   photoUrl?: string | null;
+  isAdmin?: boolean;
 }
 
 interface AuthResponse extends AuthUser {

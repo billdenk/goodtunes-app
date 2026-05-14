@@ -15,6 +15,7 @@ import { Account } from "@/pages/Account";
 import { EditAccount } from "@/pages/EditAccount";
 import { ArtistDetail } from "@/pages/ArtistDetail";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
+import { Admin } from "@/pages/Admin";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -86,6 +87,9 @@ function Router() {
         </Route>
         <Route path="/account">
           <ProtectedRoute component={Account} />
+        </Route>
+        <Route path="/admin">
+          <ProtectedRoute component={Admin} />
         </Route>
         <Route path="/">
           {user ? <Redirect to="/collection" /> : <Redirect to="/login" />}

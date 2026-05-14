@@ -51,6 +51,15 @@ async function requireAuth(req: Request, res: Response, next: Function) {
   next();
 }
 
+async function requireAdmin(req: Request, res: Response, next: Function) {
+  const userId = await getUserIdFromRequest(req);
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  const user = await storage.getUser(userId);
+  if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+  req.session.userId = userId;
+  next();
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const PgSession = connectPgSimple(session);
   const sessionSecret = process.env.SESSION_SECRET;
@@ -154,7 +163,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(404).json({ message: "User not found" });
     const photoUrl = await storage.getProfilePhoto(user.id);
-    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, photoUrl });
+    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, photoUrl, isAdmin: user.isAdmin });
   });
 
   app.put("/api/me", requireAuth, async (req, res) => {
@@ -176,7 +185,93 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const updated = await storage.updateUser(req.session.userId!, updates);
     if (!updated) return res.status(404).json({ message: "User not found" });
     const photoUrl = await storage.getProfilePhoto(updated.id);
-    return res.json({ id: updated.id, username: updated.username, email: updated.email, displayName: updated.displayName, realName: updated.realName, photoUrl });
+    return res.json({ id: updated.id, username: updated.username, email: updated.email, displayName: updated.displayName, realName: updated.realName, photoUrl, isAdmin: updated.isAdmin });
+  });
+
+  // ----- Admin bootstrap + CMS -------------------------------------------
+  // First authenticated caller becomes admin if no admin exists yet. After
+  // that, only existing admins can promote (or you set is_admin=true in DB
+  // directly). Cheap to build, easy to revoke.
+  app.post("/api/admin/bootstrap", requireAuth, async (req, res) => {
+    // Race-free: a single conditional UPDATE only promotes if no admin
+    // currently exists. Two concurrent first-callers can't both win.
+    const claimed = await storage.tryClaimFirstAdmin(req.session.userId!);
+    if (claimed) return res.json({ isAdmin: true });
+    const me = await storage.getUser(req.session.userId!);
+    if (me?.isAdmin) return res.json({ isAdmin: true });
+    return res.status(403).json({ message: "An admin already exists. Ask an existing admin to promote you." });
+  });
+
+  app.post("/api/admin/albums", requireAdmin, async (req, res) => {
+    const { id, title, artist, artwork, year, type, description } = req.body ?? {};
+    if (!title || !artist || !artwork) {
+      return res.status(400).json({ message: "title, artist, artwork are required" });
+    }
+    const album = await storage.createAlbum({
+      id: id || undefined,
+      title: String(title),
+      artist: String(artist),
+      artwork: String(artwork),
+      year: year != null ? Number(year) : null,
+      type: type === "EP" ? "EP" : "album",
+      description: description ? String(description) : null,
+    } as any);
+    return res.status(201).json(album);
+  });
+
+  app.put("/api/admin/albums/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const { title, artist, artwork, year, type, description } = req.body ?? {};
+    const updates: any = {};
+    if (title !== undefined) updates.title = String(title);
+    if (artist !== undefined) updates.artist = String(artist);
+    if (artwork !== undefined) updates.artwork = String(artwork);
+    if (year !== undefined) updates.year = year === null || year === "" ? null : Number(year);
+    if (type !== undefined) updates.type = type === "EP" ? "EP" : "album";
+    if (description !== undefined) updates.description = description ? String(description) : null;
+    const updated = await storage.updateAlbum(id, updates);
+    if (!updated) return res.status(404).json({ message: "Album not found" });
+    return res.json(updated);
+  });
+
+  app.delete("/api/admin/albums/:id", requireAdmin, async (req, res) => {
+    await storage.deleteAlbum(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  app.post("/api/admin/songs", requireAdmin, async (req, res) => {
+    const { albumId, title, trackNumber, duration, lyrics, audioUrl } = req.body ?? {};
+    if (!albumId || !title || trackNumber == null) {
+      return res.status(400).json({ message: "albumId, title, trackNumber are required" });
+    }
+    const song = await storage.createSong({
+      albumId: String(albumId),
+      title: String(title),
+      trackNumber: Number(trackNumber),
+      duration: duration != null ? Number(duration) : 180,
+      lyrics: lyrics ? String(lyrics) : null,
+      audioUrl: audioUrl ? String(audioUrl) : null,
+    } as any);
+    return res.status(201).json(song);
+  });
+
+  app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const { title, trackNumber, duration, lyrics, audioUrl } = req.body ?? {};
+    const updates: any = {};
+    if (title !== undefined) updates.title = String(title);
+    if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
+    if (duration !== undefined) updates.duration = Number(duration);
+    if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
+    if (audioUrl !== undefined) updates.audioUrl = audioUrl ? String(audioUrl) : null;
+    const updated = await storage.updateSong(id, updates);
+    if (!updated) return res.status(404).json({ message: "Song not found" });
+    return res.json(updated);
+  });
+
+  app.delete("/api/admin/songs/:id", requireAdmin, async (req, res) => {
+    await storage.deleteSong(String(req.params.id));
+    return res.json({ message: "Deleted" });
   });
 
   // ----- Profile photo ----------------------------------------------------

@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useParams } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
@@ -52,8 +53,66 @@ export function AlbumDetail() {
   };
   const [downloadedSongs, setDownloadedSongs] = useState<Set<string>>(new Set());
 
-  const album = ALBUMS.find((a) => a.id === id);
-  const songs = album ? getSongsByAlbum(id) : [];
+  // Source-of-truth for base album + tracklist is the API (so CMS edits and
+  // newly-created albums show up here, including inside the /admin live
+  // preview iframe). Static `musicData` is used only as enrichment for
+  // fields the DB schema doesn't store yet (videos/photos/owned-cert numbers
+  // /credits — those land when their CMS UIs do).
+  type ApiAlbum = {
+    id: string;
+    title: string;
+    artist: string;
+    artwork: string;
+    year: number | null;
+    type: "album" | "EP";
+    description: string | null;
+    songs: {
+      id: string;
+      albumId: string;
+      title: string;
+      trackNumber: number;
+      duration: number;
+      lyrics: string | null;
+      audioUrl: string | null;
+    }[];
+  };
+  const { data: apiAlbum } = useQuery<ApiAlbum>({
+    queryKey: ["/api/albums", id],
+    enabled: !!id,
+  });
+  const staticAlbum = ALBUMS.find((a) => a.id === id);
+  const album: Album | undefined = useMemo(() => {
+    if (apiAlbum) {
+      return {
+        ...(staticAlbum ?? ({} as Album)),
+        id: apiAlbum.id,
+        title: apiAlbum.title,
+        artist: apiAlbum.artist,
+        artwork: apiAlbum.artwork,
+        year: apiAlbum.year ?? staticAlbum?.year ?? 0,
+        type: apiAlbum.type,
+        description: apiAlbum.description ?? staticAlbum?.description ?? "",
+      };
+    }
+    return staticAlbum;
+  }, [apiAlbum, staticAlbum]);
+  const songs: Song[] = useMemo(() => {
+    if (apiAlbum) {
+      return apiAlbum.songs
+        .slice()
+        .sort((a, b) => a.trackNumber - b.trackNumber)
+        .map((s) => ({
+          id: s.id,
+          albumId: s.albumId,
+          title: s.title,
+          trackNumber: s.trackNumber,
+          duration: s.duration,
+          lyrics: s.lyrics ?? undefined,
+          audioUrl: s.audioUrl ?? undefined,
+        }));
+    }
+    return album ? getSongsByAlbum(id) : [];
+  }, [apiAlbum, album, id]);
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
   const tint = "#00062B";
