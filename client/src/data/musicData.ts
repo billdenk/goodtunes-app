@@ -153,8 +153,20 @@ export const INSTRUMENTS: Record<string, Instrument> = {
         bio: "ish.guitars is a small-batch dealer focused on hand-picked vintage Martins, Gibsons, and boutique acoustics. Every instrument is set up in-house, photographed in detail, and described honestly — including the dings. Shipping is fully insured, and trial periods are standard.",
         usedByPersonIds: ["p-tim-snider", "p-joe-hall", "p-wolfgang"],
       },
-      { name: "Carter Vintage Guitars", affiliateUrl: "https://cartervintage.com/shop/martin-d-28-1974-shadetop/3C5kGDIqU4PSAX8mXAKHxZe02KK", aboutUrl: "https://cartervintage.com/",      logoUrl: fav("cartervintage.com") },
-      { name: "Martin Guitar (official)", affiliateUrl: "https://www.martinguitar.com/guitars/standard-series/d-28.html",                aboutUrl: "https://www.martinguitar.com/",   logoUrl: fav("martinguitar.com") },
+      {
+        name: "Carter Vintage Guitars",
+        affiliateUrl: "https://cartervintage.com/shop/martin-d-28-1974-shadetop/3C5kGDIqU4PSAX8mXAKHxZe02KK",
+        aboutUrl: "https://cartervintage.com/",
+        logoUrl: fav("cartervintage.com"),
+        bio: "Founded in Nashville by Walter and Christie Carter, Carter Vintage Guitars is one of the world's leading dealers of vintage and used guitars, basses, mandolins, banjos and amplifiers. Walter's decades as a writer and historian for Gibson and Gruhn Guitars inform every listing — instruments are individually inspected, photographed in detail, and described with the kind of historical context most shops skip.",
+      },
+      {
+        name: "Martin Guitar (official)",
+        affiliateUrl: "https://www.martinguitar.com/guitars/standard-series/d-28.html",
+        aboutUrl: "https://www.martinguitar.com/",
+        logoUrl: fav("martinguitar.com"),
+        bio: "Founded in 1833 by German immigrant C. F. Martin Sr. and still family-owned in Nazareth, Pennsylvania, Martin is the company that invented the dreadnought and shaped the sound of American acoustic music. Six generations in, every standard-series Martin is still built by hand in the Nazareth factory using woods, bracing patterns, and dovetail joinery refined over nearly 200 years.",
+      },
     ],
   },
   "i-gretsch-1967-6071": {
@@ -168,9 +180,27 @@ export const INSTRUMENTS: Record<string, Instrument> = {
     artistNote:
       "Selecting this guitar for its unparalleled blend of classic resonance and modern versatility.",
     vendors: [
-      { name: "Norman's Rare Guitars", affiliateUrl: "https://www.normansrareguitars.com/",                aboutUrl: "https://www.normansrareguitars.com/about", logoUrl: fav("normansrareguitars.com") },
-      { name: "The Twelfth Fret",      affiliateUrl: "https://www.12fret.com/?s=gretsch+6071",            aboutUrl: "https://www.12fret.com/",                  logoUrl: fav("12fret.com") },
-      { name: "Reverb",                affiliateUrl: "https://reverb.com/marketplace?query=Gretsch%206071", aboutUrl: "https://reverb.com/",                       logoUrl: fav("reverb.com") },
+      {
+        name: "Norman's Rare Guitars",
+        affiliateUrl: "https://www.normansrareguitars.com/",
+        aboutUrl: "https://www.normansrareguitars.com/about",
+        logoUrl: fav("normansrareguitars.com"),
+        bio: "Norman's Rare Guitars opened in Reseda, California in 1975 and has spent five decades selling vintage guitars to working musicians and the studios that record them — Bob Dylan, Tom Petty, Joe Walsh, and the rotating cast of session players you've heard on a thousand records have all walked through the door. Norman Harris and his team specialize in pre-CBS Fenders, pre-1965 Gibsons, and the kind of one-of-one pieces that only surface in shops with this much history.",
+      },
+      {
+        name: "The Twelfth Fret",
+        affiliateUrl: "https://www.12fret.com/?s=gretsch+6071",
+        aboutUrl: "https://www.12fret.com/",
+        logoUrl: fav("12fret.com"),
+        bio: "The Twelfth Fret has been Toronto's destination for guitarists since 1977. The shop sells new, used, and vintage guitars, and runs a full repair and restoration department staffed by luthiers who have been there for decades — from refrets and neck resets to complete vintage restorations. The company's motto, \"Guitarists' Pro Shop,\" is meant literally.",
+      },
+      {
+        name: "Reverb",
+        affiliateUrl: "https://reverb.com/marketplace?query=Gretsch%206071",
+        aboutUrl: "https://reverb.com/",
+        logoUrl: fav("reverb.com"),
+        bio: "Launched in Chicago in 2013 by Music Makers founder David Kalt, Reverb is the global online marketplace dedicated to making, buying, and selling music gear. Tens of thousands of dealers and individual sellers list new, used, vintage, and handmade instruments, amps, effects, recording gear, and parts. Buyer protection, transparent pricing data via the Reverb Price Guide, and music-specialist customer support are core to the platform.",
+      },
     ],
   },
   "i-violin-strad-copy": {
@@ -184,9 +214,27 @@ export const INSTRUMENTS: Record<string, Instrument> = {
     artistNote:
       "Tuned standard. Mic'd close on the bridge for the verses, room mic for the choruses.",
     vendors: [
-      { name: "Shar Music",   affiliateUrl: "https://www.sharmusic.com/violins.html", aboutUrl: "https://www.sharmusic.com/",   logoUrl: fav("sharmusic.com") },
-      { name: "Fiddlershop",  affiliateUrl: "https://fiddlershop.com/collections/violins", aboutUrl: "https://fiddlershop.com/", logoUrl: fav("fiddlershop.com") },
-      { name: "Reverb",       affiliateUrl: "https://reverb.com/marketplace?query=german%20violin", aboutUrl: "https://reverb.com/", logoUrl: fav("reverb.com") },
+      {
+        name: "Shar Music",
+        affiliateUrl: "https://www.sharmusic.com/violins.html",
+        aboutUrl: "https://www.sharmusic.com/",
+        logoUrl: fav("sharmusic.com"),
+        bio: "Founded in 1962 in Ann Arbor, Michigan by Charles Avsharian — a Juilliard-trained violinist — Shar Music has grown into one of the largest dedicated string-instrument retailers in North America. Shar carries violins, violas, cellos, and basses across every level from student to professional, and is widely used by school music programs, conservatory students, and orchestral players for its rental program, repair shop, and sheet music catalog.",
+      },
+      {
+        name: "Fiddlershop",
+        affiliateUrl: "https://fiddlershop.com/collections/violins",
+        aboutUrl: "https://fiddlershop.com/",
+        logoUrl: fav("fiddlershop.com"),
+        bio: "Fiddlershop is a family-owned string instrument shop in Pompano Beach, Florida, founded by brothers Pierre and Michael Holstein. Every violin, viola, cello, and bass is set up in-house by their luthiers before it ships, and they're known online for their detailed YouTube playthroughs and head-to-head instrument comparisons — a level of transparency rare in the string world.",
+      },
+      {
+        name: "Reverb",
+        affiliateUrl: "https://reverb.com/marketplace?query=german%20violin",
+        aboutUrl: "https://reverb.com/",
+        logoUrl: fav("reverb.com"),
+        bio: "Launched in Chicago in 2013 by Music Makers founder David Kalt, Reverb is the global online marketplace dedicated to making, buying, and selling music gear. Tens of thousands of dealers and individual sellers list new, used, vintage, and handmade instruments, amps, effects, recording gear, and parts. Buyer protection, transparent pricing data via the Reverb Price Guide, and music-specialist customer support are core to the platform.",
+      },
     ],
   },
   "i-bass-fender-p": {
@@ -200,9 +248,27 @@ export const INSTRUMENTS: Record<string, Instrument> = {
     artistNote:
       "Flatwounds, no pick. Sat right behind the kick on every track.",
     vendors: [
-      { name: "Fender",        affiliateUrl: "https://www.fender.com/en-US/electric-basses/precision-bass/", aboutUrl: "https://www.fender.com/",        logoUrl: fav("fender.com") },
-      { name: "Andy Baxter Bass", affiliateUrl: "https://www.andybaxterbass.com/",                            aboutUrl: "https://www.andybaxterbass.com/", logoUrl: fav("andybaxterbass.com") },
-      { name: "Reverb",        affiliateUrl: "https://reverb.com/marketplace?query=1976%20fender%20precision%20bass", aboutUrl: "https://reverb.com/",         logoUrl: fav("reverb.com") },
+      {
+        name: "Fender",
+        affiliateUrl: "https://www.fender.com/en-US/electric-basses/precision-bass/",
+        aboutUrl: "https://www.fender.com/",
+        logoUrl: fav("fender.com"),
+        bio: "Founded by Leo Fender in Fullerton, California in 1946, Fender Musical Instruments Corporation invented the solid-body electric guitar (the Telecaster, 1950), the electric bass guitar (the Precision Bass, 1951), and the Stratocaster (1954) — instruments that became the foundation of modern popular music. Today Fender designs and manufactures guitars, basses, amplifiers, and gear played by everyone from first-time students to the world's most recorded artists.",
+      },
+      {
+        name: "Andy Baxter Bass",
+        affiliateUrl: "https://www.andybaxterbass.com/",
+        aboutUrl: "https://www.andybaxterbass.com/",
+        logoUrl: fav("andybaxterbass.com"),
+        bio: "Andy Baxter Bass & Guitars is a London-based dealer specializing in vintage and second-hand basses — Fender, Music Man, Rickenbacker, Höfner, Wal, Alembic, and the rare boutique pieces working bassists actually want. Andy Baxter himself is a touring bassist, and the shop's listings are written by players, for players, with detail on weight, electronics, and feel that mainstream retailers don't bother with.",
+      },
+      {
+        name: "Reverb",
+        affiliateUrl: "https://reverb.com/marketplace?query=1976%20fender%20precision%20bass",
+        aboutUrl: "https://reverb.com/",
+        logoUrl: fav("reverb.com"),
+        bio: "Launched in Chicago in 2013 by Music Makers founder David Kalt, Reverb is the global online marketplace dedicated to making, buying, and selling music gear. Tens of thousands of dealers and individual sellers list new, used, vintage, and handmade instruments, amps, effects, recording gear, and parts. Buyer protection, transparent pricing data via the Reverb Price Guide, and music-specialist customer support are core to the platform.",
+      },
     ],
   },
   "i-drums-gretsch-kit": {
@@ -216,9 +282,27 @@ export const INSTRUMENTS: Record<string, Instrument> = {
     artistNote:
       "22\" kick, 13\" rack, 16\" floor. Calf heads on the toms for a softer attack.",
     vendors: [
-      { name: "Gretsch Drums",     affiliateUrl: "https://www.gretschdrums.com/series/usa-custom",            aboutUrl: "https://www.gretschdrums.com/", logoUrl: fav("gretschdrums.com") },
-      { name: "Sweetwater",        affiliateUrl: "https://www.sweetwater.com/c1066--Gretsch_Drums",            aboutUrl: "https://www.sweetwater.com/",   logoUrl: fav("sweetwater.com") },
-      { name: "Bentley's Drum Shop", affiliateUrl: "https://bentleysdrumshop.com/collections/gretsch-drums", aboutUrl: "https://bentleysdrumshop.com/", logoUrl: fav("bentleysdrumshop.com") },
+      {
+        name: "Gretsch Drums",
+        affiliateUrl: "https://www.gretschdrums.com/series/usa-custom",
+        aboutUrl: "https://www.gretschdrums.com/",
+        logoUrl: fav("gretschdrums.com"),
+        bio: "Founded in Brooklyn in 1883 by 27-year-old German immigrant Friedrich Gretsch, Gretsch is one of the oldest American musical instrument makers — and \"That Great Gretsch Sound\" has anchored jazz, country, and rock recordings for well over a century. USA Custom drums are still built in Ridgeland, South Carolina using the company's classic 6-ply maple/gum shells, 30-degree bearing edges, and the legendary silver-sealer interior.",
+      },
+      {
+        name: "Sweetwater",
+        affiliateUrl: "https://www.sweetwater.com/c1066--Gretsch_Drums",
+        aboutUrl: "https://www.sweetwater.com/",
+        logoUrl: fav("sweetwater.com"),
+        bio: "Started by Chuck Surack out of a VW bus in 1979, Sweetwater is now the largest online retailer of musical instruments and pro-audio gear in the United States, headquartered on a 175-acre campus in Fort Wayne, Indiana. Every customer is assigned a personal Sales Engineer — a working musician trained to give real advice — and every guitar over $299 receives a complimentary 55-Point Inspection by Sweetwater's Guitar Gallery before it ships.",
+      },
+      {
+        name: "Bentley's Drum Shop",
+        affiliateUrl: "https://bentleysdrumshop.com/collections/gretsch-drums",
+        aboutUrl: "https://bentleysdrumshop.com/",
+        logoUrl: fav("bentleysdrumshop.com"),
+        bio: "Bentley's Drum Shop has served Fresno, California and the touring/recording community since 1962 — a true drummer's drum shop. The Bentley family stocks deep across kits, snares, cymbals, hardware, and hand percussion from the major makers and the boutique builders, and runs a repair and restoration department for vintage drums.",
+      },
     ],
   },
   "i-perc-lp-congas": {
@@ -232,9 +316,27 @@ export const INSTRUMENTS: Record<string, Instrument> = {
     artistNote:
       "A pair of quintos plus a bongo for the bridge fills.",
     vendors: [
-      { name: "Latin Percussion", affiliateUrl: "https://lpmusic.com/collections/matador-series", aboutUrl: "https://lpmusic.com/",          logoUrl: fav("lpmusic.com") },
-      { name: "Sweetwater",       affiliateUrl: "https://www.sweetwater.com/c777--Conga_Drums",   aboutUrl: "https://www.sweetwater.com/",  logoUrl: fav("sweetwater.com") },
-      { name: "Drums Etc.",       affiliateUrl: "https://www.drumsetc.com/",                       aboutUrl: "https://www.drumsetc.com/",   logoUrl: fav("drumsetc.com") },
+      {
+        name: "Latin Percussion",
+        affiliateUrl: "https://lpmusic.com/collections/matador-series",
+        aboutUrl: "https://lpmusic.com/",
+        logoUrl: fav("lpmusic.com"),
+        bio: "Latin Percussion was founded in 1964 by Martin Cohen, an engineer who couldn't find decent congas in New York and started building his own. Sixty years later, LP is the world's leading maker of hand percussion — congas, bongos, timbales, cowbells, shakers, and the rest of the Afro-Cuban toolkit — and the brand of choice for everyone from Tito Puente to Sheila E. to the modern session world.",
+      },
+      {
+        name: "Sweetwater",
+        affiliateUrl: "https://www.sweetwater.com/c777--Conga_Drums",
+        aboutUrl: "https://www.sweetwater.com/",
+        logoUrl: fav("sweetwater.com"),
+        bio: "Started by Chuck Surack out of a VW bus in 1979, Sweetwater is now the largest online retailer of musical instruments and pro-audio gear in the United States, headquartered on a 175-acre campus in Fort Wayne, Indiana. Every customer is assigned a personal Sales Engineer — a working musician trained to give real advice — and every guitar over $299 receives a complimentary 55-Point Inspection by Sweetwater's Guitar Gallery before it ships.",
+      },
+      {
+        name: "Drums Etc.",
+        affiliateUrl: "https://www.drumsetc.com/",
+        aboutUrl: "https://www.drumsetc.com/",
+        logoUrl: fav("drumsetc.com"),
+        bio: "Drums Etc. has been Charlotte, North Carolina's full-line drum shop since 1989, owned and run by drummers. Beyond kits and cymbals from every major maker, the shop is known for its hand-percussion wall — congas, djembes, cajóns, frame drums, world percussion — and a teaching studio that's brought in clinicians from across the country.",
+      },
     ],
   },
 };
