@@ -13,6 +13,7 @@ import fenderPPhoto from "@assets/instruments/fender-p.jpg";
 import gretschKitPhoto from "@assets/instruments/gretsch-kit.jpg";
 import lpCongasPhoto from "@assets/instruments/lp-congas.jpg";
 import nickCarterPhoto from "@assets/image_1778720312538.png";
+import fenderTelecasterCover from "@assets/image_1778731986270.png";
 
 export const ARTIST_PHOTOS: Record<string, string> = {
   "Nick Carter": nickCarterPhoto,
@@ -253,6 +254,7 @@ export const INSTRUMENTS: Record<string, Instrument> = {
         affiliateUrl: "https://www.fender.com/en-US/electric-basses/precision-bass/",
         aboutUrl: "https://www.fender.com/",
         logoUrl: fav("fender.com"),
+        coverUrl: fenderTelecasterCover,
         bio: "Founded by Leo Fender in Fullerton, California in 1946, Fender Musical Instruments Corporation invented the solid-body electric guitar (the Telecaster, 1950), the electric bass guitar (the Precision Bass, 1951), and the Stratocaster (1954) — instruments that became the foundation of modern popular music. Today Fender designs and manufactures guitars, basses, amplifiers, and gear played by everyone from first-time students to the world's most recorded artists.",
       },
       {
