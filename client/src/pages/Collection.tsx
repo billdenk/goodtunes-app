@@ -7,7 +7,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { ALBUMS, SONGS, type Album } from "@/data/musicData";
+import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 type LibraryTab = "albums" | "songs" | "artists";
@@ -387,12 +387,20 @@ export function Collection() {
                         </svg>
                       )}
                     </div>
-                    <img
-                      src={artist.albums[0].artwork}
-                      alt={artist.name}
-                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                      style={{ border: "1px solid rgba(255,255,255,0.1)" }}
-                    />
+                    {(() => {
+                      const photo = ARTIST_PHOTOS[artist.name];
+                      return (
+                        <img
+                          src={photo ?? artist.albums[0].artwork}
+                          alt={artist.name}
+                          className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                          style={{
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            ...(photo ? { objectPosition: "50% 20%" } : {}),
+                          }}
+                        />
+                      );
+                    })()}
                     <div className="flex-1 min-w-0">
                       <p className="text-white text-sm font-semibold truncate leading-tight">{artist.name}</p>
                       <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
