@@ -2079,17 +2079,6 @@ export function Admin() {
               <span className="text-[11px] text-slate-400">{t.count}</span>
             </button>
           ))}
-          {["Credits"].map((label) => (
-            <button
-              key={label}
-              type="button"
-              disabled
-              className="w-full text-left px-3 py-2 rounded-md text-slate-300 cursor-not-allowed"
-              title="Credits panel coming next"
-            >
-              {label} <span className="text-[10px] uppercase tracking-wider opacity-60 ml-1">soon</span>
-            </button>
-          ))}
         </nav>
         <PromotePanel />
         <div className="px-3 py-3 border-t border-slate-200">
