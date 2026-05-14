@@ -16,6 +16,10 @@ interface AdminAlbum {
   // from the fan-side catalog. CMS callers see hidden rows so they can
   // flip the toggle back on.
   isHidden: boolean;
+  // Per-album streaming-service handoff. Populated either by the People
+  // discography panel (Apple Music) or manually on the album editor.
+  appleMusicUrl: string | null;
+  spotifyUrl: string | null;
 }
 
 interface AdminSong {
@@ -38,6 +42,31 @@ interface AdminPerson {
   photoUrl: string | null;
   bio: string | null;
   accent: string | null;
+  appleMusicUrl: string | null;
+  spotifyUrl: string | null;
+  itunesArtistId: string | null;
+}
+
+interface ScrapedArtistAlbum {
+  collectionId: number;
+  name: string;
+  artworkUrl: string;
+  year: number | null;
+  trackCount: number | null;
+  type: "album" | "EP";
+  releaseDate: string | null;
+  appleMusicUrl: string | null;
+}
+
+interface ArtistScrapeResult {
+  source: "apple" | "spotify" | "unknown";
+  name: string | null;
+  photoUrl: string | null;
+  bio: string | null;
+  itunesArtistId: string | null;
+  appleMusicUrl: string | null;
+  spotifyUrl: string | null;
+  albums: ScrapedArtistAlbum[];
 }
 
 interface AdminVendor {
@@ -327,6 +356,8 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
         type: data.type,
         description: data.description,
         isHidden: data.isHidden,
+        appleMusicUrl: data.appleMusicUrl,
+        spotifyUrl: data.spotifyUrl,
       });
       setDirty(false);
     }
@@ -496,6 +527,30 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
             data-testid="input-album-description"
           />
         </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Apple Music URL (album)">
+            <input
+              value={form.appleMusicUrl ?? ""}
+              onChange={(e) => set("appleMusicUrl", e.target.value || null)}
+              placeholder="https://music.apple.com/us/album/…"
+              className={inputCls}
+              data-testid="input-album-apple-url"
+            />
+          </Field>
+          <Field label="Spotify URL (album)">
+            <input
+              value={form.spotifyUrl ?? ""}
+              onChange={(e) => set("spotifyUrl", e.target.value || null)}
+              placeholder="https://open.spotify.com/album/…"
+              className={inputCls}
+              data-testid="input-album-spotify-url"
+            />
+          </Field>
+        </div>
+        <p className="text-[11px] text-slate-400 -mt-2">
+          "Listen on…" handoff. Surfaced on the album page after the in-app preview window. Apple Music URL is auto-filled when an album is pulled from an artist's discography.
+        </p>
 
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -815,13 +870,143 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ---------- PersonEditor ----------
 
+// Paste-an-artist-URL bar. Mirror of ScrapeBar for instruments. Reads the
+// artist's Apple Music or Spotify page for name/photo/bio, and (Apple only)
+// the full discography via the free iTunes Lookup API.
+function ArtistScrapeBar({ onPrefill }: { onPrefill: (r: ArtistScrapeResult) => void }) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  async function go() {
+    const u = url.trim();
+    if (!u) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/people/scrape", { url: u });
+      const data = (await res.json()) as ArtistScrapeResult;
+      onPrefill(data);
+      const src = data.source === "apple" ? "Apple Music" : data.source === "spotify" ? "Spotify" : "page";
+      const discog = data.albums.length > 0 ? ` Found ${data.albums.length} album${data.albums.length === 1 ? "" : "s"}.` : "";
+      setMsg({ kind: "ok", text: `Pulled from ${src}. Review and Save.${discog}` });
+      setUrl("");
+    } catch (e: any) {
+      setMsg({ kind: "err", text: e?.message || "Couldn't read that page." });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="rounded-lg border border-slate-200 bg-[#f7fbff] p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); go(); } }}
+          placeholder="Paste an Apple Music or Spotify artist URL"
+          className={inputCls + " flex-1"}
+          disabled={busy}
+          data-testid="input-artist-scrape-url"
+        />
+        <button
+          type="button"
+          onClick={go}
+          disabled={busy || !url.trim()}
+          className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40"
+          data-testid="button-artist-scrape-url"
+        >
+          {busy ? "Reading…" : "Pull"}
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400">
+        Fills name, photo, bio, and stores the streaming URL as the eventual "Listen on…" handoff. Apple Music URLs also list the artist's full discography below.
+      </p>
+      {msg && (
+        <p
+          className={`text-[12px] ${msg.kind === "ok" ? "text-[#319ED8]" : "text-red-600"}`}
+          data-testid="text-artist-scrape-result"
+        >
+          {msg.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Discography row — one pulled album from iTunes Lookup. Shows artwork +
+// title + year + a status pill on the right ("In library" if we already
+// have a matching album, otherwise "+ Add" which one-clicks creating it
+// in GoodTunes with the right artist/year/artwork/Apple Music URL).
+function DiscographyRow({
+  album,
+  artistName,
+  match,
+  onAdded,
+}: {
+  album: ScrapedArtistAlbum;
+  artistName: string;
+  match: AdminAlbum | null;
+  onAdded: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const add = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/albums", {
+        title: album.name,
+        artist: artistName,
+        artwork: album.artworkUrl,
+        year: album.year,
+        type: album.type,
+        appleMusicUrl: album.appleMusicUrl,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      onAdded();
+    },
+  });
+  return (
+    <div className="flex items-center gap-3 py-2" data-testid={`row-discography-${album.collectionId}`}>
+      {album.artworkUrl ? (
+        <img src={album.artworkUrl} alt="" className="w-12 h-12 rounded object-cover shrink-0" />
+      ) : (
+        <div className="w-12 h-12 rounded bg-slate-200 shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="text-slate-900 text-sm font-medium truncate">{album.name}</div>
+        <div className="text-slate-400 text-[11px]">
+          {[album.type, album.year, album.trackCount ? `${album.trackCount} tracks` : null].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      {match ? (
+        <span className="text-[11px] font-medium text-[#319ED8] bg-[#319ED8]/10 px-2 py-1 rounded">In library</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => add.mutate()}
+          disabled={add.isPending}
+          className="text-[12px] text-[#319ED8] font-medium hover:underline disabled:opacity-40"
+          data-testid={`button-add-album-${album.collectionId}`}
+        >
+          {add.isPending ? "Adding…" : "+ Add"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: () => void }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<AdminPerson>({ queryKey: ["/api/people", personId] });
+  const { data: libraryAlbums = [] } = useQuery<AdminAlbum[]>({ queryKey: ["/api/albums"] });
   const [form, setForm] = useState<AdminPerson | null>(null);
   const [dirty, setDirty] = useState(false);
+  // Discography lives in client state — it's transient (pulled per session,
+  // not persisted). On re-pull we replace it; on save we don't touch it.
+  const [discography, setDiscography] = useState<ScrapedArtistAlbum[]>([]);
   useEffect(() => {
-    if (data) { setForm(data); setDirty(false); }
+    if (data) { setForm(data); setDirty(false); setDiscography([]); }
   }, [data?.id]);
 
   const update = (patch: Partial<AdminPerson>) => { setForm((f) => (f ? { ...f, ...patch } : f)); setDirty(true); };
@@ -852,6 +1037,19 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
     },
   });
 
+  // Match a scraped album against the GoodTunes library by lowercased title
+  // + artist. Lossy on purpose: "Greatest Hits (Deluxe Edition)" won't match
+  // "Greatest Hits" — admin can still click + Add and we'd get a dupe, but
+  // that's the safer side of the trade-off.
+  const matchAlbum = (a: ScrapedArtistAlbum, artistName: string): AdminAlbum | null => {
+    const key = `${a.name}::${artistName}`.toLowerCase().trim();
+    return (
+      libraryAlbums.find(
+        (lib) => `${lib.title}::${lib.artist}`.toLowerCase().trim() === key,
+      ) || null
+    );
+  };
+
   if (isLoading || !form) return <div className="p-6 text-slate-400">Loading…</div>;
 
   return (
@@ -873,6 +1071,21 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
         </div>
       </div>
 
+      <ArtistScrapeBar
+        onPrefill={(r) => {
+          update({
+            // Never clobber a non-empty existing value
+            name: form.name && form.name !== "New person" ? form.name : (r.name || form.name),
+            photoUrl: form.photoUrl || r.photoUrl,
+            bio: form.bio || r.bio,
+            appleMusicUrl: r.appleMusicUrl || form.appleMusicUrl,
+            spotifyUrl: r.spotifyUrl || form.spotifyUrl,
+            itunesArtistId: r.itunesArtistId || form.itunesArtistId,
+          });
+          setDiscography(r.albums);
+        }}
+      />
+
       <Field label="Name">
         <input value={form.name} onChange={(e) => update({ name: e.target.value })} className={inputCls} data-testid="input-person-name" />
       </Field>
@@ -883,6 +1096,31 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
       <Field label="Bio">
         <textarea value={form.bio ?? ""} onChange={(e) => update({ bio: e.target.value || null })} rows={4} className={inputCls + " resize-none"} data-testid="input-person-bio" />
       </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Apple Music URL (artist)">
+          <input
+            value={form.appleMusicUrl ?? ""}
+            onChange={(e) => update({ appleMusicUrl: e.target.value || null })}
+            placeholder="https://music.apple.com/us/artist/…"
+            className={inputCls}
+            data-testid="input-person-apple-url"
+          />
+        </Field>
+        <Field label="Spotify URL (artist)">
+          <input
+            value={form.spotifyUrl ?? ""}
+            onChange={(e) => update({ spotifyUrl: e.target.value || null })}
+            placeholder="https://open.spotify.com/artist/…"
+            className={inputCls}
+            data-testid="input-person-spotify-url"
+          />
+        </Field>
+      </div>
+      <p className="text-[11px] text-slate-400 -mt-2">
+        After the in-app preview window, fans get "Listen on Apple Music / Spotify" buttons that point here.
+      </p>
+
       <Field label="Accent colour (hex, falls back to brand blue)">
         <div className="flex items-center gap-2">
           <input value={form.accent ?? ""} onChange={(e) => update({ accent: e.target.value || null })} placeholder="#319ED8" className={inputCls} data-testid="input-person-accent" />
@@ -918,6 +1156,31 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
           {save.isPending ? "Saving…" : "Save changes"}
         </button>
       </div>
+
+      {discography.length > 0 && (
+        <div className="pt-4 border-t border-slate-200 space-y-2" data-testid="section-discography">
+          <div className="flex items-center justify-between">
+            <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">Discography</h3>
+            <span className="text-[11px] text-slate-400">
+              {discography.length} from Apple Music · newest first
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            One-click adds an album to GoodTunes with real artwork + the Apple Music handoff URL. Track-by-track import and Spotify URLs come next.
+          </p>
+          <div className="divide-y divide-slate-100">
+            {discography.map((a) => (
+              <DiscographyRow
+                key={a.collectionId}
+                album={a}
+                artistName={form.name}
+                match={matchAlbum(a, form.name)}
+                onAdded={() => { /* match recomputes after invalidation refetches /api/albums */ }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

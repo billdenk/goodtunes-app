@@ -342,7 +342,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }
   // Manual redirect follower so we can re-run the SSRF check on every hop.
-  async function safeFetch(url: string, init?: RequestInit, maxHops = 5): Promise<Response> {
+  // NB: `Response` is imported at the top of this file as Express's response
+  // type. We explicitly want the fetch/web `Response` here, so we reach for
+  // the global. Without this, callers see Express's Response and lose
+  // `.ok` / `.text()` / `.arrayBuffer()` etc.
+  async function safeFetch(url: string, init?: RequestInit, maxHops = 5): Promise<globalThis.Response> {
     let current = url;
     for (let i = 0; i <= maxHops; i++) {
       await assertPublic(new URL(current));
@@ -627,7 +631,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/albums", requireAdmin, async (req, res) => {
-    const { id, title, artist, artwork, year, type, description } = req.body ?? {};
+    const { id, title, artist, artwork, year, type, description, appleMusicUrl, spotifyUrl } = req.body ?? {};
     if (!title || !artist || !artwork) {
       return res.status(400).json({ message: "title, artist, artwork are required" });
     }
@@ -639,6 +643,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       year: year != null ? Number(year) : null,
       type: type === "EP" ? "EP" : "album",
       description: description ? String(description) : null,
+      appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
+      spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
     } as any);
     return res.status(201).json(album);
   });
@@ -654,6 +660,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (type !== undefined) updates.type = type === "EP" ? "EP" : "album";
     if (description !== undefined) updates.description = description ? String(description) : null;
     if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
+    if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
+    if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
     return res.json(updated);
@@ -711,24 +719,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(p);
   });
   app.post("/api/admin/people", requireAdmin, async (req, res) => {
-    const { name, photoUrl, bio, accent } = req.body ?? {};
+    const { name, photoUrl, bio, accent, appleMusicUrl, spotifyUrl, itunesArtistId } = req.body ?? {};
     if (!name) return res.status(400).json({ message: "name is required" });
     const p = await storage.createPerson({
       name: String(name),
       photoUrl: photoUrl ? String(photoUrl) : null,
       bio: bio ? String(bio) : null,
       accent: accent ? String(accent) : null,
+      appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
+      spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
+      itunesArtistId: itunesArtistId ? String(itunesArtistId) : null,
     } as any);
     return res.status(201).json(p);
   });
   app.put("/api/admin/people/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, photoUrl, bio, accent } = req.body ?? {};
+    const { name, photoUrl, bio, accent, appleMusicUrl, spotifyUrl, itunesArtistId } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (accent !== undefined) updates.accent = accent ? String(accent) : null;
+    if (appleMusicUrl !== undefined) updates.appleMusicUrl = appleMusicUrl ? String(appleMusicUrl) : null;
+    if (spotifyUrl !== undefined) updates.spotifyUrl = spotifyUrl ? String(spotifyUrl) : null;
+    if (itunesArtistId !== undefined) updates.itunesArtistId = itunesArtistId ? String(itunesArtistId) : null;
     const p = await storage.updatePerson(id, updates);
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(p);
@@ -736,6 +750,167 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/admin/people/:id", requireAdmin, async (req, res) => {
     await storage.deletePerson(String(req.params.id));
     return res.json({ message: "Deleted" });
+  });
+
+  // --- Artist URL scraper (Apple Music / Spotify → prefilled person + discography) ---
+  // Mirror of the instrument scraper. Two sources:
+  //   1. The artist page itself: OG meta for image + bio snippet (and canonical
+  //      name from <title> / og:title). Works on both services.
+  //   2. iTunes Lookup API (free, no auth) — Apple Music URLs end in a numeric
+  //      artist id, which we feed to lookup?id=...&entity=album to get the
+  //      artist's complete discography with artwork + year + track count. We
+  //      surface that as a "Discography" panel so the admin can one-click
+  //      add real albums (with real artwork) to the GoodTunes catalog.
+  // Per replit.md: we host the song in-app for ~2 weeks then send fans back
+  // to Apple/Spotify via these same URLs ("referring them to give them
+  // business"). One paste fills both jobs.
+  app.post("/api/admin/people/scrape", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// artist URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+
+    // Detect service. Apple Music artist URLs look like
+    //   /<country>/artist/<slug>/<numeric-id>(?i=...)?
+    // Spotify artist URLs look like /artist/<base62>
+    let source: "apple" | "spotify" | "unknown" = "unknown";
+    let itunesArtistId: string | null = null;
+    if (/(^|\.)music\.apple\.com$/.test(host)) {
+      source = "apple";
+      const m = parsed.pathname.match(/\/artist\/(?:[^/]+\/)?(\d+)/i);
+      if (m) itunesArtistId = m[1];
+    } else if (/(^|\.)open\.spotify\.com$/.test(host) || /(^|\.)spotify\.com$/.test(host)) {
+      source = "spotify";
+    }
+
+    try {
+      // ----- 1) Scrape the artist page for OG image + bio snippet -----
+      let metaName: string | null = null;
+      let bio: string | null = null;
+      let rawImage: string | null = null;
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10_000);
+        const html = await safeFetch(url, {
+          signal: ctrl.signal,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+            "Accept": "text/html,application/xhtml+xml",
+          },
+        }).then((r) => {
+          if (!r.ok) throw new Error(`Page returned ${r.status}`);
+          return r.text();
+        }).finally(() => clearTimeout(t));
+
+        const meta: Record<string, string> = {};
+        const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+        const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+        let m: RegExpExecArray | null;
+        while ((m = re1.exec(html))) {
+          const key = m[1].toLowerCase();
+          if (!(key in meta)) meta[key] = decodeEntities(m[2]);
+        }
+        while ((m = re2.exec(html))) {
+          const key = m[2].toLowerCase();
+          if (!(key in meta)) meta[key] = decodeEntities(m[1]);
+        }
+
+        // Apple titles its og:title as "Artist Name on Apple Music" — strip
+        // the trailing service tag. Spotify is "Artist Name | Spotify".
+        let ogTitle = meta["og:title"] || meta["twitter:title"] || null;
+        if (ogTitle) {
+          ogTitle = ogTitle
+            .replace(/\s+on Apple Music\s*$/i, "")
+            .replace(/\s*[|·]\s*Spotify\s*$/i, "")
+            .trim();
+        }
+        metaName = ogTitle;
+        bio = meta["og:description"] || meta["twitter:description"] || meta["description"] || null;
+        rawImage = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+        if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
+        if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
+      } catch {
+        /* OG scrape is best-effort — Apple sometimes 403s the bot. We still
+           have iTunes Lookup below to fill name + first album art. */
+      }
+
+      // ----- 2) Apple-only: pull the canonical artist + full discography -----
+      let canonicalName: string | null = null;
+      let albums: Array<{
+        collectionId: number;
+        name: string;
+        artworkUrl: string;
+        year: number | null;
+        trackCount: number | null;
+        type: "album" | "EP";
+        releaseDate: string | null;
+      }> = [];
+      if (source === "apple" && itunesArtistId) {
+        try {
+          const lookup = await safeFetch(
+            `https://itunes.apple.com/lookup?id=${itunesArtistId}&entity=album&limit=200&country=us`,
+            { headers: { "Accept": "application/json" } },
+          ).then((r) => r.json() as Promise<{ results: any[] }>);
+          const results = Array.isArray(lookup?.results) ? lookup.results : [];
+          const artistRow = results.find((r) => r.wrapperType === "artist");
+          canonicalName = artistRow?.artistName || null;
+          albums = results
+            .filter((r) => r.wrapperType === "collection")
+            .map((r) => {
+              // iTunes returns 100×100 thumbs by default — swap to 600×600
+              // which is what Apple Music UI actually uses.
+              const art100: string = r.artworkUrl100 || r.artworkUrl60 || "";
+              const artworkUrl = art100.replace(/\/(\d+)x(\d+)bb\.(jpg|png)$/i, "/600x600bb.$3");
+              const releaseDate: string | null = r.releaseDate || null;
+              const year = releaseDate ? Number(releaseDate.slice(0, 4)) || null : null;
+              const trackCount = Number(r.trackCount) || null;
+              return {
+                collectionId: Number(r.collectionId),
+                name: String(r.collectionName || ""),
+                artworkUrl,
+                year,
+                trackCount,
+                type: (trackCount && trackCount <= 6 ? "EP" : "album") as "album" | "EP",
+                releaseDate,
+                // Canonical Apple Music album URL — the "Listen on Apple
+                // Music" handoff target. Spotify equivalent has to be set
+                // manually for now (no free cross-service mapping).
+                appleMusicUrl: (r.collectionViewUrl as string) || null,
+              };
+            })
+            // newest first — matches the canvas order of an Apple Music artist page
+            .sort((a, b) => (b.releaseDate || "").localeCompare(a.releaseDate || ""));
+        } catch {
+          /* discography is a bonus — don't fail the whole scrape if iTunes
+             is down or rate-limits us */
+        }
+      }
+
+      // ----- 3) Rehost photo so we don't depend on Apple's CDN long-term -----
+      let photoUrl: string | null = null;
+      if (rawImage) {
+        try { photoUrl = await rehostRemoteImage(rawImage); }
+        catch { photoUrl = rawImage; }
+      }
+
+      const name = canonicalName || metaName || null;
+      res.json({
+        source,
+        name,
+        photoUrl,
+        bio,
+        itunesArtistId,
+        appleMusicUrl: source === "apple" ? url : null,
+        spotifyUrl: source === "spotify" ? url : null,
+        albums,
+      });
+    } catch (e: any) {
+      const msg = e?.name === "AbortError" ? "Streaming page took too long to respond." : (e?.message || "Unable to read that page");
+      res.status(502).json({ message: msg });
+    }
   });
 
   // ----- SuperCredits™ catalog: Instruments + vendors ----------------------

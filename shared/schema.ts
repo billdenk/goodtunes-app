@@ -27,6 +27,12 @@ export const albums = pgTable("albums", {
   // effectively hiding the artist + all their songs/credits in one toggle.
   // Admin endpoints keep returning hidden rows so the CMS can flip them back.
   isHidden: boolean("is_hidden").notNull().default(false),
+  // Streaming-service handoff. We host the album in-app for the first ~2 weeks
+  // then surface "Listen on Apple Music / Spotify" buttons on the album page
+  // that point fans at the canonical album URL on each service — same
+  // referral logic as the per-artist links on `people`.
+  appleMusicUrl: text("apple_music_url"),
+  spotifyUrl: text("spotify_url"),
 });
 
 export const songs = pgTable("songs", {
@@ -88,6 +94,16 @@ export const people = pgTable("people", {
   // HSL-friendly hex from the brand palette for the initial-circle avatar
   // fallback (#319ED8, #7F10A7, #4AFFCA, #FF5470).
   accent: text("accent"),
+  // Streaming-service handoff. We host the song in-app for the first ~2 weeks,
+  // then surface "Listen on Apple Music / Spotify" buttons that point at the
+  // artist's canonical page on each service. Same URLs are also the scrape
+  // source for name/photo/bio on first import.
+  appleMusicUrl: text("apple_music_url"),
+  spotifyUrl: text("spotify_url"),
+  // iTunes Lookup needs the numeric artist id (last path segment of an Apple
+  // Music artist URL). Cached so the discography panel can refresh without
+  // re-parsing the URL.
+  itunesArtistId: text("itunes_artist_id"),
 });
 
 export const instruments = pgTable("instruments", {

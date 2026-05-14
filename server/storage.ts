@@ -147,10 +147,10 @@ export interface IStorage {
 // imports that the server can't resolve. The catalog tables for people /
 // instruments / vendors / credits land in the next phase along with the CMS.
 const SEED_ALBUMS: Album[] = [
-  { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "album", description: "A sweeping collection of songs about stillness, change, and the moments between.", isHidden: false },
-  { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "album", description: "Instrumental mastery meets emotional storytelling.", isHidden: false },
-  { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell.", isHidden: false },
-  { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "album", description: "Sunshine, highways, and the stories only California can tell.", isHidden: false },
+  { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "album", description: "A sweeping collection of songs about stillness, change, and the moments between.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
+  { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "album", description: "Instrumental mastery meets emotional storytelling.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
+  { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
+  { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "album", description: "Sunshine, highways, and the stories only California can tell.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
 ];
 
 const SEED_SONGS: Song[] = [
