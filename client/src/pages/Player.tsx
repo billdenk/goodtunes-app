@@ -2,6 +2,7 @@ import { useState, useRef, useMemo, useEffect } from "react";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
+import { track } from "@/lib/analytics";
 
 // Build a line-level synced lyric track by evenly distributing each
 // non-header lyric line across the song's duration, with a small lead-in

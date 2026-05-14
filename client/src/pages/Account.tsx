@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import { clearLocalAnalytics } from "@/lib/analytics";
 
 export function Account() {
   const { user, logout, updateProfile, isUpdatePending, updateError } = useAuth();
@@ -13,6 +14,18 @@ export function Account() {
   const [username, setUsername] = useState(user?.username || "");
   const [realName, setRealName] = useState(user?.realName || "");
   const [saved, setSaved] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearedToast, setClearedToast] = useState(false);
+
+  const handleClearHistory = async () => {
+    setClearing(true);
+    try { await clearLocalAnalytics(); } catch {}
+    setClearing(false);
+    setConfirmClear(false);
+    setClearedToast(true);
+    setTimeout(() => setClearedToast(false), 2200);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -154,6 +167,55 @@ export function Account() {
               </button>
             ))}
           </div>
+
+          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
+          <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+            <p className="px-4 pt-3 pb-2 text-white/55 text-[12px] leading-snug">
+              We record what you listen to so artists can see which songs resonate. You can wipe your history any time.
+            </p>
+            {!confirmClear ? (
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t"
+                style={{ borderColor: "rgba(255,255,255,0.07)" }}
+                data-testid="button-clear-history"
+              >
+                Delete My Listening History
+              </button>
+            ) : (
+              <div className="px-4 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                <p className="text-white text-[14px] mb-3">Permanently delete every play, skip, and favorite event tied to this account?</p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClear(false)}
+                    className="flex-1 py-3 rounded-2xl border border-white/20 text-white/60 text-sm font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearHistory}
+                    disabled={clearing}
+                    className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white disabled:opacity-50"
+                    style={{ background: "#FF5470" }}
+                    data-testid="button-confirm-clear-history"
+                  >
+                    {clearing ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          {clearedToast && (
+            <div className="mb-3 flex items-center gap-2 text-[#4AFFCA] text-sm px-1">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M20 6L9 17l-5-5" strokeLinecap="round" />
+              </svg>
+              Listening history deleted
+            </div>
+          )}
 
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             <button

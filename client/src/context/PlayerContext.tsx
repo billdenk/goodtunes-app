@@ -139,23 +139,36 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (hasRealAudio) return;
     if (currentTime >= duration && duration > 0 && isPlaying) {
-      handleNext();
+      // Force-mark complete before advancing so this isn't classified as a skip.
+      milestonesRef.current.completed = true;
+      handleNext(false);
     }
   }, [currentTime, duration, hasRealAudio]);
 
-  // Keep a live ref to the current song so audio-event callbacks (which close
-  // over the initial render) can always read the latest one.
+  // Keep live refs so audio-event callbacks (which close over the initial
+  // render) can always read the latest values without stale-closure bugs.
   const currentSongRef = useRef<PlayerSong | null>(null);
+  const currentTimeRef = useRef(0);
+  const durationRef = useRef(0);
   useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
 
   // Reset per-play analytics milestones whenever the current song changes.
   useEffect(() => {
     resetMilestones(currentSong?.id ?? null);
   }, [currentSong?.id, resetMilestones]);
 
+  // Begin a new analytics play instance: reset milestones and emit play_start.
+  // Called from playSong (initial play of any song, including replay of the
+  // currently-playing one), repeat-one restart, and the simulated playback path.
+  const beginPlayInstance = useCallback((song: PlayerSong, simulated: boolean) => {
+    resetMilestones(song.id);
+    milestonesRef.current.started = true;
+    track("play_start", { ...songMeta(song), simulated: simulated || undefined });
+  }, [resetMilestones, songMeta]);
+
   // Fire play_30s and play_complete based on currentTime / duration milestones.
-  // play_start fires from the audio element's `playing` event below (or
-  // immediately on playSong for the simulated/no-audio path).
   useEffect(() => {
     const m = milestonesRef.current;
     const song = currentSongRef.current;
@@ -170,16 +183,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [currentTime, duration, songMeta]);
 
-  const handleNext = useCallback(() => {
-    // Emit play_skip if the user skipped before completing the track.
+  // userInitiated=false is used by the natural-end paths (audio 'ended'
+  // event + simulated end-of-track effect). Auto-advance never counts as a skip.
+  const handleNext = useCallback((userInitiated: boolean = true) => {
     const m = milestonesRef.current;
     const song = currentSongRef.current;
-    if (song && !m.completed && currentTime < 30) {
-      track("play_skip", { ...songMeta(song), at: currentTime, duration, direction: "next" });
+    const ct = currentTimeRef.current;
+    const dur = durationRef.current;
+    if (userInitiated && song && !m.completed && ct < 30) {
+      track("play_skip", { ...songMeta(song), at: ct, duration: dur, direction: "next" });
     }
     if (repeat === "one") {
-      // Treat replay as a new play instance for analytics.
-      resetMilestones(song?.id ?? null);
+      if (song) beginPlayInstance(song, !song.audioUrl);
       setCurrentTime(0);
       const a = audioRef.current;
       if (a && hasRealAudio) { a.currentTime = 0; a.play().catch(() => {}); }
@@ -199,31 +214,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } else {
       setIsPlaying(false);
     }
-  }, [currentIndex, queue.length, repeat, shuffle, hasRealAudio]);
+  }, [currentIndex, queue.length, repeat, shuffle, hasRealAudio, songMeta, beginPlayInstance]);
 
   const handlePrev = useCallback(() => {
+    const ct = currentTimeRef.current;
+    const dur = durationRef.current;
     const m = milestonesRef.current;
     const song = currentSongRef.current;
-    if (song && !m.completed && currentTime < 30 && currentTime <= 3) {
-      // Only count as a skip when we're actually leaving this track
-      // (currentTime > 3 just restarts the same song below).
-      track("play_skip", { ...songMeta(song), at: currentTime, duration, direction: "prev" });
-    }
-    if (currentTime > 3) {
+    // Apple behavior: prev with currentTime > 3 restarts the same song (no skip).
+    if (ct > 3) {
       setCurrentTime(0);
       const a = audioRef.current;
       if (a && hasRealAudio) a.currentTime = 0;
       return;
     }
+    // Only count as a skip when we're actually leaving the current track.
     if (currentIndex > 0) {
+      if (song && !m.completed && ct < 30) {
+        track("play_skip", { ...songMeta(song), at: ct, duration: dur, direction: "prev" });
+      }
       setCurrentIndex((i) => i - 1);
       setCurrentTime(0);
     } else {
+      // At start of queue with currentTime <= 3 — just restart, no skip.
       setCurrentTime(0);
       const a = audioRef.current;
       if (a && hasRealAudio) a.currentTime = 0;
     }
-  }, [currentIndex, currentTime, hasRealAudio]);
+  }, [currentIndex, hasRealAudio, songMeta]);
 
   // Sync the hidden <audio> element with the current song + isPlaying state.
   useEffect(() => {
@@ -270,7 +288,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onMeta = () => {
       if (Number.isFinite(a.duration)) setAudioDuration(Math.floor(a.duration));
     };
-    const onEnded = () => handleNext();
+    const onEnded = () => {
+      milestonesRef.current.completed = true;
+      handleNext(false);
+    };
     const onError = () => setIsPlaying(false);
     const onPlaying = () => {
       const m = milestonesRef.current;
@@ -304,13 +325,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0);
     setAudioDuration(null);
     setIsPlaying(true);
-    // For songs without real audio, the audio element's `playing` event never
-    // fires — emit play_start here so the simulated path is also instrumented.
-    if (!song.audioUrl) {
-      resetMilestones(song.id);
-      milestonesRef.current.started = true;
-      track("play_start", { songId: song.id, songTitle: song.title, albumId: song.album?.id, albumTitle: song.album?.title, artist: song.album?.artist, simulated: true });
-    }
+    // Always begin a new play instance — covers replays of the currently-
+    // playing song where currentSong.id wouldn't change. For real audio the
+    // 'playing' event would also try to fire play_start, but the `started`
+    // flag set here keeps it idempotent.
+    beginPlayInstance(song, !song.audioUrl);
     // Apple Music behavior: tapping a song updates the mini-player only.
     // The full Now Playing sheet opens only when the user taps the mini-player.
     setShowLyrics(false);

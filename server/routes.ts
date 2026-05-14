@@ -241,6 +241,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Removed" });
   });
 
+  // ----- Play analytics ---------------------------------------------------
+  // Stub endpoint for the player-side analytics module. The GT coders will
+  // replace the in-memory ring buffer with real persistence (Postgres / S3 +
+  // Athena / Snowflake — see replit.md "Play analytics"). Shape is stable:
+  // POST /api/events  body: { events: AnalyticsEvent[] }
+  // DELETE /api/events  → wipes this user's events ("Delete my listening history")
+  // GET /api/events/recent  → last 100 for inspection during integration
+  type StoredEvent = {
+    id: string;
+    name: string;
+    payload: Record<string, any>;
+    ts: number;
+    sessionId: string;
+    userId?: string;
+    receivedAt: number;
+  };
+  const eventBuffer: StoredEvent[] = [];
+  const EVENT_BUFFER_MAX = 1000;
+
+  app.post("/api/events", (req, res) => {
+    const userId = getUserIdFromRequest(req);
+    const events = Array.isArray(req.body?.events) ? req.body.events : [];
+    const now = Date.now();
+    for (const e of events) {
+      if (!e || typeof e.name !== "string") continue;
+      eventBuffer.push({
+        id: String(e.id ?? ""),
+        name: String(e.name),
+        payload: e.payload && typeof e.payload === "object" ? e.payload : {},
+        ts: typeof e.ts === "number" ? e.ts : now,
+        sessionId: String(e.sessionId ?? ""),
+        userId,
+        receivedAt: now,
+      });
+    }
+    if (eventBuffer.length > EVENT_BUFFER_MAX) {
+      eventBuffer.splice(0, eventBuffer.length - EVENT_BUFFER_MAX);
+    }
+    return res.status(204).end();
+  });
+
+  app.delete("/api/events", requireAuth, (req, res) => {
+    const userId = req.session.userId!;
+    for (let i = eventBuffer.length - 1; i >= 0; i--) {
+      if (eventBuffer[i].userId === userId) eventBuffer.splice(i, 1);
+    }
+    return res.json({ message: "Listening history deleted" });
+  });
+
+  app.get("/api/events/recent", requireAuth, (req, res) => {
+    const userId = req.session.userId!;
+    const mine = eventBuffer.filter((e) => e.userId === userId).slice(-100);
+    return res.json(mine);
+  });
+
   // Public OpenGraph share page for a GoodDeed certificate.
   // No auth required — link is meant to be unfurled by social platforms.
   app.get("/share/cert", (req, res) => {
