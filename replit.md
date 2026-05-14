@@ -93,6 +93,11 @@ Out of scope for the demo (planned for the real build):
 - Vendor accounts (separate role from listener), real inbox + thread storage, push notifications.
 - Anti-spam, rate limiting, attachments (artists will want gear photos / audio clips).
 - Vendor profile pages (logo, bio, hours, response-time SLA, instruments they specialize in). Today the row simply links into the in-app browser for the vendor's own about/buy pages.
+
+#### In-app browser (web vs. native)
+On the web, vendor sites (Reverb, Sweetwater, Shar, etc.) all send `X-Frame-Options: deny` / restrictive CSP `frame-ancestors`, so we **cannot** render them inside an iframe. The current "preview card → Open in browser" sheet (`InAppBrowserSheet` in `AlbumDetail.tsx`) is the honest web-platform answer: show vendor logo + name + domain, then punt to system Safari/Chrome via `window.open`.
+
+When this ports to the native iOS/Android apps, swap `window.open(url)` for **`SFSafariViewController`** (iOS) / **Chrome Custom Tabs** (Android) — both are real in-app browsers that bypass X-Frame-Options because they're full browser instances, not iframes. The fan stays "inside GoodTunes" visually (with the native bottom Safari/share/done chrome) but gets a fully functional vendor site with their own cookies, autofill, Reader mode, etc. In React Native this is one line via `expo-web-browser` (`WebBrowser.openBrowserAsync`) or `react-native-inappbrowser-reborn`. The preview-card UX stays unchanged; only the handoff target changes.
 - **Verified-artist outreach** — gating a "Reach out about a gig" button on artist/management contact rows. Originally scoped here; explicitly **deferred** until we have a real identity-verification path (Spotify-for-Artists / distributor / label cross-check) and the moderation tooling to keep working musicians safe from spam.
 
 #### Data shape implications (when we build it)
