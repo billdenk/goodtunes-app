@@ -1,5 +1,23 @@
-import { type User, type InsertUser, type Album, type Song, type Playlist, type PlaylistSong, type UserAlbum } from "@shared/schema";
-import { randomUUID } from "crypto";
+import {
+  type User,
+  type InsertUser,
+  type Album,
+  type Song,
+  type Playlist,
+  type PlaylistSong,
+  type UserAlbum,
+  users,
+  albums,
+  songs,
+  userAlbums,
+  playlists,
+  playlistSongs,
+  authTokens,
+  profilePhotos,
+  analyticsEvents,
+} from "@shared/schema";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { db } from "./db";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -7,11 +25,13 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
+
   getAlbums(): Promise<Album[]>;
   getAlbumById(id: string): Promise<Album | undefined>;
   getSongsByAlbum(albumId: string): Promise<Song[]>;
   getSongById(id: string): Promise<Song | undefined>;
   getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]>;
+
   getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]>;
   getPlaylistById(id: string): Promise<Playlist | undefined>;
   createPlaylist(userId: string, name: string): Promise<Playlist>;
@@ -20,45 +40,39 @@ export interface IStorage {
   getPlaylistSongs(playlistId: string): Promise<(PlaylistSong & { song: Song & { album: Album } })[]>;
   addSongToPlaylist(playlistId: string, songId: string, position: number): Promise<PlaylistSong>;
   removeSongFromPlaylist(playlistId: string, songId: string): Promise<void>;
+
+  // Auth tokens (bearer)
+  createAuthToken(token: string, userId: string): Promise<void>;
+  getUserIdByAuthToken(token: string): Promise<string | undefined>;
+  deleteAuthToken(token: string): Promise<void>;
+
+  // Profile photo
+  getProfilePhoto(userId: string): Promise<string | null>;
+  setProfilePhoto(userId: string, dataUrl: string): Promise<void>;
+  deleteProfilePhoto(userId: string): Promise<void>;
+
+  // Analytics
+  insertAnalyticsEvents(rows: {
+    clientId?: string;
+    name: string;
+    payload: Record<string, any>;
+    ts: Date;
+    sessionId?: string;
+    userId?: string;
+  }[]): Promise<void>;
+  deleteAnalyticsForUser(userId: string): Promise<void>;
+  getRecentAnalyticsForUser(userId: string, limit: number): Promise<any[]>;
 }
 
+// Seed catalog (albums + songs). Kept inline rather than imported from the
+// client `musicData.ts` because that module pulls Vite-managed `@assets/*`
+// imports that the server can't resolve. The catalog tables for people /
+// instruments / vendors / credits land in the next phase along with the CMS.
 const SEED_ALBUMS: Album[] = [
-  {
-    id: "album-1",
-    title: "When the World Stops",
-    artist: "Tim Snider & Wolfgang Timber",
-    artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png",
-    year: 2024,
-    type: "album",
-    description: "A sweeping collection of songs about stillness, change, and the moments between.",
-  },
-  {
-    id: "album-2",
-    title: "Guitar as a Voice",
-    artist: "Fernando Perdomo",
-    artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png",
-    year: 2024,
-    type: "album",
-    description: "Instrumental mastery meets emotional storytelling.",
-  },
-  {
-    id: "album-3",
-    title: "Love Spell EP",
-    artist: "Whitney Lyman",
-    artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png",
-    year: 2024,
-    type: "EP",
-    description: "Four songs that cast a spell.",
-  },
-  {
-    id: "album-4",
-    title: "California Way",
-    artist: "TOMMYGUNN",
-    artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png",
-    year: 2024,
-    type: "album",
-    description: "Sunshine, highways, and the stories only California can tell.",
-  },
+  { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "album", description: "A sweeping collection of songs about stillness, change, and the moments between." },
+  { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "album", description: "Instrumental mastery meets emotional storytelling." },
+  { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell." },
+  { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "album", description: "Sunshine, highways, and the stories only California can tell." },
 ];
 
 const SEED_SONGS: Song[] = [
@@ -87,177 +101,220 @@ const SEED_SONGS: Song[] = [
   { id: "song-4-5", albumId: "album-4", title: "California Way", trackNumber: 5, duration: 248, lyrics: "This is the California way\nDream it in the light of day\nChase it down the golden road\n\nCalifornia way, California way\nEverything is gonna be okay\nJust live it and breathe it\nBelieve it today\nThe California way", audioUrl: null },
 ];
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User> = new Map();
-  private albums: Map<string, Album> = new Map();
-  private songs: Map<string, Song> = new Map();
-  private userAlbums: Map<string, UserAlbum> = new Map();
-  private playlists: Map<string, Playlist> = new Map();
-  private playlistSongs: Map<string, PlaylistSong> = new Map();
-
-  constructor() {
-    SEED_ALBUMS.forEach((a) => this.albums.set(a.id, a));
-    SEED_SONGS.forEach((s) => this.songs.set(s.id, s));
-  }
-
+export class DbStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const [u] = await db.select().from(users).where(eq(users.id, id));
+    return u;
   }
-
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find((u) => u.username === username);
+    const [u] = await db.select().from(users).where(eq(users.username, username));
+    return u;
   }
-
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const lower = email.toLowerCase();
-    return Array.from(this.users.values()).find((u) => u.email.toLowerCase() === lower);
+    const [u] = await db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
+    return u;
   }
-
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = {
-      ...insertUser,
-      realName: insertUser.realName ?? null,
-      id,
-      createdAt: new Date(),
-    };
-    this.users.set(id, user);
+    const [u] = await db
+      .insert(users)
+      .values({ ...insertUser, realName: insertUser.realName ?? null })
+      .returning();
+    // Grant every signup the seed albums (matches MemStore behavior).
     const certNums = [12, 7, 3, 21];
-    SEED_ALBUMS.forEach((album, i) => {
-      const uaId = randomUUID();
-      this.userAlbums.set(uaId, {
-        id: uaId,
-        userId: id,
-        albumId: album.id,
-        certificateNumber: certNums[i],
-        acquiredAt: new Date(),
-      });
-    });
-    return user;
+    const all = await db.select().from(albums);
+    if (all.length) {
+      await db
+        .insert(userAlbums)
+        .values(
+          all.map((a, i) => ({
+            userId: u.id,
+            albumId: a.id,
+            certificateNumber: certNums[i] ?? null,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+    return u;
   }
-
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-    const updated = { ...user, ...data };
-    this.users.set(id, updated);
-    return updated;
+    const { id: _i, createdAt: _c, ...rest } = data as any;
+    const [u] = await db.update(users).set(rest).where(eq(users.id, id)).returning();
+    return u;
   }
 
   async getAlbums(): Promise<Album[]> {
-    return Array.from(this.albums.values());
+    return db.select().from(albums);
   }
-
   async getAlbumById(id: string): Promise<Album | undefined> {
-    return this.albums.get(id);
+    const [a] = await db.select().from(albums).where(eq(albums.id, id));
+    return a;
   }
-
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
-    return Array.from(this.songs.values())
-      .filter((s) => s.albumId === albumId)
-      .sort((a, b) => a.trackNumber - b.trackNumber);
+    return db.select().from(songs).where(eq(songs.albumId, albumId)).orderBy(asc(songs.trackNumber));
   }
-
   async getSongById(id: string): Promise<Song | undefined> {
-    return this.songs.get(id);
+    const [s] = await db.select().from(songs).where(eq(songs.id, id));
+    return s;
   }
-
   async getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]> {
-    return Array.from(this.userAlbums.values())
-      .filter((ua) => ua.userId === userId)
-      .map((ua) => ({
-        ...ua,
-        album: this.albums.get(ua.albumId)!,
-      }))
-      .filter((ua) => ua.album);
+    const rows = await db
+      .select()
+      .from(userAlbums)
+      .innerJoin(albums, eq(userAlbums.albumId, albums.id))
+      .where(eq(userAlbums.userId, userId));
+    return rows.map((r) => ({ ...r.user_albums, album: r.albums }));
   }
 
   async getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]> {
-    const lists = Array.from(this.playlists.values())
-      .filter((p) => p.userId === userId)
-      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
-    return lists.map((p) => {
-      const entries = Array.from(this.playlistSongs.values())
-        .filter((ps) => ps.playlistId === p.id)
-        .sort((a, b) => a.position - b.position);
+    const lists = await db
+      .select()
+      .from(playlists)
+      .where(eq(playlists.userId, userId))
+      .orderBy(desc(playlists.createdAt));
+    const out: (Playlist & { artworks: string[]; songCount: number })[] = [];
+    for (const p of lists) {
+      const entries = await db
+        .select({
+          addedAt: playlistSongs.addedAt,
+          artwork: albums.artwork,
+          albumId: albums.id,
+        })
+        .from(playlistSongs)
+        .innerJoin(songs, eq(playlistSongs.songId, songs.id))
+        .innerJoin(albums, eq(songs.albumId, albums.id))
+        .where(eq(playlistSongs.playlistId, p.id))
+        .orderBy(desc(playlistSongs.addedAt));
       const seen = new Set<string>();
       const artworks: string[] = [];
-      // Pick most-recent unique album artworks first so the cover shifts as new songs are added.
-      // Use addedAt (insertion time) — position is not a reliable recency signal since clients
-      // can reuse position values when batch-adding songs.
-      const byRecency = [...entries].sort(
-        (a, b) => (b.addedAt?.getTime() ?? 0) - (a.addedAt?.getTime() ?? 0),
-      );
-      for (const ps of byRecency) {
-        const song = this.songs.get(ps.songId);
-        if (!song) continue;
-        const album = this.albums.get(song.albumId);
-        if (!album || seen.has(album.id)) continue;
-        seen.add(album.id);
-        artworks.push(album.artwork);
+      for (const e of entries) {
+        if (seen.has(e.albumId)) continue;
+        seen.add(e.albumId);
+        artworks.push(e.artwork);
         if (artworks.length >= 4) break;
       }
-      return { ...p, artworks, songCount: entries.length };
-    });
+      out.push({ ...p, artworks, songCount: entries.length });
+    }
+    return out;
   }
-
   async getPlaylistById(id: string): Promise<Playlist | undefined> {
-    return this.playlists.get(id);
+    const [p] = await db.select().from(playlists).where(eq(playlists.id, id));
+    return p;
   }
-
   async createPlaylist(userId: string, name: string): Promise<Playlist> {
-    const id = randomUUID();
-    const playlist: Playlist = { id, userId, name, createdAt: new Date() };
-    this.playlists.set(id, playlist);
-    return playlist;
+    const [p] = await db.insert(playlists).values({ userId, name }).returning();
+    return p;
   }
-
   async updatePlaylist(id: string, name: string): Promise<Playlist | undefined> {
-    const p = this.playlists.get(id);
-    if (!p) return undefined;
-    const updated = { ...p, name };
-    this.playlists.set(id, updated);
-    return updated;
+    const [p] = await db.update(playlists).set({ name }).where(eq(playlists.id, id)).returning();
+    return p;
   }
-
   async deletePlaylist(id: string): Promise<void> {
-    this.playlists.delete(id);
-    Array.from(this.playlistSongs.values())
-      .filter((ps) => ps.playlistId === id)
-      .forEach((ps) => this.playlistSongs.delete(ps.id));
+    await db.delete(playlistSongs).where(eq(playlistSongs.playlistId, id));
+    await db.delete(playlists).where(eq(playlists.id, id));
   }
-
   async getPlaylistSongs(playlistId: string): Promise<(PlaylistSong & { song: Song & { album: Album } })[]> {
-    return Array.from(this.playlistSongs.values())
-      .filter((ps) => ps.playlistId === playlistId)
-      .sort((a, b) => a.position - b.position)
-      .map((ps) => {
-        const song = this.songs.get(ps.songId);
-        if (!song) return null;
-        const album = this.albums.get(song.albumId);
-        if (!album) return null;
-        return { ...ps, song: { ...song, album } };
-      })
-      .filter(Boolean) as any[];
+    const rows = await db
+      .select()
+      .from(playlistSongs)
+      .innerJoin(songs, eq(playlistSongs.songId, songs.id))
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .where(eq(playlistSongs.playlistId, playlistId))
+      .orderBy(asc(playlistSongs.position));
+    return rows.map((r) => ({
+      ...r.playlist_songs,
+      song: { ...r.songs, album: r.albums },
+    }));
   }
-
   async addSongToPlaylist(playlistId: string, songId: string, position: number): Promise<PlaylistSong> {
-    const existing = Array.from(this.playlistSongs.values()).find(
-      (ps) => ps.playlistId === playlistId && ps.songId === songId
-    );
+    const [existing] = await db
+      .select()
+      .from(playlistSongs)
+      .where(and(eq(playlistSongs.playlistId, playlistId), eq(playlistSongs.songId, songId)));
     if (existing) return existing;
-    const id = randomUUID();
-    const ps: PlaylistSong = { id, playlistId, songId, position, addedAt: new Date() };
-    this.playlistSongs.set(id, ps);
+    const [ps] = await db
+      .insert(playlistSongs)
+      .values({ playlistId, songId, position })
+      .returning();
     return ps;
   }
-
   async removeSongFromPlaylist(playlistId: string, songId: string): Promise<void> {
-    const entry = Array.from(this.playlistSongs.values()).find(
-      (ps) => ps.playlistId === playlistId && ps.songId === songId
+    await db
+      .delete(playlistSongs)
+      .where(and(eq(playlistSongs.playlistId, playlistId), eq(playlistSongs.songId, songId)));
+  }
+
+  async createAuthToken(token: string, userId: string): Promise<void> {
+    await db.insert(authTokens).values({ token, userId }).onConflictDoNothing();
+  }
+  async getUserIdByAuthToken(token: string): Promise<string | undefined> {
+    const [row] = await db.select().from(authTokens).where(eq(authTokens.token, token));
+    return row?.userId;
+  }
+  async deleteAuthToken(token: string): Promise<void> {
+    await db.delete(authTokens).where(eq(authTokens.token, token));
+  }
+
+  async getProfilePhoto(userId: string): Promise<string | null> {
+    const [row] = await db.select().from(profilePhotos).where(eq(profilePhotos.userId, userId));
+    return row?.dataUrl ?? null;
+  }
+  async setProfilePhoto(userId: string, dataUrl: string): Promise<void> {
+    await db
+      .insert(profilePhotos)
+      .values({ userId, dataUrl, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: profilePhotos.userId,
+        set: { dataUrl, updatedAt: new Date() },
+      });
+  }
+  async deleteProfilePhoto(userId: string): Promise<void> {
+    await db.delete(profilePhotos).where(eq(profilePhotos.userId, userId));
+  }
+
+  async insertAnalyticsEvents(rows: {
+    clientId?: string;
+    name: string;
+    payload: Record<string, any>;
+    ts: Date;
+    sessionId?: string;
+    userId?: string;
+  }[]): Promise<void> {
+    if (rows.length === 0) return;
+    await db.insert(analyticsEvents).values(
+      rows.map((r) => ({
+        clientId: r.clientId ?? null,
+        name: r.name,
+        payload: r.payload ?? {},
+        ts: r.ts,
+        sessionId: r.sessionId ?? null,
+        userId: r.userId ?? null,
+      })),
     );
-    if (entry) this.playlistSongs.delete(entry.id);
+  }
+  async deleteAnalyticsForUser(userId: string): Promise<void> {
+    await db.delete(analyticsEvents).where(eq(analyticsEvents.userId, userId));
+  }
+  async getRecentAnalyticsForUser(userId: string, limit: number): Promise<any[]> {
+    return db
+      .select()
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.userId, userId))
+      .orderBy(desc(analyticsEvents.receivedAt))
+      .limit(limit);
   }
 }
 
-export const storage = new MemStorage();
+export async function seedCatalog(): Promise<void> {
+  // Idempotent: both the albums and songs inserts use onConflictDoNothing so
+  // a partial-seed failure on a prior boot, or two boots racing, both heal on
+  // the next start instead of leaving missing songs permanently.
+  await db.insert(albums).values(SEED_ALBUMS).onConflictDoNothing();
+  await db
+    .insert(songs)
+    .values(
+      SEED_SONGS.map((s) => ({ ...s, lyrics: s.lyrics ?? null, audioUrl: s.audioUrl ?? null })),
+    )
+    .onConflictDoNothing();
+}
+
+export const storage: IStorage = new DbStorage();

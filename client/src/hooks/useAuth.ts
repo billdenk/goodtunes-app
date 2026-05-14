@@ -7,6 +7,7 @@ interface AuthUser {
   email: string;
   displayName: string;
   realName?: string | null;
+  photoUrl?: string | null;
 }
 
 interface AuthResponse extends AuthUser {
@@ -97,6 +98,30 @@ export function useAuth() {
     },
   });
 
+  const updatePhotoMutation = useMutation({
+    mutationFn: async (dataUrl: string) => {
+      const res = await apiRequest("PUT", "/api/me/photo", { dataUrl });
+      return res.json() as Promise<{ photoUrl: string | null }>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData<AuthUser | null>(["/api/me"], (prev) =>
+        prev ? { ...prev, photoUrl: data.photoUrl } : prev,
+      );
+    },
+  });
+
+  const removePhotoMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/me/photo");
+      return res.json() as Promise<{ photoUrl: string | null }>;
+    },
+    onSuccess: () => {
+      queryClient.setQueryData<AuthUser | null>(["/api/me"], (prev) =>
+        prev ? { ...prev, photoUrl: null } : prev,
+      );
+    },
+  });
+
   return {
     user: user ?? null,
     isLoading,
@@ -104,9 +129,12 @@ export function useAuth() {
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
     updateProfile: updateProfileMutation.mutateAsync,
+    updatePhoto: updatePhotoMutation.mutateAsync,
+    removePhoto: removePhotoMutation.mutateAsync,
     isLoginPending: loginMutation.isPending,
     isRegisterPending: registerMutation.isPending,
     isUpdatePending: updateProfileMutation.isPending,
+    isPhotoPending: updatePhotoMutation.isPending,
     loginError: loginMutation.error?.message,
     registerError: registerMutation.error?.message,
     updateError: updateProfileMutation.error?.message,

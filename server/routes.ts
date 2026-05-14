@@ -1,7 +1,9 @@
 import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
+import { type Server } from "http";
 import { storage } from "./storage";
+import { pool } from "./db";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 
@@ -26,37 +28,46 @@ declare module "express-session" {
   }
 }
 
-// Bearer-token store (token -> userId). Survives across requests in-memory.
-const tokenStore = new Map<string, string>();
-
 function generateToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-function getUserIdFromRequest(req: Request): string | undefined {
+async function getUserIdFromRequest(req: Request): Promise<string | undefined> {
   if (req.session.userId) return req.session.userId;
   const auth = req.headers.authorization;
   if (auth && auth.startsWith("Bearer ")) {
     const token = auth.slice(7);
-    return tokenStore.get(token);
+    return storage.getUserIdByAuthToken(token);
   }
   return undefined;
 }
 
-function requireAuth(req: Request, res: Response, next: Function) {
-  const userId = getUserIdFromRequest(req);
+async function requireAuth(req: Request, res: Response, next: Function) {
+  const userId = await getUserIdFromRequest(req);
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  // Make downstream handlers see it as a session userId for compat
   req.session.userId = userId;
   next();
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  const PgSession = connectPgSimple(session);
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET must be set in production");
+    }
+    console.warn("[auth] SESSION_SECRET not set — using a dev-only fallback. Set it before deploy.");
+  }
   app.use(
     session({
-      secret: process.env.SESSION_SECRET || "goodtunes-secret-key-2024",
+      store: new PgSession({
+        pool,
+        tableName: "user_sessions",
+        createTableIfMissing: true,
+      }),
+      secret: sessionSecret || "goodtunes-dev-only-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {
@@ -68,6 +79,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })
   );
 
+  // Photo uploads are data URLs up to ~5MB image + base64 overhead. Default
+  // express.json() limit (~100KB) would reject them; mount a wider parser
+  // just for the photo route so other endpoints stay locked down.
+  const photoJson = (await import("express")).default.json({ limit: "8mb" });
+
   app.post("/api/register", async (req, res) => {
     const { username, email, displayName, realName, password } = req.body;
     if (!username || !email || !displayName || !password) {
@@ -78,8 +94,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!emailRe.test(emailNorm)) {
       return res.status(400).json({ message: "Please enter a valid email address" });
     }
-    // Normalize username: strip leading "@", lowercase, sanitize. Persist the normalized form
-    // so signup, lookup, and login always agree on case/shape.
     const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
     if (usernameNorm.length < 3) {
       return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
@@ -101,7 +115,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const user = await storage.createUser({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
     req.session.userId = user.id;
     const token = generateToken();
-    tokenStore.set(token, user.id);
+    await storage.createAuthToken(token, user.id);
     return res.status(201).json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, token });
   });
 
@@ -111,7 +125,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "Username or email and password are required" });
     }
     const raw = String(username).trim();
-    // Strip a leading "@" so "@bill" works as a username.
     const ident = (raw.startsWith("@") ? raw.slice(1) : raw).toLowerCase();
     const looksLikeEmail = ident.includes("@");
     const lookup = looksLikeEmail
@@ -123,14 +136,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     req.session.userId = user.id;
     const token = generateToken();
-    tokenStore.set(token, user.id);
+    await storage.createAuthToken(token, user.id);
     return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, token });
   });
 
-  app.post("/api/logout", (req, res) => {
+  app.post("/api/logout", async (req, res) => {
     const auth = req.headers.authorization;
     if (auth && auth.startsWith("Bearer ")) {
-      tokenStore.delete(auth.slice(7));
+      await storage.deleteAuthToken(auth.slice(7));
     }
     req.session.destroy(() => {
       res.json({ message: "Logged out" });
@@ -140,7 +153,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/me", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(404).json({ message: "User not found" });
-    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName });
+    const photoUrl = await storage.getProfilePhoto(user.id);
+    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, photoUrl });
   });
 
   app.put("/api/me", requireAuth, async (req, res) => {
@@ -161,7 +175,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const updated = await storage.updateUser(req.session.userId!, updates);
     if (!updated) return res.status(404).json({ message: "User not found" });
-    return res.json({ id: updated.id, username: updated.username, email: updated.email, displayName: updated.displayName, realName: updated.realName });
+    const photoUrl = await storage.getProfilePhoto(updated.id);
+    return res.json({ id: updated.id, username: updated.username, email: updated.email, displayName: updated.displayName, realName: updated.realName, photoUrl });
+  });
+
+  // ----- Profile photo ----------------------------------------------------
+  // Stored inline as a data URL (5MB hard cap). Swap for object-storage URL
+  // once GT's AWS bucket lands.
+  app.put("/api/me/photo", photoJson, requireAuth, async (req, res) => {
+    const { dataUrl } = req.body as { dataUrl?: string };
+    if (!dataUrl || typeof dataUrl !== "string") {
+      return res.status(400).json({ message: "dataUrl is required" });
+    }
+    // Allowlist real raster formats only — no SVG (script execution), no
+    // arbitrary application/* payloads dressed as images.
+    const allowed = /^data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]+)$/;
+    const m = dataUrl.match(allowed);
+    if (!m) {
+      return res.status(400).json({ message: "Only PNG, JPEG, WEBP, or GIF data URLs are accepted" });
+    }
+    if (dataUrl.length > 7_500_000) {
+      return res.status(413).json({ message: "Image too large (max ~5MB)" });
+    }
+    // Sanity-check base64 decodes and magic bytes match the declared mime.
+    let buf: Buffer;
+    try {
+      buf = Buffer.from(m[2], "base64");
+    } catch {
+      return res.status(400).json({ message: "Image data is not valid base64" });
+    }
+    if (buf.length < 8) return res.status(400).json({ message: "Image data is empty" });
+    const looksLikePng = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+    const looksLikeJpeg = buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+    const looksLikeWebp = buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP";
+    const looksLikeGif = buf.slice(0, 6).toString("ascii").startsWith("GIF8");
+    if (!(looksLikePng || looksLikeJpeg || looksLikeWebp || looksLikeGif)) {
+      return res.status(400).json({ message: "Image data does not match a supported format" });
+    }
+    await storage.setProfilePhoto(req.session.userId!, dataUrl);
+    return res.json({ photoUrl: dataUrl });
+  });
+
+  app.delete("/api/me/photo", requireAuth, async (req, res) => {
+    await storage.deleteProfilePhoto(req.session.userId!);
+    return res.json({ photoUrl: null });
   });
 
   app.get("/api/albums", requireAuth, async (_req, res) => {
@@ -242,58 +299,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ----- Play analytics ---------------------------------------------------
-  // Stub endpoint for the player-side analytics module. The GT coders will
-  // replace the in-memory ring buffer with real persistence (Postgres / S3 +
-  // Athena / Snowflake — see replit.md "Play analytics"). Shape is stable:
-  // POST /api/events  body: { events: AnalyticsEvent[] }
-  // DELETE /api/events  → wipes this user's events ("Delete my listening history")
-  // GET /api/events/recent  → last 100 for inspection during integration
-  type StoredEvent = {
-    id: string;
-    name: string;
-    payload: Record<string, any>;
-    ts: number;
-    sessionId: string;
-    userId?: string;
-    receivedAt: number;
-  };
-  const eventBuffer: StoredEvent[] = [];
-  const EVENT_BUFFER_MAX = 1000;
-
-  app.post("/api/events", (req, res) => {
-    const userId = getUserIdFromRequest(req);
+  // Backed by `analytics_events` table now (was in-memory ring buffer). Same
+  // shape on the wire.
+  app.post("/api/events", async (req, res) => {
+    const userId = await getUserIdFromRequest(req);
     const events = Array.isArray(req.body?.events) ? req.body.events : [];
     const now = Date.now();
-    for (const e of events) {
-      if (!e || typeof e.name !== "string") continue;
-      eventBuffer.push({
-        id: String(e.id ?? ""),
+    const rows = events
+      .filter((e: any) => e && typeof e.name === "string")
+      .map((e: any) => ({
+        clientId: e.id ? String(e.id) : undefined,
         name: String(e.name),
         payload: e.payload && typeof e.payload === "object" ? e.payload : {},
-        ts: typeof e.ts === "number" ? e.ts : now,
-        sessionId: String(e.sessionId ?? ""),
+        ts: new Date(typeof e.ts === "number" ? e.ts : now),
+        sessionId: e.sessionId ? String(e.sessionId) : undefined,
         userId,
-        receivedAt: now,
-      });
-    }
-    if (eventBuffer.length > EVENT_BUFFER_MAX) {
-      eventBuffer.splice(0, eventBuffer.length - EVENT_BUFFER_MAX);
+      }));
+    if (rows.length) {
+      try {
+        await storage.insertAnalyticsEvents(rows);
+      } catch (err) {
+        console.error("[analytics] insert failed", err);
+      }
     }
     return res.status(204).end();
   });
 
-  app.delete("/api/events", requireAuth, (req, res) => {
-    const userId = req.session.userId!;
-    for (let i = eventBuffer.length - 1; i >= 0; i--) {
-      if (eventBuffer[i].userId === userId) eventBuffer.splice(i, 1);
-    }
+  app.delete("/api/events", requireAuth, async (req, res) => {
+    await storage.deleteAnalyticsForUser(req.session.userId!);
     return res.json({ message: "Listening history deleted" });
   });
 
-  app.get("/api/events/recent", requireAuth, (req, res) => {
-    const userId = req.session.userId!;
-    const mine = eventBuffer.filter((e) => e.userId === userId).slice(-100);
-    return res.json(mine);
+  app.get("/api/events/recent", requireAuth, async (req, res) => {
+    const rows = await storage.getRecentAnalyticsForUser(req.session.userId!, 100);
+    return res.json(rows);
   });
 
   // Public OpenGraph share page for a GoodDeed certificate.

@@ -2,13 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 
-/** Profile photo is stored client-side as a data URL in localStorage (same
- *  pattern as favorites + chat). When the GT backend lands, swap for an
- *  uploaded URL on the user record. */
-const profilePhotoKey = (userId: string) => `gt:profile-photo:${userId}`;
-
 export function EditAccount() {
-  const { user, updateProfile, isUpdatePending, updateError } = useAuth();
+  const { user, updateProfile, updatePhoto, removePhoto, isUpdatePending, updateError } = useAuth();
   const [, navigate] = useLocation();
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [username, setUsername] = useState(user?.username || "");
@@ -28,11 +23,9 @@ export function EditAccount() {
     : "?";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!user?.id) return;
-    try { setPhotoUrl(localStorage.getItem(profilePhotoKey(user.id))); } catch {}
-  }, [user?.id]);
+  // Photo lives on the server now (DB-backed, survives restarts + device switches).
+  // `user.photoUrl` is the source of truth.
+  const photoUrl = user?.photoUrl ?? null;
 
   const handlePhotoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,16 +37,14 @@ export function EditAccount() {
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
       if (!dataUrl) return;
-      try { localStorage.setItem(profilePhotoKey(user.id), dataUrl); } catch {}
-      setPhotoUrl(dataUrl);
+      updatePhoto(dataUrl).catch(() => {});
     };
     reader.readAsDataURL(file);
   };
 
   const handlePhotoRemove = () => {
     if (!user?.id) return;
-    try { localStorage.removeItem(profilePhotoKey(user.id)); } catch {}
-    setPhotoUrl(null);
+    removePhoto().catch(() => {});
   };
 
   const handleSave = async () => {

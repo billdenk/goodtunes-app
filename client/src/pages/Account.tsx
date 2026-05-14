@@ -40,13 +40,9 @@ export function Account() {
     ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
     : "?";
 
-  // Profile photo (client-only — actual upload/remove lives on the
-  // dedicated /account/edit page). We just read here to show it.
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!user?.id) return;
-    try { setPhotoUrl(localStorage.getItem(profilePhotoKey(user.id))); } catch {}
-  }, [user?.id]);
+  // Profile photo comes from the server (auth payload). Actual edit lives on
+  // the dedicated /account/edit page.
+  const photoUrl = user?.photoUrl ?? null;
 
   // Bookmarked instruments (synced with the same localStorage key used by
   // InstrumentSheet in AlbumDetail). Re-read on focus so newly-bookmarked
