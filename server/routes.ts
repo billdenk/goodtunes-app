@@ -6,6 +6,8 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
+import { z } from "zod";
+import { insertTrackWriterSchema, insertTrackPerformerSchema } from "@shared/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -396,6 +398,97 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.delete("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
     await storage.deleteInstrumentVendor(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  // ----- SuperCredits™ song credits (writers + performers) -----------------
+  // Public read so the fan-facing credits sheet can fetch by song id.
+  app.get("/api/songs/:id/credits", async (req, res) => {
+    return res.json(await storage.getSongCredits(String(req.params.id)));
+  });
+  // Writers (nested under song for create; flat for update/delete by id).
+  // POST body validated via insertTrackWriterSchema (songId injected from
+  // path, position auto-appended to end if not supplied). PUT uses a
+  // .partial() of the same schema. FK violations (e.g. unknown personId)
+  // surface as 400s rather than 500s.
+  const writerCreateBody = insertTrackWriterSchema.omit({ songId: true, position: true }).extend({
+    position: z.number().int().nonnegative().optional(),
+  });
+  const writerUpdateBody = insertTrackWriterSchema.omit({ songId: true }).partial();
+  const performerCreateBody = insertTrackPerformerSchema.omit({ songId: true, position: true }).extend({
+    position: z.number().int().nonnegative().optional(),
+  });
+  const performerUpdateBody = insertTrackPerformerSchema.omit({ songId: true }).partial();
+
+  function isFkViolation(e: unknown): boolean {
+    return !!(e && typeof e === "object" && (e as any).code === "23503");
+  }
+
+  app.post("/api/admin/songs/:id/writers", requireAdmin, async (req, res) => {
+    const parsed = writerCreateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid writer", issues: parsed.error.issues });
+    const songId = String(req.params.id);
+    const existing = await storage.getSongCredits(songId);
+    try {
+      const w = await storage.createTrackWriter({
+        ...parsed.data,
+        songId,
+        position: parsed.data.position ?? existing.writers.length,
+      } as any);
+      return res.status(201).json(w);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown song or person reference" });
+      throw e;
+    }
+  });
+  app.put("/api/admin/writers/:id", requireAdmin, async (req, res) => {
+    const parsed = writerUpdateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid writer", issues: parsed.error.issues });
+    try {
+      const w = await storage.updateTrackWriter(String(req.params.id), parsed.data as any);
+      if (!w) return res.status(404).json({ message: "Writer not found" });
+      return res.json(w);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown person reference" });
+      throw e;
+    }
+  });
+  app.delete("/api/admin/writers/:id", requireAdmin, async (req, res) => {
+    await storage.deleteTrackWriter(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  app.post("/api/admin/songs/:id/performers", requireAdmin, async (req, res) => {
+    const parsed = performerCreateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid performer", issues: parsed.error.issues });
+    const songId = String(req.params.id);
+    const existing = await storage.getSongCredits(songId);
+    try {
+      const p = await storage.createTrackPerformer({
+        ...parsed.data,
+        songId,
+        position: parsed.data.position ?? existing.performers.length,
+      } as any);
+      return res.status(201).json(p);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown song, person, or instrument reference" });
+      throw e;
+    }
+  });
+  app.put("/api/admin/performers/:id", requireAdmin, async (req, res) => {
+    const parsed = performerUpdateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid performer", issues: parsed.error.issues });
+    try {
+      const p = await storage.updateTrackPerformer(String(req.params.id), parsed.data as any);
+      if (!p) return res.status(404).json({ message: "Performer not found" });
+      return res.json(p);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown person or instrument reference" });
+      throw e;
+    }
+  });
+  app.delete("/api/admin/performers/:id", requireAdmin, async (req, res) => {
+    await storage.deleteTrackPerformer(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
 

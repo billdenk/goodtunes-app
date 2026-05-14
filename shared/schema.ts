@@ -110,6 +110,34 @@ export const instrumentVendors = pgTable("instrument_vendors", {
   position: integer("position").notNull().default(0),
 });
 
+// ----- SuperCredits™ song credits (linking layer) -----------------------
+// Each song has any number of writers + performers. Both rows store a
+// `name` snapshot so credits keep rendering after a Person is removed
+// (historical credits, muso.ai imports of people not in our roster).
+// FK delete policy:
+//   - songId → CASCADE              (credits row is meaningless without song)
+//   - personId → SET NULL           (name snapshot preserves display)
+//   - instrumentId → SET NULL       (performance keeps person, loses gear)
+export const trackWriters = pgTable("track_writers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  songId: varchar("song_id").notNull().references(() => songs.id, { onDelete: "cascade" }),
+  personId: varchar("person_id").references(() => people.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  role: text("role").notNull(), // "Composer" / "Lyricist" / "Producer"
+  position: integer("position").notNull().default(0),
+});
+
+export const trackPerformers = pgTable("track_performers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  songId: varchar("song_id").notNull().references(() => songs.id, { onDelete: "cascade" }),
+  personId: varchar("person_id").references(() => people.id, { onDelete: "set null" }),
+  instrumentId: varchar("instrument_id").references(() => instruments.id, { onDelete: "set null" }),
+  name: text("name").notNull(), // snapshot of person.name at credit time
+  role: text("role").notNull(), // "Guitar" / "Bass" / "Composer · Violin"
+  tuningNotes: text("tuning_notes"), // "DADGAD", "Dropped D, capo 3"
+  position: integer("position").notNull().default(0),
+});
+
 // Bearer token store (replaces in-memory tokenStore).
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
@@ -168,6 +196,14 @@ export type Instrument = typeof instruments.$inferSelect;
 export const insertInstrumentVendorSchema = createInsertSchema(instrumentVendors).omit({ id: true });
 export type InsertInstrumentVendor = z.infer<typeof insertInstrumentVendorSchema>;
 export type InstrumentVendor = typeof instrumentVendors.$inferSelect;
+
+export const insertTrackWriterSchema = createInsertSchema(trackWriters).omit({ id: true });
+export type InsertTrackWriter = z.infer<typeof insertTrackWriterSchema>;
+export type TrackWriter = typeof trackWriters.$inferSelect;
+
+export const insertTrackPerformerSchema = createInsertSchema(trackPerformers).omit({ id: true });
+export type InsertTrackPerformer = z.infer<typeof insertTrackPerformerSchema>;
+export type TrackPerformer = typeof trackPerformers.$inferSelect;
 export type UserAlbum = typeof userAlbums.$inferSelect;
 export type Playlist = typeof playlists.$inferSelect;
 export type PlaylistSong = typeof playlistSongs.$inferSelect;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -274,6 +274,207 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
   );
 }
 
+interface AdminTrackWriter {
+  id: string;
+  songId: string;
+  personId: string | null;
+  name: string;
+  role: string;
+  position: number;
+}
+interface AdminTrackPerformer {
+  id: string;
+  songId: string;
+  personId: string | null;
+  instrumentId: string | null;
+  name: string;
+  role: string;
+  tuningNotes: string | null;
+  position: number;
+}
+interface SongCredits {
+  // Enriched shape — server resolves person + instrument so the fan-side
+  // credits sheet can render from a single GET. The admin editor only
+  // touches the flat row fields and ignores the joined objects.
+  writers: (AdminTrackWriter & { person: AdminPerson | null })[];
+  performers: (AdminTrackPerformer & {
+    person: AdminPerson | null;
+    instrument: (AdminInstrument & { vendors: any[] }) | null;
+  })[];
+}
+
+function SongCreditsEditor({ songId }: { songId: string }) {
+  const queryClient = useQueryClient();
+  const { data: credits } = useQuery<SongCredits>({ queryKey: ["/api/songs", songId, "credits"] });
+  const { data: people = [] } = useQuery<AdminPerson[]>({ queryKey: ["/api/people"] });
+  const { data: instruments = [] } = useQuery<AdminInstrument[]>({ queryKey: ["/api/instruments"] });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["/api/songs", songId, "credits"] });
+
+  const addWriter = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/songs/${songId}/writers`, {
+        name: "New writer",
+        role: "Composer",
+      });
+      return res.json();
+    },
+    onSuccess: invalidate,
+  });
+  const addPerformer = useMutation({
+    mutationFn: async () => {
+      const firstPerson = people[0];
+      if (!firstPerson) throw new Error("Add at least one Person in the People tab first.");
+      const res = await apiRequest("POST", `/api/admin/songs/${songId}/performers`, {
+        personId: firstPerson.id,
+        name: firstPerson.name,
+        role: "Guitar",
+      });
+      return res.json();
+    },
+    onSuccess: invalidate,
+    onError: (e: Error) => alert(e.message),
+  });
+
+  if (!credits) return <div className="text-white/40 text-xs py-2">Loading credits…</div>;
+
+  return (
+    <div className="space-y-4 pt-2">
+      {/* Writers */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <h4 className="text-white/60 text-[11px] uppercase tracking-wider">Writers <span className="text-white/30 ml-1">({credits.writers.length})</span></h4>
+          <button type="button" onClick={() => addWriter.mutate()} className="text-[11px] text-[#319ED8] hover:underline" data-testid={`button-add-writer-${songId}`}>+ Writer</button>
+        </div>
+        <div className="space-y-1">
+          {credits.writers.map((w) => (
+            <WriterRow key={w.id} writer={w} people={people} onChanged={invalidate} />
+          ))}
+          {credits.writers.length === 0 && <p className="text-white/30 text-xs">No writers yet.</p>}
+        </div>
+      </div>
+
+      {/* Performers */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <h4 className="text-white/60 text-[11px] uppercase tracking-wider">Performers <span className="text-white/30 ml-1">({credits.performers.length})</span></h4>
+          <button
+            type="button"
+            onClick={() => addPerformer.mutate()}
+            disabled={people.length === 0}
+            title={people.length === 0 ? "Add People first" : ""}
+            className="text-[11px] text-[#319ED8] hover:underline disabled:opacity-40 disabled:no-underline"
+            data-testid={`button-add-performer-${songId}`}
+          >
+            + Performer
+          </button>
+        </div>
+        <div className="space-y-1">
+          {credits.performers.map((p) => (
+            <PerformerRow key={p.id} performer={p} people={people} instruments={instruments} onChanged={invalidate} />
+          ))}
+          {credits.performers.length === 0 && <p className="text-white/30 text-xs">No performers yet.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Shared dirty-tracking hook. Resets the local draft from the server row
+// only when the user has no unsaved edits — prevents a background refetch
+// from clobbering whatever they're typing. Returns a payload snapshot so
+// rapid-fire saves use the exact bytes that were on screen at click time.
+function useRowDraft<T extends { id: string }>(row: T) {
+  const [draft, setDraft] = useState<T>(row);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const dirtyRef = useRef(false);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(row);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    // Only adopt fresh server state when the user has nothing in-flight.
+    if (!dirtyRef.current) setDraft(row);
+  }, [JSON.stringify(row)]);
+  return { draft, setDraft, dirty, snapshot: () => draftRef.current };
+}
+
+function WriterRow({ writer, people, onChanged }: { writer: AdminTrackWriter & { person: AdminPerson | null }; people: AdminPerson[]; onChanged: () => void }) {
+  const { draft, setDraft, dirty, snapshot } = useRowDraft(writer);
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/admin/writers/${writer.id}`, snapshot());
+      return res.json();
+    },
+    onSuccess: onChanged,
+  });
+  const del = useMutation({
+    mutationFn: async () => { await apiRequest("DELETE", `/api/admin/writers/${writer.id}`); },
+    onSuccess: onChanged,
+  });
+  return (
+    <div className="grid grid-cols-[2fr_1fr_1.5fr_auto_auto] gap-2 items-center" data-testid={`row-writer-${writer.id}`}>
+      <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name" className={inputCls + " py-1 text-xs"} />
+      <input value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} placeholder="Composer / Lyricist / Producer" className={inputCls + " py-1 text-xs"} />
+      <select
+        value={draft.personId ?? ""}
+        onChange={(e) => {
+          const id = e.target.value || null;
+          const matched = people.find((p) => p.id === id);
+          setDraft({ ...draft, personId: id, name: matched ? matched.name : draft.name });
+        }}
+        className={inputCls + " py-1 text-xs"}
+      >
+        <option value="">— link to person (optional) —</option>
+        {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="px-2 py-1 rounded bg-[#319ED8] text-white text-[11px] disabled:opacity-40" data-testid={`button-save-writer-${writer.id}`}>{save.isPending ? "…" : "Save"}</button>
+      <button type="button" disabled={del.isPending} onClick={() => { if (confirm("Delete this writer credit?")) del.mutate(); }} className="px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/10 rounded disabled:opacity-40" data-testid={`button-delete-writer-${writer.id}`}>×</button>
+    </div>
+  );
+}
+
+function PerformerRow({ performer, people, instruments, onChanged }: { performer: AdminTrackPerformer & { person: AdminPerson | null }; people: AdminPerson[]; instruments: AdminInstrument[]; onChanged: () => void }) {
+  const { draft, setDraft, dirty, snapshot } = useRowDraft(performer);
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/admin/performers/${performer.id}`, snapshot());
+      return res.json();
+    },
+    onSuccess: onChanged,
+  });
+  const del = useMutation({
+    mutationFn: async () => { await apiRequest("DELETE", `/api/admin/performers/${performer.id}`); },
+    onSuccess: onChanged,
+  });
+  return (
+    <div className="grid grid-cols-[1.5fr_1fr_1.5fr_1fr_auto_auto] gap-2 items-center" data-testid={`row-performer-${performer.id}`}>
+      <select
+        value={draft.personId ?? ""}
+        onChange={(e) => {
+          const id = e.target.value || null;
+          const matched = people.find((p) => p.id === id);
+          // Snapshot the display name whenever the link changes so credits
+          // keep rendering even if the Person is later removed.
+          setDraft({ ...draft, personId: id, name: matched ? matched.name : draft.name });
+        }}
+        className={inputCls + " py-1 text-xs"}
+      >
+        <option value="">— unlinked ({draft.name}) —</option>
+        {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <input value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} placeholder="Guitar / Bass / Vocals" className={inputCls + " py-1 text-xs"} />
+      <select value={draft.instrumentId ?? ""} onChange={(e) => setDraft({ ...draft, instrumentId: e.target.value || null })} className={inputCls + " py-1 text-xs"}>
+        <option value="">— instrument (optional) —</option>
+        {instruments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+      </select>
+      <input value={draft.tuningNotes ?? ""} onChange={(e) => setDraft({ ...draft, tuningNotes: e.target.value || null })} placeholder="DADGAD, capo 3…" className={inputCls + " py-1 text-xs"} />
+      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="px-2 py-1 rounded bg-[#319ED8] text-white text-[11px] disabled:opacity-40" data-testid={`button-save-performer-${performer.id}`}>{save.isPending ? "…" : "Save"}</button>
+      <button type="button" disabled={del.isPending} onClick={() => { if (confirm("Delete this performer credit?")) del.mutate(); }} className="px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/10 rounded disabled:opacity-40" data-testid={`button-delete-performer-${performer.id}`}>×</button>
+    </div>
+  );
+}
+
 function SongRow({ song, onSave, onDelete }: { song: AdminSong; onSave: (p: Partial<AdminSong>) => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(song);
@@ -333,6 +534,9 @@ function SongRow({ song, onSave, onDelete }: { song: AdminSong; onSave: (p: Part
             >
               Save song
             </button>
+          </div>
+          <div className="pt-3 mt-2 border-t border-white/10">
+            <SongCreditsEditor songId={song.id} />
           </div>
         </div>
       )}

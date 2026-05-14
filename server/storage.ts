@@ -12,6 +12,10 @@ import {
   type InsertInstrument,
   type InstrumentVendor,
   type InsertInstrumentVendor,
+  type TrackWriter,
+  type InsertTrackWriter,
+  type TrackPerformer,
+  type InsertTrackPerformer,
   users,
   albums,
   songs,
@@ -24,8 +28,10 @@ import {
   people,
   instruments,
   instrumentVendors,
+  trackWriters,
+  trackPerformers,
 } from "@shared/schema";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
@@ -72,6 +78,20 @@ export interface IStorage {
   createInstrumentVendor(data: InsertInstrumentVendor & { id?: string }): Promise<InstrumentVendor>;
   updateInstrumentVendor(id: string, data: Partial<InstrumentVendor>): Promise<InstrumentVendor | undefined>;
   deleteInstrumentVendor(id: string): Promise<void>;
+
+  getSongCredits(songId: string): Promise<{
+    writers: (TrackWriter & { person: Person | null })[];
+    performers: (TrackPerformer & {
+      person: Person | null;
+      instrument: (Instrument & { vendors: InstrumentVendor[] }) | null;
+    })[];
+  }>;
+  createTrackWriter(data: InsertTrackWriter & { id?: string }): Promise<TrackWriter>;
+  updateTrackWriter(id: string, data: Partial<TrackWriter>): Promise<TrackWriter | undefined>;
+  deleteTrackWriter(id: string): Promise<void>;
+  createTrackPerformer(data: InsertTrackPerformer & { id?: string }): Promise<TrackPerformer>;
+  updateTrackPerformer(id: string, data: Partial<TrackPerformer>): Promise<TrackPerformer | undefined>;
+  deleteTrackPerformer(id: string): Promise<void>;
 
   getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]>;
   getPlaylistById(id: string): Promise<Playlist | undefined>;
@@ -325,6 +345,80 @@ export class DbStorage implements IStorage {
   }
   async deleteInstrumentVendor(id: string): Promise<void> {
     await db.delete(instrumentVendors).where(eq(instrumentVendors.id, id));
+  }
+
+  // ----- SuperCredits™ song credits ----------------------------------
+  async getSongCredits(songId: string) {
+    const [writerRows, performerRows] = await Promise.all([
+      db.select().from(trackWriters).where(eq(trackWriters.songId, songId)).orderBy(asc(trackWriters.position)),
+      db.select().from(trackPerformers).where(eq(trackPerformers.songId, songId)).orderBy(asc(trackPerformers.position)),
+    ]);
+    // Resolve the small set of distinct person + instrument ids in one
+    // query each — keeps the fan-side credits sheet to a single GET.
+    const personIds = Array.from(new Set([
+      ...writerRows.map((w) => w.personId).filter((v): v is string => !!v),
+      ...performerRows.map((p) => p.personId).filter((v): v is string => !!v),
+    ]));
+    const instrumentIds = Array.from(new Set(
+      performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
+    ));
+    const [peopleRows, instrumentRows, vendorRows] = await Promise.all([
+      personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
+      instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
+      instrumentIds.length
+        ? db.select().from(instrumentVendors).where(inArray(instrumentVendors.instrumentId, instrumentIds)).orderBy(asc(instrumentVendors.position))
+        : Promise.resolve([] as InstrumentVendor[]),
+    ]);
+    const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
+    const vendorsByInstrument = new Map<string, InstrumentVendor[]>();
+    for (const v of vendorRows) {
+      const list = vendorsByInstrument.get(v.instrumentId) ?? [];
+      list.push(v);
+      vendorsByInstrument.set(v.instrumentId, list);
+    }
+    const instrumentsById = new Map(
+      instrumentRows.map((i) => [i.id, { ...i, vendors: vendorsByInstrument.get(i.id) ?? [] }]),
+    );
+    return {
+      writers: writerRows.map((w) => ({ ...w, person: w.personId ? peopleById.get(w.personId) ?? null : null })),
+      performers: performerRows.map((p) => ({
+        ...p,
+        person: p.personId ? peopleById.get(p.personId) ?? null : null,
+        instrument: p.instrumentId ? instrumentsById.get(p.instrumentId) ?? null : null,
+      })),
+    };
+  }
+  async createTrackWriter(data: InsertTrackWriter & { id?: string }): Promise<TrackWriter> {
+    const [w] = await db.insert(trackWriters).values(data as any).returning();
+    return w;
+  }
+  async updateTrackWriter(id: string, data: Partial<TrackWriter>): Promise<TrackWriter | undefined> {
+    const { id: _i, songId: _s, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [w] = await db.select().from(trackWriters).where(eq(trackWriters.id, id));
+      return w;
+    }
+    const [w] = await db.update(trackWriters).set(rest).where(eq(trackWriters.id, id)).returning();
+    return w;
+  }
+  async deleteTrackWriter(id: string): Promise<void> {
+    await db.delete(trackWriters).where(eq(trackWriters.id, id));
+  }
+  async createTrackPerformer(data: InsertTrackPerformer & { id?: string }): Promise<TrackPerformer> {
+    const [p] = await db.insert(trackPerformers).values(data as any).returning();
+    return p;
+  }
+  async updateTrackPerformer(id: string, data: Partial<TrackPerformer>): Promise<TrackPerformer | undefined> {
+    const { id: _i, songId: _s, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [p] = await db.select().from(trackPerformers).where(eq(trackPerformers.id, id));
+      return p;
+    }
+    const [p] = await db.update(trackPerformers).set(rest).where(eq(trackPerformers.id, id)).returning();
+    return p;
+  }
+  async deleteTrackPerformer(id: string): Promise<void> {
+    await db.delete(trackPerformers).where(eq(trackPerformers.id, id));
   }
 
   async tryClaimFirstAdmin(userId: string): Promise<boolean> {
