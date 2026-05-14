@@ -12,6 +12,7 @@ import { Collection } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
+import { EditAccount } from "@/pages/EditAccount";
 import { ArtistDetail } from "@/pages/ArtistDetail";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 
@@ -79,6 +80,9 @@ function Router() {
         </Route>
         <Route path="/chat/:id">
           <ProtectedRoute component={ChatThreadPage} />
+        </Route>
+        <Route path="/account/edit">
+          <ProtectedRoute component={EditAccount} />
         </Route>
         <Route path="/account">
           <ProtectedRoute component={Account} />

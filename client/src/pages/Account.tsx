@@ -13,13 +13,8 @@ import { INSTRUMENTS } from "@/data/musicData";
 const profilePhotoKey = (userId: string) => `gt:profile-photo:${userId}`;
 
 export function Account() {
-  const { user, logout, updateProfile, isUpdatePending, updateError } = useAuth();
+  const { user, logout } = useAuth();
   const [, navigate] = useLocation();
-  const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(user?.displayName || "");
-  const [username, setUsername] = useState(user?.username || "");
-  const [realName, setRealName] = useState(user?.realName || "");
-  const [saved, setSaved] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearedToast, setClearedToast] = useState(false);
@@ -38,15 +33,6 @@ export function Account() {
     navigate("/login");
   };
 
-  const handleSave = async () => {
-    try {
-      await updateProfile({ displayName, username, realName: realName || null });
-      setSaved(true);
-      setEditing(false);
-      setTimeout(() => setSaved(false), 2000);
-    } catch {}
-  };
-
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
@@ -54,36 +40,13 @@ export function Account() {
     ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
     : "?";
 
-  // Profile photo (client-only, see comment at top of file).
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Profile photo (client-only — actual upload/remove lives on the
+  // dedicated /account/edit page). We just read here to show it.
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!user?.id) return;
     try { setPhotoUrl(localStorage.getItem(profilePhotoKey(user.id))); } catch {}
   }, [user?.id]);
-
-  const handlePhotoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-uploading the same file
-    if (!file || !user?.id) return;
-    if (!file.type.startsWith("image/")) return;
-    // ~5 MB cap to keep localStorage healthy.
-    if (file.size > 5 * 1024 * 1024) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || "");
-      if (!dataUrl) return;
-      try { localStorage.setItem(profilePhotoKey(user.id), dataUrl); } catch {}
-      setPhotoUrl(dataUrl);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handlePhotoRemove = () => {
-    if (!user?.id) return;
-    try { localStorage.removeItem(profilePhotoKey(user.id)); } catch {}
-    setPhotoUrl(null);
-  };
 
   // Bookmarked instruments (synced with the same localStorage key used by
   // InstrumentSheet in AlbumDetail). Re-read on focus so newly-bookmarked
@@ -127,138 +90,28 @@ export function Account() {
         </header>
 
         <div className="relative z-10 flex flex-col items-center pt-6 pb-4 px-5">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoPick}
-            data-testid="input-profile-photo"
-          />
-          <div className="relative mb-4">
-            <button
-              type="button"
-              onClick={() => editing && fileInputRef.current?.click()}
-              disabled={!editing}
-              className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white active:opacity-80 disabled:active:opacity-100"
-              style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
-              aria-label={editing ? "Change profile photo" : "Profile photo"}
-              data-testid="button-profile-photo"
-            >
-              {photoUrl ? (
-                <img src={photoUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span>{initials}</span>
-              )}
-            </button>
-            {/* Camera badge — only in edit mode, sibling of the circle so it isn't clipped */}
-            {editing && (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Change profile photo"
-                className="absolute -bottom-0.5 -right-0.5 w-7 h-7 rounded-full flex items-center justify-center active:opacity-80"
-                style={{ background: "#319ED8", boxShadow: "0 0 0 2px #00062B" }}
-                data-testid="button-profile-photo-edit"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
-              </button>
+          <div
+            className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white mb-4"
+            style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
+            aria-label="Profile photo"
+            data-testid="profile-photo"
+          >
+            {photoUrl ? (
+              <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span>{initials}</span>
             )}
           </div>
-          {editing && photoUrl && (
-            <button
-              type="button"
-              onClick={handlePhotoRemove}
-              className="-mt-2 mb-2 text-white/45 text-[12px] active:opacity-70"
-              data-testid="button-profile-photo-remove"
-            >
-              Remove photo
-            </button>
-          )}
-
-          {!editing ? (
-            <>
-              <p className="text-white text-xl font-bold">{user?.displayName}</p>
-              <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
-              <button
-                type="button"
-                onClick={() => { setEditing(true); setDisplayName(user?.displayName || ""); setUsername(user?.username || ""); setRealName(user?.realName || ""); }}
-                className="mt-3 px-5 py-2 rounded-full border border-white/20 text-white/70 text-sm font-medium"
-              >
-                Edit Profile
-              </button>
-            </>
-          ) : (
-            <div className="w-full flex flex-col gap-3 mt-2">
-              <div>
-                <label className="text-white/40 text-xs uppercase tracking-wider block mb-1.5 ml-1">Name</label>
-                <input
-                  type="text"
-                  value={realName}
-                  onChange={(e) => setRealName(e.target.value)}
-                  placeholder="Your name"
-                  className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
-                  style={{ background: "rgba(255,255,255,0.06)" }}
-                  data-testid="input-account-real-name"
-                />
-              </div>
-              <div>
-                <label className="text-white/40 text-xs uppercase tracking-wider block mb-1.5 ml-1">Display Name</label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#319ED8]"
-                  style={{ background: "rgba(255,255,255,0.06)" }}
-                  data-testid="input-account-display-name"
-                />
-              </div>
-              <div>
-                <label className="text-white/40 text-xs uppercase tracking-wider block mb-1.5 ml-1">Username</label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-                  className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#319ED8]"
-                  style={{ background: "rgba(255,255,255,0.06)" }}
-                  data-testid="input-account-username"
-                />
-              </div>
-              {updateError && (
-                <p className="text-red-400 text-xs px-1">{updateError}</p>
-              )}
-              <div className="flex gap-3 mt-1">
-                <button
-                  type="button"
-                  onClick={() => setEditing(false)}
-                  className="flex-1 py-3 rounded-2xl border border-white/20 text-white/60 text-sm font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isUpdatePending}
-                  className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white disabled:opacity-50"
-                  style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
-                >
-                  {isUpdatePending ? "Saving..." : "Save"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {saved && (
-            <div className="mt-3 flex items-center gap-2 text-[#4AFFCA] text-sm">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M20 6L9 17l-5-5" strokeLinecap="round" />
-              </svg>
-              Profile updated
-            </div>
-          )}
+          <p className="text-white text-xl font-bold">{user?.displayName}</p>
+          <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
+          <button
+            type="button"
+            onClick={() => navigate("/account/edit")}
+            className="mt-3 px-5 py-2 rounded-full border border-white/20 text-white/70 text-sm font-medium active:opacity-70"
+            data-testid="button-edit-profile"
+          >
+            Edit Profile
+          </button>
         </div>
 
         <div ref={scrollRef} className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide pb-[170px]">
@@ -298,22 +151,6 @@ export function Account() {
               </div>
             </>
           )}
-
-          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
-            {["Notifications", "Privacy", "About GoodTunes®"].map((label, i, arr) => (
-              <button
-                key={label}
-                type="button"
-                className={`w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
-                style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
-              >
-                <span className="text-white text-[15px]">{label}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
-                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            ))}
-          </div>
 
           <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
           <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
