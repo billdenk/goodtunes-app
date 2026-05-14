@@ -55,6 +55,16 @@ Mobile-first, Apple-Music-inspired web player.
    - Short note from the artist (why they chose it, how it was tuned/mic'd, etc.).
    - A **"Discover more / Buy"** link out to the maker or shop (Gibson, Martin, Fender, Gretsch, Norman's Rare Guitars, etc.).
 
+#### SuperCredits™ badge (discovery)
+Apple surfaces little badges on albums/tracks that have **Dolby Atmos**, **Lossless**, **Spatial Audio** — fans actively hunt for them because the badge says "this is the good version." A `SuperCredits™` badge should do the same job: signal "this album took the trouble to credit every musician + show you their gear."
+
+Surfaces:
+- Small chip on the album cover in library / search results (next to title, like Apple's `Lossless` chip).
+- Inline on the track row in the album view, so fans can see which *tracks within* an album have credits (not all tracks always will, especially early on).
+- A filter in the library: "Albums with SuperCredits™" — same pattern as Apple's Atmos filter.
+
+Same slot can later host partner-brand lockups ("Gear by Gretsch", "Strings by D'Addario") when an album has a sponsorship attached. One badge slot, two kinds of signal — worth designing the slot now even if we only fill it with the SuperCredits™ chip on day one.
+
 #### Micro-Sponsorships (monetization layer for SuperCredits™)
 Outbound instrument links are affiliate links. Revenue split: **artist gets the lion's share, GoodTunes takes a small cut for the connection.** This makes credits a revenue stream for the musician, not just metadata — a real differentiator vs. Apple/Spotify. Treat affiliate URL + revenue share as part of the instrument record, not a per-link afterthought.
 
