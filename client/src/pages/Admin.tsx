@@ -99,11 +99,13 @@ function ArtworkPicker({
   onChange,
   shape = "square",
   testId,
+  hint,
 }: {
   value: string;
   onChange: (next: string) => void;
   shape?: "square" | "circle";
   testId: string;
+  hint?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -202,6 +204,11 @@ function ArtworkPicker({
               }}
             />
           </div>
+          {hint && (
+            <p className="text-[11px] text-slate-400" data-testid={`${testId}-hint`}>
+              {hint}
+            </p>
+          )}
           {err && <p className="text-red-600 text-xs" data-testid={`${testId}-error`}>{err}</p>}
         </div>
       </div>
@@ -437,6 +444,7 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
             onChange={(next) => set("artwork", next)}
             shape="square"
             testId="input-album-artwork"
+            hint="Square. 1000×1000 px recommended (3000×3000 for a future Apple-Music-grade master). JPG or PNG. Larger uploads are fine — the player scales them down."
           />
         </Field>
         <div className="grid grid-cols-2 gap-4">
@@ -847,6 +855,7 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
       </Field>
       <Field label="Photo URL">
         <input value={form.photoUrl ?? ""} onChange={(e) => update({ photoUrl: e.target.value || null })} className={inputCls} data-testid="input-person-photo" />
+        <p className="text-[11px] text-slate-400 mt-1">Square, displayed as a circle. 400×400 px minimum (800×800 for retina). JPG or PNG.</p>
       </Field>
       <Field label="Bio">
         <textarea value={form.bio ?? ""} onChange={(e) => update({ bio: e.target.value || null })} rows={4} className={inputCls + " resize-none"} data-testid="input-person-bio" />
@@ -971,6 +980,7 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
       </div>
       <Field label="Photo URL">
         <input value={form.photoUrl ?? ""} onChange={(e) => update({ photoUrl: e.target.value || null })} className={inputCls} data-testid="input-instrument-photo" />
+        <p className="text-[11px] text-slate-400 mt-1">Square. 800×800 px recommended (1600×1600 for retina). JPG or PNG. Plain or neutral background reads best.</p>
       </Field>
       <Field label="About (neutral: history, model facts)">
         <textarea value={form.about ?? ""} onChange={(e) => update({ about: e.target.value || null })} rows={3} className={inputCls + " resize-none"} data-testid="input-instrument-about" />
@@ -1078,6 +1088,7 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
             </Field>
             <Field label="Logo URL (else favicon)">
               <input value={draft.logoUrl ?? ""} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value || null })} className={inputCls} data-testid={`input-vendor-logo-${vendor.id}`} />
+              <p className="text-[11px] text-slate-400 mt-1">Square. 200×200 px min (400×400 retina). Transparent PNG or SVG.</p>
             </Field>
           </div>
           <Field label="Tagline (one-liner)">
@@ -1089,6 +1100,7 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
             </Field>
             <Field label="Cover URL (hero photo)">
               <input value={draft.coverUrl ?? ""} onChange={(e) => setDraft({ ...draft, coverUrl: e.target.value || null })} className={inputCls} data-testid={`input-vendor-cover-${vendor.id}`} />
+              <p className="text-[11px] text-slate-400 mt-1">Wide hero. 1200×400 px recommended (2400×800 retina). JPG.</p>
             </Field>
           </div>
           <Field label="Bio (longer About copy)">
