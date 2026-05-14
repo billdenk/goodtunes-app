@@ -162,6 +162,7 @@ export function Login() {
               <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Username or Email</label>
               <input
                 type="text"
+                name="username"
                 value={loginIdent}
                 onChange={(e) => setLoginIdent(e.target.value.replace(/\s/g, ""))}
                 placeholder="@username or you@example.com"
@@ -182,6 +183,7 @@ export function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                name="password"
                 autoComplete="current-password"
                 className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
                 style={{ background: "rgba(255,255,255,0.06)" }}
@@ -226,6 +228,7 @@ export function Login() {
               <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1">Email</label>
               <input
                 type="email"
+                name="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
@@ -246,6 +249,7 @@ export function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                name="new-password"
                 autoComplete="new-password"
                 minLength={8}
                 className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
