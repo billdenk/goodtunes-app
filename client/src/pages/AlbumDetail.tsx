@@ -1898,11 +1898,22 @@ function VendorSheet({
               style={{ background: `linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)` }}
             >
               {vendor.logoUrl && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-40 h-40 rounded-full flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.95)" }}>
-                    <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" />
+                <>
+                  {/* Blurred large logo as backdrop (Apple-Music album style) */}
+                  <img
+                    src={vendor.logoUrl}
+                    alt=""
+                    aria-hidden
+                    className="absolute inset-0 w-full h-full object-cover"
+                    style={{ filter: "blur(40px) saturate(160%)", transform: "scale(1.3)", opacity: 0.85 }}
+                  />
+                  {/* Sharp logo on top — translucent tile so the blur bleeds through */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-40 h-40 rounded-full flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+                      <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" style={{ opacity: 0.92 }} />
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}
