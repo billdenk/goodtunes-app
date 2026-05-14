@@ -150,6 +150,87 @@ The Lyrics overlay in `client/src/pages/Player.tsx` derives **round-second times
 
 Word-level karaoke (per-word fill animation in `#319ED8` → `#4AFFCA`) is a follow-up driven off `requestAnimationFrame(audio.currentTime)` once per-word data exists — render code is small (~1 day).
 
+## Mobile / native strategy (handing this off to existing iOS + Android apps)
+
+GoodTunes already ships native apps in the App Store + Play Store. **Sales happen on goodtunes.fm, not in-app**, so the App Store 30% cut is a non-issue — this player is purely a **playback surface for already-purchased content**, which Apple's rules explicitly allow without their cut.
+
+Four realistic paths to get this codebase onto mobile, in order of effort:
+
+1. **WebView wrap** (fastest stop-gap). Embed the existing web player inside the current native shells (`WKWebView` on iOS, `WebView` on Android). Zero re-work, instant updates without app-store review. **Trade-offs**: background audio is finicky, no native lock-screen / CarPlay / Android Auto without a small native bridge, slightly less snappy on old devices. **Use as a bridge while Path 2 is being built.**
+2. **React Native port** ⭐ (recommended end-state). Same React + TypeScript model — components, hooks, state, data flow port nearly 1:1. Web-specific glue (~5% of the code) gets swapped:
+   - `<audio>` → `react-native-track-player` (true native audio + lock screen + CarPlay + Android Auto)
+   - `localStorage` → `AsyncStorage` (one-line swap)
+   - `wouter` → `react-navigation`
+   - `<div>`/`<img>` + Tailwind → `<View>`/`<Image>` + NativeWind
+   - Lyrics scroll → `FlatList.scrollToIndex`
+   - Sheets/popovers → RN `Modal` / bottom-sheet libs
+
+   Realistic budget: **2–4 weeks** for a competent RN dev to port everything we've built, +2 weeks for CarPlay/Auto/lock-screen polish. One codebase ships to both stores. Same stack as Spotify, Discord, Coinbase, Shopify, Teams.
+3. **Capacitor / Ionic**. Web app inside a native shell with proper plugins. Less work than RN, more native-feeling than plain WebView. Fine, but RN's audio story is meaningfully better for a music app.
+4. **Full native rewrite (Swift + Kotlin)**. Two codebases, double the maintenance forever. Skip unless at Apple-Music scale.
+
+### What ports vs. what gets rebuilt (Path 2)
+- **Ports unchanged**: SuperCredits™ surface, vendor chat, lyrics overlay (synced renderer included), favorites, playlists, mini-player + queue, brand styling, all interaction patterns.
+- **Adapter layer**: `PlayerContext` already isolates audio + persistence behind a stable API — the RN swap happens behind that interface, the rest of the app doesn't notice.
+- **Genuinely new work**: store accounts/certs/signing, push notifications (artist-drop alerts), CarPlay / Android Auto integration.
+
+### Handoff value to the GT coders
+This codebase is a **working reference implementation**, not throwaway prototype. Even if they choose Path 4, what they receive is:
+- Every screen, every interaction, every transition — already designed and validated.
+- Clean separation between UI / playback / persistence / data — the seam where native pieces plug in.
+- Data shape docs in this file (SuperCredits™, chat, playlists, favorites, lyrics, analytics).
+- Product decisions already locked (Apple-trimmed action menu, playlist cover mosaic logic, mini-player layout, heart-vs-star icon convention) — no re-litigation needed.
+
+**Recommended sequence**: keep iterating the web player here as the canonical reference → wrap it in the existing apps as a stop-gap (Path 1) → budget 6–10 weeks for the RN port (Path 2) → RN becomes the real mobile experience, web stays alive for desktop and platforms without an app.
+
+## Play analytics (artist + label insights)
+
+GoodTunes is a **tethered download** model, not streaming — but per-track listening data is just as valuable to artists, and the player already has hooks for every event we'd need. Capture this from day one; **every play that happens before instrumentation is a play we can never recover.**
+
+### Event taxonomy (industry-standard for music apps)
+| Event | Fires when | Why |
+|---|---|---|
+| `play_start` | Audio actually begins (not on tap — on the `playing` event) | Counts attempts; lets us measure intro drop-off |
+| `play_progress` | Every 30s of continuous playback | Confirms it's a real listen, not autoplay-then-walk-away |
+| `play_complete` | Reached ≥ 90% of song length | The "real listen" — primary number for artist reports |
+| `play_30s` | Reached 30s | Spotify/Apple-equivalent "stream" metric, for comparability |
+| `play_skip` | Next/prev tapped before 30s in | Bail-rate per track |
+| `seek` | User scrubs the timeline | Optional — spots replayed sections (chorus, solo) |
+| `favorite` / `unfavorite` | Heart toggle | Top-fan signal |
+| `add_to_playlist` | Song added to a custom list | Strong intent |
+| `lyrics_open` | Lyrics overlay opened | Engagement depth |
+| `credits_open` / `instrument_view` / `vendor_link_click` | SuperCredits™ surfaces | Proves the micro-sponsorship channel works; required for affiliate attribution |
+
+**For "plays count" in artist-facing reports, use `play_complete`.** Show `play_30s` alongside it so artists can compare apples-to-apples with their Spotify/Apple numbers.
+
+### Player-side wiring (~½ day)
+- One module: `client/src/lib/analytics.ts` exposing `track(name, payload)`.
+- Hook into `PlayerContext` events that already fire: audio element `playing` / `ended` / `timeupdate` / `seeking`, plus the existing `next` / `prev` / `toggleFavorite` / playlist mutations.
+- Buffer events in memory + `localStorage` (key `gt:analytics-queue`), flush in batches every ~15s and on `pagehide` / `visibilitychange=hidden` via **`navigator.sendBeacon`** so the last batch never gets dropped on tab-close.
+- Resilient to backend downtime — events queue in `localStorage` until next successful flush.
+
+### Backend (GT coders, small)
+- One endpoint: **`POST /api/events`** accepting a JSON batch tied to the logged-in user (server already knows who that is via the existing session).
+- Storage: either a `play_events` table (Postgres / DynamoDB) or — better at scale — append to S3 in hourly partitions and query via Athena / Snowflake / BigQuery. The latter is cheap, schema-flexible, and the standard pattern for event streams.
+- Nightly rollup job → artist-facing aggregates table (much smaller, indexed for fast dashboard queries).
+
+### Artist / label dashboard (Phase 3, separate surface from the fan player)
+The pitch — and a real GoodTunes differentiator vs. Apple/Spotify, where indie artists get crumbs of analytics:
+- **"Which track should be your first single to streaming?"** — `play_complete` count + completion rate per track on the album.
+- **"Who are your top 50 fans?"** — rank entitled users by completed plays + favorites + playlist adds. Use for vinyl gifts, livestream invites, meet-and-greets.
+- **"Where do people drop off?"** — average % of song listened before skip, per track.
+- **"Did SuperCredits™ vendor links convert?"** — `vendor_link_click` → affiliate-attributed purchase. Closes the loop on the micro-sponsorship promise.
+- **"Geographic heat map"** — country/region only, no precise location. Tour-planning gold (Bandcamp does this well).
+
+### Fan-facing application (year-end)
+GoodTunes Wrapped equivalent — "Your top 10 songs of 2026" — but for music **bought**, not streamed. Warmer story than Spotify Wrapped because the user paid for everything in it.
+
+### Privacy (must build alongside, not after)
+Every event is per-identified-user (paid product, can't be anonymous). Required:
+- Privacy policy line: "we record what you listen to so artists can see which songs resonate."
+- Account-settings button: **"Delete my listening history"** → backend `DELETE /me/events`. GDPR + CCPA both require this; cheap to build, expensive to retrofit if regulators ask.
+- Artist-facing reports show **aggregates only** — top-fan list shows display name + city, never raw event log.
+
 ## Auth plan (when moving off in-memory store)
 
 Support email/password, **Sign in with Apple**, and **Sign in with Google**.
