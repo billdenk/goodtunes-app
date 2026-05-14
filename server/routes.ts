@@ -829,6 +829,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         metaName = ogTitle;
         bio = meta["og:description"] || meta["twitter:description"] || meta["description"] || null;
+        // Spotify's OG description for every artist page is boilerplate —
+        // "Artist · 40.8K monthly listeners." — not the actual About text
+        // (which they lazy-load via internal GraphQL and is unavailable in
+        // the initial HTML). Reject the pattern so we don't pollute the
+        // admin's BIO field with a listener count. Apple Music's
+        // og:description is usually the real artist blurb, so we keep it.
+        if (bio && /^artist\s*[·•|-]\s*[\d.,]+\s*[kmb]?\s*monthly listeners\.?$/i.test(bio.trim())) {
+          bio = null;
+        }
         rawImage = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
         if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
         if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
