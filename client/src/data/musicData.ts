@@ -12,6 +12,11 @@ import violinPhoto from "@assets/instruments/violin.jpg";
 import fenderPPhoto from "@assets/instruments/fender-p.jpg";
 import gretschKitPhoto from "@assets/instruments/gretsch-kit.jpg";
 import lpCongasPhoto from "@assets/instruments/lp-congas.jpg";
+import nickCarterPhoto from "@assets/image_1778720312538.png";
+
+export const ARTIST_PHOTOS: Record<string, string> = {
+  "Nick Carter": nickCarterPhoto,
+};
 
 export interface AlbumVideo {
   id: string;

@@ -3,7 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
-import { ALBUMS, SONGS, type Album } from "@/data/musicData";
+import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 
@@ -38,6 +38,9 @@ export function ArtistDetail() {
 
   const isFav = favArtists.has(artistName);
   const heroArt = artistAlbums[0]?.artwork;
+  const artistPhoto = ARTIST_PHOTOS[artistName];
+  const avatarSrc = artistPhoto ?? heroArt;
+  const blurSrc = artistPhoto ?? heroArt;
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
@@ -64,9 +67,9 @@ export function ArtistDetail() {
 
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
-      {heroArt && (
+      {blurSrc && (
         <div className="absolute top-0 left-0 right-0 h-[280px] overflow-hidden pointer-events-none">
-          <img src={heroArt} alt="" className="w-full h-full object-cover" style={{ filter: "blur(40px) saturate(140%)", transform: "scale(1.2)" }} />
+          <img src={blurSrc} alt="" className="w-full h-full object-cover" style={{ filter: "blur(40px) saturate(140%)", transform: "scale(1.2)" }} />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.4) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)" }} />
         </div>
       )}
@@ -99,12 +102,17 @@ export function ArtistDetail() {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }}>
           <div className="flex flex-col items-center pt-20 px-5">
-            {heroArt && (
+            {avatarSrc && (
               <div
                 className="w-[180px] h-[180px] rounded-full overflow-hidden flex-shrink-0"
                 style={{ boxShadow: "0 12px 40px rgba(0,0,0,0.55)", border: "1px solid rgba(255,255,255,0.12)" }}
               >
-                <img src={heroArt} alt={artistName} className="w-full h-full object-cover" />
+                <img
+                  src={avatarSrc}
+                  alt={artistName}
+                  className="w-full h-full object-cover"
+                  style={artistPhoto ? { objectPosition: "50% 20%" } : undefined}
+                />
               </div>
             )}
             <button
