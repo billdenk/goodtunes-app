@@ -1136,6 +1136,17 @@ export function Admin() {
     setSelectedByEntity((prev) => ({ ...prev, [entity]: id }));
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
+  // Opt this route into the light theme by tagging <body>. The matching
+  // `body.gt-admin` rule in index.css overrides the global dark body bg
+  // and `color: white` that the fan player relies on. Cleaning the class
+  // on unmount keeps the rest of the app dark.
+  useEffect(() => {
+    document.body.classList.add("gt-admin");
+    return () => {
+      document.body.classList.remove("gt-admin");
+    };
+  }, []);
+
   const { data: albums = [] } = useQuery<AdminAlbum[]>({
     queryKey: ["/api/albums"],
     enabled: !!user?.isAdmin,

@@ -198,6 +198,16 @@ body {
   overscroll-behavior: none;
 }
 
+/* The admin route opts into a light Apple/Stripe-style theme. The fan
+   player keeps the dark body bg above — this class is toggled by
+   client/src/pages/Admin.tsx on mount and removed on unmount, so the
+   override only applies while /admin is rendered. */
+body.gt-admin {
+  background-color: #f7f8fa;
+  color: #0f172a; /* slate-900 */
+  color-scheme: light;
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
