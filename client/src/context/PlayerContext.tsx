@@ -143,8 +143,43 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [currentTime, duration, hasRealAudio]);
 
+  // Keep a live ref to the current song so audio-event callbacks (which close
+  // over the initial render) can always read the latest one.
+  const currentSongRef = useRef<PlayerSong | null>(null);
+  useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
+
+  // Reset per-play analytics milestones whenever the current song changes.
+  useEffect(() => {
+    resetMilestones(currentSong?.id ?? null);
+  }, [currentSong?.id, resetMilestones]);
+
+  // Fire play_30s and play_complete based on currentTime / duration milestones.
+  // play_start fires from the audio element's `playing` event below (or
+  // immediately on playSong for the simulated/no-audio path).
+  useEffect(() => {
+    const m = milestonesRef.current;
+    const song = currentSongRef.current;
+    if (!song) return;
+    if (!m.hit30 && currentTime >= 30) {
+      m.hit30 = true;
+      track("play_30s", { ...songMeta(song), at: currentTime, duration });
+    }
+    if (!m.completed && duration > 0 && currentTime >= duration * 0.9) {
+      m.completed = true;
+      track("play_complete", { ...songMeta(song), at: currentTime, duration });
+    }
+  }, [currentTime, duration, songMeta]);
+
   const handleNext = useCallback(() => {
+    // Emit play_skip if the user skipped before completing the track.
+    const m = milestonesRef.current;
+    const song = currentSongRef.current;
+    if (song && !m.completed && currentTime < 30) {
+      track("play_skip", { ...songMeta(song), at: currentTime, duration, direction: "next" });
+    }
     if (repeat === "one") {
+      // Treat replay as a new play instance for analytics.
+      resetMilestones(song?.id ?? null);
       setCurrentTime(0);
       const a = audioRef.current;
       if (a && hasRealAudio) { a.currentTime = 0; a.play().catch(() => {}); }
@@ -167,6 +202,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [currentIndex, queue.length, repeat, shuffle, hasRealAudio]);
 
   const handlePrev = useCallback(() => {
+    const m = milestonesRef.current;
+    const song = currentSongRef.current;
+    if (song && !m.completed && currentTime < 30 && currentTime <= 3) {
+      // Only count as a skip when we're actually leaving this track
+      // (currentTime > 3 just restarts the same song below).
+      track("play_skip", { ...songMeta(song), at: currentTime, duration, direction: "prev" });
+    }
     if (currentTime > 3) {
       setCurrentTime(0);
       const a = audioRef.current;
@@ -230,17 +272,27 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
     const onEnded = () => handleNext();
     const onError = () => setIsPlaying(false);
+    const onPlaying = () => {
+      const m = milestonesRef.current;
+      const song = currentSongRef.current;
+      if (song && !m.started) {
+        m.started = true;
+        track("play_start", { ...songMeta(song), duration: Number.isFinite(a.duration) ? Math.floor(a.duration) : undefined });
+      }
+    };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("loadedmetadata", onMeta);
     a.addEventListener("durationchange", onMeta);
     a.addEventListener("ended", onEnded);
     a.addEventListener("error", onError);
+    a.addEventListener("playing", onPlaying);
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("loadedmetadata", onMeta);
       a.removeEventListener("durationchange", onMeta);
       a.removeEventListener("ended", onEnded);
       a.removeEventListener("error", onError);
+      a.removeEventListener("playing", onPlaying);
     };
   }, [handleNext]);
 
@@ -252,6 +304,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0);
     setAudioDuration(null);
     setIsPlaying(true);
+    // For songs without real audio, the audio element's `playing` event never
+    // fires — emit play_start here so the simulated path is also instrumented.
+    if (!song.audioUrl) {
+      resetMilestones(song.id);
+      milestonesRef.current.started = true;
+      track("play_start", { songId: song.id, songTitle: song.title, albumId: song.album?.id, albumTitle: song.album?.title, artist: song.album?.artist, simulated: true });
+    }
     // Apple Music behavior: tapping a song updates the mini-player only.
     // The full Now Playing sheet opens only when the user taps the mini-player.
     setShowLyrics(false);
@@ -266,17 +325,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
   const seekTo = useCallback((time: number) => {
     const clamped = Math.max(0, Math.min(time, duration));
+    const song = currentSongRef.current;
+    if (song) track("seek", { ...songMeta(song), from: currentTime, to: clamped, duration });
     setCurrentTime(clamped);
     const a = audioRef.current;
     if (a && hasRealAudio) a.currentTime = clamped;
-  }, [duration, hasRealAudio]);
+  }, [duration, hasRealAudio, currentTime, songMeta]);
   const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
   const toggleRepeat = useCallback(() => {
     setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"));
   }, []);
 
   const toggleFavorite = useCallback((songId: string) => {
+    const wasFav = favSongs.has(songId);
     favSongs.toggle(songId);
+    track(wasFav ? "unfavorite" : "favorite", { songId });
   }, [favSongs]);
 
   const isFavorite = useCallback((songId: string) => favSongs.has(songId), [favSongs]);

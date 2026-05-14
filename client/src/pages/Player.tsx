@@ -317,7 +317,12 @@ export function Player() {
             <div className="w-full flex items-center justify-around pb-2">
               <button
                 type="button"
-                onClick={() => currentSong.lyrics && setShowLyrics(true)}
+                onClick={() => {
+                  if (currentSong.lyrics) {
+                    setShowLyrics(true);
+                    track("lyrics_open", { songId: currentSong.id, songTitle: currentSong.title, albumId: currentSong.album?.id });
+                  }
+                }}
                 disabled={!currentSong.lyrics}
                 className={`w-11 h-11 flex items-center justify-center transition-colors ${
                   currentSong.lyrics
