@@ -901,6 +901,83 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
 
 // ---------- InstrumentEditor ----------
 
+// Paste-a-vendor-URL bar. Calls the server scraper, prefills name/photo/
+// category on the parent form, and pushes a pre-populated vendor row.
+// On hosts we don't recognise yet we still show what we found — the admin
+// can edit the inferred vendor name before saving.
+function ScrapeBar({
+  onPrefill,
+}: {
+  onPrefill: (r: {
+    name: string | null;
+    brand: string | null;
+    category: string | null;
+    photoUrl: string | null;
+    vendor: { name: string; affiliateUrl: string; aboutUrl: string; logoUrl: string; domain: string; known: boolean };
+  }) => Promise<void> | void;
+}) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  async function go() {
+    const u = url.trim();
+    if (!u) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/instruments/scrape", { url: u });
+      const data = await res.json();
+      await onPrefill(data);
+      setMsg({
+        kind: "ok",
+        text: data.vendor?.known
+          ? `Pulled from ${data.vendor.name}. Review the fields below and Save.`
+          : `Pulled from ${data.vendor.name} (new vendor — confirm the name).`,
+      });
+      setUrl("");
+    } catch (e: any) {
+      setMsg({ kind: "err", text: e?.message || "Couldn't read that page." });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="rounded-lg border border-slate-200 bg-[#f7fbff] p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); go(); } }}
+          placeholder="Paste a product URL — Carter Vintage, Reverb, Gibson, Martin, Sweetwater…"
+          className={inputCls + " flex-1"}
+          disabled={busy}
+          data-testid="input-scrape-url"
+        />
+        <button
+          type="button"
+          onClick={go}
+          disabled={busy || !url.trim()}
+          className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40"
+          data-testid="button-scrape-url"
+        >
+          {busy ? "Reading…" : "Pull"}
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400">
+        Reads the page's Open Graph + product metadata and rehosts the hero image. Most modern shops work without an account.
+      </p>
+      {msg && (
+        <p
+          className={`text-[12px] ${msg.kind === "ok" ? "text-[#319ED8]" : "text-red-600"}`}
+          data-testid="text-scrape-result"
+        >
+          {msg.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; onDeleted: () => void }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<AdminInstrument>({ queryKey: ["/api/instruments", instrumentId] });
@@ -966,6 +1043,43 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           <p className="text-slate-300 text-xs font-mono">{form.id}</p>
         </div>
       </div>
+
+      <ScrapeBar
+        onPrefill={async (r) => {
+          // Fill the form (don't clobber non-empty fields the admin already
+          // typed). Build a full title from "<brand> <name>" when both are
+          // present — JSON-LD often returns just the model in `name`.
+          const merged: Partial<AdminInstrument> = {};
+          const composedName = [r.brand, r.name].filter(Boolean).join(" ").trim();
+          if (composedName && !form.name) merged.name = composedName;
+          if (r.photoUrl && !form.photoUrl) merged.photoUrl = r.photoUrl;
+          if (r.category && !form.category) merged.category = String(r.category);
+          if (Object.keys(merged).length) update(merged);
+
+          // Dedupe: if a vendor with this exact affiliateUrl is already on
+          // the instrument, skip the create — protects against accidental
+          // double-pulls and re-pulls after a manual edit.
+          const existing = (form.vendors || []).some(
+            (v) => (v.affiliateUrl || "").toLowerCase() === r.vendor.affiliateUrl.toLowerCase(),
+          );
+          if (existing) return;
+
+          // Create the vendor row server-side with all the scraped fields,
+          // so the row appears below complete instead of as a "New vendor"
+          // placeholder the admin then has to fill in.
+          try {
+            await apiRequest("POST", `/api/admin/instruments/${instrumentId}/vendors`, {
+              name: r.vendor.name,
+              affiliateUrl: r.vendor.affiliateUrl,
+              aboutUrl: r.vendor.aboutUrl,
+              logoUrl: r.vendor.logoUrl,
+            });
+            invalidate();
+          } catch {
+            // Vendor add is best-effort; the form prefill above still ran.
+          }
+        }}
+      />
 
       <Field label="Name (year + maker + model)">
         <input value={form.name} onChange={(e) => update({ name: e.target.value })} className={inputCls} data-testid="input-instrument-name" />

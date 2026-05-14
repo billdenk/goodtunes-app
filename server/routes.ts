@@ -292,6 +292,271 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ url: `/uploads/${f.filename}` });
   });
 
+  // --- Vendor URL scraper (paste-a-link → prefilled instrument + vendor) ---
+  // Reads Open Graph + Schema.org Product JSON-LD from a public product page
+  // and rehosts the hero image locally so the admin can review/save without
+  // any manual copy-paste. Works on every modern shop (Shopify, BigCommerce,
+  // WooCommerce, Reverb, vendor sites with SEO) because those formats are
+  // a published standard — not a per-site scraper. When we strike a real
+  // partnership we swap individual hosts for their official API (Reverb has
+  // OAuth + listings); the public route stays the catch-all.
+  //
+  // NOT comprehensive product data — just enough to prefill the editor.
+  // The admin still reviews + saves manually.
+  // SSRF guard: resolve every hostname to its IPs and reject anything that
+  // points at our own infrastructure (loopback, link-local, RFC1918, cloud
+  // metadata 169.254.169.254, ULA fc00::/7, etc). Applied before each fetch
+  // AND after every redirect — undici's default `redirect:'follow'` would
+  // happily chase a public URL into 127.0.0.1.
+  const dnsLookup = (await import("node:dns/promises")).default;
+  const netMod = (await import("node:net")).default;
+  function isPrivateIp(ip: string): boolean {
+    if (netMod.isIPv4(ip)) {
+      const [a, b] = ip.split(".").map(Number);
+      return (
+        a === 0 || a === 10 || a === 127 ||
+        (a === 169 && b === 254) ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        a >= 224
+      );
+    }
+    if (netMod.isIPv6(ip)) {
+      const lower = ip.toLowerCase().replace(/^\[|\]$/g, "");
+      if (lower === "::1" || lower === "::") return true;
+      if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
+      if (lower.startsWith("fe80:")) return true;
+      const m = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+      if (m) return isPrivateIp(m[1]);
+      return false;
+    }
+    return false;
+  }
+  async function assertPublic(u: URL) {
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      throw new Error(`Disallowed protocol: ${u.protocol}`);
+    }
+    const all = await dnsLookup.lookup(u.hostname, { all: true });
+    for (const { address } of all) {
+      if (isPrivateIp(address)) throw new Error(`Refusing to fetch private/loopback host (${address})`);
+    }
+  }
+  // Manual redirect follower so we can re-run the SSRF check on every hop.
+  async function safeFetch(url: string, init?: RequestInit, maxHops = 5): Promise<Response> {
+    let current = url;
+    for (let i = 0; i <= maxHops; i++) {
+      await assertPublic(new URL(current));
+      const res = await fetch(current, { ...(init || {}), redirect: "manual" });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        if (!loc) throw new Error("Redirect with no Location header");
+        current = new URL(loc, current).toString();
+        continue;
+      }
+      return res;
+    }
+    throw new Error("Too many redirects");
+  }
+
+  const KNOWN_VENDORS: Record<string, string> = {
+    "cartervintage.com": "Carter Vintage Guitars",
+    "normansrareguitars.com": "Norman's Rare Guitars",
+    "reverb.com": "Reverb",
+    "sweetwater.com": "Sweetwater",
+    "chicagomusicexchange.com": "Chicago Music Exchange",
+    "elderly.com": "Elderly Instruments",
+    "wildwoodguitars.com": "Wildwood Guitars",
+    "davesguitar.com": "Dave's Guitar Shop",
+    "rudysmusic.com": "Rudy's Music",
+    "gibson.com": "Gibson",
+    "martinguitar.com": "Martin Guitar",
+    "fender.com": "Fender",
+    "gretschguitars.com": "Gretsch Guitars",
+    "gretschdrums.com": "Gretsch Drums",
+    "taylorguitars.com": "Taylor Guitars",
+    "prsguitars.com": "PRS Guitars",
+    "ricksmusicworld.com": "Rick's Music World",
+    "steinway.com": "Steinway & Sons",
+    "yamaha.com": "Yamaha",
+    "kawai.com": "Kawai",
+    "boesendorfer.com": "Bösendorfer",
+    "fazioli.com": "Fazioli",
+    "nordkeyboards.com": "Nord",
+    "ludwig-drums.com": "Ludwig",
+    "dwdrums.com": "DW Drums",
+    "pearldrum.com": "Pearl Drums",
+    "tama.com": "Tama",
+    "sonor.com": "Sonor",
+    "zildjian.com": "Zildjian",
+    "sabian.com": "Sabian",
+    "paiste.com": "Paiste",
+    "meinl.de": "Meinl",
+    "marshall.com": "Marshall",
+    "mesaboogie.com": "Mesa/Boogie",
+    "voxamps.com": "Vox",
+    "orangeamps.com": "Orange Amps",
+    "two-rock.com": "Two-Rock",
+    "matchlessamplifiers.com": "Matchless",
+    "friedmanamplification.com": "Friedman",
+    "drzamps.com": "Dr. Z",
+    "daddario.com": "D'Addario",
+    "ernieball.com": "Ernie Ball",
+    "elixirstrings.com": "Elixir",
+    "rotosound.com": "Rotosound",
+    // Europe / UK / international staples
+    "thomann.de": "Thomann",
+    "andertons.co.uk": "Andertons",
+    "guitarguitar.co.uk": "GuitarGuitar",
+    // Boutique pedals / amps
+    "strymon.net": "Strymon",
+    "chasebliss.com": "Chase Bliss Audio",
+    "earthquakerdevices.com": "EarthQuaker Devices",
+    // Keys
+    "roland.com": "Roland",
+    "casio.com": "Casio",
+    "korg.com": "Korg",
+    "moogmusic.com": "Moog",
+    "sequential.com": "Sequential",
+  };
+
+  function decodeEntities(s: string) {
+    return s
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#0?39;/g, "'")
+      .replace(/&#x27;/gi, "'");
+  }
+
+  // JSON-LD blocks can be a Product directly, an array of nodes, or a
+  // `@graph` wrapper. Walk everything and return the first Product.
+  // Depth-bounded so a maliciously-nested blob can't blow the stack.
+  function findProduct(node: any, depth = 0): any {
+    if (depth > 8 || !node || typeof node !== "object") return null;
+    if (Array.isArray(node)) {
+      for (const n of node) { const r = findProduct(n, depth + 1); if (r) return r; }
+      return null;
+    }
+    const t = node["@type"];
+    if (t === "Product" || (Array.isArray(t) && t.includes("Product"))) return node;
+    if (node["@graph"]) return findProduct(node["@graph"], depth + 1);
+    return null;
+  }
+
+  async function rehostRemoteImage(src: string): Promise<string> {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10_000);
+    const r = await safeFetch(src, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0)" },
+    }).finally(() => clearTimeout(t));
+    if (!r.ok) throw new Error(`image fetch ${r.status}`);
+    const mime = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    const ext = MIME_TO_EXT[mime];
+    if (!ext) throw new Error(`unsupported image mime: ${mime || "unknown"}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.byteLength > 8 * 1024 * 1024) throw new Error("image larger than 8MB");
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const filename = `${id}${ext}`;
+    fs.writeFileSync(path.join(uploadsDir, filename), buf);
+    return `/uploads/${filename}`;
+  }
+
+  app.post("/api/admin/instruments/scrape", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// product URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          // Some shops 403 the default undici UA. A polite browser-like UA
+          // gets through Carter Vintage, Reverb, Gibson, Martin, etc.
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Vendor page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      // Collect every meta tag. Two regexes because property/name can come
+      // before or after content depending on the shop's template.
+      const meta: Record<string, string> = {};
+      // Prefer the first occurrence found in document order for both regex
+      // orderings; some templates emit dupes for FB/Twitter compatibility.
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) {
+        const key = m[1].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[2]);
+      }
+      while ((m = re2.exec(html))) {
+        const key = m[2].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[1]);
+      }
+
+      let product: any = null;
+      const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+      while ((m = ldRe.exec(html))) {
+        try {
+          const node = JSON.parse(m[1].trim());
+          const found = findProduct(node);
+          if (found) { product = found; break; }
+        } catch { /* malformed JSON-LD — keep walking */ }
+      }
+
+      const name = product?.name || meta["og:title"] || meta["twitter:title"] || null;
+      const brand = (typeof product?.brand === "object" ? product.brand?.name : product?.brand) || null;
+      const category = product?.category || null;
+
+      let rawImage: string | null =
+        (Array.isArray(product?.image) ? product.image[0] : product?.image) ||
+        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
+      if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
+
+      let photoUrl: string | null = null;
+      if (rawImage) {
+        try { photoUrl = await rehostRemoteImage(rawImage); }
+        catch { photoUrl = rawImage; /* fall back to hot-link, admin can re-upload */ }
+      }
+
+      const vendorName =
+        KNOWN_VENDORS[host] ||
+        meta["og:site_name"] ||
+        host.split(".").slice(0, -1).join(".").replace(/\b\w/g, (c) => c.toUpperCase());
+
+      res.json({
+        name,
+        brand,
+        category,
+        photoUrl,
+        sourceImage: rawImage,
+        vendor: {
+          name: vendorName,
+          affiliateUrl: url,
+          aboutUrl: `${parsed.origin}/`,
+          logoUrl: `https://www.google.com/s2/favicons?sz=128&domain=${host}`,
+          domain: host,
+          known: host in KNOWN_VENDORS,
+        },
+      });
+    } catch (e: any) {
+      const msg = e?.name === "AbortError" ? "Vendor site took too long to respond." : (e?.message || "Unable to read that page");
+      res.status(502).json({ message: msg });
+    }
+  });
+
   app.post("/api/admin/albums", requireAdmin, async (req, res) => {
     const { id, title, artist, artwork, year, type, description } = req.body ?? {};
     if (!title || !artist || !artwork) {
