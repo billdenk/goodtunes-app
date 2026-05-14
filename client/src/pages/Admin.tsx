@@ -120,7 +120,7 @@ interface AdminInstrument {
   vendors: AdminVendor[];
 }
 
-type EntityKey = "albums" | "people" | "instruments";
+type EntityKey = "albums" | "people" | "instruments" | "vendors";
 
 // ---------- Shared bits ----------
 
@@ -1618,6 +1618,139 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
   );
 }
 
+// Full-pane vendor editor used by the top-level Vendors tab. Same mutations
+// as VendorRow but laid out like AlbumEditor / InstrumentEditor so it fills
+// the editor column. Includes a "jump to instrument" affordance because a
+// vendor row is owned by its instrument in the DB.
+function VendorPaneEditor({
+  vendor,
+  onJumpToInstrument,
+  onDeleted,
+}: {
+  vendor: AdminVendor & { instrumentName: string };
+  onJumpToInstrument: () => void;
+  onDeleted: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<AdminVendor>(vendor);
+  useEffect(() => { setDraft(vendor); }, [vendor.id]);
+  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(vendor), [draft, vendor]);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/instruments", vendor.instrumentId] });
+  };
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/admin/vendors/${vendor.id}`, draft);
+      return res.json();
+    },
+    onSuccess: invalidate,
+  });
+  const del = useMutation({
+    mutationFn: async () => { await apiRequest("DELETE", `/api/admin/vendors/${vendor.id}`); },
+    onSuccess: () => { invalidate(); onDeleted(); },
+  });
+
+  const logoFallback = useMemo(() => {
+    if (draft.logoUrl) return draft.logoUrl;
+    try {
+      const u = new URL(draft.affiliateUrl);
+      return `https://www.google.com/s2/favicons?sz=128&domain=${u.hostname}`;
+    } catch { return ""; }
+  }, [draft.logoUrl, draft.affiliateUrl]);
+
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="px-6 py-5 border-b border-slate-200 flex items-center gap-4">
+        {logoFallback ? (
+          <img src={logoFallback} alt="" className="w-14 h-14 rounded bg-slate-50 object-contain shrink-0 border border-slate-200" />
+        ) : (
+          <div className="w-14 h-14 rounded bg-slate-100 shrink-0" />
+        )}
+        <div className="min-w-0 flex-1">
+          <h1 className="text-slate-900 text-lg font-semibold truncate" data-testid="text-vendor-title">
+            {draft.name || "Untitled vendor"}
+          </h1>
+          <button
+            type="button"
+            onClick={onJumpToInstrument}
+            className="text-[12px] text-slate-500 hover:text-[#319ED8] truncate text-left"
+            data-testid="link-vendor-instrument"
+          >
+            for {vendor.instrumentName} →
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setDraft({ ...draft, isHidden: !draft.isHidden })}
+          className={`px-3 py-1 text-[12px] rounded border ${
+            draft.isHidden
+              ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
+              : "border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+          title={draft.isHidden ? "Hidden from fans. Click to show." : "Visible to fans. Click to hide."}
+          data-testid="button-toggle-vendor-visible"
+        >
+          {draft.isHidden ? "Hidden" : "Visible"}
+        </button>
+      </div>
+
+      <div className="px-6 py-5 space-y-3 max-w-2xl">
+        <Field label="Vendor name">
+          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={inputCls} data-testid="input-vendor-pane-name" />
+        </Field>
+        <Field label="Affiliate / product URL (where the buy button goes)">
+          <input value={draft.affiliateUrl} onChange={(e) => setDraft({ ...draft, affiliateUrl: e.target.value })} className={inputCls} data-testid="input-vendor-pane-affiliate" />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="About URL (homepage)">
+            <input value={draft.aboutUrl ?? ""} onChange={(e) => setDraft({ ...draft, aboutUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-about" />
+          </Field>
+          <Field label="Logo URL (else favicon)">
+            <input value={draft.logoUrl ?? ""} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-logo" />
+          </Field>
+        </div>
+        <Field label="Tagline (one-liner)">
+          <input value={draft.tagline ?? ""} onChange={(e) => setDraft({ ...draft, tagline: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-tagline" />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Location">
+            <input value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value || null })} placeholder="Nashville, TN" className={inputCls} data-testid="input-vendor-pane-location" />
+          </Field>
+          <Field label="Cover URL (hero photo)">
+            <input value={draft.coverUrl ?? ""} onChange={(e) => setDraft({ ...draft, coverUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-cover" />
+          </Field>
+        </div>
+        <Field label="Bio (short paragraph)">
+          <textarea value={draft.bio ?? ""} onChange={(e) => setDraft({ ...draft, bio: e.target.value || null })} className={`${inputCls} min-h-[100px]`} data-testid="input-vendor-pane-bio" />
+        </Field>
+      </div>
+
+      <div className="px-6 py-4 border-t border-slate-200 flex items-center gap-3 sticky bottom-0 bg-white">
+        <button
+          type="button"
+          onClick={() => { if (confirm(`Delete "${draft.name || "this vendor"}"?`)) del.mutate(); }}
+          className="px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 rounded mr-auto"
+          data-testid="button-delete-vendor-pane"
+        >
+          Delete vendor
+        </button>
+        <button
+          type="button"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate()}
+          className="px-4 py-1.5 text-[13px] rounded bg-[#319ED8] text-white disabled:opacity-40"
+          data-testid="button-save-vendor-pane"
+        >
+          {save.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Phone-frame preview that mirrors the fan-side InstrumentSheet so admins
 // can see how their edits will render *before* publishing. Reads the live
 // instrument record (same query key as the editor — TanStack dedupes the
@@ -1721,6 +1854,7 @@ export function Admin() {
     albums: null,
     people: null,
     instruments: null,
+    vendors: null,
   });
   const selectedId = selectedByEntity[entity];
   const setSelectedId = (id: string | null) =>
@@ -1765,6 +1899,29 @@ export function Admin() {
     if (selectedByEntity.instruments == null && instruments.length > 0)
       setSelectedByEntity((p) => ({ ...p, instruments: instruments[0].id }));
   }, [instruments, selectedByEntity.instruments]);
+
+  // Flat cross-cut of every vendor row across every instrument. Vendors are
+  // owned by instruments in the DB (FK), so this is a derivation — no
+  // separate query. We tag each row with its parent instrument so the list
+  // can show "for <instrument>" context. Newest first.
+  const allVendors = useMemo(() => {
+    const rows: (AdminVendor & { instrumentName: string })[] = [];
+    for (const inst of instruments) {
+      for (const v of inst.vendors) {
+        rows.push({ ...v, instrumentName: inst.name });
+      }
+    }
+    rows.sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tb - ta;
+    });
+    return rows;
+  }, [instruments]);
+  useEffect(() => {
+    if (selectedByEntity.vendors == null && allVendors.length > 0)
+      setSelectedByEntity((p) => ({ ...p, vendors: allVendors[0].id }));
+  }, [allVendors, selectedByEntity.vendors]);
 
   const bootstrap = useMutation({
     mutationFn: async () => {
@@ -1909,6 +2066,7 @@ export function Admin() {
             { key: "albums", label: "Albums", count: albums.length },
             { key: "people", label: "People", count: people.length },
             { key: "instruments", label: "Instruments", count: instruments.length },
+            { key: "vendors", label: "Vendors", count: allVendors.length },
           ] as { key: EntityKey; label: string; count: number }[]).map((t) => (
             <button
               key={t.key}
@@ -1921,13 +2079,13 @@ export function Admin() {
               <span className="text-[11px] text-slate-400">{t.count}</span>
             </button>
           ))}
-          {["Vendors", "Credits"].map((label) => (
+          {["Credits"].map((label) => (
             <button
               key={label}
               type="button"
               disabled
               className="w-full text-left px-3 py-2 rounded-md text-slate-300 cursor-not-allowed"
-              title="Vendors live under each instrument · Credits panel coming next"
+              title="Credits panel coming next"
             >
               {label} <span className="text-[10px] uppercase tracking-wider opacity-60 ml-1">soon</span>
             </button>
@@ -1950,10 +2108,14 @@ export function Admin() {
             onClick={() => {
               if (entity === "albums") createAlbum.mutate();
               else if (entity === "people") createPerson.mutate();
-              else createInstrument.mutate();
+              else if (entity === "instruments") createInstrument.mutate();
             }}
-            disabled={createAlbum.isPending || createPerson.isPending || createInstrument.isPending}
-            className="text-[12px] text-[#319ED8] hover:underline"
+            disabled={
+              entity === "vendors" ||
+              createAlbum.isPending || createPerson.isPending || createInstrument.isPending
+            }
+            className={`text-[12px] ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:underline"}`}
+            title={entity === "vendors" ? "Vendors are added via an instrument's scraper" : undefined}
             data-testid={`button-new-${entity.slice(0, -1)}`}
           >
             + New
@@ -1999,6 +2161,32 @@ export function Admin() {
               </button>
             </li>
           ))}
+          {entity === "vendors" && allVendors.map((v) => {
+            const logo = v.logoUrl || (() => {
+              try { return `https://www.google.com/s2/favicons?sz=128&domain=${new URL(v.affiliateUrl).hostname}`; }
+              catch { return ""; }
+            })();
+            return (
+              <li key={v.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(v.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === v.id ? "bg-blue-50" : ""} ${v.isHidden ? "opacity-50" : ""}`}
+                  data-testid={`row-vendor-list-${v.id}`}
+                >
+                  {logo ? (
+                    <img src={logo} alt="" className="w-10 h-10 rounded bg-slate-50 object-contain shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded bg-slate-100 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-slate-900 text-sm truncate">{v.name || "Untitled vendor"}</div>
+                    <div className="text-slate-400 text-xs truncate">for {v.instrumentName}</div>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
           {entity === "instruments" && instruments.map((i) => (
             <li key={i.id}>
               <button
@@ -2028,6 +2216,11 @@ export function Admin() {
           {entity === "instruments" && instruments.length === 0 && (
             <li className="px-4 py-6 text-slate-400 text-sm">No instruments yet. Click + New.</li>
           )}
+          {entity === "vendors" && allVendors.length === 0 && (
+            <li className="px-4 py-6 text-slate-400 text-sm leading-relaxed">
+              No vendors yet. Open an instrument and paste a Reverb / Sweetwater / Carter Vintage URL into its Vendors scraper.
+            </li>
+          )}
         </ul>
       </section>
 
@@ -2039,6 +2232,22 @@ export function Admin() {
           <AlbumEditor key={selectedId} albumId={selectedId} onDeleted={() => setSelectedId(null)} />
         ) : entity === "people" ? (
           <PersonEditor key={selectedId} personId={selectedId} onDeleted={() => setSelectedId(null)} />
+        ) : entity === "vendors" ? (
+          (() => {
+            const v = allVendors.find((x) => x.id === selectedId);
+            if (!v) return <div className="h-full flex items-center justify-center text-slate-400">Vendor not found.</div>;
+            return (
+              <VendorPaneEditor
+                key={v.id}
+                vendor={v}
+                onJumpToInstrument={() => {
+                  setSelectedByEntity((p) => ({ ...p, instruments: v.instrumentId }));
+                  setEntity("instruments");
+                }}
+                onDeleted={() => setSelectedId(null)}
+              />
+            );
+          })()
         ) : (
           <InstrumentEditor key={selectedId} instrumentId={selectedId} onDeleted={() => setSelectedId(null)} />
         )}
