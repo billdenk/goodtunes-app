@@ -215,6 +215,83 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(403).json({ message: "An admin already exists. Ask an existing admin to promote you." });
   });
 
+  // CSRF guard for the new admin mutation endpoints. Session cookies are
+  // sameSite:"none" so a cross-site form POST could ride an admin's
+  // session — requiring a Bearer header that lives in localStorage (and
+  // is therefore unreachable cross-origin) closes that path. Bootstrap
+  // and the older /api/admin/* mutations remain on the existing
+  // requireAdmin contract; we only harden the routes added here.
+  function requireAdminBearer(req: Request, res: Response, next: Function) {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Bearer token required for admin writes" });
+    }
+    return requireAdmin(req, res, next);
+  }
+
+  // Promote an existing user to admin by their @username. Admin-only.
+  // No revoke endpoint by design — keeps the surface tight and matches the
+  // pricing-page rule that the bootstrap admin can't be locked out of the
+  // CMS by another admin. Use the DB directly if you need to demote.
+  app.post("/api/admin/promote", requireAdminBearer, async (req, res) => {
+    const raw = String(req.body?.username ?? "").trim();
+    const username = (raw.startsWith("@") ? raw.slice(1) : raw).toLowerCase();
+    if (!username) return res.status(400).json({ message: "Username is required" });
+    const target = await storage.getUserByUsername(username);
+    if (!target) return res.status(404).json({ message: `No user found with username "@${username}"` });
+    if (target.isAdmin) {
+      return res.status(200).json({ id: target.id, username: target.username, displayName: target.displayName, isAdmin: true, alreadyAdmin: true });
+    }
+    await storage.setUserAdmin(target.id, true);
+    return res.json({ id: target.id, username: target.username, displayName: target.displayName, isAdmin: true });
+  });
+
+  // Image upload for album artwork / vendor logos / person photos. Saves to
+  // an `uploads/` directory served statically from `/uploads/...`.
+  // Caveat for production: on Replit's Autoscale deployments the local FS
+  // is ephemeral, so an upload survives within a single instance but not
+  // across redeploys. Move to Object Storage (or S3-compatible) when the
+  // catalog goes beyond the demo phase.
+  const multer = (await import("multer")).default;
+  const path = (await import("path")).default;
+  const fs = (await import("fs")).default;
+  const uploadsDir = path.resolve("uploads");
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  // MIME → extension map. We DERIVE the extension from the validated
+  // mimetype instead of trusting `file.originalname`, so an attacker can't
+  // upload "evil.html" with mimetype "image/png" and have us save+serve
+  // an HTML payload from a same-origin URL. SVG is excluded by design
+  // because it can carry executable script.
+  const MIME_TO_EXT: Record<string, string> = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/avif": ".avif",
+  };
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: uploadsDir,
+      filename: (_req, file, cb) => {
+        const ext = MIME_TO_EXT[file.mimetype] || ".bin";
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        cb(null, `${id}${ext}`);
+      },
+    }),
+    limits: { fileSize: 8 * 1024 * 1024 }, // 8MB cap — matches the photo route
+    fileFilter: (_req, file, cb) => {
+      if (!(file.mimetype in MIME_TO_EXT)) {
+        return cb(new Error("Only PNG, JPEG, GIF, WebP, or AVIF images are allowed"));
+      }
+      cb(null, true);
+    },
+  });
+  app.post("/api/admin/upload", requireAdminBearer, upload.single("file"), (req, res) => {
+    const f = (req as any).file as Express.Multer.File | undefined;
+    if (!f) return res.status(400).json({ message: "No file uploaded" });
+    return res.json({ url: `/uploads/${f.filename}` });
+  });
+
   app.post("/api/admin/albums", requireAdmin, async (req, res) => {
     const { id, title, artist, artwork, year, type, description } = req.body ?? {};
     if (!title || !artist || !artwork) {

@@ -24,6 +24,11 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Serve admin-uploaded images. Files land here via POST /api/admin/upload
+// and are referenced by relative URL ("/uploads/<id>.png") in album.artwork,
+// person.photoUrl, etc. See server/routes.ts for the multer setup.
+app.use("/uploads", express.static("uploads", { maxAge: "1y", immutable: true }));
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
