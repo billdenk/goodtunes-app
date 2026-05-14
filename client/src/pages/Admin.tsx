@@ -12,6 +12,10 @@ interface AdminAlbum {
   year: number | null;
   type: "album" | "EP";
   description: string | null;
+  // Demo show/hide. When true the album (and its songs/credits) is hidden
+  // from the fan-side catalog. CMS callers see hidden rows so they can
+  // flip the toggle back on.
+  isHidden: boolean;
 }
 
 interface AdminSong {
@@ -48,6 +52,9 @@ interface AdminVendor {
   location: string | null;
   coverUrl: string | null;
   position: number;
+  // Demo show/hide — hides this vendor's button from the fan-side
+  // InstrumentSheet. Admins still see it in the CMS so they can flip it back.
+  isHidden: boolean;
 }
 
 interface AdminInstrument {
@@ -89,6 +96,7 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
         year: data.year,
         type: data.type,
         description: data.description,
+        isHidden: data.isHidden,
       });
       setDirty(false);
     }
@@ -187,6 +195,22 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
             data-testid="button-delete-album"
           >
             Delete
+          </button>
+          {/* Demo hide toggle. Flipping this away from `false` immediately
+              dirties the form so the change rides the regular Save button —
+              keeps the editor's single source of truth (no separate mutation). */}
+          <button
+            type="button"
+            onClick={() => set("isHidden", !form.isHidden)}
+            className={`px-3 py-1.5 text-[12px] rounded-md border ${
+              form.isHidden
+                ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
+                : "border-white/15 text-white/70 hover:bg-white/[0.05]"
+            }`}
+            title={form.isHidden ? "Hidden from fans. Click to show." : "Visible to fans. Click to hide."}
+            data-testid="button-toggle-album-hidden"
+          >
+            {form.isHidden ? "Hidden" : "Visible"}
           </button>
           <button
             type="button"
@@ -829,12 +853,13 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
 
   return (
     <div className="rounded-md border border-white/10 bg-white/[0.03]">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-white/[0.04]" data-testid={`row-vendor-${vendor.id}`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className={`w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-white/[0.04] ${draft.isHidden ? "opacity-50" : ""}`} data-testid={`row-vendor-${vendor.id}`}>
         {logoFallback ? <img src={logoFallback} alt="" className="w-8 h-8 rounded bg-white/5 object-contain" /> : <div className="w-8 h-8 rounded bg-white/10" />}
         <div className="min-w-0 flex-1">
           <div className="text-white text-sm truncate">{draft.name || "Untitled vendor"}</div>
           <div className="text-white/40 text-xs truncate">{draft.affiliateUrl}</div>
         </div>
+        {draft.isHidden && <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">Hidden</span>}
         <span className="text-white/40 text-xs">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
@@ -868,6 +893,20 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
             <textarea value={draft.bio ?? ""} onChange={(e) => setDraft({ ...draft, bio: e.target.value || null })} rows={3} className={inputCls + " resize-none"} data-testid={`input-vendor-bio-${vendor.id}`} />
           </Field>
           <div className="flex items-center justify-end gap-2 pt-1">
+            {/* Demo hide toggle — rides the same Save button via the dirty flag. */}
+            <button
+              type="button"
+              onClick={() => setDraft({ ...draft, isHidden: !draft.isHidden })}
+              className={`px-3 py-1 text-[12px] rounded border ${
+                draft.isHidden
+                  ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
+                  : "border-white/15 text-white/70 hover:bg-white/[0.05]"
+              } mr-auto`}
+              title={draft.isHidden ? "Hidden from fans. Click to show." : "Visible to fans. Click to hide."}
+              data-testid={`button-toggle-vendor-hidden-${vendor.id}`}
+            >
+              {draft.isHidden ? "Hidden" : "Visible"}
+            </button>
             <button type="button" onClick={() => { if (confirm("Delete this vendor?")) del.mutate(); }} className="px-3 py-1 text-[12px] text-red-300 hover:bg-red-500/10 rounded" data-testid={`button-delete-vendor-${vendor.id}`}>Delete</button>
             <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="px-3 py-1 text-[12px] rounded bg-[#319ED8] text-white disabled:opacity-40" data-testid={`button-save-vendor-${vendor.id}`}>Save</button>
           </div>
@@ -1109,14 +1148,15 @@ export function Admin() {
               <button
                 type="button"
                 onClick={() => setSelectedId(a.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-white/[0.05] text-left ${selectedId === a.id ? "bg-white/[0.08]" : ""}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-white/[0.05] text-left ${selectedId === a.id ? "bg-white/[0.08]" : ""} ${a.isHidden ? "opacity-50" : ""}`}
                 data-testid={`row-album-${a.id}`}
               >
                 <img src={a.artwork} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-white text-sm truncate">{a.title}</div>
                   <div className="text-white/40 text-xs truncate">{a.artist}</div>
                 </div>
+                {a.isHidden && <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5 shrink-0">Hidden</span>}
               </button>
             </li>
           ))}

@@ -62,6 +62,17 @@ async function requireAdmin(req: Request, res: Response, next: Function) {
   next();
 }
 
+// Non-blocking admin check for routes that are admin-aware (return more data
+// when the caller is an admin) without being admin-only. Used by the public
+// catalog routes so `?includeHidden=1` is honored for admins and silently
+// dropped for everyone else.
+async function isAdminUser(req: Request): Promise<boolean> {
+  const userId = await getUserIdFromRequest(req);
+  if (!userId) return false;
+  const user = await storage.getUser(userId);
+  return !!user?.isAdmin;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const PgSession = connectPgSimple(session);
   const sessionSecret = process.env.SESSION_SECRET;
@@ -231,6 +242,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (year !== undefined) updates.year = year === null || year === "" ? null : Number(year);
     if (type !== undefined) updates.type = type === "EP" ? "EP" : "album";
     if (description !== undefined) updates.description = description ? String(description) : null;
+    if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
     return res.json(updated);
@@ -316,11 +328,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ----- SuperCredits™ catalog: Instruments + vendors ----------------------
-  app.get("/api/instruments", async (_req, res) => {
-    return res.json(await storage.getInstruments());
+  app.get("/api/instruments", async (req, res) => {
+    // Admins (CMS) see every vendor — hidden ones still need to be editable.
+    // Fans see the public set only.
+    const includeHiddenVendors = await isAdminUser(req);
+    return res.json(await storage.getInstruments({ includeHiddenVendors }));
   });
   app.get("/api/instruments/:id", async (req, res) => {
-    const i = await storage.getInstrumentById(String(req.params.id));
+    const includeHiddenVendors = await isAdminUser(req);
+    const i = await storage.getInstrumentById(String(req.params.id), { includeHiddenVendors });
     if (!i) return res.status(404).json({ message: "Instrument not found" });
     return res.json(i);
   });
@@ -392,6 +408,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (location !== undefined) updates.location = location ? String(location) : null;
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
     if (position !== undefined) updates.position = Number(position);
+    if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
     const v = await storage.updateInstrumentVendor(id, updates);
     if (!v) return res.status(404).json({ message: "Vendor not found" });
     return res.json(v);
@@ -404,13 +421,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ----- SuperCredits™ song credits (writers + performers) -----------------
   // Public read so the fan-facing credits sheet can fetch by song id.
   app.get("/api/songs/:id/credits", async (req, res) => {
-    return res.json(await storage.getSongCredits(String(req.params.id)));
+    // Resolve the song → its parent album so we can honor the album's
+    // hidden flag here too. Without this check, fans could pull credits
+    // for a song whose album we've already removed from the catalog.
+    const songId = String(req.params.id);
+    const song = await storage.getSongById(songId);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    const includeHidden = await isAdminUser(req);
+    const album = await storage.getAlbumById(song.albumId, { includeHidden });
+    if (!album) return res.status(404).json({ message: "Song not found" });
+    return res.json(await storage.getSongCredits(songId));
   });
   // Album-wide credits in one round-trip. Used by the fan-side AlbumDetail
   // page so CreditsSheet + PerformerSheet ("Also on this album" rail) both
   // render from a single fetch.
   app.get("/api/albums/:id/credits", async (req, res) => {
-    return res.json(await storage.getAlbumCredits(String(req.params.id)));
+    const albumId = String(req.params.id);
+    const includeHidden = await isAdminUser(req);
+    const album = await storage.getAlbumById(albumId, { includeHidden });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    return res.json(await storage.getAlbumCredits(albumId));
   });
   // Writers (nested under song for create; flat for update/delete by id).
   // POST body validated via insertTrackWriterSchema (songId injected from
@@ -540,13 +570,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ photoUrl: null });
   });
 
-  app.get("/api/albums", requireAuth, async (_req, res) => {
-    const albums = await storage.getAlbums();
+  app.get("/api/albums", requireAuth, async (req, res) => {
+    // Admins see hidden albums so the CMS list stays complete; fans don't.
+    const includeHidden = await isAdminUser(req);
+    const albums = await storage.getAlbums({ includeHidden });
     return res.json(albums);
   });
 
   app.get("/api/albums/:id", requireAuth, async (req, res) => {
-    const album = await storage.getAlbumById(String(req.params.id));
+    const includeHidden = await isAdminUser(req);
+    const album = await storage.getAlbumById(String(req.params.id), { includeHidden });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const songs = await storage.getSongsByAlbum(album.id);
     return res.json({ ...album, songs });

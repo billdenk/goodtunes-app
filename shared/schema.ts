@@ -22,6 +22,11 @@ export const albums = pgTable("albums", {
   year: integer("year"),
   type: text("type").notNull().default("album"),
   description: text("description"),
+  // Demo show/hide flag. When true the album is excluded from public catalog
+  // reads (album list + detail) AND from the fan-facing credits surface,
+  // effectively hiding the artist + all their songs/credits in one toggle.
+  // Admin endpoints keep returning hidden rows so the CMS can flip them back.
+  isHidden: boolean("is_hidden").notNull().default(false),
 });
 
 export const songs = pgTable("songs", {
@@ -108,6 +113,10 @@ export const instrumentVendors = pgTable("instrument_vendors", {
   location: text("location"),
   coverUrl: text("cover_url"),
   position: integer("position").notNull().default(0),
+  // Demo show/hide flag — hides this vendor's "Buy / Discover more" button
+  // from the fan-facing InstrumentSheet so it doesn't look like we're
+  // promoting a competitor during a different vendor's pitch.
+  isHidden: boolean("is_hidden").notNull().default(false),
 });
 
 // ----- SuperCredits™ song credits (linking layer) -----------------------

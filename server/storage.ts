@@ -41,8 +41,10 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
 
-  getAlbums(): Promise<Album[]>;
-  getAlbumById(id: string): Promise<Album | undefined>;
+  // `includeHidden` is honored only by admin call sites — public reads
+  // always pass false so demo-hidden albums vanish from the fan catalog.
+  getAlbums(opts?: { includeHidden?: boolean }): Promise<Album[]>;
+  getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<Album | undefined>;
   getSongsByAlbum(albumId: string): Promise<Song[]>;
   getSongById(id: string): Promise<Song | undefined>;
   getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]>;
@@ -69,8 +71,11 @@ export interface IStorage {
   updatePerson(id: string, data: Partial<Person>): Promise<Person | undefined>;
   deletePerson(id: string): Promise<void>;
 
-  getInstruments(): Promise<(Instrument & { vendors: InstrumentVendor[] })[]>;
-  getInstrumentById(id: string): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined>;
+  // `includeHiddenVendors` is honored only by admin call sites — public
+  // reads always pass false so hidden vendor buttons don't render in the
+  // fan-side InstrumentSheet.
+  getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] })[]>;
+  getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined>;
   createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument>;
   updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined>;
   deleteInstrument(id: string): Promise<void>;
@@ -142,10 +147,10 @@ export interface IStorage {
 // imports that the server can't resolve. The catalog tables for people /
 // instruments / vendors / credits land in the next phase along with the CMS.
 const SEED_ALBUMS: Album[] = [
-  { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "album", description: "A sweeping collection of songs about stillness, change, and the moments between." },
-  { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "album", description: "Instrumental mastery meets emotional storytelling." },
-  { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell." },
-  { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "album", description: "Sunshine, highways, and the stories only California can tell." },
+  { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "album", description: "A sweeping collection of songs about stillness, change, and the moments between.", isHidden: false },
+  { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "album", description: "Instrumental mastery meets emotional storytelling.", isHidden: false },
+  { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell.", isHidden: false },
+  { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "album", description: "Sunshine, highways, and the stories only California can tell.", isHidden: false },
 ];
 
 const SEED_SONGS: Song[] = [
@@ -215,11 +220,14 @@ export class DbStorage implements IStorage {
     return u;
   }
 
-  async getAlbums(): Promise<Album[]> {
-    return db.select().from(albums);
+  async getAlbums(opts?: { includeHidden?: boolean }): Promise<Album[]> {
+    if (opts?.includeHidden) return db.select().from(albums);
+    return db.select().from(albums).where(eq(albums.isHidden, false));
   }
-  async getAlbumById(id: string): Promise<Album | undefined> {
+  async getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<Album | undefined> {
     const [a] = await db.select().from(albums).where(eq(albums.id, id));
+    if (!a) return undefined;
+    if (a.isHidden && !opts?.includeHidden) return undefined;
     return a;
   }
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
@@ -301,13 +309,16 @@ export class DbStorage implements IStorage {
     await db.delete(people).where(eq(people.id, id));
   }
 
-  async getInstruments(): Promise<(Instrument & { vendors: InstrumentVendor[] })[]> {
+  async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] })[]> {
     const all = await db.select().from(instruments).orderBy(asc(instruments.name));
     if (all.length === 0) return [];
-    const allVendors = await db
+    const vendorQuery = db
       .select()
       .from(instrumentVendors)
       .orderBy(asc(instrumentVendors.position));
+    const allVendors = opts?.includeHiddenVendors
+      ? await vendorQuery
+      : await vendorQuery.where(eq(instrumentVendors.isHidden, false));
     const byInstrument = new Map<string, InstrumentVendor[]>();
     for (const v of allVendors) {
       const list = byInstrument.get(v.instrumentId) ?? [];
@@ -316,13 +327,16 @@ export class DbStorage implements IStorage {
     }
     return all.map((i) => ({ ...i, vendors: byInstrument.get(i.id) ?? [] }));
   }
-  async getInstrumentById(id: string): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined> {
+  async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined> {
     const [i] = await db.select().from(instruments).where(eq(instruments.id, id));
     if (!i) return undefined;
+    const predicate = opts?.includeHiddenVendors
+      ? eq(instrumentVendors.instrumentId, id)
+      : and(eq(instrumentVendors.instrumentId, id), eq(instrumentVendors.isHidden, false));
     const vendors = await db
       .select()
       .from(instrumentVendors)
-      .where(eq(instrumentVendors.instrumentId, id))
+      .where(predicate)
       .orderBy(asc(instrumentVendors.position));
     return { ...i, vendors };
   }
@@ -377,8 +391,12 @@ export class DbStorage implements IStorage {
     const [peopleRows, instrumentRows, vendorRows] = await Promise.all([
       personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
       instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
+      // Fan-facing — hidden vendors are excluded so demo-hidden vendor
+      // buttons don't render in the InstrumentSheet.
       instrumentIds.length
-        ? db.select().from(instrumentVendors).where(inArray(instrumentVendors.instrumentId, instrumentIds)).orderBy(asc(instrumentVendors.position))
+        ? db.select().from(instrumentVendors)
+            .where(and(inArray(instrumentVendors.instrumentId, instrumentIds), eq(instrumentVendors.isHidden, false)))
+            .orderBy(asc(instrumentVendors.position))
         : Promise.resolve([] as InstrumentVendor[]),
     ]);
     const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
@@ -424,8 +442,11 @@ export class DbStorage implements IStorage {
     const [peopleRows, instrumentRows, vendorRows] = await Promise.all([
       personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
       instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
+      // Fan-facing — hidden vendors are excluded.
       instrumentIds.length
-        ? db.select().from(instrumentVendors).where(inArray(instrumentVendors.instrumentId, instrumentIds)).orderBy(asc(instrumentVendors.position))
+        ? db.select().from(instrumentVendors)
+            .where(and(inArray(instrumentVendors.instrumentId, instrumentIds), eq(instrumentVendors.isHidden, false)))
+            .orderBy(asc(instrumentVendors.position))
         : Promise.resolve([] as InstrumentVendor[]),
     ]);
     const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
@@ -511,11 +532,15 @@ export class DbStorage implements IStorage {
   }
 
   async getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]> {
+    // Hidden albums are excluded from a user's collection so the demo
+    // show/hide toggle keeps the album out of the fan-facing Library tab
+    // even after the user has added it. Admin still sees the row in the
+    // CMS list (that path goes through getAlbums(includeHidden=true)).
     const rows = await db
       .select()
       .from(userAlbums)
       .innerJoin(albums, eq(userAlbums.albumId, albums.id))
-      .where(eq(userAlbums.userId, userId));
+      .where(and(eq(userAlbums.userId, userId), eq(albums.isHidden, false)));
     return rows.map((r) => ({ ...r.user_albums, album: r.albums }));
   }
 
@@ -536,7 +561,10 @@ export class DbStorage implements IStorage {
         .from(playlistSongs)
         .innerJoin(songs, eq(playlistSongs.songId, songs.id))
         .innerJoin(albums, eq(songs.albumId, albums.id))
-        .where(eq(playlistSongs.playlistId, p.id))
+        // Drop songs whose parent album is hidden — those artworks and the
+        // bumped song count would otherwise leak the hidden album back into
+        // the playlist cover mosaic / row count on the fan side.
+        .where(and(eq(playlistSongs.playlistId, p.id), eq(albums.isHidden, false)))
         .orderBy(desc(playlistSongs.addedAt));
       const seen = new Set<string>();
       const artworks: string[] = [];
@@ -572,7 +600,9 @@ export class DbStorage implements IStorage {
       .from(playlistSongs)
       .innerJoin(songs, eq(playlistSongs.songId, songs.id))
       .innerJoin(albums, eq(songs.albumId, albums.id))
-      .where(eq(playlistSongs.playlistId, playlistId))
+      // Hide songs whose parent album is hidden so they vanish from the
+      // playlist detail view too (matches getPlaylists summary).
+      .where(and(eq(playlistSongs.playlistId, playlistId), eq(albums.isHidden, false)))
       .orderBy(asc(playlistSongs.position));
     return rows.map((r) => ({
       ...r.playlist_songs,
