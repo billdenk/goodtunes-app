@@ -55,6 +55,29 @@ interface AdminVendor {
   // Demo show/hide — hides this vendor's button from the fan-side
   // InstrumentSheet. Admins still see it in the CMS so they can flip it back.
   isHidden: boolean;
+  // ISO timestamp from the DB; powers the "Pulled 2m ago" hint in the row.
+  createdAt: string | null;
+}
+
+// Light-touch "x time ago" for vendor-row provenance hints. Keeps the
+// numbers in admin-grey rather than yelling at the user — we only want
+// them as a "when did I last touch this" cue.
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diff = Math.max(0, Date.now() - then);
+  const s = Math.floor(diff / 1000);
+  if (s < 45) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
 }
 
 interface AdminInstrument {
@@ -1249,17 +1272,33 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
     } catch { return ""; }
   }, [draft.logoUrl, draft.affiliateUrl]);
 
+  const pulledAgo = relativeTime(vendor.createdAt);
+
   return (
     <div className="rounded-md border border-slate-200 bg-white">
-      <button type="button" onClick={() => setOpen((o) => !o)} className={`w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-slate-50 ${draft.isHidden ? "opacity-50" : ""}`} data-testid={`row-vendor-${vendor.id}`}>
-        {logoFallback ? <img src={logoFallback} alt="" className="w-8 h-8 rounded bg-slate-50 object-contain" /> : <div className="w-8 h-8 rounded bg-slate-100" />}
-        <div className="min-w-0 flex-1">
-          <div className="text-slate-900 text-sm truncate">{draft.name || "Untitled vendor"}</div>
-          <div className="text-slate-400 text-xs truncate">{draft.affiliateUrl}</div>
-        </div>
-        {draft.isHidden && <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">Hidden</span>}
-        <span className="text-slate-400 text-xs">{open ? "▾" : "▸"}</span>
-      </button>
+      <div className={`w-full pl-3 pr-2 py-2 flex items-center gap-3 hover:bg-slate-50 ${draft.isHidden ? "opacity-50" : ""}`}>
+        <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-3 text-left flex-1 min-w-0" data-testid={`row-vendor-${vendor.id}`}>
+          {logoFallback ? <img src={logoFallback} alt="" className="w-8 h-8 rounded bg-slate-50 object-contain" /> : <div className="w-8 h-8 rounded bg-slate-100" />}
+          <div className="min-w-0 flex-1">
+            <div className="text-slate-900 text-sm truncate">{draft.name || "Untitled vendor"}</div>
+            <div className="text-slate-400 text-xs truncate">{draft.affiliateUrl}</div>
+          </div>
+          {pulledAgo && <span className="text-[11px] text-slate-300 shrink-0 hidden sm:inline">Pulled {pulledAgo}</span>}
+          {draft.isHidden && <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">Hidden</span>}
+          <span className="text-slate-400 text-xs">{open ? "▾" : "▸"}</span>
+        </button>
+        {/* Inline remove — saves a click vs. expanding the row first. */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${draft.name || "this vendor"}"?`)) del.mutate(); }}
+          className="shrink-0 w-7 h-7 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-base leading-none"
+          title="Remove vendor"
+          aria-label="Remove vendor"
+          data-testid={`button-remove-vendor-${vendor.id}`}
+        >
+          ×
+        </button>
+      </div>
       {open && (
         <div className="px-3 pb-3 pt-1 space-y-2 border-t border-slate-200">
           <Field label="Vendor name">
@@ -1313,6 +1352,97 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
         </div>
       )}
     </div>
+  );
+}
+
+// Phone-frame preview that mirrors the fan-side InstrumentSheet so admins
+// can see how their edits will render *before* publishing. Reads the live
+// instrument record (same query key as the editor — TanStack dedupes the
+// fetch) so prefilled fields appear here moments after the scrape.
+function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
+  const { data } = useQuery<AdminInstrument>({ queryKey: ["/api/instruments", instrumentId] });
+  return (
+    <>
+      <div
+        className="relative rounded-[42px] overflow-hidden shadow-2xl"
+        style={{
+          width: 360,
+          height: 760,
+          background: "#00062B",
+          padding: 10,
+          boxShadow: "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+        }}
+        data-testid="preview-instrument"
+      >
+        <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
+          {/* Mock status bar */}
+          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-white text-[11px] font-medium">
+            <span>9:41</span>
+            <span>● ● ●</span>
+          </div>
+          {/* Sheet chrome — back chevron + share/bookmark hints */}
+          <div className="flex-shrink-0 flex items-center justify-between px-3 pb-2">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white" style={{ background: "rgba(255,255,255,0.10)" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-full" style={{ background: "rgba(255,255,255,0.10)" }} />
+              <div className="w-9 h-9 rounded-full" style={{ background: "rgba(255,255,255,0.10)" }} />
+            </div>
+          </div>
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto scrollbar-hide pb-6">
+            <div className="mx-5 mt-1 rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
+              {data?.photoUrl ? (
+                <img src={data.photoUrl} alt={data.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-white/35 text-xs">No photo yet</div>
+              )}
+            </div>
+            <div className="px-5 pb-3">
+              <p className="text-[#4AFFCA] text-[11px] font-medium uppercase tracking-wider mb-1">{data?.shortCategory || data?.category || "Instrument"}</p>
+              <h2 className="text-white text-[22px] font-bold leading-tight">{data?.name || "Untitled instrument"}</h2>
+            </div>
+            {data?.about && (
+              <div className="px-5 pb-4">
+                <p className="text-white/70 text-[13px] leading-relaxed whitespace-pre-wrap">{data.about}</p>
+              </div>
+            )}
+            {data?.artistNote && (
+              <div className="mx-5 mb-4 rounded-xl p-3" style={{ background: "rgba(74,255,202,0.08)", border: "1px solid rgba(74,255,202,0.18)" }}>
+                <p className="text-[#4AFFCA] text-[10px] font-medium uppercase tracking-wider mb-1">Artist note</p>
+                <p className="text-white text-[13px] leading-relaxed">{data.artistNote}</p>
+              </div>
+            )}
+            {data?.vendors && data.vendors.filter((v) => !v.isHidden).length > 0 && (
+              <div className="px-5 pb-3">
+                <p className="text-white/50 text-[11px] font-medium uppercase tracking-wider mb-2">Discover more / Buy</p>
+                <div className="space-y-2">
+                  {data.vendors.filter((v) => !v.isHidden).map((v) => {
+                    const logo = v.logoUrl || (() => {
+                      try { return `https://www.google.com/s2/favicons?sz=128&domain=${new URL(v.affiliateUrl).hostname}`; } catch { return ""; }
+                    })();
+                    let host = "";
+                    try { host = new URL(v.affiliateUrl).hostname.replace(/^www\./, ""); } catch { /* */ }
+                    return (
+                      <div key={v.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: "rgba(255,255,255,0.06)" }}>
+                        {logo ? <img src={logo} alt="" className="w-9 h-9 rounded bg-white/10 object-contain" /> : <div className="w-9 h-9 rounded bg-white/10" />}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-white text-[13px] font-medium truncate">{v.name}</div>
+                          <div className="text-white/45 text-[11px] truncate">{v.tagline || host}</div>
+                        </div>
+                        <div className="text-white/40 text-[14px]">›</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <p className="text-slate-300 text-xs mt-3">Preview of the in-app InstrumentSheet.</p>
+    </>
   );
 }
 
@@ -1680,6 +1810,8 @@ export function Admin() {
               {selectedId ? `Previewing /album/${selectedId.slice(0, 8)}…` : "Open the player at /collection"}
             </p>
           </>
+        ) : entity === "instruments" && selectedId ? (
+          <InstrumentPreviewCard instrumentId={selectedId} />
         ) : (
           <div
             className="rounded-[42px] flex items-center justify-center text-center px-8"
