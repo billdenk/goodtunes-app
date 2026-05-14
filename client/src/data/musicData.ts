@@ -14,6 +14,8 @@ import gretschKitPhoto from "@assets/instruments/gretsch-kit.jpg";
 import lpCongasPhoto from "@assets/instruments/lp-congas.jpg";
 import nickCarterPhoto from "@assets/image_1778720312538.png";
 import fenderTelecasterCover from "@assets/image_1778731986270.png";
+import fenderLogo from "@assets/461125233_1058013002493273_1591653497522534890_n_1778732472335.jpg";
+import martinLogo from "@assets/317491717_240990641664216_6413553804796243039_n_1778732477205.jpg";
 
 export const ARTIST_PHOTOS: Record<string, string> = {
   "Nick Carter": nickCarterPhoto,
@@ -165,7 +167,7 @@ export const INSTRUMENTS: Record<string, Instrument> = {
         name: "Martin Guitar (official)",
         affiliateUrl: "https://www.martinguitar.com/guitars/standard-series/d-28.html",
         aboutUrl: "https://www.martinguitar.com/",
-        logoUrl: fav("martinguitar.com"),
+        logoUrl: martinLogo,
         bio: "Founded in 1833 by German immigrant C. F. Martin Sr. and still family-owned in Nazareth, Pennsylvania, Martin is the company that invented the dreadnought and shaped the sound of American acoustic music. Six generations in, every standard-series Martin is still built by hand in the Nazareth factory using woods, bracing patterns, and dovetail joinery refined over nearly 200 years.",
       },
     ],
@@ -253,7 +255,7 @@ export const INSTRUMENTS: Record<string, Instrument> = {
         name: "Fender",
         affiliateUrl: "https://www.fender.com/en-US/electric-basses/precision-bass/",
         aboutUrl: "https://www.fender.com/",
-        logoUrl: fav("fender.com"),
+        logoUrl: fenderLogo,
         coverUrl: fenderTelecasterCover,
         bio: "Founded by Leo Fender in Fullerton, California in 1946, Fender Musical Instruments Corporation invented the solid-body electric guitar (the Telecaster, 1950), the electric bass guitar (the Precision Bass, 1951), and the Stratocaster (1954) — instruments that became the foundation of modern popular music. Today Fender designs and manufactures guitars, basses, amplifiers, and gear played by everyone from first-time students to the world's most recorded artists.",
       },
