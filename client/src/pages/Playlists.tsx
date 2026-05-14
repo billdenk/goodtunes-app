@@ -99,7 +99,9 @@ function PlaylistArtwork({
         style={wrapperStyle}
       >
         {unique.map((src, i) => (
-          <img key={i} src={src} alt="" className="w-full h-full object-cover" />
+          <div key={i} className="w-full h-full flex items-center justify-center bg-[#00062B]">
+            <img src={src} alt="" className="w-full h-full object-contain" />
+          </div>
         ))}
         {tint}
       </div>
@@ -112,9 +114,15 @@ function PlaylistArtwork({
         className={`${rounded} flex-shrink-0 overflow-hidden grid grid-cols-2 grid-rows-2 relative`}
         style={wrapperStyle}
       >
-        <img src={unique[0]} alt="" className="w-full h-full object-cover row-span-2" />
-        <img src={unique[1]} alt="" className="w-full h-full object-cover" />
-        <img src={unique[2]} alt="" className="w-full h-full object-cover" />
+        <div className="w-full h-full row-span-2 flex items-center justify-center bg-[#00062B]">
+          <img src={unique[0]} alt="" className="w-full h-full object-contain" />
+        </div>
+        <div className="w-full h-full flex items-center justify-center bg-[#00062B]">
+          <img src={unique[1]} alt="" className="w-full h-full object-contain" />
+        </div>
+        <div className="w-full h-full flex items-center justify-center bg-[#00062B]">
+          <img src={unique[2]} alt="" className="w-full h-full object-contain" />
+        </div>
         {tint}
       </div>
     );
@@ -126,7 +134,9 @@ function PlaylistArtwork({
       style={wrapperStyle}
     >
       {unique.map((src, i) => (
-        <img key={i} src={src} alt="" className="w-full h-full object-cover" />
+        <div key={i} className="w-full h-full flex items-center justify-center bg-[#00062B]">
+          <img src={src} alt="" className="w-full h-full object-contain" />
+        </div>
       ))}
       {tint}
     </div>

@@ -108,31 +108,40 @@ export function Account() {
             onChange={handlePhotoPick}
             data-testid="input-profile-photo"
           />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white mb-4 active:opacity-80"
-            style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
-            aria-label="Change profile photo"
-            data-testid="button-profile-photo"
-          >
-            {photoUrl ? (
-              <img src={photoUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span>{initials}</span>
-            )}
-            {/* Camera badge */}
-            <span
-              className="absolute bottom-0 right-0 w-6 h-6 rounded-full flex items-center justify-center"
-              style={{ background: "#319ED8", boxShadow: "0 0 0 2px #00062B" }}
+          <div className="relative mb-4">
+            <button
+              type="button"
+              onClick={() => editing && fileInputRef.current?.click()}
+              disabled={!editing}
+              className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white active:opacity-80 disabled:active:opacity-100"
+              style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
+              aria-label={editing ? "Change profile photo" : "Profile photo"}
+              data-testid="button-profile-photo"
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                <circle cx="12" cy="13" r="4" />
-              </svg>
-            </span>
-          </button>
-          {photoUrl && (
+              {photoUrl ? (
+                <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span>{initials}</span>
+              )}
+            </button>
+            {/* Camera badge — only in edit mode, sibling of the circle so it isn't clipped */}
+            {editing && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Change profile photo"
+                className="absolute -bottom-0.5 -right-0.5 w-7 h-7 rounded-full flex items-center justify-center active:opacity-80"
+                style={{ background: "#319ED8", boxShadow: "0 0 0 2px #00062B" }}
+                data-testid="button-profile-photo-edit"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {editing && photoUrl && (
             <button
               type="button"
               onClick={handlePhotoRemove}

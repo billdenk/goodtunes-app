@@ -46,7 +46,7 @@ export function AlbumDetail() {
     setBookmarkedInstruments((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      try { window.localStorage.setItem("gt:bookmarked-instruments", JSON.stringify([...next])); } catch {}
+      try { window.localStorage.setItem("gt:bookmarked-instruments", JSON.stringify(Array.from(next))); } catch {}
       return next;
     });
   };
@@ -2162,12 +2162,38 @@ function InAppBrowserSheet({
   );
 }
 
+const FAV_PHOTOS_KEY = "gt:fav:photos";
+function readFavPhotos(): Set<string> {
+  try {
+    const raw = localStorage.getItem(FAV_PHOTOS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch { return new Set(); }
+}
+function writeFavPhotos(s: Set<string>) {
+  try { localStorage.setItem(FAV_PHOTOS_KEY, JSON.stringify(Array.from(s))); } catch {}
+  try { window.dispatchEvent(new Event("gt:fav-photos-changed")); } catch {}
+}
+
 function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; startIndex: number; onClose: () => void }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(startIndex);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [zoom, setZoom] = useState(false);
   const lastTapRef = useRef(0);
+  const [favPhotos, setFavPhotos] = useState<Set<string>>(() => readFavPhotos());
+  const currentLiked = !!photos[index] && favPhotos.has(photos[index].id);
+  const toggleLike = () => {
+    const p = photos[index];
+    if (!p) return;
+    setFavPhotos((prev) => {
+      const next = new Set(prev);
+      if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+      writeFavPhotos(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -2303,18 +2329,33 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; 
         <span className="text-white/80 text-sm font-medium tabular-nums" data-testid="text-photo-counter">
           {index + 1} of {photos.length}
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="w-10 h-10 rounded-full flex items-center justify-center text-white active:opacity-70"
-          style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
-          data-testid="button-close-photo"
-        >
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleLike}
+            aria-label={currentLiked ? "Unfavorite photo" : "Favorite photo"}
+            aria-pressed={currentLiked}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
+            data-testid="button-favorite-photo"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill={currentLiked ? "#FF5470" : "none"} stroke={currentLiked ? "#FF5470" : "currentColor"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
+            data-testid="button-close-photo"
+          >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
+        </div>
       </div>
 
       <div

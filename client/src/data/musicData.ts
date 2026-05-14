@@ -13,6 +13,7 @@ import fenderPPhoto from "@assets/instruments/fender-p.jpg";
 import gretschKitPhoto from "@assets/instruments/gretsch-kit.jpg";
 import lpCongasPhoto from "@assets/instruments/lp-congas.jpg";
 import nickCarterPhoto from "@assets/nick_carter_compressed.jpg";
+import nickCarterAlbumCover from "@assets/nick_carter_album_cover.jpg";
 import fenderTelecasterCover from "@assets/image_1778731986270.png";
 import fenderLogo from "@assets/461125233_1058013002493273_1591653497522534890_n_1778732472335.jpg";
 import martinLogo from "@assets/317491717_240990641664216_6413553804796243039_n_1778732477205.jpg";
@@ -523,8 +524,7 @@ export const ALBUMS: Album[] = [
     id: "album-5",
     title: "Love Life Tragedy",
     artist: "Nick Carter",
-    artwork:
-      "https://www.dropbox.com/scl/fi/wr6elgai0hhxqcclpv1jk/Nick-Carter-Album-Art_JPEG.jpg?rlkey=6wjiflxzctr6lz33umsx5n6x9&raw=1",
+    artwork: nickCarterAlbumCover,
     year: 2025,
     type: "album",
     description:
