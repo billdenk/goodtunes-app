@@ -57,7 +57,7 @@ function formatRelativeTs(ts: number): string {
 function VendorAvatar({ logoUrl, name, size = 44 }: { logoUrl?: string; name: string; size?: number }) {
   return (
     <div
-      className="rounded-2xl overflow-hidden flex items-center justify-center flex-shrink-0"
+      className="rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
       style={{ width: size, height: size, background: "rgba(255,255,255,0.92)" }}
     >
       {logoUrl ? (

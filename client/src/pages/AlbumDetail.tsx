@@ -1722,12 +1722,12 @@ function InstrumentSheet({
                   type="button"
                   onClick={() => onOpenVendor(v)}
                   aria-label={`About ${v.name}`}
-                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 active:opacity-70 overflow-hidden"
+                  className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70 overflow-hidden"
                   style={{ background: "rgba(255,255,255,0.92)" }}
                   data-testid={`button-vendor-about-${i}`}
                 >
                   {v.logoUrl ? (
-                    <img src={v.logoUrl} alt="" className="w-7 h-7 object-contain" />
+                    <img src={v.logoUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-[#00062B] text-[13px] font-bold">{v.name.charAt(0)}</span>
                   )}
@@ -1899,8 +1899,8 @@ function VendorSheet({
             >
               {vendor.logoUrl && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-32 h-32 rounded-2xl flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.95)" }}>
-                    <img src={vendor.logoUrl} alt="" className="w-20 h-20 object-contain" />
+                  <div className="w-40 h-40 rounded-full flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.95)" }}>
+                    <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" />
                   </div>
                 </div>
               )}
@@ -2053,8 +2053,8 @@ function InAppBrowserSheet({
 
         <div className="flex-1 flex items-center gap-2 min-w-0">
           {logoUrl && (
-            <div className="w-6 h-6 rounded-md overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.92)" }}>
-              <img src={logoUrl} alt="" className="w-4 h-4 object-contain" />
+            <div className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.92)" }}>
+              <img src={logoUrl} alt="" className="w-full h-full object-cover" />
             </div>
           )}
           <div className="min-w-0">
@@ -2091,11 +2091,11 @@ function InAppBrowserSheet({
             {/* Blocked-state placeholder (sits behind the iframe). */}
             <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center pointer-events-none">
               {logoUrl ? (
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(255,255,255,0.92)" }}>
-                  <img src={logoUrl} alt="" className="w-10 h-10 object-contain" />
+                <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center mb-4" style={{ background: "rgba(255,255,255,0.92)" }}>
+                  <img src={logoUrl} alt="" className="w-full h-full object-cover" />
                 </div>
               ) : (
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(49,158,216,0.16)" }}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: "rgba(49,158,216,0.16)" }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
