@@ -12,7 +12,7 @@ import violinPhoto from "@assets/instruments/violin.jpg";
 import fenderPPhoto from "@assets/instruments/fender-p.jpg";
 import gretschKitPhoto from "@assets/instruments/gretsch-kit.jpg";
 import lpCongasPhoto from "@assets/instruments/lp-congas.jpg";
-import nickCarterPhoto from "@assets/image_1778720312538.png";
+import nickCarterPhoto from "@assets/nick_carter_compressed.jpg";
 import fenderTelecasterCover from "@assets/image_1778731986270.png";
 import fenderLogo from "@assets/461125233_1058013002493273_1591653497522534890_n_1778732472335.jpg";
 import martinLogo from "@assets/317491717_240990641664216_6413553804796243039_n_1778732477205.jpg";
