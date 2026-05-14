@@ -158,10 +158,13 @@ export function Player() {
             <div className="w-9 h-[5px] rounded-full" style={{ background: "rgba(255,255,255,0.35)" }} />
           </div>
 
-          <div className="relative z-10 flex-1 flex flex-col items-center px-7">
+          {/* Apple's Now Playing distributes vertical space: artwork sits high,
+              title + progress + transport breathe in the middle (taking any
+              extra height on tall devices), volume + bottom row anchor low. */}
+          <div className="relative z-10 flex-1 flex flex-col px-7 pt-2 pb-2 min-h-0">
             {/* Album art */}
             <div
-              className="w-full aspect-square rounded-3xl overflow-hidden mb-7 mt-1"
+              className="w-full aspect-square rounded-3xl overflow-hidden flex-shrink-0"
               style={{
                 boxShadow: "0 24px 64px rgba(0,0,0,0.65)",
                 transform: isPlaying ? "scale(1.02)" : "scale(0.96)",
@@ -171,8 +174,12 @@ export function Player() {
               <img src={currentSong.album.artwork} alt={currentSong.album.title} className="w-full h-full object-cover" />
             </div>
 
+            {/* Middle cluster — title + progress + transport, vertically centered
+                in the leftover space between artwork and the bottom controls. */}
+            <div className="flex-1 flex flex-col justify-center w-full min-h-0 py-3">
+
             {/* Title row — favorite + more, à la Apple Music */}
-            <div className="w-full flex items-center justify-between mb-5 gap-3">
+            <div className="w-full flex items-center justify-between mb-6 gap-3">
               <div className="flex-1 min-w-0">
                 <h2 className="text-white text-xl font-bold leading-snug truncate">{currentSong.title}</h2>
                 <p className="text-white/55 text-sm mt-0.5 truncate">{currentSong.album.artist}</p>
@@ -215,7 +222,7 @@ export function Player() {
             </div>
 
             {/* Progress bar */}
-            <div className="w-full mb-1">
+            <div className="w-full mb-2">
               <div className="relative w-full h-1 rounded-full overflow-hidden cursor-pointer">
                 <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
                 <div
@@ -240,7 +247,7 @@ export function Player() {
 
             {/* Transport — Apple Music: just prev / play / next, centered.
                 Shuffle & Repeat live in the Up Next overlay. */}
-            <div className="w-full flex items-center justify-center gap-12 mb-7 mt-1">
+            <div className="w-full flex items-center justify-center gap-12 mt-5">
               <button
                 type="button"
                 onClick={prev}
@@ -287,8 +294,11 @@ export function Player() {
               </button>
             </div>
 
+            </div>
+            {/* End middle cluster — volume + bottom buttons anchor at bottom. */}
+
             {/* Volume slider */}
-            <div className="w-full flex items-center gap-3 mb-3">
+            <div className="w-full flex items-center gap-3 mb-2 flex-shrink-0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
               </svg>
@@ -315,7 +325,7 @@ export function Player() {
             </div>
 
             {/* Bottom actions: Lyrics · AirPlay · Queue */}
-            <div className="w-full flex items-center justify-around pb-2">
+            <div className="w-full flex items-center justify-around pb-1 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => {

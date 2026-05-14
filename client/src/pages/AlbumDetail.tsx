@@ -15,7 +15,8 @@ import { ALBUMS, getSongsByAlbum, getCreditsForSong, getTracksForPerformerOnAlbu
 export function AlbumDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast } = usePlayer();
+  const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex } = usePlayer();
+  const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
   const { user } = useAuth();
   const favSongs = useFavoriteSongs();
   const [showCert, setShowCert] = useState(false);
@@ -643,7 +644,9 @@ export function AlbumDetail() {
               }}
               onAddToPlaylist={() => { setSongMenuFor(null); setShowPlaylistPicker(s); }}
               onPlayNext={() => { playNext({ ...s, album }); setShareToast("Playing next"); setTimeout(() => setShareToast(""), 1600); }}
+              onAddToQueue={() => { addToQueue({ ...s, album }); setShareToast("Added to Queue"); setTimeout(() => setShareToast(""), 1600); }}
               onPlayLast={() => { playLast({ ...s, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
+              queueHasUpcoming={queueHasUpcoming}
               onViewCredits={() => { setSongMenuFor(null); setCreditsForSong(s); }}
               onClose={() => setSongMenuFor(null)}
             />
@@ -935,9 +938,11 @@ function SongActionPopover({
   onShare,
   onAddToPlaylist,
   onPlayNext,
+  onAddToQueue,
   onPlayLast,
   onViewCredits,
   onClose,
+  queueHasUpcoming,
 }: {
   song: Song;
   album: Album;
@@ -947,9 +952,11 @@ function SongActionPopover({
   onShare: () => void;
   onAddToPlaylist: () => void;
   onPlayNext: () => void;
+  onAddToQueue: () => void;
   onPlayLast: () => void;
   onViewCredits: () => void;
   onClose: () => void;
+  queueHasUpcoming: boolean;
 }) {
   const POP_W = 244;
   const panelRef = useRef<HTMLDivElement>(null);
@@ -1105,6 +1112,25 @@ function SongActionPopover({
             </svg>
           }
         />
+        {/* Apple shows "Add to Queue" only after an Up Next list exists.
+            We mirror that: render it when the user has staged at least one
+            song after the current track. */}
+        {queueHasUpcoming && (
+          <Row
+            label="Add to Queue"
+            testId="row-popover-add-to-queue"
+            onClick={close(onAddToQueue)}
+            icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="14" y2="6" />
+                <line x1="3" y1="12" x2="14" y2="12" />
+                <line x1="3" y1="18" x2="14" y2="18" />
+                <line x1="19" y1="9" x2="19" y2="15" />
+                <line x1="16" y1="12" x2="22" y2="12" />
+              </svg>
+            }
+          />
+        )}
         <Row
           label="Play Last"
           testId="row-popover-play-last"
