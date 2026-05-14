@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 
 interface AdminAlbum {
   id: string;
@@ -1297,9 +1298,11 @@ export function Admin() {
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900 flex">
       {/* Left rail: entity nav */}
       <aside className="w-56 shrink-0 border-r border-slate-200 flex flex-col">
-        <div className="px-5 py-5 border-b border-slate-200">
-          <p className="text-[11px] uppercase tracking-widest text-slate-400">GoodTunes</p>
-          <h1 className="text-slate-900 text-lg font-semibold">Admin</h1>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          {/* Color variant pairs with the light sidebar; the "white" variant
+              uses mix-blend-mode:screen and would wash out on this bg. */}
+          <GoodTunesLogo size="sm" variant="color" />
+          <span className="text-[11px] uppercase tracking-widest text-slate-400 font-medium">Admin</span>
         </div>
         <nav className="flex-1 px-2 py-3 space-y-1 text-sm">
           {([
