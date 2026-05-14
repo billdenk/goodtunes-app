@@ -274,6 +274,131 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // ----- SuperCredits™ catalog: People -------------------------------------
+  // Read is public (the in-app credits surface fetches these); writes are admin.
+  app.get("/api/people", async (_req, res) => {
+    const rows = await storage.getPeople();
+    return res.json(rows);
+  });
+  app.get("/api/people/:id", async (req, res) => {
+    const p = await storage.getPersonById(String(req.params.id));
+    if (!p) return res.status(404).json({ message: "Person not found" });
+    return res.json(p);
+  });
+  app.post("/api/admin/people", requireAdmin, async (req, res) => {
+    const { name, photoUrl, bio, accent } = req.body ?? {};
+    if (!name) return res.status(400).json({ message: "name is required" });
+    const p = await storage.createPerson({
+      name: String(name),
+      photoUrl: photoUrl ? String(photoUrl) : null,
+      bio: bio ? String(bio) : null,
+      accent: accent ? String(accent) : null,
+    } as any);
+    return res.status(201).json(p);
+  });
+  app.put("/api/admin/people/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const { name, photoUrl, bio, accent } = req.body ?? {};
+    const updates: any = {};
+    if (name !== undefined) updates.name = String(name);
+    if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
+    if (bio !== undefined) updates.bio = bio ? String(bio) : null;
+    if (accent !== undefined) updates.accent = accent ? String(accent) : null;
+    const p = await storage.updatePerson(id, updates);
+    if (!p) return res.status(404).json({ message: "Person not found" });
+    return res.json(p);
+  });
+  app.delete("/api/admin/people/:id", requireAdmin, async (req, res) => {
+    await storage.deletePerson(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  // ----- SuperCredits™ catalog: Instruments + vendors ----------------------
+  app.get("/api/instruments", async (_req, res) => {
+    return res.json(await storage.getInstruments());
+  });
+  app.get("/api/instruments/:id", async (req, res) => {
+    const i = await storage.getInstrumentById(String(req.params.id));
+    if (!i) return res.status(404).json({ message: "Instrument not found" });
+    return res.json(i);
+  });
+  app.post("/api/admin/instruments", requireAdmin, async (req, res) => {
+    const { name, category, shortCategory, photoUrl, about, artistNote } = req.body ?? {};
+    if (!name || !category) return res.status(400).json({ message: "name and category are required" });
+    const i = await storage.createInstrument({
+      name: String(name),
+      category: String(category),
+      shortCategory: shortCategory ? String(shortCategory) : null,
+      photoUrl: photoUrl ? String(photoUrl) : null,
+      about: about ? String(about) : null,
+      artistNote: artistNote ? String(artistNote) : null,
+    } as any);
+    return res.status(201).json(i);
+  });
+  app.put("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const { name, category, shortCategory, photoUrl, about, artistNote } = req.body ?? {};
+    const updates: any = {};
+    if (name !== undefined) updates.name = String(name);
+    if (category !== undefined) updates.category = String(category);
+    if (shortCategory !== undefined) updates.shortCategory = shortCategory ? String(shortCategory) : null;
+    if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
+    if (about !== undefined) updates.about = about ? String(about) : null;
+    if (artistNote !== undefined) updates.artistNote = artistNote ? String(artistNote) : null;
+    const i = await storage.updateInstrument(id, updates);
+    if (!i) return res.status(404).json({ message: "Instrument not found" });
+    return res.json(i);
+  });
+  app.delete("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
+    await storage.deleteInstrument(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  // Vendors are nested under an instrument. Create-via-parent makes it easy
+  // for the CMS to assign instrumentId without leaking that field to the
+  // client. Updates/deletes use the vendor id directly.
+  app.post("/api/admin/instruments/:id/vendors", requireAdmin, async (req, res) => {
+    const instrumentId = String(req.params.id);
+    const parent = await storage.getInstrumentById(instrumentId);
+    if (!parent) return res.status(404).json({ message: "Instrument not found" });
+    const { name, affiliateUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, position } = req.body ?? {};
+    if (!name || !affiliateUrl) return res.status(400).json({ message: "name and affiliateUrl are required" });
+    const v = await storage.createInstrumentVendor({
+      instrumentId,
+      name: String(name),
+      affiliateUrl: String(affiliateUrl),
+      aboutUrl: aboutUrl ? String(aboutUrl) : null,
+      logoUrl: logoUrl ? String(logoUrl) : null,
+      tagline: tagline ? String(tagline) : null,
+      bio: bio ? String(bio) : null,
+      location: location ? String(location) : null,
+      coverUrl: coverUrl ? String(coverUrl) : null,
+      position: position != null ? Number(position) : parent.vendors.length,
+    } as any);
+    return res.status(201).json(v);
+  });
+  app.put("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const { name, affiliateUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, position } = req.body ?? {};
+    const updates: any = {};
+    if (name !== undefined) updates.name = String(name);
+    if (affiliateUrl !== undefined) updates.affiliateUrl = String(affiliateUrl);
+    if (aboutUrl !== undefined) updates.aboutUrl = aboutUrl ? String(aboutUrl) : null;
+    if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
+    if (tagline !== undefined) updates.tagline = tagline ? String(tagline) : null;
+    if (bio !== undefined) updates.bio = bio ? String(bio) : null;
+    if (location !== undefined) updates.location = location ? String(location) : null;
+    if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
+    if (position !== undefined) updates.position = Number(position);
+    const v = await storage.updateInstrumentVendor(id, updates);
+    if (!v) return res.status(404).json({ message: "Vendor not found" });
+    return res.json(v);
+  });
+  app.delete("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
+    await storage.deleteInstrumentVendor(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
   // ----- Profile photo ----------------------------------------------------
   // Stored inline as a data URL (5MB hard cap). Swap for object-storage URL
   // once GT's AWS bucket lands.

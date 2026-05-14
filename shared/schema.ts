@@ -69,6 +69,47 @@ export const playlistSongs = pgTable(
   }),
 );
 
+// ----- SuperCredits™ catalog -------------------------------------------
+// Bound to song-level credits in a later turn (track_writers /
+// track_performers will FK into people + instruments). Keep these
+// schemas matching the in-app `Person` / `Instrument` / `InstrumentVendor`
+// shapes in client/src/data/musicData.ts so the CMS can fully replace the
+// static seed data without a downstream type rewrite.
+export const people = pgTable("people", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  photoUrl: text("photo_url"),
+  bio: text("bio"),
+  // HSL-friendly hex from the brand palette for the initial-circle avatar
+  // fallback (#319ED8, #7F10A7, #4AFFCA, #FF5470).
+  accent: text("accent"),
+});
+
+export const instruments = pgTable("instruments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // e.g. "1967 Gretsch 6071 'Monkees' Bass Walnut"
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  shortCategory: text("short_category"),
+  photoUrl: text("photo_url"),
+  about: text("about"),
+  artistNote: text("artist_note"),
+});
+
+export const instrumentVendors = pgTable("instrument_vendors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentId: varchar("instrument_id").notNull().references(() => instruments.id),
+  name: text("name").notNull(),
+  affiliateUrl: text("affiliate_url").notNull(),
+  aboutUrl: text("about_url"),
+  logoUrl: text("logo_url"),
+  tagline: text("tagline"),
+  bio: text("bio"),
+  location: text("location"),
+  coverUrl: text("cover_url"),
+  position: integer("position").notNull().default(0),
+});
+
 // Bearer token store (replaces in-memory tokenStore).
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
@@ -115,6 +156,18 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Album = typeof albums.$inferSelect;
 export type Song = typeof songs.$inferSelect;
+
+export const insertPersonSchema = createInsertSchema(people).omit({ id: true });
+export type InsertPerson = z.infer<typeof insertPersonSchema>;
+export type Person = typeof people.$inferSelect;
+
+export const insertInstrumentSchema = createInsertSchema(instruments).omit({ id: true });
+export type InsertInstrument = z.infer<typeof insertInstrumentSchema>;
+export type Instrument = typeof instruments.$inferSelect;
+
+export const insertInstrumentVendorSchema = createInsertSchema(instrumentVendors).omit({ id: true });
+export type InsertInstrumentVendor = z.infer<typeof insertInstrumentVendorSchema>;
+export type InstrumentVendor = typeof instrumentVendors.$inferSelect;
 export type UserAlbum = typeof userAlbums.$inferSelect;
 export type Playlist = typeof playlists.$inferSelect;
 export type PlaylistSong = typeof playlistSongs.$inferSelect;

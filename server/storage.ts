@@ -6,6 +6,12 @@ import {
   type Playlist,
   type PlaylistSong,
   type UserAlbum,
+  type Person,
+  type InsertPerson,
+  type Instrument,
+  type InsertInstrument,
+  type InstrumentVendor,
+  type InsertInstrumentVendor,
   users,
   albums,
   songs,
@@ -15,6 +21,9 @@ import {
   authTokens,
   profilePhotos,
   analyticsEvents,
+  people,
+  instruments,
+  instrumentVendors,
 } from "@shared/schema";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -46,6 +55,23 @@ export interface IStorage {
   // Atomically grant admin to `userId` iff no admin currently exists. Returns
   // true if this caller claimed the slot, false if an admin already existed.
   tryClaimFirstAdmin(userId: string): Promise<boolean>;
+
+  // SuperCredits™ catalog
+  getPeople(): Promise<Person[]>;
+  getPersonById(id: string): Promise<Person | undefined>;
+  createPerson(data: InsertPerson & { id?: string }): Promise<Person>;
+  updatePerson(id: string, data: Partial<Person>): Promise<Person | undefined>;
+  deletePerson(id: string): Promise<void>;
+
+  getInstruments(): Promise<(Instrument & { vendors: InstrumentVendor[] })[]>;
+  getInstrumentById(id: string): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined>;
+  createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument>;
+  updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined>;
+  deleteInstrument(id: string): Promise<void>;
+
+  createInstrumentVendor(data: InsertInstrumentVendor & { id?: string }): Promise<InstrumentVendor>;
+  updateInstrumentVendor(id: string, data: Partial<InstrumentVendor>): Promise<InstrumentVendor | undefined>;
+  deleteInstrumentVendor(id: string): Promise<void>;
 
   getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]>;
   getPlaylistById(id: string): Promise<Playlist | undefined>;
@@ -221,6 +247,86 @@ export class DbStorage implements IStorage {
   async setUserAdmin(userId: string, isAdmin: boolean): Promise<void> {
     await db.update(users).set({ isAdmin }).where(eq(users.id, userId));
   }
+  // ----- SuperCredits™ catalog ---------------------------------------
+  async getPeople(): Promise<Person[]> {
+    return db.select().from(people).orderBy(asc(people.name));
+  }
+  async getPersonById(id: string): Promise<Person | undefined> {
+    const [p] = await db.select().from(people).where(eq(people.id, id));
+    return p;
+  }
+  async createPerson(data: InsertPerson & { id?: string }): Promise<Person> {
+    const [p] = await db.insert(people).values(data as any).returning();
+    return p;
+  }
+  async updatePerson(id: string, data: Partial<Person>): Promise<Person | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return this.getPersonById(id);
+    const [p] = await db.update(people).set(rest).where(eq(people.id, id)).returning();
+    return p;
+  }
+  async deletePerson(id: string): Promise<void> {
+    await db.delete(people).where(eq(people.id, id));
+  }
+
+  async getInstruments(): Promise<(Instrument & { vendors: InstrumentVendor[] })[]> {
+    const all = await db.select().from(instruments).orderBy(asc(instruments.name));
+    if (all.length === 0) return [];
+    const allVendors = await db
+      .select()
+      .from(instrumentVendors)
+      .orderBy(asc(instrumentVendors.position));
+    const byInstrument = new Map<string, InstrumentVendor[]>();
+    for (const v of allVendors) {
+      const list = byInstrument.get(v.instrumentId) ?? [];
+      list.push(v);
+      byInstrument.set(v.instrumentId, list);
+    }
+    return all.map((i) => ({ ...i, vendors: byInstrument.get(i.id) ?? [] }));
+  }
+  async getInstrumentById(id: string): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined> {
+    const [i] = await db.select().from(instruments).where(eq(instruments.id, id));
+    if (!i) return undefined;
+    const vendors = await db
+      .select()
+      .from(instrumentVendors)
+      .where(eq(instrumentVendors.instrumentId, id))
+      .orderBy(asc(instrumentVendors.position));
+    return { ...i, vendors };
+  }
+  async createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument> {
+    const [i] = await db.insert(instruments).values(data as any).returning();
+    return i;
+  }
+  async updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return (await this.getInstrumentById(id)) as Instrument | undefined;
+    const [i] = await db.update(instruments).set(rest).where(eq(instruments.id, id)).returning();
+    return i;
+  }
+  async deleteInstrument(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(instrumentVendors).where(eq(instrumentVendors.instrumentId, id));
+      await tx.delete(instruments).where(eq(instruments.id, id));
+    });
+  }
+  async createInstrumentVendor(data: InsertInstrumentVendor & { id?: string }): Promise<InstrumentVendor> {
+    const [v] = await db.insert(instrumentVendors).values(data as any).returning();
+    return v;
+  }
+  async updateInstrumentVendor(id: string, data: Partial<InstrumentVendor>): Promise<InstrumentVendor | undefined> {
+    const { id: _i, instrumentId: _ii, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [v] = await db.select().from(instrumentVendors).where(eq(instrumentVendors.id, id));
+      return v;
+    }
+    const [v] = await db.update(instrumentVendors).set(rest).where(eq(instrumentVendors.id, id)).returning();
+    return v;
+  }
+  async deleteInstrumentVendor(id: string): Promise<void> {
+    await db.delete(instrumentVendors).where(eq(instrumentVendors.id, id));
+  }
+
   async tryClaimFirstAdmin(userId: string): Promise<boolean> {
     // Single statement: "promote this user, but only if no admin exists yet."
     // Two callers racing both run this; whichever lands first sees a row
