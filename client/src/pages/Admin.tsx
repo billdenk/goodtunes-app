@@ -1842,6 +1842,108 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
   );
 }
 
+// Phone-frame preview that mirrors the fan-side PerformerSheet header.
+// People don't have a standalone public page yet — they surface inside a
+// song's credits — so we render the header treatment (big avatar + name +
+// accent dot + bio) the fan would see when they tap a performer row.
+// Streaming links are previewed as the same pills we'll use post-window
+// when fans get punted to Apple Music / Spotify for the full catalog.
+function PersonPreviewCard({ person }: { person: AdminPerson }) {
+  const initials = person.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "•";
+  const accent = person.accent || "#319ED8";
+  return (
+    <>
+      <div
+        className="relative rounded-[42px] overflow-hidden shadow-2xl"
+        style={{
+          width: 360,
+          height: 760,
+          background: "#00062B",
+          padding: 10,
+          boxShadow: "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+        }}
+        data-testid="preview-person"
+      >
+        <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
+          {/* Mock status bar */}
+          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white">
+            <span>9:41</span>
+            <span>● ● ●</span>
+          </div>
+          {/* Sheet chrome — close affordance, no back arrow on a fullscreen sheet */}
+          <div className="flex-shrink-0 flex items-center justify-end px-3 pb-2">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white/70" style={{ background: "rgba(255,255,255,0.10)" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            </div>
+          </div>
+
+          {/* Hero — large avatar + name + role placeholder */}
+          <div className="flex flex-col items-center text-center px-5 pt-2 pb-5">
+            {person.photoUrl ? (
+              <img
+                src={person.photoUrl}
+                alt={person.name}
+                className="rounded-full object-cover"
+                style={{ width: 112, height: 112 }}
+              />
+            ) : (
+              <div
+                className="rounded-full flex items-center justify-center text-white font-semibold"
+                style={{ width: 112, height: 112, background: accent, fontSize: 42 }}
+                aria-hidden="true"
+              >
+                {initials}
+              </div>
+            )}
+            <h2 className="text-white text-[24px] font-bold leading-tight mt-3" data-testid="text-preview-person-name">
+              {person.name || "Unnamed"}
+            </h2>
+            <p className="text-white/55 text-[13px] mt-1">Tap from any song credit to land here</p>
+          </div>
+
+          {/* Bio */}
+          {person.bio && (
+            <>
+              <h3 className="px-5 pt-1 pb-2 text-white text-[18px] font-bold tracking-tight">About</h3>
+              <p className="px-5 text-white/75 text-[14px] leading-relaxed whitespace-pre-line line-clamp-6">
+                {person.bio}
+              </p>
+            </>
+          )}
+
+          {/* Listen-on pills */}
+          {(person.appleMusicUrl || person.spotifyUrl) && (
+            <div className="px-5 pt-5 pb-4 mt-auto flex gap-2">
+              {person.appleMusicUrl && (
+                <div
+                  className="flex-1 h-10 rounded-full flex items-center justify-center text-white text-[13px] font-medium"
+                  style={{ background: "rgba(255,255,255,0.10)" }}
+                >
+                  Apple Music
+                </div>
+              )}
+              {person.spotifyUrl && (
+                <div
+                  className="flex-1 h-10 rounded-full flex items-center justify-center text-white text-[13px] font-medium"
+                  style={{ background: "rgba(255,255,255,0.10)" }}
+                >
+                  Spotify
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="text-slate-300 text-xs mt-3">Preview of the in-app PerformerSheet header.</p>
+    </>
+  );
+}
+
 // ---------- Admin shell ----------
 
 export function Admin() {
@@ -2273,6 +2375,12 @@ export function Admin() {
           </>
         ) : entity === "instruments" && selectedId ? (
           <InstrumentPreviewCard instrumentId={selectedId} />
+        ) : entity === "people" && selectedId ? (
+          (() => {
+            const p = people.find((x) => x.id === selectedId);
+            if (!p) return null;
+            return <PersonPreviewCard person={p} />;
+          })()
         ) : (
           <div
             className="rounded-[42px] flex items-center justify-center text-center px-8"
@@ -2285,8 +2393,7 @@ export function Admin() {
             data-testid="placeholder-preview"
           >
             <p className="text-slate-400 text-sm leading-relaxed">
-              Live preview lights up once {entity === "people" ? "people" : "instruments"} are wired
-              into a song's credits. Edit on the left — fields save independently.
+              Select a row on the left to see how it looks to fans.
             </p>
           </div>
         )}
