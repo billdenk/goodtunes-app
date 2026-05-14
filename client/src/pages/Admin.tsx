@@ -912,9 +912,12 @@ function ScrapeBar({
     name: string | null;
     brand: string | null;
     category: string | null;
+    description: string | null;
+    specs: Record<string, string>;
+    price: string | null;
     photoUrl: string | null;
     vendor: { name: string; affiliateUrl: string; aboutUrl: string; logoUrl: string; domain: string; known: boolean };
-  }) => Promise<void> | void;
+  }) => Promise<{ ok: boolean; warn?: string } | void>;
 }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -927,13 +930,12 @@ function ScrapeBar({
     try {
       const res = await apiRequest("POST", "/api/admin/instruments/scrape", { url: u });
       const data = await res.json();
-      await onPrefill(data);
-      setMsg({
-        kind: "ok",
-        text: data.vendor?.known
-          ? `Pulled from ${data.vendor.name}. Review the fields below and Save.`
-          : `Pulled from ${data.vendor.name} (new vendor — confirm the name).`,
-      });
+      const r = await onPrefill(data);
+      const base = data.vendor?.known
+        ? `Pulled from ${data.vendor.name}.`
+        : `Pulled from ${data.vendor.name} (new vendor — confirm the name).`;
+      const warn = r && "warn" in r && r.warn ? ` ${r.warn}` : "";
+      setMsg({ kind: "ok", text: `${base} Review and Save.${warn}` });
       setUrl("");
     } catch (e: any) {
       setMsg({ kind: "err", text: e?.message || "Couldn't read that page." });
@@ -1046,14 +1048,79 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
 
       <ScrapeBar
         onPrefill={async (r) => {
-          // Fill the form (don't clobber non-empty fields the admin already
-          // typed). Build a full title from "<brand> <name>" when both are
-          // present — JSON-LD often returns just the model in `name`.
+          // The admin explicitly clicked Pull — overwrite the standard
+          // "New instrument" placeholders without ceremony. Only preserve
+          // values that look custom (i.e. not the new-record defaults).
+          const isDefaultName = !form.name || form.name === "New instrument" || form.name.toLowerCase().startsWith("untitled");
+          const isDefaultCategory = !form.category || form.category === "Guitar";
+
+          // Compose the best possible Name from whatever we extracted.
+          // Preferred shape (matches the editor's "year + maker + model"
+          // convention): "<Year> <Brand> <Model> — <Finish>".
+          //   • Year/Brand/Model/Finish live in the spec table when present
+          //   • Otherwise fall back to brand + product.name + meta title
+          const specs = r.specs || {};
+          const pickSpec = (...keys: string[]): string | null => {
+            for (const k of keys) {
+              const hit = Object.keys(specs).find((sk) => sk.toLowerCase() === k.toLowerCase());
+              if (hit && specs[hit]) return specs[hit];
+            }
+            return null;
+          };
+          const year = pickSpec("Made In Year", "Year", "Year Made");
+          const brand = r.brand || pickSpec("Brand", "Make", "Manufacturer");
+          const model = pickSpec("Model");
+          const finish = pickSpec("Finish", "Color", "Colour");
+          const parts: string[] = [];
+          if (year) parts.push(year);
+          if (brand) parts.push(brand);
+          if (model) parts.push(model);
+          let composedName = parts.join(" ").trim();
+          if (finish && composedName) composedName = `${composedName} — ${finish}`;
+          // Fallbacks: brand + product.name, then product.name alone.
+          if (!composedName) composedName = [r.brand, r.name].filter(Boolean).join(" ").trim();
+          if (!composedName) composedName = r.name || "";
+
           const merged: Partial<AdminInstrument> = {};
-          const composedName = [r.brand, r.name].filter(Boolean).join(" ").trim();
-          if (composedName && !form.name) merged.name = composedName;
+          if (composedName && isDefaultName) merged.name = composedName;
           if (r.photoUrl && !form.photoUrl) merged.photoUrl = r.photoUrl;
-          if (r.category && !form.category) merged.category = String(r.category);
+          // Prefer the Instrument spec value (e.g. "Dreadnought") over the
+          // generic Schema.org category when both exist.
+          const cat = pickSpec("Instrument", "Type", "Category") || r.category;
+          if (cat && isDefaultCategory) merged.category = String(cat);
+
+          // Build the About field: a clean spec block + blank line + the
+          // narrative description. Only include the rows that actually
+          // matter for credits — the page may have 40 rows of marketing.
+          if (!form.about) {
+            const specOrder = [
+              "Instrument", "Brand", "Model", "Finish", "Made In Year", "Year",
+              "Top", "Back and Sides", "Neck/Fingerboard", "Bridge Material",
+              "Tuners", "Radius", "Neck Profile", "Neck Depth",
+              "Scale Length", "Nut Width", "String Spacing at Saddle",
+              "Electronics", "Pickups", "Case", "SKU", "Handedness",
+            ];
+            const seen = new Set<string>();
+            const lines: string[] = [];
+            for (const key of specOrder) {
+              const hit = Object.keys(specs).find((sk) => sk.toLowerCase() === key.toLowerCase());
+              if (hit && !seen.has(hit.toLowerCase())) {
+                lines.push(`${hit}: ${specs[hit]}`);
+                seen.add(hit.toLowerCase());
+              }
+            }
+            // Append any extra specs we didn't anticipate, capped so the
+            // About field doesn't become a wall of text.
+            for (const [k, v] of Object.entries(specs)) {
+              if (seen.has(k.toLowerCase())) continue;
+              if (lines.length >= 24) break;
+              lines.push(`${k}: ${v}`);
+            }
+            const block = lines.join("\n");
+            const desc = r.description?.trim() || "";
+            const composed = [block, desc].filter(Boolean).join("\n\n").trim();
+            if (composed) merged.about = composed;
+          }
           if (Object.keys(merged).length) update(merged);
 
           // Dedupe: if a vendor with this exact affiliateUrl is already on
@@ -1062,21 +1129,26 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           const existing = (form.vendors || []).some(
             (v) => (v.affiliateUrl || "").toLowerCase() === r.vendor.affiliateUrl.toLowerCase(),
           );
-          if (existing) return;
+          if (existing) return { ok: true, warn: "(Vendor already on this instrument — skipped.)" };
 
-          // Create the vendor row server-side with all the scraped fields,
-          // so the row appears below complete instead of as a "New vendor"
-          // placeholder the admin then has to fill in.
+          // Create the vendor row server-side, then splice it into local
+          // form state directly. invalidate() alone is not enough because
+          // the editor's useEffect only resyncs `form` when the instrument
+          // id changes — that's why the previous attempt showed "Vendors (0)"
+          // even though the POST succeeded.
           try {
-            await apiRequest("POST", `/api/admin/instruments/${instrumentId}/vendors`, {
+            const res = await apiRequest("POST", `/api/admin/instruments/${instrumentId}/vendors`, {
               name: r.vendor.name,
               affiliateUrl: r.vendor.affiliateUrl,
               aboutUrl: r.vendor.aboutUrl,
               logoUrl: r.vendor.logoUrl,
             });
+            const newVendor = await res.json();
+            setForm((f) => (f ? { ...f, vendors: [...(f.vendors || []), newVendor] } : f));
             invalidate();
-          } catch {
-            // Vendor add is best-effort; the form prefill above still ran.
+            return { ok: true };
+          } catch (e: any) {
+            return { ok: false, warn: `(Vendor row not added: ${e?.message || "save failed"})` };
           }
         }}
       />

@@ -518,6 +518,72 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const name = product?.name || meta["og:title"] || meta["twitter:title"] || null;
       const brand = (typeof product?.brand === "object" ? product.brand?.name : product?.brand) || null;
       const category = product?.category || null;
+      // Description: prefer Product.description (richer/longer) over OG.
+      // Strip HTML tags — Shopify often embeds <p> / <br> in description.
+      let descriptionRaw: string | null =
+        product?.description ||
+        meta["og:description"] ||
+        meta["twitter:description"] ||
+        meta["description"] ||
+        null;
+      if (descriptionRaw) {
+        descriptionRaw = descriptionRaw
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+          .replace(/<[^>]+>/g, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+      }
+      // Offer price (useful context for the admin even though we don't
+      // store it yet — keeps the door open for "from $X" in the future).
+      const offer = product?.offers && (Array.isArray(product.offers) ? product.offers[0] : product.offers);
+      const price = offer?.price ? `${offer.priceCurrency || "USD"} ${offer.price}` : null;
+
+      // Spec table extraction — the part that actually matters for guitar
+      // shops. Carter Vintage, Reverb, Norman's etc. put 20+ rows of real
+      // gear data (Year, Top, Back/Sides, Tuners, Scale Length, Pickups…)
+      // in plain HTML tables that never appear in OG or JSON-LD root. Try
+      // three sources in priority order; keep the first value seen.
+      const specs: Record<string, string> = {};
+      const cleanCell = (s: string) =>
+        decodeEntities(
+          s.replace(/<script[\s\S]*?<\/script>/gi, "")
+           .replace(/<style[\s\S]*?<\/style>/gi, "")
+           .replace(/<[^>]+>/g, " ")
+           .replace(/\s+/g, " ")
+           .trim(),
+        );
+      const looksLikeSpec = (label: string, value: string) =>
+        label.length > 0 && label.length <= 50 &&
+        value.length > 0 && value.length <= 200 &&
+        // Reject obvious nav / button / chrome rows.
+        !/^(add to cart|buy now|sign in|search|menu|cart|checkout|home|shop)$/i.test(label) &&
+        !/^(add to cart|buy now)$/i.test(value);
+
+      // 1) Schema.org additionalProperty — Shopify themes increasingly emit this.
+      const addProps = (product as any)?.additionalProperty;
+      if (Array.isArray(addProps)) {
+        for (const p of addProps) {
+          const lbl = p?.name && String(p.name).trim();
+          const val = p?.value != null && String(p.value).trim();
+          if (lbl && val && looksLikeSpec(lbl, val) && !(lbl in specs)) specs[lbl] = val;
+        }
+      }
+      // 2) Two-column <table> rows — Carter Vintage's main format.
+      const rowRe = /<tr[^>]*>\s*<t[dh][^>]*>([\s\S]*?)<\/t[dh]>\s*<t[dh][^>]*>([\s\S]*?)<\/t[dh]>\s*<\/tr>/gi;
+      let sm: RegExpExecArray | null;
+      while ((sm = rowRe.exec(html)) && Object.keys(specs).length < 40) {
+        const label = cleanCell(sm[1]);
+        const value = cleanCell(sm[2]);
+        if (looksLikeSpec(label, value) && !(label in specs)) specs[label] = value;
+      }
+      // 3) Definition lists — Reverb, some Shopify themes.
+      const dlRe = /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi;
+      while ((sm = dlRe.exec(html)) && Object.keys(specs).length < 40) {
+        const label = cleanCell(sm[1]);
+        const value = cleanCell(sm[2]);
+        if (looksLikeSpec(label, value) && !(label in specs)) specs[label] = value;
+      }
 
       let rawImage: string | null =
         (Array.isArray(product?.image) ? product.image[0] : product?.image) ||
@@ -540,6 +606,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         name,
         brand,
         category,
+        description: descriptionRaw,
+        specs,
+        price,
         photoUrl,
         sourceImage: rawImage,
         vendor: {
