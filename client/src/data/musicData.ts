@@ -117,7 +117,15 @@ export interface Instrument {
 }
 
 export interface TrackPerformer {
-  personId: string;
+  // personId is optional because the DB allows it to be null after a Person
+  // row is deleted (FK is SET NULL). When that happens we render from the
+  // `name` snapshot instead. The static seed always supplies personId.
+  personId?: string;
+  name?: string;           // snapshot from the API so deleted-person credits still render
+  // Stable DB row id (only present for API-sourced rows). Used by the fan
+  // surface to match an unlinked performer across sheets when personId is
+  // null. Static seed rows leave this undefined.
+  creditId?: string;
   role: string;            // e.g. "Guitar", "Bass", "Composer · Violin"
   instrumentId?: string;
   tuningNotes?: string;    // e.g. "DADGAD", "Dropped D, capo 3"

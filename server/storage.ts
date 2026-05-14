@@ -86,6 +86,18 @@ export interface IStorage {
       instrument: (Instrument & { vendors: InstrumentVendor[] }) | null;
     })[];
   }>;
+  // Same enriched shape as getSongCredits, but for every song on the album
+  // in one round-trip. Keyed by songId; songs with no credits rows are
+  // omitted (the client falls back to its static seed for those).
+  getAlbumCredits(albumId: string): Promise<{
+    bySongId: Record<string, {
+      writers: (TrackWriter & { person: Person | null })[];
+      performers: (TrackPerformer & {
+        person: Person | null;
+        instrument: (Instrument & { vendors: InstrumentVendor[] }) | null;
+      })[];
+    }>;
+  }>;
   createTrackWriter(data: InsertTrackWriter & { id?: string }): Promise<TrackWriter>;
   updateTrackWriter(id: string, data: Partial<TrackWriter>): Promise<TrackWriter | undefined>;
   deleteTrackWriter(id: string): Promise<void>;
@@ -387,6 +399,68 @@ export class DbStorage implements IStorage {
         instrument: p.instrumentId ? instrumentsById.get(p.instrumentId) ?? null : null,
       })),
     };
+  }
+  async getAlbumCredits(albumId: string) {
+    // 1) Resolve song ids for this album. Cheap single query.
+    const songRows = await db.select({ id: songs.id }).from(songs).where(eq(songs.albumId, albumId));
+    const songIds = songRows.map((r) => r.id);
+    if (songIds.length === 0) return { bySongId: {} };
+
+    // 2) All writers + performers for those songs in two queries.
+    const [writerRows, performerRows] = await Promise.all([
+      db.select().from(trackWriters).where(inArray(trackWriters.songId, songIds)).orderBy(asc(trackWriters.position)),
+      db.select().from(trackPerformers).where(inArray(trackPerformers.songId, songIds)).orderBy(asc(trackPerformers.position)),
+    ]);
+
+    // 3) Resolve the small set of distinct person + instrument ids in one
+    //    query each (same enrichment as getSongCredits, batched across the album).
+    const personIds = Array.from(new Set([
+      ...writerRows.map((w) => w.personId).filter((v): v is string => !!v),
+      ...performerRows.map((p) => p.personId).filter((v): v is string => !!v),
+    ]));
+    const instrumentIds = Array.from(new Set(
+      performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
+    ));
+    const [peopleRows, instrumentRows, vendorRows] = await Promise.all([
+      personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
+      instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
+      instrumentIds.length
+        ? db.select().from(instrumentVendors).where(inArray(instrumentVendors.instrumentId, instrumentIds)).orderBy(asc(instrumentVendors.position))
+        : Promise.resolve([] as InstrumentVendor[]),
+    ]);
+    const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
+    const vendorsByInstrument = new Map<string, InstrumentVendor[]>();
+    for (const v of vendorRows) {
+      const list = vendorsByInstrument.get(v.instrumentId) ?? [];
+      list.push(v);
+      vendorsByInstrument.set(v.instrumentId, list);
+    }
+    const instrumentsById = new Map(
+      instrumentRows.map((i) => [i.id, { ...i, vendors: vendorsByInstrument.get(i.id) ?? [] }]),
+    );
+
+    // 4) Bucket by songId. Position order is preserved because we sorted at
+    //    the query level above.
+    const bySongId: Record<string, {
+      writers: (TrackWriter & { person: Person | null })[];
+      performers: (TrackPerformer & {
+        person: Person | null;
+        instrument: (Instrument & { vendors: InstrumentVendor[] }) | null;
+      })[];
+    }> = {};
+    for (const w of writerRows) {
+      const bucket = bySongId[w.songId] ?? (bySongId[w.songId] = { writers: [], performers: [] });
+      bucket.writers.push({ ...w, person: w.personId ? peopleById.get(w.personId) ?? null : null });
+    }
+    for (const p of performerRows) {
+      const bucket = bySongId[p.songId] ?? (bySongId[p.songId] = { writers: [], performers: [] });
+      bucket.performers.push({
+        ...p,
+        person: p.personId ? peopleById.get(p.personId) ?? null : null,
+        instrument: p.instrumentId ? instrumentsById.get(p.instrumentId) ?? null : null,
+      });
+    }
+    return { bySongId };
   }
   async createTrackWriter(data: InsertTrackWriter & { id?: string }): Promise<TrackWriter> {
     const [w] = await db.insert(trackWriters).values(data as any).returning();

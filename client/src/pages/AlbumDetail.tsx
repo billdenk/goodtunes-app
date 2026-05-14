@@ -11,7 +11,47 @@ import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { startVendorChatAboutInstrument } from "@/lib/chatStore";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { ALBUMS, getSongsByAlbum, getCreditsForSong, getTracksForPerformerOnAlbum, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer } from "@/data/musicData";
+import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
+
+// Enriched credits as returned by GET /api/songs/:id/credits and
+// GET /api/albums/:id/credits. Person/instrument joins are already done
+// server-side so the fan-side credits surface renders from a single fetch.
+type ApiPerson = { id: string; name: string; photoUrl?: string | null; bio?: string | null; accent?: string | null };
+type ApiVendor = { id: string; instrumentId: string; name: string; affiliateUrl: string; aboutUrl?: string | null; logoUrl?: string | null; tagline?: string | null; bio?: string | null; location?: string | null; coverUrl?: string | null; position: number };
+type ApiInstrument = { id: string; name: string; category: string; shortCategory?: string | null; photoUrl?: string | null; about?: string | null; artistNote?: string | null; vendors: ApiVendor[] };
+type ApiSongCredits = {
+  writers: Array<{ id: string; songId: string; personId: string | null; name: string; role: string; position: number; person: ApiPerson | null }>;
+  performers: Array<{ id: string; songId: string; personId: string | null; instrumentId: string | null; name: string; role: string; tuningNotes: string | null; position: number; person: ApiPerson | null; instrument: ApiInstrument | null }>;
+};
+
+// API rows use `string | null` for optional columns; the static types use
+// `string | undefined`. These tiny coercions keep TS happy and match the
+// static-seed shapes already used by the credits sheets.
+const nu = <T,>(v: T | null | undefined): T | undefined => v ?? undefined;
+function normalizePerson(p: ApiPerson): Person {
+  return { id: p.id, name: p.name, photoUrl: nu(p.photoUrl), bio: nu(p.bio), accent: nu(p.accent) };
+}
+function normalizeInstrument(i: ApiInstrument): Instrument {
+  return {
+    id: i.id,
+    name: i.name,
+    category: i.category,
+    shortCategory: nu(i.shortCategory),
+    photoUrl: nu(i.photoUrl),
+    about: nu(i.about),
+    artistNote: nu(i.artistNote),
+    vendors: i.vendors.map((v) => ({
+      name: v.name,
+      affiliateUrl: v.affiliateUrl,
+      aboutUrl: nu(v.aboutUrl),
+      logoUrl: nu(v.logoUrl),
+      tagline: nu(v.tagline),
+      bio: nu(v.bio),
+      location: nu(v.location),
+      coverUrl: nu(v.coverUrl),
+    })),
+  };
+}
 
 export function AlbumDetail() {
   const { id } = useParams<{ id: string }>();
@@ -32,7 +72,7 @@ export function AlbumDetail() {
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [songMenuFor, setSongMenuFor] = useState<{ song: Song; rect: DOMRect } | null>(null);
   const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
-  const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song } | null>(null);
+  const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song; creditId?: string } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
   const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
@@ -113,6 +153,71 @@ export function AlbumDetail() {
     }
     return album ? getSongsByAlbum(id) : [];
   }, [apiAlbum, album, id]);
+
+  // SuperCredits™ — fetch every song's credits for this album in one round-trip.
+  // CreditsSheet + PerformerSheet both render from the resolved maps below;
+  // the static `TRACK_CREDITS` / `PEOPLE` / `INSTRUMENTS` seed is kept as a
+  // graceful fallback for songs that haven't been migrated into the DB yet.
+  const { data: apiAlbumCredits } = useQuery<{ bySongId: Record<string, ApiSongCredits> }>({
+    queryKey: ["/api/albums", id, "credits"],
+    enabled: !!id,
+  });
+  const { creditsBySongId, peopleById, instrumentsById } = useMemo(() => {
+    const peopleById = new Map<string, Person>();
+    const instrumentsById = new Map<string, Instrument>();
+    // Seed with the static rosters first so API-supplied rows override.
+    for (const [pid, p] of Object.entries(PEOPLE)) peopleById.set(pid, p);
+    for (const [iid, i] of Object.entries(INSTRUMENTS)) instrumentsById.set(iid, i);
+
+    const creditsBySongId = new Map<string, TrackCredits>();
+    if (apiAlbumCredits) {
+      for (const [songId, api] of Object.entries(apiAlbumCredits.bySongId)) {
+        for (const w of api.writers) {
+          if (w.person) peopleById.set(w.person.id, normalizePerson(w.person));
+        }
+        for (const p of api.performers) {
+          if (p.person) peopleById.set(p.person.id, normalizePerson(p.person));
+          if (p.instrument) instrumentsById.set(p.instrument.id, normalizeInstrument(p.instrument));
+        }
+        creditsBySongId.set(songId, {
+          writers: api.writers.map((w) => ({ name: w.name, role: w.role, personId: w.personId ?? undefined })),
+          performers: api.performers.map((p) => ({
+            personId: p.personId ?? undefined,
+            name: p.name,
+            creditId: p.id,
+            role: p.role,
+            instrumentId: p.instrumentId ?? undefined,
+            tuningNotes: p.tuningNotes ?? undefined,
+          })),
+        });
+      }
+    }
+    return { creditsBySongId, peopleById, instrumentsById };
+  }, [apiAlbumCredits]);
+  // Helper: live API credits for a song, falling back to the static seed.
+  const getCredits = (songId: string): TrackCredits | undefined =>
+    creditsBySongId.get(songId) ?? getCreditsForSong(songId);
+  // Helper: every track on this album where this performer is credited.
+  // Matches by personId when available, falling back to creditId so a
+  // single unlinked snapshot row still resolves. Unlinked performers won't
+  // cross-link across tracks (no shared identity), but they at least
+  // resolve to their own track.
+  const getTracksForPerformer = (sel: { personId?: string; creditId?: string }): Array<{ song: Song; performer: TrackPerformer }> => {
+    // Defensive: with neither id supplied we'd match the first performer on
+    // every song (because `undefined === undefined`), so bail early.
+    if (!sel.personId && !sel.creditId) return [];
+    const out: Array<{ song: Song; performer: TrackPerformer }> = [];
+    for (const song of songs) {
+      const c = getCredits(song.id);
+      if (!c) continue;
+      const perf = c.performers.find((p) =>
+        sel.personId ? p.personId === sel.personId : p.creditId === sel.creditId,
+      );
+      if (perf) out.push({ song, performer: perf });
+    }
+    return out.sort((a, b) => a.song.trackNumber - b.song.trackNumber);
+  };
+
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
   const tint = "#00062B";
@@ -707,7 +812,7 @@ export function AlbumDetail() {
               onPlayLast={() => { playLast({ ...s, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
               queueHasUpcoming={queueHasUpcoming}
               onViewCredits={() => { setSongMenuFor(null); setCreditsForSong(s); }}
-              hasCredits={!!getCreditsForSong(s.id)}
+              hasCredits={!!getCredits(s.id)}
               onClose={() => setSongMenuFor(null)}
             />
           );
@@ -787,6 +892,13 @@ export function AlbumDetail() {
             person={performerSheet.person}
             song={performerSheet.song}
             album={album}
+            selectedCreditId={performerSheet.creditId}
+            currentSongCredits={getCredits(performerSheet.song.id)}
+            otherTracks={getTracksForPerformer({
+              personId: performerSheet.person.id.startsWith("unlinked-") ? undefined : performerSheet.person.id,
+              creditId: performerSheet.creditId,
+            }).filter(({ song: s }) => s.id !== performerSheet.song.id)}
+            resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
             onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
             onClose={() => setPerformerSheet(null)}
           />
@@ -794,7 +906,10 @@ export function AlbumDetail() {
           <CreditsSheet
             song={creditsForSong}
             album={album}
-            onOpenPerformer={(person) => setPerformerSheet({ person, song: creditsForSong })}
+            credits={getCredits(creditsForSong.id)}
+            resolvePerson={(pid) => (pid ? peopleById.get(pid) : undefined)}
+            resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
+            onOpenPerformer={(person, creditId) => setPerformerSheet({ person, song: creditsForSong, creditId })}
             onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
             onClose={() => setCreditsForSong(null)}
           />
@@ -1351,18 +1466,22 @@ function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; 
 function CreditsSheet({
   song,
   album,
+  credits,
+  resolvePerson,
+  resolveInstrument,
   onOpenPerformer,
   onOpenInstrument,
   onClose,
 }: {
   song: Song;
   album: Album;
-  onOpenPerformer: (person: Person) => void;
+  credits: TrackCredits | undefined;
+  resolvePerson: (personId?: string) => Person | undefined;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
+  onOpenPerformer: (person: Person, creditId?: string) => void;
   onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
   onClose: () => void;
 }) {
-  const credits = getCreditsForSong(song.id);
-
   return (
     <SheetShell ariaLabel={`Credits for ${song.title}`} testId="sheet-credits" onClose={onClose}>
       <SheetHeader
@@ -1384,7 +1503,7 @@ function CreditsSheet({
             {credits.writers.map((w, i) => {
               // If this writer is also in our PEOPLE roster, make the row tappable
               // and route to their PerformerSheet (so writers can be explored too).
-              const person = w.personId ? PEOPLE[w.personId] : undefined;
+              const person = resolvePerson(w.personId);
               if (person) {
                 return (
                   <button
@@ -1425,18 +1544,28 @@ function CreditsSheet({
               Tap left → performer sheet. Tap right → instrument sheet. */}
           <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Performed by</h3>
           <div className="pb-2">
-            {credits.performers.map((perf) => {
-              const person = PEOPLE[perf.personId];
-              const instrument = perf.instrumentId ? INSTRUMENTS[perf.instrumentId] : undefined;
+            {credits.performers.map((perf, idx) => {
+              // Prefer the live Person row; fall back to a synthesized one
+              // from the snapshot `name` so credits still render after a
+              // person row has been deleted (FK SET NULL).
+              const resolved = resolvePerson(perf.personId);
+              // `unlinked-${creditId|idx}` is a stable synthetic id used purely
+              // as a React key and a sentinel ("don't try to match this back
+              // to a real personId"). The actual cross-sheet match happens
+              // via creditId in the parent.
+              const syntheticId = perf.creditId ? `unlinked-${perf.creditId}` : `unlinked-${idx}`;
+              const person: Person | undefined = resolved
+                ?? (perf.name ? { id: syntheticId, name: perf.name } : undefined);
+              const instrument = resolveInstrument(perf.instrumentId);
               if (!person) return null;
               const shortLabel = instrument?.shortCategory ?? instrument?.category ?? "";
               return (
-                <div key={perf.personId} className="flex items-center px-5 py-2.5 active:bg-white/5">
+                <div key={perf.creditId ?? person.id} className="flex items-center px-5 py-2.5 active:bg-white/5">
                   <button
                     type="button"
-                    onClick={() => onOpenPerformer(person)}
+                    onClick={() => onOpenPerformer(person, perf.creditId)}
                     className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-80"
-                    data-testid={`button-performer-${perf.personId}`}
+                    data-testid={`button-performer-${perf.creditId ?? person.id}`}
                   >
                     <PersonAvatar person={person} size={44} />
                     <div className="flex-1 min-w-0">
@@ -1447,9 +1576,9 @@ function CreditsSheet({
                   {instrument && (
                     <button
                       type="button"
-                      onClick={() => onOpenInstrument(instrument, perf.tuningNotes, { personId: perf.personId, songId: song.id })}
+                      onClick={() => onOpenInstrument(instrument, perf.tuningNotes, { personId: person.id, songId: song.id })}
                       className="flex items-center gap-1 pl-3 -mr-1 active:opacity-70"
-                      data-testid={`button-instrument-${perf.instrumentId}`}
+                      data-testid={`button-instrument-${instrument.id}`}
                       aria-label={`Instrument: ${instrument.name}`}
                     >
                       <span className="text-white/70 text-[14px]">{shortLabel}</span>
@@ -1473,23 +1602,34 @@ function PerformerSheet({
   person,
   song,
   album,
+  selectedCreditId,
+  currentSongCredits,
+  otherTracks,
+  resolveInstrument,
   onOpenInstrument,
   onClose,
 }: {
   person: Person;
   song: Song;                  // The song we're focused on — drives "instruments on this song"
   album: Album;
+  // Stable credit-row id of the originally-clicked row. Required to match
+  // unlinked (personId === null) snapshot performers; ignored when the
+  // resolved person has a real id.
+  selectedCreditId?: string;
+  currentSongCredits: TrackCredits | undefined;
+  // Other tracks on this album where this performer is credited (already filtered, sorted by parent).
+  otherTracks: Array<{ song: Song; performer: TrackPerformer }>;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
   onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
   onClose: () => void;
 }) {
-  const allTracks = getTracksForPerformerOnAlbum(person.id, album.id);
-
-  // What this performer played on the CURRENT song (could be 0, 1, or many entries)
-  const currentSongCredits = getCreditsForSong(song.id);
-  const onThisSong = (currentSongCredits?.performers ?? []).filter((p) => p.personId === person.id);
-
-  // Other tracks on this album they played on (excluding the current song)
-  const otherTracks = allTracks.filter(({ song: s }) => s.id !== song.id);
+  // What this performer played on the CURRENT song. Match by personId when
+  // we have a real one; otherwise fall back to the credit row id so unlinked
+  // snapshot rows still resolve to their own performance.
+  const isSynthetic = person.id.startsWith("unlinked-");
+  const onThisSong = (currentSongCredits?.performers ?? []).filter((p) =>
+    isSynthetic ? p.creditId === selectedCreditId : p.personId === person.id,
+  );
 
   return (
     <SheetShell ariaLabel={`${person.name} on ${song.title}`} testId="sheet-performer" onClose={onClose}>
@@ -1520,7 +1660,7 @@ function PerformerSheet({
           <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Played on this song</h3>
           <div className="pb-1">
             {onThisSong.map((perf, i) => {
-              const inst = perf.instrumentId ? INSTRUMENTS[perf.instrumentId] : undefined;
+              const inst = resolveInstrument(perf.instrumentId);
               if (!inst) {
                 return (
                   <div key={`role-${i}`} className="px-5 py-2.5 text-white/80 text-[14px]">{perf.role}</div>
@@ -1564,7 +1704,7 @@ function PerformerSheet({
           <h3 className="px-5 pt-5 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Also on {album.title}</h3>
           <div className="pb-2">
             {otherTracks.map(({ song: s, performer }) => {
-              const instrument = performer.instrumentId ? INSTRUMENTS[performer.instrumentId] : undefined;
+              const instrument = resolveInstrument(performer.instrumentId);
               return (
                 <div
                   key={s.id}
@@ -1577,7 +1717,7 @@ function PerformerSheet({
                   {instrument && (
                     <button
                       type="button"
-                      onClick={() => onOpenInstrument(instrument, performer.tuningNotes, { personId: performer.personId, songId: s.id })}
+                      onClick={() => onOpenInstrument(instrument, performer.tuningNotes, { personId: performer.personId ?? person.id, songId: s.id })}
                       className="flex items-center gap-1 pl-2 -mr-1 active:opacity-70 flex-shrink-0"
                       data-testid={`button-performer-track-instrument-${s.id}`}
                     >

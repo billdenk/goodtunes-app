@@ -406,6 +406,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/songs/:id/credits", async (req, res) => {
     return res.json(await storage.getSongCredits(String(req.params.id)));
   });
+  // Album-wide credits in one round-trip. Used by the fan-side AlbumDetail
+  // page so CreditsSheet + PerformerSheet ("Also on this album" rail) both
+  // render from a single fetch.
+  app.get("/api/albums/:id/credits", async (req, res) => {
+    return res.json(await storage.getAlbumCredits(String(req.params.id)));
+  });
   // Writers (nested under song for create; flat for update/delete by id).
   // POST body validated via insertTrackWriterSchema (songId injected from
   // path, position auto-appended to end if not supplied). PUT uses a
