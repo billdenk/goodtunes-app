@@ -1,10 +1,15 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
+
+/** Profile photo is stored client-side as a data URL in localStorage (same
+ *  pattern as favorites + chat). When the GT backend lands, swap for an
+ *  uploaded URL on the user record. */
+const profilePhotoKey = (userId: string) => `gt:profile-photo:${userId}`;
 
 export function Account() {
   const { user, logout, updateProfile, isUpdatePending, updateError } = useAuth();
@@ -48,6 +53,37 @@ export function Account() {
     ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
     : "?";
 
+  // Profile photo (client-only, see comment at top of file).
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    try { setPhotoUrl(localStorage.getItem(profilePhotoKey(user.id))); } catch {}
+  }, [user?.id]);
+
+  const handlePhotoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-uploading the same file
+    if (!file || !user?.id) return;
+    if (!file.type.startsWith("image/")) return;
+    // ~5 MB cap to keep localStorage healthy.
+    if (file.size > 5 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      if (!dataUrl) return;
+      try { localStorage.setItem(profilePhotoKey(user.id), dataUrl); } catch {}
+      setPhotoUrl(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePhotoRemove = () => {
+    if (!user?.id) return;
+    try { localStorage.removeItem(profilePhotoKey(user.id)); } catch {}
+    setPhotoUrl(null);
+  };
+
   return (
     <main className="relative h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
       <div
@@ -64,12 +100,48 @@ export function Account() {
         </header>
 
         <div className="relative z-10 flex flex-col items-center pt-6 pb-4 px-5">
-          <div
-            className="w-20 h-20 rounded-full border-2 border-[#319ED8] flex items-center justify-center text-2xl font-bold text-white mb-4"
-            style={{ background: "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoPick}
+            data-testid="input-profile-photo"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white mb-4 active:opacity-80"
+            style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
+            aria-label="Change profile photo"
+            data-testid="button-profile-photo"
           >
-            {initials}
-          </div>
+            {photoUrl ? (
+              <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span>{initials}</span>
+            )}
+            {/* Camera badge */}
+            <span
+              className="absolute bottom-0 right-0 w-6 h-6 rounded-full flex items-center justify-center"
+              style={{ background: "#319ED8", boxShadow: "0 0 0 2px #00062B" }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </span>
+          </button>
+          {photoUrl && (
+            <button
+              type="button"
+              onClick={handlePhotoRemove}
+              className="-mt-2 mb-2 text-white/45 text-[12px] active:opacity-70"
+              data-testid="button-profile-photo-remove"
+            >
+              Remove photo
+            </button>
+          )}
 
           {!editing ? (
             <>

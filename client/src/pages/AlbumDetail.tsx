@@ -2090,45 +2090,65 @@ function InAppBrowserSheet({
         </button>
       </div>
 
-      {/* Iframe area. Many vendor sites send X-Frame-Options/CSP frame-ancestors
-          to block embedding, so the iframe paints blank — the parent has no JS
-          way to detect that. We render a styled "preview" placeholder behind
-          the iframe; if the site is embeddable, the iframe paints over it; if
-          it's blocked, the placeholder shows through and looks intentional
-          rather than broken. Background is dark to match the app chrome. */}
-      <div className="flex-1 min-h-0 relative" style={{ background: "#00062B" }}>
+      {/* Preview card. Virtually every vendor site (Fender, Reverb, Sweetwater,
+          Martin, etc.) blocks framing via X-Frame-Options / CSP frame-ancestors,
+          which left the iframe painting blank white over our placeholder. Apple
+          Music and Replit's own in-app browser take the honest approach: show
+          a rich preview card with brand identity + a single primary CTA to open
+          in the system browser. That's what this renders now. */}
+      <div className="flex-1 min-h-0 relative overflow-hidden" style={{ background: "#00062B" }}>
         {safeUrl ? (
           <>
-            {/* Blocked-state placeholder (sits behind the iframe). */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center pointer-events-none">
+            {/* Blurred logo as ambient backdrop (Apple Music style). */}
+            {logoUrl && (
+              <img
+                src={logoUrl}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ filter: "blur(60px) saturate(160%)", transform: "scale(1.3)", opacity: 0.45 }}
+              />
+            )}
+            <div
+              className="absolute inset-0"
+              style={{ background: "linear-gradient(180deg, rgba(0,6,43,0.4) 0%, rgba(0,6,43,0.7) 60%, #00062B 100%)" }}
+            />
+
+            <div className="relative h-full flex flex-col items-center justify-center px-8 text-center">
               {logoUrl ? (
-                <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center mb-4" style={{ background: "rgba(255,255,255,0.92)" }}>
+                <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center mb-5" style={{ background: "rgba(255,255,255,0.95)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
                   <img src={logoUrl} alt="" className="w-full h-full object-cover" />
                 </div>
               ) : (
-                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: "rgba(49,158,216,0.16)" }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: "rgba(49,158,216,0.16)" }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                   </svg>
                 </div>
               )}
-              <p className="text-white text-[16px] font-semibold mb-1">{title}</p>
-              <p className="text-white/55 text-[13px] mb-5">{domain}</p>
-              <p className="text-white/45 text-[12px] leading-relaxed max-w-[260px]">
-                Many vendor sites don't allow being shown inside another app. Tap <span className="text-white/80 font-semibold">Open</span> below to view in your browser.
+              <p className="text-white text-[22px] font-bold mb-1 tracking-tight">{title}</p>
+              <p className="text-white/55 text-[13px] mb-7">{domain}</p>
+
+              <button
+                type="button"
+                onClick={openExternal}
+                className="flex items-center gap-2 px-6 py-3 rounded-full text-white text-[15px] font-semibold active:opacity-80"
+                style={{ background: "#319ED8", boxShadow: "0 6px 24px rgba(49,158,216,0.45)" }}
+                data-testid="button-inapp-primary-open"
+              >
+                <span>Open in browser</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 4h6v6" />
+                  <path d="M20 4l-9 9" />
+                  <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
+                </svg>
+              </button>
+
+              <p className="mt-6 text-white/40 text-[11px] leading-relaxed max-w-[280px]">
+                Most shops don't allow being shown inside another app. You'll land directly on the page above.
               </p>
             </div>
-            <iframe
-              src={safeUrl.toString()}
-              title={title}
-              className="w-full h-full border-0 relative"
-              referrerPolicy="no-referrer-when-downgrade"
-              // Intentionally NOT setting allow-same-origin: combined with allow-scripts it
-              // would weaken sandbox isolation against arbitrary 3rd-party vendor URLs.
-              sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-              data-testid="iframe-inapp-browser"
-            />
           </>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
@@ -2138,29 +2158,6 @@ function InAppBrowserSheet({
         )}
       </div>
 
-      {/* Persistent bottom Open bar — always available so users have an
-          escape hatch even when the iframe renders blank. */}
-      {safeUrl && (
-        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-t border-white/8" style={{ background: "rgba(0,6,43,0.96)" }}>
-          <p className="flex-1 text-white/65 text-[12px] leading-snug">
-            View {domain} in your browser
-          </p>
-          <button
-            type="button"
-            onClick={openExternal}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-white text-[13px] font-semibold active:opacity-80 flex-shrink-0"
-            style={{ background: "#319ED8" }}
-            data-testid="button-inapp-bottom-open"
-          >
-            <span>Open</span>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M14 4h6v6" />
-              <path d="M20 4l-9 9" />
-              <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
-            </svg>
-          </button>
-        </div>
-      )}
     </SheetShell>
   );
 }
