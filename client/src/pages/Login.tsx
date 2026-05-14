@@ -214,7 +214,7 @@ export function Login() {
                 type="text"
                 value={realName}
                 onChange={(e) => setRealName(e.target.value)}
-                placeholder="Tina Banner"
+                placeholder="Nigel Tufnel"
                 autoComplete="name"
                 className="w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors"
                 style={{ background: "rgba(255,255,255,0.06)" }}

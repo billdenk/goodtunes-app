@@ -241,7 +241,7 @@ export function GoodDeedCertificate({
                           type="text"
                           value={realDraft}
                           onChange={(e) => setRealDraft(e.target.value)}
-                          placeholder="Tina Banner"
+                          placeholder="Nigel Tufnel"
                           autoFocus
                           className="w-full border border-white/15 rounded-xl px-3 py-2 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
                           style={{ background: "rgba(255,255,255,0.06)" }}
