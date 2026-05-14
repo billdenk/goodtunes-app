@@ -648,6 +648,7 @@ export function AlbumDetail() {
               onPlayLast={() => { playLast({ ...s, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
               queueHasUpcoming={queueHasUpcoming}
               onViewCredits={() => { setSongMenuFor(null); setCreditsForSong(s); }}
+              hasCredits={!!getCreditsForSong(s.id)}
               onClose={() => setSongMenuFor(null)}
             />
           );
@@ -943,6 +944,7 @@ function SongActionPopover({
   onViewCredits,
   onClose,
   queueHasUpcoming,
+  hasCredits,
 }: {
   song: Song;
   album: Album;
@@ -957,6 +959,7 @@ function SongActionPopover({
   onViewCredits: () => void;
   onClose: () => void;
   queueHasUpcoming: boolean;
+  hasCredits: boolean;
 }) {
   const POP_W = 244;
   const panelRef = useRef<HTMLDivElement>(null);
@@ -1002,12 +1005,14 @@ function SongActionPopover({
   const close = (run?: () => void) => () => { run?.(); onClose(); };
 
   // Apple-style row: black icon on left, label right. Tight spacing.
-  const Row = ({ label, icon, onClick, testId }: { label: string; icon: ReactNode; onClick: () => void; testId: string }) => (
+  const Row = ({ label, icon, onClick, testId, disabled }: { label: string; icon: ReactNode; onClick: () => void; testId: string; disabled?: boolean }) => (
     <button
       type="button"
       role="menuitem"
-      onClick={onClick}
-      className="w-full flex items-center justify-between gap-3 px-4 py-2.5 active:bg-black/[0.06]"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+      className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 ${disabled ? "opacity-40" : "active:bg-black/[0.06]"}`}
       data-testid={testId}
     >
       <span className="text-[15px] text-black truncate">{label}</span>
@@ -1148,6 +1153,7 @@ function SongActionPopover({
         <Row
           label="View SuperCredits™"
           testId="row-popover-credits"
+          disabled={!hasCredits}
           onClick={close(onViewCredits)}
           icon={
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
