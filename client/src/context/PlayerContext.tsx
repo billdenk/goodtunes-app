@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
 import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
+import { track } from "@/lib/analytics";
 
 export interface PlayerSong extends Song {
   album: Album;
@@ -75,6 +76,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     a.preload = "metadata";
     audioRef.current = a;
   }
+
+  // Per-play analytics milestones. Reset whenever the current song changes
+  // (or restarts via repeat-one). `started`/`hit30`/`completed` ensure each
+  // event fires at most once per play instance.
+  const milestonesRef = useRef<{
+    songId: string | null;
+    started: boolean;
+    hit30: boolean;
+    completed: boolean;
+  }>({ songId: null, started: false, hit30: false, completed: false });
+  const resetMilestones = useCallback((songId: string | null) => {
+    milestonesRef.current = { songId, started: false, hit30: false, completed: false };
+  }, []);
+  const songMeta = useCallback((s: PlayerSong | null) => {
+    if (!s) return {};
+    return {
+      songId: s.id,
+      songTitle: s.title,
+      albumId: s.album?.id,
+      albumTitle: s.album?.title,
+      artist: s.album?.artist,
+    };
+  }, []);
 
   const currentSong = queue[currentIndex] ?? null;
   const hasRealAudio = !!currentSong?.audioUrl;

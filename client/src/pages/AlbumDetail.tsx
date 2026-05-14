@@ -1046,13 +1046,13 @@ function SongActionPopover({
         }}
       >
         {/* Top: Favorite + Share — Apple's two-up icon-over-label header */}
-        <div className="grid grid-cols-2">
+        <div className="flex items-stretch">
           <button
             type="button"
             role="menuitemcheckbox"
             aria-checked={isFavorite}
             onClick={() => { onToggleFavorite(); }}
-            className="flex flex-col items-center justify-center gap-1 py-3 active:bg-black/[0.06]"
+            className="flex-1 flex flex-col items-center justify-center gap-1 py-3 active:bg-black/[0.06]"
             data-testid="button-popover-favorite"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill={isFavorite ? "#FF5470" : "none"} stroke={isFavorite ? "#FF5470" : "#000"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1065,7 +1065,7 @@ function SongActionPopover({
             type="button"
             role="menuitem"
             onClick={close(onShare)}
-            className="flex flex-col items-center justify-center gap-1 py-3 active:bg-black/[0.06] -ml-px"
+            className="flex-1 flex flex-col items-center justify-center gap-1 py-3 active:bg-black/[0.06]"
             data-testid="button-popover-share"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
