@@ -622,6 +622,79 @@ function AlbumEditor({
     onSuccess: () => invalidateAlbumSurfaces(),
   });
 
+  // Drag-to-reorder the tracklist. We optimistically rewrite the album's
+  // cached songs array (so the user sees the new order the instant they
+  // drop), then POST the full ordered ID list to the server. On error we
+  // refetch — the server is the source of truth for trackNumber.
+  const reorderSongs = useMutation({
+    mutationFn: async (songIds: string[]) => {
+      await apiRequest("POST", `/api/admin/albums/${albumId}/tracks/reorder`, {
+        songIds,
+      });
+    },
+    onMutate: async (songIds: string[]) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/albums", albumId] });
+      const prev = queryClient.getQueryData<AlbumWithSongs>(["/api/albums", albumId]);
+      if (prev) {
+        const byId = new Map(prev.songs.map((s) => [s.id, s]));
+        const next = songIds
+          .map((id, i) => {
+            const s = byId.get(id);
+            return s ? { ...s, trackNumber: i + 1 } : null;
+          })
+          .filter((s): s is AdminSong => s !== null);
+        queryClient.setQueryData<AlbumWithSongs>(["/api/albums", albumId], {
+          ...prev,
+          songs: next,
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) {
+        queryClient.setQueryData(["/api/albums", albumId], ctx.prev);
+      }
+    },
+    onSettled: () => invalidateAlbumSurfaces(),
+  });
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropBeforeId, setDropBeforeId] = useState<string | null>(null);
+  const handleDragStart = (id: string) => (e: React.DragEvent) => {
+    setDragId(id);
+    // Firefox requires setData to actually initiate the drag.
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", id); } catch {}
+  };
+  const handleDragOver = (id: string) => (e: React.DragEvent) => {
+    if (!dragId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropBeforeId(id);
+  };
+  const handleDragEnd = () => {
+    setDragId(null);
+    setDropBeforeId(null);
+  };
+  const handleDrop = (targetId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const src = dragId;
+    setDragId(null);
+    setDropBeforeId(null);
+    if (!src || src === targetId) return;
+    const songs = data?.songs ?? [];
+    const ids = songs.map((s) => s.id);
+    const from = ids.indexOf(src);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const next = ids.slice();
+    next.splice(from, 1);
+    // If we removed a row above the target, the target index shifts up by 1.
+    next.splice(from < to ? to - 1 : to, 0, src);
+    // No-op if nothing actually changed.
+    if (next.every((id, i) => id === ids[i])) return;
+    reorderSongs.mutate(next);
+  };
+
   if (isLoading || !form) {
     return <div className="p-8 text-slate-500">Loading…</div>;
   }
@@ -928,6 +1001,12 @@ function AlbumEditor({
                 onDelete={() => {
                   if (confirm(`Delete "${s.title}"?`)) deleteSong.mutate(s.id);
                 }}
+                isDragging={dragId === s.id}
+                isDropTarget={dropBeforeId === s.id && dragId !== s.id}
+                onDragStart={handleDragStart(s.id)}
+                onDragOver={handleDragOver(s.id)}
+                onDrop={handleDrop(s.id)}
+                onDragEnd={handleDragEnd}
               />
             ))}
             {(data?.songs ?? []).length === 0 && (
@@ -2082,10 +2161,22 @@ function SongRow({
   song,
   onSave,
   onDelete,
+  isDragging,
+  isDropTarget,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   song: AdminSong;
   onSave: (p: Partial<AdminSong>) => void;
   onDelete: () => void;
+  isDragging?: boolean;
+  isDropTarget?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(song);
@@ -2180,8 +2271,40 @@ function SongRow({
   };
 
   return (
-    <div className="border-b border-slate-200 last:border-b-0">
-      <div className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50">
+    <div
+      className={
+        "border-b border-slate-200 last:border-b-0 transition-opacity " +
+        (isDragging ? "opacity-40 " : "") +
+        (isDropTarget ? "border-t-2 border-t-[#319ED8] " : "")
+      }
+      // Row-level drag wiring. The whole row is draggable so the user can
+      // grab anywhere along the resting (un-expanded) bar; the open-edit
+      // panel below sits outside this listener so its inputs still work.
+      draggable={!open}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
+      <div className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50">
+        {/* Grip handle — visually signals draggability. Drag events are
+            wired on the parent row so grabbing anywhere on the bar works,
+            but this icon gives the user a clear target. */}
+        <span
+          className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing flex-shrink-0"
+          aria-hidden="true"
+          data-testid={`grip-song-${song.id}`}
+          title="Drag to reorder"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="6" r="1.5" />
+            <circle cx="15" cy="6" r="1.5" />
+            <circle cx="9" cy="12" r="1.5" />
+            <circle cx="15" cy="12" r="1.5" />
+            <circle cx="9" cy="18" r="1.5" />
+            <circle cx="15" cy="18" r="1.5" />
+          </svg>
+        </span>
         <span className="text-slate-400 text-xs w-6 text-right">
           {song.trackNumber}
         </span>

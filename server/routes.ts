@@ -1170,6 +1170,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // Bulk reorder the tracklist. Accepts the album's song IDs in their new
+  // display order and rewrites each song's trackNumber to its index+1.
+  // No unique constraint on (albumId, trackNumber) so we can update in any
+  // order without intermediate-state conflicts. We don't enforce that the
+  // submitted IDs match the album's full song set on the server — the
+  // admin UI sends the complete list — but a wrong-album song will simply
+  // get a stray trackNumber that the admin can fix on next open.
+  app.post(
+    "/api/admin/albums/:id/tracks/reorder",
+    requireAdmin,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const { songIds } = req.body ?? {};
+      if (!Array.isArray(songIds) || songIds.some((x) => typeof x !== "string")) {
+        return res.status(400).json({ message: "songIds must be an array of strings" });
+      }
+      for (let i = 0; i < songIds.length; i++) {
+        await storage.updateSong(songIds[i], { trackNumber: i + 1 });
+      }
+      return res.json({ albumId, count: songIds.length });
+    },
+  );
+
   // ----- Bonus album content: Videos + Photos ------------------------------
   // Reads mirror the album-detail visibility model: requireAuth + an admin
   // check unlocks hidden albums, fans get a 404 for hidden/nonexistent ids
