@@ -1563,11 +1563,25 @@ function PersonEditor({
           | "bluesky"
           | "facebook"
           | "website";
+        // Restrict the dynamic field write to keys whose value type on
+        // AdminPerson is `string | null`. This makes `update({ [field]: v
+        // || null })` type-safe and prevents a future contributor from
+        // accidentally pointing a tab at a non-URL field (id, accent,
+        // photoUrl, etc.).
+        type SocialField =
+          | "appleMusicUrl"
+          | "spotifyUrl"
+          | "instagramUrl"
+          | "tiktokUrl"
+          | "twitterUrl"
+          | "blueskyUrl"
+          | "facebookUrl"
+          | "websiteUrl";
         const platforms: {
           key: Key;
           label: string;
           placeholder: string;
-          field: keyof AdminPerson;
+          field: SocialField;
           testid: string;
         }[] = [
           {
@@ -1663,7 +1677,7 @@ function PersonEditor({
                 key={active.key}
                 value={activeValue}
                 onChange={(e) =>
-                  update({ [active.field]: e.target.value || null } as Partial<AdminPerson>)
+                  update({ [active.field]: e.target.value || null })
                 }
                 placeholder={active.placeholder}
                 className={inputCls}

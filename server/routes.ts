@@ -913,20 +913,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rawImage = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
         if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
         if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
-        // Apple Music's og:image is always the wide 1200×630 share card —
-        // a small circular portrait centered on a white background. When
-        // we drop that into a circular avatar (PersonPreviewCard, fan
-        // PerformerSheet) it shows up as a tiny photo ringed by a huge
-        // white border. Apple's image CDN exposes the same source at any
-        // size + crop suffix, so rewrite the `cw` (crop-wide w/ padding)
-        // variant to `bb` (bounding box, no padding) at a square size.
+        // Apple Music's og:image is the wide 1200×630 share card — a small
+        // circular portrait centered on a white background. Dropped into a
+        // circular avatar (PersonPreviewCard, PerformerSheet) it shows up
+        // as a tiny photo ringed by a huge white border. Apple's image CDN
+        // (mzstatic.com) re-encodes the same source at any size + crop
+        // suffix encoded in the final path segment: e.g.
+        //   .../1200x630cw.jpg  (crop-wide, white padded)
+        //   .../600x600bb.png   (bounding box, no padding)
+        //   .../400x400cc.jpg   (center crop)
+        //   .../800x800sr.jpg   (stretch)
+        //   .../1200x1200fc.jpg (face crop)
+        // Normalize *any* recognized size+suffix variant to a square
+        // 1200×1200bb so we always get a tight, padding-free portrait.
+        // We match on `WxHxx.ext` (2 letters before the extension) instead
+        // of a hard-coded suffix so future Apple suffixes still get
+        // normalized. The query string is preserved.
         if (
           source === "apple" &&
           rawImage &&
           /mzstatic\.com\//.test(rawImage)
         ) {
           rawImage = rawImage.replace(
-            /\/\d+x\d+cw\.(jpg|jpeg|png|webp)(\?.*)?$/i,
+            /\/\d+x\d+[a-z]{2}\.(jpg|jpeg|png|webp)(\?.*)?$/i,
             "/1200x1200bb.$1$2",
           );
         }
