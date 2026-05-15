@@ -2344,8 +2344,9 @@ function InstrumentSheet({
         </div>
       </div>
 
-      {/* Scrollable content area (header above is shrink-0) */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide pb-8">
+      {/* Scrollable content area (header above is shrink-0). Pin
+          overflow-x off — see VendorSheet for the same reason. */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide pb-8">
       {/* Hero photo (no overlay X — that's in the sticky bar above) */}
       <div className="mx-5 mt-2 rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
         {instrument.photoUrl ? (
@@ -2605,8 +2606,13 @@ function VendorSheet({
 
   return (
     <SheetShell ariaLabel={vendor.name} testId="sheet-vendor" variant="full" onClose={onClose}>
-      {/* Top bar: floating back chevron + actions over the hero (Apple Music artist page) */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide pb-10 relative">
+      {/* Top bar: floating back chevron + actions over the hero (Apple Music artist page).
+          NOTE: `overflow-x-hidden` is intentional — when only overflow-y is set
+          the browser computes overflow-x as `auto` too, which let the whole
+          vendor page slide horizontally when any descendant (e.g. the action
+          row when chat is enabled) measured even a hair wider than the
+          viewport. Pin x-scroll off so this stays a vertical-only page. */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide pb-10 relative">
         {/* Toolbar + tab strip share a single sticky container so the tabs
             always sit immediately under the toolbar regardless of the
             device safe-area inset (a hardcoded `top-[60px]` would overlap
