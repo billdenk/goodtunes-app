@@ -422,6 +422,66 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // Audio upload — same pattern as video. We deliberately keep audio on
+  // its own route + multer instance so we can cap size differently (full
+  // tracks can be 30–80MB lossless, way beyond the 8MB artwork limit)
+  // and gate the MIME whitelist to actual playable audio. Extension is
+  // still derived from the validated mimetype, never from originalname.
+  const AUDIO_MIME_TO_EXT: Record<string, string> = {
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/aac": ".aac",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/flac": ".flac",
+    "audio/x-flac": ".flac",
+    "audio/ogg": ".ogg",
+    "audio/webm": ".weba",
+  };
+  const uploadAudio = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 150 * 1024 * 1024 }, // 150MB cap — covers WAV/FLAC masters
+    fileFilter: (_req, file, cb) => {
+      if (!(file.mimetype in AUDIO_MIME_TO_EXT)) {
+        return cb(new Error("Only MP3, M4A/AAC, WAV, FLAC, or OGG audio is allowed"));
+      }
+      cb(null, true);
+    },
+  });
+  app.post(
+    "/api/admin/upload-audio",
+    requireAdminBearer,
+    uploadAudio.single("file"),
+    async (req, res) => {
+      const f = (req as any).file as Express.Multer.File | undefined;
+      if (!f) return res.status(400).json({ message: "No file uploaded" });
+      try {
+        const ext = AUDIO_MIME_TO_EXT[f.mimetype] || ".mp3";
+        const id = `${randomUUID()}${ext}`;
+        const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
+        const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
+        const firstSlash = trimmed.indexOf("/");
+        const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
+        const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
+        const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+        const file = objectStorageClient.bucket(bucketName).file(objectName);
+        await file.save(f.buffer, {
+          contentType: f.mimetype,
+          metadata: { cacheControl: "public, max-age=31536000, immutable" },
+          resumable: false,
+        });
+        await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+        return res.json({ url: `/objects/uploads/${id}` });
+      } catch (err) {
+        console.error("Audio upload failed", err);
+        return res.status(500).json({ message: "Upload failed" });
+      }
+    },
+  );
+
   app.post(
     "/api/admin/upload",
     requireAdminBearer,

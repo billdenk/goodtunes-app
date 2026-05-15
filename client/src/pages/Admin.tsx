@@ -992,6 +992,29 @@ async function uploadVideoFile(file: File): Promise<string> {
   return url as string;
 }
 
+// Shared upload helper for audio files (per-song MP3/M4A/WAV/FLAC).
+// Routes through the dedicated `/api/admin/upload-audio` endpoint, which
+// has a 150MB cap and an audio-only MIME whitelist — distinct from the
+// 8MB image route and the 200MB video route.
+async function uploadAudioFile(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) throw new Error("Sign out and back in — your session token is missing.");
+  const res = await fetch("/api/admin/upload-audio", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
 // Same helper but for the image-upload route (poster frames + photos).
 async function uploadImageFile(file: File): Promise<string> {
   const fd = new FormData();
@@ -1687,13 +1710,29 @@ function SongRow({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(song);
-  // Surface VTT-parse errors inline rather than via window.alert so the
-  // admin can fix the file without losing context. Cleared on each new
-  // file pick or when the editor reopens.
+  // Surface VTT-parse / audio-upload errors inline rather than via
+  // window.alert so the admin can fix the file without losing context.
+  // Cleared on each new file pick or when the editor reopens.
   const [vttError, setVttError] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioUploading, setAudioUploading] = useState(false);
+  // dragOver targets — used to highlight the drop zone the file is over.
+  const [audioDragOver, setAudioDragOver] = useState(false);
+  const [vttDragOver, setVttDragOver] = useState(false);
   const vttInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(
-    () => setDraft(song),
+    () => {
+      setDraft(song);
+      // Reset transient UI state alongside the draft so stale errors,
+      // upload spinners, or drag-over highlights from one song don't
+      // bleed into the next when the prop identity changes.
+      setVttError(null);
+      setAudioError(null);
+      setAudioUploading(false);
+      setAudioDragOver(false);
+      setVttDragOver(false);
+    },
     [
       song.id,
       song.title,
@@ -1706,10 +1745,27 @@ function SongRow({
       JSON.stringify(song.syncedLyrics ?? null),
     ],
   );
+  // Clear inline errors whenever the editor is reopened — admins expect
+  // a fresh state on each Edit click, not a leftover red message from
+  // an earlier failed upload.
+  useEffect(() => {
+    if (open) {
+      setVttError(null);
+      setAudioError(null);
+    }
+  }, [open]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(song);
 
   const handleVttFile = async (file: File) => {
     setVttError(null);
+    // Defensive — drag-drop doesn't enforce `accept`, only the file input
+    // does. Reject anything that isn't plausibly a VTT file by extension
+    // before we try to parse, so we don't get a confusing "no cues found"
+    // error from, say, an MP3 dropped on the wrong zone.
+    if (!/\.vtt$/i.test(file.name) && file.type && file.type !== "text/vtt") {
+      setVttError("That doesn't look like a .vtt file.");
+      return;
+    }
     try {
       const text = await file.text();
       const { parseVtt } = await import("@/lib/vttParser");
@@ -1721,6 +1777,26 @@ function SongRow({
       setDraft((d) => ({ ...d, syncedLyrics: cues }));
     } catch (e: any) {
       setVttError(e?.message || "Couldn't read the file.");
+    }
+  };
+
+  const handleAudioFile = async (file: File) => {
+    setAudioError(null);
+    // Same defensive check as VTT — drag-drop bypasses `accept`. Reject
+    // anything whose MIME doesn't look like audio so we fail fast with a
+    // clearer message than the server's MIME-whitelist error.
+    if (file.type && !file.type.startsWith("audio/")) {
+      setAudioError("That doesn't look like an audio file.");
+      return;
+    }
+    setAudioUploading(true);
+    try {
+      const url = await uploadAudioFile(file);
+      setDraft((d) => ({ ...d, audioUrl: url }));
+    } catch (e: any) {
+      setAudioError(e?.message || "Upload failed.");
+    } finally {
+      setAudioUploading(false);
     }
   };
 
@@ -1776,12 +1852,94 @@ function SongRow({
               title="Duration (s)"
             />
           </div>
-          <input
-            value={draft.audioUrl ?? ""}
-            onChange={(e) => setDraft({ ...draft, audioUrl: e.target.value })}
-            placeholder="Audio URL (optional)"
-            className={inputCls}
-          />
+          {/* Audio source — drop an MP3/M4A/WAV/FLAC, browse to one, or
+              paste a URL. Upload routes through /api/admin/upload-audio
+              and lands the song at /objects/uploads/<id>.<ext>. */}
+          <div
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setAudioDragOver(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setAudioDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setAudioDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setAudioDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleAudioFile(f);
+            }}
+            className={
+              "rounded-md border px-3 py-2.5 space-y-1.5 transition-colors " +
+              (audioDragOver
+                ? "border-[#319ED8] bg-[#319ED8]/10"
+                : "border-slate-200 bg-slate-50/60")
+            }
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 flex-1">
+                Audio file
+                {audioUploading && (
+                  <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
+                    · uploading…
+                  </span>
+                )}
+              </span>
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleAudioFile(f);
+                  e.target.value = "";
+                }}
+                data-testid={`input-audio-${song.id}`}
+              />
+              <button
+                type="button"
+                onClick={() => audioInputRef.current?.click()}
+                disabled={audioUploading}
+                className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-40"
+                data-testid={`button-upload-audio-${song.id}`}
+              >
+                {draft.audioUrl ? "Replace file" : "Choose file"}
+              </button>
+              {draft.audioUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft((d) => ({ ...d, audioUrl: null }));
+                    setAudioError(null);
+                  }}
+                  className="text-[12px] text-slate-500 hover:text-slate-700 hover:underline"
+                  data-testid={`button-clear-audio-${song.id}`}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <input
+              value={draft.audioUrl ?? ""}
+              onChange={(e) =>
+                setDraft({ ...draft, audioUrl: e.target.value || null })
+              }
+              placeholder="Drop MP3/M4A/AAC/WAV/FLAC/OGG here, or paste a URL"
+              className={inputCls + " text-xs"}
+              data-testid={`input-audio-url-${song.id}`}
+            />
+            {audioError && (
+              <p className="text-[11px] text-red-600" data-testid={`text-audio-error-${song.id}`}>
+                {audioError}
+              </p>
+            )}
+          </div>
           <textarea
             value={draft.lyrics ?? ""}
             onChange={(e) => setDraft({ ...draft, lyrics: e.target.value })}
@@ -1793,7 +1951,32 @@ function SongRow({
               overlay uses these timestamps verbatim instead of the
               evenly-distributed auto-timing it derives from the plain
               lyrics + duration. Cleared = fall back to auto. */}
-          <div className="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2.5 space-y-1.5">
+          <div
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setVttDragOver(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setVttDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setVttDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setVttDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleVttFile(f);
+            }}
+            className={
+              "rounded-md border px-3 py-2.5 space-y-1.5 transition-colors " +
+              (vttDragOver
+                ? "border-[#319ED8] bg-[#319ED8]/10"
+                : "border-slate-200 bg-slate-50/60")
+            }
+          >
             <div className="flex items-center gap-2">
               <span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 flex-1">
                 Synced lyrics (WebVTT)
