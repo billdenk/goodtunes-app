@@ -1233,6 +1233,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // round trip. `artists` is derived from SuperCredits (track_performers
   // playing any of the vendor's instruments). `instruments` lists every
   // non-hidden instrument attached to the vendor.
+  // Person profile bundle — powers the fan-facing PerformerSheet tabs
+  // (About / Music / Gear) in one round trip. Tracks are sorted by album
+  // year then album title then track number on the storage side.
+  app.get("/api/people/:id/profile", async (req, res) => {
+    const id = String(req.params.id);
+    const person = await storage.getPersonById(id);
+    if (!person) return res.status(404).json({ message: "Person not found" });
+    const tracks = await storage.getPersonTracks(id);
+    return res.json({ person, tracks });
+  });
   app.get("/api/vendors/:id/profile", async (req, res) => {
     const id = String(req.params.id);
     const vendor = await storage.getVendorById(id);

@@ -115,6 +115,29 @@ export interface IStorage {
   getVendorInstruments(vendorId: string): Promise<Instrument[]>;
   getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>>;
 
+  // Person profile — every (non-hidden) track this person is credited on
+  // across the catalog, with album + (optional) instrument joined in. The
+  // fan-side PerformerSheet derives both the Music and Gear tabs from this
+  // single payload, so one round-trip powers the whole artist view.
+  getPersonTracks(personId: string): Promise<Array<{
+    performerId: string;
+    songId: string;
+    songTitle: string;
+    trackNumber: number;
+    albumId: string;
+    albumTitle: string;
+    albumArtwork: string;
+    albumArtist: string;
+    albumYear: number | null;
+    role: string;
+    tuningNotes: string | null;
+    instrumentId: string | null;
+    instrumentName: string | null;
+    instrumentShortCategory: string | null;
+    instrumentCategory: string | null;
+    instrumentPhotoUrl: string | null;
+  }>>;
+
   // Attachment CRUD — only the per-instrument fields (affiliateUrl, position,
   // isHidden) live on the join row. Vendor metadata edits go through the
   // vendor-entity methods above.
@@ -519,6 +542,45 @@ export class DbStorage implements IStorage {
       out.push(r.i);
     }
     return out;
+  }
+
+  async getPersonTracks(personId: string) {
+    // Catalog-wide credits for one person. Joins:
+    //   track_performers → songs (the track) → albums (cover + title)
+    //   left-joined to instruments (some credits are role-only without
+    //   a specific instrument attached, so we keep those rows too).
+    // Hidden albums are filtered out — same rule fan-side album reads use.
+    const rows = await db
+      .select({
+        p: trackPerformers,
+        s: songs,
+        a: albums,
+        i: instruments,
+      })
+      .from(trackPerformers)
+      .innerJoin(songs, eq(trackPerformers.songId, songs.id))
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .leftJoin(instruments, eq(trackPerformers.instrumentId, instruments.id))
+      .where(and(eq(trackPerformers.personId, personId), eq(albums.isHidden, false)))
+      .orderBy(asc(albums.year), asc(albums.title), asc(songs.trackNumber), asc(trackPerformers.position));
+    return rows.map((r) => ({
+      performerId: r.p.id,
+      songId: r.s.id,
+      songTitle: r.s.title,
+      trackNumber: r.s.trackNumber,
+      albumId: r.a.id,
+      albumTitle: r.a.title,
+      albumArtwork: r.a.artwork,
+      albumArtist: r.a.artist,
+      albumYear: r.a.year,
+      role: r.p.role,
+      tuningNotes: r.p.tuningNotes,
+      instrumentId: r.i?.id ?? null,
+      instrumentName: r.i?.name ?? null,
+      instrumentShortCategory: r.i?.shortCategory ?? null,
+      instrumentCategory: r.i?.category ?? null,
+      instrumentPhotoUrl: r.i?.photoUrl ?? null,
+    }));
   }
 
   async getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>> {

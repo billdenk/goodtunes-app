@@ -1674,6 +1674,11 @@ function PerformerSheet({
   onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
   onClose: () => void;
 }) {
+  // Default to Music: the sheet is reached from a song row, so the
+  // song-context view ("Played on this song" + "Also on this album") has
+  // to lead. About/Gear are explicit opt-ins.
+  const [tab, setTab] = useState<"about" | "music" | "gear">("music");
+
   // What this performer played on the CURRENT song. Match by personId when
   // we have a real one; otherwise fall back to the credit row id so unlinked
   // snapshot rows still resolve to their own performance.
@@ -1681,6 +1686,132 @@ function PerformerSheet({
   const onThisSong = (currentSongCredits?.performers ?? []).filter((p) =>
     isSynthetic ? p.creditId === selectedCreditId : p.personId === person.id,
   );
+
+  // Catalog-wide credits for this person — backs the Music tab's "Other
+  // albums" section and the Gear tab's distinct-instruments list. Disabled
+  // for synthetic snapshot rows (no real personId), in which case the sheet
+  // falls back to current-album-only data already in props.
+  type PersonProfile = {
+    person: { id: string; name: string; photoUrl: string | null; bio: string | null; accent: string | null };
+    tracks: Array<{
+      performerId: string;
+      songId: string; songTitle: string; trackNumber: number;
+      albumId: string; albumTitle: string; albumArtwork: string;
+      albumArtist: string; albumYear: number | null;
+      role: string; tuningNotes: string | null;
+      instrumentId: string | null; instrumentName: string | null;
+      instrumentShortCategory: string | null; instrumentCategory: string | null;
+      instrumentPhotoUrl: string | null;
+    }>;
+  };
+  const { data: profile } = useQuery<PersonProfile>({
+    queryKey: ["/api/people", person.id, "profile"],
+    enabled: !isSynthetic,
+  });
+
+  // Group catalog tracks by album for the Music tab. Current album is
+  // intentionally surfaced first (as a dedicated "On this album" block)
+  // so the contextual info from props still leads the view.
+  const otherAlbums = (() => {
+    if (!profile) return [] as Array<{
+      albumId: string; albumTitle: string; albumArtwork: string;
+      albumYear: number | null;
+      tracks: PersonProfile["tracks"];
+    }>;
+    const byAlbum = new Map<string, { albumId: string; albumTitle: string; albumArtwork: string; albumYear: number | null; tracks: PersonProfile["tracks"] }>();
+    for (const t of profile.tracks) {
+      if (t.albumId === album.id) continue;
+      const entry = byAlbum.get(t.albumId) ?? {
+        albumId: t.albumId,
+        albumTitle: t.albumTitle,
+        albumArtwork: t.albumArtwork,
+        albumYear: t.albumYear,
+        tracks: [],
+      };
+      entry.tracks.push(t);
+      byAlbum.set(t.albumId, entry);
+    }
+    return Array.from(byAlbum.values());
+  })();
+
+  // Distinct gear this person has played. Prefers the catalog-wide profile
+  // payload when available; falls back to current-album data (this song +
+  // other tracks on this album) for synthetic/unlinked snapshot rows that
+  // don't have a real personId to look up. Same shape either way so the
+  // render path is identical.
+  const gear = (() => {
+    type GearEntry = { id: string; name: string; shortCategory: string | null; category: string | null; photoUrl: string | null; tracks: Set<string> };
+    const byInstrument = new Map<string, GearEntry>();
+    if (profile) {
+      for (const t of profile.tracks) {
+        if (!t.instrumentId) continue;
+        const entry = byInstrument.get(t.instrumentId) ?? {
+          id: t.instrumentId,
+          name: t.instrumentName ?? "Instrument",
+          shortCategory: t.instrumentShortCategory,
+          category: t.instrumentCategory,
+          photoUrl: t.instrumentPhotoUrl,
+          tracks: new Set<string>(),
+        };
+        entry.tracks.add(t.songId);
+        byInstrument.set(t.instrumentId, entry);
+      }
+    } else {
+      // Fallback: this album only. Combine onThisSong (current song) +
+      // otherTracks (other tracks on this album), de-duped by instrumentId.
+      const add = (instrumentId: string | null | undefined, songId: string) => {
+        if (!instrumentId) return;
+        const inst = resolveInstrument(instrumentId);
+        if (!inst) return;
+        const entry = byInstrument.get(instrumentId) ?? {
+          id: instrumentId,
+          name: inst.name,
+          shortCategory: inst.shortCategory ?? null,
+          category: inst.category ?? null,
+          photoUrl: inst.photoUrl ?? null,
+          tracks: new Set<string>(),
+        };
+        entry.tracks.add(songId);
+        byInstrument.set(instrumentId, entry);
+      };
+      for (const p of onThisSong) add(p.instrumentId, song.id);
+      for (const { song: s, performer } of otherTracks) add(performer.instrumentId, s.id);
+    }
+    return Array.from(byInstrument.values())
+      .map(({ tracks, ...rest }) => ({ ...rest, trackCount: tracks.size }))
+      .sort((a, b) => b.trackCount - a.trackCount || a.name.localeCompare(b.name));
+  })();
+
+  const totalTrackCount = profile?.tracks.length ?? (onThisSong.length + otherTracks.length);
+
+  // Open an instrument by id, even when it lives on an album outside the
+  // current page's static instrument map. Falls back to a minimal synthetic
+  // Instrument built from the profile-row metadata so cross-album rows in
+  // Music + Gear stay tappable. `songId` lets the InstrumentSheet anchor
+  // its "played on" context to the right track.
+  const openByIdWithFallback = (
+    instrumentId: string,
+    fallback: { name: string; category: string | null; shortCategory: string | null; photoUrl: string | null },
+    tuningNotes: string | null | undefined,
+    songIdForContext: string,
+  ) => {
+    const resolved = resolveInstrument(instrumentId);
+    if (resolved) {
+      onOpenInstrument(resolved, tuningNotes ?? undefined, { personId: person.id, songId: songIdForContext });
+      return;
+    }
+    // The fan-side Instrument interface (musicData.ts) uses optional
+    // `string | undefined` fields, while the profile payload comes through
+    // as `string | null` from the DB — coerce nulls to undefined.
+    const synthetic: Instrument = {
+      id: instrumentId,
+      name: fallback.name,
+      category: fallback.category ?? "Instrument",
+      shortCategory: fallback.shortCategory ?? undefined,
+      photoUrl: fallback.photoUrl ?? undefined,
+    };
+    onOpenInstrument(synthetic, tuningNotes ?? undefined, { personId: person.id, songId: songIdForContext });
+  };
 
   return (
     <SheetShell ariaLabel={`${person.name} on ${song.title}`} testId="sheet-performer" onClose={onClose}>
@@ -1705,111 +1836,251 @@ function PerformerSheet({
         </div>
       </div>
 
-      {/* Instrument(s) used on THIS song */}
-      {onThisSong.length > 0 && (
-        <>
-          <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Played on this song</h3>
-          <div className="pb-1">
-            {onThisSong.map((perf, i) => {
-              const inst = resolveInstrument(perf.instrumentId);
-              if (!inst) {
-                return (
-                  <div key={`role-${i}`} className="px-5 py-2.5 text-white/80 text-[14px]">{perf.role}</div>
-                );
-              }
-              return (
-                <button
-                  key={`inst-${i}`}
-                  type="button"
-                  onClick={() => onOpenInstrument(inst, perf.tuningNotes, { personId: person.id, songId: song.id })}
-                  className="w-full flex items-center gap-3 px-5 py-2.5 text-left active:bg-white/5"
-                  data-testid={`button-performer-song-instrument-${perf.instrumentId}`}
-                >
-                  <div
-                    className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0"
-                    style={{ background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}
-                  >
-                    {inst.photoUrl ? (
-                      <img src={inst.photoUrl} alt="" className="w-full h-full object-cover" />
-                    ) : null}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-[15px] font-medium truncate">{inst.name}</p>
-                    <p className="text-white/55 text-[12px] truncate">
-                      {perf.role}{perf.tuningNotes ? ` · ${perf.tuningNotes}` : ""}
-                    </p>
-                  </div>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
-                    <path d="M9 6l6 6-6 6" />
-                  </svg>
-                </button>
-              );
-            })}
+      {/* Tab strip — About | Music | Gear. Same shape/typography as the
+          VendorSheet tabs so the two artist-adjacent sheets read as a pair. */}
+      <div className="px-5 pt-1 pb-0" style={{ background: "#00062B" }}>
+        <div className="flex gap-6 border-b border-white/10">
+          {(["about", "music", "gear"] as const).map((t) => {
+            const active = tab === t;
+            const label = t === "about" ? "About" : t === "music" ? "Music" : "Gear";
+            const count = t === "music" ? totalTrackCount : t === "gear" ? gear.length : undefined;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className="relative pb-3 pt-2 text-[14px] font-semibold tracking-wide transition-colors"
+                style={{ color: active ? "#FFFFFF" : "rgba(255,255,255,0.45)" }}
+                data-testid={`tab-performer-${t}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  {label}
+                  {typeof count === "number" && count > 0 && (
+                    <span className="text-[12px] font-medium" style={{ color: active ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.35)" }}>
+                      {count}
+                    </span>
+                  )}
+                </span>
+                {active && (
+                  <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ABOUT */}
+      {tab === "about" && (
+        <div className="pb-4">
+          {person.bio ? (
+            <p className="px-5 pt-4 text-white/80 text-[15px] leading-[1.55] whitespace-pre-line" data-testid="text-performer-bio">
+              {person.bio}
+            </p>
+          ) : (
+            <p className="px-5 pt-4 text-white/45 text-[14px]">No bio yet for {person.name}.</p>
+          )}
+
+          {/* Artist Profile link — placeholder for the future cross-album /
+              streaming-handoff flow. See replit.md → "Streaming-service handoff". */}
+          <div className="h-px bg-white/8 mx-5 mt-5 mb-3" />
+          <div className="px-5">
+            <button
+              type="button"
+              onClick={() => {
+                toast({ title: `Artist profile for ${person.name}`, description: "Coming soon" });
+              }}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl active:opacity-80"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+              data-testid="button-artist-profile"
+            >
+              <span className="text-white text-[14px] font-medium">View artist profile</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/45" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
           </div>
-        </>
+        </div>
       )}
 
-      {/* Other tracks on this album */}
-      {otherTracks.length > 0 && (
-        <>
-          <h3 className="px-5 pt-5 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Also on {album.title}</h3>
-          <div className="pb-2">
-            {otherTracks.map(({ song: s, performer }) => {
-              const instrument = resolveInstrument(performer.instrumentId);
-              return (
+      {/* MUSIC — played-on-this-song, also-on-this-album, then other albums. */}
+      {tab === "music" && (
+        <div className="pb-4">
+          {onThisSong.length > 0 && (
+            <>
+              <h3 className="px-5 pt-4 pb-2 text-white text-[18px] font-bold leading-tight tracking-tight">Played on this song</h3>
+              <div className="pb-1">
+                {onThisSong.map((perf, i) => {
+                  const inst = resolveInstrument(perf.instrumentId);
+                  if (!inst) {
+                    return (
+                      <div key={`role-${i}`} className="px-5 py-2.5 text-white/80 text-[14px]">{perf.role}</div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={`inst-${i}`}
+                      type="button"
+                      onClick={() => onOpenInstrument(inst, perf.tuningNotes, { personId: person.id, songId: song.id })}
+                      className="w-full flex items-center gap-3 px-5 py-2.5 text-left active:bg-white/5"
+                      data-testid={`button-performer-song-instrument-${perf.instrumentId}`}
+                    >
+                      <div
+                        className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0"
+                        style={{ background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}
+                      >
+                        {inst.photoUrl ? (
+                          <img src={inst.photoUrl} alt="" className="w-full h-full object-cover" />
+                        ) : null}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-[15px] font-medium truncate">{inst.name}</p>
+                        <p className="text-white/55 text-[12px] truncate">
+                          {perf.role}{perf.tuningNotes ? ` · ${perf.tuningNotes}` : ""}
+                        </p>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {otherTracks.length > 0 && (
+            <>
+              <h3 className="px-5 pt-5 pb-2 text-white text-[18px] font-bold leading-tight tracking-tight">Also on {album.title}</h3>
+              <div className="pb-2">
+                {otherTracks.map(({ song: s, performer }) => {
+                  const instrument = resolveInstrument(performer.instrumentId);
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex items-center gap-3 px-5 py-3 active:bg-white/5"
+                      data-testid={`row-performer-track-${s.id}`}
+                    >
+                      {/* Track number color matches the album track-list (rgba(255,255,255,0.32)) */}
+                      <span className="w-6 text-[15px] tabular-nums text-right flex-shrink-0" style={{ color: "rgba(255,255,255,0.32)" }}>{s.trackNumber}</span>
+                      <p className="flex-1 min-w-0 text-white text-[15px] truncate">{s.title}</p>
+                      {instrument && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenInstrument(instrument, performer.tuningNotes, { personId: performer.personId ?? person.id, songId: s.id })}
+                          className="flex items-center gap-1 pl-2 -mr-1 active:opacity-70 flex-shrink-0"
+                          data-testid={`button-performer-track-instrument-${s.id}`}
+                        >
+                          <span className="text-white/65 text-[14px]">{instrument.shortCategory ?? instrument.category}</span>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                            <path d="M9 6l6 6-6 6" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Other albums — from the catalog-wide profile fetch. Each album
+              renders as a header (cover + title + year) followed by its
+              track list, mirroring the album-page track row style. */}
+          {otherAlbums.map((alb) => (
+            <div key={alb.albumId} className="pt-3">
+              <div className="flex items-center gap-3 px-5 pt-2 pb-2">
+                <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-white/5">
+                  {alb.albumArtwork ? (
+                    <img src={alb.albumArtwork} alt="" className="w-full h-full object-cover" />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-[15px] font-semibold truncate">{alb.albumTitle}</p>
+                  <p className="text-white/45 text-[12px] truncate">
+                    {alb.albumYear ? `${alb.albumYear} · ` : ""}{alb.tracks.length} track{alb.tracks.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </div>
+              {alb.tracks.map((t) => (
                 <div
-                  key={s.id}
-                  className="flex items-center gap-3 px-5 py-3 active:bg-white/5"
-                  data-testid={`row-performer-track-${s.id}`}
+                  key={t.performerId}
+                  className="flex items-center gap-3 px-5 py-2.5 active:bg-white/5"
+                  data-testid={`row-performer-other-track-${t.performerId}`}
                 >
-                  {/* Track number color matches the album track-list (rgba(255,255,255,0.32)) */}
-                  <span className="w-6 text-[15px] tabular-nums text-right flex-shrink-0" style={{ color: "rgba(255,255,255,0.32)" }}>{s.trackNumber}</span>
-                  <p className="flex-1 min-w-0 text-white text-[15px] truncate">{s.title}</p>
-                  {instrument && (
+                  <span className="w-6 text-[15px] tabular-nums text-right flex-shrink-0" style={{ color: "rgba(255,255,255,0.32)" }}>{t.trackNumber}</span>
+                  <p className="flex-1 min-w-0 text-white text-[15px] truncate">{t.songTitle}</p>
+                  {t.instrumentId && (
                     <button
                       type="button"
-                      onClick={() => onOpenInstrument(instrument, performer.tuningNotes, { personId: performer.personId ?? person.id, songId: s.id })}
+                      onClick={() => openByIdWithFallback(
+                        t.instrumentId!,
+                        { name: t.instrumentName ?? "Instrument", category: t.instrumentCategory, shortCategory: t.instrumentShortCategory, photoUrl: t.instrumentPhotoUrl },
+                        t.tuningNotes,
+                        t.songId,
+                      )}
                       className="flex items-center gap-1 pl-2 -mr-1 active:opacity-70 flex-shrink-0"
-                      data-testid={`button-performer-track-instrument-${s.id}`}
+                      data-testid={`button-performer-other-track-instrument-${t.performerId}`}
                     >
-                      <span className="text-white/65 text-[14px]">{instrument.shortCategory ?? instrument.category}</span>
+                      <span className="text-white/65 text-[14px]">{t.instrumentShortCategory ?? t.instrumentCategory}</span>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
                         <path d="M9 6l6 6-6 6" />
                       </svg>
                     </button>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        </>
+              ))}
+            </div>
+          ))}
+
+          {onThisSong.length === 0 && otherTracks.length === 0 && otherAlbums.length === 0 && (
+            <p className="px-5 py-6 text-white/55 text-sm">No detailed credits yet for {person.name}.</p>
+          )}
+        </div>
       )}
 
-      {onThisSong.length === 0 && otherTracks.length === 0 && (
-        <p className="px-5 py-6 text-white/55 text-sm">No detailed credits yet for this performer on this album.</p>
+      {/* GEAR — distinct instruments this person plays across the catalog.
+          Each row is tappable, opening the InstrumentSheet. */}
+      {tab === "gear" && (
+        <div className="pb-4 pt-2">
+          {gear.length === 0 ? (
+            <p className="px-5 py-6 text-white/55 text-sm">No gear credited to {person.name} yet.</p>
+          ) : (
+            gear.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => openByIdWithFallback(
+                  g.id,
+                  { name: g.name, category: g.category, shortCategory: g.shortCategory, photoUrl: g.photoUrl },
+                  null,
+                  song.id,
+                )}
+                className="w-full flex items-center gap-3 px-5 py-2.5 text-left active:bg-white/5"
+                data-testid={`button-performer-gear-${g.id}`}
+              >
+                <div
+                  className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0"
+                  style={{ background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}
+                >
+                  {g.photoUrl ? (
+                    <img src={g.photoUrl} alt="" className="w-full h-full object-cover" />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-[15px] font-medium truncate">{g.name}</p>
+                  <p className="text-white/55 text-[12px] truncate">
+                    {g.shortCategory ?? g.category ?? "Instrument"} · {g.trackCount} track{g.trackCount === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              </button>
+            ))
+          )}
+        </div>
       )}
-
-      {/* Artist Profile link — placeholder for the future cross-album / streaming-handoff flow.
-          See replit.md → "Streaming-service handoff" for the planned UX. */}
-      <div className="h-px bg-white/8 mx-5 mt-2 mb-3" />
-      <div className="px-5 pb-2">
-        <button
-          type="button"
-          onClick={() => {
-            // Placeholder: future flow opens an Artist Profile page with cross-album
-            // work + streaming-handoff. See replit.md → "Streaming-service handoff".
-            toast({ title: `Artist profile for ${person.name}`, description: "Coming soon" });
-          }}
-          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl active:opacity-80"
-          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
-          data-testid="button-artist-profile"
-        >
-          <span className="text-white text-[14px] font-medium">View artist profile</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/45" aria-hidden="true">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
-      </div>
     </SheetShell>
   );
 }
@@ -2506,7 +2777,7 @@ function VendorSheet({
               <div>
                 <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Featured instrument</p>
                 <p className="text-white text-[16px]">{instrument.name}</p>
-                <p className="text-[12px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>The instrument that opened this page — tap the Instruments tab to see the rest.</p>
+                <p className="text-[12px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>The instrument that opened this page — tap the Gear tab to see the rest.</p>
               </div>
             </section>
           </>
