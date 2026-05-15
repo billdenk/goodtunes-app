@@ -196,6 +196,14 @@ export function AlbumDetail() {
     return album ? getSongsByAlbum(id) : [];
   }, [apiAlbum, album, id]);
 
+  // True when the currently-playing track belongs to this album AND the
+  // player is actively playing (not paused). Drives the Apple-style
+  // shrink/grow of the album artwork in the hero.
+  const isAlbumPlaying = useMemo(() => {
+    if (!isPlaying || !currentSong) return false;
+    return songs.some((s) => s.id === currentSong.id);
+  }, [isPlaying, currentSong, songs]);
+
   // SuperCredits™ — fetch every song's credits for this album in one round-trip.
   // CreditsSheet + PerformerSheet both render from the resolved maps below;
   // the static `TRACK_CREDITS` / `PEOPLE` / `INSTRUMENTS` seed is kept as a
@@ -468,12 +476,23 @@ export function AlbumDetail() {
               album header more literally (per design feedback). The label
               now lives only in the metadata footer below the tracklist. */}
           <div style={{ background: "#00062B" }}>
-            <div className="pt-6 px-6 flex justify-center">
+            {/* pt-24 reserves a clear band above the artwork for the
+                floating back / share / ⋯ chrome (anchored at top-11 with
+                12-unit buttons → ends around 92px). Without this padding
+                those buttons sat on top of the cover art, exactly the
+                overlap Apple avoids in their album header. */}
+            <div className="pt-24 px-6 flex justify-center">
               <div
-                className="w-[72%] max-w-[300px] rounded-xl overflow-hidden"
+                className="w-[72%] max-w-[300px] rounded-xl overflow-hidden transition-transform duration-300 ease-out"
                 style={{
                   aspectRatio: "1 / 1",
                   boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
+                  // Apple-style play/pause "breathing" — when a track
+                  // from this album is the active, *playing* song, the
+                  // cover sits at full size; otherwise it shrinks to
+                  // ~92% so the difference is felt the moment the user
+                  // taps play (and again the moment they pause).
+                  transform: isAlbumPlaying ? "scale(1)" : "scale(0.92)",
                 }}
               >
                 <img
