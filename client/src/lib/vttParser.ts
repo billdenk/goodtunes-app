@@ -50,13 +50,30 @@ export function parseVtt(raw: string): SyncedLyricCue[] {
   const cues: SyncedLyricCue[] = [];
   while (i < lines.length) {
     const line = lines[i];
-    // Skip blank lines, NOTE blocks, STYLE blocks, REGION blocks, cue
-    // identifiers (a line preceding a timing line without "-->"). We
-    // detect those by simply scanning forward until we hit a timing line.
+
+    // NOTE / STYLE / REGION blocks run from their keyword line to the
+    // next blank line (per spec). We have to skip the entire block —
+    // not just the keyword line — because the block body can legally
+    // contain text that looks like a cue timing (e.g. a NOTE comment
+    // mentioning "00:01.000 --> 00:02.000") and would otherwise be
+    // misparsed as a real cue.
+    const trimmed = line?.trim() ?? "";
+    if (
+      trimmed === "NOTE" ||
+      trimmed.startsWith("NOTE ") ||
+      trimmed.startsWith("NOTE\t") ||
+      trimmed === "STYLE" ||
+      trimmed === "REGION"
+    ) {
+      i += 1;
+      while (i < lines.length && lines[i].trim() !== "") i += 1;
+      i += 1; // step over the terminating blank line
+      continue;
+    }
+
+    // Skip blank lines and cue-identifier lines — anything not a timing
+    // line gets advanced past until the main loop finds a "-->".
     if (!line || !TIMING_LINE_RE.test(line)) {
-      // Skip NOTE / STYLE / REGION blocks: per spec they end at the next
-      // blank line. Easiest just to advance one line at a time and let
-      // the main loop find the next timing line.
       i += 1;
       continue;
     }

@@ -1687,6 +1687,11 @@ function SongRow({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(song);
+  // Surface VTT-parse errors inline rather than via window.alert so the
+  // admin can fix the file without losing context. Cleared on each new
+  // file pick or when the editor reopens.
+  const [vttError, setVttError] = useState<string | null>(null);
+  const vttInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(
     () => setDraft(song),
     [
@@ -1696,9 +1701,28 @@ function SongRow({
       song.trackNumber,
       song.duration,
       song.audioUrl,
+      // Including the cue array in the dep list so a save-then-reopen
+      // re-syncs the preview to whatever the server actually stored.
+      JSON.stringify(song.syncedLyrics ?? null),
     ],
   );
   const dirty = JSON.stringify(draft) !== JSON.stringify(song);
+
+  const handleVttFile = async (file: File) => {
+    setVttError(null);
+    try {
+      const text = await file.text();
+      const { parseVtt } = await import("@/lib/vttParser");
+      const cues = parseVtt(text);
+      if (cues.length === 0) {
+        setVttError("No cues found. Make sure this is a WebVTT (.vtt) file.");
+        return;
+      }
+      setDraft((d) => ({ ...d, syncedLyrics: cues }));
+    } catch (e: any) {
+      setVttError(e?.message || "Couldn't read the file.");
+    }
+  };
 
   return (
     <div className="border-b border-slate-200 last:border-b-0">
@@ -1765,6 +1789,89 @@ function SongRow({
             rows={6}
             className={inputCls + " resize-none font-mono text-xs"}
           />
+          {/* Synced lyrics (WebVTT) — when uploaded, the Player lyrics
+              overlay uses these timestamps verbatim instead of the
+              evenly-distributed auto-timing it derives from the plain
+              lyrics + duration. Cleared = fall back to auto. */}
+          <div className="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2.5 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 flex-1">
+                Synced lyrics (WebVTT)
+                {draft.syncedLyrics && draft.syncedLyrics.length > 0 && (
+                  <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
+                    · {draft.syncedLyrics.length} cue{draft.syncedLyrics.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </span>
+              <input
+                ref={vttInputRef}
+                type="file"
+                accept=".vtt,text/vtt"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleVttFile(f);
+                  // Reset value so picking the same file again re-fires onChange.
+                  e.target.value = "";
+                }}
+                data-testid={`input-vtt-${song.id}`}
+              />
+              <button
+                type="button"
+                onClick={() => vttInputRef.current?.click()}
+                className="text-[12px] text-[#319ED8] hover:underline"
+                data-testid={`button-upload-vtt-${song.id}`}
+              >
+                {draft.syncedLyrics && draft.syncedLyrics.length > 0 ? "Replace .vtt" : "Upload .vtt"}
+              </button>
+              {draft.syncedLyrics && draft.syncedLyrics.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft((d) => ({ ...d, syncedLyrics: null }));
+                    setVttError(null);
+                  }}
+                  className="text-[12px] text-slate-500 hover:text-slate-700 hover:underline"
+                  data-testid={`button-clear-vtt-${song.id}`}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {draft.syncedLyrics && draft.syncedLyrics.length > 0 ? (
+              <ul className="text-[11px] font-mono text-slate-600 space-y-0.5">
+                {draft.syncedLyrics.slice(0, 4).map((c, i) => (
+                  <li key={i} className="truncate">
+                    <span className="text-slate-400">
+                      {Math.floor(c.timeMs / 60000)
+                        .toString()
+                        .padStart(2, "0")}
+                      :
+                      {Math.floor((c.timeMs % 60000) / 1000)
+                        .toString()
+                        .padStart(2, "0")}
+                      .
+                      {(c.timeMs % 1000).toString().padStart(3, "0")}
+                    </span>{" "}
+                    {c.text}
+                  </li>
+                ))}
+                {draft.syncedLyrics.length > 4 && (
+                  <li className="text-slate-400">+ {draft.syncedLyrics.length - 4} more…</li>
+                )}
+              </ul>
+            ) : (
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                No file uploaded. Lyrics will auto-scroll using even
+                distribution across the song's duration.
+              </p>
+            )}
+            {vttError && (
+              <p className="text-[11px] text-red-600" data-testid={`text-vtt-error-${song.id}`}>
+                {vttError}
+              </p>
+            )}
+          </div>
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
@@ -1784,6 +1891,7 @@ function SongRow({
                   duration: draft.duration,
                   lyrics: draft.lyrics,
                   audioUrl: draft.audioUrl,
+                  syncedLyrics: draft.syncedLyrics,
                 })
               }
               className="px-3 py-1 text-[12px] rounded bg-[#319ED8] text-white disabled:opacity-40"

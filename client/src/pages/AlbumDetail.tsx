@@ -151,6 +151,10 @@ export function AlbumDetail() {
       duration: number;
       lyrics: string | null;
       audioUrl: string | null;
+      // WebVTT-derived per-line timing uploaded via Admin. When present,
+      // Player.tsx uses these timestamps instead of auto-distributing the
+      // plain-text `lyrics` field across `duration`.
+      syncedLyrics: { timeMs: number; text: string }[] | null;
     }[];
   };
   const { data: apiAlbum } = useQuery<ApiAlbum>({
@@ -186,6 +190,7 @@ export function AlbumDetail() {
           duration: s.duration,
           lyrics: s.lyrics ?? undefined,
           audioUrl: s.audioUrl ?? undefined,
+          syncedLyrics: s.syncedLyrics ?? null,
         }));
     }
     return album ? getSongsByAlbum(id) : [];

@@ -20,7 +20,29 @@ type SyncedLine = {
   time: number | null;
 };
 
-function buildSyncedLines(lyrics: string | undefined, duration: number): SyncedLine[] {
+function buildSyncedLines(
+  lyrics: string | undefined,
+  duration: number,
+  syncedLyrics?: { timeMs: number; text: string }[] | null,
+): SyncedLine[] {
+  // Preferred path: real per-line timing from an uploaded .vtt file. Each
+  // cue becomes one rendered line with seconds-precision time (the overlay
+  // compares to currentTime in seconds). Section-header detection still
+  // runs so [Verse 1]-style cues render dimmed + un-tappable.
+  if (syncedLyrics && syncedLyrics.length > 0) {
+    return syncedLyrics.map((cue) => {
+      const text = cue.text;
+      const trimmed = text.trim();
+      const isHeader = /^\[.*\]$/.test(trimmed);
+      return {
+        text,
+        isHeader,
+        isEmpty: trimmed === "",
+        time: isHeader ? null : cue.timeMs / 1000,
+      };
+    });
+  }
+  // Fallback: distribute the plain-text lyrics evenly across duration.
   if (!lyrics || !duration || duration <= 0) {
     return (lyrics ?? "").split("\n").map((line) => ({
       text: line,
@@ -92,8 +114,8 @@ export function Player() {
   // stable across renders (currentSong starts null on app load, then becomes
   // a real song once playback begins — the hook count must not change).
   const syncedLines = useMemo(
-    () => buildSyncedLines(currentSong?.lyrics, duration),
-    [currentSong?.id, currentSong?.lyrics, duration]
+    () => buildSyncedLines(currentSong?.lyrics, duration, currentSong?.syncedLyrics),
+    [currentSong?.id, currentSong?.lyrics, currentSong?.syncedLyrics, duration]
   );
   const activeLineIdx = useMemo(() => {
     let active = -1;
