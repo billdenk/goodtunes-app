@@ -2254,6 +2254,33 @@ function InstrumentSheet({
     accent: a.accent ?? undefined,
   } as Person));
 
+  // Split the admin-pasted "about" blob into prose vs. structured specs once,
+  // up here, so the top-level tab strip below can decide which tabs to show.
+  // Mirrors the same parse used inline by the older InstrumentAboutSection.
+  const { prose: aboutProse, specs: aboutSpecs } = useMemo(
+    () => parseInstrumentAbout(instrument.about ?? ""),
+    [instrument.about],
+  );
+  const hasProse = aboutProse.length > 0;
+  const hasSpecs = aboutSpecs.length > 0;
+  const hasArtists = instrumentArtists.length > 0;
+
+  // Vendor-style top tabs: About | Specs | Artists. Tabs hide themselves
+  // when their content is empty (no specs uploaded yet, no SuperCredits
+  // performers yet) so a sparse instrument doesn't show empty sections.
+  // Default tab prefers About when prose exists, otherwise Specs, otherwise
+  // Artists — same priority as the original linear order.
+  const availableTabs = (
+    ["about", "specs", "artists"] as const
+  ).filter((t) =>
+    t === "about" ? hasProse || instrument.artistNote || (instrument.vendors && instrument.vendors.length > 0)
+    : t === "specs" ? hasSpecs
+    : hasArtists,
+  );
+  const [instrumentTab, setInstrumentTab] = useState<"about" | "specs" | "artists">(
+    availableTabs[0] ?? "about",
+  );
+
   // Resolve attribution → who wrote the note + which song it's about.
   // Used so a bookmarked instrument still tells you "this note was from X on Y".
   const noteFromPerson = attribution ? PEOPLE[attribution.personId] : undefined;
@@ -2371,21 +2398,83 @@ function InstrumentSheet({
         )}
       </div>
 
-      {/* About / Specs — tabbed.
-          Admins routinely paste a vendor's full listing into `about`, which
-          contains a long "Brand: Martin / Model: D12-35 / Top: Adirondack…"
-          spec sheet that — rendered raw — pushes the artist's note and the
-          Where-to-buy vendors way below the fold. We split `about` at render
-          time into prose vs. key:value specs, and tuck the specs behind a
-          segmented control. No schema change required; works for any
-          instrument whose about field happens to contain a structured spec
-          block (typical Reverb / Carter Vintage / ish.guitars listings). */}
-      {instrument.about && (
-        <InstrumentAboutSection category={instrument.category} about={instrument.about} />
+      {/* Top-level tab strip — mirrors VendorSheet's About | Gear | Artists
+          treatment so the two gear-adjacent sheets feel like a pair. Tabs
+          self-hide when their content is empty. Underline is #319ED8 (brand
+          blue) — same component shape used on the vendor sheet at ~L2773. */}
+      {availableTabs.length > 1 && (
+        <div className="px-5 pt-1 pb-0">
+          <div className="flex gap-6 border-b border-white/10">
+            {availableTabs.map((t) => {
+              const active = instrumentTab === t;
+              const label = t === "about" ? "About" : t === "specs" ? "Specs" : "Artists";
+              const count = t === "specs" ? aboutSpecs.length : t === "artists" ? instrumentArtists.length : undefined;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setInstrumentTab(t)}
+                  aria-pressed={active}
+                  className="relative pb-2.5 text-[15px] font-semibold active:opacity-80"
+                  style={{ color: active ? "#fff" : "rgba(235,235,245,0.55)" }}
+                  data-testid={`tab-instrument-${t}`}
+                >
+                  {label}
+                  {typeof count === "number" && count > 0 && (
+                    <span className="ml-1.5 text-[13px] font-medium" style={{ color: "rgba(235,235,245,0.45)" }}>
+                      {count}
+                    </span>
+                  )}
+                  {active && (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
+                      style={{ background: "#319ED8" }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Specs tab — structured key:value grid lifted out of the old
+          InstrumentAboutSection. Two-column dl: label dim, value white,
+          hairline rows. Matches the dense spec sheets on Reverb / Carter
+          Vintage listings. */}
+      {instrumentTab === "specs" && hasSpecs && (
+        <section className="px-5 pt-4 pb-5">
+          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">Specs</h3>
+          <dl className="text-[15px] leading-snug" data-testid="list-instrument-specs">
+            {aboutSpecs.map((s, i) => (
+              <div
+                key={`${s.label}-${i}`}
+                className="grid grid-cols-[40%_60%] gap-3 py-2"
+                style={{ borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)" }}
+              >
+                <dt style={{ color: "rgba(235,235,245,0.55)" }}>{s.label}</dt>
+                <dd className="text-white">{s.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      {/* About tab — prose only (no specs; those moved to their own tab).
+          Notes from artist + Where to buy live here too, because they're
+          the "story" of this instrument; Specs is the dry data view. */}
+      {instrumentTab === "about" && hasProse && (
+        <section className="px-5 pt-4 pb-3">
+          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About this {instrument.category.toLowerCase()}</h3>
+          <p className="text-[16px] leading-relaxed whitespace-pre-line" style={{ color: "rgba(235,235,245,0.72)" }} data-testid="text-instrument-about">
+            {aboutProse}
+          </p>
+        </section>
       )}
 
       {/* Notes from the artist — attributed (so the note still makes sense after bookmarking) */}
-      {instrument.artistNote && (
+      {instrumentTab === "about" && instrument.artistNote && (
         <section className="px-5 pt-3 pb-5">
           <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">Notes from the artist</h3>
           <p className="pb-3 text-[16px] leading-relaxed italic" style={{ color: "rgba(235,235,245,0.78)" }}>"{instrument.artistNote}"</p>
@@ -2404,7 +2493,7 @@ function InstrumentSheet({
       )}
 
       {/* Where to buy — vendor list. Tap row → direct buy link. Tap logo → vendor about page. */}
-      {instrument.vendors && instrument.vendors.length > 0 && (
+      {instrumentTab === "about" && instrument.vendors && instrument.vendors.length > 0 && (
         <section className="pt-3 pb-2">
           <h3 className="px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Where to buy</h3>
           <div className="pb-1">
@@ -2478,13 +2567,12 @@ function InstrumentSheet({
         </section>
       )}
 
-      {/* Artists who play this — SuperCredits™ derived. Mirrors the
-          Artists grid on the VendorSheet (3-col avatar wall) so the two
-          gear-adjacent sheets read as a pair. Hidden when no one has
-          credited this instrument yet. */}
-      {instrumentArtists.length > 0 && (
-        <section className="px-5 pt-3 pb-5">
-          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Artists who play this</h3>
+      {/* Artists tab — SuperCredits™ derived. Mirrors the Artists grid on
+          VendorSheet (3-col avatar wall) so the two gear-adjacent sheets
+          read as a pair. The tab itself self-hides when empty (see
+          availableTabs filter), so we don't need a heading here. */}
+      {instrumentTab === "artists" && instrumentArtists.length > 0 && (
+        <section className="px-5 pt-5 pb-5">
           <div className="grid grid-cols-3 gap-x-4 gap-y-5">
             {instrumentArtists.map((person) => (
               <div key={person.id} className="flex flex-col items-center" data-testid={`instrument-artist-${person.id}`}>
