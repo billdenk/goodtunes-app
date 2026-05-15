@@ -5963,6 +5963,7 @@ export function Admin() {
   });
   const isSearchOpen = searchOpen[entity] || !!search;
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   // Opt this route into the light theme by tagging <body>. The matching
   // `body.gt-admin` rule in index.css overrides the global dark body bg
@@ -6645,10 +6646,34 @@ export function Admin() {
                 </li>
               ))}
             {entity === "albums" && filteredAlbums.length === 0 && (
-              <li className="px-4 py-6 text-slate-400 text-sm">
-                {needle
-                  ? `No albums match "${search}".`
-                  : "No albums yet. Click + New."}
+              <li className="px-4 py-6 text-slate-400 text-sm space-y-3">
+                <div>
+                  {needle
+                    ? `No albums match "${search}".`
+                    : "No GoodTunes releases yet."}
+                </div>
+                {!needle && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await apiRequest("POST", "/api/admin/albums/backfill-originals", {});
+                        const data = await res.json() as { updated: { title: string }[]; count: number };
+                        await queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+                        toast({
+                          title: data.count > 0 ? `Marked ${data.count} originals` : "Nothing to backfill",
+                          description: data.count > 0 ? data.updated.map((u) => u.title).join(", ") : "No matching titles found.",
+                        });
+                      } catch (e: any) {
+                        toast({ title: "Backfill failed", description: String(e?.message || e), variant: "destructive" });
+                      }
+                    }}
+                    className="text-[#319ED8] hover:underline text-sm font-medium"
+                    data-testid="button-backfill-originals"
+                  >
+                    Mark the 5 originals as GoodTunes releases
+                  </button>
+                )}
               </li>
             )}
             {entity === "people" && filteredPeople.length === 0 && (

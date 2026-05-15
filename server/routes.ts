@@ -757,6 +757,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(201).json(album);
   });
 
+  // One-shot backfill: flips `isGoodTunesRelease=true` on the small,
+  // hard-coded list of original GoodTunes releases. Exists because the
+  // boolean column shipped to prod with a `false` default, leaving the
+  // curated Albums sidebar empty until each original is flagged. Title
+  // match is case-insensitive and tolerant of small variants ("Love Spell"
+  // vs "Love Spell EP" vs "Lovespell"). Safe to re-run — no-op when the
+  // flag is already on. Returns the rows that changed.
+  app.post("/api/admin/albums/backfill-originals", requireAdmin, async (_req, res) => {
+    const targets = [
+      "guitar as a voice",
+      "when the world stops",
+      "california way",
+      "love spell",
+      "love spell ep",
+      "lovespell",
+      "love life tragedy",
+    ];
+    const all = await storage.getAlbums({ includeHidden: true });
+    const updated: { id: string; title: string }[] = [];
+    for (const a of all) {
+      if (a.isGoodTunesRelease) continue;
+      const norm = String(a.title || "").trim().toLowerCase();
+      if (!targets.includes(norm)) continue;
+      await storage.updateAlbum(a.id, { isGoodTunesRelease: true } as any);
+      updated.push({ id: a.id, title: a.title });
+    }
+    return res.json({ updated, count: updated.length });
+  });
+
   // Seed a new album from an Apple Music album URL. Mirrors how the
   // artist scrape pulls a discography, but tighter: one URL → one album +
   // its complete tracklist (title, track #, duration) created in a single
