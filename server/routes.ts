@@ -651,7 +651,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const t = node["@type"];
     if (t === "Product" || (Array.isArray(t) && t.includes("Product"))) return node;
-    if (node["@graph"]) return findProduct(node["@graph"], depth + 1);
+    // Walk every object value, not just @graph. Manufacturer sites
+    // (Martin, Gibson) wrap the Product inside a WebPage node via
+    // `mainEntity`, so a strict @graph-only walk misses it entirely and
+    // we fall back to OG/Twitter for everything — losing the JSON-LD
+    // image array, description, brand, etc. Bounded by depth so a
+    // maliciously deep blob can't blow the stack.
+    for (const key of Object.keys(node)) {
+      const v = (node as any)[key];
+      if (v && typeof v === "object") {
+        const r = findProduct(v, depth + 1);
+        if (r) return r;
+      }
+    }
     return null;
   }
 
@@ -793,9 +805,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (looksLikeSpec(label, value) && !(label in specs)) specs[label] = value;
       }
 
+      // JSON-LD Product.image can also be a wrapped { "@type": "ImageObject",
+      // "url": "..." } instead of a bare URL string — handle both shapes.
+      const pickImage = (img: any): string | null => {
+        if (!img) return null;
+        if (typeof img === "string") return img;
+        if (Array.isArray(img)) {
+          for (const x of img) { const v = pickImage(x); if (v) return v; }
+          return null;
+        }
+        if (typeof img === "object") return img.url || img.contentUrl || null;
+        return null;
+      };
       let rawImage: string | null =
-        (Array.isArray(product?.image) ? product.image[0] : product?.image) ||
-        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+        pickImage(product?.image) ||
+        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] ||
+        // Manufacturer sites (Martin uses Salesforce Commerce Cloud / Demandware)
+        // emit a bare `<meta property="image">` instead of `og:image`. Falling
+        // back to it lets us still rehost the hero shot when no OG tag exists.
+        meta["image"] || null;
       if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
       if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
 
