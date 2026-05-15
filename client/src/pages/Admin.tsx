@@ -2248,17 +2248,14 @@ function InstrumentEditor({
           />
         </Field>
       </div>
-      <Field label="Photo URL">
-        <input
+      <Field label="Photo">
+        <ArtworkPicker
           value={form.photoUrl ?? ""}
-          onChange={(e) => update({ photoUrl: e.target.value || null })}
-          className={inputCls}
-          data-testid="input-instrument-photo"
+          onChange={(next) => update({ photoUrl: next || null })}
+          shape="square"
+          testId="input-instrument-photo"
+          hint="Square. 800×800 px recommended (1600×1600 for retina). JPG or PNG. Plain or neutral background reads best."
         />
-        <p className="text-[11px] text-slate-400 mt-1">
-          Square. 800×800 px recommended (1600×1600 for retina). JPG or PNG.
-          Plain or neutral background reads best.
-        </p>
       </Field>
       <Field label="About (neutral: history, model facts)">
         <textarea
