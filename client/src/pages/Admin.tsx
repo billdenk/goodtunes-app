@@ -3837,8 +3837,14 @@ function PersonEditor({
 // On hosts we don't recognise yet we still show what we found — the admin
 // can edit the inferred vendor name before saving.
 function ScrapeBar({
+  storageKey,
   onPrefill,
 }: {
+  // Per-instrument localStorage key so the last-pulled URL survives both
+  // refreshes and switching between instruments in the middle pane. Without
+  // this the input would always re-mount empty even though the rest of the
+  // form is restored from the DB.
+  storageKey?: string;
   onPrefill: (r: {
     name: string | null;
     brand: string | null;
@@ -3857,7 +3863,24 @@ function ScrapeBar({
     };
   }) => Promise<{ ok: boolean; warn?: string } | void>;
 }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState<string>(() => {
+    if (!storageKey) return "";
+    try { return localStorage.getItem(storageKey) || ""; } catch { return ""; }
+  });
+  // Re-hydrate when the active instrument changes (the component instance
+  // is reused across instrument switches, so we can't rely on the lazy
+  // useState initializer alone).
+  useEffect(() => {
+    if (!storageKey) { setUrl(""); return; }
+    try { setUrl(localStorage.getItem(storageKey) || ""); } catch { setUrl(""); }
+  }, [storageKey]);
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      if (url) localStorage.setItem(storageKey, url);
+      else localStorage.removeItem(storageKey);
+    } catch {}
+  }, [url, storageKey]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null,
@@ -4225,6 +4248,7 @@ function InstrumentEditor({
 
       {tab === "about" && (<div role="tabpanel" id="panel-admin-instrument-about" aria-labelledby="tab-admin-instrument-about" className="space-y-4" data-testid="panel-admin-instrument-about">
       <ScrapeBar
+        storageKey={`gt:admin:scrape-url:${instrumentId}`}
         onPrefill={async (r) => {
           // The admin explicitly clicked Pull — overwrite the standard
           // "New instrument" placeholders without ceremony. Only preserve
