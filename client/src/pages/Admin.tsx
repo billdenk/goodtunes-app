@@ -1973,8 +1973,26 @@ function InstrumentEditor({
           };
           const year = pickSpec("Made In Year", "Year", "Year Made");
           const brand = r.brand || pickSpec("Brand", "Make", "Manufacturer");
-          const model = pickSpec("Model");
           const finish = pickSpec("Finish", "Color", "Colour");
+          // Manufacturer pages (Martin, Gibson, etc.) usually have JSON-LD
+          // Product.name set to just the model ("00L Biosphere® IV") with
+          // no two-column spec table, so pickSpec("Model") is empty. Fall
+          // back to r.name with the brand prefix and any "| Vendor" suffix
+          // stripped, so we don't end up composing the bare brand on its
+          // own and dropping the model entirely.
+          const cleanFallbackName = (raw: string | null): string | null => {
+            if (!raw) return null;
+            let s = raw.replace(/\s*\|\s*[^|]+$/, "").trim();
+            if (brand) {
+              const re = new RegExp(
+                "^\\s*" + brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s+",
+                "i",
+              );
+              s = s.replace(re, "").trim();
+            }
+            return s || null;
+          };
+          const model = pickSpec("Model") || cleanFallbackName(r.name);
           const parts: string[] = [];
           if (year) parts.push(year);
           if (brand) parts.push(brand);
@@ -1982,7 +2000,7 @@ function InstrumentEditor({
           let composedName = parts.join(" ").trim();
           if (finish && composedName)
             composedName = `${composedName} — ${finish}`;
-          // Fallbacks: brand + product.name, then product.name alone.
+          // Final fallbacks if neither brand nor model produced anything.
           if (!composedName)
             composedName = [r.brand, r.name].filter(Boolean).join(" ").trim();
           if (!composedName) composedName = r.name || "";
