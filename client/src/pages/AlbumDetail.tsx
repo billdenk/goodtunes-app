@@ -2394,11 +2394,35 @@ function VendorSheet({
               )}
             </div>
           )}
-          {/* Bottom gradient → name */}
-          <div className="absolute inset-x-0 bottom-0 h-2/3" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)" }} />
-          <div className="absolute left-5 right-5 bottom-4">
-            <h2 className="text-white text-[34px] font-bold leading-tight tracking-tight" data-testid="text-vendor-name">{vendor.name}</h2>
-            {tagline && <p className="text-[15px] mt-0.5" style={{ color: "rgba(235,235,245,0.7)" }}>{tagline}</p>}
+          {/* Bottom gradient — softens the hero so the avatar overlap sits
+              clean against page bg. Less aggressive than before because the
+              vendor name no longer lives inside the hero. */}
+          <div className="absolute inset-x-0 bottom-0 h-1/3" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0) 0%, #00062B 100%)" }} />
+        </div>
+
+        {/* Instagram-style profile row: circular logo with brand-gradient
+            ring overlapping the hero, then name + tagline beside it.
+            Stats (posts/followers/friends in IG) are intentionally absent —
+            we'll wire them in once we have something to count. */}
+        <div className="px-5 -mt-12 relative flex items-end gap-4">
+          <div
+            className="flex-shrink-0 w-[88px] h-[88px] rounded-full p-[3px]"
+            style={{ background: "linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)" }}
+            data-testid="vendor-avatar"
+          >
+            <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center" style={{ background: "#fff" }}>
+              {vendor.logoUrl ? (
+                <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[32px] font-bold" style={{ color: "#00062B" }}>
+                  {vendor.name.charAt(0).toUpperCase()}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="min-w-0 flex-1 pb-1">
+            <h2 className="text-white text-[24px] font-bold leading-tight tracking-tight truncate" data-testid="text-vendor-name">{vendor.name}</h2>
+            {tagline && <p className="text-[14px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.7)" }}>{tagline}</p>}
           </div>
         </div>
 
@@ -2413,7 +2437,7 @@ function VendorSheet({
             behavior) — pinning it under a safe-area-aware toolbar requires
             a measured offset which we'd otherwise hardcode and risk overlap
             on notched devices. */}
-        <div className="px-5 pt-3 pb-0" style={{ background: "#00062B" }}>
+        <div className="px-5 pt-5 pb-0" style={{ background: "#00062B" }}>
           <div className="flex gap-6 border-b border-white/10">
             {(["about", "instruments", "artists"] as const).map((t) => {
               const active = tab === t;
