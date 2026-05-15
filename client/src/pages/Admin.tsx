@@ -12,7 +12,7 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe } from "lucide-react";
+import { Globe, Check } from "lucide-react";
 
 interface AdminAlbum {
   id: string;
@@ -1202,7 +1202,7 @@ function Field({
 function ArtistScrapeBar({
   onPrefill,
 }: {
-  onPrefill: (r: ArtistScrapeResult) => void;
+  onPrefill: (r: ArtistScrapeResult, sourceUrl: string) => void;
 }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1219,7 +1219,7 @@ function ArtistScrapeBar({
         url: u,
       });
       const data = (await res.json()) as ArtistScrapeResult;
-      onPrefill(data);
+      onPrefill(data, u);
       const src =
         data.source === "apple"
           ? "Apple Music"
@@ -1232,7 +1232,7 @@ function ArtistScrapeBar({
           : "";
       setMsg({
         kind: "ok",
-        text: `Pulled from ${src}. Review and Save.${discog}`,
+        text: `Filled name, photo, bio, and ${src} URL below. Review and Save.${discog}`,
       });
       setUrl("");
     } catch (e: any) {
@@ -1253,7 +1253,7 @@ function ArtistScrapeBar({
               go();
             }
           }}
-          placeholder="Paste an Apple Music or Spotify artist URL"
+          placeholder="Paste an Apple Music or Spotify artist URL to auto-fill the form"
           className={inputCls + " flex-1"}
           disabled={busy}
           data-testid="input-artist-scrape-url"
@@ -1265,13 +1265,14 @@ function ArtistScrapeBar({
           className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40"
           data-testid="button-artist-scrape-url"
         >
-          {busy ? "Reading…" : "Pull"}
+          {busy ? "Reading…" : "Fill form"}
         </button>
       </div>
       <p className="text-[11px] text-slate-400">
-        Fills name, photo, bio, and stores the streaming URL as the eventual
-        "Listen on…" handoff. Apple Music URLs also list the artist's full
-        discography below.
+        Helper only — nothing is saved until you click <strong>Save changes</strong>.
+        Drops the name, photo, bio, and matching streaming URL into the
+        fields below. Apple Music URLs also list the artist's full
+        discography.
       </p>
       {msg && (
         <p
@@ -1475,7 +1476,14 @@ function PersonEditor({
       </div>
 
       <ArtistScrapeBar
-        onPrefill={(r) => {
+        onPrefill={(r, sourceUrl) => {
+          // Auto-fill the matching streaming field from the URL the admin
+          // pasted into the Pull bar so they don't have to enter it twice.
+          // The scraper may also return one (Apple URL → spotifyUrl, etc.)
+          // — prefer the scraper response when it's there.
+          const lower = sourceUrl.toLowerCase();
+          const pastedIsApple = /music\.apple\.com/.test(lower);
+          const pastedIsSpotify = /open\.spotify\.com/.test(lower);
           update({
             // Never clobber a non-empty existing value
             name:
@@ -1484,8 +1492,12 @@ function PersonEditor({
                 : r.name || form.name,
             photoUrl: form.photoUrl || r.photoUrl,
             bio: form.bio || r.bio,
-            appleMusicUrl: r.appleMusicUrl || form.appleMusicUrl,
-            spotifyUrl: r.spotifyUrl || form.spotifyUrl,
+            appleMusicUrl:
+              r.appleMusicUrl ||
+              (pastedIsApple ? sourceUrl : form.appleMusicUrl),
+            spotifyUrl:
+              r.spotifyUrl ||
+              (pastedIsSpotify ? sourceUrl : form.spotifyUrl),
             itunesArtistId: r.itunesArtistId || form.itunesArtistId,
           });
           setDiscography(r.albums);
