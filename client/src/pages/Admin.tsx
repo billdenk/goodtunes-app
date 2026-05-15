@@ -3573,7 +3573,7 @@ function PersonEditor({
           when filled) and tabs. Clicking one reveals a single input bound
           to that platform's URL field. The Apple Music + Spotify tabs
           double as the auto-fill entry point — paste a URL there (or press
-          "Fill form") and we scrape name, photo, bio, and (Apple) the full
+          "Engage") and we scrape name, photo, bio, and (Apple) the full
           discography. */}
       {(() => {
         type Key =
@@ -3730,6 +3730,10 @@ function PersonEditor({
                   disabled={isScrapable && scrapeBusy}
                   data-testid={active.testid}
                 />
+                {/* Open-in-new-tab — visible for every platform so the admin
+                    can always jump to the saved URL with one click. Disabled
+                    until the field has a parseable value. */}
+                <OpenUrlButton url={activeValue} testId="button-artist-open-url" />
                 {isScrapable && (
                   <button
                     type="button"
@@ -3738,7 +3742,7 @@ function PersonEditor({
                     className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40 shrink-0"
                     data-testid="button-artist-scrape-url"
                   >
-                    {scrapeBusy ? "Reading…" : "Fill form"}
+                    {scrapeBusy ? "Reading…" : "Engage"}
                   </button>
                 )}
               </div>
@@ -3831,6 +3835,39 @@ function PersonEditor({
 }
 
 // ---------- InstrumentEditor ----------
+
+// Small "open URL in a new tab" affordance shown next to every URL input
+// that the admin might want to verify by hand (artist Apple/Spotify, label
+// website, instrument product URL, vendor affiliate URL, …). Disabled
+// until the field holds something that parses as an http(s) URL. Kept as
+// a single component so we don't ship a different icon/style per surface.
+function OpenUrlButton({ url, testId }: { url: string; testId?: string }) {
+  const trimmed = (url || "").trim();
+  let href: string | null = null;
+  try {
+    if (trimmed) {
+      const u = new URL(trimmed);
+      if (u.protocol === "http:" || u.protocol === "https:") href = u.toString();
+    }
+  } catch { /* not a valid URL — button stays disabled */ }
+  return (
+    <button
+      type="button"
+      onClick={() => { if (href) window.open(href, "_blank", "noopener,noreferrer"); }}
+      disabled={!href}
+      aria-label="Open URL in a new tab"
+      title={href ? `Open ${href}` : "Enter a valid URL to open"}
+      className="w-9 h-9 rounded-md border border-slate-200 bg-white text-slate-500 hover:text-[#319ED8] hover:border-[#319ED8] flex items-center justify-center disabled:opacity-40 disabled:hover:text-slate-500 disabled:hover:border-slate-200 shrink-0"
+      data-testid={testId}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M14 4h6v6" />
+        <path d="M20 4L10 14" />
+        <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+      </svg>
+    </button>
+  );
+}
 
 // Paste-a-vendor-URL bar. Calls the server scraper, prefills name/photo/
 // category on the parent form, and pushes a pre-populated vendor row.
@@ -3928,6 +3965,7 @@ function ScrapeBar({
           disabled={busy}
           data-testid="input-scrape-url"
         />
+        <OpenUrlButton url={url} testId="button-scrape-open-url" />
         <button
           type="button"
           onClick={go}
@@ -4668,14 +4706,17 @@ function VendorRow({
             />
           </Field>
           <Field label="Affiliate / product URL (where the buy button goes)">
-            <input
-              value={draft.affiliateUrl}
-              onChange={(e) =>
-                setDraft({ ...draft, affiliateUrl: e.target.value })
-              }
-              className={inputCls}
-              data-testid={`input-vendor-affiliate-${vendor.id}`}
-            />
+            <div className="flex items-center gap-2">
+              <input
+                value={draft.affiliateUrl}
+                onChange={(e) =>
+                  setDraft({ ...draft, affiliateUrl: e.target.value })
+                }
+                className={inputCls + " flex-1"}
+                data-testid={`input-vendor-affiliate-${vendor.id}`}
+              />
+              <OpenUrlButton url={draft.affiliateUrl} testId={`button-vendor-affiliate-open-${vendor.id}`} />
+            </div>
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="About URL (homepage)">
@@ -6867,6 +6908,7 @@ function LabelEditor({
               disabled={scrapeBusy}
               data-testid="input-label-scrape-url"
             />
+            <OpenUrlButton url={scrapeUrl} testId="button-label-open-url" />
             <button
               type="button"
               onClick={runScrape}
@@ -6874,7 +6916,7 @@ function LabelEditor({
               className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40 shrink-0"
               data-testid="button-label-scrape"
             >
-              {scrapeBusy ? "Reading…" : "Fill form"}
+              {scrapeBusy ? "Reading…" : "Engage"}
             </button>
           </div>
           <p className="text-[11px] text-slate-400">
