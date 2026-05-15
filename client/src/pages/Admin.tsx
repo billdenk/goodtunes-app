@@ -6342,6 +6342,41 @@ export function Admin() {
     };
   }, []);
 
+  // Multi-admin live refresh. The global TanStack default is
+  // `staleTime: Infinity`, which keeps the fan player snappy but means a
+  // second admin's edits don't appear here until you reload. While the
+  // /admin route is mounted we poll the admin lists every 5s (only when
+  // the tab is visible) and also refetch the instant the tab regains
+  // focus. Invalidate only nudges *active* queries to refetch, so this
+  // stays cheap — it never wakes a query that isn't on screen.
+  useEffect(() => {
+    if (!user?.isAdmin) return;
+    const ADMIN_KEYS: string[][] = [
+      ["/api/albums"],
+      ["/api/people"],
+      ["/api/instruments"],
+      ["/api/vendors"],
+      ["/api/labels"],
+    ];
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      for (const key of ADMIN_KEYS) {
+        queryClient.invalidateQueries({ queryKey: key });
+      }
+    };
+    const intervalId = window.setInterval(refresh, 5000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [queryClient, user?.isAdmin]);
+
   const { data: albums = [] } = useQuery<AdminAlbum[]>({
     queryKey: ["/api/albums"],
     enabled: !!user?.isAdmin,
