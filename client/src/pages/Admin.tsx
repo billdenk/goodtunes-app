@@ -4036,7 +4036,19 @@ function VendorPreviewCard({
   // or a vendor that's attached to dozens of instruments.
   const [tab, setTab] = useState<"about" | "gear" | "artists">("about");
   const [bioExpanded, setBioExpanded] = useState(false);
-  const visibleAttachments = vendor.attachments.filter((a) => !a.isHidden);
+  const visibleAttachments = vendor.attachments
+    .filter((a) => !a.isHidden)
+    // Same Apple-Music / Spotify rule as artists/albums: alphabetical by
+    // display name, case- and accent-insensitive. Once instruments grow a
+    // dedicated `year` column we can flip this to year-desc and add a
+    // brand chip filter (see TODO in the user-facing notes).
+    .sort((a, b) =>
+      (a.instrumentName ?? "").localeCompare(
+        b.instrumentName ?? "",
+        undefined,
+        { sensitivity: "base" },
+      ),
+    );
   const gearCount = visibleAttachments.length;
   // "Featured instrument" on the real sheet is the instrument that opened it;
   // in the admin preview we don't have that context, so we show the first
