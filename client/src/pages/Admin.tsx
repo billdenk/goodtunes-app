@@ -2170,7 +2170,30 @@ function AddGearPanel({
   async function handleSave() {
     if (!canSave || !selectedInstrument) return;
     setSaving(true);
-    const songIds = Array.from(selectedSongIds);
+    // Dedupe up front: if a selected track already has a performer row for
+    // THIS person on THIS instrument, drop it. Without this the server
+    // happily creates a second identical row (there's no DB-level unique
+    // constraint on personId + songId + instrumentId), which would inflate
+    // the gear track counts and require manual cleanup.
+    const allSelected = Array.from(selectedSongIds);
+    const songIdToTrack = new Map<string, GearContextAlbum["tracks"][number]>();
+    for (const a of context) for (const t of a.tracks) songIdToTrack.set(t.songId, t);
+    const skipped: string[] = [];
+    const songIds = allSelected.filter((songId) => {
+      const t = songIdToTrack.get(songId);
+      const dup = t?.performers.some((p) => p.instrumentId === selectedInstrument!.id);
+      if (dup) skipped.push(t?.title ?? songId);
+      return !dup;
+    });
+    if (songIds.length === 0) {
+      setSaving(false);
+      toast({
+        title: "Nothing to save",
+        description: `Already credited on ${skipped.length} track${skipped.length === 1 ? "" : "s"}.`,
+        variant: "destructive",
+      });
+      return;
+    }
     const body = {
       personId,
       instrumentId: selectedInstrument.id,
@@ -2184,12 +2207,26 @@ function AddGearPanel({
       ),
     );
     const fails = results.filter((r) => r.status === "rejected").length;
+    const ok = songIds.length - fails;
     setSaving(false);
-    if (fails > 0) {
+    // If every POST failed, keep the panel open so the admin can fix the
+    // input and retry instead of seeing a misleading "Gear saved" toast.
+    if (ok === 0) {
       toast({
-        title: `Saved ${songIds.length - fails}/${songIds.length}`,
-        description: `${fails} track${fails === 1 ? "" : "s"} failed — check the console.`,
+        title: "Save failed",
+        description: `0/${songIds.length} tracks saved. Check the console for details.`,
         variant: "destructive",
+      });
+      return;
+    }
+    if (fails > 0 || skipped.length > 0) {
+      const parts: string[] = [];
+      if (fails > 0) parts.push(`${fails} failed`);
+      if (skipped.length > 0) parts.push(`${skipped.length} already credited`);
+      toast({
+        title: `Saved ${ok}/${allSelected.length}`,
+        description: parts.join(" · "),
+        variant: fails > 0 ? "destructive" : undefined,
       });
     }
     onSaved();
@@ -3130,24 +3167,8 @@ function PersonEditor({
       )}
 
       {tab === "gear" && (
-        <div role="tabpanel" id="panel-admin-person-gear" aria-labelledby="tab-admin-person-gear" className="space-y-2" data-testid="panel-admin-person-gear">
-          {personGear.length === 0 ? (
-            <p className="text-slate-400 text-sm">No gear credited to {form.name} yet.</p>
-          ) : (
-            <ul className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-              {personGear.map((g) => (
-                <li key={g.id} className="flex items-center gap-3 px-3 py-2.5" data-testid={`row-admin-person-gear-${g.id}`}>
-                  <div className="w-10 h-10 rounded-md overflow-hidden bg-slate-200 flex-shrink-0">
-                    {g.photoUrl ? <img src={g.photoUrl} alt="" className="w-full h-full object-cover" /> : null}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-slate-900 text-[13px] font-medium truncate">{g.name}</p>
-                    <p className="text-slate-400 text-[11px] truncate">{g.shortCategory ?? g.category ?? "Instrument"} · {g.trackCount} track{g.trackCount === 1 ? "" : "s"}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div role="tabpanel" id="panel-admin-person-gear" aria-labelledby="tab-admin-person-gear">
+          <PersonGearManager personId={personId} personName={form.name} />
         </div>
       )}
 
