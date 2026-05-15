@@ -150,12 +150,9 @@ export function ArtistDetail() {
   const handlePlayAll = () => {
     if (allArtistSongs.length > 0) playSong(allArtistSongs[0], allArtistSongs);
   };
-
-  const handleShuffle = () => {
-    if (allArtistSongs.length === 0) return;
-    const shuffled = [...allArtistSongs].sort(() => Math.random() - 0.5);
-    playSong(shuffled[0], shuffled);
-  };
+  // Shuffle handler was removed alongside the Shuffle pill — Apple-Music's
+  // artist hero is a single Play action; shuffle stays available from the
+  // now-playing controls.
 
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
@@ -195,16 +192,38 @@ export function ArtistDetail() {
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }}>
           <div className="flex flex-col items-center pt-20 px-5">
             {avatarSrc && (
-              <div
-                className="w-[180px] h-[180px] rounded-full overflow-hidden flex-shrink-0"
-                style={{ boxShadow: "0 12px 40px rgba(0,0,0,0.55)", border: "1px solid rgba(255,255,255,0.12)" }}
-              >
-                <img
-                  src={avatarSrc}
-                  alt={artistName}
-                  className="w-full h-full object-cover"
-                  style={artistPhoto ? { objectPosition: "50% 20%" } : undefined}
-                />
+              <div className="relative flex-shrink-0">
+                <div
+                  className="w-[180px] h-[180px] rounded-full overflow-hidden"
+                  style={{ boxShadow: "0 12px 40px rgba(0,0,0,0.55)", border: "1px solid rgba(255,255,255,0.12)" }}
+                >
+                  <img
+                    src={avatarSrc}
+                    alt={artistName}
+                    className="w-full h-full object-cover"
+                    style={artistPhoto ? { objectPosition: "50% 20%" } : undefined}
+                  />
+                </div>
+                {/* Apple-Music-style hero play FAB. Overlaps the avatar at
+                    bottom-right; brand blue fill in place of Apple's red.
+                    Replaces the previous side-by-side Play / Shuffle pills
+                    — single primary action, consistent with Apple. Shuffle
+                    is still available from the now-playing controls. */}
+                {hasGtReleases && (
+                  <button
+                    type="button"
+                    onClick={handlePlayAll}
+                    disabled={songCount === 0}
+                    aria-label="Play all songs"
+                    className="absolute bottom-1 right-1 w-14 h-14 rounded-full flex items-center justify-center active:scale-[0.94] transition-transform disabled:opacity-40"
+                    style={{ background: "#319ED8", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}
+                    data-testid="button-play-artist"
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" style={{ marginLeft: 2 }}>
+                      <path d="M8 5.14v14l11-7-11-7z" />
+                    </svg>
+                  </button>
+                )}
               </div>
             )}
             {hasGtReleases ? (
@@ -230,36 +249,8 @@ export function ArtistDetail() {
               </p>
             )}
 
-            {hasGtReleases && (
-              <div className="flex items-center gap-3 mt-5 w-full max-w-[300px]">
-                <button
-                  type="button"
-                  onClick={handlePlayAll}
-                  disabled={songCount === 0}
-                  className="flex-1 flex items-center justify-center gap-2 h-11 rounded-full font-semibold text-sm active:scale-[0.98] transition-transform disabled:opacity-40"
-                  style={{ background: "rgba(255,255,255,0.10)", color: "#319ED8" }}
-                  data-testid="button-play-artist"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5.14v14l11-7-11-7z" />
-                  </svg>
-                  Play
-                </button>
-                <button
-                  type="button"
-                  onClick={handleShuffle}
-                  disabled={songCount === 0}
-                  className="flex-1 flex items-center justify-center gap-2 h-11 rounded-full font-semibold text-sm active:scale-[0.98] transition-transform disabled:opacity-40"
-                  style={{ background: "rgba(255,255,255,0.10)", color: "#319ED8" }}
-                  data-testid="button-shuffle-artist"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-                  </svg>
-                  Shuffle
-                </button>
-              </div>
-            )}
+            {/* Play / Shuffle pill row replaced by the circular FAB that
+                overlaps the avatar above — Apple-Music-style. */}
           </div>
 
           {hasGtReleases && (
