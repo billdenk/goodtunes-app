@@ -3711,9 +3711,12 @@ function VendorPreviewCard({
 }: {
   vendor: AdminVendorGrouped;
 }) {
-  // Mirror the fan-side VendorSheet About tab so admins see exactly what fans
-  // see. The real sheet has three tabs (About / Gear / Artists); the admin
-  // preview is static and locks to About since that's the field-driven view.
+  // Mirror the fan-side VendorSheet so admins see exactly what fans see.
+  // Tabs are interactive (About / Gear / Artists) and the scroll region
+  // scrolls — both are needed for an admin to actually proof a long bio
+  // or a vendor that's attached to dozens of instruments.
+  const [tab, setTab] = useState<"about" | "gear" | "artists">("about");
+  const [bioExpanded, setBioExpanded] = useState(false);
   const visibleAttachments = vendor.attachments.filter((a) => !a.isHidden);
   const gearCount = visibleAttachments.length;
   // "Featured instrument" on the real sheet is the instrument that opened it;
@@ -3770,9 +3773,11 @@ function VendorPreviewCard({
             <span>● ● ●</span>
           </div>
 
-          {/* Scrollable region (preview is static but mirrors the fan sheet
-              order: floating toolbar → hero → profile row → tabs → About). */}
-          <div className="flex-1 overflow-hidden relative">
+          {/* Scrollable region — matches fan sheet order
+              (floating toolbar → hero → profile row → tabs → tab content)
+              and uses overflow-y-auto so a long bio or big Gear list is
+              actually reachable inside the phone frame. */}
+          <div className="flex-1 overflow-y-auto scrollbar-hide relative">
             {/* Floating toolbar — back + bookmark + share + globe + chat */}
             <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 pt-2">
               <IconBtn testId="preview-vendor-back">
@@ -3901,15 +3906,22 @@ function VendorPreviewCard({
                 </div>
               </div>
               <div className="min-w-0 flex-1 pb-1">
+                {/* Allow the name to wrap to a second line (or shrink one
+                    notch) instead of truncating — vendor names like "Carter
+                    Vintage Guitars" routinely lose their tail otherwise.
+                    14px stays within Apple HIG for a secondary header on a
+                    profile row; the wrap cap keeps it from blowing the row
+                    height on extreme cases. */}
                 <h2
-                  className="text-white text-[20px] font-bold leading-tight tracking-tight truncate"
+                  className="text-white font-bold leading-tight tracking-tight line-clamp-2 break-words"
+                  style={{ fontSize: (vendor.name?.length ?? 0) > 18 ? 17 : 20 }}
                   data-testid="text-preview-vendor-name"
                 >
                   {vendor.name || "Untitled vendor"}
                 </h2>
                 {tagline && (
                   <p
-                    className="text-[13px] mt-0.5 truncate"
+                    className="text-[13px] mt-0.5 line-clamp-2"
                     style={{ color: "rgba(235,235,245,0.7)" }}
                   >
                     {tagline}
@@ -3918,22 +3930,28 @@ function VendorPreviewCard({
               </div>
             </div>
 
-            {/* Tabs — About | Gear N | Artists (admin preview locks to About). */}
+            {/* Tabs — About | Gear N | Artists. Interactive so admins can
+                proof each tab; "Artists" (not "People") because you only
+                land on a vendor sheet through gear, so the only people who
+                end up here are performers who actually played one. */}
             <div className="px-5 pt-4">
               <div className="flex gap-5 border-b border-white/10">
                 {([
                   { key: "about", label: "About", count: undefined as number | undefined },
                   { key: "gear", label: "Gear", count: gearCount > 0 ? gearCount : undefined },
-                  { key: "people", label: "People", count: undefined },
-                ]).map((t) => {
-                  const active = t.key === "about";
+                  { key: "artists", label: "Artists", count: undefined },
+                ] as const).map((t) => {
+                  const active = tab === t.key;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={t.key}
-                      className="relative pb-2 text-[14px] font-semibold"
+                      onClick={() => setTab(t.key)}
+                      className="relative pb-2 text-[14px] font-semibold active:opacity-80"
                       style={{
                         color: active ? "#fff" : "rgba(235,235,245,0.55)",
                       }}
+                      data-testid={`tab-preview-vendor-${t.key}`}
                     >
                       {t.label}
                       {typeof t.count === "number" && (
@@ -3951,57 +3969,132 @@ function VendorPreviewCard({
                           style={{ background: "#319ED8" }}
                         />
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* About content — bio + Web + Featured instrument */}
-            <div className="px-5 pt-4 pb-6">
-              <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-1.5">
-                About {vendor.name || "this vendor"}
-              </h3>
-              <p
-                className="text-[13px] leading-relaxed line-clamp-5"
-                style={{ color: "rgba(235,235,245,0.72)" }}
-                data-testid="text-preview-vendor-bio"
-              >
-                {vendor.bio || bioFallback}
-              </p>
+            {tab === "about" && (
+              <div className="px-5 pt-4 pb-6">
+                <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-1.5">
+                  About {vendor.name || "this vendor"}
+                </h3>
+                {(() => {
+                  const body = vendor.bio || bioFallback;
+                  // Bio toggle: clamp to 5 lines by default, full text on tap.
+                  // Mirrors how the fan sheet renders long copy (the real sheet
+                  // is scrollable end-to-end, but the preview lives inside a
+                  // mock phone so we collapse + reveal instead). The "more" /
+                  // "less" affordance keeps the admin in control of how much
+                  // they want to see at once.
+                  const isLong = body.length > 260;
+                  return (
+                    <>
+                      <p
+                        className={`text-[13px] leading-relaxed ${
+                          isLong && !bioExpanded ? "line-clamp-5" : ""
+                        }`}
+                        style={{ color: "rgba(235,235,245,0.72)" }}
+                        data-testid="text-preview-vendor-bio"
+                      >
+                        {body}
+                      </p>
+                      {isLong && (
+                        <button
+                          type="button"
+                          onClick={() => setBioExpanded((v) => !v)}
+                          className="mt-1.5 text-[13px] font-semibold active:opacity-70"
+                          style={{ color: "#319ED8" }}
+                          data-testid="button-preview-vendor-bio-toggle"
+                        >
+                          {bioExpanded ? "less" : "more"}
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
 
-              {vendor.location && (
-                <div className="mt-4">
-                  <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
-                    Location
-                  </p>
-                  <p className="text-white text-[14px]">{vendor.location}</p>
-                </div>
-              )}
+                {vendor.location && (
+                  <div className="mt-4">
+                    <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                      Location
+                    </p>
+                    <p className="text-white text-[14px]">{vendor.location}</p>
+                  </div>
+                )}
 
-              {domain && (
-                <div className="mt-4">
-                  <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
-                    Web
-                  </p>
-                  <p className="text-[14px]" style={{ color: "#319ED8" }}>
-                    {domain}
-                  </p>
-                </div>
-              )}
+                {domain && (
+                  <div className="mt-4">
+                    <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                      Web
+                    </p>
+                    <p className="text-[14px]" style={{ color: "#319ED8" }}>
+                      {domain}
+                    </p>
+                  </div>
+                )}
 
-              {featuredInstrumentName && (
-                <div className="mt-4">
-                  <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
-                    Featured instrument
+                {featuredInstrumentName && (
+                  <div className="mt-4">
+                    <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                      Featured instrument
+                    </p>
+                    <p className="text-white text-[14px]">{featuredInstrumentName}</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>
+                      The instrument that opened this page — tap the Gear tab to see the rest.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === "gear" && (
+              <div className="px-5 pt-4 pb-6">
+                {gearCount === 0 ? (
+                  <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
+                    Not attached to any instrument yet. Add a vendor row inside an instrument's editor to populate this list.
                   </p>
-                  <p className="text-white text-[14px]">{featuredInstrumentName}</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>
-                    The instrument that opened this page — tap the Gear tab to see the rest.
-                  </p>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <ul className="flex flex-col">
+                    {visibleAttachments.map((a, idx) => (
+                      <li
+                        key={a.attachmentId}
+                        className={`flex items-center gap-3 py-3 ${
+                          idx > 0 ? "border-t border-white/10" : ""
+                        }`}
+                        data-testid={`preview-vendor-gear-${a.instrumentId}`}
+                      >
+                        <div
+                          className="w-11 h-11 rounded-md flex items-center justify-center text-white/40 text-[18px] flex-shrink-0"
+                          style={{ background: "rgba(255,255,255,0.06)" }}
+                          aria-hidden
+                        >
+                          ♪
+                        </div>
+                        <p className="text-white text-[14px] font-medium leading-tight">
+                          {a.instrumentName}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+                  Everything {vendor.name || "this vendor"} is currently attached to across the GoodTunes catalog.
+                </p>
+              </div>
+            )}
+
+            {tab === "artists" && (
+              <div className="px-5 pt-4 pb-6">
+                <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
+                  Live in the app — pulls from SuperCredits™. Any performer who's credited one of {vendor.name || "this vendor"}'s instruments on a track shows up here.
+                </p>
+                <p className="pt-3 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+                  Producers and lyricists won't appear here because vendors are reached through gear; only people who actually played a vendor's instrument get tagged.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
