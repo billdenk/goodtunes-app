@@ -990,6 +990,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       blueskyUrl: opt(b.blueskyUrl),
       facebookUrl: opt(b.facebookUrl),
       websiteUrl: opt(b.websiteUrl),
+      labelId: opt(b.labelId),
     } as any);
     return res.status(201).json(p);
   });
@@ -1011,6 +1012,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.blueskyUrl !== undefined) updates.blueskyUrl = opt(b.blueskyUrl);
     if (b.facebookUrl !== undefined) updates.facebookUrl = opt(b.facebookUrl);
     if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
+    if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
     const p = await storage.updatePerson(id, updates);
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(p);

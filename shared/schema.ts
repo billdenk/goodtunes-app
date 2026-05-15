@@ -137,6 +137,13 @@ export const people = pgTable("people", {
   // HSL-friendly hex from the brand palette for the initial-circle avatar
   // fallback (#319ED8, #7F10A7, #4AFFCA, #FF5470).
   accent: text("accent"),
+  // Optional FK to the label this artist is signed to. Mirrors
+  // `albums.labelId` so an artist can be tagged with a label even before
+  // they've released anything in-app, and so independent artists (no
+  // label) stay an explicit choice — `null` means "no label", not
+  // "missing". SET NULL on delete keeps the person renderable if the
+  // label row is removed.
+  labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
   // Streaming-service handoff. We host the song in-app for the first ~2 weeks,
   // then surface "Listen on Apple Music / Spotify" buttons that point at the
   // artist's canonical page on each service. Same URLs are also the scrape

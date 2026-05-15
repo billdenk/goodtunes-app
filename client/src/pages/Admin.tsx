@@ -90,6 +90,10 @@ interface AdminPerson {
   blueskyUrl: string | null;
   facebookUrl: string | null;
   websiteUrl: string | null;
+  // Optional FK to a label this artist is signed to. Independent of
+  // album.labelId — an artist can be tagged with a label even when their
+  // releases aren't (or vice-versa, e.g. one-off licensed album).
+  labelId: string | null;
 }
 
 interface ScrapedArtistAlbum {
@@ -2164,6 +2168,14 @@ function PersonEditor({
           ))}
         </div>
       </Field>
+
+      {/* Label picker — same search-or-create UX as the album editor, so
+          an artist can be signed to a label independently of any single
+          release. "No label" is a real choice (independent artist). */}
+      <AlbumLabelPicker
+        value={form.labelId}
+        onChange={(next) => update({ labelId: next })}
+      />
 
       <div className="flex items-center justify-between pt-4 border-t border-slate-200">
         <button
