@@ -388,90 +388,101 @@ function HowToPlaySheet({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/65 backdrop-blur-md"
       onClick={onClose}
       data-testid="sheet-how-to-play"
     >
       <div
-        className="w-full max-w-[440px] bg-[#101535] rounded-t-3xl text-white pb-8"
+        className="w-full max-w-[440px] bg-[#0E1334] rounded-t-[28px] text-white pb-10"
         onClick={(e) => e.stopPropagation()}
         style={{ boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}
       >
-        <div className="flex justify-center pt-3">
-          <div className="w-10 h-1 rounded-full bg-white/25" />
-        </div>
-        <div className="px-5 pt-4 pb-5 flex items-center gap-3 border-b border-white/8">
-          {release.artworkUrl && (
-            <img
-              src={release.artworkUrl}
-              alt=""
-              className="w-14 h-14 rounded-lg object-cover"
-            />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="text-white text-base font-semibold truncate">{release.name}</p>
-            <p className="text-white/55 text-xs truncate">
-              {artistName}
-              {release.year ? ` · ${release.year}` : ""}
-            </p>
+        {/* Drag handle + floating close button */}
+        <div className="relative">
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full bg-white/25" />
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
+            className="absolute top-3 right-4 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
             data-testid="button-close-how-to-play"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="px-5 pt-5">
-          <h3 className="text-white text-xl font-bold tracking-tight mb-3">How to Play</h3>
-          <div className="space-y-2.5">
+        {/* Centered hero: large rounded album art + title + meta */}
+        <div className="flex flex-col items-center text-center px-6 pt-4 pb-7">
+          {release.artworkUrl ? (
+            <img
+              src={release.artworkUrl}
+              alt={release.name}
+              className="w-44 h-44 rounded-2xl object-cover"
+              style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.55)" }}
+            />
+          ) : (
+            <div
+              className="w-44 h-44 rounded-2xl bg-white/8"
+              style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.55)" }}
+            />
+          )}
+          <h3 className="text-white text-[20px] font-bold tracking-tight mt-5 leading-tight">
+            {release.name}
+          </h3>
+          <p className="text-white/55 text-[13px] mt-1">
+            {artistName}
+            {release.year ? ` · ${release.year}` : ""}
+          </p>
+        </div>
+
+        {/* How to Play — two big app-icon-style tap targets, centered.
+            Logo tile gets the brand color; service name sits underneath. */}
+        <div className="px-6">
+          <h4 className="text-white/55 text-[11px] font-semibold uppercase tracking-[0.14em] text-center mb-4">
+            How to Play
+          </h4>
+          <div className="flex items-start justify-center gap-7">
             {services.map((s) => {
-              // Render a real disabled control (no anchor) when we don't
-              // have a deep link — keeps focus / pointer / a11y semantics
-              // honest instead of presenting a clickable-looking link
-              // that does nothing.
               const isDisabled = !s.href;
-              const inner = (
-                <>
-                  <div
-                    className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: s.accent, opacity: isDisabled ? 0.45 : 1 }}
-                  >
-                    {s.logo}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-white text-base font-semibold">{s.label}</p>
-                    <p className="text-white/55 text-xs">
-                      {isDisabled
-                        ? "Not available for this release"
-                        : s.key === "spotify" && !release.spotifyUrl
-                          ? "Open in Spotify"
-                          : "Listen on " + s.label}
-                    </p>
-                  </div>
-                  {!isDisabled && (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/45">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  )}
-                </>
+              const tile = (
+                <div
+                  className="flex items-center justify-center rounded-[22px] transition-transform active:scale-[0.94]"
+                  style={{
+                    width: 88,
+                    height: 88,
+                    background: s.accent,
+                    opacity: isDisabled ? 0.4 : 1,
+                    boxShadow: isDisabled
+                      ? "none"
+                      : `0 10px 24px ${s.accent}55, inset 0 1px 0 rgba(255,255,255,0.15)`,
+                  }}
+                >
+                  {/* Bump the logo larger inside the bigger tile */}
+                  <div style={{ transform: "scale(1.7)" }}>{s.logo}</div>
+                </div>
               );
+              const caption = (
+                <p className="text-white text-[13px] font-semibold mt-2.5">{s.label}</p>
+              );
+              const subcaption = isDisabled ? (
+                <p className="text-white/40 text-[11px] mt-0.5">Not available</p>
+              ) : null;
               if (isDisabled) {
                 return (
                   <div
                     key={s.key}
                     role="button"
                     aria-disabled="true"
-                    className="flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl bg-white/5 opacity-60 cursor-not-allowed"
+                    className="flex flex-col items-center cursor-not-allowed"
                     data-testid={`button-how-to-play-${s.key}-disabled`}
                   >
-                    {inner}
+                    {tile}
+                    {caption}
+                    {subcaption}
                   </div>
                 );
               }
@@ -481,10 +492,12 @@ function HowToPlaySheet({
                   href={s.href!}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl bg-white/8 active:scale-[0.99] transition-transform"
+                  className="flex flex-col items-center"
                   data-testid={`button-how-to-play-${s.key}`}
+                  aria-label={`Listen on ${s.label}`}
                 >
-                  {inner}
+                  {tile}
+                  {caption}
                 </a>
               );
             })}
