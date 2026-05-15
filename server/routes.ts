@@ -1669,8 +1669,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const id = String(req.params.id);
     const instrument = await storage.getInstrumentById(id);
     if (!instrument) return res.status(404).json({ message: "Instrument not found" });
-    const artists = await storage.getInstrumentSuperCreditArtists(id);
-    return res.json({ instrument, artists });
+    const [artists, tracks] = await Promise.all([
+      storage.getInstrumentSuperCreditArtists(id),
+      storage.getInstrumentTracks(id),
+    ]);
+    return res.json({ instrument, artists, tracks });
   });
   app.get("/api/vendors/:id/profile", async (req, res) => {
     const id = String(req.params.id);

@@ -1989,6 +1989,20 @@ function PersonGearManager({
     queryClient.invalidateQueries({
       queryKey: ["/api/people", personId, "profile"],
     });
+    // Adding/removing a performer row also flips the counts on the
+    // Instrument editor's Tracks + Artists tabs (which queries
+    // /api/instruments/:id/profile). Predicate-match so we hit any
+    // currently-mounted instrument profile, whichever instrument it is.
+    queryClient.invalidateQueries({
+      predicate: (q) => {
+        const k = q.queryKey;
+        return (
+          Array.isArray(k) &&
+          k[0] === "/api/instruments" &&
+          k[2] === "profile"
+        );
+      },
+    });
   };
 
   const deletePerformer = useMutation({
@@ -3562,6 +3576,45 @@ function InstrumentEditor({
   const { data, isLoading } = useQuery<AdminInstrument>({
     queryKey: ["/api/instruments", instrumentId],
   });
+  // Profile bundle — artists + tracks credited on this instrument. Powers
+  // the Tracks and Artists tabs below. Separate query so the About form
+  // (which writes back to /api/instruments/:id) can invalidate without
+  // having to know about the catalog side.
+  type InstrumentProfile = {
+    instrument: AdminInstrument;
+    artists: Array<{
+      id: string;
+      name: string;
+      photoUrl: string | null;
+      shortRole: string | null;
+      trackCount: number;
+    }>;
+    tracks: Array<{
+      performerId: string;
+      songId: string;
+      songTitle: string;
+      trackNumber: number;
+      albumId: string;
+      albumTitle: string;
+      albumArtwork: string;
+      albumYear: number | null;
+      personId: string | null;
+      personName: string;
+      personPhotoUrl: string | null;
+      role: string;
+      tuningNotes: string | null;
+    }>;
+  };
+  const { data: profile } = useQuery<InstrumentProfile>({
+    queryKey: ["/api/instruments", instrumentId, "profile"],
+  });
+  const [tab, setTab] = useState<"about" | "tracks" | "artists">("about");
+  // Reset tab to About whenever the admin switches to a different
+  // instrument, so we never land on Tracks for a brand-new one with zero
+  // credits.
+  useEffect(() => {
+    setTab("about");
+  }, [instrumentId]);
   const [form, setForm] = useState<AdminInstrument | null>(null);
   const [dirty, setDirty] = useState(false);
   // Re-sync from the server every time `data` changes. On instrument switch
@@ -3690,6 +3743,164 @@ function InstrumentEditor({
         </div>
       </div>
 
+      {/* Tab strip — mirrors the Person editor pattern. About holds the
+          editing surface; Tracks + Artists are catalog views derived from
+          performer credits. Counts shown when > 0. */}
+      <div role="tablist" aria-label="Instrument editor sections" className="flex gap-5 border-b border-slate-200 -mx-6 px-6">
+        {(["about", "tracks", "artists"] as const).map((t) => {
+          const active = tab === t;
+          const label = t === "about" ? "About" : t === "tracks" ? "Tracks" : "Artists";
+          const count =
+            t === "tracks" ? profile?.tracks.length :
+            t === "artists" ? profile?.artists.length :
+            undefined;
+          return (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              id={`tab-admin-instrument-${t}`}
+              aria-selected={active}
+              aria-controls={`panel-admin-instrument-${t}`}
+              tabIndex={active ? 0 : -1}
+              onClick={() => setTab(t)}
+              className="relative pb-2.5 pt-1 text-[13px] font-semibold tracking-wide transition-colors"
+              style={{ color: active ? "#0f172a" : "#64748b" }}
+              data-testid={`tab-admin-instrument-${t}`}
+            >
+              <span className="flex items-center gap-1.5">
+                {label}
+                {typeof count === "number" && count > 0 && (
+                  <span className="text-[11px] font-medium text-slate-400">{count}</span>
+                )}
+              </span>
+              {active && (
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "tracks" && (
+        <div role="tabpanel" id="panel-admin-instrument-tracks" aria-labelledby="tab-admin-instrument-tracks" data-testid="panel-admin-instrument-tracks">
+          {(() => {
+            const tracks = profile?.tracks ?? [];
+            if (tracks.length === 0) {
+              return (
+                <p className="text-slate-400 text-sm py-3">
+                  No tracks credit this instrument yet.
+                </p>
+              );
+            }
+            // Group by album so admins see "this 1973 Martin is on 4 tracks
+            // across Blue + Court and Spark" rather than a flat blob.
+            type AlbumGroup = { albumId: string; albumTitle: string; albumArtwork: string; albumYear: number | null; rows: typeof tracks };
+            const byAlbum = new Map<string, AlbumGroup>();
+            for (const t of tracks) {
+              const g = byAlbum.get(t.albumId) ?? {
+                albumId: t.albumId,
+                albumTitle: t.albumTitle,
+                albumArtwork: t.albumArtwork,
+                albumYear: t.albumYear,
+                rows: [],
+              };
+              g.rows.push(t);
+              byAlbum.set(t.albumId, g);
+            }
+            const groups = Array.from(byAlbum.values());
+            return (
+              <ul className="space-y-4">
+                {groups.map((g) => (
+                  <li key={g.albumId} data-testid={`group-instrument-album-${g.albumId}`}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {g.albumArtwork ? (
+                        <img src={g.albumArtwork} alt="" className="w-7 h-7 rounded object-cover" />
+                      ) : null}
+                      <span className="text-slate-900 text-[13px] font-semibold truncate">
+                        {g.albumTitle}
+                        {g.albumYear ? (
+                          <span className="text-slate-400 font-normal"> · {g.albumYear}</span>
+                        ) : null}
+                      </span>
+                      <span className="text-slate-400 text-[11px] ml-auto">
+                        {g.rows.length} track{g.rows.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <ul className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+                      {g.rows.map((t) => (
+                        <li
+                          key={t.performerId}
+                          className="flex items-center gap-3 px-3 py-2"
+                          data-testid={`row-instrument-track-${t.performerId}`}
+                        >
+                          <span className="text-slate-400 text-[11px] w-6 text-right tabular-nums">
+                            {t.trackNumber}
+                          </span>
+                          <span className="flex-1 min-w-0 text-slate-700 text-[12px] truncate">
+                            {t.songTitle}
+                            <span className="text-slate-400"> · {t.personName}</span>
+                            {t.role && t.role.toLowerCase() !== (form.shortCategory ?? form.category ?? "").toLowerCase() ? (
+                              <span className="text-slate-400"> · {t.role}</span>
+                            ) : null}
+                            {t.tuningNotes ? (
+                              <span className="text-slate-400 italic"> — {t.tuningNotes}</span>
+                            ) : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </div>
+      )}
+
+      {tab === "artists" && (
+        <div role="tabpanel" id="panel-admin-instrument-artists" aria-labelledby="tab-admin-instrument-artists" data-testid="panel-admin-instrument-artists">
+          {(() => {
+            const artists = profile?.artists ?? [];
+            if (artists.length === 0) {
+              return (
+                <p className="text-slate-400 text-sm py-3">
+                  No artists credited on this instrument yet.
+                </p>
+              );
+            }
+            return (
+              <ul className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+                {artists.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-3 px-3 py-2.5"
+                    data-testid={`row-instrument-artist-${a.id}`}
+                  >
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 flex-shrink-0">
+                      {a.photoUrl ? (
+                        <img src={a.photoUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm font-semibold">
+                          {a.name.slice(0, 1).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-slate-900 text-[13px] font-medium truncate">{a.name}</p>
+                      <p className="text-slate-400 text-[11px] truncate">
+                        {a.trackCount} track{a.trackCount === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </div>
+      )}
+
+      {tab === "about" && (<div role="tabpanel" id="panel-admin-instrument-about" aria-labelledby="tab-admin-instrument-about" className="space-y-4" data-testid="panel-admin-instrument-about">
       <ScrapeBar
         onPrefill={async (r) => {
           // The admin explicitly clicked Pull — overwrite the standard
@@ -3971,6 +4182,7 @@ function InstrumentEditor({
           )}
         </div>
       </div>
+      </div>)}
     </div>
   );
 }

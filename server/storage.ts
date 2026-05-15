@@ -151,6 +151,25 @@ export interface IStorage {
   // on the fan-side InstrumentSheet.
   getInstrumentSuperCreditArtists(instrumentId: string): Promise<Array<Person & { trackCount: number }>>;
 
+  // Every track this instrument is credited on, with album + person joined.
+  // Powers the Tracks tab on the admin Instrument editor (and is a useful
+  // building block for the fan-side instrument profile later).
+  getInstrumentTracks(instrumentId: string): Promise<Array<{
+    performerId: string;
+    songId: string;
+    songTitle: string;
+    trackNumber: number;
+    albumId: string;
+    albumTitle: string;
+    albumArtwork: string;
+    albumYear: number | null;
+    personId: string | null;
+    personName: string;
+    personPhotoUrl: string | null;
+    role: string;
+    tuningNotes: string | null;
+  }>>;
+
   // Person profile — every (non-hidden) track this person is credited on
   // across the catalog, with album + (optional) instrument joined in. The
   // fan-side PerformerSheet derives both the Music and Gear tabs from this
@@ -896,7 +915,8 @@ export class DbStorage implements IStorage {
     // Walk track_performers filtered to this instrument, join people.
     // Same shape as getVendorSuperCreditArtists but one hop shorter — no
     // need to detour through instrument_vendors because the instrument
-    // is the anchor here.
+    // is the anchor here. Hidden albums are excluded so this public
+    // endpoint can't leak unreleased catalog (mirrors getPersonTracks).
     const rows = await db
       .select({
         person: people,
@@ -904,7 +924,14 @@ export class DbStorage implements IStorage {
       })
       .from(trackPerformers)
       .innerJoin(people, eq(trackPerformers.personId, people.id))
-      .where(eq(trackPerformers.instrumentId, instrumentId));
+      .innerJoin(songs, eq(trackPerformers.songId, songs.id))
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .where(
+        and(
+          eq(trackPerformers.instrumentId, instrumentId),
+          eq(albums.isHidden, false),
+        ),
+      );
     const byPerson = new Map<string, { person: Person; tracks: Set<string> }>();
     for (const r of rows) {
       const entry = byPerson.get(r.person.id) ?? {
@@ -920,6 +947,56 @@ export class DbStorage implements IStorage {
       // getVendorSuperCreditArtists. See note there for why.
       .sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      );
+  }
+
+  async getInstrumentTracks(instrumentId: string) {
+    // Walk track_performers anchored on this instrument, join the
+    // person (optional — name snapshot survives the FK on delete) and
+    // the song + album for navigation. Sort by album year → album title
+    // → track number so the UI groups naturally.
+    const rows = await db
+      .select({
+        p: trackPerformers,
+        s: songs,
+        a: albums,
+        person: people,
+      })
+      .from(trackPerformers)
+      .innerJoin(songs, eq(trackPerformers.songId, songs.id))
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .leftJoin(people, eq(trackPerformers.personId, people.id))
+      .where(
+        and(
+          eq(trackPerformers.instrumentId, instrumentId),
+          // Mirror getPersonTracks / getInstrumentSuperCreditArtists —
+          // never expose hidden-album credits through the public profile.
+          eq(albums.isHidden, false),
+        ),
+      );
+    return rows
+      .map((r) => ({
+        performerId: r.p.id,
+        songId: r.s.id,
+        songTitle: r.s.title,
+        trackNumber: r.s.trackNumber,
+        albumId: r.a.id,
+        albumTitle: r.a.title,
+        albumArtwork: r.a.artwork,
+        albumYear: r.a.year,
+        personId: r.person?.id ?? null,
+        // Prefer the live joined name, but the snapshot keeps the row
+        // renderable if the Person row was deleted (FK is SET NULL).
+        personName: r.person?.name ?? r.p.name,
+        personPhotoUrl: r.person?.photoUrl ?? null,
+        role: r.p.role,
+        tuningNotes: r.p.tuningNotes,
+      }))
+      .sort(
+        (a, b) =>
+          (a.albumYear ?? 0) - (b.albumYear ?? 0) ||
+          a.albumTitle.localeCompare(b.albumTitle) ||
+          a.trackNumber - b.trackNumber,
       );
   }
 
