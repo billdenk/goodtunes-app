@@ -197,6 +197,26 @@ export function Account() {
             </div>
           )}
 
+          {/* Settings rows — moved here from EditAccount so they sit on the
+              Account page itself, not inside the Edit Profile flow. */}
+          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
+          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
+            {["Notifications", "Privacy", "About GoodTunes®"].map((label, i, arr) => (
+              <button
+                key={label}
+                type="button"
+                className={`w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
+                style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
+                data-testid={`row-${label.toLowerCase().replace(/[^a-z]/g, "-")}`}
+              >
+                <span className="text-white text-[15px]">{label}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            ))}
+          </div>
+
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             <button
               type="button"
