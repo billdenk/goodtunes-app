@@ -2717,7 +2717,11 @@ function VendorSheet({
               // "Gear" is the public-facing name for the Instruments bucket
               // — see the Admin "Gear" nav entry. Internally we keep the key
               // `instruments` so the schema/storage names don't have to change.
-              const label = t === "about" ? "About" : t === "instruments" ? "Gear" : "Artists";
+              // "Gear" is the public name for instruments; "People" replaces
+              // "Artists" so the label matches the People entity and the
+              // SuperCredits taggers it surfaces (any credited person, not
+              // just headline artists).
+              const label = t === "about" ? "About" : t === "instruments" ? "Gear" : "People";
               const count = t === "instruments" ? profile?.instruments.length : t === "artists" ? usedBy.length : undefined;
               return (
                 <button
@@ -2827,7 +2831,7 @@ function VendorSheet({
         {tab === "artists" && (
           <section className="px-5 pt-5">
             {usedBy.length === 0 ? (
-              <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>No artists credited with this vendor's instruments yet.</p>
+              <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>Nobody's been credited with this vendor's instruments yet.</p>
             ) : (
               <div className="grid grid-cols-3 gap-x-4 gap-y-5">
                 {usedBy.map((person) => (
@@ -2839,7 +2843,7 @@ function VendorSheet({
               </div>
             )}
             <p className="pt-5 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-              From SuperCredits™ — artists who've credited one of {vendor.name}'s instruments on a track. Official sponsorships will badge here once that admin field lands.
+              From SuperCredits™ — people who've credited one of {vendor.name}'s instruments on a track. Official sponsorships will badge here once that admin field lands.
             </p>
           </section>
         )}

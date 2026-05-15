@@ -2969,11 +2969,9 @@ function VendorRow({
 // isHidden) live in VendorRow inside the InstrumentEditor — not here.
 function VendorPaneEditor({
   vendor,
-  onJumpToInstrument,
   onDeleted,
 }: {
   vendor: AdminVendorGrouped;
-  onJumpToInstrument: (instrumentId: string) => void;
   onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -3037,8 +3035,6 @@ function VendorPaneEditor({
       return `https://www.google.com/s2/favicons?sz=128&domain=${draft.domain}`;
     return "";
   }, [draft.logoUrl, draft.domain]);
-
-  const attachmentCount = vendor.attachments.length;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -3928,7 +3924,7 @@ function VendorPreviewCard({
                 {([
                   { key: "about", label: "About", count: undefined as number | undefined },
                   { key: "gear", label: "Gear", count: gearCount > 0 ? gearCount : undefined },
-                  { key: "artists", label: "Artists", count: undefined },
+                  { key: "people", label: "People", count: undefined },
                 ]).map((t) => {
                   const active = t.key === "about";
                   return (
@@ -5728,13 +5724,6 @@ export function Admin() {
                 <VendorPaneEditor
                   key={v.id}
                   vendor={v}
-                  onJumpToInstrument={(instrumentId) => {
-                    setSelectedByEntity((p) => ({
-                      ...p,
-                      instruments: instrumentId,
-                    }));
-                    setEntity("instruments");
-                  }}
                   onDeleted={() => setSelectedId(null)}
                 />
               );
