@@ -814,15 +814,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const type: "Single" | "EP" | "LP" =
       trackCount === 1 ? "Single" : trackCount && trackCount <= 6 ? "EP" : "LP";
 
-    // Try to resolve the artist text → an existing Person row (case-insensitive
-    // exact name match). If we find one, pre-link via primaryArtistId so the
-    // new album shows up on the artist's page immediately.
-    const artistName: string = String(collection.artistName || "");
+    // Resolve the artist text → Person rows. Apple uses two very different
+    // conventions in the same `artistName` field:
+    //   • Band/duo names — "Tim Snider & Wolfgang Timber", "Simon & Garfunkel",
+    //     "Crosby, Stills & Nash". These are ONE artist entity, not several.
+    //   • Featured guests — "Drake feat. Rihanna", "X ft. Y", "A with B".
+    //     The first name is the primary, the rest are guests.
+    // We can't tell the two apart from punctuation alone, so we only split
+    // on the explicit guest markers (feat./ft./with). Anything with just
+    // "&", ",", or "and" is treated as a single artist name — preserving
+    // band identity. Worst case the admin renames or splits later; better
+    // than silently shattering "Tim Snider & Wolfgang Timber" into three
+    // rows. If the artist string is empty we still create one Person from
+    // whatever text Apple gave us, so every imported album lands with at
+    // least one Person attached.
+    const artistName: string = String(collection.artistName || "").trim();
     let primaryArtistId: string | null = null;
     if (artistName) {
+      const pieces = artistName
+        .split(/\s+(?:\bfeat\.?\b|\bft\.?\b|\bwith\b)\s+/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const names = pieces.length > 0 ? pieces : [artistName];
       const allPeople = await storage.getPeople();
-      const match = allPeople.find((p) => p.name.toLowerCase() === artistName.toLowerCase());
-      if (match) primaryArtistId = match.id;
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        const existing = allPeople.find(
+          (p) => p.name.toLowerCase() === name.toLowerCase(),
+        );
+        let personId: string;
+        if (existing) {
+          personId = existing.id;
+        } else {
+          const created = await storage.createPerson({ name } as any);
+          personId = created.id;
+          allPeople.push(created);
+        }
+        if (i === 0) primaryArtistId = personId;
+      }
     }
 
     const album = await storage.createAlbum({
