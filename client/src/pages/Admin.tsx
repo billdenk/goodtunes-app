@@ -20,8 +20,10 @@ interface AdminAlbum {
   artist: string;
   artwork: string;
   year: number | null;
-  type: "album" | "EP";
+  type: "Single" | "EP" | "LP";
   description: string | null;
+  goodTunesReleaseDate: string | null;
+  streamingReleaseDate: string | null;
   // Demo show/hide. When true the album (and its songs/credits) is hidden
   // from the fan-side catalog. CMS callers see hidden rows so they can
   // flip the toggle back on.
@@ -462,6 +464,8 @@ function AlbumEditor({
         labelId: data.labelId ?? null,
         appleMusicUrl: data.appleMusicUrl,
         spotifyUrl: data.spotifyUrl,
+        goodTunesReleaseDate: (data as any).goodTunesReleaseDate ?? null,
+        streamingReleaseDate: (data as any).streamingReleaseDate ?? null,
       });
       setDirty(false);
     }
@@ -658,12 +662,15 @@ function AlbumEditor({
           <Field label="Type">
             <select
               value={form.type}
-              onChange={(e) => set("type", e.target.value as "album" | "EP")}
+              onChange={(e) =>
+                set("type", e.target.value as "Single" | "EP" | "LP")
+              }
               className={inputCls}
               data-testid="select-album-type"
             >
-              <option value="album">Album</option>
+              <option value="Single">Single</option>
               <option value="EP">EP</option>
+              <option value="LP">LP</option>
             </select>
           </Field>
         </div>
@@ -702,6 +709,42 @@ function AlbumEditor({
             />
           </Field>
         </div>
+
+        {/* Release dates. Two-pane: the GoodTunes go-live date (when fans with
+            the bundle can start listening in-app) and the streaming-release
+            date (when Apple/Spotify drop). Leaving either blank means "not
+            scheduled yet". The streaming date drives the "Now on streaming"
+            banner once it lands — see roadmap. */}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="GoodTunes release date">
+            <input
+              type="date"
+              value={form.goodTunesReleaseDate ?? ""}
+              onChange={(e) =>
+                set("goodTunesReleaseDate", e.target.value || null)
+              }
+              className={inputCls}
+              data-testid="input-album-goodtunes-release-date"
+            />
+          </Field>
+          <Field label="Streaming release date">
+            <input
+              type="date"
+              value={form.streamingReleaseDate ?? ""}
+              onChange={(e) =>
+                set("streamingReleaseDate", e.target.value || null)
+              }
+              className={inputCls}
+              data-testid="input-album-streaming-release-date"
+            />
+          </Field>
+        </div>
+        <p className="text-[11px] text-slate-400 -mt-2">
+          GoodTunes goes live first — fans with the vinyl bundle hear it in-app
+          during the pre-streaming window. On the streaming date the player
+          surfaces a friendly "now on Apple/Spotify" handoff so fans can listen
+          however they normally do.
+        </p>
         <p className="text-[11px] text-slate-400 -mt-2">
           "Listen on…" handoff. Surfaced on the album page after the in-app
           preview window. Apple Music URL is auto-filled when an album is pulled
@@ -4401,7 +4444,7 @@ export function Admin() {
         title: "New album",
         artist: "Unknown artist",
         artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png",
-        type: "album",
+        type: "LP",
       });
       return res.json() as Promise<AdminAlbum>;
     },

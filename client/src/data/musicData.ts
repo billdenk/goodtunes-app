@@ -59,7 +59,7 @@ export interface Album {
   artist: string;
   artwork: string;
   year: number;
-  type: "album" | "EP";
+  type: "Single" | "EP" | "LP";
   description: string;
   certificateNumber?: number;
   ownedCertificates?: number[];
@@ -467,7 +467,7 @@ export const ALBUMS: Album[] = [
     artist: "Tim Snider & Wolfgang Timber",
     artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png",
     year: 2024,
-    type: "album",
+    type: "LP",
     description: "A sweeping collection of songs about stillness, change, and the moments between.",
     certificateNumber: 12,
   },
@@ -477,7 +477,7 @@ export const ALBUMS: Album[] = [
     artist: "Fernando Perdomo",
     artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png",
     year: 2024,
-    type: "album",
+    type: "LP",
     description: "Instrumental mastery meets emotional storytelling. Each track a conversation without words.",
     certificateNumber: 7,
   },
@@ -497,7 +497,7 @@ export const ALBUMS: Album[] = [
     artist: "TOMMYGUNN",
     artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png",
     year: 2024,
-    type: "album",
+    type: "LP",
     description: "Sunshine, highways, and the stories only California can tell. A West Coast state of mind.",
     certificateNumber: 21,
     ownedCertificates: [21, 47, 88],
@@ -543,7 +543,7 @@ export const ALBUMS: Album[] = [
     artist: "Nick Carter",
     artwork: nickCarterAlbumCover,
     year: 2025,
-    type: "album",
+    type: "LP",
     description:
       "Love. Life. Tragedy. And everything in between. Nick Carter's most personal album to date is finally here — a raw, reflective collection of pop-rock anthems and heartfelt ballads, capturing the highs and heartbreaks of a life lived in the spotlight. With tracks like \u201CStorms,\u201D \u201CCold Night,\u201D and \u201CHurts To Love You,\u201D this album dives deep \u2013 and comes back stronger.",
   },

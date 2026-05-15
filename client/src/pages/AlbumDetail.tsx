@@ -130,8 +130,10 @@ export function AlbumDetail() {
     artist: string;
     artwork: string;
     year: number | null;
-    type: "album" | "EP";
+    type: "Single" | "EP" | "LP";
     description: string | null;
+    goodTunesReleaseDate: string | null;
+    streamingReleaseDate: string | null;
     // Denormalized record-label entity (or null). Comes from the album's
     // LEFT JOIN on `labels` so we render name/logo without a second fetch.
     label: {
@@ -670,7 +672,7 @@ export function AlbumDetail() {
               <span className="block mt-0.5">{songs.length} {songs.length === 1 ? "song" : "songs"} · {runtime}</span>
               {ownedNums.length > 0 && (
                 <span className="block mt-0.5">
-                  You own {ownedNums.length === 1 ? `No. ${(ownedNums[0]).toString().padStart(2, "0")}` : `${ownedNums.length} certificates`} of this {album.type === "EP" ? "EP" : "album"}.
+                  You own {ownedNums.length === 1 ? `No. ${(ownedNums[0]).toString().padStart(2, "0")}` : `${ownedNums.length} certificates`} of this {album.type === "EP" ? "EP" : album.type === "Single" ? "single" : "LP"}.
                 </span>
               )}
             </p>

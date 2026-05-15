@@ -40,8 +40,19 @@ export const albums = pgTable("albums", {
   artist: text("artist").notNull(),
   artwork: text("artwork").notNull(),
   year: integer("year"),
-  type: text("type").notNull().default("album"),
+  // Release format. One of "Single" (1–2 tracks, the 7" equivalent),
+  // "EP" (3–7 tracks), "LP" (8+ tracks, the full-length record). Legacy
+  // rows used "album" — migrated to "LP" on the 2026-05 schema bump.
+  type: text("type").notNull().default("LP"),
   description: text("description"),
+  // ISO YYYY-MM-DD. Day GoodTunes goes live with the in-app player (the
+  // bundle-holder pre-streaming window starts here). Nullable while the
+  // album is still being assembled.
+  goodTunesReleaseDate: text("good_tunes_release_date"),
+  // ISO YYYY-MM-DD. Day the same album drops on Apple/Spotify/etc. When
+  // this date hits, the player surfaces a "Now on streaming — listen
+  // anywhere" banner so we're not holding fans hostage.
+  streamingReleaseDate: text("streaming_release_date"),
   // The label this album was released on. SET NULL so deleting a label
   // doesn't take down its catalog; the album just loses its label credit
   // until reassigned. Album reads denormalize the joined label entity

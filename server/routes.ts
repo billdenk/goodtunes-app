@@ -73,6 +73,31 @@ async function isAdminUser(req: Request): Promise<boolean> {
   return !!user?.isAdmin;
 }
 
+// Maps any incoming album-type string to the three values the player + admin
+// know about. Accepts legacy "album" payloads from older clients and rewrites
+// them to "LP" so we don't have to do a coordinated client rollout.
+function normalizeAlbumType(value: unknown): "Single" | "EP" | "LP" {
+  const s = typeof value === "string" ? value.trim() : "";
+  if (s === "Single") return "Single";
+  if (s === "EP") return "EP";
+  if (s === "LP") return "LP";
+  if (s.toLowerCase() === "single") return "Single";
+  if (s.toLowerCase() === "ep") return "EP";
+  if (s.toLowerCase() === "lp" || s.toLowerCase() === "album") return "LP";
+  return "LP";
+}
+
+// Coerces a release-date input into a `YYYY-MM-DD` string or null. Accepts:
+// empty string / null / undefined → null; otherwise trims and validates the
+// shape (10 chars, ISO-like). Anything malformed is stored as null rather
+// than throwing — the admin form is the only writer today.
+function normalizeReleaseDate(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const PgSession = connectPgSimple(session);
   const sessionSecret = process.env.SESSION_SECRET;
@@ -706,11 +731,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       artist: String(artist),
       artwork: String(artwork),
       year: year != null ? Number(year) : null,
-      type: type === "EP" ? "EP" : "album",
+      type: normalizeAlbumType(type),
       description: description ? String(description) : null,
       labelId: normalizedLabelId,
       appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
       spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
+      goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
+      streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
     } as any);
     return res.status(201).json(album);
   });
@@ -723,8 +750,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (artist !== undefined) updates.artist = String(artist);
     if (artwork !== undefined) updates.artwork = String(artwork);
     if (year !== undefined) updates.year = year === null || year === "" ? null : Number(year);
-    if (type !== undefined) updates.type = type === "EP" ? "EP" : "album";
+    if (type !== undefined) updates.type = normalizeAlbumType(type);
     if (description !== undefined) updates.description = description ? String(description) : null;
+    if (req.body?.goodTunesReleaseDate !== undefined)
+      updates.goodTunesReleaseDate = normalizeReleaseDate(req.body.goodTunesReleaseDate);
+    if (req.body?.streamingReleaseDate !== undefined)
+      updates.streamingReleaseDate = normalizeReleaseDate(req.body.streamingReleaseDate);
     if (req.body?.labelId !== undefined) {
       const normalizedLabelId = req.body.labelId ? String(req.body.labelId) : null;
       if (normalizedLabelId && !(await storage.getLabelById(normalizedLabelId))) {
