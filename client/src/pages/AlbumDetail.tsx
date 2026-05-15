@@ -16,7 +16,7 @@ import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type S
 // Enriched credits as returned by GET /api/songs/:id/credits and
 // GET /api/albums/:id/credits. Person/instrument joins are already done
 // server-side so the fan-side credits surface renders from a single fetch.
-type ApiPerson = { id: string; name: string; photoUrl?: string | null; bio?: string | null; accent?: string | null };
+type ApiPerson = { id: string; name: string; photoUrl?: string | null; bio?: string | null };
 type ApiVendor = { id: string; instrumentId: string; vendorId: string; name: string; domain?: string; affiliateUrl: string; aboutUrl?: string | null; homeUrl?: string | null; logoUrl?: string | null; tagline?: string | null; bio?: string | null; location?: string | null; coverUrl?: string | null; position: number };
 type ApiInstrument = { id: string; name: string; category: string; shortCategory?: string | null; photoUrl?: string | null; about?: string | null; artistNote?: string | null; vendors: ApiVendor[] };
 type ApiSongCredits = {
@@ -29,7 +29,7 @@ type ApiSongCredits = {
 // static-seed shapes already used by the credits sheets.
 const nu = <T,>(v: T | null | undefined): T | undefined => v ?? undefined;
 function normalizePerson(p: ApiPerson): Person {
-  return { id: p.id, name: p.name, photoUrl: nu(p.photoUrl), bio: nu(p.bio), accent: nu(p.accent) };
+  return { id: p.id, name: p.name, photoUrl: nu(p.photoUrl), bio: nu(p.bio) };
 }
 function normalizeInstrument(i: ApiInstrument): Instrument {
   return {
@@ -1706,7 +1706,7 @@ function PerformerSheet({
   // for synthetic snapshot rows (no real personId), in which case the sheet
   // falls back to current-album-only data already in props.
   type PersonProfile = {
-    person: { id: string; name: string; photoUrl: string | null; bio: string | null; accent: string | null };
+    person: { id: string; name: string; photoUrl: string | null; bio: string | null };
     tracks: Array<{
       performerId: string;
       songId: string; songTitle: string; trackNumber: number;
@@ -2244,7 +2244,7 @@ function InstrumentSheet({
     instrument: { id: string };
     artists: Array<{
       id: string; name: string; photoUrl: string | null;
-      bio: string | null; accent: string | null; trackCount: number;
+      bio: string | null; trackCount: number;
     }>;
   };
   const { data: instrumentProfile } = useQuery<InstrumentProfile>({
@@ -2255,7 +2255,6 @@ function InstrumentSheet({
     id: a.id,
     name: a.name,
     photoUrl: a.photoUrl ?? undefined,
-    accent: a.accent ?? undefined,
   } as Person));
 
   // Split the admin-pasted "about" blob into prose vs. structured specs once,
@@ -2640,7 +2639,7 @@ function VendorSheet({
     }>;
     artists: Array<{
       id: string; name: string; photoUrl: string | null;
-      bio: string | null; accent: string | null;
+      bio: string | null;
       trackCount: number;
     }>;
   };
@@ -2665,7 +2664,6 @@ function VendorSheet({
         id: a.id,
         name: a.name,
         photoUrl: a.photoUrl ?? undefined,
-        accent: a.accent ?? undefined,
       } as Person))
     : ((vendor.usedByPersonIds ?? Object.keys(PEOPLE).slice(0, 4))
         .map((pid) => PEOPLE[pid])

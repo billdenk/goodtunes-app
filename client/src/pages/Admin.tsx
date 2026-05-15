@@ -83,8 +83,8 @@ interface AdminPerson {
   id: string;
   name: string;
   photoUrl: string | null;
+  coverUrl: string | null;
   bio: string | null;
-  accent: string | null;
   appleMusicUrl: string | null;
   spotifyUrl: string | null;
   itunesArtistId: string | null;
@@ -2667,7 +2667,7 @@ function PersonEditor({
   // /api/people/:id/profile bundle that powers the fan-side PerformerSheet.
   const [tab, setTab] = useState<"about" | "music" | "gear">("about");
   type PersonProfile = {
-    person: { id: string; name: string; photoUrl: string | null; bio: string | null; accent: string | null };
+    person: { id: string; name: string; photoUrl: string | null; bio: string | null };
     tracks: Array<{
       performerId: string;
       songId: string; songTitle: string; trackNumber: number;
@@ -2920,7 +2920,7 @@ function PersonEditor({
         ) : (
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-semibold text-white"
-            style={{ background: form.accent || "#319ED8" }}
+            style={{ background: "#319ED8" }}
           >
             {form.name.slice(0, 1).toUpperCase()}
           </div>
@@ -3387,17 +3387,23 @@ function PersonEditor({
           data-testid="input-person-name"
         />
       </Field>
-      <Field label="Photo URL">
-        <input
+      <Field label="Photo">
+        <ArtworkPicker
           value={form.photoUrl ?? ""}
-          onChange={(e) => update({ photoUrl: e.target.value || null })}
-          className={inputCls}
-          data-testid="input-person-photo"
+          onChange={(next) => update({ photoUrl: next || null })}
+          shape="circle"
+          testId="input-person-photo"
+          hint="Square, displayed as a circle. 400×400 px minimum (800×800 for retina). JPG or PNG."
         />
-        <p className="text-[11px] text-slate-400 mt-1">
-          Square, displayed as a circle. 400×400 px minimum (800×800 for
-          retina). JPG or PNG.
-        </p>
+      </Field>
+      <Field label="Cover image">
+        <ArtworkPicker
+          value={form.coverUrl ?? ""}
+          onChange={(next) => update({ coverUrl: next || null })}
+          shape="square"
+          testId="input-person-cover"
+          hint="Wide hero banner for the artist page. Optional — falls back to the circular photo when empty."
+        />
       </Field>
       <Field label="Bio">
         <textarea
@@ -3407,28 +3413,6 @@ function PersonEditor({
           className={inputCls + " resize-none"}
           data-testid="input-person-bio"
         />
-      </Field>
-
-      <Field label="Accent colour (hex, falls back to brand blue)">
-        <div className="flex items-center gap-2">
-          <input
-            value={form.accent ?? ""}
-            onChange={(e) => update({ accent: e.target.value || null })}
-            placeholder="#319ED8"
-            className={inputCls}
-            data-testid="input-person-accent"
-          />
-          {["#319ED8", "#7F10A7", "#4AFFCA", "#FF5470"].map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => update({ accent: c })}
-              className="w-7 h-7 rounded-full shrink-0 border border-slate-300"
-              style={{ background: c }}
-              title={c}
-            />
-          ))}
-        </div>
       </Field>
 
       {/* Label picker — same search-or-create UX as the album editor, so
@@ -4506,7 +4490,7 @@ function VendorPaneEditor({
   type VendorProfile = {
     vendor: unknown;
     instruments: Array<{ id: string; name: string; category: string; shortCategory: string | null; photoUrl: string | null }>;
-    artists: Array<{ id: string; name: string; photoUrl: string | null; accent: string | null; trackCount: number }>;
+    artists: Array<{ id: string; name: string; photoUrl: string | null; trackCount: number }>;
   };
   const { data: vendorProfile } = useQuery<VendorProfile>({
     queryKey: ["/api/vendors", vendor.vendorId, "profile"],
@@ -4717,7 +4701,7 @@ function VendorPaneEditor({
                   ) : (
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[12px] font-semibold"
-                      style={{ background: p.accent ?? "#319ED8" }}
+                      style={{ background: "#319ED8" }}
                     >
                       {p.name.charAt(0).toUpperCase()}
                     </div>
@@ -5887,23 +5871,48 @@ function LabelPreviewCard({
   );
   const musicCount = labelAlbums.length;
 
-  // Artists = distinct primary artists across those albums. Dedupe by
-  // primaryArtistId when present, falling back to the snapshot `artist`
-  // string so manually-typed names (no Person row yet) still surface.
+  // Artists = the union of two paths so an artist surfaces here as soon
+  // as either link exists:
+  //   1) People directly signed to this label via `people.labelId` — a
+  //      freshly-linked artist appears in the stable immediately, even
+  //      before they have a release.
+  //   2) Primary artists on non-hidden albums attached to this label —
+  //      either a real Person row (via primaryArtistId) or a snapshot
+  //      name from older albums typed in before a Person existed.
+  // We do the people-by-labelId pass FIRST and register BOTH an id key
+  // and a name key per person. The album pass then dedupes against
+  // either, so a signed artist who also has a snapshot-typed album on
+  // this label only renders once (and we keep the richer Person row).
   const artistKeys = new Set<string>();
   const artistRows: { id: string; name: string; photoUrl: string | null }[] = [];
+  const nameKey = (n: string) =>
+    `name:${n.trim().toLowerCase()}`;
+  for (const p of people) {
+    if (p.labelId !== label.id) continue;
+    if (artistKeys.has(p.id)) continue;
+    artistKeys.add(p.id);
+    artistKeys.add(nameKey(p.name));
+    artistRows.push({ id: p.id, name: p.name, photoUrl: p.photoUrl });
+  }
   for (const a of labelAlbums) {
-    const key = a.primaryArtistId ?? `name:${a.artist || ""}`;
-    if (!key || artistKeys.has(key)) continue;
-    artistKeys.add(key);
-    const person = a.primaryArtistId
-      ? people.find((p) => p.id === a.primaryArtistId)
-      : undefined;
-    artistRows.push({
-      id: key,
-      name: person?.name ?? a.artist ?? "Unknown artist",
-      photoUrl: person?.photoUrl ?? null,
-    });
+    if (a.primaryArtistId) {
+      if (artistKeys.has(a.primaryArtistId)) continue;
+      const person = people.find((p) => p.id === a.primaryArtistId);
+      artistKeys.add(a.primaryArtistId);
+      if (person) artistKeys.add(nameKey(person.name));
+      artistRows.push({
+        id: a.primaryArtistId,
+        name: person?.name ?? a.artist ?? "Unknown artist",
+        photoUrl: person?.photoUrl ?? null,
+      });
+      continue;
+    }
+    const snapshot = (a.artist ?? "").trim();
+    if (!snapshot) continue;
+    const nk = nameKey(snapshot);
+    if (artistKeys.has(nk)) continue;
+    artistKeys.add(nk);
+    artistRows.push({ id: `name:${snapshot}`, name: snapshot, photoUrl: null });
   }
   // Apple-Music / Spotify standard: alphabetical by display name as a
   // single string (case-insensitive). "Fernando Perdomo" sorts under F,
@@ -6815,7 +6824,7 @@ function AlbumArtistPicker({
                 ) : (
                   <span
                     className="w-7 h-7 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[11px] font-semibold text-slate-500"
-                    style={linked.accent ? { background: linked.accent, color: "white" } : undefined}
+                    style={{ background: "#319ED8", color: "white" }}
                   >
                     {linked.name.charAt(0).toUpperCase()}
                   </span>
@@ -6896,7 +6905,7 @@ function AlbumArtistPicker({
                   ) : (
                     <span
                       className="w-6 h-6 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500"
-                      style={p.accent ? { background: p.accent, color: "white" } : undefined}
+                      style={{ background: "#319ED8", color: "white" }}
                     >
                       {p.name.charAt(0).toUpperCase()}
                     </span>
@@ -7019,6 +7028,36 @@ function AlbumLabelPicker({
   const [newWebsiteUrl, setNewWebsiteUrl] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
 
+  // Close the open dropdown when the admin clicks anywhere outside it or
+  // presses Escape. Without this the panel just hangs open after picking,
+  // saving, or moving on to another field — which made the form feel
+  // stuck and obscured the rest of the editor.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onPointer = (e: MouseEvent | TouchEvent) => {
+      const root = rootRef.current;
+      if (root && !root.contains(e.target as Node)) {
+        setPickerOpen(false);
+        setCreating(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPickerOpen(false);
+        setCreating(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("touchstart", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("touchstart", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pickerOpen]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return sorted;
@@ -7070,7 +7109,7 @@ function AlbumLabelPicker({
 
   return (
     <Field label="Label">
-      <div className="space-y-2">
+      <div className="space-y-2" ref={rootRef}>
         <button
           type="button"
           onClick={() => setPickerOpen((v) => !v)}
@@ -7522,7 +7561,6 @@ export function Admin() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/people", {
         name: "New person",
-        accent: "#319ED8",
       });
       return res.json() as Promise<AdminPerson>;
     },
@@ -7880,7 +7918,7 @@ export function Admin() {
                     ) : (
                       <div
                         className="w-10 h-10 rounded-full flex items-center justify-center text-slate-900 text-sm font-semibold shrink-0"
-                        style={{ background: p.accent || "#319ED8" }}
+                        style={{ background: "#319ED8" }}
                       >
                         {p.name.slice(0, 1).toUpperCase()}
                       </div>

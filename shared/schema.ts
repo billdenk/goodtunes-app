@@ -172,10 +172,13 @@ export const people = pgTable("people", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   photoUrl: text("photo_url"),
+  // Optional wide background image for the artist hero — mirrors
+  // `vendors.coverUrl` / `labels.coverUrl` so when the fan-side artist
+  // page lands we already have a place to put a banner. The initial
+  // circle now always falls back to brand blue (#319ED8); the old
+  // per-person `accent` hex was removed.
+  coverUrl: text("cover_url"),
   bio: text("bio"),
-  // HSL-friendly hex from the brand palette for the initial-circle avatar
-  // fallback (#319ED8, #7F10A7, #4AFFCA, #FF5470).
-  accent: text("accent"),
   // Optional FK to the label this artist is signed to. Mirrors
   // `albums.labelId` so an artist can be tagged with a label even before
   // they've released anything in-app, and so independent artists (no

@@ -1169,8 +1169,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const p = await storage.createPerson({
       name: String(b.name),
       photoUrl: opt(b.photoUrl),
+      coverUrl: opt(b.coverUrl),
       bio: opt(b.bio),
-      accent: opt(b.accent),
       appleMusicUrl: opt(b.appleMusicUrl),
       spotifyUrl: opt(b.spotifyUrl),
       itunesArtistId: opt(b.itunesArtistId),
@@ -1191,8 +1191,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const opt = (v: any) => (v ? String(v) : null);
     if (b.name !== undefined) updates.name = String(b.name);
     if (b.photoUrl !== undefined) updates.photoUrl = opt(b.photoUrl);
+    if (b.coverUrl !== undefined) updates.coverUrl = opt(b.coverUrl);
     if (b.bio !== undefined) updates.bio = opt(b.bio);
-    if (b.accent !== undefined) updates.accent = opt(b.accent);
     if (b.appleMusicUrl !== undefined) updates.appleMusicUrl = opt(b.appleMusicUrl);
     if (b.spotifyUrl !== undefined) updates.spotifyUrl = opt(b.spotifyUrl);
     if (b.itunesArtistId !== undefined) updates.itunesArtistId = opt(b.itunesArtistId);

@@ -84,8 +84,6 @@ export interface Person {
   name: string;
   photoUrl?: string;
   bio?: string;
-  // Used for the initial-circle avatar fallback (HSL-friendly hex from the brand palette).
-  accent?: string;
 }
 
 export interface InstrumentVendor {
@@ -152,12 +150,12 @@ export interface TrackCredits {
 }
 
 export const PEOPLE: Record<string, Person> = {
-  "p-tim-snider":   { id: "p-tim-snider",   name: "Timothy Michael Snider", accent: "#319ED8" },
-  "p-wolfgang":     { id: "p-wolfgang",     name: "Wolfgang Timber",        accent: "#7F10A7" },
-  "p-joe-hall":     { id: "p-joe-hall",     name: "Joe Hall",               accent: "#4AFFCA" },
-  "p-zach-teran":   { id: "p-zach-teran",   name: "Zachary Christopher Teran", accent: "#FF5470" },
-  "p-miguel-cruz":  { id: "p-miguel-cruz",  name: "Miguel Jimenez Cruz",    accent: "#319ED8" },
-  "p-chance-utter": { id: "p-chance-utter", name: "Chance Chester Utter",   accent: "#7F10A7" },
+  "p-tim-snider":   { id: "p-tim-snider",   name: "Timothy Michael Snider" },
+  "p-wolfgang":     { id: "p-wolfgang",     name: "Wolfgang Timber" },
+  "p-joe-hall":     { id: "p-joe-hall",     name: "Joe Hall" },
+  "p-zach-teran":   { id: "p-zach-teran",   name: "Zachary Christopher Teran" },
+  "p-miguel-cruz":  { id: "p-miguel-cruz",  name: "Miguel Jimenez Cruz" },
+  "p-chance-utter": { id: "p-chance-utter", name: "Chance Chester Utter" },
 };
 
 // Helper: stable favicon URL for a vendor. Cheap, recognizable, no asset shipping.

@@ -22,6 +22,9 @@ Mobile-first, Apple-Music-inspired web player.
 
 ## User preferences
 
+### Spelling
+- Use **US English** for all user-facing strings (e.g. "color", not "colour"; "favorite", not "favourite"). Code identifiers can stay as they are; only the visible UI copy needs to read American.
+
 ### Playlist covers
 - Always show the actual artwork mosaic (gradient fallback only when truly empty).
 - Adapt the layout to the count of unique album artworks:
