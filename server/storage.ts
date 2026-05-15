@@ -115,6 +115,12 @@ export interface IStorage {
   getVendorInstruments(vendorId: string): Promise<Instrument[]>;
   getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>>;
 
+  // Symmetric to the vendor version, but anchored on an instrument:
+  // returns every artist credited (via SuperCredits) as having played
+  // THIS instrument on a track. Powers the "Artists who play this" rail
+  // on the fan-side InstrumentSheet.
+  getInstrumentSuperCreditArtists(instrumentId: string): Promise<Array<Person & { trackCount: number }>>;
+
   // Person profile — every (non-hidden) track this person is credited on
   // across the catalog, with album + (optional) instrument joined in. The
   // fan-side PerformerSheet derives both the Music and Gear tabs from this
@@ -601,6 +607,36 @@ export class DbStorage implements IStorage {
       )
       .innerJoin(people, eq(trackPerformers.personId, people.id))
       .where(eq(instrumentVendors.vendorId, vendorId));
+    const byPerson = new Map<string, { person: Person; tracks: Set<string> }>();
+    for (const r of rows) {
+      const entry = byPerson.get(r.person.id) ?? {
+        person: r.person,
+        tracks: new Set<string>(),
+      };
+      entry.tracks.add(r.songId);
+      byPerson.set(r.person.id, entry);
+    }
+    return Array.from(byPerson.values())
+      .map(({ person, tracks }) => ({ ...person, trackCount: tracks.size }))
+      .sort(
+        (a, b) =>
+          b.trackCount - a.trackCount || a.name.localeCompare(b.name),
+      );
+  }
+
+  async getInstrumentSuperCreditArtists(instrumentId: string): Promise<Array<Person & { trackCount: number }>> {
+    // Walk track_performers filtered to this instrument, join people.
+    // Same shape as getVendorSuperCreditArtists but one hop shorter — no
+    // need to detour through instrument_vendors because the instrument
+    // is the anchor here.
+    const rows = await db
+      .select({
+        person: people,
+        songId: trackPerformers.songId,
+      })
+      .from(trackPerformers)
+      .innerJoin(people, eq(trackPerformers.personId, people.id))
+      .where(eq(trackPerformers.instrumentId, instrumentId));
     const byPerson = new Map<string, { person: Person; tracks: Set<string> }>();
     for (const r of rows) {
       const entry = byPerson.get(r.person.id) ?? {

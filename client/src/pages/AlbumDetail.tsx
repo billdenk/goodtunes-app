@@ -2233,6 +2233,27 @@ function InstrumentSheet({
   onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
   onClose: () => void;
 }) {
+  // SuperCredits-derived list of artists who've played this instrument on
+  // a track. Anchored on instrument.id (not vendor.id), so it works for
+  // both demo instruments and real DB rows. Empty list → section hidden.
+  type InstrumentProfile = {
+    instrument: { id: string };
+    artists: Array<{
+      id: string; name: string; photoUrl: string | null;
+      bio: string | null; accent: string | null; trackCount: number;
+    }>;
+  };
+  const { data: instrumentProfile } = useQuery<InstrumentProfile>({
+    queryKey: ["/api/instruments", instrument.id, "profile"],
+    enabled: !!instrument.id,
+  });
+  const instrumentArtists: Person[] = (instrumentProfile?.artists ?? []).map((a) => ({
+    id: a.id,
+    name: a.name,
+    photoUrl: a.photoUrl ?? undefined,
+    accent: a.accent ?? undefined,
+  } as Person));
+
   // Resolve attribution → who wrote the note + which song it's about.
   // Used so a bookmarked instrument still tells you "this note was from X on Y".
   const noteFromPerson = attribution ? PEOPLE[attribution.personId] : undefined;
@@ -2452,6 +2473,27 @@ function InstrumentSheet({
 
           <p className="px-5 pt-4 pb-3 text-[11px] text-center leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
             Outbound links support the artist via SuperCredits™ Micro-Sponsorships. Artist receives the lion's share; GoodTunes receives a small connection fee.
+          </p>
+        </section>
+      )}
+
+      {/* Artists who play this — SuperCredits™ derived. Mirrors the
+          Artists grid on the VendorSheet (3-col avatar wall) so the two
+          gear-adjacent sheets read as a pair. Hidden when no one has
+          credited this instrument yet. */}
+      {instrumentArtists.length > 0 && (
+        <section className="px-5 pt-3 pb-5">
+          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Artists who play this</h3>
+          <div className="grid grid-cols-3 gap-x-4 gap-y-5">
+            {instrumentArtists.map((person) => (
+              <div key={person.id} className="flex flex-col items-center" data-testid={`instrument-artist-${person.id}`}>
+                <PersonAvatar person={person} size={88} />
+                <p className="text-white text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
+              </div>
+            ))}
+          </div>
+          <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+            From SuperCredits™ — artists credited with playing this instrument on a track.
           </p>
         </section>
       )}
