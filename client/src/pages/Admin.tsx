@@ -1357,6 +1357,31 @@ interface SongCredits {
   })[];
 }
 
+interface AdminCreditRole {
+  id: string;
+  kind: "writer" | "performer";
+  name: string;
+}
+
+// Unified credit row — one shape covering both writer and performer rows
+// in the merged list. `kind` reflects whichever backend table the row
+// currently lives in; flipping it in the role picker triggers a
+// delete-then-create migration on save.
+type UnifiedCredit = {
+  kind: "writer" | "performer";
+  id: string;
+  songId: string;
+  personId: string | null;
+  name: string;
+  role: string;
+  position: number;
+  person: AdminPerson | null;
+  // Performer-only fields. Left null/undefined for writer rows.
+  instrumentId?: string | null;
+  tuningNotes?: string | null;
+  instrument?: (AdminInstrument & { vendors: any[] }) | null;
+};
+
 function SongCreditsEditor({ songId }: { songId: string }) {
   const queryClient = useQueryClient();
   const { data: credits } = useQuery<SongCredits>({
@@ -1368,119 +1393,669 @@ function SongCreditsEditor({ songId }: { songId: string }) {
   const { data: instruments = [] } = useQuery<AdminInstrument[]>({
     queryKey: ["/api/instruments"],
   });
+  const { data: roles = [] } = useQuery<AdminCreditRole[]>({
+    queryKey: ["/api/admin/credit-roles"],
+  });
 
   const invalidate = () =>
     queryClient.invalidateQueries({
       queryKey: ["/api/songs", songId, "credits"],
     });
+  const invalidatePeople = () =>
+    queryClient.invalidateQueries({ queryKey: ["/api/people"] });
 
-  const addWriter = useMutation({
+  // Default new credit = writer + Composer, blank name. The row appears in
+  // the list immediately; the admin then picks a person from the picker.
+  const addCredit = useMutation({
     mutationFn: async () => {
       const res = await apiRequest(
         "POST",
         `/api/admin/songs/${songId}/writers`,
-        {
-          name: "New writer",
-          role: "Composer",
-        },
+        { name: "", role: "Composer" },
       );
       return res.json();
     },
     onSuccess: invalidate,
-  });
-  const addPerformer = useMutation({
-    mutationFn: async () => {
-      const firstPerson = people[0];
-      if (!firstPerson)
-        throw new Error("Add at least one Person in the People tab first.");
-      const res = await apiRequest(
-        "POST",
-        `/api/admin/songs/${songId}/performers`,
-        {
-          personId: firstPerson.id,
-          name: firstPerson.name,
-          role: "Guitar",
-        },
-      );
-      return res.json();
-    },
-    onSuccess: invalidate,
-    onError: (e: Error) => alert(e.message),
   });
 
   if (!credits)
     return <div className="text-slate-400 text-xs py-2">Loading credits…</div>;
 
-  return (
-    <div className="space-y-4 pt-2">
-      {/* Writers */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <h4 className="text-slate-500 text-[11px] uppercase tracking-wider">
-            Writers{" "}
-            <span className="text-slate-300 ml-1">
-              ({credits.writers.length})
-            </span>
-          </h4>
-          <button
-            type="button"
-            onClick={() => addWriter.mutate()}
-            className="text-[11px] text-[#319ED8] hover:underline"
-            data-testid={`button-add-writer-${songId}`}
-          >
-            + Writer
-          </button>
-        </div>
-        <div className="space-y-1">
-          {credits.writers.map((w) => (
-            <WriterRow
-              key={w.id}
-              writer={w}
-              people={people}
-              onChanged={invalidate}
-            />
-          ))}
-          {credits.writers.length === 0 && (
-            <p className="text-slate-300 text-xs">No writers yet.</p>
-          )}
-        </div>
-      </div>
+  // Writers first, then performers. Each list is already server-sorted by
+  // position; we surface them in that order without resorting.
+  const unified: UnifiedCredit[] = [
+    ...credits.writers.map<UnifiedCredit>((w) => ({
+      kind: "writer",
+      id: w.id,
+      songId: w.songId,
+      personId: w.personId,
+      name: w.name,
+      role: w.role,
+      position: w.position,
+      person: w.person,
+    })),
+    ...credits.performers.map<UnifiedCredit>((p) => ({
+      kind: "performer",
+      id: p.id,
+      songId: p.songId,
+      personId: p.personId,
+      name: p.name,
+      role: p.role,
+      position: p.position,
+      person: p.person,
+      instrumentId: p.instrumentId,
+      tuningNotes: p.tuningNotes,
+      instrument: p.instrument,
+    })),
+  ];
 
-      {/* Performers */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <h4 className="text-slate-500 text-[11px] uppercase tracking-wider">
-            Performers{" "}
-            <span className="text-slate-300 ml-1">
-              ({credits.performers.length})
-            </span>
-          </h4>
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center justify-between mb-1">
+        <h4 className="text-slate-500 text-[11px] uppercase tracking-wider">
+          Credits{" "}
+          <span className="text-slate-300 ml-1">({unified.length})</span>
+        </h4>
+        <button
+          type="button"
+          onClick={() => addCredit.mutate()}
+          disabled={addCredit.isPending}
+          className="text-[11px] text-[#319ED8] hover:underline disabled:opacity-40"
+          data-testid={`button-add-credit-${songId}`}
+        >
+          + Credit
+        </button>
+      </div>
+      <div className="space-y-1">
+        {unified.map((row) => (
+          <CreditRow
+            key={`${row.kind}-${row.id}`}
+            songId={songId}
+            row={row}
+            people={people}
+            instruments={instruments}
+            roles={roles}
+            onChanged={invalidate}
+            onPersonCreated={invalidatePeople}
+          />
+        ))}
+        {unified.length === 0 && (
+          <p className="text-slate-300 text-xs">No credits yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CreditRow({
+  songId,
+  row,
+  people,
+  instruments,
+  roles,
+  onChanged,
+  onPersonCreated,
+}: {
+  songId: string;
+  row: UnifiedCredit;
+  people: AdminPerson[];
+  instruments: AdminInstrument[];
+  roles: AdminCreditRole[];
+  onChanged: () => void;
+  onPersonCreated: () => void;
+}) {
+  const { draft, setDraft, dirty, snapshot } = useRowDraft(row);
+
+  // Save dispatches based on whether kind changed. Same-kind = PUT in
+  // place. Cross-kind = create a fresh row in the other table, then
+  // delete the original — server treats the two tables as independent.
+  const save = useMutation({
+    mutationFn: async () => {
+      const s = snapshot();
+      const sameKind = s.kind === row.kind;
+      if (sameKind) {
+        const url =
+          s.kind === "writer"
+            ? `/api/admin/writers/${row.id}`
+            : `/api/admin/performers/${row.id}`;
+        const body: any = {
+          personId: s.personId,
+          name: s.name,
+          role: s.role,
+        };
+        if (s.kind === "performer") {
+          body.instrumentId = s.instrumentId ?? null;
+          body.tuningNotes = s.tuningNotes ?? null;
+        }
+        await apiRequest("PUT", url, body);
+        return;
+      }
+      // Kind changed — create on the new table, then delete the old.
+      const createUrl =
+        s.kind === "writer"
+          ? `/api/admin/songs/${songId}/writers`
+          : `/api/admin/songs/${songId}/performers`;
+      const createBody: any = {
+        personId: s.personId,
+        name: s.name,
+        role: s.role,
+      };
+      if (s.kind === "performer") {
+        createBody.instrumentId = s.instrumentId ?? null;
+        createBody.tuningNotes = s.tuningNotes ?? null;
+      }
+      await apiRequest("POST", createUrl, createBody);
+      const deleteUrl =
+        row.kind === "writer"
+          ? `/api/admin/writers/${row.id}`
+          : `/api/admin/performers/${row.id}`;
+      await apiRequest("DELETE", deleteUrl);
+    },
+    onSuccess: onChanged,
+  });
+  const del = useMutation({
+    mutationFn: async () => {
+      const url =
+        row.kind === "writer"
+          ? `/api/admin/writers/${row.id}`
+          : `/api/admin/performers/${row.id}`;
+      await apiRequest("DELETE", url);
+    },
+    onSuccess: onChanged,
+  });
+
+  const selectedPerson =
+    people.find((p) => p.id === draft.personId) ?? draft.person;
+  const selectedInstrument =
+    draft.kind === "performer"
+      ? instruments.find((i) => i.id === draft.instrumentId) ?? null
+      : null;
+
+  return (
+    <div
+      className="rounded-md border border-slate-200 bg-white p-2 space-y-2"
+      data-testid={`row-credit-${row.kind}-${row.id}`}
+    >
+      <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-start">
+        <PersonPicker
+          people={people}
+          value={selectedPerson ?? null}
+          fallbackName={draft.name}
+          onChange={(p) => {
+            setDraft({
+              ...draft,
+              personId: p?.id ?? null,
+              name: p?.name ?? draft.name,
+              person: p,
+            });
+          }}
+          onCreated={(p) => {
+            onPersonCreated();
+            setDraft({
+              ...draft,
+              personId: p.id,
+              name: p.name,
+              person: p,
+            });
+          }}
+        />
+        <RolePicker
+          roles={roles}
+          kind={draft.kind}
+          role={draft.role}
+          onChange={(kind, role) => {
+            // Preserve performer-only fields in the draft when toggling to
+            // writer so flipping back ("oops, wrong kind") restores the
+            // gear selection. They're only sent to the server on save
+            // when kind === "performer".
+            setDraft({ ...draft, kind, role });
+          }}
+        />
+        <button
+          type="button"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate()}
+          className="px-2 py-1 rounded bg-[#319ED8] text-white text-[11px] disabled:opacity-40"
+          data-testid={`button-save-credit-${row.id}`}
+        >
+          {save.isPending ? "…" : "Save"}
+        </button>
+        <button
+          type="button"
+          disabled={del.isPending}
+          onClick={() => {
+            if (confirm("Delete this credit?")) del.mutate();
+          }}
+          className="px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded disabled:opacity-40"
+          data-testid={`button-delete-credit-${row.id}`}
+        >
+          ×
+        </button>
+      </div>
+      {draft.kind === "performer" && (
+        <div className="grid grid-cols-[2fr_1fr] gap-2 items-center">
+          <InstrumentPicker
+            instruments={instruments}
+            value={selectedInstrument}
+            onChange={(i) =>
+              setDraft({ ...draft, instrumentId: i?.id ?? null })
+            }
+            onCreated={(i) =>
+              setDraft({ ...draft, instrumentId: i.id })
+            }
+          />
+          <input
+            value={draft.tuningNotes ?? ""}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                tuningNotes: e.target.value || null,
+              })
+            }
+            placeholder="DADGAD, capo 3…"
+            className={inputCls + " py-1 text-xs"}
+            data-testid={`input-tuning-${row.id}`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Labels-style searchable Person combobox. Mirrors InstrumentPicker —
+// search, pick, or create-inline. When a row already has a person, shows
+// a compact card with a Change button; otherwise shows the search input.
+function PersonPicker({
+  people,
+  value,
+  fallbackName,
+  onChange,
+  onCreated,
+}: {
+  people: AdminPerson[];
+  value: AdminPerson | null;
+  fallbackName: string;
+  onChange: (p: AdminPerson | null) => void;
+  onCreated: (p: AdminPerson) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createErr, setCreateErr] = useState<string | null>(null);
+
+  const matches = (() => {
+    if (!query.trim()) return people.slice(0, 25);
+    const q = query.toLowerCase();
+    return people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 25);
+  })();
+
+  async function handleCreate() {
+    const name = newName.trim();
+    if (!name) {
+      setCreateErr("Name is required.");
+      return;
+    }
+    setCreateBusy(true);
+    setCreateErr(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/people", { name });
+      const created = (await res.json()) as AdminPerson;
+      onCreated(created);
+      setCreating(false);
+      setOpen(false);
+      setQuery("");
+      setNewName("");
+    } catch (e: any) {
+      setCreateErr(e?.message || "Create failed");
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
+  if (value && !creating) {
+    return (
+      <div
+        className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5"
+        data-testid="display-selected-person"
+      >
+        <div className="w-7 h-7 rounded-full overflow-hidden bg-slate-200 flex-shrink-0">
+          {value.photoUrl ? (
+            <img
+              src={value.photoUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : null}
+        </div>
+        <p className="flex-1 min-w-0 text-slate-900 text-[12px] truncate">
+          {value.name}
+        </p>
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="text-[11px] text-slate-500 hover:text-slate-800"
+          data-testid="button-change-person"
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative" data-testid="combobox-person">
+      {!creating ? (
+        <>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder={
+              fallbackName
+                ? `Search people… (was "${fallbackName}")`
+                : "Search people…"
+            }
+            className={inputCls + " py-1.5 text-xs"}
+            data-testid="input-person-search"
+          />
+          {open && (
+            <div className="absolute z-10 left-0 right-0 mt-1 rounded-md border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto">
+              {matches.length === 0 && (
+                <p className="px-3 py-2 text-slate-400 text-[12px]">
+                  No matches.
+                </p>
+              )}
+              {matches.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onChange(p);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 text-left"
+                  data-testid={`option-person-${p.id}`}
+                >
+                  <div className="w-6 h-6 rounded-full overflow-hidden bg-slate-200 flex-shrink-0">
+                    {p.photoUrl ? (
+                      <img
+                        src={p.photoUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <span className="flex-1 min-w-0 text-slate-900 text-[12px] truncate">
+                    {p.name}
+                  </span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setNewName(query);
+                  setCreating(true);
+                  setOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[#319ED8] hover:bg-slate-50"
+                data-testid="button-create-new-person"
+              >
+                + Create new person{query.trim() ? ` "${query.trim()}"` : ""}
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div
+          className="rounded-md border border-slate-200 bg-white p-2 space-y-2"
+          data-testid="form-new-person"
+        >
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Person name"
+            className={inputCls + " py-1.5 text-xs"}
+            data-testid="input-new-person-name"
+          />
+          {createErr && (
+            <p className="text-red-600 text-[11px]">{createErr}</p>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCreating(false);
+                setCreateErr(null);
+              }}
+              className="text-[11px] text-slate-500 hover:text-slate-800 px-2 py-1"
+              data-testid="button-cancel-new-person"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={createBusy}
+              onClick={handleCreate}
+              className="px-2.5 py-1 text-[11px] rounded bg-[#319ED8] text-white font-medium disabled:opacity-40"
+              data-testid="button-save-new-person"
+            >
+              {createBusy ? "Creating…" : "Create"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Flat searchable role list combining writer + performer kinds. Each
+// option carries its kind so picking flips the parent row's `kind`,
+// revealing the gear picker for performers. Creates new roles inline
+// via POST /api/admin/credit-roles; defaults to writer kind for free
+// text the admin types (they can flip with the kind toggle below).
+function RolePicker({
+  roles,
+  kind,
+  role,
+  onChange,
+}: {
+  roles: AdminCreditRole[];
+  kind: "writer" | "performer";
+  role: string;
+  onChange: (kind: "writer" | "performer", role: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newKind, setNewKind] = useState<"writer" | "performer">("writer");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createErr, setCreateErr] = useState<string | null>(null);
+
+  const matches = (() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? roles.filter((r) => r.name.toLowerCase().includes(q))
+      : roles;
+    // Writers first then performers, alphabetical within each kind.
+    return filtered.slice().sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "writer" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
+  async function handleCreate() {
+    const name = newName.trim();
+    if (!name) {
+      setCreateErr("Role name is required.");
+      return;
+    }
+    setCreateBusy(true);
+    setCreateErr(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/credit-roles", {
+        kind: newKind,
+        name,
+      });
+      const created = (await res.json()) as AdminCreditRole;
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/credit-roles"],
+      });
+      onChange(created.kind, created.name);
+      setCreating(false);
+      setOpen(false);
+      setQuery("");
+      setNewName("");
+    } catch (e: any) {
+      setCreateErr(e?.message || "Create failed");
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
+  if (creating) {
+    return (
+      <div
+        className="rounded-md border border-slate-200 bg-white p-2 space-y-2"
+        data-testid="form-new-role"
+      >
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Role name (e.g. Engineer)"
+          className={inputCls + " py-1.5 text-xs"}
+          data-testid="input-new-role-name"
+        />
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="text-slate-500">Kind:</span>
           <button
             type="button"
-            onClick={() => addPerformer.mutate()}
-            disabled={people.length === 0}
-            title={people.length === 0 ? "Add People first" : ""}
-            className="text-[11px] text-[#319ED8] hover:underline disabled:opacity-40 disabled:no-underline"
-            data-testid={`button-add-performer-${songId}`}
+            onClick={() => setNewKind("writer")}
+            className={`px-2 py-0.5 rounded ${newKind === "writer" ? "bg-[#319ED8] text-white" : "bg-slate-100 text-slate-600"}`}
+            data-testid="button-new-role-kind-writer"
           >
-            + Performer
+            Writer
+          </button>
+          <button
+            type="button"
+            onClick={() => setNewKind("performer")}
+            className={`px-2 py-0.5 rounded ${newKind === "performer" ? "bg-[#319ED8] text-white" : "bg-slate-100 text-slate-600"}`}
+            data-testid="button-new-role-kind-performer"
+          >
+            Performer
           </button>
         </div>
-        <div className="space-y-1">
-          {credits.performers.map((p) => (
-            <PerformerRow
-              key={p.id}
-              performer={p}
-              people={people}
-              instruments={instruments}
-              onChanged={invalidate}
-            />
-          ))}
-          {credits.performers.length === 0 && (
-            <p className="text-slate-300 text-xs">No performers yet.</p>
-          )}
+        {createErr && <p className="text-red-600 text-[11px]">{createErr}</p>}
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setCreating(false);
+              setCreateErr(null);
+            }}
+            className="text-[11px] text-slate-500 hover:text-slate-800 px-2 py-1"
+            data-testid="button-cancel-new-role"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={createBusy}
+            onClick={handleCreate}
+            className="px-2.5 py-1 text-[11px] rounded bg-[#319ED8] text-white font-medium disabled:opacity-40"
+            data-testid="button-save-new-role"
+          >
+            {createBusy ? "Creating…" : "Create"}
+          </button>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="relative" data-testid="combobox-role">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={
+          inputCls +
+          " py-1.5 text-xs text-left flex items-center justify-between gap-2"
+        }
+        data-testid="button-role-current"
+      >
+        <span className="truncate">
+          {role || <span className="text-slate-400">Select role…</span>}
+        </span>
+        <span
+          className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${kind === "writer" ? "bg-[#7F10A7]/10 text-[#7F10A7]" : "bg-[#319ED8]/10 text-[#319ED8]"}`}
+        >
+          {kind}
+        </span>
+      </button>
+      {open && (
+        <div className="absolute z-10 left-0 right-0 mt-1 rounded-md border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto">
+          <div className="p-1 sticky top-0 bg-white border-b border-slate-100">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search roles…"
+              className={inputCls + " py-1 text-xs"}
+              autoFocus
+              data-testid="input-role-search"
+            />
+          </div>
+          {matches.length === 0 && (
+            <p className="px-3 py-2 text-slate-400 text-[12px]">No matches.</p>
+          )}
+          {matches.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(r.kind, r.name);
+                setOpen(false);
+                setQuery("");
+              }}
+              className="w-full flex items-center justify-between gap-2 px-2 py-1.5 hover:bg-slate-50 text-left"
+              data-testid={`option-role-${r.id}`}
+            >
+              <span className="text-slate-900 text-[12px] truncate">
+                {r.name}
+              </span>
+              <span
+                className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded ${r.kind === "writer" ? "bg-[#7F10A7]/10 text-[#7F10A7]" : "bg-[#319ED8]/10 text-[#319ED8]"}`}
+              >
+                {r.kind}
+              </span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setNewName(query);
+              setNewKind(kind);
+              setCreating(true);
+              setOpen(false);
+            }}
+            className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[#319ED8] hover:bg-slate-50"
+            data-testid="button-create-new-role"
+          >
+            + Create new role{query.trim() ? ` "${query.trim()}"` : ""}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1501,202 +2076,6 @@ function useRowDraft<T extends { id: string }>(row: T) {
     if (!dirtyRef.current) setDraft(row);
   }, [JSON.stringify(row)]);
   return { draft, setDraft, dirty, snapshot: () => draftRef.current };
-}
-
-function WriterRow({
-  writer,
-  people,
-  onChanged,
-}: {
-  writer: AdminTrackWriter & { person: AdminPerson | null };
-  people: AdminPerson[];
-  onChanged: () => void;
-}) {
-  const { draft, setDraft, dirty, snapshot } = useRowDraft(writer);
-  const save = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest(
-        "PUT",
-        `/api/admin/writers/${writer.id}`,
-        snapshot(),
-      );
-      return res.json();
-    },
-    onSuccess: onChanged,
-  });
-  const del = useMutation({
-    mutationFn: async () => {
-      await apiRequest("DELETE", `/api/admin/writers/${writer.id}`);
-    },
-    onSuccess: onChanged,
-  });
-  return (
-    <div
-      className="grid grid-cols-[2fr_1fr_1.5fr_auto_auto] gap-2 items-center"
-      data-testid={`row-writer-${writer.id}`}
-    >
-      <input
-        value={draft.name}
-        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-        placeholder="Name"
-        className={inputCls + " py-1 text-xs"}
-      />
-      <input
-        value={draft.role}
-        onChange={(e) => setDraft({ ...draft, role: e.target.value })}
-        placeholder="Composer / Lyricist / Producer"
-        className={inputCls + " py-1 text-xs"}
-      />
-      <select
-        value={draft.personId ?? ""}
-        onChange={(e) => {
-          const id = e.target.value || null;
-          const matched = people.find((p) => p.id === id);
-          setDraft({
-            ...draft,
-            personId: id,
-            name: matched ? matched.name : draft.name,
-          });
-        }}
-        className={inputCls + " py-1 text-xs"}
-      >
-        <option value="">— link to person (optional) —</option>
-        {people.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        disabled={!dirty || save.isPending}
-        onClick={() => save.mutate()}
-        className="px-2 py-1 rounded bg-[#319ED8] text-slate-900 text-[11px] disabled:opacity-40"
-        data-testid={`button-save-writer-${writer.id}`}
-      >
-        {save.isPending ? "…" : "Save"}
-      </button>
-      <button
-        type="button"
-        disabled={del.isPending}
-        onClick={() => {
-          if (confirm("Delete this writer credit?")) del.mutate();
-        }}
-        className="px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded disabled:opacity-40"
-        data-testid={`button-delete-writer-${writer.id}`}
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
-function PerformerRow({
-  performer,
-  people,
-  instruments,
-  onChanged,
-}: {
-  performer: AdminTrackPerformer & { person: AdminPerson | null };
-  people: AdminPerson[];
-  instruments: AdminInstrument[];
-  onChanged: () => void;
-}) {
-  const { draft, setDraft, dirty, snapshot } = useRowDraft(performer);
-  const save = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest(
-        "PUT",
-        `/api/admin/performers/${performer.id}`,
-        snapshot(),
-      );
-      return res.json();
-    },
-    onSuccess: onChanged,
-  });
-  const del = useMutation({
-    mutationFn: async () => {
-      await apiRequest("DELETE", `/api/admin/performers/${performer.id}`);
-    },
-    onSuccess: onChanged,
-  });
-  return (
-    <div
-      className="grid grid-cols-[1.5fr_1fr_1.5fr_1fr_auto_auto] gap-2 items-center"
-      data-testid={`row-performer-${performer.id}`}
-    >
-      <select
-        value={draft.personId ?? ""}
-        onChange={(e) => {
-          const id = e.target.value || null;
-          const matched = people.find((p) => p.id === id);
-          // Snapshot the display name whenever the link changes so credits
-          // keep rendering even if the Person is later removed.
-          setDraft({
-            ...draft,
-            personId: id,
-            name: matched ? matched.name : draft.name,
-          });
-        }}
-        className={inputCls + " py-1 text-xs"}
-      >
-        <option value="">— unlinked ({draft.name}) —</option>
-        {people.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-      <input
-        value={draft.role}
-        onChange={(e) => setDraft({ ...draft, role: e.target.value })}
-        placeholder="Guitar / Bass / Vocals"
-        className={inputCls + " py-1 text-xs"}
-      />
-      <select
-        value={draft.instrumentId ?? ""}
-        onChange={(e) =>
-          setDraft({ ...draft, instrumentId: e.target.value || null })
-        }
-        className={inputCls + " py-1 text-xs"}
-      >
-        <option value="">— instrument (optional) —</option>
-        {instruments.map((i) => (
-          <option key={i.id} value={i.id}>
-            {i.name}
-          </option>
-        ))}
-      </select>
-      <input
-        value={draft.tuningNotes ?? ""}
-        onChange={(e) =>
-          setDraft({ ...draft, tuningNotes: e.target.value || null })
-        }
-        placeholder="DADGAD, capo 3…"
-        className={inputCls + " py-1 text-xs"}
-      />
-      <button
-        type="button"
-        disabled={!dirty || save.isPending}
-        onClick={() => save.mutate()}
-        className="px-2 py-1 rounded bg-[#319ED8] text-slate-900 text-[11px] disabled:opacity-40"
-        data-testid={`button-save-performer-${performer.id}`}
-      >
-        {save.isPending ? "…" : "Save"}
-      </button>
-      <button
-        type="button"
-        disabled={del.isPending}
-        onClick={() => {
-          if (confirm("Delete this performer credit?")) del.mutate();
-        }}
-        className="px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded disabled:opacity-40"
-        data-testid={`button-delete-performer-${performer.id}`}
-      >
-        ×
-      </button>
-    </div>
-  );
 }
 
 function SongRow({

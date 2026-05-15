@@ -7,7 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
-import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema } from "@shared/schema";
+import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -2057,6 +2057,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/admin/performers/:id", requireAdmin, async (req, res) => {
     await storage.deleteTrackPerformer(String(req.params.id));
     return res.json({ message: "Deleted" });
+  });
+
+  app.get("/api/admin/credit-roles", requireAdmin, async (_req, res) => {
+    const rows = await storage.listCreditRoles();
+    return res.json(rows);
+  });
+  app.post("/api/admin/credit-roles", requireAdmin, async (req, res) => {
+    const parsed = insertCreditRoleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid role", issues: parsed.error.issues });
+    const row = await storage.findOrCreateCreditRole(parsed.data);
+    return res.status(201).json(row);
   });
 
   // ----- Profile photo ----------------------------------------------------

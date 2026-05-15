@@ -28,6 +28,8 @@ import {
   type InsertTrackWriter,
   type TrackPerformer,
   type InsertTrackPerformer,
+  type CreditRole,
+  type InsertCreditRole,
   users,
   albums,
   songs,
@@ -1161,6 +1163,65 @@ export class DbStorage implements IStorage {
   }
   async deleteTrackPerformer(id: string): Promise<void> {
     await db.delete(trackPerformers).where(eq(trackPerformers.id, id));
+  }
+
+  async listCreditRoles(): Promise<CreditRole[]> {
+    const existing = await db.select().from(creditRoles).orderBy(asc(creditRoles.kind), asc(creditRoles.name));
+    if (existing.length > 0) return existing;
+    const seed: InsertCreditRole[] = [
+      { kind: "writer", name: "Composer" },
+      { kind: "writer", name: "Lyricist" },
+      { kind: "writer", name: "Songwriter" },
+      { kind: "writer", name: "Producer" },
+      { kind: "writer", name: "Co-producer" },
+      { kind: "writer", name: "Arranger" },
+      { kind: "performer", name: "Lead vocal" },
+      { kind: "performer", name: "Backing vocal" },
+      { kind: "performer", name: "Guitar" },
+      { kind: "performer", name: "Acoustic guitar" },
+      { kind: "performer", name: "Electric guitar" },
+      { kind: "performer", name: "Bass" },
+      { kind: "performer", name: "Drums" },
+      { kind: "performer", name: "Percussion" },
+      { kind: "performer", name: "Piano" },
+      { kind: "performer", name: "Keyboards" },
+      { kind: "performer", name: "Organ" },
+      { kind: "performer", name: "Violin" },
+      { kind: "performer", name: "Cello" },
+      { kind: "performer", name: "Saxophone" },
+      { kind: "performer", name: "Trumpet" },
+      { kind: "performer", name: "Harmonica" },
+      { kind: "performer", name: "Banjo" },
+      { kind: "performer", name: "Mandolin" },
+      { kind: "performer", name: "Pedal steel" },
+      { kind: "performer", name: "Fiddle" },
+      { kind: "performer", name: "Other" },
+    ];
+    try {
+      await db.insert(creditRoles).values(seed).onConflictDoNothing();
+    } catch {}
+    return db.select().from(creditRoles).orderBy(asc(creditRoles.kind), asc(creditRoles.name));
+  }
+  async findOrCreateCreditRole(data: InsertCreditRole): Promise<CreditRole> {
+    const name = data.name.trim();
+    const existing = await db
+      .select()
+      .from(creditRoles)
+      .where(and(eq(creditRoles.kind, data.kind), sql`lower(${creditRoles.name}) = lower(${name})`))
+      .limit(1);
+    if (existing[0]) return existing[0];
+    const [row] = await db
+      .insert(creditRoles)
+      .values({ kind: data.kind, name })
+      .onConflictDoNothing()
+      .returning();
+    if (row) return row;
+    const [again] = await db
+      .select()
+      .from(creditRoles)
+      .where(and(eq(creditRoles.kind, data.kind), sql`lower(${creditRoles.name}) = lower(${name})`))
+      .limit(1);
+    return again!;
   }
 
   async tryClaimFirstAdmin(userId: string): Promise<boolean> {

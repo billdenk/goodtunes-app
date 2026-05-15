@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -336,12 +336,18 @@ export const trackPerformers = pgTable("track_performers", {
 // Future use: a `person_roles` join (or `roles[]` on people) can pull
 // from the same table to categorize people as Singer-Songwriters,
 // Producers, etc. on the artist-list/filter surfaces.
-export const creditRoles = pgTable("credit_roles", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().unique(),
-  kind: text("kind").notNull(), // "writer" | "performer"
-  position: integer("position").notNull().default(0),
-});
+export const creditRoles = pgTable(
+  "credit_roles",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    kind: text("kind").notNull(), // "writer" | "performer"
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    kindNameUnique: unique("credit_roles_kind_name_unique").on(t.kind, t.name),
+  }),
+);
 
 // Bearer token store (replaces in-memory tokenStore).
 export const authTokens = pgTable("auth_tokens", {
@@ -461,7 +467,7 @@ export type InsertTrackPerformer = z.infer<typeof insertTrackPerformerSchema>;
 export type TrackPerformer = typeof trackPerformers.$inferSelect;
 
 export const insertCreditRoleSchema = createInsertSchema(creditRoles)
-  .omit({ id: true, position: true })
+  .omit({ id: true, createdAt: true })
   .extend({
     // Kind is a closed enum on the API even though the column is text —
     // keeps junk like "engineer" or "" from sneaking in via direct POSTs.
