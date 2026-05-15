@@ -12,7 +12,7 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check } from "lucide-react";
+import { Globe, Check, Search, X as XIcon } from "lucide-react";
 
 interface AdminAlbum {
   id: string;
@@ -3453,6 +3453,26 @@ export function Admin() {
     setSelectedByEntity((prev) => ({ ...prev, [entity]: id }));
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
+  // Per-entity search query for filtering the middle list. Kept per-tab so
+  // switching between Albums / People / Instruments / Vendors preserves
+  // whatever filter you had open in each. Empty string = no filter.
+  const [searchByEntity, setSearchByEntity] = useState<
+    Record<EntityKey, string>
+  >({ albums: "", people: "", instruments: "", vendors: "" });
+  const search = searchByEntity[entity];
+  const setSearch = (v: string) =>
+    setSearchByEntity((prev) => ({ ...prev, [entity]: v }));
+  // Whether the search input is revealed for the current tab. Auto-opens if
+  // there's a stored query so the filter is never "invisible".
+  const [searchOpen, setSearchOpen] = useState<Record<EntityKey, boolean>>({
+    albums: false,
+    people: false,
+    instruments: false,
+    vendors: false,
+  });
+  const isSearchOpen = searchOpen[entity] || !!search;
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // Opt this route into the light theme by tagging <body>. The matching
   // `body.gt-admin` rule in index.css overrides the global dark body bg
   // and `color: white` that the fan player relies on. Cleaning the class
@@ -3514,6 +3534,55 @@ export function Admin() {
     if (selectedByEntity.vendors == null && allVendors.length > 0)
       setSelectedByEntity((p) => ({ ...p, vendors: allVendors[0].id }));
   }, [allVendors, selectedByEntity.vendors]);
+
+  // Apply the per-entity search filter just before render. We do a simple
+  // case-insensitive substring match against the fields shown on each row
+  // so admins can find a row by typing what they already see on screen.
+  const needle = search.trim().toLowerCase();
+  const filteredAlbums = useMemo(
+    () =>
+      !needle
+        ? albums
+        : albums.filter(
+            (a) =>
+              a.title.toLowerCase().includes(needle) ||
+              a.artist.toLowerCase().includes(needle),
+          ),
+    [albums, needle],
+  );
+  const filteredPeople = useMemo(
+    () =>
+      !needle
+        ? people
+        : people.filter(
+            (p) =>
+              p.name.toLowerCase().includes(needle) ||
+              (p.bio?.toLowerCase().includes(needle) ?? false),
+          ),
+    [people, needle],
+  );
+  const filteredInstruments = useMemo(
+    () =>
+      !needle
+        ? instruments
+        : instruments.filter(
+            (i) =>
+              i.name.toLowerCase().includes(needle) ||
+              i.category.toLowerCase().includes(needle),
+          ),
+    [instruments, needle],
+  );
+  const filteredVendors = useMemo(
+    () =>
+      !needle
+        ? allVendors
+        : allVendors.filter(
+            (v) =>
+              (v.name ?? "").toLowerCase().includes(needle) ||
+              v.instrumentName.toLowerCase().includes(needle),
+          ),
+    [allVendors, needle],
+  );
 
   const bootstrap = useMutation({
     mutationFn: async () => {
@@ -3720,37 +3789,105 @@ export function Admin() {
 
         {/* Middle: entity list */}
         <section className="w-72 shrink-0 border-r border-slate-200 flex flex-col">
-          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-            <h2 className="text-slate-900 text-sm font-semibold capitalize">
-              {entity}
-            </h2>
-            <button
-              type="button"
-              onClick={() => {
-                if (entity === "albums") createAlbum.mutate();
-                else if (entity === "people") createPerson.mutate();
-                else if (entity === "instruments") createInstrument.mutate();
-              }}
-              disabled={
-                entity === "vendors" ||
-                createAlbum.isPending ||
-                createPerson.isPending ||
-                createInstrument.isPending
-              }
-              className={`text-[12px] ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:underline"}`}
-              title={
-                entity === "vendors"
-                  ? "Vendors are added via an instrument's scraper"
-                  : undefined
-              }
-              data-testid={`button-new-${entity.slice(0, -1)}`}
-            >
-              + New
-            </button>
+          <div className="border-b border-slate-200">
+            <div className="px-4 py-3 flex items-center justify-between gap-2">
+              <h2 className="text-slate-900 text-sm font-semibold capitalize">
+                {entity}
+              </h2>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchOpen((prev) => {
+                      const next = !prev[entity];
+                      if (!next) {
+                        // Closing the search bar — wipe any stored query so
+                        // the list snaps back to showing every row.
+                        setSearch("");
+                      } else {
+                        // Defer focus until the input is rendered.
+                        requestAnimationFrame(() =>
+                          searchInputRef.current?.focus(),
+                        );
+                      }
+                      return { ...prev, [entity]: next };
+                    });
+                  }}
+                  className={`p-1 rounded ${isSearchOpen ? "text-[#319ED8]" : "text-slate-400 hover:text-slate-600"}`}
+                  aria-label={`Search ${entity}`}
+                  aria-expanded={isSearchOpen}
+                  title={`Search ${entity}`}
+                  data-testid={`button-search-${entity}`}
+                >
+                  <Search size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (entity === "albums") createAlbum.mutate();
+                    else if (entity === "people") createPerson.mutate();
+                    else if (entity === "instruments") createInstrument.mutate();
+                  }}
+                  disabled={
+                    entity === "vendors" ||
+                    createAlbum.isPending ||
+                    createPerson.isPending ||
+                    createInstrument.isPending
+                  }
+                  className={`text-[12px] ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:underline"}`}
+                  title={
+                    entity === "vendors"
+                      ? "Vendors are added via an instrument's scraper"
+                      : undefined
+                  }
+                  data-testid={`button-new-${entity.slice(0, -1)}`}
+                >
+                  + New
+                </button>
+              </div>
+            </div>
+            {isSearchOpen && (
+              <div className="px-4 pb-3">
+                <div className="relative">
+                  <Search
+                    size={14}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    ref={searchInputRef}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setSearch("");
+                        setSearchOpen((prev) => ({ ...prev, [entity]: false }));
+                      }
+                    }}
+                    placeholder={`Search ${entity}…`}
+                    className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#319ED8] focus:bg-white"
+                    data-testid={`input-search-${entity}`}
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearch("");
+                        searchInputRef.current?.focus();
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      aria-label="Clear search"
+                      data-testid={`button-clear-search-${entity}`}
+                    >
+                      <XIcon size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <ul className="flex-1 overflow-y-auto py-2">
             {entity === "albums" &&
-              albums.map((a) => (
+              filteredAlbums.map((a) => (
                 <li key={a.id}>
                   <button
                     type="button"
@@ -3780,7 +3917,7 @@ export function Admin() {
                 </li>
               ))}
             {entity === "people" &&
-              people.map((p) => (
+              filteredPeople.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
@@ -3814,7 +3951,7 @@ export function Admin() {
                 </li>
               ))}
             {entity === "vendors" &&
-              allVendors.map((v) => {
+              filteredVendors.map((v) => {
                 const logo =
                   v.logoUrl ||
                   (() => {
@@ -3854,7 +3991,7 @@ export function Admin() {
                 );
               })}
             {entity === "instruments" &&
-              instruments.map((i) => (
+              filteredInstruments.map((i) => (
                 <li key={i.id}>
                   <button
                     type="button"
@@ -3884,25 +4021,32 @@ export function Admin() {
                   </button>
                 </li>
               ))}
-            {entity === "albums" && albums.length === 0 && (
+            {entity === "albums" && filteredAlbums.length === 0 && (
               <li className="px-4 py-6 text-slate-400 text-sm">
-                No albums yet. Click + New.
+                {needle
+                  ? `No albums match "${search}".`
+                  : "No albums yet. Click + New."}
               </li>
             )}
-            {entity === "people" && people.length === 0 && (
+            {entity === "people" && filteredPeople.length === 0 && (
               <li className="px-4 py-6 text-slate-400 text-sm">
-                No people yet. Click + New.
+                {needle
+                  ? `No people match "${search}".`
+                  : "No people yet. Click + New."}
               </li>
             )}
-            {entity === "instruments" && instruments.length === 0 && (
+            {entity === "instruments" && filteredInstruments.length === 0 && (
               <li className="px-4 py-6 text-slate-400 text-sm">
-                No instruments yet. Click + New.
+                {needle
+                  ? `No instruments match "${search}".`
+                  : "No instruments yet. Click + New."}
               </li>
             )}
-            {entity === "vendors" && allVendors.length === 0 && (
+            {entity === "vendors" && filteredVendors.length === 0 && (
               <li className="px-4 py-6 text-slate-400 text-sm leading-relaxed">
-                No vendors yet. Open an instrument and paste a Reverb /
-                Sweetwater / Carter Vintage URL into its Vendors scraper.
+                {needle
+                  ? `No vendors match "${search}".`
+                  : "No vendors yet. Open an instrument and paste a Reverb / Sweetwater / Carter Vintage URL into its Vendors scraper."}
               </li>
             )}
           </ul>
