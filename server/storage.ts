@@ -45,6 +45,7 @@ import {
   labels,
   trackWriters,
   trackPerformers,
+  creditRoles,
   albumVideos,
   albumPhotos,
 } from "@shared/schema";
@@ -259,6 +260,9 @@ export interface IStorage {
   createTrackPerformer(data: InsertTrackPerformer & { id?: string }): Promise<TrackPerformer>;
   updateTrackPerformer(id: string, data: Partial<TrackPerformer>): Promise<TrackPerformer | undefined>;
   deleteTrackPerformer(id: string): Promise<void>;
+
+  listCreditRoles(): Promise<CreditRole[]>;
+  findOrCreateCreditRole(data: InsertCreditRole): Promise<CreditRole>;
 
   getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]>;
   getPlaylistById(id: string): Promise<Playlist | undefined>;

@@ -322,6 +322,27 @@ export const trackPerformers = pgTable("track_performers", {
   position: integer("position").notNull().default(0),
 });
 
+// ----- Credit role catalog ----------------------------------------------
+// A searchable, growable list of roles the admin can assign on track-level
+// credits. `kind` tells the system which underlying table a credit belongs
+// in when saved:
+//   • "writer"    → row lives in track_writers  (Composer, Lyricist, …)
+//   • "performer" → row lives in track_performers (Guitar, Lead vocal, …)
+// We seed the table lazily with industry-standard roles on first read.
+// Admins can create new ones inline from the credits picker — pick a
+// kind, give it a name, save. Unique on `name` so a typo'd duplicate
+// surfaces as a clean upsert rather than two near-identical rows.
+//
+// Future use: a `person_roles` join (or `roles[]` on people) can pull
+// from the same table to categorize people as Singer-Songwriters,
+// Producers, etc. on the artist-list/filter surfaces.
+export const creditRoles = pgTable("credit_roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  kind: text("kind").notNull(), // "writer" | "performer"
+  position: integer("position").notNull().default(0),
+});
+
 // Bearer token store (replaces in-memory tokenStore).
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
@@ -438,6 +459,17 @@ export type TrackWriter = typeof trackWriters.$inferSelect;
 export const insertTrackPerformerSchema = createInsertSchema(trackPerformers).omit({ id: true });
 export type InsertTrackPerformer = z.infer<typeof insertTrackPerformerSchema>;
 export type TrackPerformer = typeof trackPerformers.$inferSelect;
+
+export const insertCreditRoleSchema = createInsertSchema(creditRoles)
+  .omit({ id: true, position: true })
+  .extend({
+    // Kind is a closed enum on the API even though the column is text —
+    // keeps junk like "engineer" or "" from sneaking in via direct POSTs.
+    kind: z.enum(["writer", "performer"]),
+    name: z.string().min(1).max(60),
+  });
+export type InsertCreditRole = z.infer<typeof insertCreditRoleSchema>;
+export type CreditRole = typeof creditRoles.$inferSelect;
 export type UserAlbum = typeof userAlbums.$inferSelect;
 export type Playlist = typeof playlists.$inferSelect;
 export type PlaylistSong = typeof playlistSongs.$inferSelect;
