@@ -3341,6 +3341,126 @@ function VendorPaneEditor({
 // can see how their edits will render *before* publishing. Reads the live
 // instrument record (same query key as the editor — TanStack dedupes the
 // fetch) so prefilled fields appear here moments after the scrape.
+// Mirrors the fan-side InstrumentAboutSection (AlbumDetail.tsx). Parses the
+// raw `about` blob into prose + "Label: Value" specs and shows an
+// Apple-Music-style About/Specs segmented control inside the phone preview
+// so admins see the dense spec list collapsed behind a tap — exactly how
+// fans will.
+function parseAdminInstrumentAbout(about: string): {
+  prose: string;
+  specs: { label: string; value: string }[];
+} {
+  const lines = about.split(/\r?\n/);
+  const proseLines: string[] = [];
+  const specs: { label: string; value: string }[] = [];
+  const specLine = /^\s*([A-Z][A-Za-z0-9 /()&'.-]{0,40}):\s+(.{1,80})\s*$/;
+  for (const raw of lines) {
+    const m = raw.match(specLine);
+    const looksProse =
+      m && (/[.!?]\s+\S/.test(m[2]) || /[.!?]["')\]]?\s*$/.test(m[2]));
+    if (m && !looksProse) {
+      specs.push({ label: m[1].trim(), value: m[2].trim() });
+    } else {
+      proseLines.push(raw);
+    }
+  }
+  const prose = proseLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { prose, specs };
+}
+
+function InstrumentPreviewAbout({
+  category,
+  about,
+}: {
+  category: string;
+  about: string;
+}) {
+  const { prose, specs } = useMemo(
+    () => parseAdminInstrumentAbout(about),
+    [about],
+  );
+  const hasProse = prose.length > 0;
+  const hasSpecs = specs.length > 0;
+  const [tab, setTab] = useState<"about" | "specs">(
+    hasProse ? "about" : "specs",
+  );
+  const showBoth = hasProse && hasSpecs;
+
+  if (!hasSpecs) {
+    return (
+      <div className="px-5 pb-4">
+        <p
+          className="text-[12.5px] leading-relaxed whitespace-pre-wrap"
+          style={{ color: "rgba(255,255,255,0.85)" }}
+        >
+          {prose || about}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-5 pb-4">
+      {showBoth && (
+        <div
+          className="flex items-center gap-1 p-1 rounded-full mb-3"
+          style={{ background: "rgba(255,255,255,0.06)" }}
+          role="tablist"
+          aria-label="About or specs"
+        >
+          {(["about", "specs"] as const).map((v) => {
+            const active = tab === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setTab(v)}
+                aria-pressed={active}
+                className="flex-1 h-7 rounded-full text-[11.5px] font-semibold transition-colors"
+                style={{
+                  background: active ? "rgba(255,255,255,0.14)" : "transparent",
+                  color: active ? "#ffffff" : "rgba(235,235,245,0.55)",
+                }}
+                data-testid={`tab-preview-instrument-${v}`}
+              >
+                {v === "about" ? "About" : "Specs"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {tab === "about" && hasProse && (
+        <p
+          className="text-[12.5px] leading-relaxed whitespace-pre-wrap"
+          style={{ color: "rgba(255,255,255,0.85)" }}
+        >
+          {prose}
+        </p>
+      )}
+      {tab === "specs" && (
+        <dl
+          className="text-[11.5px] leading-snug"
+          data-testid="list-preview-instrument-specs"
+        >
+          {specs.map((s, i) => (
+            <div
+              key={`${s.label}-${i}`}
+              className="grid grid-cols-[42%_58%] gap-2 py-1.5"
+              style={{
+                borderTop:
+                  i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <dt style={{ color: "rgba(235,235,245,0.55)" }}>{s.label}</dt>
+              <dd className="text-white">{s.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
+}
+
 function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
   const { data } = useQuery<AdminInstrument>({
     queryKey: ["/api/instruments", instrumentId],
@@ -3437,14 +3557,10 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
               </h2>
             </div>
             {data?.about && (
-              <div className="px-5 pb-4">
-                <p
-                  className="text-[12.5px] leading-relaxed whitespace-pre-wrap"
-                  style={{ color: "rgba(255,255,255,0.85)" }}
-                >
-                  {data.about}
-                </p>
-              </div>
+              <InstrumentPreviewAbout
+                category={data.shortCategory || data.category || "Instrument"}
+                about={data.about}
+              />
             )}
             {data?.artistNote && (
               <div
