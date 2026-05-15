@@ -7862,6 +7862,15 @@ export function Admin() {
     onError: (e: Error) => setBootstrapError(e.message),
   });
 
+  // After a create, we need the new row to be visible in the list cache
+  // BEFORE we move the cursor to it. The auto-heal effects above watch
+  // each entity list and reset `selectedId` to list[0] whenever the
+  // current selection isn't in the list — so if we just `invalidateQueries`
+  // and `setSelected(newId)`, the auto-heal fires against the stale list
+  // (the refetch hasn't landed yet), decides the new id isn't visible,
+  // and snaps us back to the top row. Optimistically pushing the new row
+  // into the cache first makes `stillVisible` true on the first pass; the
+  // subsequent invalidate just reconciles with the server-shaped row.
   const createAlbum = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/albums", {
@@ -7869,13 +7878,22 @@ export function Admin() {
         artist: "Unknown artist",
         artwork: "/album-placeholder.svg",
         type: "LP",
+        // Clicking "New" on the Albums tab is an explicit "I'm starting a
+        // GoodTunes release" action. Without this flag the new row would
+        // be filtered out of the curated sidebar (which only shows
+        // GoodTunes releases), and the auto-heal would snap selection
+        // back to the first existing row.
+        isGoodTunesRelease: true,
       });
       return res.json() as Promise<AdminAlbum>;
     },
     onSuccess: (a) => {
+      queryClient.setQueryData<AdminAlbum[]>(["/api/albums"], (old) =>
+        old ? (old.some((x) => x.id === a.id) ? old : [...old, a]) : [a],
+      );
+      setSelectedByEntity((p) => ({ ...p, albums: a.id }));
       queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
       queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
-      setSelectedByEntity((p) => ({ ...p, albums: a.id }));
     },
   });
 
@@ -7887,8 +7905,11 @@ export function Admin() {
       return res.json() as Promise<AdminPerson>;
     },
     onSuccess: (p) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      queryClient.setQueryData<AdminPerson[]>(["/api/people"], (old) =>
+        old ? (old.some((x) => x.id === p.id) ? old : [...old, p]) : [p],
+      );
       setSelectedByEntity((s) => ({ ...s, people: p.id }));
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
     },
   });
 
@@ -7901,8 +7922,17 @@ export function Admin() {
       return res.json() as Promise<AdminInstrument>;
     },
     onSuccess: (i) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
+      queryClient.setQueryData<AdminInstrument[]>(
+        ["/api/instruments"],
+        (old) =>
+          old
+            ? old.some((x) => x.id === i.id)
+              ? old
+              : [...old, { ...i, vendors: [] }]
+            : [{ ...i, vendors: [] }],
+      );
       setSelectedByEntity((s) => ({ ...s, instruments: i.id }));
+      queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
     },
   });
 
@@ -7914,8 +7944,11 @@ export function Admin() {
       return res.json() as Promise<AdminLabel>;
     },
     onSuccess: (l) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
+      queryClient.setQueryData<AdminLabel[]>(["/api/labels"], (old) =>
+        old ? (old.some((x) => x.id === l.id) ? old : [...old, l]) : [l],
+      );
       setSelectedByEntity((s) => ({ ...s, labels: l.id }));
+      queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
     },
   });
 
