@@ -514,6 +514,15 @@ function AlbumEditor({
 
   const [form, setForm] = useState<AdminAlbum | null>(null);
   const [dirty, setDirty] = useState(false);
+  // Editor-wide tab strip — mirrors the PersonEditor pattern (About | Music
+  // | Gear) so admins move through the four entities the same way. About =
+  // the metadata form, Content = tracklist + videos + photos, People +
+  // Gear are placeholders until per-song writer/performer/instrument
+  // editing graduates out of the song-row credits sheet.
+  const [tab, setTab] = useState<"about" | "content" | "people" | "gear">("about");
+  // Reset to the About tab whenever the editor switches to a different
+  // album so a deep-linked tab doesn't carry over between rows.
+  useEffect(() => { setTab("about"); }, [albumId]);
   useEffect(() => {
     if (data) {
       setForm({
@@ -626,12 +635,13 @@ function AlbumEditor({
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
         <div>
           <h2
-            className="text-slate-900 text-lg font-semibold"
+            className="text-slate-900 text-lg font-semibold truncate max-w-[480px]"
             data-testid="text-editor-title"
+            title={form.title || "Untitled album"}
           >
-            Edit album
+            {form.title?.trim() || "Untitled album"}
           </h2>
-          <p className="text-slate-400 text-xs">{albumId}</p>
+          <p className="text-slate-400 text-xs truncate max-w-[480px]" title={albumId}>{albumId}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -683,7 +693,45 @@ function AlbumEditor({
         </div>
       </div>
 
+      {/* Tab strip — About | Content | People | Gear. Mirrors the
+          PersonEditor pattern. People + Gear are placeholders until
+          per-song writer/performer/instrument editing graduates out
+          of the song-row credits sheet. */}
+      <div role="tablist" aria-label="Album editor sections" className="flex gap-5 px-6 border-b border-slate-200">
+        {(["about", "content", "people", "gear"] as const).map((t) => {
+          const active = tab === t;
+          const label = t === "about" ? "About" : t === "content" ? "Content" : t === "people" ? "People" : "Gear";
+          const count = t === "content" ? (data?.songs?.length ?? 0) : undefined;
+          return (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              id={`tab-admin-album-${t}`}
+              aria-selected={active}
+              aria-controls={`panel-admin-album-${t}`}
+              tabIndex={active ? 0 : -1}
+              onClick={() => setTab(t)}
+              className="relative pb-2.5 pt-3 text-[13px] font-semibold tracking-wide transition-colors"
+              style={{ color: active ? "#0f172a" : "#64748b" }}
+              data-testid={`tab-admin-album-${t}`}
+            >
+              <span className="flex items-center gap-1.5">
+                {label}
+                {typeof count === "number" && count > 0 && (
+                  <span className="text-[11px] font-medium text-slate-400">{count}</span>
+                )}
+              </span>
+              {active && (
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+      {tab === "about" && (<div role="tabpanel" id="panel-admin-album-about" aria-labelledby="tab-admin-album-about" className="space-y-6" data-testid="panel-admin-album-about">
         <Field label="Title">
           <input
             value={form.title}
@@ -852,7 +900,9 @@ function AlbumEditor({
           preview window. Apple Music URL is auto-filled when an album is pulled
           from an artist's discography.
         </p>
+      </div>)}
 
+      {tab === "content" && (<div role="tabpanel" id="panel-admin-album-content" aria-labelledby="tab-admin-album-content" className="space-y-6" data-testid="panel-admin-album-content">
         <div>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
@@ -892,6 +942,29 @@ function AlbumEditor({
             arrays are non-empty (handled in AlbumDetail). */}
         <AlbumVideosSection albumId={albumId} />
         <AlbumPhotosSection albumId={albumId} />
+      </div>)}
+
+      {tab === "people" && (<div role="tabpanel" id="panel-admin-album-people" aria-labelledby="tab-admin-album-people" className="space-y-4" data-testid="panel-admin-album-people">
+        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-6">
+          <h3 className="text-slate-900 text-sm font-semibold mb-1">Songwriters &amp; performers</h3>
+          <p className="text-slate-500 text-[13px] leading-relaxed">
+            Per-song writers (composer / lyricist / producer) and performers
+            are configured today from each song row in the <button type="button" onClick={() => setTab("content")} className="text-[#319ED8] hover:underline">Content</button> tab.
+            An album-level roll-up — with writer splits — lands here next.
+          </p>
+        </div>
+      </div>)}
+
+      {tab === "gear" && (<div role="tabpanel" id="panel-admin-album-gear" aria-labelledby="tab-admin-album-gear" className="space-y-4" data-testid="panel-admin-album-gear">
+        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-6">
+          <h3 className="text-slate-900 text-sm font-semibold mb-1">Gear used on this album</h3>
+          <p className="text-slate-500 text-[13px] leading-relaxed">
+            Instruments are attached to each performer credit on a per-song
+            basis (see the credits sheet inside each row in the <button type="button" onClick={() => setTab("content")} className="text-[#319ED8] hover:underline">Content</button> tab).
+            An album-level "all gear on this record" summary lands here next.
+          </p>
+        </div>
+      </div>)}
       </div>
     </div>
   );
