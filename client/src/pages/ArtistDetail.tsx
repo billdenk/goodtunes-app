@@ -56,6 +56,23 @@ export function ArtistDetail() {
     },
     enabled: !!artistName,
   });
+
+  // Person record (for bio + future fields like coverUrl). The fan page
+  // is keyed by display name today, so we resolve via the public
+  // /api/people list (small) and match case-insensitively. When this
+  // page migrates to a personId-based route we can swap for a direct
+  // /api/people/:id fetch.
+  type PublicPerson = { id: string; name: string; bio: string | null; photoUrl: string | null };
+  const { data: allPeople = [] } = useQuery<PublicPerson[]>({
+    queryKey: ["/api/people"],
+  });
+  const artistPerson = useMemo(
+    () =>
+      allPeople.find(
+        (p) => p.name.trim().toLowerCase() === artistName.trim().toLowerCase(),
+      ),
+    [allPeople, artistName],
+  );
   // Dedupe vs GoodTunes Releases by title (case-insensitive). Anything
   // already in the catalog renders above as a full GT tile — we don't
   // want it to appear twice with a streaming handoff fan can use to
@@ -347,8 +364,10 @@ export function ArtistDetail() {
 
           <div className="px-5 mt-9">
             <h2 className="text-white text-xl font-bold tracking-tight mb-3">About</h2>
-            <p className="text-white/60 text-sm leading-relaxed">
-              {artistAlbums[0]?.description || `Music by ${artistName} on GoodTunes®.`}
+            <p className="text-white/60 text-sm leading-relaxed whitespace-pre-line">
+              {artistPerson?.bio?.trim() ||
+                artistAlbums[0]?.description ||
+                `Music by ${artistName} on GoodTunes®.`}
             </p>
           </div>
         </div>
