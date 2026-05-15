@@ -4907,7 +4907,7 @@ export function Admin() {
         </section>
 
         {/* Editor pane */}
-        <section className="flex-1 min-w-0 border-r border-slate-200">
+        <section className="flex-1 min-w-0 min-h-0 overflow-hidden border-r border-slate-200">
           {!selectedId ? (
             <div className="h-full flex items-center justify-center text-slate-400">
               Select an item to edit.
