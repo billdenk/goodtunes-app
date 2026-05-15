@@ -129,22 +129,39 @@ export const instruments = pgTable("instruments", {
   artistNote: text("artist_note"),
 });
 
-export const instrumentVendors = pgTable("instrument_vendors", {
+// Real-world vendor entity. One row per shop (Carter Vintage, Reverb,
+// Sweetwater, …) — the logo / bio / location / cover live here so editing
+// once propagates across every instrument that links to this vendor.
+// `domain` is the canonical dedup key (lowercased hostname, no www).
+export const vendors = pgTable("vendors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  instrumentId: varchar("instrument_id").notNull().references(() => instruments.id),
   name: text("name").notNull(),
-  affiliateUrl: text("affiliate_url").notNull(),
+  domain: text("domain").notNull().unique(),
+  homeUrl: text("home_url"),
   aboutUrl: text("about_url"),
   logoUrl: text("logo_url"),
   tagline: text("tagline"),
   bio: text("bio"),
   location: text("location"),
   coverUrl: text("cover_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Join row attaching a vendor to an instrument with a per-instrument
+// product URL. Vendor metadata lives on `vendors`; only the things that
+// vary per-instrument live here.
+export const instrumentVendors = pgTable("instrument_vendors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentId: varchar("instrument_id").notNull().references(() => instruments.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  affiliateUrl: text("affiliate_url").notNull(),
   position: integer("position").notNull().default(0),
   // Demo show/hide flag — hides this vendor's "Buy / Discover more" button
-  // from the fan-facing InstrumentSheet so it doesn't look like we're
-  // promoting a competitor during a different vendor's pitch.
+  // from the fan-facing InstrumentSheet on THIS instrument only, so it
+  // doesn't look like we're promoting a competitor during a different
+  // vendor's pitch. Per-attachment, not per-vendor.
   isHidden: boolean("is_hidden").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // ----- SuperCredits™ song credits (linking layer) -----------------------
@@ -230,9 +247,38 @@ export const insertInstrumentSchema = createInsertSchema(instruments).omit({ id:
 export type InsertInstrument = z.infer<typeof insertInstrumentSchema>;
 export type Instrument = typeof instruments.$inferSelect;
 
-export const insertInstrumentVendorSchema = createInsertSchema(instrumentVendors).omit({ id: true });
+export const insertVendorSchema = createInsertSchema(vendors).omit({ id: true, createdAt: true });
+export type InsertVendor = z.infer<typeof insertVendorSchema>;
+export type Vendor = typeof vendors.$inferSelect;
+
+export const insertInstrumentVendorSchema = createInsertSchema(instrumentVendors).omit({ id: true, createdAt: true });
 export type InsertInstrumentVendor = z.infer<typeof insertInstrumentVendorSchema>;
 export type InstrumentVendor = typeof instrumentVendors.$inferSelect;
+
+// Enriched shape returned by read joins (getInstruments / getSongCredits /
+// getAlbumCredits). Keeps the flat fan-facing shape AlbumDetail.tsx and the
+// admin UI expect, while adding `vendorId` + `domain` so admin write paths
+// can route vendor-entity edits vs attachment edits to the correct endpoint.
+export type EnrichedInstrumentVendor = {
+  // attachment fields
+  id: string;
+  instrumentId: string;
+  vendorId: string;
+  affiliateUrl: string;
+  position: number;
+  isHidden: boolean;
+  createdAt: Date | null;
+  // vendor entity fields (flattened)
+  name: string;
+  domain: string;
+  homeUrl: string | null;
+  aboutUrl: string | null;
+  logoUrl: string | null;
+  tagline: string | null;
+  bio: string | null;
+  location: string | null;
+  coverUrl: string | null;
+};
 
 export const insertTrackWriterSchema = createInsertSchema(trackWriters).omit({ id: true });
 export type InsertTrackWriter = z.infer<typeof insertTrackWriterSchema>;

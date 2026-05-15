@@ -85,10 +85,20 @@ interface ArtistScrapeResult {
   albums: ScrapedArtistAlbum[];
 }
 
+// Flat shape returned by /api/instruments and /api/songs/:id/credits — the
+// API server denormalizes the vendor entity onto each attachment so fan-side
+// consumers (AlbumDetail.tsx) keep working unchanged after the M:N split.
+// `id` is the attachment id (instrument_vendors.id); `vendorId` points at
+// the vendor entity. Editing entity-level fields (name/logo/bio/location/
+// cover/tagline/aboutUrl/domain/homeUrl) affects every instrument using this
+// vendor; affiliateUrl + isHidden + position are per-attachment.
 interface AdminVendor {
   id: string;
   instrumentId: string;
+  vendorId: string;
   name: string;
+  domain: string;
+  homeUrl: string | null;
   affiliateUrl: string;
   aboutUrl: string | null;
   logoUrl: string | null;
@@ -100,7 +110,7 @@ interface AdminVendor {
   // Demo show/hide — hides this vendor's button from the fan-side
   // InstrumentSheet. Admins still see it in the CMS so they can flip it back.
   isHidden: boolean;
-  // ISO timestamp from the DB; powers the "Pulled 2m ago" hint in the row.
+  // ISO timestamp on the ATTACHMENT row; powers "Pulled 2m ago".
   createdAt: string | null;
 }
 
@@ -123,6 +133,33 @@ function relativeTime(iso: string | null | undefined): string {
   const mo = Math.floor(d / 30);
   if (mo < 12) return `${mo}mo ago`;
   return `${Math.floor(mo / 12)}y ago`;
+}
+
+// Vendor entity grouped across all its attachments. Built client-side on
+// the Vendors tab so each unique vendor (one Carter row, not three) is
+// listed once. `id` mirrors `vendorId` so the existing selection state
+// (which keys on row id) keeps working without restructuring.
+interface AdminVendorGrouped {
+  id: string;
+  vendorId: string;
+  name: string;
+  domain: string;
+  homeUrl: string | null;
+  aboutUrl: string | null;
+  logoUrl: string | null;
+  tagline: string | null;
+  bio: string | null;
+  location: string | null;
+  coverUrl: string | null;
+  createdAt: string | null;
+  attachments: {
+    attachmentId: string;
+    instrumentId: string;
+    instrumentName: string;
+    affiliateUrl: string;
+    isHidden: boolean;
+    position: number;
+  }[];
 }
 
 interface AdminInstrument {
@@ -1886,12 +1923,23 @@ function InstrumentEditor({
   });
   const [form, setForm] = useState<AdminInstrument | null>(null);
   const [dirty, setDirty] = useState(false);
+  // Re-sync from the server every time `data` changes. On instrument switch
+  // we replace `form` wholesale; for same-id refreshes (typically triggered
+  // by a vendor mutation that invalidated the cache) we keep the user's
+  // in-progress instrument-field edits but always refresh `vendors` so the
+  // attachment list reflects the latest server state. This is what makes
+  // edits in VendorRow propagate cleanly back into the form without losing
+  // unsaved instrument-level changes.
   useEffect(() => {
-    if (data) {
-      setForm(data);
-      setDirty(false);
-    }
-  }, [data?.id]);
+    if (!data) return;
+    setForm((prev) => {
+      if (!prev || prev.id !== data.id) {
+        setDirty(false);
+        return data;
+      }
+      return { ...prev, vendors: data.vendors };
+    });
+  }, [data]);
 
   const update = (patch: Partial<AdminInstrument>) => {
     setForm((f) => (f ? { ...f, ...patch } : f));
@@ -1936,19 +1984,38 @@ function InstrumentEditor({
     },
   });
 
+  // Add-vendor flow: prompt for a product URL up-front. The backend will
+  // find-or-create a vendor entity by domain, so pasting a Carter URL after
+  // Carter already exists just attaches the existing Carter — no dupes.
   const addVendor = useMutation({
     mutationFn: async () => {
+      const url = window.prompt(
+        "Paste the product URL (Reverb, Sweetwater, Carter, …). If this vendor already exists, the existing entity will be reused.",
+        "https://",
+      );
+      if (!url || url === "https://") throw new Error("cancelled");
+      let domain = "";
+      try {
+        domain = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+      } catch {
+        throw new Error("That doesn't look like a valid URL.");
+      }
+      const defaultName = domain
+        .split(".")
+        .slice(0, -1)
+        .join(" ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
       const res = await apiRequest(
         "POST",
         `/api/admin/instruments/${instrumentId}/vendors`,
-        {
-          name: "New vendor",
-          affiliateUrl: "https://",
-        },
+        { domain, name: defaultName, affiliateUrl: url },
       );
       return res.json();
     },
     onSuccess: () => invalidate(),
+    onError: (e: Error) => {
+      if (e.message !== "cancelled") alert(e.message);
+    },
   });
 
   if (isLoading || !form)
@@ -2128,6 +2195,10 @@ function InstrumentEditor({
               "POST",
               `/api/admin/instruments/${instrumentId}/vendors`,
               {
+                // Find-or-create body. If a vendor with this domain
+                // already exists, the server reuses it (its existing
+                // metadata wins) and just creates the attachment.
+                domain: (r.vendor as any).domain,
                 name: r.vendor.name,
                 affiliateUrl: r.vendor.affiliateUrl,
                 aboutUrl: r.vendor.aboutUrl,
@@ -2275,28 +2346,73 @@ function VendorRow({
 }) {
   const [draft, setDraft] = useState(vendor);
   const [open, setOpen] = useState(false);
+  // Stringify-key the vendor so the draft snaps back to server state any
+  // time the parent passes in a refreshed vendor object (after our own
+  // save succeeds, or after a different surface — Vendors tab — edits the
+  // shared entity). Without this, dirty stayed true after a save because
+  // the useEffect only fired on id change.
+  const vendorKey = JSON.stringify(vendor);
   const dirty = useMemo(
-    () => JSON.stringify(draft) !== JSON.stringify(vendor),
-    [draft, vendor],
+    () => JSON.stringify(draft) !== vendorKey,
+    [draft, vendorKey],
   );
   useEffect(() => {
     setDraft(vendor);
-  }, [vendor.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorKey]);
 
+  // Saving splits into two requests because the model now is M:N:
+  //   • Entity fields (name/logo/tagline/bio/location/cover/aboutUrl/homeUrl)
+  //     PUT to /api/admin/vendors/:vendorId — affects every instrument
+  //     using this vendor. The admin should expect that.
+  //   • Attachment fields (affiliateUrl + isHidden + position) PUT to
+  //     /api/admin/instrument-vendors/:attachmentId — local to this
+  //     instrument. The two go in parallel.
   const save = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest(
-        "PUT",
-        `/api/admin/vendors/${vendor.id}`,
-        draft,
-      );
-      return res.json();
+      const entityChanged =
+        draft.name !== vendor.name ||
+        draft.logoUrl !== vendor.logoUrl ||
+        draft.aboutUrl !== vendor.aboutUrl ||
+        draft.tagline !== vendor.tagline ||
+        draft.bio !== vendor.bio ||
+        draft.location !== vendor.location ||
+        draft.coverUrl !== vendor.coverUrl;
+      const attachmentChanged =
+        draft.affiliateUrl !== vendor.affiliateUrl ||
+        draft.isHidden !== vendor.isHidden;
+      const ops: Promise<unknown>[] = [];
+      if (entityChanged) {
+        ops.push(
+          apiRequest("PUT", `/api/admin/vendors/${vendor.vendorId}`, {
+            name: draft.name,
+            logoUrl: draft.logoUrl,
+            aboutUrl: draft.aboutUrl,
+            tagline: draft.tagline,
+            bio: draft.bio,
+            location: draft.location,
+            coverUrl: draft.coverUrl,
+          }),
+        );
+      }
+      if (attachmentChanged) {
+        ops.push(
+          apiRequest("PUT", `/api/admin/instrument-vendors/${vendor.id}`, {
+            affiliateUrl: draft.affiliateUrl,
+            isHidden: draft.isHidden,
+          }),
+        );
+      }
+      await Promise.all(ops);
     },
     onSuccess: onChanged,
   });
+  // Row-level remove = detach this vendor from THIS instrument. The vendor
+  // entity stays (it may be on other instruments). To delete the vendor
+  // entity outright, use the Vendors tab pane.
   const del = useMutation({
     mutationFn: async () => {
-      await apiRequest("DELETE", `/api/admin/vendors/${vendor.id}`);
+      await apiRequest("DELETE", `/api/admin/instrument-vendors/${vendor.id}`);
     },
     onSuccess: onChanged,
   });
@@ -2354,17 +2470,22 @@ function VendorRow({
           )}
           <span className="text-slate-400 text-xs">{open ? "▾" : "▸"}</span>
         </button>
-        {/* Inline remove — saves a click vs. expanding the row first. */}
+        {/* Inline remove — detaches this vendor from THIS instrument; the
+            vendor entity remains for use elsewhere. */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (confirm(`Remove "${draft.name || "this vendor"}"?`))
+            if (
+              confirm(
+                `Remove "${draft.name || "this vendor"}" from this instrument? The vendor entity stays available for other instruments.`,
+              )
+            )
               del.mutate();
           }}
           className="shrink-0 w-7 h-7 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-base leading-none"
-          title="Remove vendor"
-          aria-label="Remove vendor"
+          title="Detach vendor from this instrument"
+          aria-label="Detach vendor from this instrument"
           data-testid={`button-remove-vendor-${vendor.id}`}
         >
           ×
@@ -2484,12 +2605,17 @@ function VendorRow({
             <button
               type="button"
               onClick={() => {
-                if (confirm("Delete this vendor?")) del.mutate();
+                if (
+                  confirm(
+                    "Detach this vendor from this instrument? The vendor entity will remain for other instruments.",
+                  )
+                )
+                  del.mutate();
               }}
               className="px-3 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded"
               data-testid={`button-delete-vendor-${vendor.id}`}
             >
-              Delete
+              Detach
             </button>
             <button
               type="button"
@@ -2507,50 +2633,67 @@ function VendorRow({
   );
 }
 
-// Full-pane vendor editor used by the top-level Vendors tab. Same mutations
-// as VendorRow but laid out like AlbumEditor / InstrumentEditor so it fills
-// the editor column. Includes a "jump to instrument" affordance because a
-// vendor row is owned by its instrument in the DB.
+// Full-pane vendor ENTITY editor used by the top-level Vendors tab. Edits
+// here are entity-wide: one Carter row, edit logo + bio + cover once, see
+// it in every instrument using Carter. Per-attachment fields (affiliateUrl,
+// isHidden) live in VendorRow inside the InstrumentEditor — not here.
 function VendorPaneEditor({
   vendor,
   onJumpToInstrument,
   onDeleted,
 }: {
-  vendor: AdminVendor & { instrumentName: string };
-  onJumpToInstrument: () => void;
+  vendor: AdminVendorGrouped;
+  onJumpToInstrument: (instrumentId: string) => void;
   onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<AdminVendor>(vendor);
+  const [draft, setDraft] = useState<AdminVendorGrouped>(vendor);
   useEffect(() => {
     setDraft(vendor);
   }, [vendor.id]);
-  const dirty = useMemo(
-    () => JSON.stringify(draft) !== JSON.stringify(vendor),
-    [draft, vendor],
-  );
+  // Compare only the entity-editable fields — attachments are read-only here.
+  const dirty = useMemo(() => {
+    const keys: (keyof AdminVendorGrouped)[] = [
+      "name",
+      "domain",
+      "homeUrl",
+      "aboutUrl",
+      "logoUrl",
+      "tagline",
+      "bio",
+      "location",
+      "coverUrl",
+    ];
+    return keys.some((k) => draft[k] !== vendor[k]);
+  }, [draft, vendor]);
 
   const invalidate = () => {
+    // Every instrument query may reflect the edited vendor metadata, so
+    // invalidate the broad list. Per-attachment query keys are nested under
+    // the instrument keys, so this catches them too.
     queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
-    queryClient.invalidateQueries({
-      queryKey: ["/api/instruments", vendor.instrumentId],
-    });
   };
 
   const save = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest(
-        "PUT",
-        `/api/admin/vendors/${vendor.id}`,
-        draft,
-      );
-      return res.json();
+      await apiRequest("PUT", `/api/admin/vendors/${vendor.vendorId}`, {
+        name: draft.name,
+        domain: draft.domain,
+        homeUrl: draft.homeUrl,
+        aboutUrl: draft.aboutUrl,
+        logoUrl: draft.logoUrl,
+        tagline: draft.tagline,
+        bio: draft.bio,
+        location: draft.location,
+        coverUrl: draft.coverUrl,
+      });
     },
     onSuccess: invalidate,
   });
   const del = useMutation({
     mutationFn: async () => {
-      await apiRequest("DELETE", `/api/admin/vendors/${vendor.id}`);
+      // Deleting the vendor entity cascades to every attachment using it.
+      await apiRequest("DELETE", `/api/admin/vendors/${vendor.vendorId}`);
     },
     onSuccess: () => {
       invalidate();
@@ -2560,13 +2703,12 @@ function VendorPaneEditor({
 
   const logoFallback = useMemo(() => {
     if (draft.logoUrl) return draft.logoUrl;
-    try {
-      const u = new URL(draft.affiliateUrl);
-      return `https://www.google.com/s2/favicons?sz=128&domain=${u.hostname}`;
-    } catch {
-      return "";
-    }
-  }, [draft.logoUrl, draft.affiliateUrl]);
+    if (draft.domain)
+      return `https://www.google.com/s2/favicons?sz=128&domain=${draft.domain}`;
+    return "";
+  }, [draft.logoUrl, draft.domain]);
+
+  const attachmentCount = vendor.attachments.length;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -2587,32 +2729,48 @@ function VendorPaneEditor({
           >
             {draft.name || "Untitled vendor"}
           </h1>
-          <button
-            type="button"
-            onClick={onJumpToInstrument}
-            className="text-[12px] text-slate-500 hover:text-[#319ED8] truncate text-left"
-            data-testid="link-vendor-instrument"
-          >
-            for {vendor.instrumentName} →
-          </button>
+          <p className="text-[12px] text-slate-500 truncate">
+            {draft.domain || "no domain"} · Used on{" "}
+            <span className="text-slate-700 font-medium">
+              {attachmentCount}
+            </span>{" "}
+            {attachmentCount === 1 ? "instrument" : "instruments"}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setDraft({ ...draft, isHidden: !draft.isHidden })}
-          className={`px-3 py-1 text-[12px] rounded border ${
-            draft.isHidden
-              ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
-              : "border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-          title={
-            draft.isHidden
-              ? "Hidden from fans. Click to show."
-              : "Visible to fans. Click to hide."
-          }
-          data-testid="button-toggle-vendor-visible"
-        >
-          {draft.isHidden ? "Hidden" : "Visible"}
-        </button>
+      </div>
+
+      {/* "Used on" list — each clickable, jumps to that instrument so the
+          admin can edit its per-attachment affiliateUrl / visibility. */}
+      <div className="px-6 py-4 border-b border-slate-200">
+        <p className="text-[11px] uppercase tracking-wider text-slate-400 mb-2">
+          Used on
+        </p>
+        {attachmentCount === 0 ? (
+          <p className="text-slate-400 text-sm">
+            Not attached to any instrument yet.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {vendor.attachments.map((a) => (
+              <li key={a.attachmentId}>
+                <button
+                  type="button"
+                  onClick={() => onJumpToInstrument(a.instrumentId)}
+                  className="text-sm text-slate-700 hover:text-[#319ED8] hover:underline text-left flex items-center gap-2"
+                  data-testid={`link-vendor-instrument-${a.instrumentId}`}
+                >
+                  <span className="truncate">{a.instrumentName}</span>
+                  {a.isHidden && (
+                    <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">
+                      Hidden
+                    </span>
+                  )}
+                  <span className="text-slate-300 text-xs">→</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="px-6 py-5 space-y-3 max-w-2xl">
@@ -2624,16 +2782,33 @@ function VendorPaneEditor({
             data-testid="input-vendor-pane-name"
           />
         </Field>
-        <Field label="Affiliate / product URL (where the buy button goes)">
-          <input
-            value={draft.affiliateUrl}
-            onChange={(e) =>
-              setDraft({ ...draft, affiliateUrl: e.target.value })
-            }
-            className={inputCls}
-            data-testid="input-vendor-pane-affiliate"
-          />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Domain (unique key)">
+            <input
+              value={draft.domain}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  domain: e.target.value.toLowerCase().replace(/^www\./, ""),
+                })
+              }
+              placeholder="cartervintage.com"
+              className={inputCls}
+              data-testid="input-vendor-pane-domain"
+            />
+          </Field>
+          <Field label="Home URL">
+            <input
+              value={draft.homeUrl ?? ""}
+              onChange={(e) =>
+                setDraft({ ...draft, homeUrl: e.target.value || null })
+              }
+              placeholder="https://cartervintage.com/"
+              className={inputCls}
+              data-testid="input-vendor-pane-home"
+            />
+          </Field>
+        </div>
         <Field label="About URL (homepage)">
           <input
             value={draft.aboutUrl ?? ""}
@@ -3238,19 +3413,16 @@ function SocialIconRow({ person }: { person: AdminPerson }) {
 function VendorPreviewCard({
   vendor,
 }: {
-  vendor: AdminVendor & { instrumentName: string };
+  vendor: AdminVendorGrouped;
 }) {
   // Same favicon fallback the fan sheet uses, so an empty Logo field still
   // looks correct in the preview rather than showing a blank circle.
   const logoFallback = useMemo(() => {
     if (vendor.logoUrl) return vendor.logoUrl;
-    try {
-      const u = new URL(vendor.affiliateUrl);
-      return `https://www.google.com/s2/favicons?sz=128&domain=${u.hostname}`;
-    } catch {
-      return "";
-    }
-  }, [vendor.logoUrl, vendor.affiliateUrl]);
+    if (vendor.domain)
+      return `https://www.google.com/s2/favicons?sz=128&domain=${vendor.domain}`;
+    return "";
+  }, [vendor.logoUrl, vendor.domain]);
 
   return (
     <>
@@ -3439,8 +3611,9 @@ function VendorPreviewCard({
         </div>
       </div>
       <p className="text-slate-300 text-xs mt-3">
-        Preview of the in-app VendorSheet hero — appears when a fan taps a
-        vendor inside {vendor.instrumentName}.
+        Preview of the in-app VendorSheet hero — surfaces wherever this
+        vendor is attached ({vendor.attachments.length}{" "}
+        {vendor.attachments.length === 1 ? "instrument" : "instruments"}).
       </p>
     </>
   );
@@ -3530,13 +3703,50 @@ export function Admin() {
   // owned by instruments in the DB (FK), so this is a derivation — no
   // separate query. We tag each row with its parent instrument so the list
   // can show "for <instrument>" context. Newest first.
+  // Group all attachments by vendorId so the Vendors tab lists each unique
+  // vendor ENTITY once (e.g. one "Carter Vintage" row even though it powers
+  // three instruments). The `id` field on each row is the vendorId so it
+  // doubles as the pane's selection key. `attachments` gives the editor and
+  // preview enough context to show "Used on N instruments" + a representative
+  // affiliateUrl for the favicon fallback.
   const allVendors = useMemo(() => {
-    const rows: (AdminVendor & { instrumentName: string })[] = [];
+    const byVendor = new Map<string, AdminVendorGrouped>();
     for (const inst of instruments) {
       for (const v of inst.vendors) {
-        rows.push({ ...v, instrumentName: inst.name });
+        const existing = byVendor.get(v.vendorId);
+        const attachment = {
+          attachmentId: v.id,
+          instrumentId: v.instrumentId,
+          instrumentName: inst.name,
+          affiliateUrl: v.affiliateUrl,
+          isHidden: v.isHidden,
+          position: v.position,
+        };
+        if (existing) {
+          existing.attachments.push(attachment);
+        } else {
+          byVendor.set(v.vendorId, {
+            id: v.vendorId,
+            vendorId: v.vendorId,
+            name: v.name,
+            domain: v.domain,
+            homeUrl: v.homeUrl,
+            aboutUrl: v.aboutUrl,
+            logoUrl: v.logoUrl,
+            tagline: v.tagline,
+            bio: v.bio,
+            location: v.location,
+            coverUrl: v.coverUrl,
+            createdAt: v.createdAt,
+            attachments: [attachment],
+          });
+        }
       }
     }
+    const rows = Array.from(byVendor.values());
+    // Sort vendors by their newest attachment date (proxy for "recently
+    // touched" since the vendor entity itself doesn't surface created_at
+    // in the API response).
     rows.sort((a, b) => {
       const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -3544,9 +3754,17 @@ export function Admin() {
     });
     return rows;
   }, [instruments]);
+  // Auto-heal vendor selection: handles both initial mount AND the case
+  // where the previously-selected vendor disappeared (e.g. deleted from
+  // another surface, or cascaded by an instrument delete). Without the
+  // "stale id" branch, the pane would sit on a "Vendor not found" state
+  // until the admin manually clicked another row.
   useEffect(() => {
-    if (selectedByEntity.vendors == null && allVendors.length > 0)
+    if (allVendors.length === 0) return;
+    const current = selectedByEntity.vendors;
+    if (current == null || !allVendors.some((v) => v.id === current)) {
       setSelectedByEntity((p) => ({ ...p, vendors: allVendors[0].id }));
+    }
   }, [allVendors, selectedByEntity.vendors]);
 
   // Apply the per-entity search filter just before render. We do a simple
@@ -3593,7 +3811,10 @@ export function Admin() {
         : allVendors.filter(
             (v) =>
               (v.name ?? "").toLowerCase().includes(needle) ||
-              v.instrumentName.toLowerCase().includes(needle),
+              v.domain.toLowerCase().includes(needle) ||
+              v.attachments.some((a) =>
+                a.instrumentName.toLowerCase().includes(needle),
+              ),
           ),
     [allVendors, needle],
   );
@@ -3966,21 +4187,32 @@ export function Admin() {
               ))}
             {entity === "vendors" &&
               filteredVendors.map((v) => {
+                // Favicon fallback uses the vendor's canonical domain so
+                // the list looks right even with no attachments.
                 const logo =
                   v.logoUrl ||
-                  (() => {
-                    try {
-                      return `https://www.google.com/s2/favicons?sz=128&domain=${new URL(v.affiliateUrl).hostname}`;
-                    } catch {
-                      return "";
-                    }
-                  })();
+                  (v.domain
+                    ? `https://www.google.com/s2/favicons?sz=128&domain=${v.domain}`
+                    : "");
+                // A vendor is "fully hidden" only when every one of its
+                // attachments is hidden — dimmer signals "no fan ever sees
+                // this anywhere", not "hidden on one of three".
+                const allHidden =
+                  v.attachments.length > 0 &&
+                  v.attachments.every((a) => a.isHidden);
+                const count = v.attachments.length;
+                const summary =
+                  count === 0
+                    ? "Not attached"
+                    : count === 1
+                      ? `on ${v.attachments[0].instrumentName}`
+                      : `on ${count} instruments`;
                 return (
                   <li key={v.id}>
                     <button
                       type="button"
                       onClick={() => setSelectedId(v.id)}
-                      className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === v.id ? "bg-blue-50" : ""} ${v.isHidden ? "opacity-50" : ""}`}
+                      className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === v.id ? "bg-blue-50" : ""} ${allHidden ? "opacity-50" : ""}`}
                       data-testid={`row-vendor-list-${v.id}`}
                     >
                       {logo ? (
@@ -3997,7 +4229,7 @@ export function Admin() {
                           {v.name || "Untitled vendor"}
                         </div>
                         <div className="text-slate-400 text-xs truncate">
-                          for {v.instrumentName}
+                          {summary}
                         </div>
                       </div>
                     </button>
@@ -4097,10 +4329,10 @@ export function Admin() {
                 <VendorPaneEditor
                   key={v.id}
                   vendor={v}
-                  onJumpToInstrument={() => {
+                  onJumpToInstrument={(instrumentId) => {
                     setSelectedByEntity((p) => ({
                       ...p,
-                      instruments: v.instrumentId,
+                      instruments: instrumentId,
                     }));
                     setEntity("instruments");
                   }}

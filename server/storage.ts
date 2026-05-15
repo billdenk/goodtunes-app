@@ -12,6 +12,9 @@ import {
   type InsertInstrument,
   type InstrumentVendor,
   type InsertInstrumentVendor,
+  type Vendor,
+  type InsertVendor,
+  type EnrichedInstrumentVendor,
   type TrackWriter,
   type InsertTrackWriter,
   type TrackPerformer,
@@ -28,6 +31,7 @@ import {
   people,
   instruments,
   instrumentVendors,
+  vendors,
   trackWriters,
   trackPerformers,
 } from "@shared/schema";
@@ -73,22 +77,44 @@ export interface IStorage {
 
   // `includeHiddenVendors` is honored only by admin call sites — public
   // reads always pass false so hidden vendor buttons don't render in the
-  // fan-side InstrumentSheet.
-  getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] })[]>;
-  getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined>;
+  // fan-side InstrumentSheet. Returned `vendors` are flat-enriched (vendor
+  // metadata joined onto the attachment) so the client sees one shape.
+  getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] })[]>;
+  getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] }) | undefined>;
   createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument>;
   updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined>;
   deleteInstrument(id: string): Promise<void>;
 
-  createInstrumentVendor(data: InsertInstrumentVendor & { id?: string }): Promise<InstrumentVendor>;
-  updateInstrumentVendor(id: string, data: Partial<InstrumentVendor>): Promise<InstrumentVendor | undefined>;
-  deleteInstrumentVendor(id: string): Promise<void>;
+  // Vendor ENTITY CRUD (one real-world vendor per row — Carter, Reverb, …).
+  // Editing here propagates to every instrument the vendor is attached to.
+  getVendors(): Promise<Vendor[]>;
+  getVendorById(id: string): Promise<Vendor | undefined>;
+  getVendorByDomain(domain: string): Promise<Vendor | undefined>;
+  createVendor(data: InsertVendor & { id?: string }): Promise<Vendor>;
+  updateVendor(id: string, data: Partial<Vendor>): Promise<Vendor | undefined>;
+  deleteVendor(id: string): Promise<void>;
+
+  // Attachment CRUD — only the per-instrument fields (affiliateUrl, position,
+  // isHidden) live on the join row. Vendor metadata edits go through the
+  // vendor-entity methods above.
+  attachVendorToInstrument(data: {
+    instrumentId: string;
+    vendorId: string;
+    affiliateUrl: string;
+    position?: number;
+    isHidden?: boolean;
+  }): Promise<InstrumentVendor>;
+  updateInstrumentVendorAttachment(
+    id: string,
+    data: { affiliateUrl?: string; position?: number; isHidden?: boolean },
+  ): Promise<InstrumentVendor | undefined>;
+  detachInstrumentVendor(id: string): Promise<void>;
 
   getSongCredits(songId: string): Promise<{
     writers: (TrackWriter & { person: Person | null })[];
     performers: (TrackPerformer & {
       person: Person | null;
-      instrument: (Instrument & { vendors: InstrumentVendor[] }) | null;
+      instrument: (Instrument & { vendors: EnrichedInstrumentVendor[] }) | null;
     })[];
   }>;
   // Same enriched shape as getSongCredits, but for every song on the album
@@ -99,7 +125,7 @@ export interface IStorage {
       writers: (TrackWriter & { person: Person | null })[];
       performers: (TrackPerformer & {
         person: Person | null;
-        instrument: (Instrument & { vendors: InstrumentVendor[] }) | null;
+        instrument: (Instrument & { vendors: EnrichedInstrumentVendor[] }) | null;
       })[];
     }>;
   }>;
@@ -309,36 +335,63 @@ export class DbStorage implements IStorage {
     await db.delete(people).where(eq(people.id, id));
   }
 
-  async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] })[]> {
+  // Internal helper: load enriched attachments for a set of instrument ids,
+  // joining vendor metadata onto each attachment so callers see the flat
+  // shape AlbumDetail.tsx + the admin UI both already expect.
+  private async loadEnrichedAttachments(
+    instrumentIds: string[],
+    includeHidden: boolean,
+  ): Promise<Map<string, EnrichedInstrumentVendor[]>> {
+    const byInstrument = new Map<string, EnrichedInstrumentVendor[]>();
+    if (instrumentIds.length === 0) return byInstrument;
+    const conds = [inArray(instrumentVendors.instrumentId, instrumentIds)];
+    if (!includeHidden) conds.push(eq(instrumentVendors.isHidden, false));
+    const rows = await db
+      .select({ iv: instrumentVendors, v: vendors })
+      .from(instrumentVendors)
+      .innerJoin(vendors, eq(instrumentVendors.vendorId, vendors.id))
+      .where(and(...conds))
+      .orderBy(asc(instrumentVendors.position));
+    for (const r of rows) {
+      const enriched: EnrichedInstrumentVendor = {
+        id: r.iv.id,
+        instrumentId: r.iv.instrumentId,
+        vendorId: r.iv.vendorId,
+        affiliateUrl: r.iv.affiliateUrl,
+        position: r.iv.position,
+        isHidden: r.iv.isHidden,
+        createdAt: r.iv.createdAt,
+        name: r.v.name,
+        domain: r.v.domain,
+        homeUrl: r.v.homeUrl,
+        aboutUrl: r.v.aboutUrl,
+        logoUrl: r.v.logoUrl,
+        tagline: r.v.tagline,
+        bio: r.v.bio,
+        location: r.v.location,
+        coverUrl: r.v.coverUrl,
+      };
+      const list = byInstrument.get(r.iv.instrumentId) ?? [];
+      list.push(enriched);
+      byInstrument.set(r.iv.instrumentId, list);
+    }
+    return byInstrument;
+  }
+
+  async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] })[]> {
     const all = await db.select().from(instruments).orderBy(asc(instruments.name));
     if (all.length === 0) return [];
-    const vendorQuery = db
-      .select()
-      .from(instrumentVendors)
-      .orderBy(asc(instrumentVendors.position));
-    const allVendors = opts?.includeHiddenVendors
-      ? await vendorQuery
-      : await vendorQuery.where(eq(instrumentVendors.isHidden, false));
-    const byInstrument = new Map<string, InstrumentVendor[]>();
-    for (const v of allVendors) {
-      const list = byInstrument.get(v.instrumentId) ?? [];
-      list.push(v);
-      byInstrument.set(v.instrumentId, list);
-    }
+    const byInstrument = await this.loadEnrichedAttachments(
+      all.map((i) => i.id),
+      !!opts?.includeHiddenVendors,
+    );
     return all.map((i) => ({ ...i, vendors: byInstrument.get(i.id) ?? [] }));
   }
-  async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: InstrumentVendor[] }) | undefined> {
+  async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] }) | undefined> {
     const [i] = await db.select().from(instruments).where(eq(instruments.id, id));
     if (!i) return undefined;
-    const predicate = opts?.includeHiddenVendors
-      ? eq(instrumentVendors.instrumentId, id)
-      : and(eq(instrumentVendors.instrumentId, id), eq(instrumentVendors.isHidden, false));
-    const vendors = await db
-      .select()
-      .from(instrumentVendors)
-      .where(predicate)
-      .orderBy(asc(instrumentVendors.position));
-    return { ...i, vendors };
+    const byInstrument = await this.loadEnrichedAttachments([id], !!opts?.includeHiddenVendors);
+    return { ...i, vendors: byInstrument.get(id) ?? [] };
   }
   async createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument> {
     const [i] = await db.insert(instruments).values(data as any).returning();
@@ -346,30 +399,82 @@ export class DbStorage implements IStorage {
   }
   async updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined> {
     const { id: _i, ...rest } = data as any;
-    if (Object.keys(rest).length === 0) return (await this.getInstrumentById(id)) as Instrument | undefined;
+    if (Object.keys(rest).length === 0) {
+      const [existing] = await db.select().from(instruments).where(eq(instruments.id, id));
+      return existing;
+    }
     const [i] = await db.update(instruments).set(rest).where(eq(instruments.id, id)).returning();
     return i;
   }
   async deleteInstrument(id: string): Promise<void> {
-    await db.transaction(async (tx) => {
-      await tx.delete(instrumentVendors).where(eq(instrumentVendors.instrumentId, id));
-      await tx.delete(instruments).where(eq(instruments.id, id));
-    });
+    // FK on instrument_vendors.instrument_id is ON DELETE CASCADE — the join
+    // rows go with the instrument. Vendor entities are untouched (they may
+    // still be attached to other instruments).
+    await db.delete(instruments).where(eq(instruments.id, id));
   }
-  async createInstrumentVendor(data: InsertInstrumentVendor & { id?: string }): Promise<InstrumentVendor> {
-    const [v] = await db.insert(instrumentVendors).values(data as any).returning();
+
+  // ----- Vendor ENTITY CRUD -------------------------------------------
+  async getVendors(): Promise<Vendor[]> {
+    return await db.select().from(vendors).orderBy(asc(vendors.name));
+  }
+  async getVendorById(id: string): Promise<Vendor | undefined> {
+    const [v] = await db.select().from(vendors).where(eq(vendors.id, id));
     return v;
   }
-  async updateInstrumentVendor(id: string, data: Partial<InstrumentVendor>): Promise<InstrumentVendor | undefined> {
-    const { id: _i, instrumentId: _ii, ...rest } = data as any;
+  async getVendorByDomain(domain: string): Promise<Vendor | undefined> {
+    const [v] = await db.select().from(vendors).where(eq(vendors.domain, domain.toLowerCase()));
+    return v;
+  }
+  async createVendor(data: InsertVendor & { id?: string }): Promise<Vendor> {
+    const [v] = await db.insert(vendors).values({ ...data, domain: data.domain.toLowerCase() } as any).returning();
+    return v;
+  }
+  async updateVendor(id: string, data: Partial<Vendor>): Promise<Vendor | undefined> {
+    const { id: _i, createdAt: _c, ...rest } = data as any;
+    if (rest.domain) rest.domain = String(rest.domain).toLowerCase();
+    if (Object.keys(rest).length === 0) return this.getVendorById(id);
+    const [v] = await db.update(vendors).set(rest).where(eq(vendors.id, id)).returning();
+    return v;
+  }
+  async deleteVendor(id: string): Promise<void> {
+    // ON DELETE CASCADE on instrument_vendors.vendor_id removes every
+    // attachment of this vendor across all instruments.
+    await db.delete(vendors).where(eq(vendors.id, id));
+  }
+
+  // ----- Attachment CRUD ----------------------------------------------
+  async attachVendorToInstrument(data: {
+    instrumentId: string;
+    vendorId: string;
+    affiliateUrl: string;
+    position?: number;
+    isHidden?: boolean;
+  }): Promise<InstrumentVendor> {
+    const [v] = await db.insert(instrumentVendors).values({
+      instrumentId: data.instrumentId,
+      vendorId: data.vendorId,
+      affiliateUrl: data.affiliateUrl,
+      position: data.position ?? 0,
+      isHidden: data.isHidden ?? false,
+    } as any).returning();
+    return v;
+  }
+  async updateInstrumentVendorAttachment(
+    id: string,
+    data: { affiliateUrl?: string; position?: number; isHidden?: boolean },
+  ): Promise<InstrumentVendor | undefined> {
+    const rest: Record<string, unknown> = {};
+    if (data.affiliateUrl !== undefined) rest.affiliateUrl = data.affiliateUrl;
+    if (data.position !== undefined) rest.position = data.position;
+    if (data.isHidden !== undefined) rest.isHidden = data.isHidden;
     if (Object.keys(rest).length === 0) {
-      const [v] = await db.select().from(instrumentVendors).where(eq(instrumentVendors.id, id));
-      return v;
+      const [existing] = await db.select().from(instrumentVendors).where(eq(instrumentVendors.id, id));
+      return existing;
     }
     const [v] = await db.update(instrumentVendors).set(rest).where(eq(instrumentVendors.id, id)).returning();
     return v;
   }
-  async deleteInstrumentVendor(id: string): Promise<void> {
+  async detachInstrumentVendor(id: string): Promise<void> {
     await db.delete(instrumentVendors).where(eq(instrumentVendors.id, id));
   }
 
@@ -388,24 +493,14 @@ export class DbStorage implements IStorage {
     const instrumentIds = Array.from(new Set(
       performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
     ));
-    const [peopleRows, instrumentRows, vendorRows] = await Promise.all([
+    const [peopleRows, instrumentRows, vendorsByInstrument] = await Promise.all([
       personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
       instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
       // Fan-facing — hidden vendors are excluded so demo-hidden vendor
       // buttons don't render in the InstrumentSheet.
-      instrumentIds.length
-        ? db.select().from(instrumentVendors)
-            .where(and(inArray(instrumentVendors.instrumentId, instrumentIds), eq(instrumentVendors.isHidden, false)))
-            .orderBy(asc(instrumentVendors.position))
-        : Promise.resolve([] as InstrumentVendor[]),
+      this.loadEnrichedAttachments(instrumentIds, false),
     ]);
     const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
-    const vendorsByInstrument = new Map<string, InstrumentVendor[]>();
-    for (const v of vendorRows) {
-      const list = vendorsByInstrument.get(v.instrumentId) ?? [];
-      list.push(v);
-      vendorsByInstrument.set(v.instrumentId, list);
-    }
     const instrumentsById = new Map(
       instrumentRows.map((i) => [i.id, { ...i, vendors: vendorsByInstrument.get(i.id) ?? [] }]),
     );
@@ -439,23 +534,13 @@ export class DbStorage implements IStorage {
     const instrumentIds = Array.from(new Set(
       performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
     ));
-    const [peopleRows, instrumentRows, vendorRows] = await Promise.all([
+    const [peopleRows, instrumentRows, vendorsByInstrument] = await Promise.all([
       personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
       instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
       // Fan-facing — hidden vendors are excluded.
-      instrumentIds.length
-        ? db.select().from(instrumentVendors)
-            .where(and(inArray(instrumentVendors.instrumentId, instrumentIds), eq(instrumentVendors.isHidden, false)))
-            .orderBy(asc(instrumentVendors.position))
-        : Promise.resolve([] as InstrumentVendor[]),
+      this.loadEnrichedAttachments(instrumentIds, false),
     ]);
     const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
-    const vendorsByInstrument = new Map<string, InstrumentVendor[]>();
-    for (const v of vendorRows) {
-      const list = vendorsByInstrument.get(v.instrumentId) ?? [];
-      list.push(v);
-      vendorsByInstrument.set(v.instrumentId, list);
-    }
     const instrumentsById = new Map(
       instrumentRows.map((i) => [i.id, { ...i, vendors: vendorsByInstrument.get(i.id) ?? [] }]),
     );
@@ -466,7 +551,7 @@ export class DbStorage implements IStorage {
       writers: (TrackWriter & { person: Person | null })[];
       performers: (TrackPerformer & {
         person: Person | null;
-        instrument: (Instrument & { vendors: InstrumentVendor[] }) | null;
+        instrument: (Instrument & { vendors: EnrichedInstrumentVendor[] }) | null;
       })[];
     }> = {};
     for (const w of writerRows) {

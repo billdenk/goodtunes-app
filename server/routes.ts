@@ -1065,50 +1065,158 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
-  // Vendors are nested under an instrument. Create-via-parent makes it easy
-  // for the CMS to assign instrumentId without leaking that field to the
-  // client. Updates/deletes use the vendor id directly.
-  app.post("/api/admin/instruments/:id/vendors", requireAdmin, async (req, res) => {
-    const instrumentId = String(req.params.id);
-    const parent = await storage.getInstrumentById(instrumentId);
-    if (!parent) return res.status(404).json({ message: "Instrument not found" });
-    const { name, affiliateUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, position } = req.body ?? {};
-    if (!name || !affiliateUrl) return res.status(400).json({ message: "name and affiliateUrl are required" });
-    const v = await storage.createInstrumentVendor({
-      instrumentId,
+  // ----- Vendor entity CRUD ----------------------------------------------
+  // A `vendor` is one real-world shop (Carter, Reverb, Sweetwater, …).
+  // Editing here propagates to every instrument attached to this vendor.
+  // The join row (attachment) is a separate resource — see /instrument-vendors below.
+  app.get("/api/vendors", async (_req, res) => {
+    return res.json(await storage.getVendors());
+  });
+  app.get("/api/vendors/:id", async (req, res) => {
+    const v = await storage.getVendorById(String(req.params.id));
+    if (!v) return res.status(404).json({ message: "Vendor not found" });
+    return res.json(v);
+  });
+  app.post("/api/admin/vendors", requireAdmin, async (req, res) => {
+    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl } = req.body ?? {};
+    if (!name || !domain) return res.status(400).json({ message: "name and domain are required" });
+    const normDomain = String(domain).toLowerCase().replace(/^www\./, "");
+    const existing = await storage.getVendorByDomain(normDomain);
+    if (existing) return res.status(409).json({ message: "A vendor with that domain already exists", vendor: existing });
+    const v = await storage.createVendor({
       name: String(name),
-      affiliateUrl: String(affiliateUrl),
+      domain: normDomain,
+      homeUrl: homeUrl ? String(homeUrl) : null,
       aboutUrl: aboutUrl ? String(aboutUrl) : null,
       logoUrl: logoUrl ? String(logoUrl) : null,
       tagline: tagline ? String(tagline) : null,
       bio: bio ? String(bio) : null,
       location: location ? String(location) : null,
       coverUrl: coverUrl ? String(coverUrl) : null,
-      position: position != null ? Number(position) : parent.vendors.length,
-    } as any);
+    });
     return res.status(201).json(v);
   });
   app.put("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, affiliateUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, position } = req.body ?? {};
+    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
-    if (affiliateUrl !== undefined) updates.affiliateUrl = String(affiliateUrl);
+    if (domain !== undefined) updates.domain = String(domain).toLowerCase().replace(/^www\./, "");
+    if (homeUrl !== undefined) updates.homeUrl = homeUrl ? String(homeUrl) : null;
     if (aboutUrl !== undefined) updates.aboutUrl = aboutUrl ? String(aboutUrl) : null;
     if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
     if (tagline !== undefined) updates.tagline = tagline ? String(tagline) : null;
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (location !== undefined) updates.location = location ? String(location) : null;
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
-    if (position !== undefined) updates.position = Number(position);
-    if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
-    const v = await storage.updateInstrumentVendor(id, updates);
-    if (!v) return res.status(404).json({ message: "Vendor not found" });
-    return res.json(v);
+    try {
+      const v = await storage.updateVendor(id, updates);
+      if (!v) return res.status(404).json({ message: "Vendor not found" });
+      return res.json(v);
+    } catch (err: any) {
+      // Map the postgres unique-violation on `vendors.domain` to a real 409
+      // so the admin client can surface "another vendor already uses this
+      // domain" instead of a generic 500.
+      if (err?.code === "23505") {
+        return res.status(409).json({ message: "Another vendor is already using that domain" });
+      }
+      throw err;
+    }
   });
   app.delete("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
-    await storage.deleteInstrumentVendor(String(req.params.id));
+    // Cascades to every instrument_vendors row pointing at this vendor.
+    await storage.deleteVendor(String(req.params.id));
     return res.json({ message: "Deleted" });
+  });
+
+  // ----- Vendor↔Instrument attachment CRUD -------------------------------
+  // Attach a vendor to an instrument. Two body shapes are accepted:
+  //   1) { vendorId, affiliateUrl, position?, isHidden? }
+  //      → attach an existing vendor entity.
+  //   2) { domain, name, affiliateUrl, homeUrl?, aboutUrl?, logoUrl?, ... }
+  //      → find-or-create vendor by domain, then attach. Used by the admin
+  //        scrape flow ("paste a product URL → backend scrapes → attach").
+  //        If a vendor with that domain already exists, its metadata is
+  //        preserved (existing entity wins); we just create the attachment.
+  app.post("/api/admin/instruments/:id/vendors", requireAdmin, async (req, res) => {
+    const instrumentId = String(req.params.id);
+    const parent = await storage.getInstrumentById(instrumentId);
+    if (!parent) return res.status(404).json({ message: "Instrument not found" });
+    const body = req.body ?? {};
+    const affiliateUrl = body.affiliateUrl ? String(body.affiliateUrl) : "";
+    if (!affiliateUrl) return res.status(400).json({ message: "affiliateUrl is required" });
+
+    let vendorId: string | null = body.vendorId ? String(body.vendorId) : null;
+
+    if (vendorId) {
+      // Validate the supplied vendor exists up front so we return a clean
+      // 400 instead of letting the FK constraint blow up as a generic 500.
+      const existingVendor = await storage.getVendorById(vendorId);
+      if (!existingVendor) {
+        return res.status(400).json({ message: "vendorId does not match any vendor" });
+      }
+    } else {
+      // Find-or-create branch — derive domain from explicit body or the URL.
+      const rawDomain = body.domain
+        ? String(body.domain)
+        : (() => {
+            try { return new URL(affiliateUrl).hostname; } catch { return ""; }
+          })();
+      const normDomain = rawDomain.toLowerCase().replace(/^www\./, "");
+      if (!normDomain) return res.status(400).json({ message: "domain or a parseable affiliateUrl is required" });
+      const existing = await storage.getVendorByDomain(normDomain);
+      if (existing) {
+        vendorId = existing.id;
+      } else {
+        if (!body.name) return res.status(400).json({ message: "name is required when creating a new vendor" });
+        const created = await storage.createVendor({
+          name: String(body.name),
+          domain: normDomain,
+          homeUrl: body.homeUrl ? String(body.homeUrl) : `https://${normDomain}/`,
+          aboutUrl: body.aboutUrl ? String(body.aboutUrl) : null,
+          logoUrl: body.logoUrl ? String(body.logoUrl) : null,
+          tagline: body.tagline ? String(body.tagline) : null,
+          bio: body.bio ? String(body.bio) : null,
+          location: body.location ? String(body.location) : null,
+          coverUrl: body.coverUrl ? String(body.coverUrl) : null,
+        });
+        vendorId = created.id;
+      }
+    }
+
+    const attachment = await storage.attachVendorToInstrument({
+      instrumentId,
+      vendorId,
+      affiliateUrl,
+      position: body.position != null ? Number(body.position) : parent.vendors.length,
+      isHidden: !!body.isHidden,
+    });
+    // Return the enriched (vendor-joined) shape so the admin client doesn't
+    // briefly render a partial row between create response and refetch.
+    const refreshed = await storage.getInstrumentById(instrumentId, { includeHiddenVendors: true });
+    const enriched = refreshed?.vendors.find((v) => v.id === attachment.id);
+    return res.status(201).json(enriched ?? attachment);
+  });
+
+  // Edit attachment-only fields (per-instrument product URL, position, demo
+  // visibility). Vendor-level metadata edits go to /api/admin/vendors/:id.
+  app.put("/api/admin/instrument-vendors/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const { affiliateUrl, position, isHidden } = req.body ?? {};
+    const updates: { affiliateUrl?: string; position?: number; isHidden?: boolean } = {};
+    if (affiliateUrl !== undefined) updates.affiliateUrl = String(affiliateUrl);
+    if (position !== undefined) updates.position = Number(position);
+    if (isHidden !== undefined) updates.isHidden = !!isHidden;
+    const v = await storage.updateInstrumentVendorAttachment(id, updates);
+    if (!v) return res.status(404).json({ message: "Attachment not found" });
+    return res.json(v);
+  });
+  // Detach a vendor from an instrument. The vendor entity is preserved
+  // (it may still be attached to other instruments). To delete the vendor
+  // entity itself, use DELETE /api/admin/vendors/:id.
+  app.delete("/api/admin/instrument-vendors/:id", requireAdmin, async (req, res) => {
+    await storage.detachInstrumentVendor(String(req.params.id));
+    return res.json({ message: "Detached" });
   });
 
   // ----- SuperCredits™ song credits (writers + performers) -----------------
