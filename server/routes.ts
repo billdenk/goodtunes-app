@@ -422,6 +422,119 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // --- Direct-to-Object-Storage video upload ----------------------------
+  //
+  // Replit's HTTP proxy caps inbound request bodies well below our 200MB
+  // multer limit (around 32MB on Autoscale + the dev preview proxy), so
+  // anything larger than that returns a hard 413 before our handler runs.
+  // For music-video uploads we hand the browser a signed PUT URL pointing
+  // straight at Google Cloud Storage and let it stream the bytes directly,
+  // skipping the proxy entirely. The server only mints the URL and, after
+  // the PUT completes, flips the ACL to public so /objects/uploads/<id>
+  // can serve the file like every other upload.
+  //
+  // Helper: ask the Replit object-storage sidecar to sign a URL. Same
+  // request shape as the private `signObjectURL` inside the integration
+  // blueprint; inlined here so we don't have to fork that file.
+  async function signGcsUrl(
+    bucketName: string,
+    objectName: string,
+    method: "GET" | "PUT" | "DELETE" | "HEAD",
+    ttlSec: number,
+  ): Promise<string> {
+    const response = await fetch(
+      "http://127.0.0.1:1106/object-storage/signed-object-url",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bucket_name: bucketName,
+          object_name: objectName,
+          method,
+          expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
+        }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to sign object URL: ${response.status}`);
+    }
+    const { signed_url } = (await response.json()) as { signed_url: string };
+    return signed_url;
+  }
+  // Resolve PRIVATE_OBJECT_DIR ("/<bucket>/.private") into the bucket name
+  // + the "uploads/" object-key prefix used by every upload path. Pulled
+  // out of the two upload handlers above so the direct-upload flow shares
+  // the same destination layout.
+  function uploadDestination(id: string): { bucketName: string; objectName: string } {
+    const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
+    const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
+    const firstSlash = trimmed.indexOf("/");
+    const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
+    const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
+    const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+    return { bucketName, objectName };
+  }
+
+  // Step 1: mint a signed PUT URL. The client picks a MIME from the
+  // allow-list, we generate an id (uuid + matching extension), sign a
+  // 15-minute PUT URL, and return both the URL and the eventual public
+  // path the file will be served from once finalized.
+  app.post(
+    "/api/admin/upload-video/sign",
+    requireAdminBearer,
+    async (req, res) => {
+      try {
+        const contentType = String(req.body?.contentType || "");
+        if (!(contentType in VIDEO_MIME_TO_EXT)) {
+          return res
+            .status(400)
+            .json({ message: "Only MP4, MOV, or WebM videos are allowed" });
+        }
+        const id = `${randomUUID()}${VIDEO_MIME_TO_EXT[contentType]}`;
+        const { bucketName, objectName } = uploadDestination(id);
+        const uploadUrl = await signGcsUrl(bucketName, objectName, "PUT", 900);
+        return res.json({
+          uploadUrl,
+          finalPath: `/objects/uploads/${id}`,
+          contentType,
+        });
+      } catch (err) {
+        console.error("Video sign failed", err);
+        return res.status(500).json({ message: "Could not start upload" });
+      }
+    },
+  );
+
+  // Step 2: after the browser's PUT succeeds, the client calls finalize so
+  // we can verify the object actually landed and flip its ACL to public.
+  // We accept the `/objects/uploads/<id>` path the sign step returned and
+  // refuse anything else to keep this route from being used to publicize
+  // arbitrary objects in the bucket.
+  app.post(
+    "/api/admin/upload-video/finalize",
+    requireAdminBearer,
+    async (req, res) => {
+      try {
+        const finalPath = String(req.body?.finalPath || "");
+        if (!/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(finalPath)) {
+          return res.status(400).json({ message: "Invalid upload path" });
+        }
+        const file = await objectStorage.getObjectEntityFile(finalPath);
+        await setObjectAclPolicy(file, {
+          owner: "admin",
+          visibility: "public",
+        });
+        return res.json({ url: finalPath });
+      } catch (err) {
+        if (err instanceof ObjectNotFoundError) {
+          return res.status(404).json({ message: "Upload not found" });
+        }
+        console.error("Video finalize failed", err);
+        return res.status(500).json({ message: "Could not finalize upload" });
+      }
+    },
+  );
+
   // Audio upload — same pattern as video. We deliberately keep audio on
   // its own route + multer instance so we can cap size differently (full
   // tracks can be 30–80MB lossless, way beyond the 8MB artwork limit)

@@ -1050,25 +1050,83 @@ function AlbumEditor({
   );
 }
 
-// Shared upload helper for video files. Uses the dedicated video route
-// because /api/admin/upload only accepts image MIME types.
-async function uploadVideoFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
+// Shared upload helper for video files.
+//
+// Music-video files routinely run past 50MB, which is above Replit's
+// inbound proxy body cap (~32MB), so a normal multipart POST to our
+// Express route fails with 413 before the request ever reaches our
+// handler. To dodge that, we use a three-step direct-to-storage flow:
+//
+//   1. POST /api/admin/upload-video/sign  → server mints a signed PUT
+//      URL pointing straight at Google Cloud Storage.
+//   2. Browser PUTs the raw bytes directly to GCS (no proxy in the
+//      middle, no size cap on our side, progress streamed via XHR).
+//   3. POST /api/admin/upload-video/finalize → server flips ACL to
+//      public and returns the /objects/uploads/<id> URL.
+//
+// `onProgress` is optional; callers that want a percent indicator can
+// pass it and we'll forward XHR upload progress as 0–1.
+async function uploadVideoFile(
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<string> {
   const token = getAuthToken();
   if (!token) throw new Error("Sign out and back in — your session token is missing.");
-  const res = await fetch("/api/admin/upload-video", {
+
+  // 1. Sign
+  const signRes = await fetch("/api/admin/upload-video/sign", {
     method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     credentials: "include",
+    body: JSON.stringify({ contentType: file.type || "video/mp4" }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
+  if (!signRes.ok) {
+    const body = await signRes.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${signRes.status})`);
   }
-  const { url } = await res.json();
-  return url as string;
+  const { uploadUrl, finalPath, contentType } = (await signRes.json()) as {
+    uploadUrl: string;
+    finalPath: string;
+    contentType: string;
+  };
+
+  // 2. PUT directly to GCS. Use XHR (not fetch) so we get upload
+  // progress events — fetch's `ReadableStream` upload progress is still
+  // not broadly supported across browsers.
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl, true);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed — network error"));
+    xhr.send(file);
+  });
+
+  // 3. Finalize (flip ACL to public)
+  const finRes = await fetch("/api/admin/upload-video/finalize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    credentials: "include",
+    body: JSON.stringify({ finalPath }),
+  });
+  if (!finRes.ok) {
+    const body = await finRes.json().catch(() => ({}));
+    throw new Error(body.message || `Upload finalize failed (${finRes.status})`);
+  }
+  const { url } = (await finRes.json()) as { url: string };
+  return url;
 }
 
 // Shared upload helper for audio files (per-song MP3/M4A/WAV/FLAC).
@@ -1132,14 +1190,18 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
     queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "videos"] });
 
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleAddVideo(file: File) {
     setErr(null);
     setBusy(true);
+    setProgress(0);
     try {
-      const url = await uploadVideoFile(file);
+      const url = await uploadVideoFile(file, (f) =>
+        setProgress(Math.min(0.99, f)),
+      );
       await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
         videoUrl: url,
         title: file.name.replace(/\.[^.]+$/, "") || "Untitled video",
@@ -1149,6 +1211,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
       setErr(e.message || "Upload failed");
     } finally {
       setBusy(false);
+      setProgress(null);
       if (fileRef.current) fileRef.current.value = "";
     }
   }
@@ -1180,7 +1243,11 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
           className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
           data-testid="button-add-album-video"
         >
-          {busy ? "Uploading…" : "+ Upload video"}
+          {busy
+            ? progress !== null
+              ? `Uploading… ${Math.round(progress * 100)}%`
+              : "Uploading…"
+            : "+ Upload video"}
         </button>
         <input
           ref={fileRef}
