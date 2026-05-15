@@ -1621,9 +1621,55 @@ function PersonEditor({
       </div>
 
       {tab === "music" && (
-        <div role="tabpanel" id="panel-admin-person-music" aria-labelledby="tab-admin-person-music" className="space-y-4" data-testid="panel-admin-person-music">
+        <div role="tabpanel" id="panel-admin-person-music" aria-labelledby="tab-admin-person-music" className="space-y-6" data-testid="panel-admin-person-music">
+          {/* Apple Music discography — only present after a Pull. Lives at
+              the top of the Music tab so the + Add buttons are the first
+              thing the admin sees right after scraping. */}
+          {discography.length > 0 && (
+            <div className="space-y-2" data-testid="section-discography">
+              <div className="flex items-center justify-between">
+                <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+                  Discography
+                </h3>
+                <span className="text-[11px] text-slate-400">
+                  {discography.length} from Apple Music · newest first
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                One-click adds an album to GoodTunes with real artwork + the Apple
+                Music handoff URL. Track-by-track import and Spotify URLs come next.
+              </p>
+              <div className="divide-y divide-slate-100">
+                {discography.map((a) => (
+                  <DiscographyRow
+                    key={a.collectionId}
+                    album={a}
+                    artistName={form.name}
+                    match={matchAlbum(a, form.name)}
+                    onAdded={() => {
+                      /* match recomputes after invalidation refetches /api/albums */
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tracks where this person is credited (from the catalog). */}
+          {musicAlbums.length > 0 && (
+            <div className="flex items-center justify-between">
+              <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+                Credited tracks
+              </h3>
+              <span className="text-[11px] text-slate-400">
+                {profile?.tracks.length ?? 0} track{(profile?.tracks.length ?? 0) === 1 ? "" : "s"} across {musicAlbums.length} album{musicAlbums.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
           {musicAlbums.length === 0 ? (
-            <p className="text-slate-400 text-sm">No tracks credit {form.name} yet. Add credits from an album's song editor.</p>
+            discography.length === 0 ? (
+              <p className="text-slate-400 text-sm">No tracks credit {form.name} yet. Pull a discography above, or add credits from an album's song editor.</p>
+            ) : null
           ) : (
             musicAlbums.map((alb) => (
               <div key={alb.albumId} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
@@ -1944,38 +1990,6 @@ function PersonEditor({
         </button>
       </div>
 
-      {discography.length > 0 && (
-        <div
-          className="pt-4 border-t border-slate-200 space-y-2"
-          data-testid="section-discography"
-        >
-          <div className="flex items-center justify-between">
-            <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
-              Discography
-            </h3>
-            <span className="text-[11px] text-slate-400">
-              {discography.length} from Apple Music · newest first
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400">
-            One-click adds an album to GoodTunes with real artwork + the Apple
-            Music handoff URL. Track-by-track import and Spotify URLs come next.
-          </p>
-          <div className="divide-y divide-slate-100">
-            {discography.map((a) => (
-              <DiscographyRow
-                key={a.collectionId}
-                album={a}
-                artistName={form.name}
-                match={matchAlbum(a, form.name)}
-                onAdded={() => {
-                  /* match recomputes after invalidation refetches /api/albums */
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
       </div>)}
     </div>
   );
