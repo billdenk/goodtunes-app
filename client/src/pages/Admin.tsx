@@ -1360,9 +1360,30 @@ function PersonEditor({
   });
   const [form, setForm] = useState<AdminPerson | null>(null);
   const [dirty, setDirty] = useState(false);
-  // Discography lives in client state — it's transient (pulled per session,
-  // not persisted). On re-pull we replace it; on save we don't touch it.
-  const [discography, setDiscography] = useState<ScrapedArtistAlbum[]>([]);
+  // Discography is per-session and per-person, but the Replit dev iframe
+  // reloads aggressively (every restart of the workflow re-mounts this
+  // component and wipes useState). Persist into sessionStorage keyed by
+  // personId so a pulled list survives page reloads, server restarts, and
+  // toggling between the Apple/Spotify/Instagram tabs. Cleared automatically
+  // when the browser tab closes — still session-scoped, just resilient.
+  const discoKey = `gt:admin:discography:${personId}`;
+  const [discography, setDiscography] = useState<ScrapedArtistAlbum[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = sessionStorage.getItem(discoKey);
+      return raw ? (JSON.parse(raw) as ScrapedArtistAlbum[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      if (discography.length > 0) sessionStorage.setItem(discoKey, JSON.stringify(discography));
+      else sessionStorage.removeItem(discoKey);
+    } catch {
+      /* storage full or unavailable — fine to skip persistence */
+    }
+  }, [discography, discoKey]);
   // Which streaming/social tab is currently revealed below the icon strip.
   // Default to Apple Music — the most common starting point for a fresh
   // person (the Pull bar drops an Apple URL straight into that field).
@@ -4524,7 +4545,7 @@ export function Admin() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fa] text-slate-900 flex flex-col">
+    <main className="h-screen overflow-hidden bg-[#f7f8fa] text-slate-900 flex flex-col">
       {/* Top bar spans the full width so the three columns below all align
           at the same y. The dark color logo reads cleanly on this near-white
           surface — we deliberately do NOT use the shared GoodTunesLogo
