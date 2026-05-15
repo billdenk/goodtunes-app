@@ -1639,19 +1639,40 @@ function PersonEditor({
                 One-click adds an album to GoodTunes with real artwork + the Apple
                 Music handoff URL. Track-by-track import and Spotify URLs come next.
               </p>
-              <div className="divide-y divide-slate-100">
-                {discography.map((a) => (
-                  <DiscographyRow
-                    key={a.collectionId}
-                    album={a}
-                    artistName={form.name}
-                    match={matchAlbum(a, form.name)}
-                    onAdded={() => {
-                      /* match recomputes after invalidation refetches /api/albums */
-                    }}
-                  />
-                ))}
-              </div>
+              {/* Apple-style grouping: full-lengths first, then EPs, then
+                  Singles. Singles are detected by trackCount === 1 since the
+                  iTunes API marks them as collectionType "EP" with one track. */}
+              {(() => {
+                const albums = discography.filter((a) => a.type === "album" && a.trackCount !== 1);
+                const eps = discography.filter((a) => a.type === "EP" && (a.trackCount ?? 0) > 1);
+                const singles = discography.filter((a) => a.trackCount === 1);
+                const groups: Array<{ label: string; items: ScrapedArtistAlbum[] }> = [
+                  { label: "Albums", items: albums },
+                  { label: "EPs", items: eps },
+                  { label: "Singles", items: singles },
+                ];
+                return groups.filter((g) => g.items.length > 0).map((g) => (
+                  <div key={g.label} className="space-y-1" data-testid={`section-discography-${g.label.toLowerCase()}`}>
+                    <div className="flex items-baseline justify-between pt-2">
+                      <h4 className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">{g.label}</h4>
+                      <span className="text-[11px] text-slate-400">{g.items.length}</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {g.items.map((a) => (
+                        <DiscographyRow
+                          key={a.collectionId}
+                          album={a}
+                          artistName={form.name}
+                          match={matchAlbum(a, form.name)}
+                          onAdded={() => {
+                            /* match recomputes after invalidation refetches /api/albums */
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           )}
 
