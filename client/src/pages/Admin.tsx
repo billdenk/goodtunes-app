@@ -3060,48 +3060,18 @@ function VendorPaneEditor({
             {draft.name || "Untitled vendor"}
           </h1>
           <p className="text-[12px] text-slate-500 truncate">
-            {draft.domain || "no domain"} · Used on{" "}
-            <span className="text-slate-700 font-medium">
-              {attachmentCount}
-            </span>{" "}
-            {attachmentCount === 1 ? "instrument" : "instruments"}
+            {draft.domain || "no domain"}
           </p>
         </div>
       </div>
 
-      {/* "Used on" list — each clickable, jumps to that instrument so the
-          admin can edit its per-attachment affiliateUrl / visibility. */}
-      <div className="px-6 py-4 border-b border-slate-200">
-        <p className="text-[11px] uppercase tracking-wider text-slate-400 mb-2">
-          Used on
-        </p>
-        {attachmentCount === 0 ? (
-          <p className="text-slate-400 text-sm">
-            Not attached to any instrument yet.
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {vendor.attachments.map((a) => (
-              <li key={a.attachmentId}>
-                <button
-                  type="button"
-                  onClick={() => onJumpToInstrument(a.instrumentId)}
-                  className="text-sm text-slate-700 hover:text-[#319ED8] hover:underline text-left flex items-center gap-2"
-                  data-testid={`link-vendor-instrument-${a.instrumentId}`}
-                >
-                  <span className="truncate">{a.instrumentName}</span>
-                  {a.isHidden && (
-                    <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">
-                      Hidden
-                    </span>
-                  )}
-                  <span className="text-slate-300 text-xs">→</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {/* Note: we used to show a "USED ON" list of every instrument this
+          vendor is attached to here. Removed — a popular vendor (Fender,
+          Martin, D'Addario) can be on hundreds of instruments and the list
+          drowns the editor. The fan-side VendorSheet already surfaces the
+          full Gear tab (every attachment) and People tab (SuperCredits
+          taggers), so admins can see it there. Per-attachment editing
+          stays where it lives: inside each instrument's vendor list. */}
 
       <div className="px-6 py-5 space-y-3 max-w-2xl">
         <Field label="Vendor name">
