@@ -6013,17 +6013,6 @@ function AlbumArtistPicker({
           </div>
         )}
 
-        {/* Custom-name editor — only revealed when the album has no linked
-            profile, so manual entry still works for one-off / collab billings. */}
-        {!linked && (
-          <input
-            value={displayName}
-            onChange={(e) => onChange({ personId: null, name: e.target.value })}
-            placeholder="Display name (used on the album row)"
-            className={inputCls}
-            data-testid="input-album-artist"
-          />
-        )}
       </div>
     </Field>
   );
