@@ -1405,6 +1405,23 @@ function DiscographyRow({
       onAdded();
     },
   });
+  // Inverse of `add` — DELETEs the matched library album so the pill can
+  // toggle back to "+ Add". The match comes from `matchAlbum`, which gives
+  // us the GoodTunes album row by title+artist; once gone, the next refetch
+  // of /api/albums recomputes match=null and the row flips automatically.
+  const remove = useMutation({
+    mutationFn: async () => {
+      if (!match) return;
+      await apiRequest("DELETE", `/api/admin/albums/${match.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+    },
+  });
+  // Hover state on the "In library" pill — at rest it stays neutral and
+  // reads "In library"; on hover it turns red and reads "Remove". Same
+  // pattern the admin uses for other destructive toggles.
+  const [hoverRemove, setHoverRemove] = useState(false);
   return (
     <div
       className="flex items-center gap-3 py-2"
@@ -1434,9 +1451,23 @@ function DiscographyRow({
         </div>
       </div>
       {match ? (
-        <span className="text-[11px] font-medium text-[#319ED8] bg-[#319ED8]/10 px-2 py-1 rounded">
-          In library
-        </span>
+        <button
+          type="button"
+          onClick={() => remove.mutate()}
+          onMouseEnter={() => setHoverRemove(true)}
+          onMouseLeave={() => setHoverRemove(false)}
+          disabled={remove.isPending}
+          className={
+            "text-[11px] font-medium px-2 py-1 rounded transition-colors disabled:opacity-40 " +
+            (hoverRemove
+              ? "text-[#C8102E] bg-[#C8102E]/10"
+              : "text-[#319ED8] bg-[#319ED8]/10")
+          }
+          data-testid={`button-remove-album-${album.collectionId}`}
+          aria-label={`Remove ${album.name} from library`}
+        >
+          {remove.isPending ? "Removing…" : hoverRemove ? "Remove" : "In library"}
+        </button>
       ) : (
         <button
           type="button"
@@ -1691,6 +1722,32 @@ function PersonEditor({
   // + artist. Lossy on purpose: "Greatest Hits (Deluxe Edition)" won't match
   // "Greatest Hits" — admin can still click + Add and we'd get a dupe, but
   // that's the safer side of the trade-off.
+  // Bulk-add for the section "+ Add all" link. Hits POST /api/admin/albums
+  // once per release (Promise.all parallelizes), then invalidates the
+  // library query once at the end so every row in the section re-renders
+  // as "In library" together. We swallow per-item failures (Promise.allSettled)
+  // so one bad release doesn't strand the others as still "+ Add".
+  const bulkAdd = useMutation({
+    mutationFn: async (items: ScrapedArtistAlbum[]) => {
+      await Promise.allSettled(
+        items.map((album) =>
+          apiRequest("POST", "/api/admin/albums", {
+            title: album.name,
+            artist: form?.name ?? "",
+            artwork: album.artworkUrl,
+            year: album.year,
+            type: album.type,
+            appleMusicUrl: album.appleMusicUrl,
+            primaryArtistId: personId,
+          }),
+        ),
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+    },
+  });
+
   const matchAlbum = (
     a: ScrapedArtistAlbum,
     artistName: string,
@@ -1842,11 +1899,28 @@ function PersonEditor({
                   { label: "EPs", items: eps },
                   { label: "Singles", items: singles },
                 ];
-                return groups.filter((g) => g.items.length > 0).map((g) => (
+                return groups.filter((g) => g.items.length > 0).map((g) => {
+                  // Only un-added releases are bulk-addable. The button hides
+                  // once everything in the section is "In library".
+                  const unmatched = g.items.filter((a) => !matchAlbum(a, form.name));
+                  return (
                   <div key={g.label} className="space-y-1" data-testid={`section-discography-${g.label.toLowerCase()}`}>
-                    <div className="flex items-baseline justify-between pt-2">
+                    <div className="flex items-baseline justify-between pt-2 gap-2">
                       <h4 className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">{g.label}</h4>
-                      <span className="text-[11px] text-slate-400">{g.items.length}</span>
+                      <div className="flex items-baseline gap-3">
+                        {unmatched.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => bulkAdd.mutate(unmatched)}
+                            disabled={bulkAdd.isPending}
+                            className="text-[12px] text-[#319ED8] font-medium hover:underline disabled:opacity-40"
+                            data-testid={`button-add-all-${g.label.toLowerCase()}`}
+                          >
+                            {bulkAdd.isPending ? "Adding…" : `+ Add all (${unmatched.length})`}
+                          </button>
+                        )}
+                        <span className="text-[11px] text-slate-400">{g.items.length}</span>
+                      </div>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {g.items.map((a) => (
@@ -1863,7 +1937,8 @@ function PersonEditor({
                       ))}
                     </div>
                   </div>
-                ));
+                  );
+                });
               })()}
             </div>
           )}
