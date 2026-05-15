@@ -913,6 +913,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rawImage = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
         if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
         if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
+        // Apple Music's og:image is always the wide 1200×630 share card —
+        // a small circular portrait centered on a white background. When
+        // we drop that into a circular avatar (PersonPreviewCard, fan
+        // PerformerSheet) it shows up as a tiny photo ringed by a huge
+        // white border. Apple's image CDN exposes the same source at any
+        // size + crop suffix, so rewrite the `cw` (crop-wide w/ padding)
+        // variant to `bb` (bounding box, no padding) at a square size.
+        if (
+          source === "apple" &&
+          rawImage &&
+          /mzstatic\.com\//.test(rawImage)
+        ) {
+          rawImage = rawImage.replace(
+            /\/\d+x\d+cw\.(jpg|jpeg|png|webp)(\?.*)?$/i,
+            "/1200x1200bb.$1$2",
+          );
+        }
       } catch {
         /* OG scrape is best-effort — Apple sometimes 403s the bot. We still
            have iTunes Lookup below to fill name + first album art. */

@@ -1392,7 +1392,13 @@ function PersonEditor({
     if (data) {
       setForm(data);
       setDirty(false);
-      setDiscography([]);
+      // Don't clear `discography` here. The parent uses `key={selectedId}`
+      // on PersonEditor, so switching to a different person already
+      // remounts this component (which resets all local state, including
+      // discography). Clearing in this effect made saves wipe the pulled
+      // list whenever React Query re-resolved `data` after invalidation —
+      // even though personId hadn't changed — because `data?.id` could
+      // transiently flip during refetch.
     }
   }, [data?.id]);
 
