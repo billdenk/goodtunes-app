@@ -84,6 +84,7 @@ export function AlbumDetail() {
   const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song; creditId?: string } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
+  const [showDescription, setShowDescription] = useState(false);
   const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
   const [bookmarkedInstruments, setBookmarkedInstruments] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -273,6 +274,7 @@ export function AlbumDetail() {
     setCreditsForSong(null);
     setPerformerSheet(null);
     setInstrumentSheet(null);
+    setShowDescription(false);
     if (album) {
       try {
         const raw = localStorage.getItem(`gt:downloaded-songs:${album.id}`);
@@ -516,7 +518,10 @@ export function AlbumDetail() {
                 </div>
               )}
               {album.description && (
-                <p className="text-white/70 text-sm mt-3 leading-relaxed">{album.description}</p>
+                <ClampedDescription
+                  text={album.description}
+                  onExpand={() => setShowDescription(true)}
+                />
               )}
             </div>
 
@@ -827,6 +832,13 @@ export function AlbumDetail() {
             songTitle={`${album.title} · ${songs.length} song${songs.length === 1 ? "" : "s"}`}
             heading="Add Album to Playlist"
             onClose={() => setShowAlbumPlaylistPicker(false)}
+          />
+        )}
+
+        {showDescription && album.description && (
+          <AlbumDescriptionSheet
+            album={album}
+            onClose={() => setShowDescription(false)}
           />
         )}
 
@@ -1446,6 +1458,100 @@ function PersonAvatar({ person, size = 44 }: { person: Person; size?: number }) 
     >
       {initials || "•"}
     </div>
+  );
+}
+
+// Apple-Music-style 2-line clamp on the album description with an inline
+// "...more" affordance that fades into the truncated last line. Tapping
+// either the text or the "...more" pill opens AlbumDescriptionSheet with
+// the full copy. Overflow is detected with a layout effect (compares
+// scrollHeight to clientHeight) and re-checked whenever the text or
+// container width changes, so the pill never appears for short copy.
+function ClampedDescription({ text, onExpand }: { text: string; onExpand: () => void }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const check = () => {
+      // rAF to defer until after layout — avoids a stale measurement on the
+      // initial paint in some Safari builds. Tracked so unmount can cancel
+      // the pending callback and avoid a state update on a dead component.
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!ref.current) return;
+        setOverflowing(ref.current.scrollHeight - ref.current.clientHeight > 1);
+      });
+    };
+    check();
+    // ResizeObserver isn't on older Safari/WebKit. Guard + fall back to
+    // window resize so we still recompute when the viewport rotates.
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(check);
+      ro.observe(el);
+      return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+    }
+    window.addEventListener("resize", check);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", check); };
+  }, [text]);
+
+  // The whole truncated paragraph is a button when it overflows so keyboard
+  // users get the same affordance as the visible "…more" pill. When the
+  // copy fits in 2 lines we render a plain <p> so there's no fake button.
+  if (!overflowing) {
+    return (
+      <p
+        ref={ref}
+        className="text-white/70 text-sm mt-3 leading-relaxed line-clamp-2"
+        data-testid="album-description"
+      >
+        {text}
+      </p>
+    );
+  }
+
+  return (
+    <div className="relative mt-3" data-testid="album-description">
+      <button
+        type="button"
+        onClick={onExpand}
+        aria-label="Read more about this album"
+        className="block w-full text-left active:opacity-80"
+      >
+        <p
+          ref={ref}
+          className="text-white/70 text-sm leading-relaxed line-clamp-2"
+        >
+          {text}
+        </p>
+        <span
+          aria-hidden="true"
+          className="absolute bottom-0 right-0 text-white text-sm font-semibold pl-8 leading-relaxed"
+          style={{
+            background:
+              "linear-gradient(to right, rgba(0,6,43,0) 0%, #00062B 40%, #00062B 100%)",
+          }}
+          data-testid="button-album-description-more"
+        >
+          <span className="text-white/70">…</span>more
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function AlbumDescriptionSheet({ album, onClose }: { album: Album; onClose: () => void }) {
+  return (
+    <SheetShell ariaLabel={`${album.title} — about`} testId="sheet-album-description" onClose={onClose}>
+      <SheetHeader eyebrow="About" title={album.title} subtitle={album.artist} onClose={onClose} />
+      <div className="px-5 pb-2">
+        <p className="text-white/85 text-[15px] leading-relaxed whitespace-pre-wrap" data-testid="text-album-description-full">
+          {album.description}
+        </p>
+      </div>
+    </SheetShell>
   );
 }
 
