@@ -1903,17 +1903,22 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
             <h2 className="text-white text-[24px] font-bold leading-tight mt-3" data-testid="text-preview-person-name">
               {person.name || "Unnamed"}
             </h2>
-            <p className="text-white/55 text-[13px] mt-1">Tap from any song credit to land here</p>
+            <p className="text-white/70 text-[13px] mt-1">Tap from any song credit to land here</p>
           </div>
 
-          {/* Bio */}
+          {/* Bio — explicit white at 0.95 (not /75) because the dark navy
+              swallows lower-opacity text and Sam's "Hi I'm sam. Thanks for
+              listening :)" became unreadable in the preview. */}
           {person.bio && (
-            <>
-              <h3 className="px-5 pt-1 pb-2 text-white text-[18px] font-bold tracking-tight">About</h3>
-              <p className="px-5 text-white/75 text-[14px] leading-relaxed whitespace-pre-line line-clamp-6">
+            <div className="px-5">
+              <h3 className="pt-1 pb-2 text-white text-[18px] font-bold tracking-tight">About</h3>
+              <p
+                className="text-[14px] leading-relaxed whitespace-pre-line line-clamp-6"
+                style={{ color: "rgba(255,255,255,0.95)" }}
+              >
                 {person.bio}
               </p>
-            </>
+            </div>
           )}
 
           {/* Listen-on pills */}
