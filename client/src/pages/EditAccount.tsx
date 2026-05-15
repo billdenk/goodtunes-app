@@ -9,6 +9,11 @@ export function EditAccount() {
   const [username, setUsername] = useState(user?.username || "");
   const [realName, setRealName] = useState(user?.realName || "");
   const [saved, setSaved] = useState(false);
+  // Local error string for photo upload failures. We need this in addition
+  // to `updateError` (which only covers profile-field saves) so a rejected
+  // HEIC / oversized image / server validation error doesn't silently
+  // disappear into an empty avatar.
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Keep form in sync when the auth user finishes loading on a hard refresh.
   useEffect(() => {
@@ -30,21 +35,45 @@ export function EditAccount() {
   const handlePhotoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
+    setPhotoError(null);
     if (!file || !user?.id) return;
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 5 * 1024 * 1024) return;
+    // The server allowlist is PNG/JPEG/WEBP/GIF only — anything else (notably
+    // HEIC straight from iOS Photos) will 400. iPhone Safari normally
+    // auto-converts when `accept` lists explicit MIME types, but Files /
+    // share sheets can still hand us a HEIC. Reject up front with a clear
+    // message instead of letting the silent server reject bury the bug.
+    const allowedMimes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
+    if (!allowedMimes.includes(file.type.toLowerCase())) {
+      setPhotoError(`That format isn't supported (${file.type || "unknown"}). Use a JPEG or PNG.`);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError("That image is over 5MB. Pick a smaller one.");
+      return;
+    }
     const reader = new FileReader();
+    reader.onerror = () => setPhotoError("Couldn't read that file. Try a different photo.");
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
-      if (!dataUrl) return;
-      updatePhoto(dataUrl).catch(() => {});
+      if (!dataUrl) {
+        setPhotoError("Couldn't read that file. Try a different photo.");
+        return;
+      }
+      updatePhoto(dataUrl).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err ?? "");
+        setPhotoError(msg || "Upload failed. Please try again.");
+      });
     };
     reader.readAsDataURL(file);
   };
 
   const handlePhotoRemove = () => {
     if (!user?.id) return;
-    removePhoto().catch(() => {});
+    setPhotoError(null);
+    removePhoto().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      setPhotoError(msg || "Couldn't remove photo.");
+    });
   };
 
   const handleSave = async () => {
@@ -95,7 +124,7 @@ export function EditAccount() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp,image/gif"
               className="hidden"
               onChange={handlePhotoPick}
               data-testid="input-profile-photo"
@@ -138,6 +167,14 @@ export function EditAccount() {
               >
                 Remove photo
               </button>
+            )}
+            {photoError && (
+              <p
+                className="text-red-400 text-[12px] mt-2 max-w-[280px] text-center"
+                data-testid="text-photo-error"
+              >
+                {photoError}
+              </p>
             )}
           </div>
 
