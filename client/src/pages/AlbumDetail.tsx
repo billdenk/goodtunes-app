@@ -483,7 +483,8 @@ export function AlbumDetail() {
               <button
                 type="button"
                 onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
-                className="mt-1 inline-flex items-center gap-0.5 text-white text-base font-medium active:opacity-70"
+                className="mt-1 inline-flex items-center gap-0.5 text-base font-medium active:opacity-70"
+                style={{ color: "#319ED8" }}
                 data-testid="link-album-artist"
               >
                 {album.artist}
@@ -491,7 +492,14 @@ export function AlbumDetail() {
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </button>
-              <p className="text-white/55 text-xs mt-1.5">{album.year} · {songs.length} songs · {totalMin} min</p>
+              {/* Genre · Year — Apple-Music-style muted subtitle under the
+                  artist name. Genre is optional; when absent we collapse
+                  to just the year so the line never starts with a bullet.
+                  Song count + total runtime moved to the track-list footer
+                  so this row stays a clean two-token metadata strip. */}
+              <p className="text-xs mt-1.5" style={{ color: "#98A2B3" }} data-testid="text-album-meta">
+                {[album.genre, album.year].filter(Boolean).join(" · ")}
+              </p>
               {apiAlbum?.label && (
                 <div
                   className="mt-2 inline-flex items-center gap-1.5 text-white/65 text-[12px]"

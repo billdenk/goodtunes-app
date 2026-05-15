@@ -83,6 +83,12 @@ export const albums = pgTable("albums", {
   // referral logic as the per-artist links on `people`.
   appleMusicUrl: text("apple_music_url"),
   spotifyUrl: text("spotify_url"),
+  // Single primary genre string ("Indie Rock", "Soul", "Ambient"). Free-text
+  // for now — admin types it in, fan-side renders it next to the year
+  // under the artist on the album page. Optional: legacy rows + imports
+  // without a genre stay null and the "Genre · Year" line collapses to
+  // just the year on the fan side.
+  genre: text("genre"),
 });
 
 // Bonus content attached to an album. Both tables are intentionally

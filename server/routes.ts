@@ -775,7 +775,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/albums", requireAdmin, async (req, res) => {
-    const { id, title, artist, artwork, year, type, description, appleMusicUrl, spotifyUrl, labelId } = req.body ?? {};
+    const { id, title, artist, artwork, year, type, description, appleMusicUrl, spotifyUrl, labelId, genre } = req.body ?? {};
     if (!title || !artist || !artwork) {
       return res.status(400).json({ message: "title, artist, artwork are required" });
     }
@@ -797,6 +797,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       labelId: normalizedLabelId,
       appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
       spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
+      genre: genre ? String(genre).trim() : null,
       goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
       streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
       primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
@@ -1003,6 +1004,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.isGoodTunesRelease = !!req.body.isGoodTunesRelease;
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
+    if (req.body?.genre !== undefined)
+      updates.genre = req.body.genre ? String(req.body.genre).trim() : null;
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
     return res.json(updated);

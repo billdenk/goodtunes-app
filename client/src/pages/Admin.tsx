@@ -45,6 +45,10 @@ interface AdminAlbum {
   // discography panel (Apple Music) or manually on the album editor.
   appleMusicUrl: string | null;
   spotifyUrl: string | null;
+  // Free-text primary genre ("Indie Rock", "Soul", …). Rendered on the
+  // fan-side album page next to the year. Null hides the genre half of
+  // that line cleanly.
+  genre: string | null;
 }
 
 // Record label. One row per real-world label (Sub Pop, Warp, …). Each album
@@ -525,6 +529,7 @@ function AlbumEditor({
         labelId: data.labelId ?? null,
         appleMusicUrl: data.appleMusicUrl,
         spotifyUrl: data.spotifyUrl,
+        genre: (data as any).genre ?? null,
         goodTunesReleaseDate: (data as any).goodTunesReleaseDate ?? null,
         streamingReleaseDate: (data as any).streamingReleaseDate ?? null,
         primaryArtistId: (data as any).primaryArtistId ?? null,
@@ -739,6 +744,15 @@ function AlbumEditor({
             </select>
           </Field>
         </div>
+        <Field label="Genre">
+          <input
+            value={form.genre ?? ""}
+            onChange={(e) => set("genre", e.target.value || null)}
+            placeholder="Indie Rock"
+            className={inputCls}
+            data-testid="input-album-genre"
+          />
+        </Field>
         <Field label="Description">
           <textarea
             value={form.description ?? ""}

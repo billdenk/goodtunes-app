@@ -61,6 +61,7 @@ export interface Album {
   year: number;
   type: "Single" | "EP" | "LP";
   description: string;
+  genre?: string;
   certificateNumber?: number;
   ownedCertificates?: number[];
   purchases?: CertPurchase[];
