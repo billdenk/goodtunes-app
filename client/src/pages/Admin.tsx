@@ -1067,6 +1067,9 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
                     Remove poster
                   </button>
                 )}
+                <span className="text-[11px] text-slate-400">
+                  16:9 still. 1280×720 px recommended (1920×1080 retina). JPG, PNG, or WebP.
+                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1137,7 +1140,7 @@ function AlbumPhotosSection({ albumId }: { albumId: string }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1">
         <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
           Photos
         </h3>
@@ -1161,6 +1164,9 @@ function AlbumPhotosSection({ albumId }: { albumId: string }) {
           }}
         />
       </div>
+      <p className="text-[11px] text-slate-400 mb-2">
+        Square. 1200×1200 px recommended (2400×2400 retina). JPG, PNG, WebP, or GIF.
+      </p>
       {err && <p className="text-[12px] text-red-600 mb-2">{err}</p>}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         {photos.length === 0 && (
@@ -3887,7 +3893,7 @@ function VendorPaneEditor({
             onChange={(v) => setDraft({ ...draft, logoUrl: v || null })}
             shape="circle"
             testId="input-vendor-pane-logo"
-            hint="Small, square. PNG with transparency works best. Falls back to a Google-served favicon if empty."
+            hint="Square. 200×200 px min (400×400 retina). Transparent PNG or SVG. Falls back to a Google-served favicon if empty."
           />
         </Field>
         <Field label="Cover / hero background">
@@ -3895,7 +3901,7 @@ function VendorPaneEditor({
             value={draft.coverUrl ?? ""}
             onChange={(v) => setDraft({ ...draft, coverUrl: v || null })}
             testId="input-vendor-pane-cover"
-            hint="Wide hero shot of the storefront, workshop, or product. ~1600×1200 recommended."
+            hint="Wide hero. 1200×400 px recommended (2400×800 retina). JPG. Storefront, workshop, or hero product shot."
           />
         </Field>
         <Field label="Bio (short paragraph)">
@@ -5632,7 +5638,7 @@ function LabelEditor({
             onChange={(next) => set("logoUrl", next || null)}
             shape="square"
             testId="input-label-logo"
-            hint="Square logo, 512×512 recommended. Shown on album headers + the label tab list."
+            hint="Square. 512×512 px recommended (1024×1024 retina). Transparent PNG or SVG. Shown on album headers + the label tab list."
           />
         </Field>
         <Field label="Cover image">
@@ -5641,7 +5647,7 @@ function LabelEditor({
             onChange={(next) => set("coverUrl", next || null)}
             shape="square"
             testId="input-label-cover"
-            hint="Optional. Hero image for the future label page."
+            hint="Wide hero. 1600×600 px recommended (3200×1200 retina). JPG. Optional — used on the future label page."
           />
         </Field>
         <Field label="Website">
