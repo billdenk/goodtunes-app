@@ -238,10 +238,8 @@ export function Account() {
           <p className="text-center text-white/45 text-xs pb-4">
             <a
               href="/admin"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate("/admin");
-              }}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-inherit no-underline hover:no-underline"
               data-testid="link-hidden-admin"
             >
