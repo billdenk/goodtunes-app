@@ -232,7 +232,22 @@ export function Account() {
             </button>
           </div>
 
-          <p className="text-center text-white/45 text-xs pb-4">Version 1.00</p>
+          {/* Hidden admin shortcut — looks like plain version text, but
+              tapping it routes to /admin. IYKYK; lets the team get in
+              without burning a visible nav slot. */}
+          <p className="text-center text-white/45 text-xs pb-4">
+            <a
+              href="/admin"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/admin");
+              }}
+              className="text-inherit no-underline hover:no-underline"
+              data-testid="link-hidden-admin"
+            >
+              Version 1.00
+            </a>
+          </p>
           </div>
         </div>
 
