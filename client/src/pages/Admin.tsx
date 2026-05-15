@@ -3025,17 +3025,20 @@ function SocialIconRow({ person }: { person: AdminPerson }) {
       className="px-5 pt-5 pb-5 mt-auto flex flex-wrap items-center gap-2.5"
       data-testid="row-person-socials"
     >
-      {links.map(({ key, Icon, label }) => (
-        <div
+      {links.map(({ key, url, Icon, label }) => (
+        <a
           key={key}
-          aria-label={label}
-          title={label}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white"
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${label} in a new tab`}
+          title={`Open ${label}`}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white transition-colors hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           style={{ background: "rgba(255,255,255,0.10)" }}
-          data-testid={`icon-social-${key}`}
+          data-testid={`link-social-${key}`}
         >
           <Icon size={16} />
-        </div>
+        </a>
       ))}
     </div>
   );
