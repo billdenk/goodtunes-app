@@ -105,14 +105,18 @@ export function ArtistDetail() {
   const PREVIEW_CAP = 10;
 
   const isFav = favArtists.has(artistName);
-  const heroArt = artistAlbums[0]?.artwork;
+  const heroArt = artistAlbums[0]?.artwork ?? streamingAll[0]?.artworkUrl ?? undefined;
   const artistPhoto = ARTIST_PHOTOS[artistName];
   const avatarSrc = artistPhoto ?? heroArt;
   const blurSrc = artistPhoto ?? heroArt;
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
-  if (artistAlbums.length === 0) {
+  // "Artist not found" only when there's literally no data — no static
+  // GoodTunes albums AND no streaming discography pulled for this name.
+  // Streaming-only artists (no curated GT release yet) still get a full
+  // page with their Music available on streaming buckets + About.
+  if (artistAlbums.length === 0 && streamingAll.length === 0) {
     return (
       <main className="min-h-screen bg-[#00062B] flex items-center justify-center">
         <div className="text-white text-center">
@@ -122,6 +126,9 @@ export function ArtistDetail() {
       </main>
     );
   }
+  const releaseCount = artistAlbums.length;
+  const songCount = allArtistSongs.length;
+  const hasGtReleases = artistAlbums.length > 0;
 
   const handlePlayAll = () => {
     if (allArtistSongs.length > 0) playSong(allArtistSongs[0], allArtistSongs);
@@ -183,69 +190,83 @@ export function ArtistDetail() {
                 />
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => artistAlbums[0] && navigate(`/album/${artistAlbums[0].id}`)}
-              className="mt-5 flex items-center gap-1 active:opacity-70"
-              data-testid="button-artist-name"
-            >
-              <h1 className="text-white text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">{artistName}</h1>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55 mt-1">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-            <p className="text-white/45 text-xs mt-1.5">
-              {artistAlbums.length} {artistAlbums.length === 1 ? "release" : "releases"} · {allArtistSongs.length} songs
-            </p>
-
-            <div className="flex items-center gap-3 mt-5 w-full max-w-[300px]">
+            {hasGtReleases ? (
               <button
                 type="button"
-                onClick={handlePlayAll}
-                className="flex-1 flex items-center justify-center gap-2 h-11 rounded-full font-semibold text-sm active:scale-[0.98] transition-transform"
-                style={{ background: "rgba(255,255,255,0.10)", color: "#319ED8" }}
-                data-testid="button-play-artist"
+                onClick={() => artistAlbums[0] && navigate(`/album/${artistAlbums[0].id}`)}
+                className="mt-5 flex items-center gap-1 active:opacity-70"
+                data-testid="button-artist-name"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5.14v14l11-7-11-7z" />
+                <h1 className="text-white text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">{artistName}</h1>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55 mt-1">
+                  <path d="M9 18l6-6-6-6" />
                 </svg>
-                Play
               </button>
-              <button
-                type="button"
-                onClick={handleShuffle}
-                className="flex-1 flex items-center justify-center gap-2 h-11 rounded-full font-semibold text-sm active:scale-[0.98] transition-transform"
-                style={{ background: "rgba(255,255,255,0.10)", color: "#319ED8" }}
-                data-testid="button-shuffle-artist"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                  <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-                </svg>
-                Shuffle
-              </button>
-            </div>
-          </div>
+            ) : (
+              <h1 className="mt-5 text-white text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">
+                {artistName}
+              </h1>
+            )}
+            {hasGtReleases && (
+              <p className="text-white/45 text-xs mt-1.5">
+                {releaseCount} {releaseCount === 1 ? "release" : "releases"} · {songCount} songs
+              </p>
+            )}
 
-          <div className="px-5 mt-9">
-            <h2 className="text-white text-xl font-bold tracking-tight mb-3">GoodTunes Releases</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {artistAlbums.map((album) => (
+            {hasGtReleases && (
+              <div className="flex items-center gap-3 mt-5 w-full max-w-[300px]">
                 <button
-                  key={album.id}
                   type="button"
-                  onClick={() => navigate(`/album/${album.id}`)}
-                  className="flex flex-col text-left active:scale-[0.97] transition-transform"
-                  data-testid={`artist-album-${album.id}`}
+                  onClick={handlePlayAll}
+                  disabled={songCount === 0}
+                  className="flex-1 flex items-center justify-center gap-2 h-11 rounded-full font-semibold text-sm active:scale-[0.98] transition-transform disabled:opacity-40"
+                  style={{ background: "rgba(255,255,255,0.10)", color: "#319ED8" }}
+                  data-testid="button-play-artist"
                 >
-                  <div className="aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
-                    <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
-                  </div>
-                  <p className="text-white text-sm font-semibold leading-tight truncate mt-2">{album.title}</p>
-                  <p className="text-white/50 text-xs truncate mt-0.5">{album.year} · {album.type}</p>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5.14v14l11-7-11-7z" />
+                  </svg>
+                  Play
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={handleShuffle}
+                  disabled={songCount === 0}
+                  className="flex-1 flex items-center justify-center gap-2 h-11 rounded-full font-semibold text-sm active:scale-[0.98] transition-transform disabled:opacity-40"
+                  style={{ background: "rgba(255,255,255,0.10)", color: "#319ED8" }}
+                  data-testid="button-shuffle-artist"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+                  </svg>
+                  Shuffle
+                </button>
+              </div>
+            )}
           </div>
+
+          {hasGtReleases && (
+            <div className="px-5 mt-9">
+              <h2 className="text-white text-xl font-bold tracking-tight mb-3">GoodTunes Releases</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {artistAlbums.map((album) => (
+                  <button
+                    key={album.id}
+                    type="button"
+                    onClick={() => navigate(`/album/${album.id}`)}
+                    className="flex flex-col text-left active:scale-[0.97] transition-transform"
+                    data-testid={`artist-album-${album.id}`}
+                  >
+                    <div className="aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
+                      <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
+                    </div>
+                    <p className="text-white text-sm font-semibold leading-tight truncate mt-2">{album.title}</p>
+                    <p className="text-white/50 text-xs truncate mt-0.5">{album.year} · {album.type}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {streamingBuckets.length > 0 && (
             <div className="mt-9" data-testid="section-streaming">

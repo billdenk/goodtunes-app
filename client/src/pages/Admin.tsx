@@ -1738,6 +1738,7 @@ function DiscographyRow({
   artistName,
   personId,
   match,
+  bulkPending = false,
   onAdded,
 }: {
   album: ScrapedArtistAlbum;
@@ -1746,6 +1747,9 @@ function DiscographyRow({
   // new release is linked to this profile from the moment it's created.
   personId: string;
   match: AdminAlbum | null;
+  // True while a bucket-level "+ Add all" is in flight. Locks the per-row
+  // "+ Add" button so the admin can't double-create against a stale match.
+  bulkPending?: boolean;
   onAdded: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -1760,10 +1764,15 @@ function DiscographyRow({
         appleMusicUrl: album.appleMusicUrl,
         primaryArtistId: personId,
       });
-      return res.json();
+      const json = await res.json();
+      // Refetch BEFORE resolving so `isPending` stays true until the
+      // library cache reflects this create. Without the await, a rapid
+      // second click can fire while `match` is still null and duplicate
+      // the album.
+      await queryClient.refetchQueries({ queryKey: ["/api/albums"] });
+      return json;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
       onAdded();
     },
   });
@@ -1834,11 +1843,11 @@ function DiscographyRow({
         <button
           type="button"
           onClick={() => add.mutate()}
-          disabled={add.isPending}
+          disabled={add.isPending || bulkPending}
           className="text-[12px] text-[#319ED8] font-medium hover:underline disabled:opacity-40"
           data-testid={`button-add-album-${album.collectionId}`}
         >
-          {add.isPending ? "Adding…" : "+ Add"}
+          {add.isPending ? "Adding…" : bulkPending ? "…" : "+ Add"}
         </button>
       )}
     </div>
@@ -2085,12 +2094,53 @@ function PersonEditor({
   // "Greatest Hits" — admin can still click + Add and we'd get a dupe, but
   // that's the safer side of the trade-off.
   //
-  // NOTE: We deliberately do NOT offer a "+ Add all" bulk button here. The
-  // GoodTunes library is meant for actual GoodTunes releases, not the
-  // artist's full Apple Music catalog. The Discography section is the data
-  // source for the fan-side Streaming handoff — informational, not an
-  // import surface. Per-row "+ Add" is fine for the rare case where one
-  // streaming release also exists as a real GoodTunes release.
+  // Bulk "+ Add all" per bucket. Fires N parallel POST /api/admin/albums
+  // calls, each with primaryArtistId set so the new albums link back to
+  // this person from the moment they're created. Rows already matched in
+  // the library are filtered out before this fires (see button render).
+  // Uses Promise.allSettled so a single failure (network blip, server
+  // validation) doesn't abandon successful sibling creates mid-batch — we
+  // invalidate on settle so any albums that did land show up immediately,
+  // then surface the failure count via the toast hook. `addAll.isPending`
+  // is also passed to each DiscographyRow so individual "+ Add" buttons
+  // are disabled while the batch runs (prevents double-creates against
+  // a stale `match` value).
+  const { toast } = useToast();
+  const addAll = useMutation({
+    mutationFn: async (items: ScrapedArtistAlbum[]) => {
+      const results = await Promise.allSettled(
+        items.map((a) =>
+          apiRequest("POST", "/api/admin/albums", {
+            title: a.name,
+            artist: form?.name ?? "",
+            artwork: a.artworkUrl,
+            year: a.year,
+            type: a.type,
+            appleMusicUrl: a.appleMusicUrl,
+            primaryArtistId: personId,
+          }),
+        ),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      // Refetch before resolving so `isPending` stays true until fresh
+      // album rows are in the cache. Without this, the bulk button can
+      // re-enable while `unmatched` still reflects pre-batch state and
+      // a second click duplicates everything that just succeeded.
+      await queryClient.refetchQueries({ queryKey: ["/api/albums"] });
+      return { added: items.length - failed, failed };
+    },
+    onSuccess: ({ added, failed }) => {
+      if (failed === 0) {
+        toast({ title: `Added ${added} album${added === 1 ? "" : "s"}` });
+      } else {
+        toast({
+          title: `Added ${added}, ${failed} failed`,
+          description: "Retry the rows still showing + Add.",
+          variant: "destructive",
+        });
+      }
+    },
+  });
   const matchAlbum = (
     a: ScrapedArtistAlbum,
     artistName: string,
@@ -2172,12 +2222,56 @@ function PersonEditor({
 
       {tab === "music" && (
         <div role="tabpanel" id="panel-admin-person-music" aria-labelledby="tab-admin-person-music" className="space-y-6" data-testid="panel-admin-person-music">
+          {/* GoodTunes Releases — curated, in-library albums by this artist.
+              Distinct from the iTunes-pulled Discography below: this is
+              what fans actually play inside GoodTunes (album rows whose
+              `primaryArtistId` matches this person AND that admin has
+              flagged as a real GoodTunes release). */}
+          {(() => {
+            const gtReleases = libraryAlbums.filter(
+              (a) => a.primaryArtistId === personId && a.isGoodTunesRelease,
+            );
+            if (gtReleases.length === 0) return null;
+            return (
+              <div className="space-y-2" data-testid="section-goodtunes-releases">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+                    GoodTunes Releases
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    {gtReleases.length} in library
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {gtReleases.map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex items-center gap-3 py-2"
+                      data-testid={`row-goodtunes-release-${a.id}`}
+                    >
+                      {a.artwork ? (
+                        <img src={a.artwork} alt="" className="w-12 h-12 rounded object-cover shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded bg-slate-200 shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-slate-900 text-sm font-medium truncate">{a.title}</div>
+                        <div className="text-slate-400 text-[11px]">
+                          {[a.type, a.year].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-medium px-2 py-1 rounded text-[#319ED8] bg-[#319ED8]/10">
+                        In library
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* "+ New release" — creates a fresh album pre-linked to this
-              person and jumps the shell straight into the album editor.
-              Lives above the discography because for a verified artist
-              who already has rows in GoodTunes the discography section is
-              often empty (or hidden until they Pull from Apple), and we
-              want the create action to be the first thing they see. */}
+              person and jumps the shell straight into the album editor. */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex items-center gap-3" data-testid="row-person-new-release">
             <div className="w-10 h-10 rounded-full bg-[#319ED8]/10 grid place-items-center shrink-0">
               <Disc3 className="w-5 h-5 text-[#319ED8]" />
@@ -2224,7 +2318,7 @@ function PersonEditor({
             <div className="space-y-2" data-testid="section-discography">
               <div className="flex items-center justify-between">
                 <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
-                  Discography
+                  Discography on Streaming
                 </h3>
                 <span className="text-[11px] text-slate-400">
                   {discography.length} from Apple Music · newest first
@@ -2246,11 +2340,26 @@ function PersonEditor({
                   { label: "EPs", items: eps },
                   { label: "Singles", items: singles },
                 ];
-                return groups.filter((g) => g.items.length > 0).map((g) => (
+                return groups.filter((g) => g.items.length > 0).map((g) => {
+                  const unmatched = g.items.filter((a) => !matchAlbum(a, form.name));
+                  return (
                   <div key={g.label} className="space-y-1" data-testid={`section-discography-${g.label.toLowerCase()}`}>
                     <div className="flex items-baseline justify-between pt-2 gap-2">
                       <h4 className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">{g.label}</h4>
-                      <span className="text-[11px] text-slate-400">{g.items.length}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[11px] text-slate-400">{g.items.length}</span>
+                        {unmatched.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => addAll.mutate(unmatched)}
+                            disabled={addAll.isPending}
+                            className="text-[11px] font-medium text-[#319ED8] hover:underline disabled:opacity-40"
+                            data-testid={`button-add-all-${g.label.toLowerCase()}`}
+                          >
+                            {addAll.isPending ? "Adding…" : `+ Add all (${unmatched.length})`}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {g.items.map((a) => (
@@ -2260,6 +2369,7 @@ function PersonEditor({
                           artistName={form.name}
                           personId={personId}
                           match={matchAlbum(a, form.name)}
+                          bulkPending={addAll.isPending}
                           onAdded={() => {
                             /* match recomputes after invalidation refetches /api/albums */
                           }}
@@ -2267,7 +2377,8 @@ function PersonEditor({
                       ))}
                     </div>
                   </div>
-                ));
+                  );
+                });
               })()}
             </div>
           )}
@@ -4159,21 +4270,14 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
   );
 }
 
-// Phone-frame preview that mirrors the fan-side PerformerSheet header.
-// People don't have a standalone public page yet — they surface inside a
-// song's credits — so we render the header treatment (big avatar + name +
-// accent dot + bio) the fan would see when they tap a performer row.
-// Streaming links are previewed as the same pills we'll use post-window
-// when fans get punted to Apple Music / Spotify for the full catalog.
+// Phone-frame preview of the full fan-side Artist page. We iframe the
+// real /artist/<slug> route so the preview can never drift from what fans
+// see (GoodTunes Releases + Discography on Streaming buckets, About, the
+// works). Same-origin so cookies/auth carry over and the React Query
+// cache writes the admin already made are immediately visible.
 function PersonPreviewCard({ person }: { person: AdminPerson }) {
-  const initials =
-    person.name
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]?.toUpperCase() ?? "")
-      .join("") || "•";
-  const accent = person.accent || "#319ED8";
+  const slug = encodeURIComponent(person.name || "");
+  const src = person.name ? `/artist/${slug}` : "";
   return (
     <>
       <div
@@ -4188,91 +4292,24 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
         }}
         data-testid="preview-person"
       >
-        <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
-          {/* Mock status bar */}
-          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white">
-            <span>9:41</span>
-            <span>● ● ●</span>
-          </div>
-          {/* Sheet chrome — close affordance, no back arrow on a fullscreen sheet */}
-          <div className="flex-shrink-0 flex items-center justify-end px-3 pb-2">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white/70"
-              style={{ background: "rgba(255,255,255,0.10)" }}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </div>
-          </div>
-
-          {/* Hero — large avatar + name + role placeholder */}
-          <div className="flex flex-col items-center text-center px-5 pt-2 pb-5">
-            {person.photoUrl ? (
-              <img
-                src={person.photoUrl}
-                alt={person.name}
-                className="rounded-full object-cover"
-                style={{ width: 112, height: 112 }}
-              />
-            ) : (
-              <div
-                className="rounded-full flex items-center justify-center text-white font-semibold"
-                style={{
-                  width: 112,
-                  height: 112,
-                  background: accent,
-                  fontSize: 42,
-                }}
-                aria-hidden="true"
-              >
-                {initials}
-              </div>
-            )}
-            <h2
-              className="text-white text-[24px] font-bold leading-tight mt-3"
-              data-testid="text-preview-person-name"
-            >
-              {person.name || "Unnamed"}
-            </h2>
-            <p className="text-white/70 text-[13px] mt-1">
-              Tap from any song credit to land here
-            </p>
-          </div>
-
-          {/* Bio — explicit white at 0.95 (not /75) because the dark navy
-              swallows lower-opacity text and Sam's "Hi I'm sam. Thanks for
-              listening :)" became unreadable in the preview. */}
-          {person.bio && (
-            <div className="px-5">
-              <h3 className="pt-1 pb-2 text-white text-[18px] font-bold tracking-tight">
-                About
-              </h3>
-              <p
-                className="text-[14px] leading-relaxed whitespace-pre-line line-clamp-6"
-                style={{ color: "rgba(255,255,255,0.95)" }}
-              >
-                {person.bio}
-              </p>
+        <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B]">
+          {src ? (
+            <iframe
+              key={src}
+              src={src}
+              title={`Artist page preview — ${person.name}`}
+              className="w-full h-full border-0 block"
+              data-testid="iframe-preview-person"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white/50 text-sm text-center px-6">
+              Add a name to preview this artist's page.
             </div>
           )}
-
-          {/* Find-her-elsewhere icon row. Apple/Spotify are sized identically
-              to the social icons — we want fans to know she's there, but not
-              hand-hold them out of our player. Pure circles, white-on-glass. */}
-          <SocialIconRow person={person} />
         </div>
       </div>
       <p className="text-slate-300 text-xs mt-3">
-        Preview of the in-app PerformerSheet header.
+        Live preview of /artist/{person.name || "…"} — the page fans see.
       </p>
     </>
   );
