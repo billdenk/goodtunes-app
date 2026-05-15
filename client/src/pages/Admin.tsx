@@ -8151,8 +8151,16 @@ export function Admin() {
         <section className="w-72 shrink-0 border-r border-slate-200 flex flex-col">
           <div className="border-b border-slate-200">
             <div className="px-4 py-3 flex items-center justify-between gap-2">
-              <h2 className="text-slate-900 text-sm font-semibold capitalize">
-                {entity}
+              <h2 className="text-slate-900 text-sm font-semibold">
+                {/* Public label map — `instruments` shows as "Gear" to match
+                    the sidebar nav + fan-side VendorSheet tab. Internal
+                    entity keys stay as-is so schema/storage names don't
+                    need to change. */}
+                {entity === "instruments" ? "Gear"
+                  : entity === "albums" ? "Albums"
+                  : entity === "people" ? "People"
+                  : entity === "vendors" ? "Vendors"
+                  : "Labels"}
               </h2>
               <div className="flex items-center gap-3">
                 <button
