@@ -906,6 +906,14 @@ export function AlbumDetail() {
                 toast({ title: "Couldn't start chat", description: "Invalid vendor link." });
               }
             }}
+            onOpenInstrument={(inst) => {
+              // Close the vendor sheet and swap in the InstrumentSheet for
+              // the tapped gear row. The vendor stays in scope (no
+              // attribution shown) because we're navigating *from* a
+              // vendor profile rather than a song credit.
+              setVendorSheet(null);
+              setInstrumentSheet({ instrument: inst });
+            }}
             onClose={() => setVendorSheet(null)}
           />
         ) : instrumentSheet ? (
@@ -2465,6 +2473,7 @@ function VendorSheet({
   onToggleBookmark,
   onOpenInAppBrowser,
   onMessageVendor,
+  onOpenInstrument,
   onClose,
 }: {
   vendor: InstrumentVendor;
@@ -2473,6 +2482,7 @@ function VendorSheet({
   onToggleBookmark: () => void;
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
   onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
+  onOpenInstrument: (instrument: Instrument) => void;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<"about" | "instruments" | "artists">("about");
@@ -2802,25 +2812,71 @@ function VendorSheet({
               <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>No instruments attached yet.</p>
             ) : (
               <ul className="flex flex-col">
-                {profile.instruments.map((inst, idx) => (
+                {profile.instruments.map((inst, idx) => {
+                  // Build a fan-side Instrument from the profile payload so
+                  // tapping the row can hand off straight to InstrumentSheet
+                  // without a second fetch. Nulls → undefined to match the
+                  // musicData Instrument shape (same pattern as the
+                  // PerformerSheet synthetic at line ~1808).
+                  const fullInst: Instrument = {
+                    id: inst.id,
+                    name: inst.name,
+                    category: inst.category,
+                    shortCategory: inst.shortCategory ?? undefined,
+                    photoUrl: inst.photoUrl ?? undefined,
+                    about: inst.about ?? undefined,
+                    artistNote: inst.artistNote ?? undefined,
+                  } as Instrument;
+                  return (
                   <li
                     key={inst.id}
                     className={`flex items-center gap-3 py-3 ${idx > 0 ? "border-t border-white/8" : ""}`}
                     data-testid={`vendor-instrument-${inst.id}`}
                   >
-                    <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
-                      {inst.photoUrl ? (
-                        <img src={inst.photoUrl} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-white/40 text-[20px]">♪</div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-white text-[15px] font-medium leading-tight truncate">{inst.name}</p>
-                      <p className="text-[13px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.55)" }}>{inst.shortCategory ?? inst.category}</p>
-                    </div>
+                    {/* Tap thumbnail or text → open this instrument's sheet.
+                        Same UX as song rows / discography rows elsewhere in
+                        the app: the row itself is the primary action. */}
+                    <button
+                      type="button"
+                      onClick={() => onOpenInstrument(fullInst)}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left active:opacity-80"
+                      data-testid={`button-vendor-instrument-open-${inst.id}`}
+                    >
+                      <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
+                        {inst.photoUrl ? (
+                          <img src={inst.photoUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-white/40 text-[20px]">♪</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white text-[15px] font-medium leading-tight truncate">{inst.name}</p>
+                        <p className="text-[13px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.55)" }}>{inst.shortCategory ?? inst.category}</p>
+                      </div>
+                    </button>
+                    {/* Chat bubble — start a chat with THIS vendor about
+                        this specific instrument. Mirrors the chat button in
+                        the InstrumentSheet vendor list so fans get the same
+                        affordance from either entry point. */}
+                    <button
+                      type="button"
+                      onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
+                      aria-label={`Message ${vendor.name} about ${inst.name}`}
+                      className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
+                      style={{ background: "rgba(49,158,216,0.16)" }}
+                      data-testid={`button-vendor-instrument-chat-${inst.id}`}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </button>
+                    {/* Chevron — Apple-style "this row is tappable" indicator. */}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/35 flex-shrink-0" aria-hidden="true">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
             <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
