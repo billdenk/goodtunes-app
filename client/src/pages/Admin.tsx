@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import {
   SiApplemusic,
   SiSpotify,
@@ -24,6 +25,9 @@ interface AdminAlbum {
   description: string | null;
   goodTunesReleaseDate: string | null;
   streamingReleaseDate: string | null;
+  // Optional FK into People. When set, `artist` (string) mirrors the picked
+  // person's name; when null, `artist` is whatever was typed manually.
+  primaryArtistId: string | null;
   // Demo show/hide. When true the album (and its songs/credits) is hidden
   // from the fan-side catalog. CMS callers see hidden rows so they can
   // flip the toggle back on.
@@ -466,6 +470,7 @@ function AlbumEditor({
         spotifyUrl: data.spotifyUrl,
         goodTunesReleaseDate: (data as any).goodTunesReleaseDate ?? null,
         streamingReleaseDate: (data as any).streamingReleaseDate ?? null,
+        primaryArtistId: (data as any).primaryArtistId ?? null,
       });
       setDirty(false);
     }
@@ -625,14 +630,17 @@ function AlbumEditor({
             data-testid="input-album-title"
           />
         </Field>
-        <Field label="Artist">
-          <input
-            value={form.artist}
-            onChange={(e) => set("artist", e.target.value)}
-            className={inputCls}
-            data-testid="input-album-artist"
-          />
-        </Field>
+        <AlbumArtistPicker
+          personId={form.primaryArtistId}
+          displayName={form.artist}
+          onChange={({ personId, name }) => {
+            // Atomic update — switch both fields in one setState so the
+            // dirty flag fires once and the form never momentarily shows
+            // a stale display name against a new id.
+            setForm((f) => (f ? { ...f, primaryArtistId: personId, artist: name } : f));
+            setDirty(true);
+          }}
+        />
         <Field label="Artwork">
           <ArtworkPicker
             value={form.artwork}
@@ -1314,11 +1322,15 @@ function Field({
 function DiscographyRow({
   album,
   artistName,
+  personId,
   match,
   onAdded,
 }: {
   album: ScrapedArtistAlbum;
   artistName: string;
+  // Owning person — set on the created album as `primaryArtistId` so the
+  // new release is linked to this profile from the moment it's created.
+  personId: string;
   match: AdminAlbum | null;
   onAdded: () => void;
 }) {
@@ -1332,6 +1344,7 @@ function DiscographyRow({
         year: album.year,
         type: album.type,
         appleMusicUrl: album.appleMusicUrl,
+        primaryArtistId: personId,
       });
       return res.json();
     },
@@ -1390,9 +1403,14 @@ function DiscographyRow({
 function PersonEditor({
   personId,
   onDeleted,
+  onCreatedAlbum,
 }: {
   personId: string;
   onDeleted: () => void;
+  // Bubbles up to the shell after a "+ New release" click — the shell
+  // switches the active tab to Albums and selects the freshly-created row
+  // so the admin lands straight in the new album's editor.
+  onCreatedAlbum: (albumId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<AdminPerson>({
@@ -1691,6 +1709,47 @@ function PersonEditor({
 
       {tab === "music" && (
         <div role="tabpanel" id="panel-admin-person-music" aria-labelledby="tab-admin-person-music" className="space-y-6" data-testid="panel-admin-person-music">
+          {/* "+ New release" — creates a fresh album pre-linked to this
+              person and jumps the shell straight into the album editor.
+              Lives above the discography because for a verified artist
+              who already has rows in GoodTunes the discography section is
+              often empty (or hidden until they Pull from Apple), and we
+              want the create action to be the first thing they see. */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex items-center gap-3" data-testid="row-person-new-release">
+            <div className="w-10 h-10 rounded-full bg-[#319ED8]/10 grid place-items-center shrink-0">
+              <Disc3 className="w-5 h-5 text-[#319ED8]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-slate-900 text-sm font-medium">New release for {form.name || "this artist"}</div>
+              <div className="text-slate-500 text-[12px]">Creates a draft LP pre-linked to this profile. You'll land in the album editor to fill in title, artwork, and tracks.</div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const res = await apiRequest("POST", "/api/admin/albums", {
+                    title: `New release — ${form.name || "Untitled"}`,
+                    artist: form.name || "Unknown artist",
+                    artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png",
+                    type: "LP",
+                    primaryArtistId: personId,
+                  });
+                  const album = (await res.json()) as AdminAlbum;
+                  await queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+                  onCreatedAlbum(album.id);
+                } catch (e: any) {
+                  /* surface failures via the existing toast hook in the editor area —
+                     for this simple action we just log; the create endpoint is well-tested. */
+                  console.error("Couldn't create release", e);
+                }
+              }}
+              className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-sm font-medium hover:bg-[#2A89BD]"
+              data-testid="button-person-new-release"
+            >
+              + New release
+            </button>
+          </div>
+
           {/* Apple Music discography — only present after a Pull. Lives at
               the top of the Music tab so the + Add buttons are the first
               thing the admin sees right after scraping. */}
@@ -1732,6 +1791,7 @@ function PersonEditor({
                           key={a.collectionId}
                           album={a}
                           artistName={form.name}
+                          personId={personId}
                           match={matchAlbum(a, form.name)}
                           onAdded={() => {
                             /* match recomputes after invalidation refetches /api/albums */
@@ -4173,9 +4233,392 @@ function LabelEditor({
   );
 }
 
+// ---------- AdminAlbumFromUrlPanel ----------
+// Albums-tab-only inline panel: paste an Apple Music album URL → server
+// scrapes the iTunes Lookup API for the album + its tracklist, creates
+// everything in one round-trip, and we select the new row so the admin
+// drops straight into the editor. Mirrors the artist scrape UX, but for
+// catalog seeding (slice #7 of the pre-streaming workflow).
+function AdminAlbumFromUrlPanel({ onCreated }: { onCreated: (albumId: string) => void }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const seed = async () => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/albums/from-apple-url", { url: trimmed });
+      const body = (await res.json()) as { album: AdminAlbum; trackCount: number };
+      await queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      onCreated(body.album.id);
+      setOpen(false);
+      setUrl("");
+      toast({ title: `Created “${body.album.title}”`, description: `${body.trackCount} track${body.trackCount === 1 ? "" : "s"} imported.` });
+    } catch (e: any) {
+      // apiRequest throws on non-2xx with the server message in e.message.
+      toast({ title: "Couldn't import that album", description: e?.message ?? "" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="border-b border-slate-100">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full px-4 py-2 flex items-center gap-2 text-left text-[12px] text-[#319ED8] hover:bg-slate-50"
+          data-testid="button-album-from-url-open"
+        >
+          <SiApplemusic className="w-3.5 h-3.5" />
+          Seed an album from an Apple Music URL
+        </button>
+      ) : (
+        <div className="p-3 space-y-2 bg-slate-50">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">From Apple Music URL</div>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); setUrl(""); }}
+              className="text-slate-400 hover:text-slate-700"
+              data-testid="button-album-from-url-close"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !busy) seed(); }}
+            placeholder="https://music.apple.com/us/album/…/123456789"
+            className={inputCls}
+            autoFocus
+            data-testid="input-album-from-url"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-slate-400 flex-1">Pulls title, artwork, year, and the full tracklist. Auto-links a matching artist profile if one already exists.</p>
+            <button
+              type="button"
+              onClick={seed}
+              disabled={busy || !url.trim()}
+              className="px-3 py-1.5 rounded text-sm bg-[#319ED8] text-white disabled:opacity-50 shrink-0"
+              data-testid="button-album-from-url-seed"
+            >
+              {busy ? "Importing…" : "Import"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- AlbumArtistPicker ----------
+// Search-or-create picker for the album's primary artist. Backed by the
+// People table (the same roster that powers SuperCredits). Falls back to a
+// free-text "custom" mode for one-off names that don't warrant a profile
+// row (collab billings, guest features, etc.). When a profile is picked,
+// the album's `artist` display string mirrors the person's canonical name
+// — so the fan UI keeps rendering exactly the same display while the
+// underlying FK enables the artist page → "GoodTunes Releases" surface.
+function AlbumArtistPicker({
+  personId,
+  displayName,
+  onChange,
+}: {
+  personId: string | null;
+  displayName: string;
+  onChange: (next: { personId: string | null; name: string }) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: people = [] } = useQuery<AdminPerson[]>({
+    queryKey: ["/api/people"],
+  });
+  const sorted = useMemo(
+    () => [...people].sort((a, b) => a.name.localeCompare(b.name)),
+    [people],
+  );
+  const linked = sorted.find((p) => p.id === personId) ?? null;
+
+  const [query, setQuery] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newAppleUrl, setNewAppleUrl] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((p) => p.name.toLowerCase().includes(q));
+  }, [sorted, query]);
+
+  const createPersonFromUrl = async () => {
+    const name = newName.trim();
+    const url = newAppleUrl.trim();
+    if (!name && !url) {
+      toast({ title: "Add a name or paste an Apple Music URL." });
+      return;
+    }
+    setCreateBusy(true);
+    try {
+      // If a URL was provided, hit the existing scrape endpoint first to
+      // pre-fill canonical name / photo / bio. Falls back gracefully when
+      // the URL is bad or the service is down — we still create the row
+      // with whatever the admin typed.
+      let scraped: Partial<ArtistScrapeResult> | null = null;
+      if (url) {
+        try {
+          const r = await apiRequest("POST", "/api/admin/people/scrape", { url });
+          scraped = (await r.json()) as ArtistScrapeResult;
+        } catch {
+          /* scrape is a bonus — fall through to a manual create */
+        }
+      }
+      const payload = {
+        name: name || scraped?.name || "New artist",
+        photoUrl: scraped?.photoUrl ?? null,
+        bio: scraped?.bio ?? null,
+        appleMusicUrl: scraped?.appleMusicUrl ?? (url || null),
+        spotifyUrl: scraped?.spotifyUrl ?? null,
+        itunesArtistId: scraped?.itunesArtistId ?? null,
+      };
+      const res = await apiRequest("POST", "/api/admin/people", payload);
+      const person = (await res.json()) as AdminPerson;
+      await queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      onChange({ personId: person.id, name: person.name });
+      setCreating(false);
+      setPickerOpen(false);
+      setNewName("");
+      setNewAppleUrl("");
+      setQuery("");
+      toast({ title: `Linked “${person.name}”` });
+    } catch (e: any) {
+      toast({ title: "Couldn't create artist", description: e?.message ?? "" });
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  return (
+    <Field label="Artist">
+      <div className="space-y-2">
+        {/* Trigger row — shows the current selection (linked profile chip
+            or the custom-typed name) and lets the admin open the picker. */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPickerOpen((v) => !v)}
+            className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 bg-white text-left hover:border-slate-300"
+            data-testid="button-album-artist-picker"
+          >
+            {linked ? (
+              <>
+                {linked.photoUrl ? (
+                  <img
+                    src={linked.photoUrl}
+                    alt=""
+                    className="w-7 h-7 rounded-full object-cover shrink-0"
+                  />
+                ) : (
+                  <span
+                    className="w-7 h-7 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[11px] font-semibold text-slate-500"
+                    style={linked.accent ? { background: linked.accent, color: "white" } : undefined}
+                  >
+                    {linked.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span className="flex-1 min-w-0 truncate text-sm text-slate-900">
+                  {linked.name}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                  Profile
+                </span>
+              </>
+            ) : displayName ? (
+              <>
+                <span className="w-7 h-7 rounded-full bg-slate-100 shrink-0 grid place-items-center">
+                  <UserRound className="w-4 h-4 text-slate-400" />
+                </span>
+                <span className="flex-1 min-w-0 truncate text-sm text-slate-900">
+                  {displayName}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                  Custom
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-slate-400">— Choose artist —</span>
+            )}
+          </button>
+          {linked && (
+            <button
+              type="button"
+              onClick={() => onChange({ personId: null, name: displayName })}
+              className="px-2 py-2 rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-700"
+              data-testid="button-album-artist-unlink"
+              title="Unlink profile, keep the typed name"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Picker popover — inline, not a real popover, to keep this slice
+            simple. Lists alpha-sorted People filtered by the search query,
+            with a "+ Create new artist" footer and a "Use custom name" row. */}
+        {pickerOpen && (
+          <div className="border border-slate-200 rounded-md bg-white shadow-sm">
+            <div className="p-2 border-b border-slate-100">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search artists…"
+                className={inputCls}
+                autoFocus
+                data-testid="input-album-artist-search"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {filtered.length === 0 && (
+                <div className="px-3 py-4 text-center text-[12px] text-slate-400">
+                  No matches. Create a new artist below.
+                </div>
+              )}
+              {filtered.map((p) => (
+                <button
+                  type="button"
+                  key={p.id}
+                  onClick={() => {
+                    onChange({ personId: p.id, name: p.name });
+                    setPickerOpen(false);
+                    setQuery("");
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 ${
+                    p.id === personId ? "bg-blue-50" : ""
+                  }`}
+                  data-testid={`button-album-artist-pick-${p.id}`}
+                >
+                  {p.photoUrl ? (
+                    <img src={p.photoUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <span
+                      className="w-6 h-6 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500"
+                      style={p.accent ? { background: p.accent, color: "white" } : undefined}
+                    >
+                      {p.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="flex-1 min-w-0 truncate text-sm text-slate-800">
+                    {p.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-slate-100 p-2 space-y-2">
+              {!creating ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreating(true);
+                      setNewName(query.trim());
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-[#319ED8] hover:bg-slate-50 rounded"
+                    data-testid="button-album-artist-create"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create new artist{query.trim() ? ` “${query.trim()}”` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // "Custom name" mode — clears the FK; admin can type
+                      // a free string in the Title row above. Keeps any
+                      // already-typed display name as the starting value.
+                      onChange({ personId: null, name: displayName || query.trim() });
+                      setPickerOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-slate-500 hover:bg-slate-50 rounded"
+                    data-testid="button-album-artist-custom"
+                  >
+                    <UserRound className="w-4 h-4" />
+                    Use a custom name (no profile)
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-2 p-1">
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Artist name"
+                    className={inputCls}
+                    autoFocus
+                    data-testid="input-album-artist-new-name"
+                  />
+                  <input
+                    value={newAppleUrl}
+                    onChange={(e) => setNewAppleUrl(e.target.value)}
+                    placeholder="Apple Music artist URL (optional — auto-fills photo + bio)"
+                    className={inputCls}
+                    data-testid="input-album-artist-new-apple-url"
+                  />
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreating(false);
+                        setNewName("");
+                        setNewAppleUrl("");
+                      }}
+                      className="px-3 py-1.5 rounded text-sm text-slate-500 hover:bg-slate-50"
+                      data-testid="button-album-artist-new-cancel"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={createPersonFromUrl}
+                      disabled={createBusy || (!newName.trim() && !newAppleUrl.trim())}
+                      className="px-3 py-1.5 rounded text-sm bg-[#319ED8] text-white disabled:opacity-50"
+                      data-testid="button-album-artist-new-save"
+                    >
+                      {createBusy ? "Linking…" : "Create & link"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Custom-name editor — only revealed when the album has no linked
+            profile, so manual entry still works for one-off / collab billings. */}
+        {!linked && (
+          <input
+            value={displayName}
+            onChange={(e) => onChange({ personId: null, name: e.target.value })}
+            placeholder="Display name (used on the album row)"
+            className={inputCls}
+            data-testid="input-album-artist"
+          />
+        )}
+      </div>
+    </Field>
+  );
+}
+
 // ---------- AlbumLabelPicker ----------
-// Lightweight dropdown shown inside AlbumEditor. Lists every label by name
-// (alpha-sorted server-side) plus a "No label" option that writes null.
+// Mirror of AlbumArtistPicker for the label FK. Same search-or-create UX
+// (the label scrape endpoint already exists, so a pasted website URL
+// auto-fills logo + bio). "No label" is the default; the picker treats
+// `value === null` as a real choice (independent artist), not "missing".
 function AlbumLabelPicker({
   value,
   onChange,
@@ -4183,24 +4626,216 @@ function AlbumLabelPicker({
   value: string | null;
   onChange: (next: string | null) => void;
 }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: labels = [] } = useQuery<AdminLabel[]>({
     queryKey: ["/api/labels"],
   });
+  const sorted = useMemo(
+    () => [...labels].sort((a, b) => a.name.localeCompare(b.name)),
+    [labels],
+  );
+  const linked = sorted.find((l) => l.id === value) ?? null;
+
+  const [query, setQuery] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newWebsiteUrl, setNewWebsiteUrl] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((l) => l.name.toLowerCase().includes(q));
+  }, [sorted, query]);
+
+  const createLabelFromUrl = async () => {
+    const name = newName.trim();
+    const url = newWebsiteUrl.trim();
+    if (!name && !url) {
+      toast({ title: "Add a name or paste a label website URL." });
+      return;
+    }
+    setCreateBusy(true);
+    try {
+      // Scrape is best-effort — if the label site blocks us or the URL
+      // is bad we still create a row with the typed name.
+      let scraped: any = null;
+      if (url) {
+        try {
+          const r = await apiRequest("POST", "/api/admin/labels/scrape", { url });
+          scraped = await r.json();
+        } catch {
+          /* ignore — manual create below */
+        }
+      }
+      const payload = {
+        name: name || scraped?.name || "New label",
+        logoUrl: scraped?.logoUrl ?? null,
+        bio: scraped?.bio ?? null,
+        websiteUrl: scraped?.websiteUrl ?? (url || null),
+      };
+      const res = await apiRequest("POST", "/api/admin/labels", payload);
+      const label = (await res.json()) as AdminLabel;
+      await queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
+      onChange(label.id);
+      setCreating(false);
+      setPickerOpen(false);
+      setNewName("");
+      setNewWebsiteUrl("");
+      setQuery("");
+      toast({ title: `Linked “${label.name}”` });
+    } catch (e: any) {
+      toast({ title: "Couldn't create label", description: e?.message ?? "" });
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
   return (
     <Field label="Label">
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
-        className={inputCls}
-        data-testid="select-album-label"
-      >
-        <option value="">— No label —</option>
-        {labels.map((l) => (
-          <option key={l.id} value={l.id}>
-            {l.name}
-          </option>
-        ))}
-      </select>
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => setPickerOpen((v) => !v)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 bg-white text-left hover:border-slate-300"
+          data-testid="select-album-label"
+        >
+          {linked ? (
+            <>
+              {linked.logoUrl ? (
+                <img src={linked.logoUrl} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
+              ) : (
+                <span className="w-7 h-7 rounded bg-slate-200 shrink-0 grid place-items-center text-[11px] font-semibold text-slate-500">
+                  {linked.name.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="flex-1 min-w-0 truncate text-sm text-slate-900">{linked.name}</span>
+              <span className="text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                Linked
+              </span>
+            </>
+          ) : (
+            <span className="text-sm text-slate-400">— No label —</span>
+          )}
+        </button>
+
+        {pickerOpen && (
+          <div className="border border-slate-200 rounded-md bg-white shadow-sm">
+            <div className="p-2 border-b border-slate-100">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search labels…"
+                className={inputCls}
+                autoFocus
+                data-testid="input-album-label-search"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(null);
+                  setPickerOpen(false);
+                  setQuery("");
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 ${
+                  value === null ? "bg-blue-50" : ""
+                }`}
+                data-testid="button-album-label-pick-none"
+              >
+                <span className="w-6 h-6 rounded bg-slate-100 shrink-0 grid place-items-center">
+                  <XIcon className="w-3.5 h-3.5 text-slate-400" />
+                </span>
+                <span className="flex-1 min-w-0 truncate text-sm text-slate-600">— No label —</span>
+              </button>
+              {filtered.map((l) => (
+                <button
+                  type="button"
+                  key={l.id}
+                  onClick={() => {
+                    onChange(l.id);
+                    setPickerOpen(false);
+                    setQuery("");
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 ${
+                    l.id === value ? "bg-blue-50" : ""
+                  }`}
+                  data-testid={`button-album-label-pick-${l.id}`}
+                >
+                  {l.logoUrl ? (
+                    <img src={l.logoUrl} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
+                  ) : (
+                    <span className="w-6 h-6 rounded bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500">
+                      {l.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="flex-1 min-w-0 truncate text-sm text-slate-800">{l.name}</span>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-slate-100 p-2">
+              {!creating ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreating(true);
+                    setNewName(query.trim());
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-[#319ED8] hover:bg-slate-50 rounded"
+                  data-testid="button-album-label-create"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create new label{query.trim() ? ` “${query.trim()}”` : ""}
+                </button>
+              ) : (
+                <div className="space-y-2 p-1">
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Label name"
+                    className={inputCls}
+                    autoFocus
+                    data-testid="input-album-label-new-name"
+                  />
+                  <input
+                    value={newWebsiteUrl}
+                    onChange={(e) => setNewWebsiteUrl(e.target.value)}
+                    placeholder="Label website URL (optional — auto-fills logo + bio)"
+                    className={inputCls}
+                    data-testid="input-album-label-new-website-url"
+                  />
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreating(false);
+                        setNewName("");
+                        setNewWebsiteUrl("");
+                      }}
+                      className="px-3 py-1.5 rounded text-sm text-slate-500 hover:bg-slate-50"
+                      data-testid="button-album-label-new-cancel"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={createLabelFromUrl}
+                      disabled={createBusy || (!newName.trim() && !newWebsiteUrl.trim())}
+                      className="px-3 py-1.5 rounded text-sm bg-[#319ED8] text-white disabled:opacity-50"
+                      data-testid="button-album-label-new-save"
+                    >
+                      {createBusy ? "Linking…" : "Create & link"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </Field>
   );
 }
@@ -4761,6 +5396,13 @@ export function Admin() {
               </div>
             )}
           </div>
+          {entity === "albums" && (
+            <AdminAlbumFromUrlPanel
+              onCreated={(albumId) =>
+                setSelectedByEntity((p) => ({ ...p, albums: albumId }))
+              }
+            />
+          )}
           <ul className="flex-1 overflow-y-auto py-2">
             {entity === "albums" &&
               filteredAlbums.map((a) => (
@@ -4992,6 +5634,11 @@ export function Admin() {
               key={selectedId}
               personId={selectedId}
               onDeleted={() => setSelectedId(null)}
+              onCreatedAlbum={(albumId) => {
+                // Switch to the Albums tab and pre-select the new row.
+                setEntity("albums");
+                setSelectedByEntity((p) => ({ ...p, albums: albumId }));
+              }}
             />
           ) : entity === "labels" ? (
             <LabelEditor

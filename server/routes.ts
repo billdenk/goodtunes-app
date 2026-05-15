@@ -87,6 +87,17 @@ function normalizeAlbumType(value: unknown): "Single" | "EP" | "LP" {
   return "LP";
 }
 
+// Resolves a primaryArtistId payload: null / empty → null, otherwise looks
+// up the People row to confirm it exists. Unknown ids are silently dropped
+// to null so the admin save can't 500 on a stale picker selection.
+async function resolvePrimaryArtistId(value: unknown): Promise<string | null> {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  const p = await storage.getPersonById(s);
+  return p ? s : null;
+}
+
 // Coerces a release-date input into a `YYYY-MM-DD` string or null. Accepts:
 // empty string / null / undefined → null; otherwise trims and validates the
 // shape (10 chars, ISO-like). Anything malformed is stored as null rather
@@ -738,8 +749,116 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
       goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
       streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
+      primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
     } as any);
     return res.status(201).json(album);
+  });
+
+  // Seed a new album from an Apple Music album URL. Mirrors how the
+  // artist scrape pulls a discography, but tighter: one URL → one album +
+  // its complete tracklist (title, track #, duration) created in a single
+  // round-trip so the admin lands in a near-complete album editor.
+  // URL shape: https://music.apple.com/<country>/album/<slug>/<collectionId>
+  // The numeric collectionId at the end is the only piece we actually need
+  // for iTunes Lookup. Falls back to "us" storefront if the URL omits one.
+  app.post("/api/admin/albums/from-apple-url", requireAdmin, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// Apple Music album URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (!/(^|\.)music\.apple\.com$/.test(host)) {
+      return res.status(400).json({ message: "Only music.apple.com album URLs are supported here. (Spotify album scrape coming next.)" });
+    }
+    // Pull the trailing numeric segment from the path — Apple Music album
+    // URLs always end in /<collectionId> (the ?i=<trackId> query param,
+    // if present, is the song id within the album which we don't need).
+    const m = parsed.pathname.match(/\/album\/[^/]+\/(\d+)/);
+    const collectionId = m?.[1];
+    if (!collectionId) {
+      return res.status(400).json({ message: "Couldn't find an album id in that URL. Expecting …/album/<slug>/<id>." });
+    }
+    const country = (parsed.pathname.split("/").filter(Boolean)[0] || "us").toLowerCase();
+
+    type ItunesResult = any;
+    let payload: { results?: ItunesResult[] };
+    try {
+      const r = await safeFetch(
+        `https://itunes.apple.com/lookup?id=${collectionId}&entity=song&limit=200&country=${encodeURIComponent(country)}`,
+        { headers: { Accept: "application/json" } },
+      );
+      payload = await r.json();
+    } catch (e: any) {
+      return res.status(502).json({ message: `iTunes lookup failed: ${e?.message ?? "network error"}` });
+    }
+    const results = Array.isArray(payload?.results) ? payload.results : [];
+    const collection = results.find((r) => r.wrapperType === "collection");
+    if (!collection) {
+      return res.status(404).json({ message: "Apple didn't return an album for that id." });
+    }
+    const tracks = results
+      .filter((r) => r.wrapperType === "track" && r.kind === "song")
+      .sort((a, b) => (Number(a.trackNumber) || 0) - (Number(b.trackNumber) || 0));
+
+    // Bump the artwork from the default 100×100 thumb to a 600×600 master
+    // — same trick used by the artist discography scraper above.
+    const art100: string = collection.artworkUrl100 || collection.artworkUrl60 || "";
+    const artwork = art100.replace(/\/(\d+)x(\d+)bb\.(jpg|png)$/i, "/600x600bb.$3") || "/figmaAssets/artworks-000451097049-kerecr-t500x500.png";
+    const releaseDate: string | null = collection.releaseDate || null;
+    const year = releaseDate ? Number(releaseDate.slice(0, 4)) || null : null;
+    const trackCount = Number(collection.trackCount) || tracks.length || null;
+    // iTunes calls everything "Album"; lean on track count to bucket EPs +
+    // singles, matching the rule already in `normalizeAlbumType`'s spirit.
+    const type: "Single" | "EP" | "LP" =
+      trackCount === 1 ? "Single" : trackCount && trackCount <= 6 ? "EP" : "LP";
+
+    // Try to resolve the artist text → an existing Person row (case-insensitive
+    // exact name match). If we find one, pre-link via primaryArtistId so the
+    // new album shows up on the artist's page immediately.
+    const artistName: string = String(collection.artistName || "");
+    let primaryArtistId: string | null = null;
+    if (artistName) {
+      const allPeople = await storage.getPeople();
+      const match = allPeople.find((p) => p.name.toLowerCase() === artistName.toLowerCase());
+      if (match) primaryArtistId = match.id;
+    }
+
+    const album = await storage.createAlbum({
+      title: String(collection.collectionName || "Untitled album"),
+      artist: artistName || "Unknown artist",
+      artwork,
+      year,
+      type,
+      description: null,
+      labelId: null,
+      isHidden: false,
+      appleMusicUrl: String(collection.collectionViewUrl || url),
+      spotifyUrl: null,
+      goodTunesReleaseDate: null,
+      streamingReleaseDate: releaseDate ? releaseDate.slice(0, 10) : null,
+      primaryArtistId,
+    } as any);
+
+    // Bulk-create the tracks. iTunes durations are in ms; songs.duration
+    // is stored as integer seconds (per shared/schema.ts).
+    let created = 0;
+    for (const t of tracks) {
+      try {
+        await storage.createSong({
+          albumId: album.id,
+          title: String(t.trackName || `Track ${t.trackNumber ?? created + 1}`),
+          trackNumber: Number(t.trackNumber) || created + 1,
+          duration: Math.round(Number(t.trackTimeMillis || 0) / 1000),
+          lyrics: null,
+          audioUrl: null,
+        } as any);
+        created += 1;
+      } catch { /* skip the rare bad row rather than aborting the whole import */ }
+    }
+
+    return res.status(201).json({ album, trackCount: created });
   });
 
   app.put("/api/admin/albums/:id", requireAdmin, async (req, res) => {
@@ -756,6 +875,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.goodTunesReleaseDate = normalizeReleaseDate(req.body.goodTunesReleaseDate);
     if (req.body?.streamingReleaseDate !== undefined)
       updates.streamingReleaseDate = normalizeReleaseDate(req.body.streamingReleaseDate);
+    if (req.body?.primaryArtistId !== undefined)
+      updates.primaryArtistId = await resolvePrimaryArtistId(req.body.primaryArtistId);
     if (req.body?.labelId !== undefined) {
       const normalizedLabelId = req.body.labelId ? String(req.body.labelId) : null;
       if (normalizedLabelId && !(await storage.getLabelById(normalizedLabelId))) {

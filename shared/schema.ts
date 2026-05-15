@@ -58,6 +58,13 @@ export const albums = pgTable("albums", {
   // until reassigned. Album reads denormalize the joined label entity
   // into `album.label` so the fan side can render it without a 2nd fetch.
   labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
+  // Primary artist of this album as a real People row. Optional + SET NULL —
+  // the `artist` text column above stays the canonical display string (so
+  // legacy rows + reissues with collaboration billing keep rendering even
+  // when there's no profile). When `primaryArtistId` is set the admin UI
+  // mirrors the People name into `artist` on save, and the artist page can
+  // surface this album under "GoodTunes Releases".
+  primaryArtistId: varchar("primary_artist_id").references(() => people.id, { onDelete: "set null" }),
   // Demo show/hide flag. When true the album is excluded from public catalog
   // reads (album list + detail) AND from the fan-facing credits surface,
   // effectively hiding the artist + all their songs/credits in one toggle.
