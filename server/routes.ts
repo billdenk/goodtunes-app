@@ -1093,7 +1093,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(l);
   });
   app.post("/api/admin/labels", requireAdmin, async (req, res) => {
-    const { name, logoUrl, bio, location, websiteUrl, coverUrl } = req.body ?? {};
+    const { name, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
     if (!name) return res.status(400).json({ message: "name is required" });
     const l = await storage.createLabel({
       name: String(name),
@@ -1101,19 +1101,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       bio: bio ? String(bio) : null,
       location: location ? String(location) : null,
       websiteUrl: websiteUrl ? String(websiteUrl) : null,
+      instagramUrl: instagramUrl ? String(instagramUrl) : null,
       coverUrl: coverUrl ? String(coverUrl) : null,
     });
     return res.status(201).json(l);
   });
   app.put("/api/admin/labels/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, logoUrl, bio, location, websiteUrl, coverUrl } = req.body ?? {};
+    const { name, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (location !== undefined) updates.location = location ? String(location) : null;
     if (websiteUrl !== undefined) updates.websiteUrl = websiteUrl ? String(websiteUrl) : null;
+    if (instagramUrl !== undefined) updates.instagramUrl = instagramUrl ? String(instagramUrl) : null;
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
     const l = await storage.updateLabel(id, updates);
     if (!l) return res.status(404).json({ message: "Label not found" });
@@ -1123,6 +1125,98 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // SET NULL on albums.label_id — releases stay, label credit clears.
     await storage.deleteLabel(String(req.params.id));
     return res.json({ message: "Deleted" });
+  });
+
+  // Label page scraper. Paste the label's own website URL and we pull
+  // og:title (name), og:description (bio), and the best square logo we
+  // can find — preferring apple-touch-icon (usually a clean 180×180+
+  // logo) over og:image (typically a wide hero/banner). Instagram URLs
+  // are rejected up front: Meta serves a login shell to non-authenticated
+  // server fetches, so we tell the admin to paste the website instead.
+  app.post("/api/admin/labels/scrape", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// label URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)facebook\.com$/.test(host)) {
+      return res.status(400).json({
+        message: "Instagram/Facebook pages can't be scraped — paste the label's website instead, then put the social URL into the Instagram field manually.",
+      });
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) {
+        const key = m[1].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[2]);
+      }
+      while ((m = re2.exec(html))) {
+        const key = m[2].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[1]);
+      }
+
+      // Prefer apple-touch-icon — almost always a clean square logo. Fall
+      // back to og:image (often a wide hero, but still useful), then
+      // <link rel="icon"> (favicon — last resort, usually tiny).
+      let logoUrl: string | null = null;
+      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+      if (touchA) logoUrl = touchA[1];
+      else if (touchB) logoUrl = touchB[1];
+      if (!logoUrl) {
+        logoUrl = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      }
+      if (!logoUrl) {
+        const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
+        if (iconA) logoUrl = iconA[1];
+        else if (iconB) logoUrl = iconB[1];
+      }
+      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
+      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+
+      // og:title is usually "Label Name | Official Site" or "Label Name —
+      // Records" — strip common trailing service tags so the admin sees a
+      // clean name they don't have to re-edit.
+      let name = meta["og:title"] || meta["twitter:title"] || null;
+      if (name) {
+        name = name
+          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|records|music|label|the\s+official\s+site).*$/i, "")
+          .trim();
+      }
+      const bio =
+        meta["og:description"] ||
+        meta["twitter:description"] ||
+        meta["description"] ||
+        null;
+
+      return res.json({
+        name,
+        logoUrl,
+        bio,
+        websiteUrl: meta["og:url"] || url,
+      });
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Failed to read page" });
+    }
   });
 
   // Editing here propagates to every instrument attached to this vendor.

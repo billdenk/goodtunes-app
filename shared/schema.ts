@@ -26,6 +26,10 @@ export const labels = pgTable("labels", {
   bio: text("bio"),
   location: text("location"),
   websiteUrl: text("website_url"),
+  // Optional Instagram profile URL. Used in admin so the label page can
+  // surface a follow link later — not auto-scraped from IG (Instagram blocks
+  // server fetches), so this is admin-entered.
+  instagramUrl: text("instagram_url"),
   coverUrl: text("cover_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });

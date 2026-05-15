@@ -47,6 +47,7 @@ interface AdminLabel {
   bio: string | null;
   location: string | null;
   websiteUrl: string | null;
+  instagramUrl: string | null;
   coverUrl: string | null;
   createdAt: string | null;
 }
@@ -3656,12 +3657,76 @@ function LabelEditor({
   const [form, setForm] = useState<AdminLabel | null>(null);
   const [dirty, setDirty] = useState(false);
 
+  // Paste-a-website-URL state. Mirrors the artist scrape flow but the
+  // server endpoint here pulls og:title / og:description and prefers
+  // apple-touch-icon as the logo (square, vs og:image which is usually a
+  // wide banner). Manual upload via the Logo / Cover pickers below still
+  // overrides whatever this returns.
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [scrapeBusy, setScrapeBusy] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState<{
+    kind: "ok" | "err";
+    text: string;
+  } | null>(null);
+
   useEffect(() => {
     if (data) {
       setForm({ ...data });
       setDirty(false);
+      // Reset the scrape bar when switching to a different label.
+      setScrapeUrl("");
+      setScrapeMsg(null);
     }
   }, [data?.id]);
+
+  async function runScrape() {
+    const u = scrapeUrl.trim();
+    if (!u) return;
+    setScrapeBusy(true);
+    setScrapeMsg(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/labels/scrape", {
+        url: u,
+      });
+      const data = (await res.json()) as {
+        name: string | null;
+        logoUrl: string | null;
+        bio: string | null;
+        websiteUrl: string | null;
+      };
+      // Functional merge against the latest form — admin may have typed
+      // into name/bio while the scrape was in flight. Never clobber a
+      // non-empty existing value.
+      setForm((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          name:
+            prev.name && prev.name !== "New label"
+              ? prev.name
+              : data.name || prev.name,
+          logoUrl: prev.logoUrl || data.logoUrl,
+          bio: prev.bio || data.bio,
+          websiteUrl: prev.websiteUrl || data.websiteUrl || u,
+        };
+      });
+      setDirty(true);
+      setScrapeMsg({
+        kind: "ok",
+        text: data.logoUrl
+          ? "Filled name, logo, bio, and website. Review and Save."
+          : "Filled what we could find. Couldn't pull a logo — upload one below.",
+      });
+      setScrapeUrl("");
+    } catch (e: any) {
+      setScrapeMsg({
+        kind: "err",
+        text: e?.message || "Couldn't read that page.",
+      });
+    } finally {
+      setScrapeBusy(false);
+    }
+  }
 
   const invalidateLabelSurfaces = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
@@ -3749,6 +3814,48 @@ function LabelEditor({
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        <div className="rounded-lg border border-slate-200 bg-[#f7fbff] p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              value={scrapeUrl}
+              onChange={(e) => setScrapeUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  runScrape();
+                }
+              }}
+              placeholder="Paste the label's website URL to auto-fill logo, name, and bio"
+              className={inputCls + " flex-1"}
+              disabled={scrapeBusy}
+              data-testid="input-label-scrape-url"
+            />
+            <button
+              type="button"
+              onClick={runScrape}
+              disabled={scrapeBusy || !scrapeUrl.trim()}
+              className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40 shrink-0"
+              data-testid="button-label-scrape"
+            >
+              {scrapeBusy ? "Reading…" : "Fill form"}
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Helper only — nothing saves until you click <strong>Save</strong>.
+            Pulls the label's logo (square apple-touch-icon when available),
+            name, and bio. Instagram pages can't be scraped — paste those
+            into the Instagram field below.
+          </p>
+          <p
+            role="status"
+            aria-live="polite"
+            className={`text-[12px] min-h-[1em] ${scrapeMsg?.kind === "err" ? "text-red-600" : "text-[#319ED8]"}`}
+            data-testid="text-label-scrape-result"
+          >
+            {scrapeMsg?.text ?? ""}
+          </p>
+        </div>
+
         <Field label="Name">
           <input
             value={form.name}
@@ -3782,6 +3889,15 @@ function LabelEditor({
             placeholder="https://…"
             className={inputCls}
             data-testid="input-label-website"
+          />
+        </Field>
+        <Field label="Instagram">
+          <input
+            value={form.instagramUrl ?? ""}
+            onChange={(e) => set("instagramUrl", e.target.value || null)}
+            placeholder="https://instagram.com/…"
+            className={inputCls}
+            data-testid="input-label-instagram"
           />
         </Field>
         <Field label="Location">
