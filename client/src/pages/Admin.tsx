@@ -7391,16 +7391,30 @@ export function Admin() {
       setSelectedByEntity((p) => ({ ...p, albums: curated[0].id }));
     }
   }, [albums, selectedByEntity.albums]);
+  // For each non-album entity: if nothing is selected OR the currently
+  // selected id no longer exists in the refreshed list (deleted in this
+  // tab or another), fall back to the first row. Mirrors the albums
+  // effect above and prevents a "ghost editor" sticking around with
+  // stale form state pointing at a row the server already removed.
   useEffect(() => {
-    if (selectedByEntity.people == null && people.length > 0)
+    if (people.length === 0) return;
+    const current = selectedByEntity.people;
+    const stillVisible = current != null && people.some((p) => p.id === current);
+    if (!stillVisible)
       setSelectedByEntity((p) => ({ ...p, people: people[0].id }));
   }, [people, selectedByEntity.people]);
   useEffect(() => {
-    if (selectedByEntity.instruments == null && instruments.length > 0)
+    if (instruments.length === 0) return;
+    const current = selectedByEntity.instruments;
+    const stillVisible = current != null && instruments.some((i) => i.id === current);
+    if (!stillVisible)
       setSelectedByEntity((p) => ({ ...p, instruments: instruments[0].id }));
   }, [instruments, selectedByEntity.instruments]);
   useEffect(() => {
-    if (selectedByEntity.labels == null && labels.length > 0)
+    if (labels.length === 0) return;
+    const current = selectedByEntity.labels;
+    const stillVisible = current != null && labels.some((l) => l.id === current);
+    if (!stillVisible)
       setSelectedByEntity((p) => ({ ...p, labels: labels[0].id }));
   }, [labels, selectedByEntity.labels]);
 
