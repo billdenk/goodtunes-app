@@ -174,6 +174,31 @@ export interface IStorage {
     instrumentPhotoUrl: string | null;
   }>>;
 
+  // Admin-only: every track the gear flow can attach this person to, plus
+  // whatever credits they already have on each. "Assignable" means tracks
+  // on albums where this person is the primary artist OR tracks where
+  // they're already credited as a performer. Hidden albums are included
+  // (admin needs to see everything they own).
+  getPersonGearContext(personId: string): Promise<Array<{
+    albumId: string;
+    albumTitle: string;
+    albumArtwork: string;
+    albumYear: number | null;
+    tracks: Array<{
+      songId: string;
+      title: string;
+      trackNumber: number;
+      performers: Array<{
+        id: string;
+        instrumentId: string | null;
+        instrumentName: string | null;
+        instrumentPhotoUrl: string | null;
+        role: string;
+        tuningNotes: string | null;
+      }>;
+    }>;
+  }>>;
+
   // Attachment CRUD — only the per-instrument fields (affiliateUrl, position,
   // isHidden) live on the join row. Vendor metadata edits go through the
   // vendor-entity methods above.
@@ -705,6 +730,127 @@ export class DbStorage implements IStorage {
       instrumentCategory: r.i?.category ?? null,
       instrumentPhotoUrl: r.i?.photoUrl ?? null,
     }));
+  }
+
+  async getPersonGearContext(personId: string) {
+    // Admin gear flow. Returns every album the person could plausibly be
+    // credited on:
+    //   1) Albums where they're the primary artist (their own catalog).
+    //   2) Albums where they already have a performer credit on at least
+    //      one track (sessions / guest spots — keeps the existing rows
+    //      editable from the same screen).
+    // For every such album we include the full track list, with any
+    // existing performer rows FOR THIS PERSON joined onto each track so
+    // the UI can show "already credited as Guitar (1973 Martin D-28)"
+    // and offer a per-row delete.
+    const ownAlbums = await db
+      .select()
+      .from(albums)
+      .where(eq(albums.primaryArtistId, personId));
+    const performerRows = await db
+      .select({
+        p: trackPerformers,
+        s: songs,
+        a: albums,
+        i: instruments,
+      })
+      .from(trackPerformers)
+      .innerJoin(songs, eq(trackPerformers.songId, songs.id))
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .leftJoin(instruments, eq(trackPerformers.instrumentId, instruments.id))
+      .where(eq(trackPerformers.personId, personId));
+
+    type AlbumBucket = {
+      albumId: string;
+      albumTitle: string;
+      albumArtwork: string;
+      albumYear: number | null;
+      tracks: Map<string, {
+        songId: string;
+        title: string;
+        trackNumber: number;
+        performers: Array<{
+          id: string;
+          instrumentId: string | null;
+          instrumentName: string | null;
+          instrumentPhotoUrl: string | null;
+          role: string;
+          tuningNotes: string | null;
+        }>;
+      }>;
+    };
+    const byAlbum = new Map<string, AlbumBucket>();
+    const seed = (a: Album) => {
+      if (!byAlbum.has(a.id)) {
+        byAlbum.set(a.id, {
+          albumId: a.id,
+          albumTitle: a.title,
+          albumArtwork: a.artwork,
+          albumYear: a.year,
+          tracks: new Map(),
+        });
+      }
+    };
+    for (const a of ownAlbums) seed(a);
+    for (const r of performerRows) seed(r.a);
+
+    const albumIds = Array.from(byAlbum.keys());
+    if (albumIds.length > 0) {
+      const songRows = await db
+        .select()
+        .from(songs)
+        .where(inArray(songs.albumId, albumIds))
+        .orderBy(asc(songs.trackNumber));
+      for (const s of songRows) {
+        const bucket = byAlbum.get(s.albumId);
+        if (!bucket) continue;
+        bucket.tracks.set(s.id, {
+          songId: s.id,
+          title: s.title,
+          trackNumber: s.trackNumber,
+          performers: [],
+        });
+      }
+    }
+    for (const r of performerRows) {
+      const bucket = byAlbum.get(r.a.id);
+      if (!bucket) continue;
+      // The song may not be in the bucket yet if it was added via the
+      // performer rows path AND the song lookup above hasn't run (e.g.
+      // edge case where albumIds is empty — shouldn't happen here, but
+      // be defensive). Seed a stub from the joined song row.
+      const existing = bucket.tracks.get(r.s.id) ?? {
+        songId: r.s.id,
+        title: r.s.title,
+        trackNumber: r.s.trackNumber,
+        performers: [],
+      };
+      existing.performers.push({
+        id: r.p.id,
+        instrumentId: r.i?.id ?? null,
+        instrumentName: r.i?.name ?? null,
+        instrumentPhotoUrl: r.i?.photoUrl ?? null,
+        role: r.p.role,
+        tuningNotes: r.p.tuningNotes,
+      });
+      bucket.tracks.set(r.s.id, existing);
+    }
+
+    return Array.from(byAlbum.values())
+      .map((b) => ({
+        albumId: b.albumId,
+        albumTitle: b.albumTitle,
+        albumArtwork: b.albumArtwork,
+        albumYear: b.albumYear,
+        tracks: Array.from(b.tracks.values()).sort(
+          (x, y) => x.trackNumber - y.trackNumber,
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          (a.albumYear ?? 0) - (b.albumYear ?? 0) ||
+          a.albumTitle.localeCompare(b.albumTitle),
+      );
   }
 
   async getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>> {

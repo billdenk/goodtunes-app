@@ -1656,6 +1656,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const tracks = await storage.getPersonTracks(id);
     return res.json({ person, tracks });
   });
+  // Admin-only: tracks the gear flow can attach this person to + any
+  // existing performer rows for them on each track. See storage's
+  // getPersonGearContext for the inclusion rules.
+  app.get("/api/admin/people/:id/gear-context", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const person = await storage.getPersonById(id);
+    if (!person) return res.status(404).json({ message: "Person not found" });
+    return res.json(await storage.getPersonGearContext(id));
+  });
   app.get("/api/instruments/:id/profile", async (req, res) => {
     const id = String(req.params.id);
     const instrument = await storage.getInstrumentById(id);
