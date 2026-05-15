@@ -12,7 +12,7 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check, Search, X as XIcon } from "lucide-react";
+import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag } from "lucide-react";
 
 interface AdminAlbum {
   id: string;
@@ -638,7 +638,9 @@ function AlbumEditor({
             hint="Square. 1000×1000 px recommended (3000×3000 for a future Apple-Music-grade master). JPG or PNG. Larger uploads are fine — the player scales them down."
           />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        {/* Year takes the remaining flex space; Type is capped narrow because
+            the longest option ("Album") is only ~5ch. */}
+        <div className="grid grid-cols-[1fr_180px] gap-4">
           <Field label="Year">
             <input
               type="number"
@@ -1368,6 +1370,53 @@ function PersonEditor({
   // The single input rendered under the active tab. One ref is enough now
   // — focusing it on tab change keeps the keyboard-paste flow smooth.
   const socialInputRef = useRef<HTMLInputElement>(null);
+
+  // Editor-wide tab strip (About | Music | Gear). About wraps the full
+  // existing editor (streaming/identity/bio/accent + discography). Music
+  // and Gear are read-only catalog-derived views so the admin can quickly
+  // see which tracks reference this person and what gear they've played,
+  // without leaving the editor. Both panels pull from the same
+  // /api/people/:id/profile bundle that powers the fan-side PerformerSheet.
+  const [tab, setTab] = useState<"about" | "music" | "gear">("about");
+  type PersonProfile = {
+    person: { id: string; name: string; photoUrl: string | null; bio: string | null; accent: string | null };
+    tracks: Array<{
+      performerId: string;
+      songId: string; songTitle: string; trackNumber: number;
+      albumId: string; albumTitle: string; albumArtwork: string;
+      albumArtist: string; albumYear: number | null;
+      role: string; tuningNotes: string | null;
+      instrumentId: string | null; instrumentName: string | null;
+      instrumentShortCategory: string | null; instrumentCategory: string | null;
+      instrumentPhotoUrl: string | null;
+    }>;
+  };
+  const { data: profile } = useQuery<PersonProfile>({
+    queryKey: ["/api/people", personId, "profile"],
+  });
+  // Group tracks by album for the Music tab.
+  const musicAlbums = (() => {
+    if (!profile) return [] as Array<{ albumId: string; albumTitle: string; albumArtwork: string; albumYear: number | null; tracks: PersonProfile["tracks"] }>;
+    const byAlbum = new Map<string, { albumId: string; albumTitle: string; albumArtwork: string; albumYear: number | null; tracks: PersonProfile["tracks"] }>();
+    for (const t of profile.tracks) {
+      const entry = byAlbum.get(t.albumId) ?? { albumId: t.albumId, albumTitle: t.albumTitle, albumArtwork: t.albumArtwork, albumYear: t.albumYear, tracks: [] };
+      entry.tracks.push(t);
+      byAlbum.set(t.albumId, entry);
+    }
+    return Array.from(byAlbum.values());
+  })();
+  // Distinct gear with per-instrument track count.
+  const personGear = (() => {
+    if (!profile) return [] as Array<{ id: string; name: string; shortCategory: string | null; category: string | null; photoUrl: string | null; trackCount: number }>;
+    const byInst = new Map<string, { id: string; name: string; shortCategory: string | null; category: string | null; photoUrl: string | null; tracks: Set<string> }>();
+    for (const t of profile.tracks) {
+      if (!t.instrumentId) continue;
+      const entry = byInst.get(t.instrumentId) ?? { id: t.instrumentId, name: t.instrumentName ?? "Instrument", shortCategory: t.instrumentShortCategory, category: t.instrumentCategory, photoUrl: t.instrumentPhotoUrl, tracks: new Set<string>() };
+      entry.tracks.add(t.songId);
+      byInst.set(t.instrumentId, entry);
+    }
+    return Array.from(byInst.values()).map(({ tracks, ...r }) => ({ ...r, trackCount: tracks.size })).sort((a, b) => b.trackCount - a.trackCount || a.name.localeCompare(b.name));
+  })();
   useEffect(() => {
     if (data) {
       setForm(data);
@@ -1470,6 +1519,7 @@ function PersonEditor({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/people"] });
       queryClient.invalidateQueries({ queryKey: ["/api/people", personId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people", personId, "profile"] });
       setDirty(false);
     },
   });
@@ -1534,6 +1584,101 @@ function PersonEditor({
         </div>
       </div>
 
+      {/* Tab strip — mirrors the fan-side PerformerSheet tabs so the admin
+          can see this artist the same way fans do. About holds the full
+          editing surface; Music + Gear are read-only catalog views. */}
+      <div role="tablist" aria-label="Person editor sections" className="flex gap-5 border-b border-slate-200 -mx-6 px-6">
+        {(["about", "music", "gear"] as const).map((t) => {
+          const active = tab === t;
+          const label = t === "about" ? "About" : t === "music" ? "Music" : "Gear";
+          const count = t === "music" ? profile?.tracks.length : t === "gear" ? personGear.length : undefined;
+          return (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              id={`tab-admin-person-${t}`}
+              aria-selected={active}
+              aria-controls={`panel-admin-person-${t}`}
+              tabIndex={active ? 0 : -1}
+              onClick={() => setTab(t)}
+              className="relative pb-2.5 pt-1 text-[13px] font-semibold tracking-wide transition-colors"
+              style={{ color: active ? "#0f172a" : "#64748b" }}
+              data-testid={`tab-admin-person-${t}`}
+            >
+              <span className="flex items-center gap-1.5">
+                {label}
+                {typeof count === "number" && count > 0 && (
+                  <span className="text-[11px] font-medium text-slate-400">{count}</span>
+                )}
+              </span>
+              {active && (
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "music" && (
+        <div role="tabpanel" id="panel-admin-person-music" aria-labelledby="tab-admin-person-music" className="space-y-4" data-testid="panel-admin-person-music">
+          {musicAlbums.length === 0 ? (
+            <p className="text-slate-400 text-sm">No tracks credit {form.name} yet. Add credits from an album's song editor.</p>
+          ) : (
+            musicAlbums.map((alb) => (
+              <div key={alb.albumId} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                <div className="flex items-center gap-3 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                  <div className="w-10 h-10 rounded-md overflow-hidden bg-slate-200 flex-shrink-0">
+                    {alb.albumArtwork ? <img src={alb.albumArtwork} alt="" className="w-full h-full object-cover" /> : null}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-slate-900 text-sm font-medium truncate">{alb.albumTitle}</p>
+                    <p className="text-slate-400 text-[11px] truncate">{alb.albumYear ? `${alb.albumYear} · ` : ""}{alb.tracks.length} track{alb.tracks.length === 1 ? "" : "s"}</p>
+                  </div>
+                </div>
+                <ul className="divide-y divide-slate-100">
+                  {alb.tracks.map((t) => (
+                    <li key={t.performerId} className="flex items-center gap-3 px-3 py-2" data-testid={`row-admin-person-track-${t.performerId}`}>
+                      <span className="w-6 text-right text-[12px] tabular-nums text-slate-400 flex-shrink-0">{t.trackNumber}</span>
+                      <span className="flex-1 min-w-0 text-slate-900 text-[13px] truncate">{t.songTitle}</span>
+                      <span className="text-slate-500 text-[12px] truncate">{t.role}</span>
+                      {t.instrumentName && (
+                        <span className="text-slate-400 text-[11px] truncate max-w-[200px]">· {t.instrumentName}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {tab === "gear" && (
+        <div role="tabpanel" id="panel-admin-person-gear" aria-labelledby="tab-admin-person-gear" className="space-y-2" data-testid="panel-admin-person-gear">
+          {personGear.length === 0 ? (
+            <p className="text-slate-400 text-sm">No gear credited to {form.name} yet.</p>
+          ) : (
+            <ul className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+              {personGear.map((g) => (
+                <li key={g.id} className="flex items-center gap-3 px-3 py-2.5" data-testid={`row-admin-person-gear-${g.id}`}>
+                  <div className="w-10 h-10 rounded-md overflow-hidden bg-slate-200 flex-shrink-0">
+                    {g.photoUrl ? <img src={g.photoUrl} alt="" className="w-full h-full object-cover" /> : null}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-slate-900 text-[13px] font-medium truncate">{g.name}</p>
+                    <p className="text-slate-400 text-[11px] truncate">{g.shortCategory ?? g.category ?? "Instrument"} · {g.trackCount} track{g.trackCount === 1 ? "" : "s"}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* ABOUT tab — the original editing surface. Wrapped as a single
+          conditional fragment so the existing JSX stays untouched below. */}
+      {tab === "about" && (<div role="tabpanel" id="panel-admin-person-about" aria-labelledby="tab-admin-person-about" className="space-y-4">
       {/* Streaming + social URLs collapsed into a single tabbed control:
           eight platform icons act as both completion indicators (mint check
           when filled) and tabs. Clicking one reveals a single input bound
@@ -1831,6 +1976,7 @@ function PersonEditor({
           </div>
         </div>
       )}
+      </div>)}
     </div>
   );
 }
@@ -4348,10 +4494,13 @@ export function Admin() {
         <img
           src="/goodtunes-logo-color.png"
           alt="GoodTunes®"
-          className="h-7 w-auto"
+          className="h-10 w-auto"
           data-testid="img-admin-logo"
         />
-        <span className="text-[11px] uppercase tracking-widest text-slate-400 font-medium">
+        {/* ADMIN badge is pushed to the far right so the logo can breathe.
+            ml-auto on a flex parent keeps it stuck to the edge regardless
+            of viewport width. */}
+        <span className="ml-auto text-[11px] uppercase tracking-widest text-slate-400 font-medium">
           Admin
         </span>
       </header>
@@ -4362,8 +4511,8 @@ export function Admin() {
           <nav className="flex-1 px-2 py-3 space-y-1 text-sm">
             {(
               [
-                { key: "albums", label: "Albums", count: albums.length },
-                { key: "people", label: "People", count: people.length },
+                { key: "albums", label: "Albums", count: albums.length, Icon: Disc3 },
+                { key: "people", label: "People", count: people.length, Icon: UserRound },
                 {
                   key: "instruments",
                   // Public-facing label is "Gear" (matches the fan-side
@@ -4371,22 +4520,28 @@ export function Admin() {
                   // so schema and storage names don't have to change.
                   label: "Gear",
                   count: instruments.length,
+                  Icon: Guitar,
                 },
-                { key: "vendors", label: "Vendors", count: allVendors.length },
-                { key: "labels", label: "Labels", count: labels.length },
-              ] as { key: EntityKey; label: string; count: number }[]
-            ).map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setEntity(t.key)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left ${entity === t.key ? "bg-[#eff4ff] text-[#319ED8] font-medium" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-                data-testid={`nav-${t.key}`}
-              >
-                <span>{t.label}</span>
-                <span className="text-[11px] text-slate-400">{t.count}</span>
-              </button>
-            ))}
+                { key: "vendors", label: "Vendors", count: allVendors.length, Icon: Store },
+                { key: "labels", label: "Labels", count: labels.length, Icon: Tag },
+              ] as { key: EntityKey; label: string; count: number; Icon: typeof Disc3 }[]
+            ).map((t) => {
+              const active = entity === t.key;
+              const Icon = t.Icon;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setEntity(t.key)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left ${active ? "bg-[#eff4ff] text-[#319ED8] font-medium" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                  data-testid={`nav-${t.key}`}
+                >
+                  <Icon size={16} className={active ? "text-[#319ED8]" : "text-slate-400"} aria-hidden="true" />
+                  <span className="flex-1">{t.label}</span>
+                  <span className="text-[11px] text-slate-400">{t.count}</span>
+                </button>
+              );
+            })}
           </nav>
           <PromotePanel />
           <div className="px-3 py-3 border-t border-slate-200">
@@ -4450,15 +4605,16 @@ export function Admin() {
                     createInstrument.isPending ||
                     createLabel.isPending
                   }
-                  className={`text-[12px] ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:underline"}`}
+                  className={`w-8 h-8 inline-flex items-center justify-center rounded ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:bg-slate-50"}`}
+                  aria-label={`New ${entity.slice(0, -1)}`}
                   title={
                     entity === "vendors"
                       ? "Vendors are added via an instrument's scraper"
-                      : undefined
+                      : `New ${entity.slice(0, -1)}`
                   }
                   data-testid={`button-new-${entity.slice(0, -1)}`}
                 >
-                  + New
+                  <Plus size={15} />
                 </button>
               </div>
             </div>
