@@ -2969,11 +2969,32 @@ function VendorRow({
 // isHidden) live in VendorRow inside the InstrumentEditor — not here.
 function VendorPaneEditor({
   vendor,
+  onJumpToInstrument,
   onDeleted,
 }: {
   vendor: AdminVendorGrouped;
+  onJumpToInstrument: (instrumentId: string) => void;
   onDeleted: () => void;
 }) {
+  // Tab strip mirrors the PersonEditor (About | Music | Gear) and the
+  // fan-side VendorSheet (About | Gear | Artists). About wraps the editable
+  // form. Gear lists every instrument this vendor is attached to (the old
+  // "USED ON" block, now on-demand instead of always-visible). Artists is
+  // read-only and pulls from the same /api/vendors/:id/profile bundle the
+  // fan sheet uses, so admins can see who's been tagged via SuperCredits™.
+  const [tab, setTab] = useState<"about" | "gear" | "artists">("about");
+  type VendorProfile = {
+    vendor: unknown;
+    instruments: Array<{ id: string; name: string; category: string; shortCategory: string | null; photoUrl: string | null }>;
+    artists: Array<{ id: string; name: string; photoUrl: string | null; accent: string | null; trackCount: number }>;
+  };
+  const { data: vendorProfile } = useQuery<VendorProfile>({
+    queryKey: ["/api/vendors", vendor.vendorId, "profile"],
+    enabled: tab !== "about" && !!vendor.vendorId,
+  });
+  const visibleAttachments = vendor.attachments.filter((a) => !a.isHidden);
+  const gearCount = vendor.attachments.length;
+  const artistsCount = vendorProfile?.artists.length ?? 0;
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<AdminVendorGrouped>(vendor);
   useEffect(() => {
@@ -3061,15 +3082,134 @@ function VendorPaneEditor({
         </div>
       </div>
 
-      {/* Note: we used to show a "USED ON" list of every instrument this
-          vendor is attached to here. Removed — a popular vendor (Fender,
-          Martin, D'Addario) can be on hundreds of instruments and the list
-          drowns the editor. The fan-side VendorSheet already surfaces the
-          full Gear tab (every attachment) and People tab (SuperCredits
-          taggers), so admins can see it there. Per-attachment editing
-          stays where it lives: inside each instrument's vendor list. */}
+      {/* Tab strip — About | Gear N | Artists N. Mirrors PersonEditor and
+          the fan-side VendorSheet so the admin can flip between the editable
+          form and the read-only catalog views without leaving the pane. */}
+      <div role="tablist" aria-label="Vendor editor sections" className="flex gap-5 border-b border-slate-200 px-6">
+        {(["about", "gear", "artists"] as const).map((t) => {
+          const active = tab === t;
+          const label = t === "about" ? "About" : t === "gear" ? "Gear" : "Artists";
+          const count = t === "gear" ? gearCount : t === "artists" ? artistsCount : undefined;
+          return (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              id={`tab-admin-vendor-${t}`}
+              aria-selected={active}
+              aria-controls={`panel-admin-vendor-${t}`}
+              tabIndex={active ? 0 : -1}
+              onClick={() => setTab(t)}
+              className="relative pb-2.5 pt-3 text-[13px] font-semibold tracking-wide transition-colors"
+              style={{ color: active ? "#0f172a" : "#64748b" }}
+              data-testid={`tab-admin-vendor-${t}`}
+            >
+              <span className="flex items-center gap-1.5">
+                {label}
+                {typeof count === "number" && count > 0 && (
+                  <span className="text-[11px] font-medium text-slate-400">{count}</span>
+                )}
+              </span>
+              {active && (
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-      <div className="px-6 py-5 space-y-3 max-w-2xl">
+      {tab === "gear" && (
+        <div
+          role="tabpanel"
+          id="panel-admin-vendor-gear"
+          aria-labelledby="tab-admin-vendor-gear"
+          className="px-6 py-5"
+          data-testid="panel-admin-vendor-gear"
+        >
+          {gearCount === 0 ? (
+            <p className="text-slate-400 text-sm">
+              Not attached to any instrument yet. Add a vendor row inside an instrument's editor to populate this list.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md">
+              {vendor.attachments.map((a) => (
+                <li key={a.attachmentId}>
+                  <button
+                    type="button"
+                    onClick={() => onJumpToInstrument(a.instrumentId)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50"
+                    data-testid={`link-vendor-instrument-${a.instrumentId}`}
+                  >
+                    <span className="flex-1 text-sm text-slate-700 truncate">{a.instrumentName}</span>
+                    {a.isHidden && (
+                      <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">
+                        Hidden
+                      </span>
+                    )}
+                    <span className="text-slate-300 text-xs">→</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-[11px] text-slate-400">
+            Every instrument this vendor is attached to. Tap to open and edit the per-attachment affiliate URL or visibility.
+          </p>
+        </div>
+      )}
+
+      {tab === "artists" && (
+        <div
+          role="tabpanel"
+          id="panel-admin-vendor-artists"
+          aria-labelledby="tab-admin-vendor-artists"
+          className="px-6 py-5"
+          data-testid="panel-admin-vendor-artists"
+        >
+          {!vendor.vendorId ? (
+            <p className="text-slate-400 text-sm">No vendor record yet — save first to load credited artists.</p>
+          ) : !vendorProfile ? (
+            <p className="text-slate-400 text-sm">Loading…</p>
+          ) : artistsCount === 0 ? (
+            <p className="text-slate-400 text-sm">
+              No artists have credited this vendor's instruments on a track yet. As SuperCredits™ are filled in across the catalog, performers who played one of {draft.name || "this vendor"}'s instruments will show up here.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md">
+              {vendorProfile.artists.map((p) => (
+                <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
+                  {p.photoUrl ? (
+                    <img src={p.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[12px] font-semibold"
+                      style={{ background: p.accent ?? "#319ED8" }}
+                    >
+                      {p.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="flex-1 text-sm text-slate-700 truncate">{p.name}</span>
+                  <span className="text-[11px] text-slate-400">
+                    {p.trackCount} {p.trackCount === 1 ? "track" : "tracks"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-[11px] text-slate-400">
+            From SuperCredits™ — performers who've credited one of this vendor's instruments. Producers and lyricists won't appear because the vendor sheet is reached through gear.
+          </p>
+        </div>
+      )}
+
+      {tab === "about" && (
+      <div
+        role="tabpanel"
+        id="panel-admin-vendor-about"
+        aria-labelledby="tab-admin-vendor-about"
+        className="px-6 py-5 space-y-3 max-w-2xl"
+        data-testid="panel-admin-vendor-about"
+      >
         <Field label="Vendor name">
           <input
             value={draft.name}
@@ -3169,6 +3309,7 @@ function VendorPaneEditor({
           />
         </Field>
       </div>
+      )}
 
       <div className="px-6 py-4 border-t border-slate-200 flex items-center gap-3 sticky bottom-0 bg-white">
         <button
@@ -5817,6 +5958,13 @@ export function Admin() {
                 <VendorPaneEditor
                   key={v.id}
                   vendor={v}
+                  onJumpToInstrument={(instrumentId) => {
+                    setSelectedByEntity((p) => ({
+                      ...p,
+                      instruments: instrumentId,
+                    }));
+                    setEntity("instruments");
+                  }}
                   onDeleted={() => setSelectedId(null)}
                 />
               );
