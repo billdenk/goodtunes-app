@@ -6592,7 +6592,15 @@ export function Admin() {
                         className="w-10 h-10 rounded bg-slate-50 object-contain shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded bg-slate-100 shrink-0" />
+                      // Initials fallback — matches the album-level label
+                      // picker so a logoless label reads the same way
+                      // everywhere (e.g. "F" for Forward Motion Records).
+                      <div
+                        className="w-10 h-10 rounded bg-slate-100 shrink-0 flex items-center justify-center text-slate-500 text-sm font-semibold"
+                        aria-hidden
+                      >
+                        {(l.name || "?").charAt(0).toUpperCase()}
+                      </div>
                     )}
                     <div className="min-w-0">
                       <div className="text-slate-900 text-sm truncate">
