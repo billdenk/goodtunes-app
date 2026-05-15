@@ -240,6 +240,26 @@ export function Account() {
               href="/admin"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => {
+                // Inside the Replit preview iframe (and some sandboxed
+                // embeds in Safari), a plain target="_blank" anchor can
+                // be silently downgraded to a same-tab navigation. We
+                // call window.open synchronously from the user gesture
+                // and force a top-level break-out so the new tab lands
+                // in the real browser, not the simulator iframe.
+                e.preventDefault();
+                const url = new URL("/admin", window.location.origin).toString();
+                const w = window.open(url, "_blank", "noopener,noreferrer");
+                if (!w) {
+                  // Popup blocked — fall back to navigating the top
+                  // frame so the admin at least opens *somewhere*.
+                  try {
+                    window.top!.location.href = url;
+                  } catch {
+                    window.location.href = url;
+                  }
+                }
+              }}
               className="text-inherit no-underline hover:no-underline"
               data-testid="link-hidden-admin"
             >
