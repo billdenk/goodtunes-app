@@ -362,14 +362,19 @@ function ArtworkPicker({
   );
 }
 
-// Promote another user to admin by @username. Lives in the sidebar so it's
-// reachable from any tab. No revoke — by design (see /api/admin/promote
-// comment in server/routes.ts).
+// Promote another user to admin by @username. Lives quietly in the top-bar
+// as a "+" icon button that expands inline into a username field + submit.
+// Collapsed by default to keep the chrome calm — admin invites are a rare
+// action and shouldn't fight the rest of the UI for attention. No revoke
+// path — by design (see /api/admin/promote comment in server/routes.ts).
 function PromotePanel() {
+  const [expanded, setExpanded] = useState(false);
   const [username, setUsername] = useState("");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null,
   );
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const promote = useMutation({
     mutationFn: async (u: string) => {
       const res = await apiRequest("POST", "/api/admin/promote", {
@@ -391,11 +396,51 @@ function PromotePanel() {
     },
     onError: (e: Error) => setMsg({ kind: "err", text: e.message }),
   });
+
+  // Auto-focus the field on expand, and collapse on outside-click + Escape
+  // so the bar snaps back to a single icon when the admin is done.
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+  useEffect(() => {
+    if (!expanded) return;
+    function onDown(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setExpanded(false);
+        setMsg(null);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setExpanded(false);
+        setMsg(null);
+      }
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [expanded]);
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        title="Add admin"
+        aria-label="Add admin"
+        className="w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+        data-testid="button-promote-toggle"
+      >
+        <Plus size={16} aria-hidden="true" />
+      </button>
+    );
+  }
+
   return (
-    <div className="px-3 py-3 border-t border-slate-200">
-      <p className="px-1 text-[10px] uppercase tracking-widest text-slate-400 mb-2">
-        Add admin
-      </p>
+    <div ref={wrapperRef} className="relative">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -404,32 +449,33 @@ function PromotePanel() {
           setMsg(null);
           promote.mutate(u);
         }}
-        className="space-y-2"
+        className="flex items-center gap-1.5"
       >
         <input
+          ref={inputRef}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="@username"
-          className={inputCls + " py-1.5 text-xs"}
+          className="w-44 px-2.5 py-1 text-xs rounded-md border border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#319ED8]"
           data-testid="input-promote-username"
         />
         <button
           type="submit"
           disabled={promote.isPending || !username.trim()}
-          className="w-full px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-xs font-medium hover:bg-[#319ED8]/90 disabled:opacity-40"
+          className="px-2.5 py-1 rounded-md bg-[#319ED8] text-white text-xs font-medium hover:bg-[#319ED8]/90 disabled:opacity-40"
           data-testid="button-promote-admin"
         >
-          {promote.isPending ? "Promoting…" : "Promote to admin"}
+          {promote.isPending ? "…" : "Add"}
         </button>
-        {msg && (
-          <p
-            className={`text-[11px] ${msg.kind === "ok" ? "text-[#319ED8]" : "text-red-600"}`}
-            data-testid="text-promote-result"
-          >
-            {msg.text}
-          </p>
-        )}
       </form>
+      {msg && (
+        <p
+          className={`absolute right-0 top-full mt-1 text-[11px] whitespace-nowrap ${msg.kind === "ok" ? "text-[#319ED8]" : "text-red-600"}`}
+          data-testid="text-promote-result"
+        >
+          {msg.text}
+        </p>
+      )}
     </div>
   );
 }
@@ -5675,6 +5721,7 @@ export function Admin() {
         <span className="ml-auto text-[11px] uppercase tracking-widest text-slate-400 font-medium">
           Admin
         </span>
+        <PromotePanel />
       </header>
 
       <div className="flex flex-1 min-h-0">
@@ -5715,7 +5762,6 @@ export function Admin() {
               );
             })}
           </nav>
-          <PromotePanel />
           <div className="px-3 py-3 border-t border-slate-200">
             <button
               type="button"
