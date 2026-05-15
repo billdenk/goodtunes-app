@@ -1481,7 +1481,12 @@ function PersonEditor({
         };
       });
       setDirty(true);
-      setDiscography(data.albums);
+      // Only replace the discography when this scrape actually returned
+      // albums. Spotify's artist endpoint (and most non-Apple sources) come
+      // back with `albums: []` — overwriting in that case would wipe a list
+      // the admin just pulled from Apple. Keep what we have until another
+      // source proves it has a better list.
+      if (data.albums.length > 0) setDiscography(data.albums);
       const src =
         data.source === "apple"
           ? "Apple Music"
