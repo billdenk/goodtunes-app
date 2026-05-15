@@ -3,7 +3,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
+import {
+  SiApplemusic,
+  SiSpotify,
+  SiInstagram,
+  SiTiktok,
+  SiX,
+  SiBluesky,
+  SiFacebook,
+} from "react-icons/si";
 import { Globe } from "lucide-react";
 
 interface AdminAlbum {
@@ -182,7 +190,10 @@ function ArtworkPicker({
       // Bearer is *required* by the backend for /api/admin/upload — the
       // cookie session alone is rejected to block cross-site CSRF uploads.
       const token = getAuthToken();
-      if (!token) throw new Error("Sign out and back in — your session token is missing.");
+      if (!token)
+        throw new Error(
+          "Sign out and back in — your session token is missing.",
+        );
       const res = await fetch("/api/admin/upload", {
         method: "POST",
         body: fd,
@@ -265,11 +276,18 @@ function ArtworkPicker({
             />
           </div>
           {hint && (
-            <p className="text-[11px] text-slate-400" data-testid={`${testId}-hint`}>
+            <p
+              className="text-[11px] text-slate-400"
+              data-testid={`${testId}-hint`}
+            >
               {hint}
             </p>
           )}
-          {err && <p className="text-red-600 text-xs" data-testid={`${testId}-error`}>{err}</p>}
+          {err && (
+            <p className="text-red-600 text-xs" data-testid={`${testId}-error`}>
+              {err}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -281,16 +299,25 @@ function ArtworkPicker({
 // comment in server/routes.ts).
 function PromotePanel() {
   const [username, setUsername] = useState("");
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
+    null,
+  );
   const promote = useMutation({
     mutationFn: async (u: string) => {
-      const res = await apiRequest("POST", "/api/admin/promote", { username: u });
-      return res.json() as Promise<{ username: string; alreadyAdmin?: boolean }>;
+      const res = await apiRequest("POST", "/api/admin/promote", {
+        username: u,
+      });
+      return res.json() as Promise<{
+        username: string;
+        alreadyAdmin?: boolean;
+      }>;
     },
     onSuccess: (r) => {
       setMsg({
         kind: "ok",
-        text: r.alreadyAdmin ? `@${r.username} is already an admin.` : `@${r.username} is now an admin.`,
+        text: r.alreadyAdmin
+          ? `@${r.username} is already an admin.`
+          : `@${r.username} is now an admin.`,
       });
       setUsername("");
     },
@@ -298,7 +325,9 @@ function PromotePanel() {
   });
   return (
     <div className="px-3 py-3 border-t border-slate-200">
-      <p className="px-1 text-[10px] uppercase tracking-widest text-slate-400 mb-2">Add admin</p>
+      <p className="px-1 text-[10px] uppercase tracking-widest text-slate-400 mb-2">
+        Add admin
+      </p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -345,7 +374,13 @@ function fmtDuration(s: number) {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
-function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () => void }) {
+function AlbumEditor({
+  albumId,
+  onDeleted,
+}: {
+  albumId: string;
+  onDeleted: () => void;
+}) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<AlbumWithSongs>({
     queryKey: ["/api/albums", albumId],
@@ -384,7 +419,11 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
 
   const saveAlbum = useMutation({
     mutationFn: async (payload: Partial<AdminAlbum>) => {
-      const res = await apiRequest("PUT", `/api/admin/albums/${albumId}`, payload);
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/albums/${albumId}`,
+        payload,
+      );
       return res.json();
     },
     onSuccess: () => {
@@ -407,7 +446,13 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
   });
 
   const updateSong = useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<AdminSong> }) => {
+    mutationFn: async ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Partial<AdminSong>;
+    }) => {
       const res = await apiRequest("PUT", `/api/admin/songs/${id}`, patch);
       return res.json();
     },
@@ -448,14 +493,23 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
         <div>
-          <h2 className="text-slate-900 text-lg font-semibold" data-testid="text-editor-title">Edit album</h2>
+          <h2
+            className="text-slate-900 text-lg font-semibold"
+            data-testid="text-editor-title"
+          >
+            Edit album
+          </h2>
           <p className="text-slate-400 text-xs">{albumId}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => {
-              if (confirm("Delete this album, all its songs, and any playlist references? This cannot be undone.")) {
+              if (
+                confirm(
+                  "Delete this album, all its songs, and any playlist references? This cannot be undone.",
+                )
+              ) {
                 deleteAlbum.mutate();
               }
             }}
@@ -476,7 +530,11 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
                 ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
                 : "border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
-            title={form.isHidden ? "Hidden from fans. Click to show." : "Visible to fans. Click to hide."}
+            title={
+              form.isHidden
+                ? "Hidden from fans. Click to show."
+                : "Visible to fans. Click to hide."
+            }
             data-testid="button-toggle-album-hidden"
           >
             {form.isHidden ? "Hidden" : "Visible"}
@@ -495,10 +553,20 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
 
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
         <Field label="Title">
-          <input value={form.title} onChange={(e) => set("title", e.target.value)} className={inputCls} data-testid="input-album-title" />
+          <input
+            value={form.title}
+            onChange={(e) => set("title", e.target.value)}
+            className={inputCls}
+            data-testid="input-album-title"
+          />
         </Field>
         <Field label="Artist">
-          <input value={form.artist} onChange={(e) => set("artist", e.target.value)} className={inputCls} data-testid="input-album-artist" />
+          <input
+            value={form.artist}
+            onChange={(e) => set("artist", e.target.value)}
+            className={inputCls}
+            data-testid="input-album-artist"
+          />
         </Field>
         <Field label="Artwork">
           <ArtworkPicker
@@ -514,13 +582,23 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
             <input
               type="number"
               value={form.year ?? ""}
-              onChange={(e) => set("year", e.target.value === "" ? null : Number(e.target.value))}
+              onChange={(e) =>
+                set(
+                  "year",
+                  e.target.value === "" ? null : Number(e.target.value),
+                )
+              }
               className={inputCls}
               data-testid="input-album-year"
             />
           </Field>
           <Field label="Type">
-            <select value={form.type} onChange={(e) => set("type", e.target.value as "album" | "EP")} className={inputCls} data-testid="select-album-type">
+            <select
+              value={form.type}
+              onChange={(e) => set("type", e.target.value as "album" | "EP")}
+              className={inputCls}
+              data-testid="select-album-type"
+            >
               <option value="album">Album</option>
               <option value="EP">EP</option>
             </select>
@@ -557,12 +635,16 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
           </Field>
         </div>
         <p className="text-[11px] text-slate-400 -mt-2">
-          "Listen on…" handoff. Surfaced on the album page after the in-app preview window. Apple Music URL is auto-filled when an album is pulled from an artist's discography.
+          "Listen on…" handoff. Surfaced on the album page after the in-app
+          preview window. Apple Music URL is auto-filled when an album is pulled
+          from an artist's discography.
         </p>
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">Tracklist</h3>
+            <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+              Tracklist
+            </h3>
             <button
               type="button"
               onClick={() => addSong.mutate()}
@@ -585,7 +667,9 @@ function AlbumEditor({ albumId, onDeleted }: { albumId: string; onDeleted: () =>
               />
             ))}
             {(data?.songs ?? []).length === 0 && (
-              <div className="px-4 py-6 text-center text-slate-400 text-sm">No songs yet.</div>
+              <div className="px-4 py-6 text-center text-slate-400 text-sm">
+                No songs yet.
+              </div>
             )}
           </div>
         </div>
@@ -625,19 +709,31 @@ interface SongCredits {
 
 function SongCreditsEditor({ songId }: { songId: string }) {
   const queryClient = useQueryClient();
-  const { data: credits } = useQuery<SongCredits>({ queryKey: ["/api/songs", songId, "credits"] });
-  const { data: people = [] } = useQuery<AdminPerson[]>({ queryKey: ["/api/people"] });
-  const { data: instruments = [] } = useQuery<AdminInstrument[]>({ queryKey: ["/api/instruments"] });
+  const { data: credits } = useQuery<SongCredits>({
+    queryKey: ["/api/songs", songId, "credits"],
+  });
+  const { data: people = [] } = useQuery<AdminPerson[]>({
+    queryKey: ["/api/people"],
+  });
+  const { data: instruments = [] } = useQuery<AdminInstrument[]>({
+    queryKey: ["/api/instruments"],
+  });
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["/api/songs", songId, "credits"] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/songs", songId, "credits"],
+    });
 
   const addWriter = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/admin/songs/${songId}/writers`, {
-        name: "New writer",
-        role: "Composer",
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/songs/${songId}/writers`,
+        {
+          name: "New writer",
+          role: "Composer",
+        },
+      );
       return res.json();
     },
     onSuccess: invalidate,
@@ -645,40 +741,70 @@ function SongCreditsEditor({ songId }: { songId: string }) {
   const addPerformer = useMutation({
     mutationFn: async () => {
       const firstPerson = people[0];
-      if (!firstPerson) throw new Error("Add at least one Person in the People tab first.");
-      const res = await apiRequest("POST", `/api/admin/songs/${songId}/performers`, {
-        personId: firstPerson.id,
-        name: firstPerson.name,
-        role: "Guitar",
-      });
+      if (!firstPerson)
+        throw new Error("Add at least one Person in the People tab first.");
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/songs/${songId}/performers`,
+        {
+          personId: firstPerson.id,
+          name: firstPerson.name,
+          role: "Guitar",
+        },
+      );
       return res.json();
     },
     onSuccess: invalidate,
     onError: (e: Error) => alert(e.message),
   });
 
-  if (!credits) return <div className="text-slate-400 text-xs py-2">Loading credits…</div>;
+  if (!credits)
+    return <div className="text-slate-400 text-xs py-2">Loading credits…</div>;
 
   return (
     <div className="space-y-4 pt-2">
       {/* Writers */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <h4 className="text-slate-500 text-[11px] uppercase tracking-wider">Writers <span className="text-slate-300 ml-1">({credits.writers.length})</span></h4>
-          <button type="button" onClick={() => addWriter.mutate()} className="text-[11px] text-[#319ED8] hover:underline" data-testid={`button-add-writer-${songId}`}>+ Writer</button>
+          <h4 className="text-slate-500 text-[11px] uppercase tracking-wider">
+            Writers{" "}
+            <span className="text-slate-300 ml-1">
+              ({credits.writers.length})
+            </span>
+          </h4>
+          <button
+            type="button"
+            onClick={() => addWriter.mutate()}
+            className="text-[11px] text-[#319ED8] hover:underline"
+            data-testid={`button-add-writer-${songId}`}
+          >
+            + Writer
+          </button>
         </div>
         <div className="space-y-1">
           {credits.writers.map((w) => (
-            <WriterRow key={w.id} writer={w} people={people} onChanged={invalidate} />
+            <WriterRow
+              key={w.id}
+              writer={w}
+              people={people}
+              onChanged={invalidate}
+            />
           ))}
-          {credits.writers.length === 0 && <p className="text-slate-300 text-xs">No writers yet.</p>}
+          {credits.writers.length === 0 && (
+            <p className="text-slate-300 text-xs">No writers yet.</p>
+          )}
         </div>
       </div>
 
       {/* Performers */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <h4 className="text-slate-500 text-[11px] uppercase tracking-wider">Performers <span className="text-slate-300 ml-1">({credits.performers.length})</span></h4>
+          <h4 className="text-slate-500 text-[11px] uppercase tracking-wider">
+            Performers{" "}
+            <span className="text-slate-300 ml-1">
+              ({credits.performers.length})
+            </span>
+          </h4>
           <button
             type="button"
             onClick={() => addPerformer.mutate()}
@@ -692,9 +818,17 @@ function SongCreditsEditor({ songId }: { songId: string }) {
         </div>
         <div className="space-y-1">
           {credits.performers.map((p) => (
-            <PerformerRow key={p.id} performer={p} people={people} instruments={instruments} onChanged={invalidate} />
+            <PerformerRow
+              key={p.id}
+              performer={p}
+              people={people}
+              instruments={instruments}
+              onChanged={invalidate}
+            />
           ))}
-          {credits.performers.length === 0 && <p className="text-slate-300 text-xs">No performers yet.</p>}
+          {credits.performers.length === 0 && (
+            <p className="text-slate-300 text-xs">No performers yet.</p>
+          )}
         </div>
       </div>
     </div>
@@ -719,56 +853,128 @@ function useRowDraft<T extends { id: string }>(row: T) {
   return { draft, setDraft, dirty, snapshot: () => draftRef.current };
 }
 
-function WriterRow({ writer, people, onChanged }: { writer: AdminTrackWriter & { person: AdminPerson | null }; people: AdminPerson[]; onChanged: () => void }) {
+function WriterRow({
+  writer,
+  people,
+  onChanged,
+}: {
+  writer: AdminTrackWriter & { person: AdminPerson | null };
+  people: AdminPerson[];
+  onChanged: () => void;
+}) {
   const { draft, setDraft, dirty, snapshot } = useRowDraft(writer);
   const save = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PUT", `/api/admin/writers/${writer.id}`, snapshot());
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/writers/${writer.id}`,
+        snapshot(),
+      );
       return res.json();
     },
     onSuccess: onChanged,
   });
   const del = useMutation({
-    mutationFn: async () => { await apiRequest("DELETE", `/api/admin/writers/${writer.id}`); },
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/writers/${writer.id}`);
+    },
     onSuccess: onChanged,
   });
   return (
-    <div className="grid grid-cols-[2fr_1fr_1.5fr_auto_auto] gap-2 items-center" data-testid={`row-writer-${writer.id}`}>
-      <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name" className={inputCls + " py-1 text-xs"} />
-      <input value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} placeholder="Composer / Lyricist / Producer" className={inputCls + " py-1 text-xs"} />
+    <div
+      className="grid grid-cols-[2fr_1fr_1.5fr_auto_auto] gap-2 items-center"
+      data-testid={`row-writer-${writer.id}`}
+    >
+      <input
+        value={draft.name}
+        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+        placeholder="Name"
+        className={inputCls + " py-1 text-xs"}
+      />
+      <input
+        value={draft.role}
+        onChange={(e) => setDraft({ ...draft, role: e.target.value })}
+        placeholder="Composer / Lyricist / Producer"
+        className={inputCls + " py-1 text-xs"}
+      />
       <select
         value={draft.personId ?? ""}
         onChange={(e) => {
           const id = e.target.value || null;
           const matched = people.find((p) => p.id === id);
-          setDraft({ ...draft, personId: id, name: matched ? matched.name : draft.name });
+          setDraft({
+            ...draft,
+            personId: id,
+            name: matched ? matched.name : draft.name,
+          });
         }}
         className={inputCls + " py-1 text-xs"}
       >
         <option value="">— link to person (optional) —</option>
-        {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        {people.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
       </select>
-      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="px-2 py-1 rounded bg-[#319ED8] text-slate-900 text-[11px] disabled:opacity-40" data-testid={`button-save-writer-${writer.id}`}>{save.isPending ? "…" : "Save"}</button>
-      <button type="button" disabled={del.isPending} onClick={() => { if (confirm("Delete this writer credit?")) del.mutate(); }} className="px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded disabled:opacity-40" data-testid={`button-delete-writer-${writer.id}`}>×</button>
+      <button
+        type="button"
+        disabled={!dirty || save.isPending}
+        onClick={() => save.mutate()}
+        className="px-2 py-1 rounded bg-[#319ED8] text-slate-900 text-[11px] disabled:opacity-40"
+        data-testid={`button-save-writer-${writer.id}`}
+      >
+        {save.isPending ? "…" : "Save"}
+      </button>
+      <button
+        type="button"
+        disabled={del.isPending}
+        onClick={() => {
+          if (confirm("Delete this writer credit?")) del.mutate();
+        }}
+        className="px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded disabled:opacity-40"
+        data-testid={`button-delete-writer-${writer.id}`}
+      >
+        ×
+      </button>
     </div>
   );
 }
 
-function PerformerRow({ performer, people, instruments, onChanged }: { performer: AdminTrackPerformer & { person: AdminPerson | null }; people: AdminPerson[]; instruments: AdminInstrument[]; onChanged: () => void }) {
+function PerformerRow({
+  performer,
+  people,
+  instruments,
+  onChanged,
+}: {
+  performer: AdminTrackPerformer & { person: AdminPerson | null };
+  people: AdminPerson[];
+  instruments: AdminInstrument[];
+  onChanged: () => void;
+}) {
   const { draft, setDraft, dirty, snapshot } = useRowDraft(performer);
   const save = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PUT", `/api/admin/performers/${performer.id}`, snapshot());
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/performers/${performer.id}`,
+        snapshot(),
+      );
       return res.json();
     },
     onSuccess: onChanged,
   });
   const del = useMutation({
-    mutationFn: async () => { await apiRequest("DELETE", `/api/admin/performers/${performer.id}`); },
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/performers/${performer.id}`);
+    },
     onSuccess: onChanged,
   });
   return (
-    <div className="grid grid-cols-[1.5fr_1fr_1.5fr_1fr_auto_auto] gap-2 items-center" data-testid={`row-performer-${performer.id}`}>
+    <div
+      className="grid grid-cols-[1.5fr_1fr_1.5fr_1fr_auto_auto] gap-2 items-center"
+      data-testid={`row-performer-${performer.id}`}
+    >
       <select
         value={draft.personId ?? ""}
         onChange={(e) => {
@@ -776,56 +982,145 @@ function PerformerRow({ performer, people, instruments, onChanged }: { performer
           const matched = people.find((p) => p.id === id);
           // Snapshot the display name whenever the link changes so credits
           // keep rendering even if the Person is later removed.
-          setDraft({ ...draft, personId: id, name: matched ? matched.name : draft.name });
+          setDraft({
+            ...draft,
+            personId: id,
+            name: matched ? matched.name : draft.name,
+          });
         }}
         className={inputCls + " py-1 text-xs"}
       >
         <option value="">— unlinked ({draft.name}) —</option>
-        {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        {people.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
       </select>
-      <input value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} placeholder="Guitar / Bass / Vocals" className={inputCls + " py-1 text-xs"} />
-      <select value={draft.instrumentId ?? ""} onChange={(e) => setDraft({ ...draft, instrumentId: e.target.value || null })} className={inputCls + " py-1 text-xs"}>
+      <input
+        value={draft.role}
+        onChange={(e) => setDraft({ ...draft, role: e.target.value })}
+        placeholder="Guitar / Bass / Vocals"
+        className={inputCls + " py-1 text-xs"}
+      />
+      <select
+        value={draft.instrumentId ?? ""}
+        onChange={(e) =>
+          setDraft({ ...draft, instrumentId: e.target.value || null })
+        }
+        className={inputCls + " py-1 text-xs"}
+      >
         <option value="">— instrument (optional) —</option>
-        {instruments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+        {instruments.map((i) => (
+          <option key={i.id} value={i.id}>
+            {i.name}
+          </option>
+        ))}
       </select>
-      <input value={draft.tuningNotes ?? ""} onChange={(e) => setDraft({ ...draft, tuningNotes: e.target.value || null })} placeholder="DADGAD, capo 3…" className={inputCls + " py-1 text-xs"} />
-      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="px-2 py-1 rounded bg-[#319ED8] text-slate-900 text-[11px] disabled:opacity-40" data-testid={`button-save-performer-${performer.id}`}>{save.isPending ? "…" : "Save"}</button>
-      <button type="button" disabled={del.isPending} onClick={() => { if (confirm("Delete this performer credit?")) del.mutate(); }} className="px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded disabled:opacity-40" data-testid={`button-delete-performer-${performer.id}`}>×</button>
+      <input
+        value={draft.tuningNotes ?? ""}
+        onChange={(e) =>
+          setDraft({ ...draft, tuningNotes: e.target.value || null })
+        }
+        placeholder="DADGAD, capo 3…"
+        className={inputCls + " py-1 text-xs"}
+      />
+      <button
+        type="button"
+        disabled={!dirty || save.isPending}
+        onClick={() => save.mutate()}
+        className="px-2 py-1 rounded bg-[#319ED8] text-slate-900 text-[11px] disabled:opacity-40"
+        data-testid={`button-save-performer-${performer.id}`}
+      >
+        {save.isPending ? "…" : "Save"}
+      </button>
+      <button
+        type="button"
+        disabled={del.isPending}
+        onClick={() => {
+          if (confirm("Delete this performer credit?")) del.mutate();
+        }}
+        className="px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded disabled:opacity-40"
+        data-testid={`button-delete-performer-${performer.id}`}
+      >
+        ×
+      </button>
     </div>
   );
 }
 
-function SongRow({ song, onSave, onDelete }: { song: AdminSong; onSave: (p: Partial<AdminSong>) => void; onDelete: () => void }) {
+function SongRow({
+  song,
+  onSave,
+  onDelete,
+}: {
+  song: AdminSong;
+  onSave: (p: Partial<AdminSong>) => void;
+  onDelete: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(song);
-  useEffect(() => setDraft(song), [song.id, song.title, song.lyrics, song.trackNumber, song.duration, song.audioUrl]);
+  useEffect(
+    () => setDraft(song),
+    [
+      song.id,
+      song.title,
+      song.lyrics,
+      song.trackNumber,
+      song.duration,
+      song.audioUrl,
+    ],
+  );
   const dirty = JSON.stringify(draft) !== JSON.stringify(song);
 
   return (
     <div className="border-b border-slate-200 last:border-b-0">
       <div className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50">
-        <span className="text-slate-400 text-xs w-6 text-right">{song.trackNumber}</span>
-        <span className="flex-1 text-slate-900 text-sm truncate" data-testid={`text-song-${song.id}`}>{song.title}</span>
-        <span className="text-slate-400 text-xs tabular-nums">{fmtDuration(song.duration)}</span>
-        <button type="button" onClick={() => setOpen((v) => !v)} className="text-[12px] text-[#319ED8] hover:underline" data-testid={`button-edit-song-${song.id}`}>
+        <span className="text-slate-400 text-xs w-6 text-right">
+          {song.trackNumber}
+        </span>
+        <span
+          className="flex-1 text-slate-900 text-sm truncate"
+          data-testid={`text-song-${song.id}`}
+        >
+          {song.title}
+        </span>
+        <span className="text-slate-400 text-xs tabular-nums">
+          {fmtDuration(song.duration)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-[12px] text-[#319ED8] hover:underline"
+          data-testid={`button-edit-song-${song.id}`}
+        >
           {open ? "Close" : "Edit"}
         </button>
       </div>
       {open && (
         <div className="px-3 pb-3 pt-1 space-y-2 bg-white">
           <div className="grid grid-cols-[1fr_80px_80px] gap-2">
-            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Title" className={inputCls} />
+            <input
+              value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              placeholder="Title"
+              className={inputCls}
+            />
             <input
               type="number"
               value={draft.trackNumber}
-              onChange={(e) => setDraft({ ...draft, trackNumber: Number(e.target.value) })}
+              onChange={(e) =>
+                setDraft({ ...draft, trackNumber: Number(e.target.value) })
+              }
               className={inputCls}
               title="Track #"
             />
             <input
               type="number"
               value={draft.duration}
-              onChange={(e) => setDraft({ ...draft, duration: Number(e.target.value) })}
+              onChange={(e) =>
+                setDraft({ ...draft, duration: Number(e.target.value) })
+              }
               className={inputCls}
               title="Duration (s)"
             />
@@ -844,11 +1139,26 @@ function SongRow({ song, onSave, onDelete }: { song: AdminSong; onSave: (p: Part
             className={inputCls + " resize-none font-mono text-xs"}
           />
           <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={onDelete} className="px-3 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded" data-testid={`button-delete-song-${song.id}`}>Delete</button>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="px-3 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded"
+              data-testid={`button-delete-song-${song.id}`}
+            >
+              Delete
+            </button>
             <button
               type="button"
               disabled={!dirty}
-              onClick={() => onSave({ title: draft.title, trackNumber: draft.trackNumber, duration: draft.duration, lyrics: draft.lyrics, audioUrl: draft.audioUrl })}
+              onClick={() =>
+                onSave({
+                  title: draft.title,
+                  trackNumber: draft.trackNumber,
+                  duration: draft.duration,
+                  lyrics: draft.lyrics,
+                  audioUrl: draft.audioUrl,
+                })
+              }
               className="px-3 py-1 text-[12px] rounded bg-[#319ED8] text-white disabled:opacity-40"
               data-testid={`button-save-song-${song.id}`}
             >
@@ -867,10 +1177,18 @@ function SongRow({ song, onSave, onDelete }: { song: AdminSong; onSave: (p: Part
 const inputCls =
   "w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 transition";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="block text-slate-400 text-[11px] uppercase tracking-wider mb-1">{label}</span>
+      <span className="block text-slate-400 text-[11px] uppercase tracking-wider mb-1">
+        {label}
+      </span>
       {children}
     </label>
   );
@@ -881,22 +1199,41 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // Paste-an-artist-URL bar. Mirror of ScrapeBar for instruments. Reads the
 // artist's Apple Music or Spotify page for name/photo/bio, and (Apple only)
 // the full discography via the free iTunes Lookup API.
-function ArtistScrapeBar({ onPrefill }: { onPrefill: (r: ArtistScrapeResult) => void }) {
+function ArtistScrapeBar({
+  onPrefill,
+}: {
+  onPrefill: (r: ArtistScrapeResult) => void;
+}) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
+    null,
+  );
   async function go() {
     const u = url.trim();
     if (!u) return;
     setBusy(true);
     setMsg(null);
     try {
-      const res = await apiRequest("POST", "/api/admin/people/scrape", { url: u });
+      const res = await apiRequest("POST", "/api/admin/people/scrape", {
+        url: u,
+      });
       const data = (await res.json()) as ArtistScrapeResult;
       onPrefill(data);
-      const src = data.source === "apple" ? "Apple Music" : data.source === "spotify" ? "Spotify" : "page";
-      const discog = data.albums.length > 0 ? ` Found ${data.albums.length} album${data.albums.length === 1 ? "" : "s"}.` : "";
-      setMsg({ kind: "ok", text: `Pulled from ${src}. Review and Save.${discog}` });
+      const src =
+        data.source === "apple"
+          ? "Apple Music"
+          : data.source === "spotify"
+            ? "Spotify"
+            : "page";
+      const discog =
+        data.albums.length > 0
+          ? ` Found ${data.albums.length} album${data.albums.length === 1 ? "" : "s"}.`
+          : "";
+      setMsg({
+        kind: "ok",
+        text: `Pulled from ${src}. Review and Save.${discog}`,
+      });
       setUrl("");
     } catch (e: any) {
       setMsg({ kind: "err", text: e?.message || "Couldn't read that page." });
@@ -910,7 +1247,12 @@ function ArtistScrapeBar({ onPrefill }: { onPrefill: (r: ArtistScrapeResult) => 
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); go(); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              go();
+            }
+          }}
           placeholder="Paste an Apple Music or Spotify artist URL"
           className={inputCls + " flex-1"}
           disabled={busy}
@@ -927,7 +1269,9 @@ function ArtistScrapeBar({ onPrefill }: { onPrefill: (r: ArtistScrapeResult) => 
         </button>
       </div>
       <p className="text-[11px] text-slate-400">
-        Fills name, photo, bio, and stores the streaming URL as the eventual "Listen on…" handoff. Apple Music URLs also list the artist's full discography below.
+        Fills name, photo, bio, and stores the streaming URL as the eventual
+        "Listen on…" handoff. Apple Music URLs also list the artist's full
+        discography below.
       </p>
       {msg && (
         <p
@@ -975,20 +1319,37 @@ function DiscographyRow({
     },
   });
   return (
-    <div className="flex items-center gap-3 py-2" data-testid={`row-discography-${album.collectionId}`}>
+    <div
+      className="flex items-center gap-3 py-2"
+      data-testid={`row-discography-${album.collectionId}`}
+    >
       {album.artworkUrl ? (
-        <img src={album.artworkUrl} alt="" className="w-12 h-12 rounded object-cover shrink-0" />
+        <img
+          src={album.artworkUrl}
+          alt=""
+          className="w-12 h-12 rounded object-cover shrink-0"
+        />
       ) : (
         <div className="w-12 h-12 rounded bg-slate-200 shrink-0" />
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-slate-900 text-sm font-medium truncate">{album.name}</div>
+        <div className="text-slate-900 text-sm font-medium truncate">
+          {album.name}
+        </div>
         <div className="text-slate-400 text-[11px]">
-          {[album.type, album.year, album.trackCount ? `${album.trackCount} tracks` : null].filter(Boolean).join(" · ")}
+          {[
+            album.type,
+            album.year,
+            album.trackCount ? `${album.trackCount} tracks` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </div>
       </div>
       {match ? (
-        <span className="text-[11px] font-medium text-[#319ED8] bg-[#319ED8]/10 px-2 py-1 rounded">In library</span>
+        <span className="text-[11px] font-medium text-[#319ED8] bg-[#319ED8]/10 px-2 py-1 rounded">
+          In library
+        </span>
       ) : (
         <button
           type="button"
@@ -1004,25 +1365,46 @@ function DiscographyRow({
   );
 }
 
-function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: () => void }) {
+function PersonEditor({
+  personId,
+  onDeleted,
+}: {
+  personId: string;
+  onDeleted: () => void;
+}) {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery<AdminPerson>({ queryKey: ["/api/people", personId] });
-  const { data: libraryAlbums = [] } = useQuery<AdminAlbum[]>({ queryKey: ["/api/albums"] });
+  const { data, isLoading } = useQuery<AdminPerson>({
+    queryKey: ["/api/people", personId],
+  });
+  const { data: libraryAlbums = [] } = useQuery<AdminAlbum[]>({
+    queryKey: ["/api/albums"],
+  });
   const [form, setForm] = useState<AdminPerson | null>(null);
   const [dirty, setDirty] = useState(false);
   // Discography lives in client state — it's transient (pulled per session,
   // not persisted). On re-pull we replace it; on save we don't touch it.
   const [discography, setDiscography] = useState<ScrapedArtistAlbum[]>([]);
   useEffect(() => {
-    if (data) { setForm(data); setDirty(false); setDiscography([]); }
+    if (data) {
+      setForm(data);
+      setDirty(false);
+      setDiscography([]);
+    }
   }, [data?.id]);
 
-  const update = (patch: Partial<AdminPerson>) => { setForm((f) => (f ? { ...f, ...patch } : f)); setDirty(true); };
+  const update = (patch: Partial<AdminPerson>) => {
+    setForm((f) => (f ? { ...f, ...patch } : f));
+    setDirty(true);
+  };
 
   const save = useMutation({
     mutationFn: async () => {
       if (!form) return;
-      const res = await apiRequest("PUT", `/api/admin/people/${personId}`, form);
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/people/${personId}`,
+        form,
+      );
       return res.json();
     },
     onSuccess: () => {
@@ -1049,7 +1431,10 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
   // + artist. Lossy on purpose: "Greatest Hits (Deluxe Edition)" won't match
   // "Greatest Hits" — admin can still click + Add and we'd get a dupe, but
   // that's the safer side of the trade-off.
-  const matchAlbum = (a: ScrapedArtistAlbum, artistName: string): AdminAlbum | null => {
+  const matchAlbum = (
+    a: ScrapedArtistAlbum,
+    artistName: string,
+  ): AdminAlbum | null => {
     const key = `${a.name}::${artistName}`.toLowerCase().trim();
     return (
       libraryAlbums.find(
@@ -1058,13 +1443,18 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
     );
   };
 
-  if (isLoading || !form) return <div className="p-6 text-slate-400">Loading…</div>;
+  if (isLoading || !form)
+    return <div className="p-6 text-slate-400">Loading…</div>;
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-4 max-w-2xl">
       <div className="flex items-center gap-4">
         {form.photoUrl ? (
-          <img src={form.photoUrl} alt="" className="w-16 h-16 rounded-full object-cover" />
+          <img
+            src={form.photoUrl}
+            alt=""
+            className="w-16 h-16 rounded-full object-cover"
+          />
         ) : (
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-semibold text-white"
@@ -1074,7 +1464,12 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
           </div>
         )}
         <div className="min-w-0">
-          <h2 className="text-slate-900 text-xl font-semibold truncate" data-testid="text-person-heading">{form.name || "Untitled person"}</h2>
+          <h2
+            className="text-slate-900 text-xl font-semibold truncate"
+            data-testid="text-person-heading"
+          >
+            {form.name || "Untitled person"}
+          </h2>
           <p className="text-slate-400 text-xs font-mono">{form.id}</p>
         </div>
       </div>
@@ -1083,7 +1478,10 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
         onPrefill={(r) => {
           update({
             // Never clobber a non-empty existing value
-            name: form.name && form.name !== "New person" ? form.name : (r.name || form.name),
+            name:
+              form.name && form.name !== "New person"
+                ? form.name
+                : r.name || form.name,
             photoUrl: form.photoUrl || r.photoUrl,
             bio: form.bio || r.bio,
             appleMusicUrl: r.appleMusicUrl || form.appleMusicUrl,
@@ -1095,14 +1493,33 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
       />
 
       <Field label="Name">
-        <input value={form.name} onChange={(e) => update({ name: e.target.value })} className={inputCls} data-testid="input-person-name" />
+        <input
+          value={form.name}
+          onChange={(e) => update({ name: e.target.value })}
+          className={inputCls}
+          data-testid="input-person-name"
+        />
       </Field>
       <Field label="Photo URL">
-        <input value={form.photoUrl ?? ""} onChange={(e) => update({ photoUrl: e.target.value || null })} className={inputCls} data-testid="input-person-photo" />
-        <p className="text-[11px] text-slate-400 mt-1">Square, displayed as a circle. 400×400 px minimum (800×800 for retina). JPG or PNG.</p>
+        <input
+          value={form.photoUrl ?? ""}
+          onChange={(e) => update({ photoUrl: e.target.value || null })}
+          className={inputCls}
+          data-testid="input-person-photo"
+        />
+        <p className="text-[11px] text-slate-400 mt-1">
+          Square, displayed as a circle. 400×400 px minimum (800×800 for
+          retina). JPG or PNG.
+        </p>
       </Field>
       <Field label="Bio">
-        <textarea value={form.bio ?? ""} onChange={(e) => update({ bio: e.target.value || null })} rows={4} className={inputCls + " resize-none"} data-testid="input-person-bio" />
+        <textarea
+          value={form.bio ?? ""}
+          onChange={(e) => update({ bio: e.target.value || null })}
+          rows={4}
+          className={inputCls + " resize-none"}
+          data-testid="input-person-bio"
+        />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
@@ -1126,7 +1543,8 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
         </Field>
       </div>
       <p className="text-[11px] text-slate-400 -mt-2">
-        After the in-app preview window, fans get "Listen on Apple Music / Spotify" buttons that point here.
+        After the in-app preview window, fans get "Listen on Apple Music /
+        Spotify" buttons that point here.
       </p>
 
       {/* Socials — rendered alongside Apple/Spotify as small circular icons
@@ -1192,7 +1610,13 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
 
       <Field label="Accent colour (hex, falls back to brand blue)">
         <div className="flex items-center gap-2">
-          <input value={form.accent ?? ""} onChange={(e) => update({ accent: e.target.value || null })} placeholder="#319ED8" className={inputCls} data-testid="input-person-accent" />
+          <input
+            value={form.accent ?? ""}
+            onChange={(e) => update({ accent: e.target.value || null })}
+            placeholder="#319ED8"
+            className={inputCls}
+            data-testid="input-person-accent"
+          />
           {["#319ED8", "#7F10A7", "#4AFFCA", "#FF5470"].map((c) => (
             <button
               key={c}
@@ -1209,7 +1633,10 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
       <div className="flex items-center justify-between pt-4 border-t border-slate-200">
         <button
           type="button"
-          onClick={() => { if (confirm(`Delete ${form.name}? This cannot be undone.`)) del.mutate(); }}
+          onClick={() => {
+            if (confirm(`Delete ${form.name}? This cannot be undone.`))
+              del.mutate();
+          }}
           className="text-red-600 hover:bg-red-50 px-3 py-2 text-sm rounded"
           data-testid="button-delete-person"
         >
@@ -1227,15 +1654,21 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
       </div>
 
       {discography.length > 0 && (
-        <div className="pt-4 border-t border-slate-200 space-y-2" data-testid="section-discography">
+        <div
+          className="pt-4 border-t border-slate-200 space-y-2"
+          data-testid="section-discography"
+        >
           <div className="flex items-center justify-between">
-            <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">Discography</h3>
+            <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+              Discography
+            </h3>
             <span className="text-[11px] text-slate-400">
               {discography.length} from Apple Music · newest first
             </span>
           </div>
           <p className="text-[11px] text-slate-400">
-            One-click adds an album to GoodTunes with real artwork + the Apple Music handoff URL. Track-by-track import and Spotify URLs come next.
+            One-click adds an album to GoodTunes with real artwork + the Apple
+            Music handoff URL. Track-by-track import and Spotify URLs come next.
           </p>
           <div className="divide-y divide-slate-100">
             {discography.map((a) => (
@@ -1244,7 +1677,9 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
                 album={a}
                 artistName={form.name}
                 match={matchAlbum(a, form.name)}
-                onAdded={() => { /* match recomputes after invalidation refetches /api/albums */ }}
+                onAdded={() => {
+                  /* match recomputes after invalidation refetches /api/albums */
+                }}
               />
             ))}
           </div>
@@ -1271,19 +1706,30 @@ function ScrapeBar({
     specs: Record<string, string>;
     price: string | null;
     photoUrl: string | null;
-    vendor: { name: string; affiliateUrl: string; aboutUrl: string; logoUrl: string; domain: string; known: boolean };
+    vendor: {
+      name: string;
+      affiliateUrl: string;
+      aboutUrl: string;
+      logoUrl: string;
+      domain: string;
+      known: boolean;
+    };
   }) => Promise<{ ok: boolean; warn?: string } | void>;
 }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
+    null,
+  );
   async function go() {
     const u = url.trim();
     if (!u) return;
     setBusy(true);
     setMsg(null);
     try {
-      const res = await apiRequest("POST", "/api/admin/instruments/scrape", { url: u });
+      const res = await apiRequest("POST", "/api/admin/instruments/scrape", {
+        url: u,
+      });
       const data = await res.json();
       const r = await onPrefill(data);
       const base = data.vendor?.known
@@ -1304,7 +1750,12 @@ function ScrapeBar({
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); go(); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              go();
+            }
+          }}
           placeholder="Paste a product URL — Carter Vintage, Reverb, Gibson, Martin, Sweetwater…"
           className={inputCls + " flex-1"}
           disabled={busy}
@@ -1321,7 +1772,8 @@ function ScrapeBar({
         </button>
       </div>
       <p className="text-[11px] text-slate-400">
-        Reads the page's Open Graph + product metadata and rehosts the hero image. Most modern shops work without an account.
+        Reads the page's Open Graph + product metadata and rehosts the hero
+        image. Most modern shops work without an account.
       </p>
       {msg && (
         <p
@@ -1335,30 +1787,53 @@ function ScrapeBar({
   );
 }
 
-function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; onDeleted: () => void }) {
+function InstrumentEditor({
+  instrumentId,
+  onDeleted,
+}: {
+  instrumentId: string;
+  onDeleted: () => void;
+}) {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery<AdminInstrument>({ queryKey: ["/api/instruments", instrumentId] });
+  const { data, isLoading } = useQuery<AdminInstrument>({
+    queryKey: ["/api/instruments", instrumentId],
+  });
   const [form, setForm] = useState<AdminInstrument | null>(null);
   const [dirty, setDirty] = useState(false);
   useEffect(() => {
-    if (data) { setForm(data); setDirty(false); }
+    if (data) {
+      setForm(data);
+      setDirty(false);
+    }
   }, [data?.id]);
 
-  const update = (patch: Partial<AdminInstrument>) => { setForm((f) => (f ? { ...f, ...patch } : f)); setDirty(true); };
+  const update = (patch: Partial<AdminInstrument>) => {
+    setForm((f) => (f ? { ...f, ...patch } : f));
+    setDirty(true);
+  };
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/instruments", instrumentId] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/instruments", instrumentId],
+    });
   };
 
   const save = useMutation({
     mutationFn: async () => {
       if (!form) return;
       const { vendors, ...rest } = form;
-      const res = await apiRequest("PUT", `/api/admin/instruments/${instrumentId}`, rest);
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/instruments/${instrumentId}`,
+        rest,
+      );
       return res.json();
     },
-    onSuccess: () => { invalidate(); setDirty(false); },
+    onSuccess: () => {
+      invalidate();
+      setDirty(false);
+    },
   });
 
   const del = useMutation({
@@ -1368,35 +1843,55 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
     onSuccess: async () => {
       // See PersonEditor.del — refetch before clearing selection.
       await queryClient.refetchQueries({ queryKey: ["/api/instruments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/instruments", instrumentId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/instruments", instrumentId],
+      });
       onDeleted();
     },
   });
 
   const addVendor = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/admin/instruments/${instrumentId}/vendors`, {
-        name: "New vendor",
-        affiliateUrl: "https://",
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/instruments/${instrumentId}/vendors`,
+        {
+          name: "New vendor",
+          affiliateUrl: "https://",
+        },
+      );
       return res.json();
     },
     onSuccess: () => invalidate(),
   });
 
-  if (isLoading || !form) return <div className="p-6 text-slate-400">Loading…</div>;
+  if (isLoading || !form)
+    return <div className="p-6 text-slate-400">Loading…</div>;
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-4 max-w-2xl">
       <div className="flex items-center gap-4">
         {form.photoUrl ? (
-          <img src={form.photoUrl} alt="" className="w-20 h-20 rounded-lg object-cover" />
+          <img
+            src={form.photoUrl}
+            alt=""
+            className="w-20 h-20 rounded-lg object-cover"
+          />
         ) : (
-          <div className="w-20 h-20 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-300 text-xs">No photo</div>
+          <div className="w-20 h-20 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-300 text-xs">
+            No photo
+          </div>
         )}
         <div className="min-w-0">
-          <h2 className="text-slate-900 text-xl font-semibold truncate" data-testid="text-instrument-heading">{form.name || "Untitled instrument"}</h2>
-          <p className="text-slate-400 text-xs">{form.category || "Uncategorised"}</p>
+          <h2
+            className="text-slate-900 text-xl font-semibold truncate"
+            data-testid="text-instrument-heading"
+          >
+            {form.name || "Untitled instrument"}
+          </h2>
+          <p className="text-slate-400 text-xs">
+            {form.category || "Uncategorised"}
+          </p>
           <p className="text-slate-300 text-xs font-mono">{form.id}</p>
         </div>
       </div>
@@ -1406,8 +1901,12 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           // The admin explicitly clicked Pull — overwrite the standard
           // "New instrument" placeholders without ceremony. Only preserve
           // values that look custom (i.e. not the new-record defaults).
-          const isDefaultName = !form.name || form.name === "New instrument" || form.name.toLowerCase().startsWith("untitled");
-          const isDefaultCategory = !form.category || form.category === "Guitar";
+          const isDefaultName =
+            !form.name ||
+            form.name === "New instrument" ||
+            form.name.toLowerCase().startsWith("untitled");
+          const isDefaultCategory =
+            !form.category || form.category === "Guitar";
 
           // Compose the best possible Name from whatever we extracted.
           // Preferred shape (matches the editor's "year + maker + model"
@@ -1417,7 +1916,9 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           const specs = r.specs || {};
           const pickSpec = (...keys: string[]): string | null => {
             for (const k of keys) {
-              const hit = Object.keys(specs).find((sk) => sk.toLowerCase() === k.toLowerCase());
+              const hit = Object.keys(specs).find(
+                (sk) => sk.toLowerCase() === k.toLowerCase(),
+              );
               if (hit && specs[hit]) return specs[hit];
             }
             return null;
@@ -1431,9 +1932,11 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           if (brand) parts.push(brand);
           if (model) parts.push(model);
           let composedName = parts.join(" ").trim();
-          if (finish && composedName) composedName = `${composedName} — ${finish}`;
+          if (finish && composedName)
+            composedName = `${composedName} — ${finish}`;
           // Fallbacks: brand + product.name, then product.name alone.
-          if (!composedName) composedName = [r.brand, r.name].filter(Boolean).join(" ").trim();
+          if (!composedName)
+            composedName = [r.brand, r.name].filter(Boolean).join(" ").trim();
           if (!composedName) composedName = r.name || "";
 
           const merged: Partial<AdminInstrument> = {};
@@ -1449,16 +1952,35 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           // matter for credits — the page may have 40 rows of marketing.
           if (!form.about) {
             const specOrder = [
-              "Instrument", "Brand", "Model", "Finish", "Made In Year", "Year",
-              "Top", "Back and Sides", "Neck/Fingerboard", "Bridge Material",
-              "Tuners", "Radius", "Neck Profile", "Neck Depth",
-              "Scale Length", "Nut Width", "String Spacing at Saddle",
-              "Electronics", "Pickups", "Case", "SKU", "Handedness",
+              "Instrument",
+              "Brand",
+              "Model",
+              "Finish",
+              "Made In Year",
+              "Year",
+              "Top",
+              "Back and Sides",
+              "Neck/Fingerboard",
+              "Bridge Material",
+              "Tuners",
+              "Radius",
+              "Neck Profile",
+              "Neck Depth",
+              "Scale Length",
+              "Nut Width",
+              "String Spacing at Saddle",
+              "Electronics",
+              "Pickups",
+              "Case",
+              "SKU",
+              "Handedness",
             ];
             const seen = new Set<string>();
             const lines: string[] = [];
             for (const key of specOrder) {
-              const hit = Object.keys(specs).find((sk) => sk.toLowerCase() === key.toLowerCase());
+              const hit = Object.keys(specs).find(
+                (sk) => sk.toLowerCase() === key.toLowerCase(),
+              );
               if (hit && !seen.has(hit.toLowerCase())) {
                 lines.push(`${hit}: ${specs[hit]}`);
                 seen.add(hit.toLowerCase());
@@ -1482,9 +2004,15 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           // the instrument, skip the create — protects against accidental
           // double-pulls and re-pulls after a manual edit.
           const existing = (form.vendors || []).some(
-            (v) => (v.affiliateUrl || "").toLowerCase() === r.vendor.affiliateUrl.toLowerCase(),
+            (v) =>
+              (v.affiliateUrl || "").toLowerCase() ===
+              r.vendor.affiliateUrl.toLowerCase(),
           );
-          if (existing) return { ok: true, warn: "(Vendor already on this instrument — skipped.)" };
+          if (existing)
+            return {
+              ok: true,
+              warn: "(Vendor already on this instrument — skipped.)",
+            };
 
           // Create the vendor row server-side, then splice it into local
           // form state directly. invalidate() alone is not enough because
@@ -1492,48 +2020,97 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
           // id changes — that's why the previous attempt showed "Vendors (0)"
           // even though the POST succeeded.
           try {
-            const res = await apiRequest("POST", `/api/admin/instruments/${instrumentId}/vendors`, {
-              name: r.vendor.name,
-              affiliateUrl: r.vendor.affiliateUrl,
-              aboutUrl: r.vendor.aboutUrl,
-              logoUrl: r.vendor.logoUrl,
-            });
+            const res = await apiRequest(
+              "POST",
+              `/api/admin/instruments/${instrumentId}/vendors`,
+              {
+                name: r.vendor.name,
+                affiliateUrl: r.vendor.affiliateUrl,
+                aboutUrl: r.vendor.aboutUrl,
+                logoUrl: r.vendor.logoUrl,
+              },
+            );
             const newVendor = await res.json();
-            setForm((f) => (f ? { ...f, vendors: [...(f.vendors || []), newVendor] } : f));
+            setForm((f) =>
+              f ? { ...f, vendors: [...(f.vendors || []), newVendor] } : f,
+            );
             invalidate();
             return { ok: true };
           } catch (e: any) {
-            return { ok: false, warn: `(Vendor row not added: ${e?.message || "save failed"})` };
+            return {
+              ok: false,
+              warn: `(Vendor row not added: ${e?.message || "save failed"})`,
+            };
           }
         }}
       />
 
       <Field label="Name (year + maker + model)">
-        <input value={form.name} onChange={(e) => update({ name: e.target.value })} className={inputCls} data-testid="input-instrument-name" />
+        <input
+          value={form.name}
+          onChange={(e) => update({ name: e.target.value })}
+          className={inputCls}
+          data-testid="input-instrument-name"
+        />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Category">
-          <input value={form.category} onChange={(e) => update({ category: e.target.value })} placeholder="Acoustic Guitar" className={inputCls} data-testid="input-instrument-category" />
+          <input
+            value={form.category}
+            onChange={(e) => update({ category: e.target.value })}
+            placeholder="Acoustic Guitar"
+            className={inputCls}
+            data-testid="input-instrument-category"
+          />
         </Field>
         <Field label="Short category (shown inline)">
-          <input value={form.shortCategory ?? ""} onChange={(e) => update({ shortCategory: e.target.value || null })} placeholder="Guitar" className={inputCls} data-testid="input-instrument-short-category" />
+          <input
+            value={form.shortCategory ?? ""}
+            onChange={(e) => update({ shortCategory: e.target.value || null })}
+            placeholder="Guitar"
+            className={inputCls}
+            data-testid="input-instrument-short-category"
+          />
         </Field>
       </div>
       <Field label="Photo URL">
-        <input value={form.photoUrl ?? ""} onChange={(e) => update({ photoUrl: e.target.value || null })} className={inputCls} data-testid="input-instrument-photo" />
-        <p className="text-[11px] text-slate-400 mt-1">Square. 800×800 px recommended (1600×1600 for retina). JPG or PNG. Plain or neutral background reads best.</p>
+        <input
+          value={form.photoUrl ?? ""}
+          onChange={(e) => update({ photoUrl: e.target.value || null })}
+          className={inputCls}
+          data-testid="input-instrument-photo"
+        />
+        <p className="text-[11px] text-slate-400 mt-1">
+          Square. 800×800 px recommended (1600×1600 for retina). JPG or PNG.
+          Plain or neutral background reads best.
+        </p>
       </Field>
       <Field label="About (neutral: history, model facts)">
-        <textarea value={form.about ?? ""} onChange={(e) => update({ about: e.target.value || null })} rows={3} className={inputCls + " resize-none"} data-testid="input-instrument-about" />
+        <textarea
+          value={form.about ?? ""}
+          onChange={(e) => update({ about: e.target.value || null })}
+          rows={3}
+          className={inputCls + " resize-none"}
+          data-testid="input-instrument-about"
+        />
       </Field>
       <Field label="Artist note (why this artist chose THIS instrument)">
-        <textarea value={form.artistNote ?? ""} onChange={(e) => update({ artistNote: e.target.value || null })} rows={3} className={inputCls + " resize-none"} data-testid="input-instrument-artist-note" />
+        <textarea
+          value={form.artistNote ?? ""}
+          onChange={(e) => update({ artistNote: e.target.value || null })}
+          rows={3}
+          className={inputCls + " resize-none"}
+          data-testid="input-instrument-artist-note"
+        />
       </Field>
 
       <div className="flex items-center justify-between pt-2 border-t border-slate-200">
         <button
           type="button"
-          onClick={() => { if (confirm(`Delete ${form.name}? Vendors will be removed too.`)) del.mutate(); }}
+          onClick={() => {
+            if (confirm(`Delete ${form.name}? Vendors will be removed too.`))
+              del.mutate();
+          }}
           className="text-red-600 hover:bg-red-50 px-3 py-2 text-sm rounded"
           data-testid="button-delete-instrument"
         >
@@ -1553,7 +2130,12 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
       {/* Vendors */}
       <div className="pt-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-slate-900 text-sm font-semibold">Vendors <span className="text-slate-400 font-normal">({form.vendors.length})</span></h3>
+          <h3 className="text-slate-900 text-sm font-semibold">
+            Vendors{" "}
+            <span className="text-slate-400 font-normal">
+              ({form.vendors.length})
+            </span>
+          </h3>
           <button
             type="button"
             onClick={() => addVendor.mutate()}
@@ -1569,7 +2151,10 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
             <VendorRow key={v.id} vendor={v} onChanged={invalidate} />
           ))}
           {form.vendors.length === 0 && (
-            <p className="text-slate-400 text-sm py-3">No vendors yet. Affiliate links surface here in the in-app instrument sheet.</p>
+            <p className="text-slate-400 text-sm py-3">
+              No vendors yet. Affiliate links surface here in the in-app
+              instrument sheet.
+            </p>
           )}
         </div>
       </div>
@@ -1577,21 +2162,38 @@ function InstrumentEditor({ instrumentId, onDeleted }: { instrumentId: string; o
   );
 }
 
-function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () => void }) {
+function VendorRow({
+  vendor,
+  onChanged,
+}: {
+  vendor: AdminVendor;
+  onChanged: () => void;
+}) {
   const [draft, setDraft] = useState(vendor);
   const [open, setOpen] = useState(false);
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(vendor), [draft, vendor]);
-  useEffect(() => { setDraft(vendor); }, [vendor.id]);
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(vendor),
+    [draft, vendor],
+  );
+  useEffect(() => {
+    setDraft(vendor);
+  }, [vendor.id]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PUT", `/api/admin/vendors/${vendor.id}`, draft);
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/vendors/${vendor.id}`,
+        draft,
+      );
       return res.json();
     },
     onSuccess: onChanged,
   });
   const del = useMutation({
-    mutationFn: async () => { await apiRequest("DELETE", `/api/admin/vendors/${vendor.id}`); },
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/vendors/${vendor.id}`);
+    },
     onSuccess: onChanged,
   });
 
@@ -1601,28 +2203,61 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
     try {
       const u = new URL(draft.affiliateUrl);
       return `https://www.google.com/s2/favicons?sz=128&domain=${u.hostname}`;
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
   }, [draft.logoUrl, draft.affiliateUrl]);
 
   const pulledAgo = relativeTime(vendor.createdAt);
 
   return (
     <div className="rounded-md border border-slate-200 bg-white">
-      <div className={`w-full pl-3 pr-2 py-2 flex items-center gap-3 hover:bg-slate-50 ${draft.isHidden ? "opacity-50" : ""}`}>
-        <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-3 text-left flex-1 min-w-0" data-testid={`row-vendor-${vendor.id}`}>
-          {logoFallback ? <img src={logoFallback} alt="" className="w-8 h-8 rounded bg-slate-50 object-contain" /> : <div className="w-8 h-8 rounded bg-slate-100" />}
+      <div
+        className={`w-full pl-3 pr-2 py-2 flex items-center gap-3 hover:bg-slate-50 ${draft.isHidden ? "opacity-50" : ""}`}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-3 text-left flex-1 min-w-0"
+          data-testid={`row-vendor-${vendor.id}`}
+        >
+          {logoFallback ? (
+            <img
+              src={logoFallback}
+              alt=""
+              className="w-8 h-8 rounded bg-slate-50 object-contain"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded bg-slate-100" />
+          )}
           <div className="min-w-0 flex-1">
-            <div className="text-slate-900 text-sm truncate">{draft.name || "Untitled vendor"}</div>
-            <div className="text-slate-400 text-xs truncate">{draft.affiliateUrl}</div>
+            <div className="text-slate-900 text-sm truncate">
+              {draft.name || "Untitled vendor"}
+            </div>
+            <div className="text-slate-400 text-xs truncate">
+              {draft.affiliateUrl}
+            </div>
           </div>
-          {pulledAgo && <span className="text-[11px] text-slate-300 shrink-0 hidden sm:inline">Pulled {pulledAgo}</span>}
-          {draft.isHidden && <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">Hidden</span>}
+          {pulledAgo && (
+            <span className="text-[11px] text-slate-300 shrink-0 hidden sm:inline">
+              Pulled {pulledAgo}
+            </span>
+          )}
+          {draft.isHidden && (
+            <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">
+              Hidden
+            </span>
+          )}
           <span className="text-slate-400 text-xs">{open ? "▾" : "▸"}</span>
         </button>
         {/* Inline remove — saves a click vs. expanding the row first. */}
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${draft.name || "this vendor"}"?`)) del.mutate(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirm(`Remove "${draft.name || "this vendor"}"?`))
+              del.mutate();
+          }}
           className="shrink-0 w-7 h-7 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-base leading-none"
           title="Remove vendor"
           aria-label="Remove vendor"
@@ -1634,34 +2269,94 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
       {open && (
         <div className="px-3 pb-3 pt-1 space-y-2 border-t border-slate-200">
           <Field label="Vendor name">
-            <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={inputCls} data-testid={`input-vendor-name-${vendor.id}`} />
+            <input
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              className={inputCls}
+              data-testid={`input-vendor-name-${vendor.id}`}
+            />
           </Field>
           <Field label="Affiliate / product URL (where the buy button goes)">
-            <input value={draft.affiliateUrl} onChange={(e) => setDraft({ ...draft, affiliateUrl: e.target.value })} className={inputCls} data-testid={`input-vendor-affiliate-${vendor.id}`} />
+            <input
+              value={draft.affiliateUrl}
+              onChange={(e) =>
+                setDraft({ ...draft, affiliateUrl: e.target.value })
+              }
+              className={inputCls}
+              data-testid={`input-vendor-affiliate-${vendor.id}`}
+            />
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="About URL (homepage)">
-              <input value={draft.aboutUrl ?? ""} onChange={(e) => setDraft({ ...draft, aboutUrl: e.target.value || null })} className={inputCls} data-testid={`input-vendor-about-${vendor.id}`} />
+              <input
+                value={draft.aboutUrl ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, aboutUrl: e.target.value || null })
+                }
+                className={inputCls}
+                data-testid={`input-vendor-about-${vendor.id}`}
+              />
             </Field>
             <Field label="Logo URL (else favicon)">
-              <input value={draft.logoUrl ?? ""} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value || null })} className={inputCls} data-testid={`input-vendor-logo-${vendor.id}`} />
-              <p className="text-[11px] text-slate-400 mt-1">Square. 200×200 px min (400×400 retina). Transparent PNG or SVG.</p>
+              <input
+                value={draft.logoUrl ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, logoUrl: e.target.value || null })
+                }
+                className={inputCls}
+                data-testid={`input-vendor-logo-${vendor.id}`}
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Square. 200×200 px min (400×400 retina). Transparent PNG or SVG.
+              </p>
             </Field>
           </div>
           <Field label="Tagline (one-liner)">
-            <input value={draft.tagline ?? ""} onChange={(e) => setDraft({ ...draft, tagline: e.target.value || null })} className={inputCls} data-testid={`input-vendor-tagline-${vendor.id}`} />
+            <input
+              value={draft.tagline ?? ""}
+              onChange={(e) =>
+                setDraft({ ...draft, tagline: e.target.value || null })
+              }
+              className={inputCls}
+              data-testid={`input-vendor-tagline-${vendor.id}`}
+            />
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Location">
-              <input value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value || null })} placeholder="Nashville, TN" className={inputCls} data-testid={`input-vendor-location-${vendor.id}`} />
+              <input
+                value={draft.location ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, location: e.target.value || null })
+                }
+                placeholder="Nashville, TN"
+                className={inputCls}
+                data-testid={`input-vendor-location-${vendor.id}`}
+              />
             </Field>
             <Field label="Cover URL (hero photo)">
-              <input value={draft.coverUrl ?? ""} onChange={(e) => setDraft({ ...draft, coverUrl: e.target.value || null })} className={inputCls} data-testid={`input-vendor-cover-${vendor.id}`} />
-              <p className="text-[11px] text-slate-400 mt-1">Wide hero. 1200×400 px recommended (2400×800 retina). JPG.</p>
+              <input
+                value={draft.coverUrl ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, coverUrl: e.target.value || null })
+                }
+                className={inputCls}
+                data-testid={`input-vendor-cover-${vendor.id}`}
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Wide hero. 1200×400 px recommended (2400×800 retina). JPG.
+              </p>
             </Field>
           </div>
           <Field label="Bio (longer About copy)">
-            <textarea value={draft.bio ?? ""} onChange={(e) => setDraft({ ...draft, bio: e.target.value || null })} rows={3} className={inputCls + " resize-none"} data-testid={`input-vendor-bio-${vendor.id}`} />
+            <textarea
+              value={draft.bio ?? ""}
+              onChange={(e) =>
+                setDraft({ ...draft, bio: e.target.value || null })
+              }
+              rows={3}
+              className={inputCls + " resize-none"}
+              data-testid={`input-vendor-bio-${vendor.id}`}
+            />
           </Field>
           <div className="flex items-center justify-end gap-2 pt-1">
             {/* Demo hide toggle — rides the same Save button via the dirty flag. */}
@@ -1673,13 +2368,34 @@ function VendorRow({ vendor, onChanged }: { vendor: AdminVendor; onChanged: () =
                   ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
                   : "border-slate-200 text-slate-600 hover:bg-slate-50"
               } mr-auto`}
-              title={draft.isHidden ? "Hidden from fans. Click to show." : "Visible to fans. Click to hide."}
+              title={
+                draft.isHidden
+                  ? "Hidden from fans. Click to show."
+                  : "Visible to fans. Click to hide."
+              }
               data-testid={`button-toggle-vendor-hidden-${vendor.id}`}
             >
               {draft.isHidden ? "Hidden" : "Visible"}
             </button>
-            <button type="button" onClick={() => { if (confirm("Delete this vendor?")) del.mutate(); }} className="px-3 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded" data-testid={`button-delete-vendor-${vendor.id}`}>Delete</button>
-            <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="px-3 py-1 text-[12px] rounded bg-[#319ED8] text-white disabled:opacity-40" data-testid={`button-save-vendor-${vendor.id}`}>Save</button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Delete this vendor?")) del.mutate();
+              }}
+              className="px-3 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded"
+              data-testid={`button-delete-vendor-${vendor.id}`}
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              disabled={!dirty || save.isPending}
+              onClick={() => save.mutate()}
+              className="px-3 py-1 text-[12px] rounded bg-[#319ED8] text-white disabled:opacity-40"
+              data-testid={`button-save-vendor-${vendor.id}`}
+            >
+              Save
+            </button>
           </div>
         </div>
       )}
@@ -1702,24 +2418,40 @@ function VendorPaneEditor({
 }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<AdminVendor>(vendor);
-  useEffect(() => { setDraft(vendor); }, [vendor.id]);
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(vendor), [draft, vendor]);
+  useEffect(() => {
+    setDraft(vendor);
+  }, [vendor.id]);
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(vendor),
+    [draft, vendor],
+  );
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/instruments", vendor.instrumentId] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/instruments", vendor.instrumentId],
+    });
   };
 
   const save = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PUT", `/api/admin/vendors/${vendor.id}`, draft);
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/vendors/${vendor.id}`,
+        draft,
+      );
       return res.json();
     },
     onSuccess: invalidate,
   });
   const del = useMutation({
-    mutationFn: async () => { await apiRequest("DELETE", `/api/admin/vendors/${vendor.id}`); },
-    onSuccess: () => { invalidate(); onDeleted(); },
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/vendors/${vendor.id}`);
+    },
+    onSuccess: () => {
+      invalidate();
+      onDeleted();
+    },
   });
 
   const logoFallback = useMemo(() => {
@@ -1727,19 +2459,28 @@ function VendorPaneEditor({
     try {
       const u = new URL(draft.affiliateUrl);
       return `https://www.google.com/s2/favicons?sz=128&domain=${u.hostname}`;
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
   }, [draft.logoUrl, draft.affiliateUrl]);
 
   return (
     <div className="h-full overflow-y-auto">
       <div className="px-6 py-5 border-b border-slate-200 flex items-center gap-4">
         {logoFallback ? (
-          <img src={logoFallback} alt="" className="w-14 h-14 rounded bg-slate-50 object-contain shrink-0 border border-slate-200" />
+          <img
+            src={logoFallback}
+            alt=""
+            className="w-14 h-14 rounded bg-slate-50 object-contain shrink-0 border border-slate-200"
+          />
         ) : (
           <div className="w-14 h-14 rounded bg-slate-100 shrink-0" />
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="text-slate-900 text-lg font-semibold truncate" data-testid="text-vendor-title">
+          <h1
+            className="text-slate-900 text-lg font-semibold truncate"
+            data-testid="text-vendor-title"
+          >
             {draft.name || "Untitled vendor"}
           </h1>
           <button
@@ -1759,7 +2500,11 @@ function VendorPaneEditor({
               ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
               : "border-slate-200 text-slate-600 hover:bg-slate-50"
           }`}
-          title={draft.isHidden ? "Hidden from fans. Click to show." : "Visible to fans. Click to hide."}
+          title={
+            draft.isHidden
+              ? "Hidden from fans. Click to show."
+              : "Visible to fans. Click to hide."
+          }
           data-testid="button-toggle-vendor-visible"
         >
           {draft.isHidden ? "Hidden" : "Visible"}
@@ -1768,19 +2513,53 @@ function VendorPaneEditor({
 
       <div className="px-6 py-5 space-y-3 max-w-2xl">
         <Field label="Vendor name">
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={inputCls} data-testid="input-vendor-pane-name" />
+          <input
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            className={inputCls}
+            data-testid="input-vendor-pane-name"
+          />
         </Field>
         <Field label="Affiliate / product URL (where the buy button goes)">
-          <input value={draft.affiliateUrl} onChange={(e) => setDraft({ ...draft, affiliateUrl: e.target.value })} className={inputCls} data-testid="input-vendor-pane-affiliate" />
+          <input
+            value={draft.affiliateUrl}
+            onChange={(e) =>
+              setDraft({ ...draft, affiliateUrl: e.target.value })
+            }
+            className={inputCls}
+            data-testid="input-vendor-pane-affiliate"
+          />
         </Field>
         <Field label="About URL (homepage)">
-          <input value={draft.aboutUrl ?? ""} onChange={(e) => setDraft({ ...draft, aboutUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-about" />
+          <input
+            value={draft.aboutUrl ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, aboutUrl: e.target.value || null })
+            }
+            className={inputCls}
+            data-testid="input-vendor-pane-about"
+          />
         </Field>
         <Field label="Tagline (one-liner)">
-          <input value={draft.tagline ?? ""} onChange={(e) => setDraft({ ...draft, tagline: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-tagline" />
+          <input
+            value={draft.tagline ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, tagline: e.target.value || null })
+            }
+            className={inputCls}
+            data-testid="input-vendor-pane-tagline"
+          />
         </Field>
         <Field label="Location">
-          <input value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value || null })} placeholder="Nashville, TN" className={inputCls} data-testid="input-vendor-pane-location" />
+          <input
+            value={draft.location ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, location: e.target.value || null })
+            }
+            placeholder="Nashville, TN"
+            className={inputCls}
+            data-testid="input-vendor-pane-location"
+          />
         </Field>
 
         {/* Logo + cover both go through ArtworkPicker so admins can paste a
@@ -1805,14 +2584,24 @@ function VendorPaneEditor({
           />
         </Field>
         <Field label="Bio (short paragraph)">
-          <textarea value={draft.bio ?? ""} onChange={(e) => setDraft({ ...draft, bio: e.target.value || null })} className={`${inputCls} min-h-[100px]`} data-testid="input-vendor-pane-bio" />
+          <textarea
+            value={draft.bio ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, bio: e.target.value || null })
+            }
+            className={`${inputCls} min-h-[100px]`}
+            data-testid="input-vendor-pane-bio"
+          />
         </Field>
       </div>
 
       <div className="px-6 py-4 border-t border-slate-200 flex items-center gap-3 sticky bottom-0 bg-white">
         <button
           type="button"
-          onClick={() => { if (confirm(`Delete "${draft.name || "this vendor"}"?`)) del.mutate(); }}
+          onClick={() => {
+            if (confirm(`Delete "${draft.name || "this vendor"}"?`))
+              del.mutate();
+          }}
           className="px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 rounded mr-auto"
           data-testid="button-delete-vendor-pane"
         >
@@ -1837,7 +2626,9 @@ function VendorPaneEditor({
 // instrument record (same query key as the editor — TanStack dedupes the
 // fetch) so prefilled fields appear here moments after the scrape.
 function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
-  const { data } = useQuery<AdminInstrument>({ queryKey: ["/api/instruments", instrumentId] });
+  const { data } = useQuery<AdminInstrument>({
+    queryKey: ["/api/instruments", instrumentId],
+  });
   return (
     <>
       <div
@@ -1847,78 +2638,202 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
           height: 760,
           background: "#00062B",
           padding: 10,
-          boxShadow: "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+          boxShadow:
+            "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
         }}
         data-testid="preview-instrument"
       >
         <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
           {/* Mock status bar */}
-          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium" style={{ color: "#ffffff" }}>
+          <div
+            className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium"
+            style={{ color: "#ffffff" }}
+          >
             <span>9:41</span>
             <span>● ● ●</span>
           </div>
           {/* Sheet chrome — back chevron + share/bookmark hints */}
           <div className="flex-shrink-0 flex items-center justify-between px-3 pb-2">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.10)", color: "#ffffff" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(255,255,255,0.10)", color: "#ffffff" }}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full" style={{ background: "rgba(255,255,255,0.10)" }} />
-              <div className="w-9 h-9 rounded-full" style={{ background: "rgba(255,255,255,0.10)" }} />
+              <div
+                className="w-9 h-9 rounded-full"
+                style={{ background: "rgba(255,255,255,0.10)" }}
+              />
+              <div
+                className="w-9 h-9 rounded-full"
+                style={{ background: "rgba(255,255,255,0.10)" }}
+              />
             </div>
           </div>
           {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto scrollbar-hide pb-6">
-            <div className="mx-5 mt-1 rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
+            <div
+              className="mx-5 mt-1 rounded-2xl overflow-hidden mb-4"
+              style={{
+                aspectRatio: "16 / 10",
+                background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)",
+              }}
+            >
               {data?.photoUrl ? (
-                <img src={data.photoUrl} alt={data.name} className="w-full h-full object-cover" />
+                <img
+                  src={data.photoUrl}
+                  alt={data.name}
+                  className="w-full h-full object-cover"
+                />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>No photo yet</div>
+                <div
+                  className="w-full h-full flex items-center justify-center text-xs"
+                  style={{ color: "rgba(255,255,255,0.4)" }}
+                >
+                  No photo yet
+                </div>
               )}
             </div>
             <div className="px-5 pb-3">
-              <p className="text-[11px] font-medium uppercase tracking-wider mb-1" style={{ color: "#4AFFCA" }}>{data?.shortCategory || data?.category || "Instrument"}</p>
-              <h2 className="text-[22px] font-bold leading-tight" style={{ color: "#ffffff" }}>{data?.name || "Untitled instrument"}</h2>
+              <p
+                className="text-[11px] font-medium uppercase tracking-wider mb-1"
+                style={{ color: "#4AFFCA" }}
+              >
+                {data?.shortCategory || data?.category || "Instrument"}
+              </p>
+              <h2
+                className="text-[22px] font-bold leading-tight"
+                style={{ color: "#ffffff" }}
+              >
+                {data?.name || "Untitled instrument"}
+              </h2>
             </div>
             {data?.about && (
               <div className="px-5 pb-4">
-                <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{ color: "rgba(255,255,255,0.85)" }}>{data.about}</p>
+                <p
+                  className="text-[12.5px] leading-relaxed whitespace-pre-wrap"
+                  style={{ color: "rgba(255,255,255,0.85)" }}
+                >
+                  {data.about}
+                </p>
               </div>
             )}
             {data?.artistNote && (
-              <div className="mx-5 mb-4 rounded-xl p-3" style={{ background: "rgba(74,255,202,0.08)", border: "1px solid rgba(74,255,202,0.18)" }}>
-                <p className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: "#4AFFCA" }}>Artist note</p>
-                <p className="text-[13px] leading-relaxed" style={{ color: "#ffffff" }}>{data.artistNote}</p>
+              <div
+                className="mx-5 mb-4 rounded-xl p-3"
+                style={{
+                  background: "rgba(74,255,202,0.08)",
+                  border: "1px solid rgba(74,255,202,0.18)",
+                }}
+              >
+                <p
+                  className="text-[10px] font-medium uppercase tracking-wider mb-1"
+                  style={{ color: "#4AFFCA" }}
+                >
+                  Artist note
+                </p>
+                <p
+                  className="text-[13px] leading-relaxed"
+                  style={{ color: "#ffffff" }}
+                >
+                  {data.artistNote}
+                </p>
               </div>
             )}
-            {data?.vendors && data.vendors.filter((v) => !v.isHidden).length > 0 && (
-              <div className="px-5 pb-3">
-                <p className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "rgba(255,255,255,0.55)" }}>Discover more / Buy</p>
-                <div className="space-y-2">
-                  {data.vendors.filter((v) => !v.isHidden).map((v) => {
-                    const logo = v.logoUrl || (() => {
-                      try { return `https://www.google.com/s2/favicons?sz=128&domain=${new URL(v.affiliateUrl).hostname}`; } catch { return ""; }
-                    })();
-                    let host = "";
-                    try { host = new URL(v.affiliateUrl).hostname.replace(/^www\./, ""); } catch { /* */ }
-                    return (
-                      <div key={v.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: "rgba(255,255,255,0.06)" }}>
-                        {logo ? <img src={logo} alt="" className="w-9 h-9 rounded object-contain" style={{ background: "rgba(255,255,255,0.10)" }} /> : <div className="w-9 h-9 rounded" style={{ background: "rgba(255,255,255,0.10)" }} />}
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[13px] font-medium truncate" style={{ color: "#ffffff" }}>{v.name}</div>
-                          <div className="text-[11px] truncate" style={{ color: "rgba(255,255,255,0.50)" }}>{v.tagline || host}</div>
-                        </div>
-                        <div className="text-[14px]" style={{ color: "rgba(255,255,255,0.45)" }}>›</div>
-                      </div>
-                    );
-                  })}
+            {data?.vendors &&
+              data.vendors.filter((v) => !v.isHidden).length > 0 && (
+                <div className="px-5 pb-3">
+                  <p
+                    className="text-[11px] font-medium uppercase tracking-wider mb-2"
+                    style={{ color: "rgba(255,255,255,0.55)" }}
+                  >
+                    Discover more / Buy
+                  </p>
+                  <div className="space-y-2">
+                    {data.vendors
+                      .filter((v) => !v.isHidden)
+                      .map((v) => {
+                        const logo =
+                          v.logoUrl ||
+                          (() => {
+                            try {
+                              return `https://www.google.com/s2/favicons?sz=128&domain=${new URL(v.affiliateUrl).hostname}`;
+                            } catch {
+                              return "";
+                            }
+                          })();
+                        let host = "";
+                        try {
+                          host = new URL(v.affiliateUrl).hostname.replace(
+                            /^www\./,
+                            "",
+                          );
+                        } catch {
+                          /* */
+                        }
+                        return (
+                          <div
+                            key={v.id}
+                            className="rounded-xl p-3 flex items-center gap-3"
+                            style={{ background: "rgba(255,255,255,0.06)" }}
+                          >
+                            {logo ? (
+                              <img
+                                src={logo}
+                                alt=""
+                                className="w-9 h-9 rounded object-contain"
+                                style={{ background: "rgba(255,255,255,0.10)" }}
+                              />
+                            ) : (
+                              <div
+                                className="w-9 h-9 rounded"
+                                style={{ background: "rgba(255,255,255,0.10)" }}
+                              />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div
+                                className="text-[13px] font-medium truncate"
+                                style={{ color: "#ffffff" }}
+                              >
+                                {v.name}
+                              </div>
+                              <div
+                                className="text-[11px] truncate"
+                                style={{ color: "rgba(255,255,255,0.50)" }}
+                              >
+                                {v.tagline || host}
+                              </div>
+                            </div>
+                            <div
+                              className="text-[14px]"
+                              style={{ color: "rgba(255,255,255,0.45)" }}
+                            >
+                              ›
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         </div>
       </div>
-      <p className="text-slate-300 text-xs mt-3">Preview of the in-app InstrumentSheet.</p>
+      <p className="text-slate-300 text-xs mt-3">
+        Preview of the in-app InstrumentSheet.
+      </p>
     </>
   );
 }
@@ -1930,12 +2845,13 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
 // Streaming links are previewed as the same pills we'll use post-window
 // when fans get punted to Apple Music / Spotify for the full catalog.
 function PersonPreviewCard({ person }: { person: AdminPerson }) {
-  const initials = person.name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("") || "•";
+  const initials =
+    person.name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? "")
+      .join("") || "•";
   const accent = person.accent || "#319ED8";
   return (
     <>
@@ -1946,7 +2862,8 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
           height: 760,
           background: "#00062B",
           padding: 10,
-          boxShadow: "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+          boxShadow:
+            "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
         }}
         data-testid="preview-person"
       >
@@ -1958,8 +2875,21 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
           </div>
           {/* Sheet chrome — close affordance, no back arrow on a fullscreen sheet */}
           <div className="flex-shrink-0 flex items-center justify-end px-3 pb-2">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white/70" style={{ background: "rgba(255,255,255,0.10)" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white/70"
+              style={{ background: "rgba(255,255,255,0.10)" }}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
             </div>
           </div>
 
@@ -1975,16 +2905,26 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
             ) : (
               <div
                 className="rounded-full flex items-center justify-center text-white font-semibold"
-                style={{ width: 112, height: 112, background: accent, fontSize: 42 }}
+                style={{
+                  width: 112,
+                  height: 112,
+                  background: accent,
+                  fontSize: 42,
+                }}
                 aria-hidden="true"
               >
                 {initials}
               </div>
             )}
-            <h2 className="text-white text-[24px] font-bold leading-tight mt-3" data-testid="text-preview-person-name">
+            <h2
+              className="text-white text-[24px] font-bold leading-tight mt-3"
+              data-testid="text-preview-person-name"
+            >
               {person.name || "Unnamed"}
             </h2>
-            <p className="text-white/70 text-[13px] mt-1">Tap from any song credit to land here</p>
+            <p className="text-white/70 text-[13px] mt-1">
+              Tap from any song credit to land here
+            </p>
           </div>
 
           {/* Bio — explicit white at 0.95 (not /75) because the dark navy
@@ -1992,7 +2932,9 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
               listening :)" became unreadable in the preview. */}
           {person.bio && (
             <div className="px-5">
-              <h3 className="pt-1 pb-2 text-white text-[18px] font-bold tracking-tight">About</h3>
+              <h3 className="pt-1 pb-2 text-white text-[18px] font-bold tracking-tight">
+                About
+              </h3>
               <p
                 className="text-[14px] leading-relaxed whitespace-pre-line line-clamp-6"
                 style={{ color: "rgba(255,255,255,0.95)" }}
@@ -2008,7 +2950,9 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
           <SocialIconRow person={person} />
         </div>
       </div>
-      <p className="text-slate-300 text-xs mt-3">Preview of the in-app PerformerSheet header.</p>
+      <p className="text-slate-300 text-xs mt-3">
+        Preview of the in-app PerformerSheet header.
+      </p>
     </>
   );
 }
@@ -2018,21 +2962,69 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
 // Order is intentional: streaming first (where the music is), then the
 // platforms artists are most active on, then the generic website fallback.
 function SocialIconRow({ person }: { person: AdminPerson }) {
-  const links: { key: string; url: string; Icon: React.ComponentType<{ size?: number; className?: string }>; label: string }[] = [
-    person.appleMusicUrl && { key: "apple", url: person.appleMusicUrl, Icon: SiApplemusic, label: "Apple Music" },
-    person.spotifyUrl && { key: "spotify", url: person.spotifyUrl, Icon: SiSpotify, label: "Spotify" },
-    person.instagramUrl && { key: "instagram", url: person.instagramUrl, Icon: SiInstagram, label: "Instagram" },
-    person.tiktokUrl && { key: "tiktok", url: person.tiktokUrl, Icon: SiTiktok, label: "TikTok" },
-    person.twitterUrl && { key: "twitter", url: person.twitterUrl, Icon: SiX, label: "X" },
-    person.blueskyUrl && { key: "bluesky", url: person.blueskyUrl, Icon: SiBluesky, label: "Bluesky" },
-    person.facebookUrl && { key: "facebook", url: person.facebookUrl, Icon: SiFacebook, label: "Facebook" },
-    person.websiteUrl && { key: "website", url: person.websiteUrl, Icon: Globe, label: "Website" },
+  const links: {
+    key: string;
+    url: string;
+    Icon: React.ComponentType<{ size?: number; className?: string }>;
+    label: string;
+  }[] = [
+    person.appleMusicUrl && {
+      key: "apple",
+      url: person.appleMusicUrl,
+      Icon: SiApplemusic,
+      label: "Apple Music",
+    },
+    person.spotifyUrl && {
+      key: "spotify",
+      url: person.spotifyUrl,
+      Icon: SiSpotify,
+      label: "Spotify",
+    },
+    person.instagramUrl && {
+      key: "instagram",
+      url: person.instagramUrl,
+      Icon: SiInstagram,
+      label: "Instagram",
+    },
+    person.tiktokUrl && {
+      key: "tiktok",
+      url: person.tiktokUrl,
+      Icon: SiTiktok,
+      label: "TikTok",
+    },
+    person.twitterUrl && {
+      key: "twitter",
+      url: person.twitterUrl,
+      Icon: SiX,
+      label: "X",
+    },
+    person.blueskyUrl && {
+      key: "bluesky",
+      url: person.blueskyUrl,
+      Icon: SiBluesky,
+      label: "Bluesky",
+    },
+    person.facebookUrl && {
+      key: "facebook",
+      url: person.facebookUrl,
+      Icon: SiFacebook,
+      label: "Facebook",
+    },
+    person.websiteUrl && {
+      key: "website",
+      url: person.websiteUrl,
+      Icon: Globe,
+      label: "Website",
+    },
   ].filter(Boolean) as { key: string; url: string; Icon: any; label: string }[];
 
   if (links.length === 0) return null;
 
   return (
-    <div className="px-5 pt-5 pb-5 mt-auto flex flex-wrap items-center gap-2.5" data-testid="row-person-socials">
+    <div
+      className="px-5 pt-5 pb-5 mt-auto flex flex-wrap items-center gap-2.5"
+      data-testid="row-person-socials"
+    >
       {links.map(({ key, Icon, label }) => (
         <div
           key={key}
@@ -2055,7 +3047,11 @@ function SocialIconRow({ person }: { person: AdminPerson }) {
 // buttons, "About", and "Used by these artists" sections that don't add much
 // to a design preview) — just the hero + bio, which is everything that
 // actually changes when the admin edits the form.
-function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName: string } }) {
+function VendorPreviewCard({
+  vendor,
+}: {
+  vendor: AdminVendor & { instrumentName: string };
+}) {
   // Same favicon fallback the fan sheet uses, so an empty Logo field still
   // looks correct in the preview rather than showing a blank circle.
   const logoFallback = useMemo(() => {
@@ -2063,7 +3059,9 @@ function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName:
     try {
       const u = new URL(vendor.affiliateUrl);
       return `https://www.google.com/s2/favicons?sz=128&domain=${u.hostname}`;
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
   }, [vendor.logoUrl, vendor.affiliateUrl]);
 
   return (
@@ -2075,7 +3073,8 @@ function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName:
           height: 760,
           background: "#00062B",
           padding: 10,
-          boxShadow: "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+          boxShadow:
+            "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
         }}
         data-testid="preview-vendor"
       >
@@ -2086,11 +3085,37 @@ function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName:
             <span>● ● ●</span>
           </div>
           <div className="flex-shrink-0 flex items-center justify-between px-3 pb-2">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white/70" style={{ background: "rgba(255,255,255,0.10)" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 6l-6 6 6 6" /></svg>
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white/70"
+              style={{ background: "rgba(255,255,255,0.10)" }}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
             </div>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white/70" style={{ background: "rgba(255,255,255,0.10)" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white/70"
+              style={{ background: "rgba(255,255,255,0.10)" }}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
             </div>
           </div>
 
@@ -2098,13 +3123,24 @@ function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName:
               Mirrors VendorSheet in AlbumDetail.tsx (negative margin pulls
               the image up under the sticky bar). Cover height is dialled in
               so name + tagline always sit above the scroll fold. */}
-          <div className="relative w-full flex-shrink-0" style={{ height: 260 }}>
+          <div
+            className="relative w-full flex-shrink-0"
+            style={{ height: 260 }}
+          >
             {vendor.coverUrl ? (
-              <img src={vendor.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" data-testid="img-preview-vendor-cover" />
+              <img
+                src={vendor.coverUrl}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                data-testid="img-preview-vendor-cover"
+              />
             ) : (
               <div
                 className="absolute inset-0"
-                style={{ background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)" }}
+                style={{
+                  background:
+                    "linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)",
+                }}
               >
                 {logoFallback && (
                   <>
@@ -2113,41 +3149,78 @@ function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName:
                       alt=""
                       aria-hidden
                       className="absolute inset-0 w-full h-full object-cover"
-                      style={{ filter: "blur(40px) saturate(160%)", transform: "scale(1.3)", opacity: 0.85 }}
+                      style={{
+                        filter: "blur(40px) saturate(160%)",
+                        transform: "scale(1.3)",
+                        opacity: 0.85,
+                      }}
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-28 h-28 rounded-full flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)" }}>
-                        <img src={logoFallback} alt="" className="w-full h-full object-cover" style={{ opacity: 0.92 }} />
+                      <div
+                        className="w-28 h-28 rounded-full flex items-center justify-center overflow-hidden"
+                        style={{
+                          background: "rgba(255,255,255,0.55)",
+                          backdropFilter: "blur(8px)",
+                        }}
+                      >
+                        <img
+                          src={logoFallback}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          style={{ opacity: 0.92 }}
+                        />
                       </div>
                     </div>
                   </>
                 )}
               </div>
             )}
-            <div className="absolute inset-x-0 bottom-0 h-2/3" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)" }} />
+            <div
+              className="absolute inset-x-0 bottom-0 h-2/3"
+              style={{
+                background:
+                  "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)",
+              }}
+            />
             <div className="absolute left-5 right-5 bottom-3">
-              <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight" data-testid="text-preview-vendor-name">
+              <h2
+                className="text-white text-[26px] font-bold leading-tight tracking-tight"
+                data-testid="text-preview-vendor-name"
+              >
                 {vendor.name || "Untitled vendor"}
               </h2>
               {vendor.tagline && (
-                <p className="text-[13px] mt-0.5" style={{ color: "rgba(235,235,245,0.7)" }}>{vendor.tagline}</p>
+                <p
+                  className="text-[13px] mt-0.5"
+                  style={{ color: "rgba(235,235,245,0.7)" }}
+                >
+                  {vendor.tagline}
+                </p>
               )}
             </div>
           </div>
 
           {/* Primary actions — Visit + View listing. Non-interactive in preview. */}
           <div className="px-5 pt-3 flex gap-2 flex-shrink-0">
-            <div className="flex-1 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold" style={{ background: "#319ED8" }}>
+            <div
+              className="flex-1 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold"
+              style={{ background: "#319ED8" }}
+            >
               Visit website
             </div>
-            <div className="h-9 px-4 rounded-full flex items-center justify-center text-white text-[13px] font-semibold" style={{ background: "rgba(255,255,255,0.10)" }}>
+            <div
+              className="h-9 px-4 rounded-full flex items-center justify-center text-white text-[13px] font-semibold"
+              style={{ background: "rgba(255,255,255,0.10)" }}
+            >
               View listing
             </div>
           </div>
 
           {/* Bio / about — same "About {name}" pattern as the fan sheet */}
           <div className="px-5 pt-4 pb-2 flex-1 overflow-hidden">
-            <h3 className="text-white text-[16px] font-bold leading-tight tracking-tight mb-1.5">About {vendor.name || "this vendor"}</h3>
+            <h3 className="text-white text-[16px] font-bold leading-tight tracking-tight mb-1.5">
+              About {vendor.name || "this vendor"}
+            </h3>
             {vendor.bio ? (
               <p
                 className="text-[13px] leading-relaxed line-clamp-6"
@@ -2157,17 +3230,30 @@ function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName:
                 {vendor.bio}
               </p>
             ) : (
-              <p className="text-[12px]" style={{ color: "rgba(235,235,245,0.4)" }}>No bio yet — add a short paragraph so fans know who they're buying from.</p>
+              <p
+                className="text-[12px]"
+                style={{ color: "rgba(235,235,245,0.4)" }}
+              >
+                No bio yet — add a short paragraph so fans know who they're
+                buying from.
+              </p>
             )}
             {vendor.location && (
-              <p className="text-[12px] mt-3" style={{ color: "rgba(235,235,245,0.55)" }}>
-                <span aria-hidden>📍 </span>{vendor.location}
+              <p
+                className="text-[12px] mt-3"
+                style={{ color: "rgba(235,235,245,0.55)" }}
+              >
+                <span aria-hidden>📍 </span>
+                {vendor.location}
               </p>
             )}
           </div>
         </div>
       </div>
-      <p className="text-slate-300 text-xs mt-3">Preview of the in-app VendorSheet hero — appears when a fan taps a vendor inside {vendor.instrumentName}.</p>
+      <p className="text-slate-300 text-xs mt-3">
+        Preview of the in-app VendorSheet hero — appears when a fan taps a
+        vendor inside {vendor.instrumentName}.
+      </p>
     </>
   );
 }
@@ -2180,7 +3266,9 @@ export function Admin() {
   const queryClient = useQueryClient();
   const [entity, setEntity] = useState<EntityKey>("albums");
   // Per-entity selection so switching tabs preserves which row was open.
-  const [selectedByEntity, setSelectedByEntity] = useState<Record<EntityKey, string | null>>({
+  const [selectedByEntity, setSelectedByEntity] = useState<
+    Record<EntityKey, string | null>
+  >({
     albums: null,
     people: null,
     instruments: null,
@@ -2316,7 +3404,10 @@ export function Admin() {
   // Only meaningful while the Albums tab is active — gating the query keeps
   // us from firing `/api/albums/<personId>` 404s when other tabs are open.
   const albumPreviewId = entity === "albums" ? selectedId : null;
-  const iframeSrc = useMemo(() => (albumPreviewId ? `/album/${albumPreviewId}` : "/collection"), [albumPreviewId]);
+  const iframeSrc = useMemo(
+    () => (albumPreviewId ? `/album/${albumPreviewId}` : "/collection"),
+    [albumPreviewId],
+  );
   // Subscribe to the album-detail cache so React re-renders (and the key
   // recomputes) when the underlying data changes. `getQueryData` alone in a
   // useMemo body wouldn't trigger a re-render.
@@ -2329,14 +3420,19 @@ export function Admin() {
     if (!previewDetail) return `${albumPreviewId}:loading`;
     const a = previewDetail;
     const songSig = a.songs
-      ?.map((s) => `${s.id}|${s.trackNumber}|${s.title}|${s.duration}|${s.lyrics ?? ""}|${s.audioUrl ?? ""}`)
+      ?.map(
+        (s) =>
+          `${s.id}|${s.trackNumber}|${s.title}|${s.duration}|${s.lyrics ?? ""}|${s.audioUrl ?? ""}`,
+      )
       .join("~");
     return `${a.id}|${a.title}|${a.artist}|${a.artwork}|${a.year}|${a.type}|${a.description ?? ""}|${songSig}`;
   }, [albumPreviewId, previewDetail]);
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-[#f7f8fa] flex items-center justify-center text-slate-500">Loading…</main>
+      <main className="min-h-screen bg-[#f7f8fa] flex items-center justify-center text-slate-500">
+        Loading…
+      </main>
     );
   }
   if (!user) {
@@ -2348,10 +3444,14 @@ export function Admin() {
     return (
       <main className="min-h-screen bg-[#f7f8fa] flex items-center justify-center px-6">
         <div className="max-w-md text-center">
-          <h1 className="text-slate-900 text-2xl font-semibold mb-2">Admin only</h1>
+          <h1 className="text-slate-900 text-2xl font-semibold mb-2">
+            Admin only
+          </h1>
           <p className="text-slate-500 text-sm mb-6">
-            You're signed in as <span className="text-slate-900 font-medium">@{user.username}</span> but this account isn't an admin yet.
-            {" "}If no admin exists, you can claim the first slot now.
+            You're signed in as{" "}
+            <span className="text-slate-900 font-medium">@{user.username}</span>{" "}
+            but this account isn't an admin yet. If no admin exists, you can
+            claim the first slot now.
           </p>
           <button
             type="button"
@@ -2360,10 +3460,23 @@ export function Admin() {
             className="px-4 py-2 rounded-md bg-[#319ED8] text-white font-medium hover:bg-[#319ED8]/90 disabled:opacity-50"
             data-testid="button-bootstrap-admin"
           >
-            {bootstrap.isPending ? "Claiming…" : "Claim admin (if no admin yet)"}
+            {bootstrap.isPending
+              ? "Claiming…"
+              : "Claim admin (if no admin yet)"}
           </button>
-          {bootstrapError && <p className="mt-3 text-red-600 text-sm" data-testid="text-bootstrap-error">{bootstrapError}</p>}
-          <button type="button" onClick={() => navigate("/collection")} className="mt-6 block mx-auto text-slate-400 text-sm hover:text-slate-900">
+          {bootstrapError && (
+            <p
+              className="mt-3 text-red-600 text-sm"
+              data-testid="text-bootstrap-error"
+            >
+              {bootstrapError}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate("/collection")}
+            className="mt-6 block mx-auto text-slate-400 text-sm hover:text-slate-900"
+          >
             Back to the player
           </button>
         </div>
@@ -2385,247 +3498,358 @@ export function Admin() {
           className="h-7 w-auto"
           data-testid="img-admin-logo"
         />
-        <span className="text-[11px] uppercase tracking-widest text-slate-400 font-medium">Admin</span>
+        <span className="text-[11px] uppercase tracking-widest text-slate-400 font-medium">
+          Admin
+        </span>
       </header>
 
       <div className="flex flex-1 min-h-0">
-      {/* Left rail: entity nav */}
-      <aside className="w-56 shrink-0 border-r border-slate-200 flex flex-col">
-        <nav className="flex-1 px-2 py-3 space-y-1 text-sm">
-          {([
-            { key: "albums", label: "Albums", count: albums.length },
-            { key: "people", label: "People", count: people.length },
-            { key: "instruments", label: "Instruments", count: instruments.length },
-            { key: "vendors", label: "Vendors", count: allVendors.length },
-          ] as { key: EntityKey; label: string; count: number }[]).map((t) => (
+        {/* Left rail: entity nav */}
+        <aside className="w-56 shrink-0 border-r border-slate-200 flex flex-col">
+          <nav className="flex-1 px-2 py-3 space-y-1 text-sm">
+            {(
+              [
+                { key: "albums", label: "Albums", count: albums.length },
+                { key: "people", label: "People", count: people.length },
+                {
+                  key: "instruments",
+                  label: "Instruments",
+                  count: instruments.length,
+                },
+                { key: "vendors", label: "Vendors", count: allVendors.length },
+              ] as { key: EntityKey; label: string; count: number }[]
+            ).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setEntity(t.key)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left ${entity === t.key ? "bg-[#eff4ff] text-[#319ED8] font-medium" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                data-testid={`nav-${t.key}`}
+              >
+                <span>{t.label}</span>
+                <span className="text-[11px] text-slate-400">{t.count}</span>
+              </button>
+            ))}
+          </nav>
+          <PromotePanel />
+          <div className="px-3 py-3 border-t border-slate-200">
             <button
-              key={t.key}
               type="button"
-              onClick={() => setEntity(t.key)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left ${entity === t.key ? "bg-[#eff4ff] text-[#319ED8] font-medium" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-              data-testid={`nav-${t.key}`}
+              onClick={() => navigate("/collection")}
+              className="w-full text-left px-3 py-2 text-slate-500 hover:text-slate-900 text-sm"
+              data-testid="link-back-to-player"
             >
-              <span>{t.label}</span>
-              <span className="text-[11px] text-slate-400">{t.count}</span>
+              ← Back to player
             </button>
-          ))}
-        </nav>
-        <PromotePanel />
-        <div className="px-3 py-3 border-t border-slate-200">
-          <button type="button" onClick={() => navigate("/collection")} className="w-full text-left px-3 py-2 text-slate-500 hover:text-slate-900 text-sm" data-testid="link-back-to-player">
-            ← Back to player
-          </button>
-        </div>
-      </aside>
+          </div>
+        </aside>
 
-      {/* Middle: entity list */}
-      <section className="w-72 shrink-0 border-r border-slate-200 flex flex-col">
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-slate-900 text-sm font-semibold capitalize">{entity}</h2>
-          <button
-            type="button"
-            onClick={() => {
-              if (entity === "albums") createAlbum.mutate();
-              else if (entity === "people") createPerson.mutate();
-              else if (entity === "instruments") createInstrument.mutate();
-            }}
-            disabled={
-              entity === "vendors" ||
-              createAlbum.isPending || createPerson.isPending || createInstrument.isPending
-            }
-            className={`text-[12px] ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:underline"}`}
-            title={entity === "vendors" ? "Vendors are added via an instrument's scraper" : undefined}
-            data-testid={`button-new-${entity.slice(0, -1)}`}
-          >
-            + New
-          </button>
-        </div>
-        <ul className="flex-1 overflow-y-auto py-2">
-          {entity === "albums" && albums.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                onClick={() => setSelectedId(a.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === a.id ? "bg-blue-50" : ""} ${a.isHidden ? "opacity-50" : ""}`}
-                data-testid={`row-album-${a.id}`}
-              >
-                <img src={a.artwork} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-slate-900 text-sm truncate">{a.title}</div>
-                  <div className="text-slate-400 text-xs truncate">{a.artist}</div>
-                </div>
-                {a.isHidden && <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5 shrink-0">Hidden</span>}
-              </button>
-            </li>
-          ))}
-          {entity === "people" && people.map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => setSelectedId(p.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === p.id ? "bg-blue-50" : ""}`}
-                data-testid={`row-person-${p.id}`}
-              >
-                {p.photoUrl ? (
-                  <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-900 text-sm font-semibold shrink-0" style={{ background: p.accent || "#319ED8" }}>
-                    {p.name.slice(0, 1).toUpperCase()}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <div className="text-slate-900 text-sm truncate">{p.name}</div>
-                  <div className="text-slate-400 text-xs truncate">{p.bio ?? "—"}</div>
-                </div>
-              </button>
-            </li>
-          ))}
-          {entity === "vendors" && allVendors.map((v) => {
-            const logo = v.logoUrl || (() => {
-              try { return `https://www.google.com/s2/favicons?sz=128&domain=${new URL(v.affiliateUrl).hostname}`; }
-              catch { return ""; }
-            })();
-            return (
-              <li key={v.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(v.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === v.id ? "bg-blue-50" : ""} ${v.isHidden ? "opacity-50" : ""}`}
-                  data-testid={`row-vendor-list-${v.id}`}
-                >
-                  {logo ? (
-                    <img src={logo} alt="" className="w-10 h-10 rounded bg-slate-50 object-contain shrink-0" />
-                  ) : (
-                    <div className="w-10 h-10 rounded bg-slate-100 shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <div className="text-slate-900 text-sm truncate">{v.name || "Untitled vendor"}</div>
-                    <div className="text-slate-400 text-xs truncate">for {v.instrumentName}</div>
-                  </div>
-                </button>
+        {/* Middle: entity list */}
+        <section className="w-72 shrink-0 border-r border-slate-200 flex flex-col">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+            <h2 className="text-slate-900 text-sm font-semibold capitalize">
+              {entity}
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                if (entity === "albums") createAlbum.mutate();
+                else if (entity === "people") createPerson.mutate();
+                else if (entity === "instruments") createInstrument.mutate();
+              }}
+              disabled={
+                entity === "vendors" ||
+                createAlbum.isPending ||
+                createPerson.isPending ||
+                createInstrument.isPending
+              }
+              className={`text-[12px] ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:underline"}`}
+              title={
+                entity === "vendors"
+                  ? "Vendors are added via an instrument's scraper"
+                  : undefined
+              }
+              data-testid={`button-new-${entity.slice(0, -1)}`}
+            >
+              + New
+            </button>
+          </div>
+          <ul className="flex-1 overflow-y-auto py-2">
+            {entity === "albums" &&
+              albums.map((a) => (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(a.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === a.id ? "bg-blue-50" : ""} ${a.isHidden ? "opacity-50" : ""}`}
+                    data-testid={`row-album-${a.id}`}
+                  >
+                    <img
+                      src={a.artwork}
+                      alt=""
+                      className="w-10 h-10 rounded object-cover shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-slate-900 text-sm truncate">
+                        {a.title}
+                      </div>
+                      <div className="text-slate-400 text-xs truncate">
+                        {a.artist}
+                      </div>
+                    </div>
+                    {a.isHidden && (
+                      <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5 shrink-0">
+                        Hidden
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            {entity === "people" &&
+              people.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(p.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === p.id ? "bg-blue-50" : ""}`}
+                    data-testid={`row-person-${p.id}`}
+                  >
+                    {p.photoUrl ? (
+                      <img
+                        src={p.photoUrl}
+                        alt=""
+                        className="w-10 h-10 rounded-full object-cover shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-slate-900 text-sm font-semibold shrink-0"
+                        style={{ background: p.accent || "#319ED8" }}
+                      >
+                        {p.name.slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-slate-900 text-sm truncate">
+                        {p.name}
+                      </div>
+                      <div className="text-slate-400 text-xs truncate">
+                        {p.bio ?? "—"}
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            {entity === "vendors" &&
+              allVendors.map((v) => {
+                const logo =
+                  v.logoUrl ||
+                  (() => {
+                    try {
+                      return `https://www.google.com/s2/favicons?sz=128&domain=${new URL(v.affiliateUrl).hostname}`;
+                    } catch {
+                      return "";
+                    }
+                  })();
+                return (
+                  <li key={v.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(v.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === v.id ? "bg-blue-50" : ""} ${v.isHidden ? "opacity-50" : ""}`}
+                      data-testid={`row-vendor-list-${v.id}`}
+                    >
+                      {logo ? (
+                        <img
+                          src={logo}
+                          alt=""
+                          className="w-10 h-10 rounded bg-slate-50 object-contain shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-slate-100 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-slate-900 text-sm truncate">
+                          {v.name || "Untitled vendor"}
+                        </div>
+                        <div className="text-slate-400 text-xs truncate">
+                          for {v.instrumentName}
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            {entity === "instruments" &&
+              instruments.map((i) => (
+                <li key={i.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(i.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === i.id ? "bg-blue-50" : ""}`}
+                    data-testid={`row-instrument-${i.id}`}
+                  >
+                    {i.photoUrl ? (
+                      <img
+                        src={i.photoUrl}
+                        alt=""
+                        className="w-10 h-10 rounded object-cover shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-slate-100 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-slate-900 text-sm truncate">
+                        {i.name}
+                      </div>
+                      <div className="text-slate-400 text-xs truncate">
+                        {i.category}
+                        {i.vendors.length > 0 &&
+                          ` · ${i.vendors.length} vendor${i.vendors.length === 1 ? "" : "s"}`}
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            {entity === "albums" && albums.length === 0 && (
+              <li className="px-4 py-6 text-slate-400 text-sm">
+                No albums yet. Click + New.
               </li>
-            );
-          })}
-          {entity === "instruments" && instruments.map((i) => (
-            <li key={i.id}>
-              <button
-                type="button"
-                onClick={() => setSelectedId(i.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === i.id ? "bg-blue-50" : ""}`}
-                data-testid={`row-instrument-${i.id}`}
-              >
-                {i.photoUrl ? (
-                  <img src={i.photoUrl} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
-                ) : (
-                  <div className="w-10 h-10 rounded bg-slate-100 shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <div className="text-slate-900 text-sm truncate">{i.name}</div>
-                  <div className="text-slate-400 text-xs truncate">{i.category}{i.vendors.length > 0 && ` · ${i.vendors.length} vendor${i.vendors.length === 1 ? "" : "s"}`}</div>
-                </div>
-              </button>
-            </li>
-          ))}
-          {entity === "albums" && albums.length === 0 && (
-            <li className="px-4 py-6 text-slate-400 text-sm">No albums yet. Click + New.</li>
-          )}
-          {entity === "people" && people.length === 0 && (
-            <li className="px-4 py-6 text-slate-400 text-sm">No people yet. Click + New.</li>
-          )}
-          {entity === "instruments" && instruments.length === 0 && (
-            <li className="px-4 py-6 text-slate-400 text-sm">No instruments yet. Click + New.</li>
-          )}
-          {entity === "vendors" && allVendors.length === 0 && (
-            <li className="px-4 py-6 text-slate-400 text-sm leading-relaxed">
-              No vendors yet. Open an instrument and paste a Reverb / Sweetwater / Carter Vintage URL into its Vendors scraper.
-            </li>
-          )}
-        </ul>
-      </section>
+            )}
+            {entity === "people" && people.length === 0 && (
+              <li className="px-4 py-6 text-slate-400 text-sm">
+                No people yet. Click + New.
+              </li>
+            )}
+            {entity === "instruments" && instruments.length === 0 && (
+              <li className="px-4 py-6 text-slate-400 text-sm">
+                No instruments yet. Click + New.
+              </li>
+            )}
+            {entity === "vendors" && allVendors.length === 0 && (
+              <li className="px-4 py-6 text-slate-400 text-sm leading-relaxed">
+                No vendors yet. Open an instrument and paste a Reverb /
+                Sweetwater / Carter Vintage URL into its Vendors scraper.
+              </li>
+            )}
+          </ul>
+        </section>
 
-      {/* Editor pane */}
-      <section className="flex-1 min-w-0 border-r border-slate-200">
-        {!selectedId ? (
-          <div className="h-full flex items-center justify-center text-slate-400">Select an item to edit.</div>
-        ) : entity === "albums" ? (
-          <AlbumEditor key={selectedId} albumId={selectedId} onDeleted={() => setSelectedId(null)} />
-        ) : entity === "people" ? (
-          <PersonEditor key={selectedId} personId={selectedId} onDeleted={() => setSelectedId(null)} />
-        ) : entity === "vendors" ? (
-          (() => {
-            const v = allVendors.find((x) => x.id === selectedId);
-            if (!v) return <div className="h-full flex items-center justify-center text-slate-400">Vendor not found.</div>;
-            return (
-              <VendorPaneEditor
-                key={v.id}
-                vendor={v}
-                onJumpToInstrument={() => {
-                  setSelectedByEntity((p) => ({ ...p, instruments: v.instrumentId }));
-                  setEntity("instruments");
-                }}
-                onDeleted={() => setSelectedId(null)}
-              />
-            );
-          })()
-        ) : (
-          <InstrumentEditor key={selectedId} instrumentId={selectedId} onDeleted={() => setSelectedId(null)} />
-        )}
-      </section>
+        {/* Editor pane */}
+        <section className="flex-1 min-w-0 border-r border-slate-200">
+          {!selectedId ? (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              Select an item to edit.
+            </div>
+          ) : entity === "albums" ? (
+            <AlbumEditor
+              key={selectedId}
+              albumId={selectedId}
+              onDeleted={() => setSelectedId(null)}
+            />
+          ) : entity === "people" ? (
+            <PersonEditor
+              key={selectedId}
+              personId={selectedId}
+              onDeleted={() => setSelectedId(null)}
+            />
+          ) : entity === "vendors" ? (
+            (() => {
+              const v = allVendors.find((x) => x.id === selectedId);
+              if (!v)
+                return (
+                  <div className="h-full flex items-center justify-center text-slate-400">
+                    Vendor not found.
+                  </div>
+                );
+              return (
+                <VendorPaneEditor
+                  key={v.id}
+                  vendor={v}
+                  onJumpToInstrument={() => {
+                    setSelectedByEntity((p) => ({
+                      ...p,
+                      instruments: v.instrumentId,
+                    }));
+                    setEntity("instruments");
+                  }}
+                  onDeleted={() => setSelectedId(null)}
+                />
+              );
+            })()
+          ) : (
+            <InstrumentEditor
+              key={selectedId}
+              instrumentId={selectedId}
+              onDeleted={() => setSelectedId(null)}
+            />
+          )}
+        </section>
 
-      {/* Phone-frame preview — only meaningful for Albums today.
+        {/* Phone-frame preview — only meaningful for Albums today.
          People + Instruments don't have public detail pages yet; they
          surface inside album credits, which lights up in the next pass. */}
-      <aside className="w-[420px] shrink-0 hidden xl:flex flex-col items-center justify-center bg-slate-100 py-6 px-4">
-        <p className="text-slate-400 text-[11px] uppercase tracking-widest mb-3">Live preview</p>
-        {entity === "albums" ? (
-          <>
+        <aside className="w-[420px] shrink-0 hidden xl:flex flex-col items-center justify-center bg-slate-100 py-6 px-4">
+          <p className="text-slate-400 text-[11px] uppercase tracking-widest mb-3">
+            Live preview
+          </p>
+          {entity === "albums" ? (
+            <>
+              <div
+                className="relative rounded-[42px] overflow-hidden shadow-2xl"
+                style={{
+                  width: 360,
+                  height: 760,
+                  background: "#000",
+                  padding: 10,
+                  boxShadow:
+                    "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+                }}
+              >
+                <iframe
+                  key={iframeKey}
+                  src={iframeSrc}
+                  title="Live preview"
+                  className="w-full h-full rounded-[32px] bg-[#f7f8fa]"
+                  data-testid="iframe-preview"
+                />
+              </div>
+              <p className="text-slate-300 text-xs mt-3">
+                {selectedId
+                  ? `Previewing /album/${selectedId.slice(0, 8)}…`
+                  : "Open the player at /collection"}
+              </p>
+            </>
+          ) : entity === "instruments" && selectedId ? (
+            <InstrumentPreviewCard instrumentId={selectedId} />
+          ) : entity === "people" && selectedId ? (
+            (() => {
+              const p = people.find((x) => x.id === selectedId);
+              if (!p) return null;
+              return <PersonPreviewCard person={p} />;
+            })()
+          ) : entity === "vendors" && selectedId ? (
+            (() => {
+              const v = allVendors.find((x) => x.id === selectedId);
+              if (!v) return null;
+              return <VendorPreviewCard vendor={v} />;
+            })()
+          ) : (
             <div
-              className="relative rounded-[42px] overflow-hidden shadow-2xl"
+              className="rounded-[42px] flex items-center justify-center text-center px-8"
               style={{
                 width: 360,
                 height: 760,
-                background: "#000",
-                padding: 10,
-                boxShadow: "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+                background: "rgba(255,255,255,0.02)",
+                border: "1px dashed rgba(255,255,255,0.12)",
               }}
+              data-testid="placeholder-preview"
             >
-              <iframe
-                key={iframeKey}
-                src={iframeSrc}
-                title="Live preview"
-                className="w-full h-full rounded-[32px] bg-[#f7f8fa]"
-                data-testid="iframe-preview"
-              />
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Select a row on the left to see how it looks to fans.
+              </p>
             </div>
-            <p className="text-slate-300 text-xs mt-3">
-              {selectedId ? `Previewing /album/${selectedId.slice(0, 8)}…` : "Open the player at /collection"}
-            </p>
-          </>
-        ) : entity === "instruments" && selectedId ? (
-          <InstrumentPreviewCard instrumentId={selectedId} />
-        ) : entity === "people" && selectedId ? (
-          (() => {
-            const p = people.find((x) => x.id === selectedId);
-            if (!p) return null;
-            return <PersonPreviewCard person={p} />;
-          })()
-        ) : (
-          <div
-            className="rounded-[42px] flex items-center justify-center text-center px-8"
-            style={{
-              width: 360,
-              height: 760,
-              background: "rgba(255,255,255,0.02)",
-              border: "1px dashed rgba(255,255,255,0.12)",
-            }}
-            data-testid="placeholder-preview"
-          >
-            <p className="text-slate-400 text-sm leading-relaxed">
-              Select a row on the left to see how it looks to fans.
-            </p>
-          </div>
-        )}
-      </aside>
+          )}
+        </aside>
       </div>
     </main>
   );
