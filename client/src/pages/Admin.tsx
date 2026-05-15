@@ -3878,7 +3878,10 @@ function ScrapeBar({
         : `Pulled from ${data.vendor.name} (new vendor — confirm the name).`;
       const warn = r && "warn" in r && r.warn ? ` ${r.warn}` : "";
       setMsg({ kind: "ok", text: `${base} Review and Save.${warn}` });
-      setUrl("");
+      // Intentionally NOT clearing `url` — keeping the pulled URL visible
+      // mirrors the People/Artist editor's Apple Music field. Admins can
+      // see the source they pulled from, tweak the path, and re-pull
+      // without retyping the whole URL.
     } catch (e: any) {
       setMsg({ kind: "err", text: e?.message || "Couldn't read that page." });
     } finally {
