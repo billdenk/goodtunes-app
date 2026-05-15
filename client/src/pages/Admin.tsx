@@ -1274,14 +1274,14 @@ function ArtistScrapeBar({
         fields below. Apple Music URLs also list the artist's full
         discography.
       </p>
-      {msg && (
-        <p
-          className={`text-[12px] ${msg.kind === "ok" ? "text-[#319ED8]" : "text-red-600"}`}
-          data-testid="text-artist-scrape-result"
-        >
-          {msg.text}
-        </p>
-      )}
+      <p
+        role="status"
+        aria-live="polite"
+        className={`text-[12px] min-h-[1em] ${msg?.kind === "err" ? "text-red-600" : "text-[#319ED8]"}`}
+        data-testid="text-artist-scrape-result"
+      >
+        {msg?.text ?? ""}
+      </p>
     </div>
   );
 }
@@ -1385,6 +1385,9 @@ function PersonEditor({
   // Discography lives in client state — it's transient (pulled per session,
   // not persisted). On re-pull we replace it; on save we don't touch it.
   const [discography, setDiscography] = useState<ScrapedArtistAlbum[]>([]);
+  // Refs into each streaming/social URL input so the shortcut strip above
+  // them can scroll + focus the matching field when an admin taps an icon.
+  const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({});
   useEffect(() => {
     if (data) {
       setForm(data);
@@ -1534,9 +1537,35 @@ function PersonEditor({
         />
       </Field>
 
+      {/* Streaming + social URLs. The icon strip below acts as both a
+          completion indicator (a green check appears on each platform once
+          its URL field is filled) and a quick way to jump straight to the
+          matching input — handy when you've just pulled from Apple Music
+          and want to also paste in Spotify + socials without scrolling. */}
+      <SocialFieldShortcuts
+        filled={{
+          apple: !!form.appleMusicUrl,
+          spotify: !!form.spotifyUrl,
+          instagram: !!form.instagramUrl,
+          tiktok: !!form.tiktokUrl,
+          twitter: !!form.twitterUrl,
+          bluesky: !!form.blueskyUrl,
+          facebook: !!form.facebookUrl,
+          website: !!form.websiteUrl,
+        }}
+        onJump={(key) => {
+          const el = fieldRefs.current[key];
+          if (el) {
+            el.scrollIntoView({ block: "center", behavior: "smooth" });
+            el.focus({ preventScroll: true });
+          }
+        }}
+      />
+
       <div className="grid grid-cols-2 gap-3">
         <Field label="Apple Music URL (artist)">
           <input
+            ref={(el) => { fieldRefs.current.apple = el; }}
             value={form.appleMusicUrl ?? ""}
             onChange={(e) => update({ appleMusicUrl: e.target.value || null })}
             placeholder="https://music.apple.com/us/artist/…"
@@ -1546,6 +1575,7 @@ function PersonEditor({
         </Field>
         <Field label="Spotify URL (artist)">
           <input
+            ref={(el) => { fieldRefs.current.spotify = el; }}
             value={form.spotifyUrl ?? ""}
             onChange={(e) => update({ spotifyUrl: e.target.value || null })}
             placeholder="https://open.spotify.com/artist/…"
@@ -1566,6 +1596,7 @@ function PersonEditor({
       <div className="grid grid-cols-2 gap-3">
         <Field label="Instagram URL">
           <input
+            ref={(el) => { fieldRefs.current.instagram = el; }}
             value={form.instagramUrl ?? ""}
             onChange={(e) => update({ instagramUrl: e.target.value || null })}
             placeholder="https://instagram.com/…"
@@ -1575,6 +1606,7 @@ function PersonEditor({
         </Field>
         <Field label="TikTok URL">
           <input
+            ref={(el) => { fieldRefs.current.tiktok = el; }}
             value={form.tiktokUrl ?? ""}
             onChange={(e) => update({ tiktokUrl: e.target.value || null })}
             placeholder="https://tiktok.com/@…"
@@ -1584,6 +1616,7 @@ function PersonEditor({
         </Field>
         <Field label="X / Twitter URL">
           <input
+            ref={(el) => { fieldRefs.current.twitter = el; }}
             value={form.twitterUrl ?? ""}
             onChange={(e) => update({ twitterUrl: e.target.value || null })}
             placeholder="https://x.com/…"
@@ -1593,6 +1626,7 @@ function PersonEditor({
         </Field>
         <Field label="Bluesky URL">
           <input
+            ref={(el) => { fieldRefs.current.bluesky = el; }}
             value={form.blueskyUrl ?? ""}
             onChange={(e) => update({ blueskyUrl: e.target.value || null })}
             placeholder="https://bsky.app/profile/…"
@@ -1602,6 +1636,7 @@ function PersonEditor({
         </Field>
         <Field label="Facebook URL">
           <input
+            ref={(el) => { fieldRefs.current.facebook = el; }}
             value={form.facebookUrl ?? ""}
             onChange={(e) => update({ facebookUrl: e.target.value || null })}
             placeholder="https://facebook.com/…"
@@ -1611,6 +1646,7 @@ function PersonEditor({
         </Field>
         <Field label="Website / other">
           <input
+            ref={(el) => { fieldRefs.current.website = el; }}
             value={form.websiteUrl ?? ""}
             onChange={(e) => update({ websiteUrl: e.target.value || null })}
             placeholder="https://… (Linktree, Bandcamp, personal site)"
@@ -2973,6 +3009,75 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
 // PersonPreviewCard (and reusable later for the fan-side PerformerSheet).
 // Order is intentional: streaming first (where the music is), then the
 // platforms artists are most active on, then the generic website fallback.
+// Compact strip of platform-icon buttons rendered above the streaming +
+// social URL inputs in PersonEditor. Doubles as:
+//   - a glanceable completion indicator (mint check overlay = field filled)
+//   - a quick-jump nav (tap an icon → scrolls + focuses the matching input)
+// Used in the admin form, NOT on the fan-facing PerformerSheet (that's
+// SocialIconRow's job).
+function SocialFieldShortcuts({
+  filled,
+  onJump,
+}: {
+  filled: Record<string, boolean>;
+  onJump: (key: string) => void;
+}) {
+  const items: { key: string; Icon: any; label: string }[] = [
+    { key: "apple", Icon: SiApplemusic, label: "Apple Music" },
+    { key: "spotify", Icon: SiSpotify, label: "Spotify" },
+    { key: "instagram", Icon: SiInstagram, label: "Instagram" },
+    { key: "tiktok", Icon: SiTiktok, label: "TikTok" },
+    { key: "twitter", Icon: SiX, label: "X / Twitter" },
+    { key: "bluesky", Icon: SiBluesky, label: "Bluesky" },
+    { key: "facebook", Icon: SiFacebook, label: "Facebook" },
+    { key: "website", Icon: Globe, label: "Website" },
+  ];
+  const count = items.filter((i) => filled[i.key]).length;
+  return (
+    <div data-testid="row-social-shortcuts">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
+          Streaming &amp; social links
+        </span>
+        <span className="text-[11px] text-slate-400">
+          {count} of {items.length} filled
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {items.map(({ key, Icon, label }) => {
+          const isFilled = !!filled[key];
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onJump(key)}
+              aria-label={`Jump to ${label}${isFilled ? " (filled)" : " (empty)"}`}
+              title={`Jump to ${label}${isFilled ? " — filled" : ""}`}
+              className={
+                "relative w-9 h-9 rounded-full flex items-center justify-center transition-all " +
+                (isFilled
+                  ? "bg-slate-900 text-white border border-slate-900 hover:bg-slate-800"
+                  : "bg-white text-slate-400 border border-slate-200 hover:border-slate-400 hover:text-slate-600")
+              }
+              data-testid={`button-shortcut-${key}`}
+            >
+              <Icon size={15} />
+              {isFilled && (
+                <span
+                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#4AFFCA] flex items-center justify-center ring-2 ring-white"
+                  aria-hidden="true"
+                >
+                  <Check size={9} className="text-slate-900" strokeWidth={3} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SocialIconRow({ person }: { person: AdminPerson }) {
   const links: {
     key: string;
