@@ -1722,32 +1722,13 @@ function PersonEditor({
   // + artist. Lossy on purpose: "Greatest Hits (Deluxe Edition)" won't match
   // "Greatest Hits" — admin can still click + Add and we'd get a dupe, but
   // that's the safer side of the trade-off.
-  // Bulk-add for the section "+ Add all" link. Hits POST /api/admin/albums
-  // once per release (Promise.all parallelizes), then invalidates the
-  // library query once at the end so every row in the section re-renders
-  // as "In library" together. We swallow per-item failures (Promise.allSettled)
-  // so one bad release doesn't strand the others as still "+ Add".
-  const bulkAdd = useMutation({
-    mutationFn: async (items: ScrapedArtistAlbum[]) => {
-      await Promise.allSettled(
-        items.map((album) =>
-          apiRequest("POST", "/api/admin/albums", {
-            title: album.name,
-            artist: form?.name ?? "",
-            artwork: album.artworkUrl,
-            year: album.year,
-            type: album.type,
-            appleMusicUrl: album.appleMusicUrl,
-            primaryArtistId: personId,
-          }),
-        ),
-      );
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
-    },
-  });
-
+  //
+  // NOTE: We deliberately do NOT offer a "+ Add all" bulk button here. The
+  // GoodTunes library is meant for actual GoodTunes releases, not the
+  // artist's full Apple Music catalog. The Discography section is the data
+  // source for the fan-side Streaming handoff — informational, not an
+  // import surface. Per-row "+ Add" is fine for the rare case where one
+  // streaming release also exists as a real GoodTunes release.
   const matchAlbum = (
     a: ScrapedArtistAlbum,
     artistName: string,
@@ -1899,28 +1880,11 @@ function PersonEditor({
                   { label: "EPs", items: eps },
                   { label: "Singles", items: singles },
                 ];
-                return groups.filter((g) => g.items.length > 0).map((g) => {
-                  // Only un-added releases are bulk-addable. The button hides
-                  // once everything in the section is "In library".
-                  const unmatched = g.items.filter((a) => !matchAlbum(a, form.name));
-                  return (
+                return groups.filter((g) => g.items.length > 0).map((g) => (
                   <div key={g.label} className="space-y-1" data-testid={`section-discography-${g.label.toLowerCase()}`}>
                     <div className="flex items-baseline justify-between pt-2 gap-2">
                       <h4 className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">{g.label}</h4>
-                      <div className="flex items-baseline gap-3">
-                        {unmatched.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => bulkAdd.mutate(unmatched)}
-                            disabled={bulkAdd.isPending}
-                            className="text-[12px] text-[#319ED8] font-medium hover:underline disabled:opacity-40"
-                            data-testid={`button-add-all-${g.label.toLowerCase()}`}
-                          >
-                            {bulkAdd.isPending ? "Adding…" : `+ Add all (${unmatched.length})`}
-                          </button>
-                        )}
-                        <span className="text-[11px] text-slate-400">{g.items.length}</span>
-                      </div>
+                      <span className="text-[11px] text-slate-400">{g.items.length}</span>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {g.items.map((a) => (
@@ -1937,8 +1901,7 @@ function PersonEditor({
                       ))}
                     </div>
                   </div>
-                  );
-                });
+                ));
               })()}
             </div>
           )}
