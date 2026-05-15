@@ -1261,96 +1261,6 @@ function Field({
 
 // ---------- PersonEditor ----------
 
-// Paste-an-artist-URL bar. Mirror of ScrapeBar for instruments. Reads the
-// artist's Apple Music or Spotify page for name/photo/bio, and (Apple only)
-// the full discography via the free iTunes Lookup API.
-function ArtistScrapeBar({
-  onPrefill,
-}: {
-  onPrefill: (r: ArtistScrapeResult, sourceUrl: string) => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
-    null,
-  );
-  async function go() {
-    const u = url.trim();
-    if (!u) return;
-    setBusy(true);
-    setMsg(null);
-    try {
-      const res = await apiRequest("POST", "/api/admin/people/scrape", {
-        url: u,
-      });
-      const data = (await res.json()) as ArtistScrapeResult;
-      onPrefill(data, u);
-      const src =
-        data.source === "apple"
-          ? "Apple Music"
-          : data.source === "spotify"
-            ? "Spotify"
-            : "page";
-      const discog =
-        data.albums.length > 0
-          ? ` Found ${data.albums.length} album${data.albums.length === 1 ? "" : "s"}.`
-          : "";
-      setMsg({
-        kind: "ok",
-        text: `Filled name, photo, bio, and ${src} URL below. Review and Save.${discog}`,
-      });
-      setUrl("");
-    } catch (e: any) {
-      setMsg({ kind: "err", text: e?.message || "Couldn't read that page." });
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="rounded-lg border border-slate-200 bg-[#f7fbff] p-3 space-y-2">
-      <div className="flex items-center gap-2">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              go();
-            }
-          }}
-          placeholder="Paste an Apple Music or Spotify artist URL to auto-fill the form"
-          className={inputCls + " flex-1"}
-          disabled={busy}
-          data-testid="input-artist-scrape-url"
-        />
-        <button
-          type="button"
-          onClick={go}
-          disabled={busy || !url.trim()}
-          className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40"
-          data-testid="button-artist-scrape-url"
-        >
-          {busy ? "Reading…" : "Fill form"}
-        </button>
-      </div>
-      <p className="text-[11px] text-slate-400">
-        Helper only — nothing is saved until you click <strong>Save changes</strong>.
-        Drops the name, photo, bio, and matching streaming URL into the
-        fields below. Apple Music URLs also list the artist's full
-        discography.
-      </p>
-      <p
-        role="status"
-        aria-live="polite"
-        className={`text-[12px] min-h-[1em] ${msg?.kind === "err" ? "text-red-600" : "text-[#319ED8]"}`}
-        data-testid="text-artist-scrape-result"
-      >
-        {msg?.text ?? ""}
-      </p>
-    </div>
-  );
-}
-
 // Discography row — one pulled album from iTunes Lookup. Shows artwork +
 // title + year + a status pill on the right ("In library" if we already
 // have a matching album, otherwise "+ Add" which one-clicks creating it
@@ -1476,6 +1386,76 @@ function PersonEditor({
     setDirty(true);
   };
 
+  // Auto-fill state for the Apple Music / Spotify tabs. Pasting a URL into
+  // either tab (or pressing the inline "Fill form" button) calls the same
+  // /api/admin/people/scrape endpoint the old top bar used and drops the
+  // result into name/photo/bio + pulls the Apple discography below.
+  const [scrapeBusy, setScrapeBusy] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState<{
+    kind: "ok" | "err";
+    text: string;
+  } | null>(null);
+  async function runScrape(rawUrl: string) {
+    const u = rawUrl.trim();
+    if (!u || !form) return;
+    setScrapeBusy(true);
+    setScrapeMsg(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/people/scrape", {
+        url: u,
+      });
+      const data = (await res.json()) as ArtistScrapeResult;
+      const lower = u.toLowerCase();
+      const pastedIsApple = /music\.apple\.com/.test(lower);
+      const pastedIsSpotify = /open\.spotify\.com/.test(lower);
+      // Merge against the LATEST form (functional update) — the scrape is
+      // async, and the user may have typed in name/photo/bio while it was in
+      // flight. Reading from a closure-captured `form` would silently
+      // overwrite those edits.
+      setForm((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          // Never clobber a non-empty existing value
+          name:
+            prev.name && prev.name !== "New person"
+              ? prev.name
+              : data.name || prev.name,
+          photoUrl: prev.photoUrl || data.photoUrl,
+          bio: prev.bio || data.bio,
+          appleMusicUrl:
+            data.appleMusicUrl || (pastedIsApple ? u : prev.appleMusicUrl),
+          spotifyUrl:
+            data.spotifyUrl || (pastedIsSpotify ? u : prev.spotifyUrl),
+          itunesArtistId: data.itunesArtistId || prev.itunesArtistId,
+        };
+      });
+      setDirty(true);
+      setDiscography(data.albums);
+      const src =
+        data.source === "apple"
+          ? "Apple Music"
+          : data.source === "spotify"
+            ? "Spotify"
+            : "page";
+      const discog =
+        data.albums.length > 0
+          ? ` Found ${data.albums.length} album${data.albums.length === 1 ? "" : "s"}.`
+          : "";
+      setScrapeMsg({
+        kind: "ok",
+        text: `Filled name, photo, bio from ${src}. Review and Save.${discog}`,
+      });
+    } catch (e: any) {
+      setScrapeMsg({
+        kind: "err",
+        text: e?.message || "Couldn't read that page.",
+      });
+    } finally {
+      setScrapeBusy(false);
+    }
+  }
+
   const save = useMutation({
     mutationFn: async () => {
       if (!form) return;
@@ -1553,71 +1533,13 @@ function PersonEditor({
         </div>
       </div>
 
-      <ArtistScrapeBar
-        onPrefill={(r, sourceUrl) => {
-          // Auto-fill the matching streaming field from the URL the admin
-          // pasted into the Pull bar so they don't have to enter it twice.
-          // The scraper may also return one (Apple URL → spotifyUrl, etc.)
-          // — prefer the scraper response when it's there.
-          const lower = sourceUrl.toLowerCase();
-          const pastedIsApple = /music\.apple\.com/.test(lower);
-          const pastedIsSpotify = /open\.spotify\.com/.test(lower);
-          update({
-            // Never clobber a non-empty existing value
-            name:
-              form.name && form.name !== "New person"
-                ? form.name
-                : r.name || form.name,
-            photoUrl: form.photoUrl || r.photoUrl,
-            bio: form.bio || r.bio,
-            appleMusicUrl:
-              r.appleMusicUrl ||
-              (pastedIsApple ? sourceUrl : form.appleMusicUrl),
-            spotifyUrl:
-              r.spotifyUrl ||
-              (pastedIsSpotify ? sourceUrl : form.spotifyUrl),
-            itunesArtistId: r.itunesArtistId || form.itunesArtistId,
-          });
-          setDiscography(r.albums);
-        }}
-      />
-
-      <Field label="Name">
-        <input
-          value={form.name}
-          onChange={(e) => update({ name: e.target.value })}
-          className={inputCls}
-          data-testid="input-person-name"
-        />
-      </Field>
-      <Field label="Photo URL">
-        <input
-          value={form.photoUrl ?? ""}
-          onChange={(e) => update({ photoUrl: e.target.value || null })}
-          className={inputCls}
-          data-testid="input-person-photo"
-        />
-        <p className="text-[11px] text-slate-400 mt-1">
-          Square, displayed as a circle. 400×400 px minimum (800×800 for
-          retina). JPG or PNG.
-        </p>
-      </Field>
-      <Field label="Bio">
-        <textarea
-          value={form.bio ?? ""}
-          onChange={(e) => update({ bio: e.target.value || null })}
-          rows={4}
-          className={inputCls + " resize-none"}
-          data-testid="input-person-bio"
-        />
-      </Field>
-
       {/* Streaming + social URLs collapsed into a single tabbed control:
           eight platform icons act as both completion indicators (mint check
           when filled) and tabs. Clicking one reveals a single input bound
-          to that platform's URL field. Saves vertical space, removes the
-          old redundant two-column grids, and gives the admin a glanceable
-          "X of 8 filled" counter. */}
+          to that platform's URL field. The Apple Music + Spotify tabs
+          double as the auto-fill entry point — paste a URL there (or press
+          "Fill form") and we scrape name, photo, bio, and (Apple) the full
+          discography. */}
       {(() => {
         type Key =
           | "apple"
@@ -1709,6 +1631,8 @@ function PersonEditor({
         const active =
           platforms.find((p) => p.key === activeSocial) ?? platforms[0];
         const activeValue = (form[active.field] as string | null) ?? "";
+        const isScrapable =
+          active.key === "apple" || active.key === "spotify";
         return (
           <div className="space-y-2">
             <SocialFieldShortcuts
@@ -1737,27 +1661,97 @@ function PersonEditor({
               }}
             />
             <Field label={active.label}>
-              <input
-                ref={socialInputRef}
-                key={active.key}
-                value={activeValue}
-                onChange={(e) =>
-                  update({ [active.field]: e.target.value || null })
-                }
-                placeholder={active.placeholder}
-                className={inputCls}
-                data-testid={active.testid}
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  ref={socialInputRef}
+                  key={active.key}
+                  value={activeValue}
+                  onChange={(e) =>
+                    update({ [active.field]: e.target.value || null })
+                  }
+                  onPaste={(e) => {
+                    if (!isScrapable) return;
+                    const pasted = e.clipboardData.getData("text").trim();
+                    if (!pasted) return;
+                    // Read the pasted URL straight from the clipboard event
+                    // instead of waiting for the onChange round-trip — the
+                    // scrape fires immediately with the value the user
+                    // actually pasted, and the resulting prefill merges
+                    // against the latest form state inside runScrape.
+                    runScrape(pasted);
+                  }}
+                  onKeyDown={(e) => {
+                    if (
+                      isScrapable &&
+                      e.key === "Enter" &&
+                      activeValue.trim()
+                    ) {
+                      e.preventDefault();
+                      runScrape(activeValue);
+                    }
+                  }}
+                  placeholder={active.placeholder}
+                  className={inputCls + " flex-1"}
+                  disabled={isScrapable && scrapeBusy}
+                  data-testid={active.testid}
+                />
+                {isScrapable && (
+                  <button
+                    type="button"
+                    onClick={() => runScrape(activeValue)}
+                    disabled={scrapeBusy || !activeValue.trim()}
+                    className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40 shrink-0"
+                    data-testid="button-artist-scrape-url"
+                  >
+                    {scrapeBusy ? "Reading…" : "Fill form"}
+                  </button>
+                )}
+              </div>
             </Field>
-            {(active.key === "apple" || active.key === "spotify") && (
-              <p className="text-[11px] text-slate-400">
-                After the in-app preview window, fans get "Listen on Apple
-                Music / Spotify" buttons that point here.
+            {isScrapable ? (
+              <p
+                role="status"
+                aria-live="polite"
+                className={`text-[11px] min-h-[1em] ${scrapeMsg?.kind === "err" ? "text-red-600" : "text-slate-400"}`}
+                data-testid="text-artist-scrape-result"
+              >
+                {scrapeMsg?.text ??
+                  "Paste an Apple Music or Spotify artist URL — we'll fill name, photo, bio, and pull the discography. Nothing saves until you click Save changes."}
               </p>
-            )}
+            ) : null}
           </div>
         );
       })()}
+
+      <Field label="Name">
+        <input
+          value={form.name}
+          onChange={(e) => update({ name: e.target.value })}
+          className={inputCls}
+          data-testid="input-person-name"
+        />
+      </Field>
+      <Field label="Photo URL">
+        <input
+          value={form.photoUrl ?? ""}
+          onChange={(e) => update({ photoUrl: e.target.value || null })}
+          className={inputCls}
+          data-testid="input-person-photo"
+        />
+        <p className="text-[11px] text-slate-400 mt-1">
+          Square, displayed as a circle. 400×400 px minimum (800×800 for
+          retina). JPG or PNG.
+        </p>
+      </Field>
+      <Field label="Bio">
+        <textarea
+          value={form.bio ?? ""}
+          onChange={(e) => update({ bio: e.target.value || null })}
+          rows={4}
+          className={inputCls + " resize-none"}
+          data-testid="input-person-bio"
+        />
+      </Field>
 
       <Field label="Accent colour (hex, falls back to brand blue)">
         <div className="flex items-center gap-2">
