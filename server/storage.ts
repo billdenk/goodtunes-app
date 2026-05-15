@@ -618,9 +618,13 @@ export class DbStorage implements IStorage {
     }
     return Array.from(byPerson.values())
       .map(({ person, tracks }) => ({ ...person, trackCount: tracks.size }))
-      .sort(
-        (a, b) =>
-          b.trackCount - a.trackCount || a.name.localeCompare(b.name),
+      // Apple-Music / Spotify standard: sort artists alphabetically by
+      // display name as a single string (case-insensitive). "Fernando
+      // Perdomo" sorts under F; one-name acts like "SoulChef" sort under
+      // S. trackCount stays on the row for badge/display use, but it no
+      // longer drives order — fans scan rosters by name, not popularity.
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
       );
   }
 
@@ -648,9 +652,10 @@ export class DbStorage implements IStorage {
     }
     return Array.from(byPerson.values())
       .map(({ person, tracks }) => ({ ...person, trackCount: tracks.size }))
-      .sort(
-        (a, b) =>
-          b.trackCount - a.trackCount || a.name.localeCompare(b.name),
+      // Alphabetical by display name — same rule as
+      // getVendorSuperCreditArtists. See note there for why.
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
       );
   }
 

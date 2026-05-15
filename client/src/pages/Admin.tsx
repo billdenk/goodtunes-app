@@ -4495,6 +4495,12 @@ function LabelPreviewCard({
       photoUrl: person?.photoUrl ?? null,
     });
   }
+  // Apple-Music / Spotify standard: alphabetical by display name as a
+  // single string (case-insensitive). "Fernando Perdomo" sorts under F,
+  // "SoulChef" under S — matches how fans scan a roster.
+  artistRows.sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
   const artistsCount = artistRows.length;
 
   const domain = (() => {
