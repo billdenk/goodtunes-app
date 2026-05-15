@@ -805,7 +805,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Bump the artwork from the default 100×100 thumb to a 600×600 master
     // — same trick used by the artist discography scraper above.
     const art100: string = collection.artworkUrl100 || collection.artworkUrl60 || "";
-    const artwork = art100.replace(/\/(\d+)x(\d+)bb\.(jpg|png)$/i, "/600x600bb.$3") || "/figmaAssets/artworks-000451097049-kerecr-t500x500.png";
+    const artwork = art100.replace(/\/(\d+)x(\d+)bb\.(jpg|png)$/i, "/600x600bb.$3") || "/album-placeholder.svg";
     const releaseDate: string | null = collection.releaseDate || null;
     const year = releaseDate ? Number(releaseDate.slice(0, 4)) || null : null;
     const trackCount = Number(collection.trackCount) || tracks.length || null;

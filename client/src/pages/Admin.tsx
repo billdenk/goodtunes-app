@@ -1730,7 +1730,7 @@ function PersonEditor({
                   const res = await apiRequest("POST", "/api/admin/albums", {
                     title: `New release — ${form.name || "Untitled"}`,
                     artist: form.name || "Unknown artist",
-                    artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png",
+                    artwork: "/album-placeholder.svg",
                     type: "LP",
                     primaryArtistId: personId,
                   });
@@ -5493,7 +5493,7 @@ export function Admin() {
       const res = await apiRequest("POST", "/api/admin/albums", {
         title: "New album",
         artist: "Unknown artist",
-        artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png",
+        artwork: "/album-placeholder.svg",
         type: "LP",
       });
       return res.json() as Promise<AdminAlbum>;
