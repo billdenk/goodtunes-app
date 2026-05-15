@@ -8,6 +8,7 @@ import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import type { PersonDiscography } from "@shared/schema";
+import { SiApplemusic, SiSpotify } from "react-icons/si";
 
 export function ArtistDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -354,35 +355,31 @@ function HowToPlaySheet({
   const spotifyHref =
     release.spotifyUrl ??
     `https://open.spotify.com/search/${encodeURIComponent(`${artistName} ${release.name}`)}`;
+  // Official brand marks via react-icons/si. Per each service's identity
+  // guidelines we render the full-color logo on a black tile.
+  // - Apple Music identity: marketing.services.apple/apple-music-identity-guidelines
+  // - Spotify design guidelines: developer.spotify.com/documentation/design
   const services: Array<{
     key: string;
     label: string;
     href: string | null;
-    // Inline SVG keeps this self-contained — no new icon dependency.
     logo: JSX.Element;
-    accent: string;
   }> = [
     {
       key: "apple",
       label: "Apple Music",
       href: release.appleMusicUrl,
-      accent: "#FA243C",
+      // Apple Music brand pink/red gradient.
       logo: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-          <path d="M19.5 4.5c0-1.4-1.1-2.5-2.5-2.5h-10C5.6 2 4.5 3.1 4.5 4.5v15c0 1.4 1.1 2.5 2.5 2.5h10c1.4 0 2.5-1.1 2.5-2.5v-15zm-4.4 12.2c-.2.5-.5 1-.9 1.4-.6.6-1.4.9-2.2.9-.3 0-.5 0-.8-.1-.7-.2-1.3-.5-1.7-1.1-.5-.7-.7-1.5-.6-2.3.1-.8.5-1.5 1.1-2 .5-.4 1.1-.6 1.7-.7l1.3-.2V8.4c0-.1 0-.2-.1-.3-.1 0-.1-.1-.2-.1l-3.6.5c-.2 0-.4.2-.4.4v6.8c0 .1 0 .2-.1.2 0 0-.1.1-.2.1l-1.3.2c-.6.1-1.2.5-1.5 1.1-.3.5-.4 1.1-.2 1.7.2.7.7 1.2 1.3 1.5.4.2.8.3 1.3.2.4 0 .8-.2 1.1-.4.6-.4 1-1.1 1.1-1.9V9.4l3.3-.5c.1 0 .2 0 .3.1.1.1.1.2.1.3v6.5c0 .3-.1.6-.2.9z"/>
-        </svg>
+        <SiApplemusic size={52} style={{ color: "#FA243C" }} />
       ),
     },
     {
       key: "spotify",
       label: "Spotify",
       href: spotifyHref,
-      accent: "#1DB954",
-      logo: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.6 14.4c-.2.3-.6.4-.9.2-2.5-1.5-5.6-1.9-9.3-1-.4.1-.7-.1-.8-.5-.1-.4.1-.7.5-.8 4-.9 7.5-.5 10.3 1.2.4.2.4.6.2.9zm1.2-2.7c-.2.4-.7.5-1.1.3-2.8-1.7-7.1-2.2-10.4-1.2-.4.1-.9-.1-1-.5-.1-.4.1-.9.5-1 3.8-1.1 8.6-.6 11.8 1.4.4.2.5.7.2 1zm.1-2.8c-3.4-2-9-2.2-12.2-1.2-.5.2-1.1-.1-1.2-.6-.2-.5.1-1.1.6-1.2 3.7-1.1 9.9-.9 13.8 1.4.5.3.7.9.4 1.4-.3.5-.9.7-1.4.2z"/>
-        </svg>
-      ),
+      // Spotify green (#1ED760 on black per their guidelines).
+      logo: <SiSpotify size={52} style={{ color: "#1ED760" }} />,
     },
   ];
 
@@ -397,22 +394,9 @@ function HowToPlaySheet({
         onClick={(e) => e.stopPropagation()}
         style={{ boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}
       >
-        {/* Drag handle + floating close button */}
-        <div className="relative">
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="w-10 h-1 rounded-full bg-white/25" />
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute top-3 right-4 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
-            data-testid="button-close-how-to-play"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+        {/* Apple-style grabber handle — no X. Tap outside or drag to dismiss. */}
+        <div className="flex justify-center pt-2.5 pb-1">
+          <div className="w-9 h-[5px] rounded-full bg-white/30" />
         </div>
 
         {/* Centered hero: large rounded album art + title + meta */}
@@ -445,44 +429,37 @@ function HowToPlaySheet({
           <h4 className="text-white/55 text-[11px] font-semibold uppercase tracking-[0.14em] text-center mb-4">
             How to Play
           </h4>
-          <div className="flex items-start justify-center gap-7">
+          <div className="flex items-center justify-center gap-6">
             {services.map((s) => {
               const isDisabled = !s.href;
               const tile = (
                 <div
-                  className="flex items-center justify-center rounded-[22px] transition-transform active:scale-[0.94]"
+                  className="flex items-center justify-center rounded-[26px] transition-transform active:scale-[0.94]"
                   style={{
-                    width: 88,
-                    height: 88,
-                    background: s.accent,
-                    opacity: isDisabled ? 0.4 : 1,
+                    width: 104,
+                    height: 104,
+                    background: "#000",
+                    opacity: isDisabled ? 0.35 : 1,
                     boxShadow: isDisabled
                       ? "none"
-                      : `0 10px 24px ${s.accent}55, inset 0 1px 0 rgba(255,255,255,0.15)`,
+                      : "0 10px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.06)",
                   }}
                 >
-                  {/* Bump the logo larger inside the bigger tile */}
-                  <div style={{ transform: "scale(1.7)" }}>{s.logo}</div>
+                  {s.logo}
                 </div>
               );
-              const caption = (
-                <p className="text-white text-[13px] font-semibold mt-2.5">{s.label}</p>
-              );
-              const subcaption = isDisabled ? (
-                <p className="text-white/40 text-[11px] mt-0.5">Not available</p>
-              ) : null;
               if (isDisabled) {
                 return (
                   <div
                     key={s.key}
                     role="button"
                     aria-disabled="true"
-                    className="flex flex-col items-center cursor-not-allowed"
+                    aria-label={`${s.label} not available for this release`}
+                    className="cursor-not-allowed"
                     data-testid={`button-how-to-play-${s.key}-disabled`}
                   >
                     {tile}
-                    {caption}
-                    {subcaption}
                   </div>
                 );
               }
@@ -492,12 +469,10 @@ function HowToPlaySheet({
                   href={s.href!}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex flex-col items-center"
                   data-testid={`button-how-to-play-${s.key}`}
                   aria-label={`Listen on ${s.label}`}
                 >
                   {tile}
-                  {caption}
                 </a>
               );
             })}
