@@ -1773,25 +1773,37 @@ function VendorPaneEditor({
         <Field label="Affiliate / product URL (where the buy button goes)">
           <input value={draft.affiliateUrl} onChange={(e) => setDraft({ ...draft, affiliateUrl: e.target.value })} className={inputCls} data-testid="input-vendor-pane-affiliate" />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="About URL (homepage)">
-            <input value={draft.aboutUrl ?? ""} onChange={(e) => setDraft({ ...draft, aboutUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-about" />
-          </Field>
-          <Field label="Logo URL (else favicon)">
-            <input value={draft.logoUrl ?? ""} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-logo" />
-          </Field>
-        </div>
+        <Field label="About URL (homepage)">
+          <input value={draft.aboutUrl ?? ""} onChange={(e) => setDraft({ ...draft, aboutUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-about" />
+        </Field>
         <Field label="Tagline (one-liner)">
           <input value={draft.tagline ?? ""} onChange={(e) => setDraft({ ...draft, tagline: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-tagline" />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Location">
-            <input value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value || null })} placeholder="Nashville, TN" className={inputCls} data-testid="input-vendor-pane-location" />
-          </Field>
-          <Field label="Cover URL (hero photo)">
-            <input value={draft.coverUrl ?? ""} onChange={(e) => setDraft({ ...draft, coverUrl: e.target.value || null })} className={inputCls} data-testid="input-vendor-pane-cover" />
-          </Field>
-        </div>
+        <Field label="Location">
+          <input value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value || null })} placeholder="Nashville, TN" className={inputCls} data-testid="input-vendor-pane-location" />
+        </Field>
+
+        {/* Logo + cover both go through ArtworkPicker so admins can paste a
+            URL, drop a file, or upload from disk — the same UX as albums,
+            people, and instruments. Logo falls back to the site favicon at
+            render time, so leaving it blank is still fine for most vendors. */}
+        <Field label="Logo (circular). Leave blank to use site favicon.">
+          <ArtworkPicker
+            value={draft.logoUrl ?? ""}
+            onChange={(v) => setDraft({ ...draft, logoUrl: v || null })}
+            shape="circle"
+            testId="input-vendor-pane-logo"
+            hint="Small, square. PNG with transparency works best. Falls back to a Google-served favicon if empty."
+          />
+        </Field>
+        <Field label="Cover / hero background">
+          <ArtworkPicker
+            value={draft.coverUrl ?? ""}
+            onChange={(v) => setDraft({ ...draft, coverUrl: v || null })}
+            testId="input-vendor-pane-cover"
+            hint="Wide hero shot of the storefront, workshop, or product. ~1600×1200 recommended."
+          />
+        </Field>
         <Field label="Bio (short paragraph)">
           <textarea value={draft.bio ?? ""} onChange={(e) => setDraft({ ...draft, bio: e.target.value || null })} className={`${inputCls} min-h-[100px]`} data-testid="input-vendor-pane-bio" />
         </Field>
@@ -2034,6 +2046,129 @@ function SocialIconRow({ person }: { person: AdminPerson }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// Phone-frame preview mirroring the fan-side VendorSheet hero so admins can
+// see exactly how the cover image, logo, name, tagline and bio land before
+// publishing. We don't replicate the full sheet (vendor pages have action
+// buttons, "About", and "Used by these artists" sections that don't add much
+// to a design preview) — just the hero + bio, which is everything that
+// actually changes when the admin edits the form.
+function VendorPreviewCard({ vendor }: { vendor: AdminVendor & { instrumentName: string } }) {
+  // Same favicon fallback the fan sheet uses, so an empty Logo field still
+  // looks correct in the preview rather than showing a blank circle.
+  const logoFallback = useMemo(() => {
+    if (vendor.logoUrl) return vendor.logoUrl;
+    try {
+      const u = new URL(vendor.affiliateUrl);
+      return `https://www.google.com/s2/favicons?sz=128&domain=${u.hostname}`;
+    } catch { return ""; }
+  }, [vendor.logoUrl, vendor.affiliateUrl]);
+
+  return (
+    <>
+      <div
+        className="relative rounded-[42px] overflow-hidden shadow-2xl"
+        style={{
+          width: 360,
+          height: 760,
+          background: "#00062B",
+          padding: 10,
+          boxShadow: "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+        }}
+        data-testid="preview-vendor"
+      >
+        <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
+          {/* Mock status bar + back chevron (vendor is a sub-sheet of an instrument) */}
+          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white">
+            <span>9:41</span>
+            <span>● ● ●</span>
+          </div>
+          <div className="flex-shrink-0 flex items-center justify-between px-3 pb-2">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white/70" style={{ background: "rgba(255,255,255,0.10)" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 6l-6 6 6 6" /></svg>
+            </div>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white/70" style={{ background: "rgba(255,255,255,0.10)" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            </div>
+          </div>
+
+          {/* Hero — full-bleed cover with gradient fade + vendor name overlay.
+              Mirrors VendorSheet in AlbumDetail.tsx (negative margin pulls
+              the image up under the sticky bar). Cover height is dialled in
+              so name + tagline always sit above the scroll fold. */}
+          <div className="relative w-full flex-shrink-0" style={{ height: 260 }}>
+            {vendor.coverUrl ? (
+              <img src={vendor.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" data-testid="img-preview-vendor-cover" />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{ background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)" }}
+              >
+                {logoFallback && (
+                  <>
+                    <img
+                      src={logoFallback}
+                      alt=""
+                      aria-hidden
+                      className="absolute inset-0 w-full h-full object-cover"
+                      style={{ filter: "blur(40px) saturate(160%)", transform: "scale(1.3)", opacity: 0.85 }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-28 h-28 rounded-full flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)" }}>
+                        <img src={logoFallback} alt="" className="w-full h-full object-cover" style={{ opacity: 0.92 }} />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <div className="absolute inset-x-0 bottom-0 h-2/3" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)" }} />
+            <div className="absolute left-5 right-5 bottom-3">
+              <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight" data-testid="text-preview-vendor-name">
+                {vendor.name || "Untitled vendor"}
+              </h2>
+              {vendor.tagline && (
+                <p className="text-[13px] mt-0.5" style={{ color: "rgba(235,235,245,0.7)" }}>{vendor.tagline}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Primary actions — Visit + View listing. Non-interactive in preview. */}
+          <div className="px-5 pt-3 flex gap-2 flex-shrink-0">
+            <div className="flex-1 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold" style={{ background: "#319ED8" }}>
+              Visit website
+            </div>
+            <div className="h-9 px-4 rounded-full flex items-center justify-center text-white text-[13px] font-semibold" style={{ background: "rgba(255,255,255,0.10)" }}>
+              View listing
+            </div>
+          </div>
+
+          {/* Bio / about — same "About {name}" pattern as the fan sheet */}
+          <div className="px-5 pt-4 pb-2 flex-1 overflow-hidden">
+            <h3 className="text-white text-[16px] font-bold leading-tight tracking-tight mb-1.5">About {vendor.name || "this vendor"}</h3>
+            {vendor.bio ? (
+              <p
+                className="text-[13px] leading-relaxed line-clamp-6"
+                style={{ color: "rgba(255,255,255,0.85)" }}
+                data-testid="text-preview-vendor-bio"
+              >
+                {vendor.bio}
+              </p>
+            ) : (
+              <p className="text-[12px]" style={{ color: "rgba(235,235,245,0.4)" }}>No bio yet — add a short paragraph so fans know who they're buying from.</p>
+            )}
+            {vendor.location && (
+              <p className="text-[12px] mt-3" style={{ color: "rgba(235,235,245,0.55)" }}>
+                <span aria-hidden>📍 </span>{vendor.location}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+      <p className="text-slate-300 text-xs mt-3">Preview of the in-app VendorSheet hero — appears when a fan taps a vendor inside {vendor.instrumentName}.</p>
+    </>
   );
 }
 
