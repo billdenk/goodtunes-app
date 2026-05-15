@@ -2905,8 +2905,13 @@ function VendorSheet({
         </div>
 
         {/* Hero — full-bleed cover with vendor name overlay (gradient fade for legibility).
-            Pulled up under the sticky bar with a negative margin so the bar floats over it. */}
-        <div className="-mt-[60px] relative w-full" style={{ aspectRatio: "1 / 1.05" }}>
+            Pulled up under the sticky bar with a negative margin so the bar floats
+            over it. The pull-up MUST match the toolbar's real height, which
+            includes the device safe-area inset (`env(safe-area-inset-top) + 12px`
+            padding-top + 36px button + 8px padding-bottom = inset + 56px). A
+            hardcoded 60px left a visible navy strip above the hero on notched
+            iPhones where the inset is ~50px. */}
+        <div className="relative w-full" style={{ aspectRatio: "1 / 1.05", marginTop: "calc((env(safe-area-inset-top, 0px) + 56px) * -1)" }}>
           {vendor.coverUrl ? (
             <img src={vendor.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
           ) : (
