@@ -159,7 +159,7 @@ export function ArtistDetail() {
           </div>
 
           <div className="px-5 mt-9">
-            <h2 className="text-white text-xl font-bold tracking-tight mb-3">Albums</h2>
+            <h2 className="text-white text-xl font-bold tracking-tight mb-3">GoodTunes Releases</h2>
             <div className="grid grid-cols-2 gap-4">
               {artistAlbums.map((album) => (
                 <button
