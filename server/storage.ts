@@ -986,9 +986,16 @@ export class DbStorage implements IStorage {
 }
 
 export async function seedCatalog(): Promise<void> {
-  // Idempotent: both the albums and songs inserts use onConflictDoNothing so
-  // a partial-seed failure on a prior boot, or two boots racing, both heal on
-  // the next start instead of leaving missing songs permanently.
+  // First-run-only. We used to insert with onConflictDoNothing every boot
+  // for self-healing, but that backfired in production: deleting a seed
+  // album (e.g. swapping it out for a real Apple Music import) only stuck
+  // until the next republish, when the seed row would reappear and
+  // duplicate the real one. Now the seed is treated as initial demo
+  // data — if the catalog has ANY albums, the admin has taken ownership
+  // and the seed steps back. Fresh/empty DBs still get the demo content
+  // on first boot.
+  const existing = await db.select({ id: albums.id }).from(albums).limit(1);
+  if (existing.length > 0) return;
   await db.insert(albums).values(SEED_ALBUMS).onConflictDoNothing();
   await db
     .insert(songs)
