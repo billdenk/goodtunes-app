@@ -74,6 +74,7 @@ interface AdminSong {
   duration: number;
   lyrics: string | null;
   audioUrl: string | null;
+  syncedLyrics: { timeMs: number; text: string }[] | null;
 }
 
 interface AlbumWithSongs extends AdminAlbum {

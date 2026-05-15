@@ -77,6 +77,11 @@ export interface Song {
   duration: number;
   lyrics?: string;
   audioUrl?: string;
+  // Per-line WebVTT-derived timing (admin uploads a .vtt file, parsed
+  // into { timeMs, text } cues). When present, the Player's lyrics
+  // overlay uses these timestamps instead of auto-distributing the
+  // plain-text `lyrics` field across duration.
+  syncedLyrics?: { timeMs: number; text: string }[] | null;
 }
 
 // SuperCredits™

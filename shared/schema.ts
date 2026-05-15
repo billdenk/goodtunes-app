@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -131,6 +131,11 @@ export const songs = pgTable("songs", {
   duration: integer("duration").notNull().default(180),
   lyrics: text("lyrics"),
   audioUrl: text("audio_url"),
+  // Per-line WebVTT-derived timing. Uploaded by admin as a .vtt file,
+  // parsed client-side into { timeMs, text } cues. When present, the
+  // Player's lyrics overlay uses these timestamps verbatim instead of
+  // auto-distributing the plain-text `lyrics` field across duration.
+  syncedLyrics: jsonb("synced_lyrics").$type<{ timeMs: number; text: string }[]>(),
 });
 
 export const userAlbums = pgTable(

@@ -1034,13 +1034,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { title, trackNumber, duration, lyrics, audioUrl } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics } = req.body ?? {};
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
     if (duration !== undefined) updates.duration = Number(duration);
     if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
     if (audioUrl !== undefined) updates.audioUrl = audioUrl ? String(audioUrl) : null;
+    // Synced lyrics: an array of { timeMs, text } cues parsed client-side
+    // from a .vtt file. Validate the shape defensively — anything that
+    // doesn't look like a non-empty cue array is stored as null so the
+    // Player falls back to the auto-distributed timing.
+    if (syncedLyrics !== undefined) {
+      if (
+        Array.isArray(syncedLyrics) &&
+        syncedLyrics.length > 0 &&
+        syncedLyrics.every(
+          (c: any) =>
+            c &&
+            typeof c.timeMs === "number" &&
+            Number.isFinite(c.timeMs) &&
+            c.timeMs >= 0 &&
+            typeof c.text === "string",
+        )
+      ) {
+        updates.syncedLyrics = syncedLyrics.map((c: any) => ({
+          timeMs: Math.round(c.timeMs),
+          text: String(c.text),
+        }));
+      } else {
+        updates.syncedLyrics = null;
+      }
+    }
     const updated = await storage.updateSong(id, updates);
     if (!updated) return res.status(404).json({ message: "Song not found" });
     return res.json(updated);
