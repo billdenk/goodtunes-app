@@ -4426,19 +4426,78 @@ function VendorPreviewCard({
   );
 }
 
-// Phone-frame preview that mirrors what a fan will see on the future
-// label page. There's no fan-side LabelSheet shipped yet, so this is a
-// best-effort sketch — same chrome as PersonPreviewCard / VendorPreviewCard
-// so the admin can sanity-check logo + cover + bio without booting the
-// player. When the real LabelPage lands, swap this layout for that one's.
-function LabelPreviewCard({ label }: { label: AdminLabel }) {
-  const initials =
-    label.name
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]?.toUpperCase() ?? "")
-      .join("") || "•";
+
+// Phone-frame preview mirroring VendorPreviewCard one-for-one — same hero
+// chrome, same Instagram-style profile row, same tab strip (About | Music N
+// | Artists N). The fan-side LabelSheet hasn't shipped yet; when it does we
+// swap this for the real layout, but the surfaces should look identical
+// from the admin's POV so labels and vendors stay visually consistent.
+function LabelPreviewCard({
+  label,
+  albums,
+  people,
+}: {
+  label: AdminLabel;
+  albums: AdminAlbum[];
+  people: AdminPerson[];
+}) {
+  const [tab, setTab] = useState<"about" | "music" | "artists">("about");
+  const [bioExpanded, setBioExpanded] = useState(false);
+
+  // Music = every album credited to this label (hidden albums excluded —
+  // they're invisible to fans, so the count would lie).
+  const labelAlbums = albums.filter(
+    (a) => a.labelId === label.id && !a.isHidden,
+  );
+  const musicCount = labelAlbums.length;
+
+  // Artists = distinct primary artists across those albums. Dedupe by
+  // primaryArtistId when present, falling back to the snapshot `artist`
+  // string so manually-typed names (no Person row yet) still surface.
+  const artistKeys = new Set<string>();
+  const artistRows: { id: string; name: string; photoUrl: string | null }[] = [];
+  for (const a of labelAlbums) {
+    const key = a.primaryArtistId ?? `name:${a.artist || ""}`;
+    if (!key || artistKeys.has(key)) continue;
+    artistKeys.add(key);
+    const person = a.primaryArtistId
+      ? people.find((p) => p.id === a.primaryArtistId)
+      : undefined;
+    artistRows.push({
+      id: key,
+      name: person?.name ?? a.artist ?? "Unknown artist",
+      photoUrl: person?.photoUrl ?? null,
+    });
+  }
+  const artistsCount = artistRows.length;
+
+  const domain = (() => {
+    const raw = label.websiteUrl ?? "";
+    try {
+      return new URL(raw).hostname.replace(/^www\./, "");
+    } catch {
+      return (label.websiteUrl ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    }
+  })();
+  const tagline = label.location ?? domain;
+  const bioFallback = `${label.name || "This label"} releases music on GoodTunes. Tap the globe icon to visit their site, or browse their catalog and roster in the tabs below.`;
+
+  const IconBtn = ({
+    children,
+    testId,
+  }: {
+    children: React.ReactNode;
+    testId?: string;
+  }) => (
+    <div
+      className="w-8 h-8 rounded-full flex items-center justify-center text-white/85"
+      style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+      data-testid={testId}
+    >
+      {children}
+    </div>
+  );
+
   return (
     <>
       <div
@@ -4454,101 +4513,367 @@ function LabelPreviewCard({ label }: { label: AdminLabel }) {
         data-testid="preview-label"
       >
         <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
-          {/* Status bar */}
           <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white">
             <span>9:41</span>
             <span>● ● ●</span>
           </div>
 
-          {/* Cover image (or dark fallback). Logo sits over the bottom of
-              the cover so the label reads as a brand, not a list row. */}
-          <div className="relative w-full" style={{ height: 220 }}>
-            {label.coverUrl ? (
-              <img
-                src={label.coverUrl}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover"
-                data-testid="img-preview-label-cover"
-              />
-            ) : (
+          <div className="flex-1 overflow-y-auto scrollbar-hide relative">
+            {/* Floating toolbar */}
+            <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 pt-2">
+              <IconBtn testId="preview-label-back">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M15 6l-6 6 6 6" />
+                </svg>
+              </IconBtn>
+              <div className="flex items-center gap-1.5">
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  </svg>
+                </IconBtn>
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 3v12" />
+                    <path d="M7 8l5-5 5 5" />
+                    <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+                  </svg>
+                </IconBtn>
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M3 12h18" />
+                    <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
+                  </svg>
+                </IconBtn>
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </IconBtn>
+              </div>
+            </div>
+
+            {/* Hero — square-ish cover (matches VendorPreviewCard 1 / 1.05) */}
+            <div className="relative w-full" style={{ aspectRatio: "1 / 1.05" }}>
+              {label.coverUrl ? (
+                <img
+                  src={label.coverUrl}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  data-testid="img-preview-label-cover"
+                />
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)",
+                  }}
+                >
+                  {label.logoUrl && (
+                    <>
+                      <img
+                        src={label.logoUrl}
+                        alt=""
+                        aria-hidden
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{
+                          filter: "blur(40px) saturate(160%)",
+                          transform: "scale(1.3)",
+                          opacity: 0.85,
+                        }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div
+                          className="w-32 h-32 rounded-full flex items-center justify-center overflow-hidden"
+                          style={{
+                            background: "rgba(255,255,255,0.55)",
+                            backdropFilter: "blur(8px)",
+                          }}
+                        >
+                          <img
+                            src={label.logoUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            style={{ opacity: 0.92 }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <div
-                className="absolute inset-0"
+                className="absolute inset-x-0 bottom-0 h-1/3"
                 style={{
                   background:
-                    "linear-gradient(180deg, rgba(49,158,216,0.18) 0%, rgba(0,6,43,0) 100%)",
+                    "linear-gradient(to bottom, rgba(0,6,43,0) 0%, #00062B 100%)",
                 }}
               />
-            )}
-            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#00062B] to-transparent" />
-          </div>
+            </div>
 
-          {/* Logo + name block */}
-          <div className="flex flex-col items-center text-center px-5 -mt-12">
-            {label.logoUrl ? (
-              <img
-                src={label.logoUrl}
-                alt={label.name}
-                className="rounded-2xl object-cover border-2 border-[#00062B] bg-[#00062B]"
-                style={{ width: 96, height: 96 }}
-                data-testid="img-preview-label-logo"
-              />
-            ) : (
+            {/* Profile row */}
+            <div className="px-5 -mt-10 relative flex items-end gap-3">
               <div
-                className="rounded-2xl flex items-center justify-center text-white font-semibold border-2 border-[#00062B]"
+                className="flex-shrink-0 w-[72px] h-[72px] rounded-full p-[3px]"
                 style={{
-                  width: 96,
-                  height: 96,
-                  background: "#319ED8",
-                  fontSize: 32,
+                  background:
+                    "linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)",
                 }}
-                aria-hidden="true"
+                data-testid="preview-label-avatar"
               >
-                {initials}
+                <div
+                  className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
+                  style={{ background: "#fff" }}
+                >
+                  {label.logoUrl ? (
+                    <img
+                      src={label.logoUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span
+                      className="text-[26px] font-bold"
+                      style={{ color: "#00062B" }}
+                    >
+                      {(label.name || "?").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 pb-1">
+                <h2
+                  className="text-white font-bold leading-tight tracking-tight line-clamp-2 break-words"
+                  style={{ fontSize: (label.name?.length ?? 0) > 18 ? 17 : 20 }}
+                  data-testid="text-preview-label-name"
+                >
+                  {label.name || "Untitled label"}
+                </h2>
+                {tagline && (
+                  <p
+                    className="text-[13px] mt-0.5 line-clamp-2"
+                    style={{ color: "rgba(235,235,245,0.7)" }}
+                  >
+                    {tagline}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Tabs — About | Music N | Artists N */}
+            <div className="px-5 pt-4">
+              <div className="flex gap-5 border-b border-white/10">
+                {([
+                  { key: "about", label: "About", count: undefined as number | undefined },
+                  { key: "music", label: "Music", count: musicCount > 0 ? musicCount : undefined },
+                  { key: "artists", label: "Artists", count: artistsCount > 0 ? artistsCount : undefined },
+                ] as const).map((t) => {
+                  const active = tab === t.key;
+                  return (
+                    <button
+                      type="button"
+                      key={t.key}
+                      onClick={() => setTab(t.key)}
+                      className="relative pb-2 text-[14px] font-semibold active:opacity-80"
+                      style={{
+                        color: active ? "#fff" : "rgba(235,235,245,0.55)",
+                      }}
+                      data-testid={`tab-preview-label-${t.key}`}
+                    >
+                      {t.label}
+                      {typeof t.count === "number" && (
+                        <span
+                          className="ml-1.5 text-[12px] font-medium"
+                          style={{ color: "rgba(235,235,245,0.45)" }}
+                        >
+                          {t.count}
+                        </span>
+                      )}
+                      {active && (
+                        <span
+                          aria-hidden
+                          className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
+                          style={{ background: "#319ED8" }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {tab === "about" && (
+              <div className="px-5 pt-4 pb-6">
+                <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-1.5">
+                  About {label.name || "this label"}
+                </h3>
+                {(() => {
+                  const body = label.bio || bioFallback;
+                  const isLong = body.length > 260;
+                  return (
+                    <>
+                      <p
+                        className={`text-[13px] leading-relaxed whitespace-pre-line ${
+                          isLong && !bioExpanded ? "line-clamp-5" : ""
+                        }`}
+                        style={{ color: "rgba(235,235,245,0.72)" }}
+                        data-testid="text-preview-label-bio"
+                      >
+                        {body}
+                      </p>
+                      {isLong && (
+                        <button
+                          type="button"
+                          onClick={() => setBioExpanded((v) => !v)}
+                          className="mt-1.5 text-[13px] font-semibold active:opacity-70"
+                          style={{ color: "#319ED8" }}
+                          data-testid="button-preview-label-bio-toggle"
+                        >
+                          {bioExpanded ? "less" : "more"}
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {label.location && (
+                  <div className="mt-4">
+                    <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                      Location
+                    </p>
+                    <p className="text-white text-[14px]">{label.location}</p>
+                  </div>
+                )}
+
+                {domain && (
+                  <div className="mt-4">
+                    <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                      Web
+                    </p>
+                    <p className="text-[14px]" style={{ color: "#319ED8" }} data-testid="text-preview-label-website">
+                      {domain}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
-            <h2
-              className="text-white text-[22px] font-bold leading-tight mt-3"
-              data-testid="text-preview-label-name"
-            >
-              {label.name || "Unnamed label"}
-            </h2>
-            {label.location && (
-              <p className="text-white/70 text-[12px] mt-1">{label.location}</p>
+
+            {tab === "music" && (
+              <div className="px-5 pt-4 pb-6">
+                {musicCount === 0 ? (
+                  <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
+                    No albums attached yet. Set this label on an album's editor to populate this list.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col">
+                    {labelAlbums.map((a, idx) => (
+                      <li
+                        key={a.id}
+                        className={`flex items-center gap-3 py-3 ${
+                          idx > 0 ? "border-t border-white/10" : ""
+                        }`}
+                        data-testid={`preview-label-album-${a.id}`}
+                      >
+                        {a.artwork ? (
+                          <img
+                            src={a.artwork}
+                            alt=""
+                            className="w-11 h-11 rounded-md object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className="w-11 h-11 rounded-md flex items-center justify-center text-white/40 text-[18px] flex-shrink-0"
+                            style={{ background: "rgba(255,255,255,0.06)" }}
+                            aria-hidden
+                          >
+                            ♪
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-white text-[14px] font-medium leading-tight truncate">
+                            {a.title}
+                          </p>
+                          <p className="text-[12px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.55)" }}>
+                            {a.artist}
+                            {a.year ? ` · ${a.year}` : ""}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+                  Every album released on {label.name || "this label"} across the GoodTunes catalog.
+                </p>
+              </div>
             )}
-            {label.websiteUrl && (
-              <p
-                className="text-[12px] mt-1 truncate max-w-[260px]"
-                style={{ color: "#319ED8" }}
-                data-testid="text-preview-label-website"
-              >
-                {label.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-              </p>
+
+            {tab === "artists" && (
+              <div className="px-5 pt-4 pb-6">
+                {artistsCount === 0 ? (
+                  <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
+                    No artists yet. They'll appear here once an album is attached to this label.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col">
+                    {artistRows.map((p, idx) => {
+                      const initials =
+                        p.name
+                          .split(" ")
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((w) => w[0]?.toUpperCase() ?? "")
+                          .join("") || "•";
+                      return (
+                        <li
+                          key={p.id}
+                          className={`flex items-center gap-3 py-3 ${
+                            idx > 0 ? "border-t border-white/10" : ""
+                          }`}
+                          data-testid={`preview-label-artist-${p.id}`}
+                        >
+                          {p.photoUrl ? (
+                            <img
+                              src={p.photoUrl}
+                              alt=""
+                              className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div
+                              className="w-11 h-11 rounded-full flex items-center justify-center text-white text-[14px] font-semibold flex-shrink-0"
+                              style={{ background: "#319ED8" }}
+                              aria-hidden
+                            >
+                              {initials}
+                            </div>
+                          )}
+                          <p className="text-white text-[14px] font-medium leading-tight">
+                            {p.name}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+                  Distinct primary artists across this label's catalog.
+                </p>
+              </div>
             )}
           </div>
-
-          {/* Bio */}
-          {label.bio && (
-            <div className="px-5 pt-5">
-              <h3 className="pb-2 text-white text-[18px] font-bold tracking-tight">
-                About
-              </h3>
-              <p
-                className="text-[14px] leading-relaxed whitespace-pre-line line-clamp-8"
-                style={{ color: "rgba(255,255,255,0.95)" }}
-                data-testid="text-preview-label-bio"
-              >
-                {label.bio}
-              </p>
-            </div>
-          )}
         </div>
       </div>
       <p className="text-slate-300 text-xs mt-3">
-        Sketch of the fan-side label page (coming soon).
+        Preview of the in-app LabelSheet — {musicCount}{" "}
+        {musicCount === 1 ? "album" : "albums"} ·{" "}
+        {artistsCount} {artistsCount === 1 ? "artist" : "artists"}.
       </p>
     </>
   );
 }
+
 
 // ---------- LabelEditor ----------
 // Editor pane for one record label. Mirrors the entity-level half of
@@ -6340,7 +6665,7 @@ export function Admin() {
             (() => {
               const l = labels.find((x) => x.id === selectedId);
               if (!l) return null;
-              return <LabelPreviewCard label={l} />;
+              return <LabelPreviewCard label={l} albums={albums} people={people} />;
             })()
           ) : (
             <div
