@@ -17,7 +17,7 @@ import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type S
 // GET /api/albums/:id/credits. Person/instrument joins are already done
 // server-side so the fan-side credits surface renders from a single fetch.
 type ApiPerson = { id: string; name: string; photoUrl?: string | null; bio?: string | null; accent?: string | null };
-type ApiVendor = { id: string; instrumentId: string; name: string; affiliateUrl: string; aboutUrl?: string | null; logoUrl?: string | null; tagline?: string | null; bio?: string | null; location?: string | null; coverUrl?: string | null; position: number };
+type ApiVendor = { id: string; instrumentId: string; vendorId: string; name: string; domain?: string; affiliateUrl: string; aboutUrl?: string | null; homeUrl?: string | null; logoUrl?: string | null; tagline?: string | null; bio?: string | null; location?: string | null; coverUrl?: string | null; position: number };
 type ApiInstrument = { id: string; name: string; category: string; shortCategory?: string | null; photoUrl?: string | null; about?: string | null; artistNote?: string | null; vendors: ApiVendor[] };
 type ApiSongCredits = {
   writers: Array<{ id: string; songId: string; personId: string | null; name: string; role: string; position: number; person: ApiPerson | null }>;
@@ -41,6 +41,7 @@ function normalizeInstrument(i: ApiInstrument): Instrument {
     about: nu(i.about),
     artistNote: nu(i.artistNote),
     vendors: i.vendors.map((v) => ({
+      // Static-shape fields the static seed data also fills in.
       name: v.name,
       affiliateUrl: v.affiliateUrl,
       aboutUrl: nu(v.aboutUrl),
@@ -49,6 +50,14 @@ function normalizeInstrument(i: ApiInstrument): Instrument {
       bio: nu(v.bio),
       location: nu(v.location),
       coverUrl: nu(v.coverUrl),
+      // API-only fields needed by VendorSheet (profile fetch + bookmark
+      // keying). Static seed rows leave these undefined and fall back
+      // gracefully.
+      id: v.id,
+      vendorId: v.vendorId,
+      instrumentId: v.instrumentId,
+      homeUrl: v.homeUrl ?? undefined,
+      domain: v.domain,
     })),
   };
 }
@@ -88,6 +97,23 @@ export function AlbumDetail() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       try { window.localStorage.setItem("gt:bookmarked-instruments", JSON.stringify(Array.from(next))); } catch {}
+      return next;
+    });
+  };
+  // Mirrors the instrument-bookmark store. Persisted client-only via
+  // localStorage — same pattern as favorites/downloads/instruments.
+  const [bookmarkedVendors, setBookmarkedVendors] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("gt:bookmarked-vendors");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const toggleBookmarkVendor = (id: string) => {
+    setBookmarkedVendors((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { window.localStorage.setItem("gt:bookmarked-vendors", JSON.stringify(Array.from(next))); } catch {}
       return next;
     });
   };
@@ -854,6 +880,8 @@ export function AlbumDetail() {
           <VendorSheet
             vendor={vendorSheet.vendor}
             instrument={vendorSheet.instrument}
+            isBookmarked={!!vendorSheet.vendor.vendorId && bookmarkedVendors.has(vendorSheet.vendor.vendorId)}
+            onToggleBookmark={() => vendorSheet.vendor.vendorId && toggleBookmarkVendor(vendorSheet.vendor.vendorId)}
             onOpenInAppBrowser={(b) => setInAppBrowser(b)}
             onMessageVendor={(vendor) => {
               const inst = vendorSheet.instrument;
@@ -2160,28 +2188,75 @@ function InstrumentSheet({
 function VendorSheet({
   vendor,
   instrument,
+  isBookmarked,
+  onToggleBookmark,
   onOpenInAppBrowser,
   onMessageVendor,
   onClose,
 }: {
   vendor: InstrumentVendor;
   instrument: Instrument;
+  isBookmarked: boolean;
+  onToggleBookmark: () => void;
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
   onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
   onClose: () => void;
 }) {
+  const [tab, setTab] = useState<"about" | "instruments" | "artists">("about");
+
+  // One-shot fetch of the vendor profile bundle (vendor entity + all
+  // non-hidden instruments attached to it + SuperCredits-derived artists
+  // who've played those instruments). The InstrumentVendor row passed in
+  // is just one specific attachment — the profile pulls the full picture.
+  type VendorProfile = {
+    vendor: {
+      id: string; name: string; domain: string;
+      homeUrl: string | null; aboutUrl: string | null;
+      logoUrl: string | null; tagline: string | null; bio: string | null;
+      location: string | null; coverUrl: string | null;
+    };
+    instruments: Array<{
+      id: string; name: string; category: string;
+      shortCategory: string | null; photoUrl: string | null;
+      about: string | null; artistNote: string | null;
+    }>;
+    artists: Array<{
+      id: string; name: string; photoUrl: string | null;
+      bio: string | null; accent: string | null;
+      trackCount: number;
+    }>;
+  };
+  const { data: profile, isError: profileError } = useQuery<VendorProfile>({
+    queryKey: ["/api/vendors", vendor.vendorId, "profile"],
+    // Static-seed vendors (older demo data) have no vendorId — skip the
+    // fetch entirely so we don't 404 on `/api/vendors//profile`. The
+    // Instruments tab will show an empty hint and Artists falls back to
+    // the static `usedByPersonIds` rail.
+    enabled: !!vendor.vendorId,
+  });
+
   const domain = (() => {
     try { return new URL(vendor.aboutUrl ?? vendor.affiliateUrl).hostname.replace(/^www\./, ""); }
     catch { return ""; }
   })();
-
-  const usedBy = (vendor.usedByPersonIds ?? Object.keys(PEOPLE).slice(0, 4))
-    .map((pid) => PEOPLE[pid])
-    .filter(Boolean) as Person[];
+  // Prefer real SuperCredits-derived artists from the profile endpoint;
+  // fall back to the static stub `usedByPersonIds` so this still looks
+  // populated on demo vendors with no track_performers wired up yet.
+  const usedBy: Person[] = profile?.artists?.length
+    ? profile.artists.map((a) => ({
+        id: a.id,
+        name: a.name,
+        photoUrl: a.photoUrl ?? undefined,
+        accent: a.accent ?? undefined,
+      } as Person))
+    : ((vendor.usedByPersonIds ?? Object.keys(PEOPLE).slice(0, 4))
+        .map((pid) => PEOPLE[pid])
+        .filter(Boolean) as Person[]);
 
   const bio = vendor.bio
-    ?? `${vendor.name} is one of the trusted shops we link out to from SuperCredits™. Tap "Visit website" to browse their full catalog, or start a chat to ask about availability, condition, and shipping.`;
+    ?? `${vendor.name} is one of the trusted shops we link out to from SuperCredits™. Tap the globe icon to visit their full catalog, or start a chat to ask about availability, condition, and shipping.`;
   const tagline = vendor.tagline ?? domain;
+  const websiteUrl = vendor.aboutUrl ?? vendor.homeUrl ?? vendor.affiliateUrl;
 
   const handleShare = async () => {
     const shareUrl = vendor.aboutUrl ?? vendor.affiliateUrl;
@@ -2207,6 +2282,10 @@ function VendorSheet({
     <SheetShell ariaLabel={vendor.name} testId="sheet-vendor" variant="full" onClose={onClose}>
       {/* Top bar: floating back chevron + actions over the hero (Apple Music artist page) */}
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-10 relative">
+        {/* Toolbar + tab strip share a single sticky container so the tabs
+            always sit immediately under the toolbar regardless of the
+            device safe-area inset (a hardcoded `top-[60px]` would overlap
+            on notched devices with large insets). */}
         <div
           className="sticky top-0 z-20 flex items-center justify-between px-3 pb-2"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
@@ -2224,6 +2303,21 @@ function VendorSheet({
             </svg>
           </button>
           <div className="flex items-center gap-2">
+            {/* Bookmark — saves the vendor to the user's bookmark list
+                (localStorage). Filled when active. */}
+            <button
+              type="button"
+              onClick={onToggleBookmark}
+              aria-label={isBookmarked ? "Remove bookmark" : "Bookmark vendor"}
+              aria-pressed={isBookmarked}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+              data-testid="button-vendor-bookmark"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={isBookmarked ? "#4AFFCA" : "none"} stroke={isBookmarked ? "#4AFFCA" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={handleShare}
@@ -2236,6 +2330,23 @@ function VendorSheet({
                 <path d="M12 3v12" />
                 <path d="M7 8l5-5 5 5" />
                 <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+              </svg>
+            </button>
+            {/* Website — opens in-app browser to the vendor homepage.
+                Replaces the old "Visit website" pill so we don't compete
+                with the tabs below for vertical space. */}
+            <button
+              type="button"
+              onClick={() => onOpenInAppBrowser({ url: websiteUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
+              aria-label={`Visit ${vendor.name} website`}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+              data-testid="button-vendor-website"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M3 12h18" />
+                <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
               </svg>
             </button>
             <button
@@ -2291,81 +2402,144 @@ function VendorSheet({
           </div>
         </div>
 
-        {/* Primary actions */}
-        <div className="px-5 pt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => onOpenInAppBrowser({ url: vendor.aboutUrl ?? vendor.affiliateUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
-            className="flex-1 h-11 rounded-full flex items-center justify-center gap-2 text-white text-[15px] font-semibold active:opacity-80"
-            style={{ background: "#319ED8" }}
-            data-testid="button-vendor-visit"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M14 4h6v6" />
-              <path d="M20 4L10 14" />
-              <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
-            </svg>
-            Visit website
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenInAppBrowser({ url: vendor.affiliateUrl, title: instrument.name, logoUrl: vendor.logoUrl })}
-            className="h-11 px-4 rounded-full flex items-center justify-center text-white text-[15px] font-semibold active:opacity-80"
-            style={{ background: "rgba(255,255,255,0.10)" }}
-            data-testid="button-vendor-buy-listing"
-          >
-            View listing
-          </button>
+        {/* Tabs — Apple Music artist-page style: text labels with an
+            underline that animates under the active tab. Three sections:
+            • About: hero copy + contact meta (the old default view).
+            • Instruments: every instrument this vendor is attached to,
+              regardless of which one opened the sheet.
+            • Artists: SuperCredits-derived list of people who've played
+              one of the vendor's instruments on a credited track. */}
+        {/* Tab strip scrolls with content (Apple Music's actual artist-page
+            behavior) — pinning it under a safe-area-aware toolbar requires
+            a measured offset which we'd otherwise hardcode and risk overlap
+            on notched devices. */}
+        <div className="px-5 pt-3 pb-0" style={{ background: "#00062B" }}>
+          <div className="flex gap-6 border-b border-white/10">
+            {(["about", "instruments", "artists"] as const).map((t) => {
+              const active = tab === t;
+              const label = t === "about" ? "About" : t === "instruments" ? "Instruments" : "Artists";
+              const count = t === "instruments" ? profile?.instruments.length : t === "artists" ? usedBy.length : undefined;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  aria-pressed={active}
+                  className="relative pb-2.5 text-[15px] font-semibold active:opacity-80"
+                  style={{ color: active ? "#fff" : "rgba(235,235,245,0.55)" }}
+                  data-testid={`tab-vendor-${t}`}
+                >
+                  {label}
+                  {typeof count === "number" && count > 0 && (
+                    <span className="ml-1.5 text-[13px] font-medium" style={{ color: "rgba(235,235,245,0.45)" }}>
+                      {count}
+                    </span>
+                  )}
+                  {active && (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
+                      style={{ background: "#319ED8" }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* About — Apple "About Neil Diamond" pattern */}
-        <section className="px-5 pt-7 pb-2">
-          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About {vendor.name}</h3>
-          <p className="text-[16px] leading-relaxed" style={{ color: "rgba(235,235,245,0.72)" }}>{bio}</p>
-        </section>
+        {tab === "about" && (
+          <>
+            <section className="px-5 pt-5 pb-2">
+              <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About {vendor.name}</h3>
+              <p className="text-[16px] leading-relaxed" style={{ color: "rgba(235,235,245,0.72)" }}>{bio}</p>
+            </section>
 
-        {/* Contact / meta — Apple uses small uppercase labels above values on artist pages */}
-        <section className="px-5 pt-5 grid grid-cols-1 gap-4">
-          {vendor.location && (
-            <div>
-              <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Location</p>
-              <p className="text-white text-[16px]">{vendor.location}</p>
-            </div>
-          )}
-          {domain && (
-            <div>
-              <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Web</p>
-              <button
-                type="button"
-                onClick={() => onOpenInAppBrowser({ url: vendor.aboutUrl ?? vendor.affiliateUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
-                className="text-[16px] active:opacity-70"
-                style={{ color: "#319ED8" }}
-                data-testid="button-vendor-domain"
-              >
-                {domain}
-              </button>
-            </div>
-          )}
-          <div>
-            <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Featured instrument</p>
-            <p className="text-white text-[16px]">{instrument.name}</p>
-          </div>
-        </section>
-
-        {/* Artists who use them — concept rail (Apple Music "Similar Artists" pattern) */}
-        {usedBy.length > 0 && (
-          <section className="pt-7">
-            <h3 className="px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Artists who use them</h3>
-            <div className="flex gap-4 overflow-x-auto scrollbar-hide px-5 pb-1">
-              {usedBy.map((person) => (
-                <div key={person.id} className="flex-shrink-0 w-[88px] flex flex-col items-center" data-testid={`vendor-artist-${person.id}`}>
-                  <PersonAvatar person={person} size={88} />
-                  <p className="text-white text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
+            <section className="px-5 pt-5 grid grid-cols-1 gap-4">
+              {vendor.location && (
+                <div>
+                  <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Location</p>
+                  <p className="text-white text-[16px]">{vendor.location}</p>
                 </div>
-              ))}
-            </div>
-            <p className="px-5 pt-3 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-              Concept — once vendors confirm artist relationships, they'll surface here so fans can discover who else trusts them.
+              )}
+              {domain && (
+                <div>
+                  <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Web</p>
+                  <button
+                    type="button"
+                    onClick={() => onOpenInAppBrowser({ url: websiteUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
+                    className="text-[16px] active:opacity-70"
+                    style={{ color: "#319ED8" }}
+                    data-testid="button-vendor-domain"
+                  >
+                    {domain}
+                  </button>
+                </div>
+              )}
+              <div>
+                <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Featured instrument</p>
+                <p className="text-white text-[16px]">{instrument.name}</p>
+                <p className="text-[12px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>The instrument that opened this page — tap the Instruments tab to see the rest.</p>
+              </div>
+            </section>
+          </>
+        )}
+
+        {tab === "instruments" && (
+          <section className="px-5 pt-5">
+            {!vendor.vendorId ? (
+              <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>Instrument list isn't available for this demo vendor.</p>
+            ) : profileError ? (
+              <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>Couldn't load instruments. Try again later.</p>
+            ) : !profile ? (
+              <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>Loading…</p>
+            ) : profile.instruments.length === 0 ? (
+              <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>No instruments attached yet.</p>
+            ) : (
+              <ul className="flex flex-col">
+                {profile.instruments.map((inst, idx) => (
+                  <li
+                    key={inst.id}
+                    className={`flex items-center gap-3 py-3 ${idx > 0 ? "border-t border-white/8" : ""}`}
+                    data-testid={`vendor-instrument-${inst.id}`}
+                  >
+                    <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
+                      {inst.photoUrl ? (
+                        <img src={inst.photoUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white/40 text-[20px]">♪</div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-white text-[15px] font-medium leading-tight truncate">{inst.name}</p>
+                      <p className="text-[13px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.55)" }}>{inst.shortCategory ?? inst.category}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+              Everything {vendor.name} is currently attached to across the GoodTunes catalog.
+            </p>
+          </section>
+        )}
+
+        {tab === "artists" && (
+          <section className="px-5 pt-5">
+            {usedBy.length === 0 ? (
+              <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>No artists credited with this vendor's instruments yet.</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-x-4 gap-y-5">
+                {usedBy.map((person) => (
+                  <div key={person.id} className="flex flex-col items-center" data-testid={`vendor-artist-${person.id}`}>
+                    <PersonAvatar person={person} size={88} />
+                    <p className="text-white text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="pt-5 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+              From SuperCredits™ — artists who've credited one of {vendor.name}'s instruments on a track. Official sponsorships will badge here once that admin field lands.
             </p>
           </section>
         )}

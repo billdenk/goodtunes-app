@@ -1229,6 +1229,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!v) return res.status(404).json({ message: "Vendor not found" });
     return res.json(v);
   });
+  // Vendor profile bundle — powers the fan-facing VendorSheet tabs in one
+  // round trip. `artists` is derived from SuperCredits (track_performers
+  // playing any of the vendor's instruments). `instruments` lists every
+  // non-hidden instrument attached to the vendor.
+  app.get("/api/vendors/:id/profile", async (req, res) => {
+    const id = String(req.params.id);
+    const vendor = await storage.getVendorById(id);
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+    const [insts, artists] = await Promise.all([
+      storage.getVendorInstruments(id),
+      storage.getVendorSuperCreditArtists(id),
+    ]);
+    return res.json({ vendor, instruments: insts, artists });
+  });
   app.post("/api/admin/vendors", requireAdmin, async (req, res) => {
     const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl } = req.body ?? {};
     if (!name || !domain) return res.status(400).json({ message: "name and domain are required" });

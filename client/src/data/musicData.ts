@@ -103,6 +103,15 @@ export interface InstrumentVendor {
   location?: string;         // e.g. "Nashville, TN"
   coverUrl?: string;         // hero background photo (Apple Music artist style)
   usedByPersonIds?: string[]; // ids from PEOPLE for the "Artists who use them" rail
+  // Fields populated only when the row comes from the API
+  // (EnrichedInstrumentVendor server-side). Optional here so static data
+  // in this file stays valid without them — runtime usage that requires
+  // them (vendor profile fetch, bookmark id) checks before using.
+  id?: string;               // instrument_vendors.id (the join row id)
+  vendorId?: string;         // vendors.id (the vendor entity id)
+  instrumentId?: string;
+  homeUrl?: string | null;
+  domain?: string;
 }
 
 export interface Instrument {

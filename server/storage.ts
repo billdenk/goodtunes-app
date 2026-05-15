@@ -107,6 +107,13 @@ export interface IStorage {
   createVendor(data: InsertVendor & { id?: string }): Promise<Vendor>;
   updateVendor(id: string, data: Partial<Vendor>): Promise<Vendor | undefined>;
   deleteVendor(id: string): Promise<void>;
+  // Vendor profile reads — power the fan-facing VendorSheet tabs.
+  // `getVendorInstruments` lists every (non-hidden) instrument attached to
+  // this vendor. `getVendorSuperCreditArtists` derives artists by walking
+  // track_performers → instruments → instrument_vendors, so any artist
+  // credited as having played one of the vendor's instruments shows up.
+  getVendorInstruments(vendorId: string): Promise<Instrument[]>;
+  getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>>;
 
   // Attachment CRUD — only the per-instrument fields (affiliateUrl, position,
   // isHidden) live on the join row. Vendor metadata edits go through the
@@ -489,6 +496,64 @@ export class DbStorage implements IStorage {
     // ON DELETE CASCADE on instrument_vendors.vendor_id removes every
     // attachment of this vendor across all instruments.
     await db.delete(vendors).where(eq(vendors.id, id));
+  }
+
+  async getVendorInstruments(vendorId: string): Promise<Instrument[]> {
+    // DISTINCT instruments attached to this vendor (excluding hidden
+    // attachments). A vendor could be attached to the same instrument
+    // twice via separate join rows in theory, so we dedupe in JS.
+    const rows = await db
+      .select({ i: instruments })
+      .from(instrumentVendors)
+      .innerJoin(instruments, eq(instrumentVendors.instrumentId, instruments.id))
+      .where(and(
+        eq(instrumentVendors.vendorId, vendorId),
+        eq(instrumentVendors.isHidden, false),
+      ))
+      .orderBy(asc(instruments.name));
+    const seen = new Set<string>();
+    const out: Instrument[] = [];
+    for (const r of rows) {
+      if (seen.has(r.i.id)) continue;
+      seen.add(r.i.id);
+      out.push(r.i);
+    }
+    return out;
+  }
+
+  async getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>> {
+    // Artists spotted in SuperCredits playing one of this vendor's
+    // instruments. JOIN track_performers → instrument_vendors (matching
+    // instrumentId, filtered to this vendor) → people. Hidden attachments
+    // still count — the credit's existence reflects an artist saying "I
+    // played this gear", independent of whether we surface the buy link.
+    const rows = await db
+      .select({
+        person: people,
+        songId: trackPerformers.songId,
+      })
+      .from(trackPerformers)
+      .innerJoin(
+        instrumentVendors,
+        eq(trackPerformers.instrumentId, instrumentVendors.instrumentId),
+      )
+      .innerJoin(people, eq(trackPerformers.personId, people.id))
+      .where(eq(instrumentVendors.vendorId, vendorId));
+    const byPerson = new Map<string, { person: Person; tracks: Set<string> }>();
+    for (const r of rows) {
+      const entry = byPerson.get(r.person.id) ?? {
+        person: r.person,
+        tracks: new Set<string>(),
+      };
+      entry.tracks.add(r.songId);
+      byPerson.set(r.person.id, entry);
+    }
+    return Array.from(byPerson.values())
+      .map(({ person, tracks }) => ({ ...person, trackCount: tracks.size }))
+      .sort(
+        (a, b) =>
+          b.trackCount - a.trackCount || a.name.localeCompare(b.name),
+      );
   }
 
   // ----- Attachment CRUD ----------------------------------------------
