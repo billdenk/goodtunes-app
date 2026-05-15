@@ -7568,17 +7568,39 @@ export function Admin() {
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const [entity, setEntity] = useState<EntityKey>("albums");
+  // Restore the last entity tab + per-entity selection across refreshes.
+  // Without this, every reload snaps back to Albums + row[0], which is
+  // disorienting when you're mid-edit on a Person / Instrument / Vendor.
+  // Keys are namespaced under `gt:admin:` so they don't collide with the
+  // fan-side localStorage keys (favorites, downloads, chat, etc.).
+  const ENTITY_KEYS: EntityKey[] = ["albums", "people", "instruments", "vendors", "labels"];
+  const [entity, setEntity] = useState<EntityKey>(() => {
+    try {
+      const raw = localStorage.getItem("gt:admin:entity");
+      if (raw && (ENTITY_KEYS as string[]).includes(raw)) return raw as EntityKey;
+    } catch {}
+    return "albums";
+  });
   // Per-entity selection so switching tabs preserves which row was open.
   const [selectedByEntity, setSelectedByEntity] = useState<
     Record<EntityKey, string | null>
-  >({
-    albums: null,
-    people: null,
-    instruments: null,
-    vendors: null,
-    labels: null,
+  >(() => {
+    const empty = { albums: null, people: null, instruments: null, vendors: null, labels: null };
+    try {
+      const raw = localStorage.getItem("gt:admin:selectedByEntity");
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<Record<EntityKey, string | null>>;
+        return { ...empty, ...parsed };
+      }
+    } catch {}
+    return empty;
   });
+  useEffect(() => {
+    try { localStorage.setItem("gt:admin:entity", entity); } catch {}
+  }, [entity]);
+  useEffect(() => {
+    try { localStorage.setItem("gt:admin:selectedByEntity", JSON.stringify(selectedByEntity)); } catch {}
+  }, [selectedByEntity]);
   const selectedId = selectedByEntity[entity];
   const setSelectedId = (id: string | null) =>
     setSelectedByEntity((prev) => ({ ...prev, [entity]: id }));
