@@ -246,17 +246,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ id: target.id, username: target.username, displayName: target.displayName, isAdmin: true });
   });
 
-  // Image upload for album artwork / vendor logos / person photos. Saves to
-  // an `uploads/` directory served statically from `/uploads/...`.
-  // Caveat for production: on Replit's Autoscale deployments the local FS
-  // is ephemeral, so an upload survives within a single instance but not
-  // across redeploys. Move to Object Storage (or S3-compatible) when the
-  // catalog goes beyond the demo phase.
+  // Image upload for album artwork / vendor logos / person photos. Streams
+  // the file into Replit Object Storage (bucket from $DEFAULT_OBJECT_STORAGE_BUCKET_ID)
+  // and returns a stable "/objects/uploads/<uuid>" URL served by the
+  // registerObjectStorageRoutes handler. Local FS is ephemeral on Autoscale
+  // deploys — Object Storage survives redeploys.
   const multer = (await import("multer")).default;
-  const path = (await import("path")).default;
-  const fs = (await import("fs")).default;
-  const uploadsDir = path.resolve("uploads");
-  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  const { randomUUID } = await import("node:crypto");
+  const { ObjectStorageService, objectStorageClient, ObjectNotFoundError } =
+    await import("./replit_integrations/object_storage/objectStorage");
+  const { setObjectAclPolicy, getObjectAclPolicy } = await import(
+    "./replit_integrations/object_storage/objectAcl"
+  );
+  const objectStorage = new ObjectStorageService();
+  // Serve uploaded images. Scoped to /objects/uploads/<id> only — we do NOT
+  // mount the blueprint's registerObjectStorageRoutes() helpers because they
+  // also expose an unauthenticated POST /api/uploads/request-url that would
+  // let anyone mint signed PUT URLs into our bucket, and they serve any
+  // object under PRIVATE_OBJECT_DIR without checking ACL. Here we resolve
+  // strictly through /objects/uploads/* and refuse anything whose ACL isn't
+  // explicitly public.
+  app.get("/objects/uploads/:id", async (req, res) => {
+    const id = req.params.id;
+    // Block traversal / weird ids; uuid+ext only.
+    if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    try {
+      const file = await objectStorage.getObjectEntityFile(`/objects/uploads/${id}`);
+      const acl = await getObjectAclPolicy(file);
+      if (!acl || acl.visibility !== "public") {
+        return res.status(404).json({ message: "Not found" });
+      }
+      await objectStorage.downloadObject(file, res, 31536000);
+    } catch (err) {
+      if (err instanceof ObjectNotFoundError) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      console.error("Object serve failed", err);
+      return res.status(500).json({ message: "Serve failed" });
+    }
+  });
   // MIME → extension map. We DERIVE the extension from the validated
   // mimetype instead of trusting `file.originalname`, so an attacker can't
   // upload "evil.html" with mimetype "image/png" and have us save+serve
@@ -270,14 +300,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "image/avif": ".avif",
   };
   const upload = multer({
-    storage: multer.diskStorage({
-      destination: uploadsDir,
-      filename: (_req, file, cb) => {
-        const ext = MIME_TO_EXT[file.mimetype] || ".bin";
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-        cb(null, `${id}${ext}`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 8 * 1024 * 1024 }, // 8MB cap — matches the photo route
     fileFilter: (_req, file, cb) => {
       if (!(file.mimetype in MIME_TO_EXT)) {
@@ -286,11 +309,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       cb(null, true);
     },
   });
-  app.post("/api/admin/upload", requireAdminBearer, upload.single("file"), (req, res) => {
-    const f = (req as any).file as Express.Multer.File | undefined;
-    if (!f) return res.status(400).json({ message: "No file uploaded" });
-    return res.json({ url: `/uploads/${f.filename}` });
-  });
+
+  // Helper: write a buffer to Object Storage under `.private/uploads/<uuid><ext>`
+  // and mark it public so anyone hitting /objects/uploads/<uuid><ext> can read.
+  async function uploadBufferToObjectStorage(
+    buf: Buffer,
+    mime: string,
+  ): Promise<string> {
+    const ext = MIME_TO_EXT[mime] || ".bin";
+    const id = `${randomUUID()}${ext}`;
+    const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
+    // privateDir is like "/<bucket>/.private" — strip leading slash, then
+    // split bucket vs object key.
+    const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
+    const firstSlash = trimmed.indexOf("/");
+    const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
+    const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
+    const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+    const file = objectStorageClient.bucket(bucketName).file(objectName);
+    await file.save(buf, {
+      contentType: mime,
+      metadata: { cacheControl: "public, max-age=31536000, immutable" },
+      resumable: false,
+    });
+    await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+    return `/objects/uploads/${id}`;
+  }
+
+  app.post(
+    "/api/admin/upload",
+    requireAdminBearer,
+    upload.single("file"),
+    async (req, res) => {
+      const f = (req as any).file as Express.Multer.File | undefined;
+      if (!f) return res.status(400).json({ message: "No file uploaded" });
+      try {
+        const url = await uploadBufferToObjectStorage(f.buffer, f.mimetype);
+        return res.json({ url });
+      } catch (err) {
+        console.error("Object Storage upload failed", err);
+        return res.status(500).json({ message: "Upload failed" });
+      }
+    },
+  );
 
   // --- Vendor URL scraper (paste-a-link → prefilled instrument + vendor) ---
   // Reads Open Graph + Schema.org Product JSON-LD from a public product page
@@ -461,10 +522,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!ext) throw new Error(`unsupported image mime: ${mime || "unknown"}`);
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.byteLength > 8 * 1024 * 1024) throw new Error("image larger than 8MB");
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const filename = `${id}${ext}`;
-    fs.writeFileSync(path.join(uploadsDir, filename), buf);
-    return `/uploads/${filename}`;
+    return await uploadBufferToObjectStorage(buf, mime);
   }
 
   app.post("/api/admin/instruments/scrape", requireAdminBearer, async (req, res) => {

@@ -12,6 +12,7 @@ Mobile-first, Apple-Music-inspired web player.
 - Wouter (routing)
 - Tailwind + shadcn/ui
 - Bearer-token admin auth (temporary; SSO plan in roadmap)
+- Replit Object Storage for image uploads (album art, person photos, vendor logos/covers, scraped instrument images). Files live in `${PRIVATE_OBJECT_DIR}/uploads/<uuid>.<ext>` and are served via `GET /objects/uploads/<id>` (public ACL). Survives redeploys — the old local `uploads/` disk was ephemeral on Autoscale and wiped on each republish.
 
 ## Brand
 - Colors: `#00062B` (bg), `#319ED8` (blue), `#7F10A7` (purple), `#4AFFCA` (mint), `#FF5470` (heart pink)
