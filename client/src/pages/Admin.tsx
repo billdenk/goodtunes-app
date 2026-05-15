@@ -1385,9 +1385,13 @@ function PersonEditor({
   // Discography lives in client state — it's transient (pulled per session,
   // not persisted). On re-pull we replace it; on save we don't touch it.
   const [discography, setDiscography] = useState<ScrapedArtistAlbum[]>([]);
-  // Refs into each streaming/social URL input so the shortcut strip above
-  // them can scroll + focus the matching field when an admin taps an icon.
-  const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Which streaming/social tab is currently revealed below the icon strip.
+  // Default to Apple Music — the most common starting point for a fresh
+  // person (the Pull bar drops an Apple URL straight into that field).
+  const [activeSocial, setActiveSocial] = useState<string>("apple");
+  // The single input rendered under the active tab. One ref is enough now
+  // — focusing it on tab change keeps the keyboard-paste flow smooth.
+  const socialInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (data) {
       setForm(data);
@@ -1543,124 +1547,138 @@ function PersonEditor({
         />
       </Field>
 
-      {/* Streaming + social URLs. The icon strip below acts as both a
-          completion indicator (a green check appears on each platform once
-          its URL field is filled) and a quick way to jump straight to the
-          matching input — handy when you've just pulled from Apple Music
-          and want to also paste in Spotify + socials without scrolling. */}
-      <SocialFieldShortcuts
-        filled={{
-          apple: !!form.appleMusicUrl,
-          spotify: !!form.spotifyUrl,
-          instagram: !!form.instagramUrl,
-          tiktok: !!form.tiktokUrl,
-          twitter: !!form.twitterUrl,
-          bluesky: !!form.blueskyUrl,
-          facebook: !!form.facebookUrl,
-          website: !!form.websiteUrl,
-        }}
-        onJump={(key) => {
-          const el = fieldRefs.current[key];
-          if (el) {
-            el.scrollIntoView({ block: "center", behavior: "smooth" });
-            el.focus({ preventScroll: true });
-          }
-        }}
-      />
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Apple Music URL (artist)">
-          <input
-            ref={(el) => { fieldRefs.current.apple = el; }}
-            value={form.appleMusicUrl ?? ""}
-            onChange={(e) => update({ appleMusicUrl: e.target.value || null })}
-            placeholder="https://music.apple.com/us/artist/…"
-            className={inputCls}
-            data-testid="input-person-apple-url"
-          />
-        </Field>
-        <Field label="Spotify URL (artist)">
-          <input
-            ref={(el) => { fieldRefs.current.spotify = el; }}
-            value={form.spotifyUrl ?? ""}
-            onChange={(e) => update({ spotifyUrl: e.target.value || null })}
-            placeholder="https://open.spotify.com/artist/…"
-            className={inputCls}
-            data-testid="input-person-spotify-url"
-          />
-        </Field>
-      </div>
-      <p className="text-[11px] text-slate-400 -mt-2">
-        After the in-app preview window, fans get "Listen on Apple Music /
-        Spotify" buttons that point here.
-      </p>
-
-      {/* Socials — rendered alongside Apple/Spotify as small circular icons
-          on the PerformerSheet. Keeps fans discoverable wherever the artist
-          actually lives (not just on the two streaming services). All fields
-          are optional; empty rows simply don't render an icon. */}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Instagram URL">
-          <input
-            ref={(el) => { fieldRefs.current.instagram = el; }}
-            value={form.instagramUrl ?? ""}
-            onChange={(e) => update({ instagramUrl: e.target.value || null })}
-            placeholder="https://instagram.com/…"
-            className={inputCls}
-            data-testid="input-person-instagram-url"
-          />
-        </Field>
-        <Field label="TikTok URL">
-          <input
-            ref={(el) => { fieldRefs.current.tiktok = el; }}
-            value={form.tiktokUrl ?? ""}
-            onChange={(e) => update({ tiktokUrl: e.target.value || null })}
-            placeholder="https://tiktok.com/@…"
-            className={inputCls}
-            data-testid="input-person-tiktok-url"
-          />
-        </Field>
-        <Field label="X / Twitter URL">
-          <input
-            ref={(el) => { fieldRefs.current.twitter = el; }}
-            value={form.twitterUrl ?? ""}
-            onChange={(e) => update({ twitterUrl: e.target.value || null })}
-            placeholder="https://x.com/…"
-            className={inputCls}
-            data-testid="input-person-twitter-url"
-          />
-        </Field>
-        <Field label="Bluesky URL">
-          <input
-            ref={(el) => { fieldRefs.current.bluesky = el; }}
-            value={form.blueskyUrl ?? ""}
-            onChange={(e) => update({ blueskyUrl: e.target.value || null })}
-            placeholder="https://bsky.app/profile/…"
-            className={inputCls}
-            data-testid="input-person-bluesky-url"
-          />
-        </Field>
-        <Field label="Facebook URL">
-          <input
-            ref={(el) => { fieldRefs.current.facebook = el; }}
-            value={form.facebookUrl ?? ""}
-            onChange={(e) => update({ facebookUrl: e.target.value || null })}
-            placeholder="https://facebook.com/…"
-            className={inputCls}
-            data-testid="input-person-facebook-url"
-          />
-        </Field>
-        <Field label="Website / other">
-          <input
-            ref={(el) => { fieldRefs.current.website = el; }}
-            value={form.websiteUrl ?? ""}
-            onChange={(e) => update({ websiteUrl: e.target.value || null })}
-            placeholder="https://… (Linktree, Bandcamp, personal site)"
-            className={inputCls}
-            data-testid="input-person-website-url"
-          />
-        </Field>
-      </div>
+      {/* Streaming + social URLs collapsed into a single tabbed control:
+          eight platform icons act as both completion indicators (mint check
+          when filled) and tabs. Clicking one reveals a single input bound
+          to that platform's URL field. Saves vertical space, removes the
+          old redundant two-column grids, and gives the admin a glanceable
+          "X of 8 filled" counter. */}
+      {(() => {
+        type Key =
+          | "apple"
+          | "spotify"
+          | "instagram"
+          | "tiktok"
+          | "twitter"
+          | "bluesky"
+          | "facebook"
+          | "website";
+        const platforms: {
+          key: Key;
+          label: string;
+          placeholder: string;
+          field: keyof AdminPerson;
+          testid: string;
+        }[] = [
+          {
+            key: "apple",
+            label: "Apple Music URL (artist)",
+            placeholder: "https://music.apple.com/us/artist/…",
+            field: "appleMusicUrl",
+            testid: "input-person-apple-url",
+          },
+          {
+            key: "spotify",
+            label: "Spotify URL (artist)",
+            placeholder: "https://open.spotify.com/artist/…",
+            field: "spotifyUrl",
+            testid: "input-person-spotify-url",
+          },
+          {
+            key: "instagram",
+            label: "Instagram URL",
+            placeholder: "https://instagram.com/…",
+            field: "instagramUrl",
+            testid: "input-person-instagram-url",
+          },
+          {
+            key: "tiktok",
+            label: "TikTok URL",
+            placeholder: "https://tiktok.com/@…",
+            field: "tiktokUrl",
+            testid: "input-person-tiktok-url",
+          },
+          {
+            key: "twitter",
+            label: "X / Twitter URL",
+            placeholder: "https://x.com/…",
+            field: "twitterUrl",
+            testid: "input-person-twitter-url",
+          },
+          {
+            key: "bluesky",
+            label: "Bluesky URL",
+            placeholder: "https://bsky.app/profile/…",
+            field: "blueskyUrl",
+            testid: "input-person-bluesky-url",
+          },
+          {
+            key: "facebook",
+            label: "Facebook URL",
+            placeholder: "https://facebook.com/…",
+            field: "facebookUrl",
+            testid: "input-person-facebook-url",
+          },
+          {
+            key: "website",
+            label: "Website / other",
+            placeholder: "https://… (Linktree, Bandcamp, personal site)",
+            field: "websiteUrl",
+            testid: "input-person-website-url",
+          },
+        ];
+        const active =
+          platforms.find((p) => p.key === activeSocial) ?? platforms[0];
+        const activeValue = (form[active.field] as string | null) ?? "";
+        return (
+          <div className="space-y-2">
+            <SocialFieldShortcuts
+              activeKey={active.key}
+              filled={{
+                apple: !!form.appleMusicUrl,
+                spotify: !!form.spotifyUrl,
+                instagram: !!form.instagramUrl,
+                tiktok: !!form.tiktokUrl,
+                twitter: !!form.twitterUrl,
+                bluesky: !!form.blueskyUrl,
+                facebook: !!form.facebookUrl,
+                website: !!form.websiteUrl,
+              }}
+              onSelect={(key) => {
+                setActiveSocial(key);
+                // Defer focus to the next paint so the input has rendered
+                // with its new value/placeholder before we focus + select.
+                requestAnimationFrame(() => {
+                  const el = socialInputRef.current;
+                  if (el) {
+                    el.focus({ preventScroll: true });
+                    el.select();
+                  }
+                });
+              }}
+            />
+            <Field label={active.label}>
+              <input
+                ref={socialInputRef}
+                key={active.key}
+                value={activeValue}
+                onChange={(e) =>
+                  update({ [active.field]: e.target.value || null } as Partial<AdminPerson>)
+                }
+                placeholder={active.placeholder}
+                className={inputCls}
+                data-testid={active.testid}
+              />
+            </Field>
+            {(active.key === "apple" || active.key === "spotify") && (
+              <p className="text-[11px] text-slate-400">
+                After the in-app preview window, fans get "Listen on Apple
+                Music / Spotify" buttons that point here.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       <Field label="Accent colour (hex, falls back to brand blue)">
         <div className="flex items-center gap-2">
@@ -3033,18 +3051,20 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
 // PersonPreviewCard (and reusable later for the fan-side PerformerSheet).
 // Order is intentional: streaming first (where the music is), then the
 // platforms artists are most active on, then the generic website fallback.
-// Compact strip of platform-icon buttons rendered above the streaming +
-// social URL inputs in PersonEditor. Doubles as:
-//   - a glanceable completion indicator (mint check overlay = field filled)
-//   - a quick-jump nav (tap an icon → scrolls + focuses the matching input)
+// Compact strip of platform-icon buttons that doubles as a tab control
+// for the single streaming/social URL input in PersonEditor:
+//   - mint check overlay = that platform's URL is filled
+//   - blue ring + bold border = that platform is the currently revealed tab
 // Used in the admin form, NOT on the fan-facing PerformerSheet (that's
 // SocialIconRow's job).
 function SocialFieldShortcuts({
   filled,
-  onJump,
+  activeKey,
+  onSelect,
 }: {
   filled: Record<string, boolean>;
-  onJump: (key: string) => void;
+  activeKey: string;
+  onSelect: (key: string) => void;
 }) {
   const items: { key: string; Icon: any; label: string }[] = [
     { key: "apple", Icon: SiApplemusic, label: "Apple Music" },
@@ -3067,21 +3087,31 @@ function SocialFieldShortcuts({
           {count} of {items.length} filled
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="tablist"
+        aria-label="Streaming and social platforms"
+      >
         {items.map(({ key, Icon, label }) => {
           const isFilled = !!filled[key];
+          const isActive = key === activeKey;
           return (
             <button
               key={key}
               type="button"
-              onClick={() => onJump(key)}
-              aria-label={`Jump to ${label}${isFilled ? " (filled)" : " (empty)"}`}
-              title={`Jump to ${label}${isFilled ? " — filled" : ""}`}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onSelect(key)}
+              aria-label={`${label}${isFilled ? " (filled)" : " (empty)"}${isActive ? " — selected" : ""}`}
+              title={`${label}${isFilled ? " — filled" : ""}`}
               className={
                 "relative w-9 h-9 rounded-full flex items-center justify-center transition-all " +
                 (isFilled
                   ? "bg-slate-900 text-white border border-slate-900 hover:bg-slate-800"
-                  : "bg-white text-slate-400 border border-slate-200 hover:border-slate-400 hover:text-slate-600")
+                  : "bg-white text-slate-400 border border-slate-200 hover:border-slate-400 hover:text-slate-600") +
+                (isActive
+                  ? " ring-2 ring-[#319ED8] ring-offset-2 ring-offset-[#f7fbff]"
+                  : "")
               }
               data-testid={`button-shortcut-${key}`}
             >
