@@ -7717,7 +7717,16 @@ export function Admin() {
           <nav className="flex-1 px-2 py-3 space-y-1 text-sm">
             {(
               [
-                { key: "albums", label: "Albums", count: albums.length, Icon: Disc3 },
+                {
+                  key: "albums",
+                  label: "Albums",
+                  // Sidebar count mirrors the curated list shown in the
+                  // Albums pane — only true GoodTunes Releases, not the
+                  // larger pool of streaming-only album rows we ingest
+                  // for crediting / discography purposes.
+                  count: albums.filter((a) => a.isGoodTunesRelease).length,
+                  Icon: Disc3,
+                },
                 { key: "people", label: "People", count: people.length, Icon: UserRound },
                 {
                   key: "instruments",
