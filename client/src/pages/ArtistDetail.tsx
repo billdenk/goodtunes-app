@@ -84,16 +84,14 @@ export function ArtistDetail() {
     );
     const singles = streamingFiltered.filter((r) => r.trackCount === 1);
     const appearsOn: PersonDiscography[] = [];
-    // Appears On stays in the list even when empty so the surface mirrors
-    // Apple Music's four-bucket layout. Empty buckets render a "Coming
-    // soon" placeholder until the iTunes Lookup entity=song pass is wired
-    // up in admin to populate features/guest credits.
+    // Per product: hide empty buckets entirely (including "Appears On"
+    // until the iTunes Lookup entity=song pass populates guest credits).
     return [
       { label: "Albums", items: lps },
       { label: "EPs", items: eps },
       { label: "Singles", items: singles },
       { label: "Appears On", items: appearsOn },
-    ].filter((g) => g.items.length > 0 || g.label === "Appears On");
+    ].filter((g) => g.items.length > 0);
   }, [streamingFiltered]);
   // Open release for the How-to-Play sheet. Null = sheet closed.
   const [howToPlay, setHowToPlay] = useState<PersonDiscography | null>(null);
@@ -253,39 +251,26 @@ export function ArtistDetail() {
             <div className="mt-9" data-testid="section-streaming">
               <div className="px-5 mb-3">
                 <p className="text-white/45 text-[11px] uppercase tracking-[0.14em] font-semibold">
-                  The rest of {artistName}'s catalog on Apple Music & Spotify
+                  Music available on streaming
                 </p>
               </div>
               {streamingBuckets.map((bucket) => {
                 const preview = bucket.items.slice(0, PREVIEW_CAP);
                 const hasMore = bucket.items.length > PREVIEW_CAP;
-                const isEmpty = bucket.items.length === 0;
                 return (
                   <div key={bucket.label} className="mb-7 last:mb-0">
                     <button
                       type="button"
-                      onClick={() => !isEmpty && setOpenBucket(bucket)}
-                      disabled={isEmpty}
-                      className="w-full flex items-center justify-between px-5 mb-3 text-left active:opacity-70 disabled:active:opacity-100 disabled:cursor-default"
+                      onClick={() => setOpenBucket(bucket)}
+                      className="w-full flex items-center justify-between px-5 mb-3 text-left active:opacity-70"
                       data-testid={`button-bucket-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
                     >
                       <h2 className="text-white text-xl font-bold tracking-tight flex items-center gap-1.5">
                         {bucket.label}
-                        {!isEmpty && <ChevronRight className="w-5 h-5 text-white/40" />}
+                        <ChevronRight className="w-5 h-5 text-white/40" />
                       </h2>
-                      {!isEmpty && (
-                        <span className="text-white/40 text-[12px]">{bucket.items.length}</span>
-                      )}
+                      <span className="text-white/40 text-[12px]">{bucket.items.length}</span>
                     </button>
-                    {isEmpty ? (
-                      <div className="px-5">
-                        <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] px-4 py-5 text-center">
-                          <p className="text-white/50 text-[13px]">
-                            Coming soon — guest appearances will land here.
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
                     <div className="flex gap-4 overflow-x-auto scrollbar-hide px-5 pb-1">
                       {preview.map((release) => (
                         <button
@@ -333,7 +318,6 @@ export function ArtistDetail() {
                         </button>
                       )}
                     </div>
-                    )}
                   </div>
                 );
               })}
