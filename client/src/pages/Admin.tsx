@@ -3100,7 +3100,7 @@ function VendorPaneEditor({
               aria-controls={`panel-admin-vendor-${t}`}
               tabIndex={active ? 0 : -1}
               onClick={() => setTab(t)}
-              className="relative pb-2.5 pt-3 text-[13px] font-semibold tracking-wide transition-colors"
+              className="relative pb-2.5 pt-4 text-[13px] font-semibold tracking-wide transition-colors"
               style={{ color: active ? "#0f172a" : "#64748b" }}
               data-testid={`tab-admin-vendor-${t}`}
             >
@@ -3390,7 +3390,7 @@ function InstrumentPreviewAbout({
     return (
       <div className="px-5 pb-4">
         <p
-          className="text-[12.5px] leading-relaxed whitespace-pre-wrap"
+          className="text-[12.5px] leading-relaxed whitespace-pre-line"
           style={{ color: "rgba(255,255,255,0.85)" }}
         >
           {prose || about}
@@ -3431,7 +3431,7 @@ function InstrumentPreviewAbout({
       )}
       {tab === "about" && hasProse && (
         <p
-          className="text-[12.5px] leading-relaxed whitespace-pre-wrap"
+          className="text-[12.5px] leading-relaxed whitespace-pre-line"
           style={{ color: "rgba(255,255,255,0.85)" }}
         >
           {prose}
