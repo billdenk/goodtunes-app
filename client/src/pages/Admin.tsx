@@ -5965,14 +5965,16 @@ export function Admin() {
       }
     }
     const rows = Array.from(byVendor.values());
-    // Sort vendors by their newest attachment date (proxy for "recently
-    // touched" since the vendor entity itself doesn't surface created_at
-    // in the API response).
-    rows.sort((a, b) => {
-      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return tb - ta;
-    });
+    // Apple-Music / Spotify standard: alphabetical by display name as a
+    // single string (case- and accent-insensitive). "Carter Vintage
+    // Guitars" sorts under C, "Martin Guitar" under M. Matches the same
+    // rule used for People, Labels, and Gear so every roster surface
+    // reads the same way.
+    rows.sort((a, b) =>
+      (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+        sensitivity: "base",
+      }),
+    );
     return rows;
   }, [instruments]);
   // Auto-heal vendor selection: handles both initial mount AND the case
