@@ -106,6 +106,14 @@ export function AlbumDetail() {
     year: number | null;
     type: "album" | "EP";
     description: string | null;
+    // Denormalized record-label entity (or null). Comes from the album's
+    // LEFT JOIN on `labels` so we render name/logo without a second fetch.
+    label: {
+      id: string;
+      name: string;
+      logoUrl: string | null;
+      websiteUrl: string | null;
+    } | null;
     songs: {
       id: string;
       albumId: string;
@@ -456,6 +464,21 @@ export function AlbumDetail() {
                 </svg>
               </button>
               <p className="text-white/55 text-xs mt-1.5">{album.year} · {songs.length} songs · {totalMin} min</p>
+              {apiAlbum?.label && (
+                <div
+                  className="mt-2 inline-flex items-center gap-1.5 text-white/65 text-[12px]"
+                  data-testid={`text-album-label-${apiAlbum.label.id}`}
+                >
+                  {apiAlbum.label.logoUrl && (
+                    <img
+                      src={apiAlbum.label.logoUrl}
+                      alt=""
+                      className="w-4 h-4 rounded-sm object-contain bg-white/10"
+                    />
+                  )}
+                  <span>{apiAlbum.label.name}</span>
+                </div>
+              )}
               {album.description && (
                 <p className="text-white/70 text-sm mt-3 leading-relaxed">{album.description}</p>
               )}

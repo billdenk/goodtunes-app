@@ -14,6 +14,9 @@ import {
   type InsertInstrumentVendor,
   type Vendor,
   type InsertVendor,
+  type Label,
+  type InsertLabel,
+  type AlbumWithLabel,
   type EnrichedInstrumentVendor,
   type TrackWriter,
   type InsertTrackWriter,
@@ -32,6 +35,7 @@ import {
   instruments,
   instrumentVendors,
   vendors,
+  labels,
   trackWriters,
   trackPerformers,
 } from "@shared/schema";
@@ -47,8 +51,10 @@ export interface IStorage {
 
   // `includeHidden` is honored only by admin call sites — public reads
   // always pass false so demo-hidden albums vanish from the fan catalog.
-  getAlbums(opts?: { includeHidden?: boolean }): Promise<Album[]>;
-  getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<Album | undefined>;
+  // Album reads denormalize the joined label entity into `album.label` so
+  // the fan side can render label name/logo without a second fetch.
+  getAlbums(opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel[]>;
+  getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel | undefined>;
   getSongsByAlbum(albumId: string): Promise<Song[]>;
   getSongById(id: string): Promise<Song | undefined>;
   getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]>;
@@ -84,6 +90,14 @@ export interface IStorage {
   createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument>;
   updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined>;
   deleteInstrument(id: string): Promise<void>;
+
+  // Label ENTITY CRUD. Each album.labelId points here (nullable, SET NULL).
+  // Editing the label propagates to every album released on it.
+  getLabels(): Promise<Label[]>;
+  getLabelById(id: string): Promise<Label | undefined>;
+  createLabel(data: InsertLabel & { id?: string }): Promise<Label>;
+  updateLabel(id: string, data: Partial<Label>): Promise<Label | undefined>;
+  deleteLabel(id: string): Promise<void>;
 
   // Vendor ENTITY CRUD (one real-world vendor per row — Carter, Reverb, …).
   // Editing here propagates to every instrument the vendor is attached to.
@@ -173,10 +187,10 @@ export interface IStorage {
 // imports that the server can't resolve. The catalog tables for people /
 // instruments / vendors / credits land in the next phase along with the CMS.
 const SEED_ALBUMS: Album[] = [
-  { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "album", description: "A sweeping collection of songs about stillness, change, and the moments between.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
-  { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "album", description: "Instrumental mastery meets emotional storytelling.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
-  { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
-  { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "album", description: "Sunshine, highways, and the stories only California can tell.", isHidden: false, appleMusicUrl: null, spotifyUrl: null },
+  { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "album", description: "A sweeping collection of songs about stillness, change, and the moments between.", labelId: null, isHidden: false, appleMusicUrl: null, spotifyUrl: null },
+  { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "album", description: "Instrumental mastery meets emotional storytelling.", labelId: null, isHidden: false, appleMusicUrl: null, spotifyUrl: null },
+  { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell.", labelId: null, isHidden: false, appleMusicUrl: null, spotifyUrl: null },
+  { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "album", description: "Sunshine, highways, and the stories only California can tell.", labelId: null, isHidden: false, appleMusicUrl: null, spotifyUrl: null },
 ];
 
 const SEED_SONGS: Song[] = [
@@ -246,15 +260,26 @@ export class DbStorage implements IStorage {
     return u;
   }
 
-  async getAlbums(opts?: { includeHidden?: boolean }): Promise<Album[]> {
-    if (opts?.includeHidden) return db.select().from(albums);
-    return db.select().from(albums).where(eq(albums.isHidden, false));
+  // Single LEFT JOIN with labels so each album carries its denormalized
+  // label entity (or null). Same shape returned by getAlbums + getAlbumById
+  // so every caller — fan list, fan detail, admin CMS — gets one read.
+  async getAlbums(opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel[]> {
+    const rows = await db
+      .select()
+      .from(albums)
+      .leftJoin(labels, eq(albums.labelId, labels.id))
+      .where(opts?.includeHidden ? undefined : eq(albums.isHidden, false));
+    return rows.map((r) => ({ ...r.albums, label: r.labels ?? null }));
   }
-  async getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<Album | undefined> {
-    const [a] = await db.select().from(albums).where(eq(albums.id, id));
-    if (!a) return undefined;
-    if (a.isHidden && !opts?.includeHidden) return undefined;
-    return a;
+  async getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel | undefined> {
+    const [row] = await db
+      .select()
+      .from(albums)
+      .leftJoin(labels, eq(albums.labelId, labels.id))
+      .where(eq(albums.id, id));
+    if (!row) return undefined;
+    if (row.albums.isHidden && !opts?.includeHidden) return undefined;
+    return { ...row.albums, label: row.labels ?? null };
   }
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
     return db.select().from(songs).where(eq(songs.albumId, albumId)).orderBy(asc(songs.trackNumber));
@@ -411,6 +436,30 @@ export class DbStorage implements IStorage {
     // rows go with the instrument. Vendor entities are untouched (they may
     // still be attached to other instruments).
     await db.delete(instruments).where(eq(instruments.id, id));
+  }
+
+  // ----- Label ENTITY CRUD --------------------------------------------
+  async getLabels(): Promise<Label[]> {
+    return await db.select().from(labels).orderBy(asc(labels.name));
+  }
+  async getLabelById(id: string): Promise<Label | undefined> {
+    const [l] = await db.select().from(labels).where(eq(labels.id, id));
+    return l;
+  }
+  async createLabel(data: InsertLabel & { id?: string }): Promise<Label> {
+    const [l] = await db.insert(labels).values(data as any).returning();
+    return l;
+  }
+  async updateLabel(id: string, data: Partial<Label>): Promise<Label | undefined> {
+    const { id: _i, createdAt: _c, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return this.getLabelById(id);
+    const [l] = await db.update(labels).set(rest).where(eq(labels.id, id)).returning();
+    return l;
+  }
+  async deleteLabel(id: string): Promise<void> {
+    // ON DELETE SET NULL on albums.label_id — the catalog stays, the label
+    // credit just clears until reassigned.
+    await db.delete(labels).where(eq(labels.id, id));
   }
 
   // ----- Vendor ENTITY CRUD -------------------------------------------

@@ -689,9 +689,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/albums", requireAdmin, async (req, res) => {
-    const { id, title, artist, artwork, year, type, description, appleMusicUrl, spotifyUrl } = req.body ?? {};
+    const { id, title, artist, artwork, year, type, description, appleMusicUrl, spotifyUrl, labelId } = req.body ?? {};
     if (!title || !artist || !artwork) {
       return res.status(400).json({ message: "title, artist, artwork are required" });
+    }
+    // Validate the FK up front so an unknown label id returns a clean 400
+    // rather than a generic 500 from the underlying foreign-key violation.
+    // Empty string is normalized to null (no label).
+    const normalizedLabelId = labelId ? String(labelId) : null;
+    if (normalizedLabelId && !(await storage.getLabelById(normalizedLabelId))) {
+      return res.status(400).json({ message: "Unknown labelId" });
     }
     const album = await storage.createAlbum({
       id: id || undefined,
@@ -701,6 +708,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       year: year != null ? Number(year) : null,
       type: type === "EP" ? "EP" : "album",
       description: description ? String(description) : null,
+      labelId: normalizedLabelId,
       appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
       spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
     } as any);
@@ -717,6 +725,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (year !== undefined) updates.year = year === null || year === "" ? null : Number(year);
     if (type !== undefined) updates.type = type === "EP" ? "EP" : "album";
     if (description !== undefined) updates.description = description ? String(description) : null;
+    if (req.body?.labelId !== undefined) {
+      const normalizedLabelId = req.body.labelId ? String(req.body.labelId) : null;
+      if (normalizedLabelId && !(await storage.getLabelById(normalizedLabelId))) {
+        return res.status(400).json({ message: "Unknown labelId" });
+      }
+      updates.labelId = normalizedLabelId;
+    }
     if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
@@ -1067,6 +1082,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ----- Vendor entity CRUD ----------------------------------------------
   // A `vendor` is one real-world shop (Carter, Reverb, Sweetwater, …).
+  // ----- Label ENTITY routes ----------------------------------------------
+  // Public reads + admin CRUD. Each album.labelId points at one of these.
+  app.get("/api/labels", async (_req, res) => {
+    return res.json(await storage.getLabels());
+  });
+  app.get("/api/labels/:id", async (req, res) => {
+    const l = await storage.getLabelById(String(req.params.id));
+    if (!l) return res.status(404).json({ message: "Label not found" });
+    return res.json(l);
+  });
+  app.post("/api/admin/labels", requireAdmin, async (req, res) => {
+    const { name, logoUrl, bio, location, websiteUrl, coverUrl } = req.body ?? {};
+    if (!name) return res.status(400).json({ message: "name is required" });
+    const l = await storage.createLabel({
+      name: String(name),
+      logoUrl: logoUrl ? String(logoUrl) : null,
+      bio: bio ? String(bio) : null,
+      location: location ? String(location) : null,
+      websiteUrl: websiteUrl ? String(websiteUrl) : null,
+      coverUrl: coverUrl ? String(coverUrl) : null,
+    });
+    return res.status(201).json(l);
+  });
+  app.put("/api/admin/labels/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const { name, logoUrl, bio, location, websiteUrl, coverUrl } = req.body ?? {};
+    const updates: any = {};
+    if (name !== undefined) updates.name = String(name);
+    if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
+    if (bio !== undefined) updates.bio = bio ? String(bio) : null;
+    if (location !== undefined) updates.location = location ? String(location) : null;
+    if (websiteUrl !== undefined) updates.websiteUrl = websiteUrl ? String(websiteUrl) : null;
+    if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
+    const l = await storage.updateLabel(id, updates);
+    if (!l) return res.status(404).json({ message: "Label not found" });
+    return res.json(l);
+  });
+  app.delete("/api/admin/labels/:id", requireAdmin, async (req, res) => {
+    // SET NULL on albums.label_id — releases stay, label credit clears.
+    await storage.deleteLabel(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
   // Editing here propagates to every instrument attached to this vendor.
   // The join row (attachment) is a separate resource — see /instrument-vendors below.
   app.get("/api/vendors", async (_req, res) => {

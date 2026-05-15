@@ -14,6 +14,22 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Record-label entity. One row per label (Atlantic, XL, Sub Pop, …) —
+// logo / bio / location / cover live here. Each album is released on at
+// most one label (the label printed on the back of the record); a label
+// has many albums; the label's artist roster is derived from those albums.
+// Future: dedicated `/label/:id` fan page with all releases.
+export const labels = pgTable("labels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  logoUrl: text("logo_url"),
+  bio: text("bio"),
+  location: text("location"),
+  websiteUrl: text("website_url"),
+  coverUrl: text("cover_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const albums = pgTable("albums", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -22,6 +38,11 @@ export const albums = pgTable("albums", {
   year: integer("year"),
   type: text("type").notNull().default("album"),
   description: text("description"),
+  // The label this album was released on. SET NULL so deleting a label
+  // doesn't take down its catalog; the album just loses its label credit
+  // until reassigned. Album reads denormalize the joined label entity
+  // into `album.label` so the fan side can render it without a 2nd fetch.
+  labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
   // Demo show/hide flag. When true the album is excluded from public catalog
   // reads (album list + detail) AND from the fan-facing credits surface,
   // effectively hiding the artist + all their songs/credits in one toggle.
@@ -250,6 +271,15 @@ export type Instrument = typeof instruments.$inferSelect;
 export const insertVendorSchema = createInsertSchema(vendors).omit({ id: true, createdAt: true });
 export type InsertVendor = z.infer<typeof insertVendorSchema>;
 export type Vendor = typeof vendors.$inferSelect;
+
+export const insertLabelSchema = createInsertSchema(labels).omit({ id: true, createdAt: true });
+export type InsertLabel = z.infer<typeof insertLabelSchema>;
+export type Label = typeof labels.$inferSelect;
+
+// Album reads denormalize the joined label entity so the fan-facing UI can
+// render label name/logo without a second fetch. `label` is null when an
+// album has no labelId set or the label was deleted (FK SET NULL).
+export type AlbumWithLabel = Album & { label: Label | null };
 
 export const insertInstrumentVendorSchema = createInsertSchema(instrumentVendors).omit({ id: true, createdAt: true });
 export type InsertInstrumentVendor = z.infer<typeof insertInstrumentVendorSchema>;

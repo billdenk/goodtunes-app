@@ -26,10 +26,29 @@ interface AdminAlbum {
   // from the fan-side catalog. CMS callers see hidden rows so they can
   // flip the toggle back on.
   isHidden: boolean;
+  // Optional record-label FK. SET NULL in the DB so a deleted label leaves
+  // the album's catalog row intact (just with no label credit). The album
+  // read endpoints denormalize the full label entity onto `album.label`,
+  // but the editor only ever writes back the FK.
+  labelId: string | null;
   // Per-album streaming-service handoff. Populated either by the People
   // discography panel (Apple Music) or manually on the album editor.
   appleMusicUrl: string | null;
   spotifyUrl: string | null;
+}
+
+// Record label. One row per real-world label (Sub Pop, Warp, …). Each album
+// points at zero or one of these via `albums.labelId`. Editing the label
+// here propagates to every album released on it.
+interface AdminLabel {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  bio: string | null;
+  location: string | null;
+  websiteUrl: string | null;
+  coverUrl: string | null;
+  createdAt: string | null;
 }
 
 interface AdminSong {
@@ -43,6 +62,9 @@ interface AdminSong {
 }
 
 interface AlbumWithSongs extends AdminAlbum {
+  // Denormalized label entity from the album LEFT JOIN. Reading happens
+  // here; writes still flow through `labelId` on `AdminAlbum`.
+  label: AdminLabel | null;
   songs: AdminSong[];
 }
 
@@ -173,7 +195,7 @@ interface AdminInstrument {
   vendors: AdminVendor[];
 }
 
-type EntityKey = "albums" | "people" | "instruments" | "vendors";
+type EntityKey = "albums" | "people" | "instruments" | "vendors" | "labels";
 
 // ---------- Shared bits ----------
 
@@ -436,6 +458,7 @@ function AlbumEditor({
         type: data.type,
         description: data.description,
         isHidden: data.isHidden,
+        labelId: data.labelId ?? null,
         appleMusicUrl: data.appleMusicUrl,
         spotifyUrl: data.spotifyUrl,
       });
@@ -650,6 +673,11 @@ function AlbumEditor({
             data-testid="input-album-description"
           />
         </Field>
+
+        <AlbumLabelPicker
+          value={form.labelId}
+          onChange={(next) => set("labelId", next)}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Apple Music URL (album)">
@@ -3616,6 +3644,207 @@ function VendorPreviewCard({
   );
 }
 
+// ---------- LabelEditor ----------
+// Editor pane for one record label. Mirrors the entity-level half of
+// VendorPaneEditor: every field here lives on the label row itself, so
+// editing once updates the label credit on every album it's attached to.
+function LabelEditor({
+  labelId,
+  onDeleted,
+}: {
+  labelId: string;
+  onDeleted: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery<AdminLabel>({
+    queryKey: ["/api/labels", labelId],
+  });
+  const [form, setForm] = useState<AdminLabel | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (data) {
+      setForm({ ...data });
+      setDirty(false);
+    }
+  }, [data?.id]);
+
+  const invalidateLabelSurfaces = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/labels", labelId] });
+    // Album reads denormalize the joined label, so every cached album
+    // detail needs to re-fetch when the label entity changes.
+    queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+  };
+
+  const saveLabel = useMutation({
+    mutationFn: async (payload: Partial<AdminLabel>) => {
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/labels/${labelId}`,
+        payload,
+      );
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateLabelSurfaces();
+      setDirty(false);
+    },
+  });
+
+  const deleteLabel = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/labels/${labelId}`);
+    },
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["/api/labels", labelId] });
+      invalidateLabelSurfaces();
+      onDeleted();
+    },
+  });
+
+  if (isLoading || !form) {
+    return <div className="p-8 text-slate-500">Loading…</div>;
+  }
+
+  const set = <K extends keyof AdminLabel>(k: K, v: AdminLabel[K]) => {
+    setForm({ ...form, [k]: v });
+    setDirty(true);
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <div>
+          <h2
+            className="text-slate-900 text-lg font-semibold"
+            data-testid="text-editor-title"
+          >
+            Edit label
+          </h2>
+          <p className="text-slate-400 text-xs">{labelId}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                confirm(
+                  "Delete this label? Albums released on it will lose their label credit (but stay in the catalog).",
+                )
+              ) {
+                deleteLabel.mutate();
+              }
+            }}
+            disabled={deleteLabel.isPending}
+            className="px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50 rounded-md disabled:opacity-50"
+            data-testid="button-delete-label"
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => saveLabel.mutate(form)}
+            disabled={!dirty || saveLabel.isPending}
+            className="px-4 py-1.5 text-[13px] font-medium rounded-md bg-[#319ED8] text-white hover:bg-[#319ED8]/90 disabled:opacity-40"
+            data-testid="button-save-label"
+          >
+            {saveLabel.isPending ? "Saving…" : dirty ? "Save" : "Saved"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        <Field label="Name">
+          <input
+            value={form.name}
+            onChange={(e) => set("name", e.target.value)}
+            className={inputCls}
+            data-testid="input-label-name"
+          />
+        </Field>
+        <Field label="Logo">
+          <ArtworkPicker
+            value={form.logoUrl ?? ""}
+            onChange={(next) => set("logoUrl", next || null)}
+            shape="square"
+            testId="input-label-logo"
+            hint="Square logo, 512×512 recommended. Shown on album headers + the label tab list."
+          />
+        </Field>
+        <Field label="Cover image">
+          <ArtworkPicker
+            value={form.coverUrl ?? ""}
+            onChange={(next) => set("coverUrl", next || null)}
+            shape="square"
+            testId="input-label-cover"
+            hint="Optional. Hero image for the future label page."
+          />
+        </Field>
+        <Field label="Website">
+          <input
+            value={form.websiteUrl ?? ""}
+            onChange={(e) => set("websiteUrl", e.target.value || null)}
+            placeholder="https://…"
+            className={inputCls}
+            data-testid="input-label-website"
+          />
+        </Field>
+        <Field label="Location">
+          <input
+            value={form.location ?? ""}
+            onChange={(e) => set("location", e.target.value || null)}
+            placeholder="Brooklyn, NY"
+            className={inputCls}
+            data-testid="input-label-location"
+          />
+        </Field>
+        <Field label="Bio">
+          <textarea
+            value={form.bio ?? ""}
+            onChange={(e) => set("bio", e.target.value || null)}
+            rows={4}
+            className={inputCls + " resize-none"}
+            data-testid="input-label-bio"
+          />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+// ---------- AlbumLabelPicker ----------
+// Lightweight dropdown shown inside AlbumEditor. Lists every label by name
+// (alpha-sorted server-side) plus a "No label" option that writes null.
+function AlbumLabelPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (next: string | null) => void;
+}) {
+  const { data: labels = [] } = useQuery<AdminLabel[]>({
+    queryKey: ["/api/labels"],
+  });
+  return (
+    <Field label="Label">
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className={inputCls}
+        data-testid="select-album-label"
+      >
+        <option value="">— No label —</option>
+        {labels.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 // ---------- Admin shell ----------
 
 export function Admin() {
@@ -3631,6 +3860,7 @@ export function Admin() {
     people: null,
     instruments: null,
     vendors: null,
+    labels: null,
   });
   const selectedId = selectedByEntity[entity];
   const setSelectedId = (id: string | null) =>
@@ -3642,7 +3872,7 @@ export function Admin() {
   // whatever filter you had open in each. Empty string = no filter.
   const [searchByEntity, setSearchByEntity] = useState<
     Record<EntityKey, string>
-  >({ albums: "", people: "", instruments: "", vendors: "" });
+  >({ albums: "", people: "", instruments: "", vendors: "", labels: "" });
   const search = searchByEntity[entity];
   const setSearch = (v: string) =>
     setSearchByEntity((prev) => ({ ...prev, [entity]: v }));
@@ -3653,6 +3883,7 @@ export function Admin() {
     people: false,
     instruments: false,
     vendors: false,
+    labels: false,
   });
   const isSearchOpen = searchOpen[entity] || !!search;
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -3680,6 +3911,10 @@ export function Admin() {
     queryKey: ["/api/instruments"],
     enabled: !!user?.isAdmin,
   });
+  const { data: labels = [] } = useQuery<AdminLabel[]>({
+    queryKey: ["/api/labels"],
+    enabled: !!user?.isAdmin,
+  });
 
   // Auto-select the first row when switching to an entity that has no
   // selection yet. Run per-entity so each tab keeps its own cursor.
@@ -3695,6 +3930,10 @@ export function Admin() {
     if (selectedByEntity.instruments == null && instruments.length > 0)
       setSelectedByEntity((p) => ({ ...p, instruments: instruments[0].id }));
   }, [instruments, selectedByEntity.instruments]);
+  useEffect(() => {
+    if (selectedByEntity.labels == null && labels.length > 0)
+      setSelectedByEntity((p) => ({ ...p, labels: labels[0].id }));
+  }, [labels, selectedByEntity.labels]);
 
   // Flat cross-cut of every vendor row across every instrument. Vendors are
   // owned by instruments in the DB (FK), so this is a derivation — no
@@ -3815,6 +4054,17 @@ export function Admin() {
           ),
     [allVendors, needle],
   );
+  const filteredLabels = useMemo(
+    () =>
+      !needle
+        ? labels
+        : labels.filter(
+            (l) =>
+              l.name.toLowerCase().includes(needle) ||
+              (l.location?.toLowerCase().includes(needle) ?? false),
+          ),
+    [labels, needle],
+  );
 
   const bootstrap = useMutation({
     mutationFn: async () => {
@@ -3873,6 +4123,19 @@ export function Admin() {
     },
   });
 
+  const createLabel = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/labels", {
+        name: "New label",
+      });
+      return res.json() as Promise<AdminLabel>;
+    },
+    onSuccess: (l) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
+      setSelectedByEntity((s) => ({ ...s, labels: l.id }));
+    },
+  });
+
   // Iframe lifecycle: change `src` when the selected album changes; remount
   // (via `key`) whenever any CMS-mutable field on that album changes, so the
   // preview re-fetches and re-renders without us reaching into iframe.contentWindow.
@@ -3900,7 +4163,12 @@ export function Admin() {
           `${s.id}|${s.trackNumber}|${s.title}|${s.duration}|${s.lyrics ?? ""}|${s.audioUrl ?? ""}`,
       )
       .join("~");
-    return `${a.id}|${a.title}|${a.artist}|${a.artwork}|${a.year}|${a.type}|${a.description ?? ""}|${songSig}`;
+    // Include labelId + the denormalized label entity fields fan-side
+    // AlbumDetail actually reads (name/logo) so a label-only edit — either
+    // reassigning the album to a different label or editing the label
+    // entity itself — forces an iframe remount.
+    const labelSig = `${a.labelId ?? ""}|${a.label?.name ?? ""}|${a.label?.logoUrl ?? ""}`;
+    return `${a.id}|${a.title}|${a.artist}|${a.artwork}|${a.year}|${a.type}|${a.description ?? ""}|${labelSig}|${songSig}`;
   }, [albumPreviewId, previewDetail]);
 
   if (isLoading) {
@@ -3992,6 +4260,7 @@ export function Admin() {
                   count: instruments.length,
                 },
                 { key: "vendors", label: "Vendors", count: allVendors.length },
+                { key: "labels", label: "Labels", count: labels.length },
               ] as { key: EntityKey; label: string; count: number }[]
             ).map((t) => (
               <button
@@ -4059,12 +4328,14 @@ export function Admin() {
                     if (entity === "albums") createAlbum.mutate();
                     else if (entity === "people") createPerson.mutate();
                     else if (entity === "instruments") createInstrument.mutate();
+                    else if (entity === "labels") createLabel.mutate();
                   }}
                   disabled={
                     entity === "vendors" ||
                     createAlbum.isPending ||
                     createPerson.isPending ||
-                    createInstrument.isPending
+                    createInstrument.isPending ||
+                    createLabel.isPending
                   }
                   className={`text-[12px] ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:underline"}`}
                   title={
@@ -4292,6 +4563,42 @@ export function Admin() {
                   : "No vendors yet. Open an instrument and paste a Reverb / Sweetwater / Carter Vintage URL into its Vendors scraper."}
               </li>
             )}
+            {entity === "labels" &&
+              filteredLabels.map((l) => (
+                <li key={l.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(l.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left ${selectedId === l.id ? "bg-blue-50" : ""}`}
+                    data-testid={`row-label-${l.id}`}
+                  >
+                    {l.logoUrl ? (
+                      <img
+                        src={l.logoUrl}
+                        alt=""
+                        className="w-10 h-10 rounded bg-slate-50 object-contain shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-slate-100 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-slate-900 text-sm truncate">
+                        {l.name || "Untitled label"}
+                      </div>
+                      <div className="text-slate-400 text-xs truncate">
+                        {l.location ?? "—"}
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            {entity === "labels" && filteredLabels.length === 0 && (
+              <li className="px-4 py-6 text-slate-400 text-sm">
+                {needle
+                  ? `No labels match "${search}".`
+                  : "No labels yet. Click + New."}
+              </li>
+            )}
           </ul>
         </section>
 
@@ -4311,6 +4618,12 @@ export function Admin() {
             <PersonEditor
               key={selectedId}
               personId={selectedId}
+              onDeleted={() => setSelectedId(null)}
+            />
+          ) : entity === "labels" ? (
+            <LabelEditor
+              key={selectedId}
+              labelId={selectedId}
               onDeleted={() => setSelectedId(null)}
             />
           ) : entity === "vendors" ? (
