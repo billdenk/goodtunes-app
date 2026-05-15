@@ -499,28 +499,15 @@ export function AlbumDetail() {
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </button>
-              {/* Genre · Year — Apple-Music-style muted subtitle under the
-                  artist name. Genre is optional; when absent we collapse
-                  to just the year so the line never starts with a bullet.
-                  Song count + total runtime moved to the track-list footer
-                  so this row stays a clean two-token metadata strip. */}
-              <p className="text-xs mt-1.5" style={{ color: "#98A2B3" }} data-testid="text-album-meta">
-                {[album.genre, album.year].filter(Boolean).join(" · ")}
-              </p>
-              {apiAlbum?.label && (
-                <div
-                  className="mt-2 inline-flex items-center gap-1.5 text-white/65 text-[12px]"
-                  data-testid={`text-album-label-${apiAlbum.label.id}`}
-                >
-                  {apiAlbum.label.logoUrl && (
-                    <img
-                      src={apiAlbum.label.logoUrl}
-                      alt=""
-                      className="w-4 h-4 rounded-sm object-contain bg-white/10"
-                    />
-                  )}
-                  <span>{apiAlbum.label.name}</span>
-                </div>
+              {/* Genre-only muted subtitle under the artist name. Year +
+                  label moved to the track-list footer to match Apple Music's
+                  layout (release date and copyright live below the tracks,
+                  not above them). Hidden entirely when there's no genre so
+                  the title block doesn't carry an empty row. */}
+              {album.genre && (
+                <p className="text-xs mt-1.5" style={{ color: "#98A2B3" }} data-testid="text-album-meta">
+                  {album.genre}
+                </p>
               )}
               {album.description && (
                 <ClampedDescription
@@ -687,13 +674,32 @@ export function AlbumDetail() {
               videos/photos. Keeps clean albums looking identical to before. */}
           <AlbumBonusContent albumId={album.id} />
 
-          {/* Metadata block */}
+          {/* Metadata block — Apple-Music-style footer that lives BELOW
+              the tracklist (not above it). Carries release year, total
+              runtime, label, and ownership. Year + label were previously
+              up in the title block; moved here to match Apple's pattern
+              where the date/copyright row sits under the tracks. */}
           <div className="px-5 mt-7">
             <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.32)" }}>
-              <span className="block">{album.year} · {album.artist}</span>
-              <span className="block mt-0.5">{songs.length} {songs.length === 1 ? "song" : "songs"} · {runtime}</span>
+              <span className="block" data-testid="text-album-year-footer">{album.year}</span>
+              <span className="block mt-0.5">{songs.length} {songs.length === 1 ? "song" : "songs"}, {runtime}</span>
+              {apiAlbum?.label && (
+                <span
+                  className="mt-1 inline-flex items-center gap-1.5"
+                  data-testid={`text-album-label-footer-${apiAlbum.label.id}`}
+                >
+                  {apiAlbum.label.logoUrl && (
+                    <img
+                      src={apiAlbum.label.logoUrl}
+                      alt=""
+                      className="w-3.5 h-3.5 rounded-sm object-contain bg-white/10"
+                    />
+                  )}
+                  <span>{apiAlbum.label.name}</span>
+                </span>
+              )}
               {ownedNums.length > 0 && (
-                <span className="block mt-0.5">
+                <span className="block mt-1">
                   You own {ownedNums.length === 1 ? `No. ${(ownedNums[0]).toString().padStart(2, "0")}` : `${ownedNums.length} certificates`} of this {album.type === "EP" ? "EP" : album.type === "Single" ? "single" : "LP"}.
                 </span>
               )}
