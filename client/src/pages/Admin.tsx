@@ -6330,8 +6330,18 @@ export function Admin() {
   // Auto-select the first row when switching to an entity that has no
   // selection yet. Run per-entity so each tab keeps its own cursor.
   useEffect(() => {
-    if (selectedByEntity.albums == null && albums.length > 0)
-      setSelectedByEntity((p) => ({ ...p, albums: albums[0].id }));
+    // The Albums sidebar only shows curated GoodTunes releases, so the
+    // default cursor has to come from that same filtered list — otherwise
+    // we land on a discography import (e.g. "1833") that isn't even in the
+    // visible sidebar. Also re-select when the current pick falls out of
+    // the curated list (e.g. an album was un-flagged as a GoodTunes release).
+    const curated = albums.filter((a) => a.isGoodTunesRelease);
+    if (curated.length === 0) return;
+    const current = selectedByEntity.albums;
+    const stillVisible = current != null && curated.some((a) => a.id === current);
+    if (!stillVisible) {
+      setSelectedByEntity((p) => ({ ...p, albums: curated[0].id }));
+    }
   }, [albums, selectedByEntity.albums]);
   useEffect(() => {
     if (selectedByEntity.people == null && people.length > 0)
