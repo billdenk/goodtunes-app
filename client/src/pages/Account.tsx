@@ -81,36 +81,40 @@ export function Account() {
       />
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
 
-        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
-          <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Account</h1>
-        </header>
+        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
+          {/* Title + profile header now live INSIDE the scroll container so
+              the whole page scrolls as one — previously the avatar/name/Edit
+              block was fixed above the scroll area and content slid under it. */}
+          <header className="flex items-end justify-between px-5 pt-14 pb-3">
+            <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Account</h1>
+          </header>
 
-        <div className="relative z-10 flex flex-col items-center pt-6 pb-4 px-5">
-          <div
-            className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white mb-4"
-            style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
-            aria-label="Profile photo"
-            data-testid="profile-photo"
-          >
-            {photoUrl ? (
-              <img src={photoUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span>{initials}</span>
-            )}
+          <div className="flex flex-col items-center pt-6 pb-4 px-5">
+            <div
+              className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white mb-4"
+              style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
+              aria-label="Profile photo"
+              data-testid="profile-photo"
+            >
+              {photoUrl ? (
+                <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span>{initials}</span>
+              )}
+            </div>
+            <p className="text-white text-xl font-bold">{user?.displayName}</p>
+            <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
+            <button
+              type="button"
+              onClick={() => navigate("/account/edit")}
+              className="mt-3 px-5 py-2 rounded-full border border-white/20 text-white/70 text-sm font-medium active:opacity-70"
+              data-testid="button-edit-profile"
+            >
+              Edit Profile
+            </button>
           </div>
-          <p className="text-white text-xl font-bold">{user?.displayName}</p>
-          <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
-          <button
-            type="button"
-            onClick={() => navigate("/account/edit")}
-            className="mt-3 px-5 py-2 rounded-full border border-white/20 text-white/70 text-sm font-medium active:opacity-70"
-            data-testid="button-edit-profile"
-          >
-            Edit Profile
-          </button>
-        </div>
 
-        <div ref={scrollRef} className="relative z-10 flex-1 px-5 overflow-y-auto scrollbar-hide pb-[170px]">
+          <div className="px-5">
           {bookmarks.length > 0 && (
             <>
               <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Bookmarks</p>
@@ -229,6 +233,7 @@ export function Account() {
           </div>
 
           <p className="text-center text-white/45 text-xs pb-4">Version 1.00</p>
+          </div>
         </div>
 
         <MiniPlayer />
