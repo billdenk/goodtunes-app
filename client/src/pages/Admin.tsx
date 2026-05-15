@@ -4366,7 +4366,10 @@ export function Admin() {
                 { key: "people", label: "People", count: people.length },
                 {
                   key: "instruments",
-                  label: "Instruments",
+                  // Public-facing label is "Gear" (matches the fan-side
+                  // VendorSheet tab). The internal key stays `instruments`
+                  // so schema and storage names don't have to change.
+                  label: "Gear",
                   count: instruments.length,
                 },
                 { key: "vendors", label: "Vendors", count: allVendors.length },

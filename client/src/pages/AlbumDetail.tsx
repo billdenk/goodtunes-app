@@ -2441,7 +2441,10 @@ function VendorSheet({
           <div className="flex gap-6 border-b border-white/10">
             {(["about", "instruments", "artists"] as const).map((t) => {
               const active = tab === t;
-              const label = t === "about" ? "About" : t === "instruments" ? "Instruments" : "Artists";
+              // "Gear" is the public-facing name for the Instruments bucket
+              // — see the Admin "Gear" nav entry. Internally we keep the key
+              // `instruments` so the schema/storage names don't have to change.
+              const label = t === "about" ? "About" : t === "instruments" ? "Gear" : "Artists";
               const count = t === "instruments" ? profile?.instruments.length : t === "artists" ? usedBy.length : undefined;
               return (
                 <button
