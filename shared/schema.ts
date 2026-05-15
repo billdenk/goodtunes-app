@@ -168,6 +168,33 @@ export const people = pgTable("people", {
   websiteUrl: text("website_url"),
 });
 
+// Cached iTunes Lookup discography for a Person. We pull this in admin
+// (`/api/admin/people/scrape`) and persist it here so the fan-side artist
+// page can render a "Streaming" section without re-hitting Apple on every
+// visit, and so the data survives the admin's `sessionStorage` lifetime.
+// One row per release (album / EP / single). `collectionId` is Apple's
+// numeric iTunes id, unique per person so re-pulls upsert cleanly.
+export const personDiscography = pgTable("person_discography", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+  collectionId: text("collection_id").notNull(),
+  name: text("name").notNull(),
+  artworkUrl: text("artwork_url"),
+  year: integer("year"),
+  // "album" | "EP" | "Single" — kept lowercase-ish to match the
+  // ScrapedArtistAlbum shape so admin + fan render off the same values
+  // without translation.
+  type: text("type").notNull(),
+  trackCount: integer("track_count"),
+  appleMusicUrl: text("apple_music_url"),
+  // Per-release Spotify URL is a v2 problem (needs Spotify Web API).
+  // Today the fan-side "How to Play" sheet falls back to a Spotify
+  // search URL when this is null.
+  spotifyUrl: text("spotify_url"),
+  // Display order — admin pulls newest-first from Apple, we mirror that.
+  position: integer("position").notNull().default(0),
+});
+
 export const instruments = pgTable("instruments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   // e.g. "1967 Gretsch 6071 'Monkees' Bass Walnut"
@@ -292,6 +319,10 @@ export type Song = typeof songs.$inferSelect;
 export const insertPersonSchema = createInsertSchema(people).omit({ id: true });
 export type InsertPerson = z.infer<typeof insertPersonSchema>;
 export type Person = typeof people.$inferSelect;
+
+export const insertPersonDiscographySchema = createInsertSchema(personDiscography).omit({ id: true });
+export type InsertPersonDiscography = z.infer<typeof insertPersonDiscographySchema>;
+export type PersonDiscography = typeof personDiscography.$inferSelect;
 
 export const insertInstrumentSchema = createInsertSchema(instruments).omit({ id: true });
 export type InsertInstrument = z.infer<typeof insertInstrumentSchema>;

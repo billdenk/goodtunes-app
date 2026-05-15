@@ -1017,6 +1017,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(p);
   });
+  // Apple Music discography (cached iTunes Lookup result). Public reads
+  // power the fan-side artist page's "Streaming" section; admin writes
+  // happen automatically after a Pull in PersonEditor.
+  app.get("/api/people/:id/discography", async (req, res) => {
+    const rows = await storage.getDiscographyByPerson(String(req.params.id));
+    return res.json(rows);
+  });
+  // Fan-side ArtistDetail is keyed by display-name slug today (not by
+  // person.id), so this convenience endpoint does the name → person
+  // resolution server-side and returns the same payload shape.
+  app.get("/api/discography/by-artist-name", async (req, res) => {
+    const name = String(req.query.name ?? "").trim();
+    if (!name) return res.json([]);
+    const rows = await storage.getDiscographyByArtistName(name);
+    return res.json(rows);
+  });
+  app.put("/api/admin/people/:id/discography", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const body = req.body ?? {};
+    const items = Array.isArray(body.items) ? body.items : [];
+    // Normalize the loose ScrapedArtistAlbum shape from the admin client
+    // into the strict insert shape. Anything missing collectionId/name/type
+    // is dropped — we'd rather skip a malformed row than crash the whole pull.
+    const norm = items
+      .filter((r: any) => r && r.collectionId && r.name && r.type)
+      .map((r: any, idx: number) => ({
+        collectionId: String(r.collectionId),
+        name: String(r.name),
+        artworkUrl: r.artworkUrl ? String(r.artworkUrl) : null,
+        year: typeof r.year === "number" ? r.year : null,
+        type: String(r.type),
+        trackCount: typeof r.trackCount === "number" ? r.trackCount : null,
+        appleMusicUrl: r.appleMusicUrl ? String(r.appleMusicUrl) : null,
+        spotifyUrl: r.spotifyUrl ? String(r.spotifyUrl) : null,
+        position: typeof r.position === "number" ? r.position : idx,
+      }));
+    const rows = await storage.replaceDiscographyForPerson(id, norm);
+    return res.json(rows);
+  });
+
   app.delete("/api/admin/people/:id", requireAdmin, async (req, res) => {
     await storage.deletePerson(String(req.params.id));
     return res.json({ message: "Deleted" });

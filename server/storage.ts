@@ -8,6 +8,8 @@ import {
   type UserAlbum,
   type Person,
   type InsertPerson,
+  type PersonDiscography,
+  type InsertPersonDiscography,
   type Instrument,
   type InsertInstrument,
   type InstrumentVendor,
@@ -32,6 +34,7 @@ import {
   profilePhotos,
   analyticsEvents,
   people,
+  personDiscography,
   instruments,
   instrumentVendors,
   vendors,
@@ -80,6 +83,15 @@ export interface IStorage {
   createPerson(data: InsertPerson & { id?: string }): Promise<Person>;
   updatePerson(id: string, data: Partial<Person>): Promise<Person | undefined>;
   deletePerson(id: string): Promise<void>;
+
+  // Apple Music discography for a Person, mirrored from the admin's
+  // iTunes Lookup pull. Replace-all on every persist (admin scrape is
+  // the single source of truth — partial diffs would just diverge from
+  // Apple). `getByArtistName` is the fan-side convenience used by
+  // ArtistDetail, which is keyed by display name today.
+  getDiscographyByPerson(personId: string): Promise<PersonDiscography[]>;
+  getDiscographyByArtistName(name: string): Promise<PersonDiscography[]>;
+  replaceDiscographyForPerson(personId: string, items: Omit<InsertPersonDiscography, "personId">[]): Promise<PersonDiscography[]>;
 
   // `includeHiddenVendors` is honored only by admin call sites — public
   // reads always pass false so hidden vendor buttons don't render in the
@@ -398,6 +410,44 @@ export class DbStorage implements IStorage {
   }
   async deletePerson(id: string): Promise<void> {
     await db.delete(people).where(eq(people.id, id));
+  }
+
+  async getDiscographyByPerson(personId: string): Promise<PersonDiscography[]> {
+    return db
+      .select()
+      .from(personDiscography)
+      .where(eq(personDiscography.personId, personId))
+      .orderBy(asc(personDiscography.position));
+  }
+
+  async getDiscographyByArtistName(name: string): Promise<PersonDiscography[]> {
+    // Case-insensitive name match. People without an exact-name row in
+    // the catalog (typos, alt spellings) get an empty list — fan side
+    // just doesn't render the Streaming section.
+    const [person] = await db
+      .select()
+      .from(people)
+      .where(sql`lower(${people.name}) = lower(${name})`)
+      .limit(1);
+    if (!person) return [];
+    return this.getDiscographyByPerson(person.id);
+  }
+
+  async replaceDiscographyForPerson(
+    personId: string,
+    items: Omit<InsertPersonDiscography, "personId">[],
+  ): Promise<PersonDiscography[]> {
+    // Transactional replace — admin pulls always represent the full
+    // Apple discography snapshot, so partial diffs would only drift.
+    return db.transaction(async (tx) => {
+      await tx.delete(personDiscography).where(eq(personDiscography.personId, personId));
+      if (items.length === 0) return [];
+      const rows = await tx
+        .insert(personDiscography)
+        .values(items.map((i) => ({ ...i, personId })) as any)
+        .returning();
+      return rows;
+    });
   }
 
   // Internal helper: load enriched attachments for a set of instrument ids,

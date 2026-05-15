@@ -1620,7 +1620,18 @@ function PersonEditor({
       // back with `albums: []` — overwriting in that case would wipe a list
       // the admin just pulled from Apple. Keep what we have until another
       // source proves it has a better list.
-      if (data.albums.length > 0) setDiscography(data.albums);
+      if (data.albums.length > 0) {
+        setDiscography(data.albums);
+        // Mirror the pulled discography to the database so the fan-side
+        // artist page's "Streaming" section sees it without re-hitting
+        // Apple. Fire-and-forget — the in-memory list is already updated
+        // and the only consumer is the public fan endpoint.
+        apiRequest("PUT", `/api/admin/people/${personId}/discography`, {
+          items: data.albums.map((a, idx) => ({ ...a, position: idx })),
+        }).catch(() => {
+          /* non-fatal — admin will re-pull and we'll persist next time */
+        });
+      }
       const src =
         data.source === "apple"
           ? "Apple Music"

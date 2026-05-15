@@ -1,11 +1,13 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import type { PersonDiscography } from "@shared/schema";
 
 export function ArtistDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -35,6 +37,59 @@ export function ArtistDetail() {
     () => artistAlbums.flatMap((a) => (a.videos ?? []).map((v) => ({ ...v, album: a }))),
     [artistAlbums],
   );
+
+  // Streaming discography — the rest of the artist's catalog from Apple
+  // Music that isn't in GoodTunes. Admin pulls this via iTunes Lookup
+  // and persists it; here we just read + bucket. Empty array when the
+  // artist hasn't been pulled yet or doesn't exist in our `people` table.
+  // NOTE on the join: fan ArtistDetail is keyed by display name (no
+  // personId in this route), so resolution is `lower(people.name) = lower(name)`.
+  // Brittle for aliases / typos / "feat." text — fine for the current
+  // hand-curated static catalog (small, exact-match artist names). When
+  // we migrate this page off `@/data/musicData` to a DB-backed artist
+  // route, switch this to a personId-based fetch.
+  const { data: streamingAll = [] } = useQuery<PersonDiscography[]>({
+    queryKey: ["/api/discography/by-artist-name", { name: artistName }],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/discography/by-artist-name?name=${encodeURIComponent(artistName)}`,
+      );
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!artistName,
+  });
+  // Dedupe vs GoodTunes Releases by title (case-insensitive). Anything
+  // already in the catalog renders above as a full GT tile — we don't
+  // want it to appear twice with a streaming handoff fan can use to
+  // leave the app.
+  const goodTunesTitles = useMemo(
+    () => new Set(artistAlbums.map((a) => a.title.toLowerCase())),
+    [artistAlbums],
+  );
+  const streamingFiltered = useMemo(
+    () => streamingAll.filter((r) => !goodTunesTitles.has(r.name.toLowerCase())),
+    [streamingAll, goodTunesTitles],
+  );
+  // Three buckets, matching the admin Discography panel exactly so the
+  // admin sees what the fan sees. Singles are detected by trackCount === 1
+  // since iTunes marks them as collectionType "EP" with one track.
+  const streamingBuckets = useMemo(() => {
+    const lps = streamingFiltered.filter(
+      (r) => r.type === "album" && r.trackCount !== 1,
+    );
+    const eps = streamingFiltered.filter(
+      (r) => r.type === "EP" && (r.trackCount ?? 0) > 1,
+    );
+    const singles = streamingFiltered.filter((r) => r.trackCount === 1);
+    return [
+      { label: "Albums", items: lps },
+      { label: "EPs", items: eps },
+      { label: "Singles", items: singles },
+    ].filter((g) => g.items.length > 0);
+  }, [streamingFiltered]);
+  // Open release for the How-to-Play sheet. Null = sheet closed.
+  const [howToPlay, setHowToPlay] = useState<PersonDiscography | null>(null);
 
   const isFav = favArtists.has(artistName);
   const heroArt = artistAlbums[0]?.artwork;
@@ -179,6 +234,57 @@ export function ArtistDetail() {
             </div>
           </div>
 
+          {streamingBuckets.length > 0 && (
+            <div className="px-5 mt-9" data-testid="section-streaming">
+              <h2 className="text-white text-xl font-bold tracking-tight mb-1">Streaming</h2>
+              <p className="text-white/45 text-xs mb-4">
+                The rest of {artistName}'s catalog on Apple Music & Spotify.
+              </p>
+              {streamingBuckets.map((bucket) => (
+                <div key={bucket.label} className="mb-6 last:mb-0">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <h3 className="text-white/80 text-[11px] font-semibold uppercase tracking-wider">
+                      {bucket.label}
+                    </h3>
+                    <span className="text-white/40 text-[11px]">{bucket.items.length}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {bucket.items.map((release) => (
+                      <button
+                        key={release.id}
+                        type="button"
+                        onClick={() => setHowToPlay(release)}
+                        className="flex flex-col text-left active:scale-[0.97] transition-transform"
+                        data-testid={`streaming-release-${release.id}`}
+                      >
+                        <div
+                          className="aspect-square rounded-2xl overflow-hidden bg-white/5"
+                          style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
+                        >
+                          {release.artworkUrl && (
+                            <img
+                              src={release.artworkUrl}
+                              alt={release.name}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                        </div>
+                        <p className="text-white text-sm font-semibold leading-tight truncate mt-2">
+                          {release.name}
+                        </p>
+                        <p className="text-white/50 text-xs truncate mt-0.5">
+                          {[release.year, bucket.label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {allVideos.length > 0 && (
             <div className="mt-9">
               <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Music Videos</h2>
@@ -219,6 +325,172 @@ export function ArtistDetail() {
         <MiniPlayer />
         <BottomNav />
       </section>
+
+      {howToPlay && (
+        <HowToPlaySheet
+          release={howToPlay}
+          artistName={artistName}
+          onClose={() => setHowToPlay(null)}
+        />
+      )}
     </main>
+  );
+}
+
+// Apple-TV-style "How to Watch" sheet, adapted to streaming-only (no
+// Buy / Rent — every option is a subscription handoff). Two big rounded
+// rows: Apple Music (deep-link to the exact album via the iTunes Lookup
+// URL we cached) + Spotify (search fallback today, since we don't yet
+// store per-release Spotify URLs).
+function HowToPlaySheet({
+  release,
+  artistName,
+  onClose,
+}: {
+  release: PersonDiscography;
+  artistName: string;
+  onClose: () => void;
+}) {
+  const spotifyHref =
+    release.spotifyUrl ??
+    `https://open.spotify.com/search/${encodeURIComponent(`${artistName} ${release.name}`)}`;
+  const services: Array<{
+    key: string;
+    label: string;
+    href: string | null;
+    // Inline SVG keeps this self-contained — no new icon dependency.
+    logo: JSX.Element;
+    accent: string;
+  }> = [
+    {
+      key: "apple",
+      label: "Apple Music",
+      href: release.appleMusicUrl,
+      accent: "#FA243C",
+      logo: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+          <path d="M19.5 4.5c0-1.4-1.1-2.5-2.5-2.5h-10C5.6 2 4.5 3.1 4.5 4.5v15c0 1.4 1.1 2.5 2.5 2.5h10c1.4 0 2.5-1.1 2.5-2.5v-15zm-4.4 12.2c-.2.5-.5 1-.9 1.4-.6.6-1.4.9-2.2.9-.3 0-.5 0-.8-.1-.7-.2-1.3-.5-1.7-1.1-.5-.7-.7-1.5-.6-2.3.1-.8.5-1.5 1.1-2 .5-.4 1.1-.6 1.7-.7l1.3-.2V8.4c0-.1 0-.2-.1-.3-.1 0-.1-.1-.2-.1l-3.6.5c-.2 0-.4.2-.4.4v6.8c0 .1 0 .2-.1.2 0 0-.1.1-.2.1l-1.3.2c-.6.1-1.2.5-1.5 1.1-.3.5-.4 1.1-.2 1.7.2.7.7 1.2 1.3 1.5.4.2.8.3 1.3.2.4 0 .8-.2 1.1-.4.6-.4 1-1.1 1.1-1.9V9.4l3.3-.5c.1 0 .2 0 .3.1.1.1.1.2.1.3v6.5c0 .3-.1.6-.2.9z"/>
+        </svg>
+      ),
+    },
+    {
+      key: "spotify",
+      label: "Spotify",
+      href: spotifyHref,
+      accent: "#1DB954",
+      logo: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.6 14.4c-.2.3-.6.4-.9.2-2.5-1.5-5.6-1.9-9.3-1-.4.1-.7-.1-.8-.5-.1-.4.1-.7.5-.8 4-.9 7.5-.5 10.3 1.2.4.2.4.6.2.9zm1.2-2.7c-.2.4-.7.5-1.1.3-2.8-1.7-7.1-2.2-10.4-1.2-.4.1-.9-.1-1-.5-.1-.4.1-.9.5-1 3.8-1.1 8.6-.6 11.8 1.4.4.2.5.7.2 1zm.1-2.8c-3.4-2-9-2.2-12.2-1.2-.5.2-1.1-.1-1.2-.6-.2-.5.1-1.1.6-1.2 3.7-1.1 9.9-.9 13.8 1.4.5.3.7.9.4 1.4-.3.5-.9.7-1.4.2z"/>
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      data-testid="sheet-how-to-play"
+    >
+      <div
+        className="w-full max-w-[440px] bg-[#101535] rounded-t-3xl text-white pb-8"
+        onClick={(e) => e.stopPropagation()}
+        style={{ boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}
+      >
+        <div className="flex justify-center pt-3">
+          <div className="w-10 h-1 rounded-full bg-white/25" />
+        </div>
+        <div className="px-5 pt-4 pb-5 flex items-center gap-3 border-b border-white/8">
+          {release.artworkUrl && (
+            <img
+              src={release.artworkUrl}
+              alt=""
+              className="w-14 h-14 rounded-lg object-cover"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-white text-base font-semibold truncate">{release.name}</p>
+            <p className="text-white/55 text-xs truncate">
+              {artistName}
+              {release.year ? ` · ${release.year}` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
+            data-testid="button-close-how-to-play"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-5 pt-5">
+          <h3 className="text-white text-xl font-bold tracking-tight mb-3">How to Play</h3>
+          <div className="space-y-2.5">
+            {services.map((s) => {
+              // Render a real disabled control (no anchor) when we don't
+              // have a deep link — keeps focus / pointer / a11y semantics
+              // honest instead of presenting a clickable-looking link
+              // that does nothing.
+              const isDisabled = !s.href;
+              const inner = (
+                <>
+                  <div
+                    className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: s.accent, opacity: isDisabled ? 0.45 : 1 }}
+                  >
+                    {s.logo}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-white text-base font-semibold">{s.label}</p>
+                    <p className="text-white/55 text-xs">
+                      {isDisabled
+                        ? "Not available for this release"
+                        : s.key === "spotify" && !release.spotifyUrl
+                          ? "Open in Spotify"
+                          : "Listen on " + s.label}
+                    </p>
+                  </div>
+                  {!isDisabled && (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/45">
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  )}
+                </>
+              );
+              if (isDisabled) {
+                return (
+                  <div
+                    key={s.key}
+                    role="button"
+                    aria-disabled="true"
+                    className="flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl bg-white/5 opacity-60 cursor-not-allowed"
+                    data-testid={`button-how-to-play-${s.key}-disabled`}
+                  >
+                    {inner}
+                  </div>
+                );
+              }
+              return (
+                <a
+                  key={s.key}
+                  href={s.href!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl bg-white/8 active:scale-[0.99] transition-transform"
+                  data-testid={`button-how-to-play-${s.key}`}
+                >
+                  {inner}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
