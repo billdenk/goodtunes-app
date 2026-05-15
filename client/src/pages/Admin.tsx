@@ -5899,12 +5899,18 @@ export function Admin() {
                   v.attachments.length > 0 &&
                   v.attachments.every((a) => a.isHidden);
                 const count = v.attachments.length;
+                // Show the vendor's tagline under the name — same one fans
+                // see on the VendorSheet. Falls back to the canonical domain,
+                // then to an attachment summary, so unfilled rows still
+                // carry useful context.
                 const summary =
-                  count === 0
+                  v.tagline ||
+                  v.domain ||
+                  (count === 0
                     ? "Not attached"
                     : count === 1
                       ? `on ${v.attachments[0].instrumentName}`
-                      : `on ${count} instruments`;
+                      : `on ${count} instruments`);
                 return (
                   <li key={v.id}>
                     <button
