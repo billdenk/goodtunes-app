@@ -32,6 +32,10 @@ interface AdminAlbum {
   // from the fan-side catalog. CMS callers see hidden rows so they can
   // flip the toggle back on.
   isHidden: boolean;
+  // True only for albums GoodTunes is actually releasing (curated by the
+  // label, not pulled in via a discography import). Filters the Albums
+  // sidebar list to the curated catalog only.
+  isGoodTunesRelease: boolean;
   // Optional record-label FK. SET NULL in the DB so a deleted label leaves
   // the album's catalog row intact (just with no label credit). The album
   // read endpoints denormalize the full label entity onto `album.label`,
@@ -517,6 +521,7 @@ function AlbumEditor({
         type: data.type,
         description: data.description,
         isHidden: data.isHidden,
+        isGoodTunesRelease: (data as any).isGoodTunesRelease ?? false,
         labelId: data.labelId ?? null,
         appleMusicUrl: data.appleMusicUrl,
         spotifyUrl: data.spotifyUrl,
@@ -769,6 +774,29 @@ function AlbumEditor({
             />
           </Field>
         </div>
+
+        {/* GoodTunes-release toggle. Determines whether this album shows up
+            in the admin Albums sidebar (the curated catalog column). Off by
+            default for discography-imported rows; flip on once the album is
+            being scheduled as an actual GoodTunes release. */}
+        <label
+          className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100"
+          data-testid="label-album-is-goodtunes-release"
+        >
+          <input
+            type="checkbox"
+            checked={!!form.isGoodTunesRelease}
+            onChange={(e) => set("isGoodTunesRelease", e.target.checked)}
+            className="mt-0.5 h-4 w-4"
+            data-testid="checkbox-album-is-goodtunes-release"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-slate-900">GoodTunes release</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              Show this album in the Albums sidebar. Leave off for albums pulled in via an artist's discography — they stay reachable from the artist profile and credits, but won't clutter the curated list.
+            </div>
+          </div>
+        </label>
 
         {/* Release dates. Two-pane: the GoodTunes go-live date (when fans with
             the bundle can start listening in-app) and the streaming-release
@@ -1834,6 +1862,10 @@ function PersonEditor({
                     artwork: "/album-placeholder.svg",
                     type: "LP",
                     primaryArtistId: personId,
+                    // Admin is starting a curated release for this artist —
+                    // surface it in the Albums sidebar from the moment it's
+                    // created (unlike the discography "+ Add" path).
+                    isGoodTunesRelease: true,
                   });
                   const album = (await res.json()) as AdminAlbum;
                   await queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
@@ -6055,17 +6087,20 @@ export function Admin() {
   // case-insensitive substring match against the fields shown on each row
   // so admins can find a row by typing what they already see on screen.
   const needle = search.trim().toLowerCase();
-  const filteredAlbums = useMemo(
-    () =>
-      !needle
-        ? albums
-        : albums.filter(
-            (a) =>
-              a.title.toLowerCase().includes(needle) ||
-              a.artist.toLowerCase().includes(needle),
-          ),
-    [albums, needle],
-  );
+  // Sidebar shows only GoodTunes-released albums by default. Discography
+  // imports (a Person's Apple Music catalog) live in the same `albums`
+  // table so they remain reachable from the artist profile + credits, but
+  // we don't want them cluttering the "Albums" column — that's reserved
+  // for the curated GoodTunes catalog.
+  const filteredAlbums = useMemo(() => {
+    const curated = albums.filter((a) => a.isGoodTunesRelease);
+    if (!needle) return curated;
+    return curated.filter(
+      (a) =>
+        a.title.toLowerCase().includes(needle) ||
+        a.artist.toLowerCase().includes(needle),
+    );
+  }, [albums, needle]);
   const filteredPeople = useMemo(
     () =>
       !needle

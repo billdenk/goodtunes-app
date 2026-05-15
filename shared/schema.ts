@@ -70,6 +70,13 @@ export const albums = pgTable("albums", {
   // effectively hiding the artist + all their songs/credits in one toggle.
   // Admin endpoints keep returning hidden rows so the CMS can flip them back.
   isHidden: boolean("is_hidden").notNull().default(false),
+  // True only for albums GoodTunes is actually releasing — i.e. curated by
+  // the label, not pulled in via a People discography import. The admin
+  // Albums sidebar filters to these by default so the second column stays
+  // reserved for GoodTunes releases. Discography-imported albums still
+  // live in the DB (so they remain reachable from a person's profile
+  // and from the credits surface), they're just absent from this list.
+  isGoodTunesRelease: boolean("is_goodtunes_release").notNull().default(false),
   // Streaming-service handoff. We host the album in-app for the first ~2 weeks
   // then surface "Listen on Apple Music / Spotify" buttons on the album page
   // that point fans at the canonical album URL on each service — same

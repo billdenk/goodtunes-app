@@ -750,6 +750,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
       streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
       primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
+      // Discography "+ Add" + Apple-URL seed paths leave this off; admin
+      // flips it on once an album is actually being released by GoodTunes.
+      isGoodTunesRelease: !!req.body?.isGoodTunesRelease,
     } as any);
     return res.status(201).json(album);
   });
@@ -868,6 +871,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goodTunesReleaseDate: null,
       streamingReleaseDate: releaseDate ? releaseDate.slice(0, 10) : null,
       primaryArtistId,
+      // Apple-URL seed only runs from the Albums column's "Seed an album"
+      // button — admin is explicitly curating a GoodTunes release here.
+      isGoodTunesRelease: true,
     } as any);
 
     // Bulk-create the tracks. iTunes durations are in ms; songs.duration
@@ -914,6 +920,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.labelId = normalizedLabelId;
     }
     if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
+    if (req.body?.isGoodTunesRelease !== undefined)
+      updates.isGoodTunesRelease = !!req.body.isGoodTunesRelease;
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
     const updated = await storage.updateAlbum(id, updates);
