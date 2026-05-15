@@ -1763,6 +1763,123 @@ function PerformerSheet({
   );
 }
 
+// Parses an `about` blob into { prose, specs }.
+// A line counts as a spec when it looks like a short "Label: Value" pair —
+// label starts with an uppercase letter, value is ≤ 80 chars and doesn't end
+// in a sentence period (so prose with a colon, e.g. "Note: this guitar sings.",
+// stays in the prose bucket). Consecutive non-matching lines are joined as
+// paragraphs. Order is preserved; we don't try to merge non-contiguous prose.
+function parseInstrumentAbout(about: string): { prose: string; specs: { label: string; value: string }[] } {
+  const lines = about.split(/\r?\n/);
+  const proseLines: string[] = [];
+  const specs: { label: string; value: string }[] = [];
+  const specLine = /^\s*([A-Z][A-Za-z0-9 /()&'.-]{0,40}):\s+(.{1,80})\s*$/;
+  for (const raw of lines) {
+    const m = raw.match(specLine);
+    // Treat anything that reads as a sentence — multi-sentence or
+    // terminal-punctuation — as prose, not a spec. Catches both mid-sentence
+    // ("Note: this is great. And…") and trailing ("Note: this guitar sings.")
+    // shapes so prose with an incidental colon doesn't get pulled into the
+    // spec grid.
+    const looksProse = m && (/[.!?]\s+\S/.test(m[2]) || /[.!?]["')\]]?\s*$/.test(m[2]));
+    if (m && !looksProse) {
+      specs.push({ label: m[1].trim(), value: m[2].trim() });
+    } else {
+      proseLines.push(raw);
+    }
+  }
+  // Collapse runs of blank lines, trim outer whitespace.
+  const prose = proseLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { prose, specs };
+}
+
+// About / Specs section with an Apple-Music-style segmented pill control.
+// - If the about field has no extractable specs, renders prose as before
+//   (no tab chrome — keeps simple instruments visually quiet).
+// - If specs exist but no prose, defaults to Specs (no empty About tab).
+// - Otherwise: two tabs, default About. Specs are hidden until tapped, so
+//   the rest of the sheet (artist note, vendors) stays near the top.
+function InstrumentAboutSection({ category, about }: { category: string; about: string }) {
+  const { prose, specs } = useMemo(() => parseInstrumentAbout(about), [about]);
+  const hasProse = prose.length > 0;
+  const hasSpecs = specs.length > 0;
+  const [tab, setTab] = useState<"about" | "specs">(hasProse ? "about" : "specs");
+
+  // No specs detected → original render, unchanged.
+  if (!hasSpecs) {
+    return (
+      <section className="px-5 pt-3 pb-5">
+        <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About this {category.toLowerCase()}</h3>
+        <p className="text-[16px] leading-relaxed whitespace-pre-line" style={{ color: "rgba(235,235,245,0.72)" }}>{prose || about}</p>
+      </section>
+    );
+  }
+
+  const showBoth = hasProse && hasSpecs;
+  const SegBtn = ({ value, label }: { value: "about" | "specs"; label: string }) => {
+    const active = tab === value;
+    return (
+      <button
+        type="button"
+        onClick={() => setTab(value)}
+        aria-pressed={active}
+        className="flex-1 h-9 rounded-full text-[14px] font-semibold transition-colors active:opacity-80"
+        style={{
+          background: active ? "rgba(255,255,255,0.14)" : "transparent",
+          color: active ? "#ffffff" : "rgba(235,235,245,0.55)",
+        }}
+        data-testid={`tab-instrument-${value}`}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  return (
+    <section className="px-5 pt-3 pb-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight">About this {category.toLowerCase()}</h3>
+      </div>
+
+      {showBoth && (
+        <div
+          className="flex items-center gap-1 p-1 rounded-full mb-3"
+          style={{ background: "rgba(255,255,255,0.06)" }}
+          role="tablist"
+          aria-label="About or specs"
+        >
+          <SegBtn value="about" label="About" />
+          <SegBtn value="specs" label="Specs" />
+        </div>
+      )}
+
+      {tab === "about" && hasProse && (
+        <p className="text-[16px] leading-relaxed whitespace-pre-line" style={{ color: "rgba(235,235,245,0.72)" }} data-testid="text-instrument-about">
+          {prose}
+        </p>
+      )}
+
+      {tab === "specs" && (
+        // Two-column dl: label dim, value white. Subtle hairline rows so the
+        // grid reads cleanly even with a long list — matches the dense spec
+        // sheets fans expect to see on Reverb / Carter Vintage listings.
+        <dl className="text-[15px] leading-snug" data-testid="list-instrument-specs">
+          {specs.map((s, i) => (
+            <div
+              key={`${s.label}-${i}`}
+              className="grid grid-cols-[40%_60%] gap-3 py-2"
+              style={{ borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)" }}
+            >
+              <dt style={{ color: "rgba(235,235,245,0.55)" }}>{s.label}</dt>
+              <dd className="text-white">{s.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
+  );
+}
+
 function InstrumentSheet({
   instrument,
   tuningNotes,
@@ -1900,12 +2017,17 @@ function InstrumentSheet({
         )}
       </div>
 
-      {/* About — Apple-style heading + body */}
+      {/* About / Specs — tabbed.
+          Admins routinely paste a vendor's full listing into `about`, which
+          contains a long "Brand: Martin / Model: D12-35 / Top: Adirondack…"
+          spec sheet that — rendered raw — pushes the artist's note and the
+          Where-to-buy vendors way below the fold. We split `about` at render
+          time into prose vs. key:value specs, and tuck the specs behind a
+          segmented control. No schema change required; works for any
+          instrument whose about field happens to contain a structured spec
+          block (typical Reverb / Carter Vintage / ish.guitars listings). */}
       {instrument.about && (
-        <section className="px-5 pt-3 pb-5">
-          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About this {instrument.category.toLowerCase()}</h3>
-          <p className="text-[16px] leading-relaxed" style={{ color: "rgba(235,235,245,0.72)" }}>{instrument.about}</p>
-        </section>
+        <InstrumentAboutSection category={instrument.category} about={instrument.about} />
       )}
 
       {/* Notes from the artist — attributed (so the note still makes sense after bookmarking) */}

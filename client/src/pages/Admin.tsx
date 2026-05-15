@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
+import { Globe } from "lucide-react";
 
 interface AdminAlbum {
   id: string;
@@ -45,6 +47,12 @@ interface AdminPerson {
   appleMusicUrl: string | null;
   spotifyUrl: string | null;
   itunesArtistId: string | null;
+  instagramUrl: string | null;
+  tiktokUrl: string | null;
+  twitterUrl: string | null;
+  blueskyUrl: string | null;
+  facebookUrl: string | null;
+  websiteUrl: string | null;
 }
 
 interface ScrapedArtistAlbum {
@@ -1121,6 +1129,67 @@ function PersonEditor({ personId, onDeleted }: { personId: string; onDeleted: ()
         After the in-app preview window, fans get "Listen on Apple Music / Spotify" buttons that point here.
       </p>
 
+      {/* Socials — rendered alongside Apple/Spotify as small circular icons
+          on the PerformerSheet. Keeps fans discoverable wherever the artist
+          actually lives (not just on the two streaming services). All fields
+          are optional; empty rows simply don't render an icon. */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Instagram URL">
+          <input
+            value={form.instagramUrl ?? ""}
+            onChange={(e) => update({ instagramUrl: e.target.value || null })}
+            placeholder="https://instagram.com/…"
+            className={inputCls}
+            data-testid="input-person-instagram-url"
+          />
+        </Field>
+        <Field label="TikTok URL">
+          <input
+            value={form.tiktokUrl ?? ""}
+            onChange={(e) => update({ tiktokUrl: e.target.value || null })}
+            placeholder="https://tiktok.com/@…"
+            className={inputCls}
+            data-testid="input-person-tiktok-url"
+          />
+        </Field>
+        <Field label="X / Twitter URL">
+          <input
+            value={form.twitterUrl ?? ""}
+            onChange={(e) => update({ twitterUrl: e.target.value || null })}
+            placeholder="https://x.com/…"
+            className={inputCls}
+            data-testid="input-person-twitter-url"
+          />
+        </Field>
+        <Field label="Bluesky URL">
+          <input
+            value={form.blueskyUrl ?? ""}
+            onChange={(e) => update({ blueskyUrl: e.target.value || null })}
+            placeholder="https://bsky.app/profile/…"
+            className={inputCls}
+            data-testid="input-person-bluesky-url"
+          />
+        </Field>
+        <Field label="Facebook URL">
+          <input
+            value={form.facebookUrl ?? ""}
+            onChange={(e) => update({ facebookUrl: e.target.value || null })}
+            placeholder="https://facebook.com/…"
+            className={inputCls}
+            data-testid="input-person-facebook-url"
+          />
+        </Field>
+        <Field label="Website / other">
+          <input
+            value={form.websiteUrl ?? ""}
+            onChange={(e) => update({ websiteUrl: e.target.value || null })}
+            placeholder="https://… (Linktree, Bandcamp, personal site)"
+            className={inputCls}
+            data-testid="input-person-website-url"
+          />
+        </Field>
+      </div>
+
       <Field label="Accent colour (hex, falls back to brand blue)">
         <div className="flex items-center gap-2">
           <input value={form.accent ?? ""} onChange={(e) => update({ accent: e.target.value || null })} placeholder="#319ED8" className={inputCls} data-testid="input-person-accent" />
@@ -1921,31 +1990,50 @@ function PersonPreviewCard({ person }: { person: AdminPerson }) {
             </div>
           )}
 
-          {/* Listen-on pills */}
-          {(person.appleMusicUrl || person.spotifyUrl) && (
-            <div className="px-5 pt-5 pb-4 mt-auto flex gap-2">
-              {person.appleMusicUrl && (
-                <div
-                  className="flex-1 h-10 rounded-full flex items-center justify-center text-white text-[13px] font-medium"
-                  style={{ background: "rgba(255,255,255,0.10)" }}
-                >
-                  Apple Music
-                </div>
-              )}
-              {person.spotifyUrl && (
-                <div
-                  className="flex-1 h-10 rounded-full flex items-center justify-center text-white text-[13px] font-medium"
-                  style={{ background: "rgba(255,255,255,0.10)" }}
-                >
-                  Spotify
-                </div>
-              )}
-            </div>
-          )}
+          {/* Find-her-elsewhere icon row. Apple/Spotify are sized identically
+              to the social icons — we want fans to know she's there, but not
+              hand-hold them out of our player. Pure circles, white-on-glass. */}
+          <SocialIconRow person={person} />
         </div>
       </div>
       <p className="text-slate-300 text-xs mt-3">Preview of the in-app PerformerSheet header.</p>
     </>
+  );
+}
+
+// Renders the standard row of small circular social icons used in the
+// PersonPreviewCard (and reusable later for the fan-side PerformerSheet).
+// Order is intentional: streaming first (where the music is), then the
+// platforms artists are most active on, then the generic website fallback.
+function SocialIconRow({ person }: { person: AdminPerson }) {
+  const links: { key: string; url: string; Icon: React.ComponentType<{ size?: number; className?: string }>; label: string }[] = [
+    person.appleMusicUrl && { key: "apple", url: person.appleMusicUrl, Icon: SiApplemusic, label: "Apple Music" },
+    person.spotifyUrl && { key: "spotify", url: person.spotifyUrl, Icon: SiSpotify, label: "Spotify" },
+    person.instagramUrl && { key: "instagram", url: person.instagramUrl, Icon: SiInstagram, label: "Instagram" },
+    person.tiktokUrl && { key: "tiktok", url: person.tiktokUrl, Icon: SiTiktok, label: "TikTok" },
+    person.twitterUrl && { key: "twitter", url: person.twitterUrl, Icon: SiX, label: "X" },
+    person.blueskyUrl && { key: "bluesky", url: person.blueskyUrl, Icon: SiBluesky, label: "Bluesky" },
+    person.facebookUrl && { key: "facebook", url: person.facebookUrl, Icon: SiFacebook, label: "Facebook" },
+    person.websiteUrl && { key: "website", url: person.websiteUrl, Icon: Globe, label: "Website" },
+  ].filter(Boolean) as { key: string; url: string; Icon: any; label: string }[];
+
+  if (links.length === 0) return null;
+
+  return (
+    <div className="px-5 pt-5 pb-5 mt-auto flex flex-wrap items-center gap-2.5" data-testid="row-person-socials">
+      {links.map(({ key, Icon, label }) => (
+        <div
+          key={key}
+          aria-label={label}
+          title={label}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white"
+          style={{ background: "rgba(255,255,255,0.10)" }}
+          data-testid={`icon-social-${key}`}
+        >
+          <Icon size={16} />
+        </div>
+      ))}
+    </div>
   );
 }
 

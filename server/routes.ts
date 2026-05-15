@@ -719,30 +719,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(p);
   });
   app.post("/api/admin/people", requireAdmin, async (req, res) => {
-    const { name, photoUrl, bio, accent, appleMusicUrl, spotifyUrl, itunesArtistId } = req.body ?? {};
-    if (!name) return res.status(400).json({ message: "name is required" });
+    const b = req.body ?? {};
+    if (!b.name) return res.status(400).json({ message: "name is required" });
+    const opt = (v: any) => (v ? String(v) : null);
     const p = await storage.createPerson({
-      name: String(name),
-      photoUrl: photoUrl ? String(photoUrl) : null,
-      bio: bio ? String(bio) : null,
-      accent: accent ? String(accent) : null,
-      appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
-      spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
-      itunesArtistId: itunesArtistId ? String(itunesArtistId) : null,
+      name: String(b.name),
+      photoUrl: opt(b.photoUrl),
+      bio: opt(b.bio),
+      accent: opt(b.accent),
+      appleMusicUrl: opt(b.appleMusicUrl),
+      spotifyUrl: opt(b.spotifyUrl),
+      itunesArtistId: opt(b.itunesArtistId),
+      instagramUrl: opt(b.instagramUrl),
+      tiktokUrl: opt(b.tiktokUrl),
+      twitterUrl: opt(b.twitterUrl),
+      blueskyUrl: opt(b.blueskyUrl),
+      facebookUrl: opt(b.facebookUrl),
+      websiteUrl: opt(b.websiteUrl),
     } as any);
     return res.status(201).json(p);
   });
   app.put("/api/admin/people/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, photoUrl, bio, accent, appleMusicUrl, spotifyUrl, itunesArtistId } = req.body ?? {};
+    const b = req.body ?? {};
     const updates: any = {};
-    if (name !== undefined) updates.name = String(name);
-    if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
-    if (bio !== undefined) updates.bio = bio ? String(bio) : null;
-    if (accent !== undefined) updates.accent = accent ? String(accent) : null;
-    if (appleMusicUrl !== undefined) updates.appleMusicUrl = appleMusicUrl ? String(appleMusicUrl) : null;
-    if (spotifyUrl !== undefined) updates.spotifyUrl = spotifyUrl ? String(spotifyUrl) : null;
-    if (itunesArtistId !== undefined) updates.itunesArtistId = itunesArtistId ? String(itunesArtistId) : null;
+    const opt = (v: any) => (v ? String(v) : null);
+    if (b.name !== undefined) updates.name = String(b.name);
+    if (b.photoUrl !== undefined) updates.photoUrl = opt(b.photoUrl);
+    if (b.bio !== undefined) updates.bio = opt(b.bio);
+    if (b.accent !== undefined) updates.accent = opt(b.accent);
+    if (b.appleMusicUrl !== undefined) updates.appleMusicUrl = opt(b.appleMusicUrl);
+    if (b.spotifyUrl !== undefined) updates.spotifyUrl = opt(b.spotifyUrl);
+    if (b.itunesArtistId !== undefined) updates.itunesArtistId = opt(b.itunesArtistId);
+    if (b.instagramUrl !== undefined) updates.instagramUrl = opt(b.instagramUrl);
+    if (b.tiktokUrl !== undefined) updates.tiktokUrl = opt(b.tiktokUrl);
+    if (b.twitterUrl !== undefined) updates.twitterUrl = opt(b.twitterUrl);
+    if (b.blueskyUrl !== undefined) updates.blueskyUrl = opt(b.blueskyUrl);
+    if (b.facebookUrl !== undefined) updates.facebookUrl = opt(b.facebookUrl);
+    if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
     const p = await storage.updatePerson(id, updates);
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(p);

@@ -104,6 +104,18 @@ export const people = pgTable("people", {
   // Music artist URL). Cached so the discography panel can refresh without
   // re-parsing the URL.
   itunesArtistId: text("itunes_artist_id"),
+  // Social handles. Stored as full URLs (not @handles) so the renderer can
+  // open them directly without per-platform URL construction. The streaming
+  // links above (apple/spotify) get small icons too — these socials are the
+  // "don't only push fans to Apple/Spotify" answer: keep artists discoverable
+  // wherever they live. `websiteUrl` is the generic catch-all (personal site,
+  // Mastodon, Linktree, Bandcamp, anything we don't have a dedicated icon for).
+  instagramUrl: text("instagram_url"),
+  tiktokUrl: text("tiktok_url"),
+  twitterUrl: text("twitter_url"),
+  blueskyUrl: text("bluesky_url"),
+  facebookUrl: text("facebook_url"),
+  websiteUrl: text("website_url"),
 });
 
 export const instruments = pgTable("instruments", {
