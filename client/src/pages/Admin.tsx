@@ -4426,6 +4426,130 @@ function VendorPreviewCard({
   );
 }
 
+// Phone-frame preview that mirrors what a fan will see on the future
+// label page. There's no fan-side LabelSheet shipped yet, so this is a
+// best-effort sketch — same chrome as PersonPreviewCard / VendorPreviewCard
+// so the admin can sanity-check logo + cover + bio without booting the
+// player. When the real LabelPage lands, swap this layout for that one's.
+function LabelPreviewCard({ label }: { label: AdminLabel }) {
+  const initials =
+    label.name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? "")
+      .join("") || "•";
+  return (
+    <>
+      <div
+        className="relative rounded-[42px] overflow-hidden shadow-2xl"
+        style={{
+          width: 360,
+          height: 760,
+          background: "#00062B",
+          padding: 10,
+          boxShadow:
+            "0 0 0 2px rgba(255,255,255,0.08), 0 30px 70px rgba(0,0,0,0.6)",
+        }}
+        data-testid="preview-label"
+      >
+        <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
+          {/* Status bar */}
+          <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white">
+            <span>9:41</span>
+            <span>● ● ●</span>
+          </div>
+
+          {/* Cover image (or dark fallback). Logo sits over the bottom of
+              the cover so the label reads as a brand, not a list row. */}
+          <div className="relative w-full" style={{ height: 220 }}>
+            {label.coverUrl ? (
+              <img
+                src={label.coverUrl}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                data-testid="img-preview-label-cover"
+              />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(49,158,216,0.18) 0%, rgba(0,6,43,0) 100%)",
+                }}
+              />
+            )}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#00062B] to-transparent" />
+          </div>
+
+          {/* Logo + name block */}
+          <div className="flex flex-col items-center text-center px-5 -mt-12">
+            {label.logoUrl ? (
+              <img
+                src={label.logoUrl}
+                alt={label.name}
+                className="rounded-2xl object-cover border-2 border-[#00062B] bg-[#00062B]"
+                style={{ width: 96, height: 96 }}
+                data-testid="img-preview-label-logo"
+              />
+            ) : (
+              <div
+                className="rounded-2xl flex items-center justify-center text-white font-semibold border-2 border-[#00062B]"
+                style={{
+                  width: 96,
+                  height: 96,
+                  background: "#319ED8",
+                  fontSize: 32,
+                }}
+                aria-hidden="true"
+              >
+                {initials}
+              </div>
+            )}
+            <h2
+              className="text-white text-[22px] font-bold leading-tight mt-3"
+              data-testid="text-preview-label-name"
+            >
+              {label.name || "Unnamed label"}
+            </h2>
+            {label.location && (
+              <p className="text-white/70 text-[12px] mt-1">{label.location}</p>
+            )}
+            {label.websiteUrl && (
+              <p
+                className="text-[12px] mt-1 truncate max-w-[260px]"
+                style={{ color: "#319ED8" }}
+                data-testid="text-preview-label-website"
+              >
+                {label.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </p>
+            )}
+          </div>
+
+          {/* Bio */}
+          {label.bio && (
+            <div className="px-5 pt-5">
+              <h3 className="pb-2 text-white text-[18px] font-bold tracking-tight">
+                About
+              </h3>
+              <p
+                className="text-[14px] leading-relaxed whitespace-pre-line line-clamp-8"
+                style={{ color: "rgba(255,255,255,0.95)" }}
+                data-testid="text-preview-label-bio"
+              >
+                {label.bio}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="text-slate-300 text-xs mt-3">
+        Sketch of the fan-side label page (coming soon).
+      </p>
+    </>
+  );
+}
+
 // ---------- LabelEditor ----------
 // Editor pane for one record label. Mirrors the entity-level half of
 // VendorPaneEditor: every field here lives on the label row itself, so
@@ -6211,6 +6335,12 @@ export function Admin() {
               const v = allVendors.find((x) => x.id === selectedId);
               if (!v) return null;
               return <VendorPreviewCard vendor={v} />;
+            })()
+          ) : entity === "labels" && selectedId ? (
+            (() => {
+              const l = labels.find((x) => x.id === selectedId);
+              if (!l) return null;
+              return <LabelPreviewCard label={l} />;
             })()
           ) : (
             <div
