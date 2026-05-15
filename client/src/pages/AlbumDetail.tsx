@@ -461,52 +461,57 @@ export function AlbumDetail() {
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
-          {/* Hero region — brand navy throughout. Artwork bleeds to the very
-              top so over-scroll rubberband doesn't reveal a navy gap above it.
-              The floating top chrome (back / share / ⋯) handles safe-area
-              inset on its own. */}
-          <div style={{ background: tint }}>
-            {/* Hero artwork — full square, edge-to-edge of the column, fading into the tint */}
-            <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
-              <img src={album.artwork} alt="" className="absolute inset-0 w-full h-full object-cover block" />
+          {/* Hero region — Apple-Music-style: a centered square artwork
+              with a soft shadow, then the title / artist / meta stack
+              centered below. The previous full-bleed hero + tinted gradient
+              + LP badge + caret-after-artist were dropped to match Apple's
+              album header more literally (per design feedback). The label
+              now lives only in the metadata footer below the tracklist. */}
+          <div style={{ background: "#00062B" }}>
+            <div className="pt-6 px-6 flex justify-center">
               <div
-                className="absolute inset-x-0 bottom-0"
+                className="w-[72%] max-w-[300px] rounded-xl overflow-hidden"
                 style={{
-                  height: "55%",
-                  background: `linear-gradient(to bottom, transparent 0%, ${tint}73 55%, ${tint}eb 88%, ${tint} 100%)`,
+                  aspectRatio: "1 / 1",
+                  boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
                 }}
-              />
+              >
+                <img
+                  src={album.artwork}
+                  alt=""
+                  className="w-full h-full object-cover block"
+                />
+              </div>
             </div>
 
-            {/* Title block — sits on tint */}
-            <div className="relative pt-4 pb-3 px-5">
-              <span
-                className="text-[10px] font-bold px-2.5 py-1 rounded-full mb-2 inline-block"
-                style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)" }}
+            <div className="relative pt-4 pb-3 px-5 text-center">
+              <h1
+                className="text-white text-[22px] font-bold leading-tight tracking-tight"
+                data-testid="text-album-title"
               >
-                {album.type}
-              </span>
-              <h1 className="text-white text-[28px] font-bold leading-tight tracking-tight" data-testid="text-album-title">{album.title}</h1>
+                {album.title}
+              </h1>
               <button
                 type="button"
-                onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
-                className="mt-1 inline-flex items-center gap-0.5 text-base font-medium active:opacity-70"
+                onClick={() =>
+                  navigate(`/artist/${encodeURIComponent(album.artist)}`)
+                }
+                className="mt-1 text-[17px] font-medium active:opacity-70"
                 style={{ color: "#319ED8" }}
                 data-testid="link-album-artist"
               >
                 {album.artist}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
               </button>
-              {/* Genre-only muted subtitle under the artist name. Year +
-                  label moved to the track-list footer to match Apple Music's
-                  layout (release date and copyright live below the tracks,
-                  not above them). Hidden entirely when there's no genre so
-                  the title block doesn't carry an empty row. */}
-              {album.genre && (
-                <p className="text-xs mt-1.5" style={{ color: "#98A2B3" }} data-testid="text-album-meta">
-                  {album.genre}
+              {/* Genre · Year muted meta line — Apple's "Afro-Pop · 1994 ·
+                  Lossless" pattern. Both tokens are optional; we join only
+                  what's available so the line never starts with a bullet. */}
+              {(album.genre || album.year) && (
+                <p
+                  className="text-[13px] mt-1"
+                  style={{ color: "#98A2B3" }}
+                  data-testid="text-album-meta"
+                >
+                  {[album.genre, album.year].filter(Boolean).join(" · ")}
                 </p>
               )}
               {album.description && (
