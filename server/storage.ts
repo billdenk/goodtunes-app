@@ -300,11 +300,15 @@ export class DbStorage implements IStorage {
   // label entity (or null). Same shape returned by getAlbums + getAlbumById
   // so every caller — fan list, fan detail, admin CMS — gets one read.
   async getAlbums(opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel[]> {
+    // Apple-Music / Spotify standard: alphabetical by title as a single
+    // string. Postgres lower() makes it case-insensitive at the SQL
+    // layer so we don't pay a JS sort cost on every list fetch.
     const rows = await db
       .select()
       .from(albums)
       .leftJoin(labels, eq(albums.labelId, labels.id))
-      .where(opts?.includeHidden ? undefined : eq(albums.isHidden, false));
+      .where(opts?.includeHidden ? undefined : eq(albums.isHidden, false))
+      .orderBy(asc(sql`lower(${albums.title})`));
     return rows.map((r) => ({ ...r.albums, label: r.labels ?? null }));
   }
   async getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel | undefined> {
