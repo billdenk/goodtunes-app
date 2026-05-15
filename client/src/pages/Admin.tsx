@@ -4370,42 +4370,68 @@ function VendorPreviewCard({
 
             {tab === "gear" && (
               <div className="px-5 pt-4 pb-6">
+                <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-3">
+                  Gear
+                </h3>
                 {gearCount === 0 ? (
                   <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
                     Not attached to any instrument yet. Add a vendor row inside an instrument's editor to populate this list.
                   </p>
                 ) : (
-                  <ul className="flex flex-col">
-                    {visibleAttachments.map((a, idx) => (
-                      <li
+                  // 2-col grid of instrument tiles — same shape as the
+                  // LabelPreviewCard Music tab and the fan-side Artist
+                  // Albums grid, so every "list of stuff" surface reads the
+                  // same way across admin previews.
+                  <div className="grid grid-cols-2 gap-3">
+                    {visibleAttachments.map((a) => (
+                      <div
                         key={a.attachmentId}
-                        className={`flex items-center gap-3 py-3 ${
-                          idx > 0 ? "border-t border-white/10" : ""
-                        }`}
+                        className="flex flex-col text-left"
                         data-testid={`preview-vendor-gear-${a.instrumentId}`}
                       >
                         <div
-                          className="w-11 h-11 rounded-md flex items-center justify-center text-white/40 text-[18px] flex-shrink-0"
-                          style={{ background: "rgba(255,255,255,0.06)" }}
-                          aria-hidden
+                          className="aspect-square rounded-2xl overflow-hidden"
+                          style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
                         >
-                          ♪
+                          {a.instrumentPhotoUrl ? (
+                            <img
+                              src={a.instrumentPhotoUrl}
+                              alt={a.instrumentName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div
+                              className="w-full h-full flex items-center justify-center text-white/40 text-[28px]"
+                              style={{ background: "rgba(255,255,255,0.06)" }}
+                              aria-hidden
+                            >
+                              ♪
+                            </div>
+                          )}
                         </div>
-                        <p className="text-white text-[14px] font-medium leading-tight">
+                        <p className="text-white text-[13px] font-semibold leading-tight truncate mt-2">
                           {a.instrumentName}
                         </p>
-                      </li>
+                        {a.instrumentCategory && (
+                          <p
+                            className="text-[11px] truncate mt-0.5"
+                            style={{ color: "rgba(235,235,245,0.5)" }}
+                          >
+                            {a.instrumentCategory}
+                          </p>
+                        )}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
-                <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-                  Everything {vendor.name || "this vendor"} is currently attached to across the GoodTunes catalog.
-                </p>
               </div>
             )}
 
             {tab === "artists" && (
               <div className="px-5 pt-4 pb-6">
+                <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-3">
+                  Artists
+                </h3>
                 <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
                   Live in the app — pulls from SuperCredits™. Any performer who's credited one of {vendor.name || "this vendor"}'s instruments on a track shows up here.
                 </p>
@@ -4762,63 +4788,75 @@ function LabelPreviewCard({
 
             {tab === "music" && (
               <div className="px-5 pt-4 pb-6">
+                <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-3">
+                  Albums
+                </h3>
                 {musicCount === 0 ? (
                   <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
                     No albums attached yet. Set this label on an album's editor to populate this list.
                   </p>
                 ) : (
-                  <ul className="flex flex-col">
-                    {labelAlbums.map((a, idx) => (
-                      <li
+                  // 2-col grid of large square tiles — mirrors the fan-side
+                  // ArtistDetail "Albums" section so a label sheet feels like
+                  // a kind of artist sheet (one label, many artists).
+                  <div className="grid grid-cols-2 gap-3">
+                    {labelAlbums.map((a) => (
+                      <div
                         key={a.id}
-                        className={`flex items-center gap-3 py-3 ${
-                          idx > 0 ? "border-t border-white/10" : ""
-                        }`}
+                        className="flex flex-col text-left"
                         data-testid={`preview-label-album-${a.id}`}
                       >
-                        {a.artwork ? (
-                          <img
-                            src={a.artwork}
-                            alt=""
-                            className="w-11 h-11 rounded-md object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div
-                            className="w-11 h-11 rounded-md flex items-center justify-center text-white/40 text-[18px] flex-shrink-0"
-                            style={{ background: "rgba(255,255,255,0.06)" }}
-                            aria-hidden
-                          >
-                            ♪
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-white text-[14px] font-medium leading-tight truncate">
-                            {a.title}
-                          </p>
-                          <p className="text-[12px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.55)" }}>
-                            {a.artist}
-                            {a.year ? ` · ${a.year}` : ""}
-                          </p>
+                        <div
+                          className="aspect-square rounded-2xl overflow-hidden"
+                          style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
+                        >
+                          {a.artwork ? (
+                            <img
+                              src={a.artwork}
+                              alt={a.title}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div
+                              className="w-full h-full flex items-center justify-center text-white/40 text-[28px]"
+                              style={{ background: "rgba(255,255,255,0.06)" }}
+                              aria-hidden
+                            >
+                              ♪
+                            </div>
+                          )}
                         </div>
-                      </li>
+                        <p className="text-white text-[13px] font-semibold leading-tight truncate mt-2">
+                          {a.title}
+                        </p>
+                        <p
+                          className="text-[11px] truncate mt-0.5"
+                          style={{ color: "rgba(235,235,245,0.5)" }}
+                        >
+                          {a.year ? `${a.year} · ${a.type}` : a.type}
+                        </p>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
-                <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-                  Every album released on {label.name || "this label"} across the GoodTunes catalog.
-                </p>
               </div>
             )}
 
             {tab === "artists" && (
               <div className="px-5 pt-4 pb-6">
+                <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-3">
+                  Artists
+                </h3>
                 {artistsCount === 0 ? (
                   <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
                     No artists yet. They'll appear here once an album is attached to this label.
                   </p>
                 ) : (
-                  <ul className="flex flex-col">
-                    {artistRows.map((p, idx) => {
+                  // 2-col grid of circular avatars + name centered below.
+                  // Mirrors the Apple-Music roster-card look so a label's
+                  // artists read as a stable of people, not a list row.
+                  <div className="grid grid-cols-2 gap-3">
+                    {artistRows.map((p) => {
                       const initials =
                         p.name
                           .split(" ")
@@ -4827,39 +4865,45 @@ function LabelPreviewCard({
                           .map((w) => w[0]?.toUpperCase() ?? "")
                           .join("") || "•";
                       return (
-                        <li
+                        <div
                           key={p.id}
-                          className={`flex items-center gap-3 py-3 ${
-                            idx > 0 ? "border-t border-white/10" : ""
-                          }`}
+                          className="flex flex-col items-center text-center"
                           data-testid={`preview-label-artist-${p.id}`}
                         >
                           {p.photoUrl ? (
                             <img
                               src={p.photoUrl}
-                              alt=""
-                              className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+                              alt={p.name}
+                              className="rounded-full object-cover"
+                              style={{
+                                width: "100%",
+                                aspectRatio: "1 / 1",
+                                boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                              }}
                             />
                           ) : (
                             <div
-                              className="w-11 h-11 rounded-full flex items-center justify-center text-white text-[14px] font-semibold flex-shrink-0"
-                              style={{ background: "#319ED8" }}
+                              className="rounded-full flex items-center justify-center text-white font-semibold"
+                              style={{
+                                width: "100%",
+                                aspectRatio: "1 / 1",
+                                background: "#319ED8",
+                                fontSize: 32,
+                                boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                              }}
                               aria-hidden
                             >
                               {initials}
                             </div>
                           )}
-                          <p className="text-white text-[14px] font-medium leading-tight">
+                          <p className="text-white text-[13px] font-semibold leading-tight mt-2 line-clamp-2">
                             {p.name}
                           </p>
-                        </li>
+                        </div>
                       );
                     })}
-                  </ul>
+                  </div>
                 )}
-                <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-                  Distinct primary artists across this label's catalog.
-                </p>
               </div>
             )}
           </div>
