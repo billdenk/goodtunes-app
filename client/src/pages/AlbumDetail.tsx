@@ -665,6 +665,10 @@ export function AlbumDetail() {
             <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
           </div>
 
+          {/* Bonus content — surfaces only when the album has uploaded
+              videos/photos. Keeps clean albums looking identical to before. */}
+          <AlbumBonusContent albumId={album.id} />
+
           {/* Metadata block */}
           <div className="px-5 mt-7">
             <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.32)" }}>
@@ -3421,3 +3425,117 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; 
     </div>
   );
 }
+
+
+// ----- Bonus content (admin-uploaded videos + photos) ---------------------
+// Mounted between the tracklist and the metadata footer. Each subsection
+// self-hides when its array is empty so a fresh album keeps the original
+// "tracks → metadata" rhythm. Fetched here (not via the parent useQuery on
+// /api/albums/:id) so we keep one round-trip per surface rather than
+// bloating the album payload that every other surface (search, library,
+// playlist hydration) already loads.
+interface BonusVideo { id: string; albumId: string; title: string; videoUrl: string; posterUrl: string | null; position: number; }
+interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: string | null; position: number; }
+
+function AlbumBonusContent({ albumId }: { albumId: string }) {
+  const { data: videos = [] } = useQuery<BonusVideo[]>({
+    queryKey: ["/api/albums", albumId, "videos"],
+  });
+  const { data: photos = [] } = useQuery<BonusPhoto[]>({
+    queryKey: ["/api/albums", albumId, "photos"],
+  });
+  const [activePhoto, setActivePhoto] = useState<BonusPhoto | null>(null);
+
+  if (videos.length === 0 && photos.length === 0) return null;
+
+  return (
+    <>
+      {videos.length > 0 && (
+        <div className="mt-8 px-5">
+          <h3 className="text-white text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-videos">
+            Music Videos
+          </h3>
+          <div className="-mx-5 px-5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            <div className="flex gap-3 pb-2" style={{ width: "max-content" }}>
+              {videos.map((v) => (
+                <div
+                  key={v.id}
+                  className="w-[260px] flex-shrink-0"
+                  data-testid={`tile-album-video-${v.id}`}
+                >
+                  <div className="relative rounded-lg overflow-hidden bg-black/40" style={{ aspectRatio: "16 / 9" }}>
+                    <video
+                      src={v.videoUrl}
+                      poster={v.posterUrl ?? undefined}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <p className="mt-2 text-[14px] text-white font-medium truncate">{v.title}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {photos.length > 0 && (
+        <div className="mt-8 px-5">
+          <h3 className="text-white text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-photos">
+            Photos
+          </h3>
+          <div className="grid grid-cols-3 gap-1.5">
+            {photos.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setActivePhoto(p)}
+                className="relative rounded-md overflow-hidden bg-white/5 active:opacity-80"
+                style={{ aspectRatio: "1 / 1" }}
+                data-testid={`button-album-photo-${p.id}`}
+              >
+                <img src={p.photoUrl} alt={p.caption ?? ""} className="w-full h-full object-cover" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activePhoto && (
+        <div
+          className="fixed inset-0 z-[120] bg-black/95 flex flex-col"
+          onClick={() => setActivePhoto(null)}
+          data-testid="overlay-album-photo"
+        >
+          <div className="flex justify-end p-4">
+            <button
+              type="button"
+              onClick={() => setActivePhoto(null)}
+              className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white"
+              aria-label="Close"
+              data-testid="button-close-album-photo"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center px-4">
+            <img
+              src={activePhoto.photoUrl}
+              alt={activePhoto.caption ?? ""}
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          {activePhoto.caption && (
+            <p className="text-center text-white/70 text-[13px] px-6 pb-8 pt-4">{activePhoto.caption}</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+

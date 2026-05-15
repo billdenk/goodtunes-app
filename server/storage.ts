@@ -18,6 +18,10 @@ import {
   type InsertVendor,
   type Label,
   type InsertLabel,
+  type AlbumVideo,
+  type InsertAlbumVideo,
+  type AlbumPhoto,
+  type InsertAlbumPhoto,
   type AlbumWithLabel,
   type EnrichedInstrumentVendor,
   type TrackWriter,
@@ -41,6 +45,8 @@ import {
   labels,
   trackWriters,
   trackPerformers,
+  albumVideos,
+  albumPhotos,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -69,6 +75,18 @@ export interface IStorage {
   createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song>;
   updateSong(id: string, data: Partial<Song>): Promise<Song | undefined>;
   deleteSong(id: string): Promise<void>;
+
+  // Bonus album content. Public reads expose only the rows attached to
+  // the requested album; admin writes are scoped per-row. Cascade on
+  // album delete keeps orphan rows out of the DB.
+  listAlbumVideos(albumId: string): Promise<AlbumVideo[]>;
+  createAlbumVideo(data: InsertAlbumVideo): Promise<AlbumVideo>;
+  updateAlbumVideo(id: string, data: Partial<AlbumVideo>): Promise<AlbumVideo | undefined>;
+  deleteAlbumVideo(id: string): Promise<void>;
+  listAlbumPhotos(albumId: string): Promise<AlbumPhoto[]>;
+  createAlbumPhoto(data: InsertAlbumPhoto): Promise<AlbumPhoto>;
+  updateAlbumPhoto(id: string, data: Partial<AlbumPhoto>): Promise<AlbumPhoto | undefined>;
+  deleteAlbumPhoto(id: string): Promise<void>;
 
   // Admin bootstrap
   countAdmins(): Promise<number>;
@@ -370,6 +388,52 @@ export class DbStorage implements IStorage {
   async createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song> {
     const [s] = await db.insert(songs).values(data as any).returning();
     return s;
+  }
+
+  // ----- Bonus album content (videos + photos) -----
+  // Listed in `position` order so the admin's drag/reorder writes show up
+  // for fans without an explicit sort hint on the consumer.
+  async listAlbumVideos(albumId: string): Promise<AlbumVideo[]> {
+    return db.select().from(albumVideos)
+      .where(eq(albumVideos.albumId, albumId))
+      .orderBy(asc(albumVideos.position), asc(albumVideos.id));
+  }
+  async createAlbumVideo(data: InsertAlbumVideo): Promise<AlbumVideo> {
+    const [v] = await db.insert(albumVideos).values(data as any).returning();
+    return v;
+  }
+  async updateAlbumVideo(id: string, data: Partial<AlbumVideo>): Promise<AlbumVideo | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [v] = await db.select().from(albumVideos).where(eq(albumVideos.id, id));
+      return v;
+    }
+    const [v] = await db.update(albumVideos).set(rest).where(eq(albumVideos.id, id)).returning();
+    return v;
+  }
+  async deleteAlbumVideo(id: string): Promise<void> {
+    await db.delete(albumVideos).where(eq(albumVideos.id, id));
+  }
+  async listAlbumPhotos(albumId: string): Promise<AlbumPhoto[]> {
+    return db.select().from(albumPhotos)
+      .where(eq(albumPhotos.albumId, albumId))
+      .orderBy(asc(albumPhotos.position), asc(albumPhotos.id));
+  }
+  async createAlbumPhoto(data: InsertAlbumPhoto): Promise<AlbumPhoto> {
+    const [p] = await db.insert(albumPhotos).values(data as any).returning();
+    return p;
+  }
+  async updateAlbumPhoto(id: string, data: Partial<AlbumPhoto>): Promise<AlbumPhoto | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [p] = await db.select().from(albumPhotos).where(eq(albumPhotos.id, id));
+      return p;
+    }
+    const [p] = await db.update(albumPhotos).set(rest).where(eq(albumPhotos.id, id)).returning();
+    return p;
+  }
+  async deleteAlbumPhoto(id: string): Promise<void> {
+    await db.delete(albumPhotos).where(eq(albumPhotos.id, id));
   }
   async updateSong(id: string, data: Partial<Song>): Promise<Song | undefined> {
     const { id: _i, ...rest } = data as any;

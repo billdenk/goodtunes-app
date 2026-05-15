@@ -872,6 +872,340 @@ function AlbumEditor({
             )}
           </div>
         </div>
+
+        {/* Bonus content — videos + photos. Admin always sees these sections
+            (so they can add to an empty album); fans only see them when the
+            arrays are non-empty (handled in AlbumDetail). */}
+        <AlbumVideosSection albumId={albumId} />
+        <AlbumPhotosSection albumId={albumId} />
+      </div>
+    </div>
+  );
+}
+
+// Shared upload helper for video files. Uses the dedicated video route
+// because /api/admin/upload only accepts image MIME types.
+async function uploadVideoFile(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) throw new Error("Sign out and back in — your session token is missing.");
+  const res = await fetch("/api/admin/upload-video", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
+// Same helper but for the image-upload route (poster frames + photos).
+async function uploadImageFile(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) throw new Error("Sign out and back in — your session token is missing.");
+  const res = await fetch("/api/admin/upload", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
+interface AdminAlbumVideo {
+  id: string;
+  albumId: string;
+  title: string;
+  videoUrl: string;
+  posterUrl: string | null;
+  position: number;
+}
+
+function AlbumVideosSection({ albumId }: { albumId: string }) {
+  const queryClient = useQueryClient();
+  const { data: videos = [] } = useQuery<AdminAlbumVideo[]>({
+    queryKey: ["/api/albums", albumId, "videos"],
+  });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "videos"] });
+
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleAddVideo(file: File) {
+    setErr(null);
+    setBusy(true);
+    try {
+      const url = await uploadVideoFile(file);
+      await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
+        videoUrl: url,
+        title: file.name.replace(/\.[^.]+$/, "") || "Untitled video",
+      });
+      invalidate();
+    } catch (e: any) {
+      setErr(e.message || "Upload failed");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  const updateVideo = useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<AdminAlbumVideo> }) => {
+      const res = await apiRequest("PUT", `/api/admin/album-videos/${id}`, patch);
+      return res.json();
+    },
+    onSuccess: invalidate,
+  });
+  const deleteVideo = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/album-videos/${id}`);
+    },
+    onSuccess: invalidate,
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+          Music videos
+        </h3>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
+          data-testid="button-add-album-video"
+        >
+          {busy ? "Uploading…" : "+ Upload video"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/mp4,video/quicktime,video/webm"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleAddVideo(f);
+          }}
+        />
+      </div>
+      {err && <p className="text-[12px] text-red-600 mb-2">{err}</p>}
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        {videos.length === 0 && (
+          <div className="px-4 py-6 text-center text-slate-400 text-sm">
+            No videos yet. Upload an MP4 to add a "Music Videos" section to the album.
+          </div>
+        )}
+        {videos.map((v) => (
+          <div
+            key={v.id}
+            className="flex items-start gap-3 p-3 border-b border-slate-100 last:border-b-0"
+            data-testid={`row-album-video-${v.id}`}
+          >
+            <video
+              src={v.videoUrl}
+              poster={v.posterUrl ?? undefined}
+              className="w-28 h-16 bg-slate-100 rounded object-cover flex-shrink-0"
+              controls
+              preload="metadata"
+            />
+            <div className="flex-1 min-w-0 space-y-2">
+              <input
+                type="text"
+                defaultValue={v.title}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val && val !== v.title) updateVideo.mutate({ id: v.id, patch: { title: val } });
+                }}
+                className={inputCls}
+                data-testid={`input-album-video-title-${v.id}`}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = "image/png,image/jpeg,image/webp";
+                    input.onchange = async () => {
+                      const f = input.files?.[0];
+                      if (!f) return;
+                      try {
+                        const url = await uploadImageFile(f);
+                        updateVideo.mutate({ id: v.id, patch: { posterUrl: url } });
+                      } catch (e: any) {
+                        setErr(e.message || "Poster upload failed");
+                      }
+                    };
+                    input.click();
+                  }}
+                  className="px-3 py-1.5 text-[12px] rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                  data-testid={`button-album-video-poster-${v.id}`}
+                >
+                  {v.posterUrl ? "Change poster" : "Add poster"}
+                </button>
+                {v.posterUrl && (
+                  <button
+                    type="button"
+                    onClick={() => updateVideo.mutate({ id: v.id, patch: { posterUrl: null as any } })}
+                    className="px-2 py-1.5 text-[12px] text-slate-500 hover:text-red-600"
+                  >
+                    Remove poster
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Delete "${v.title}"?`)) deleteVideo.mutate(v.id);
+                  }}
+                  className="ml-auto px-2 py-1.5 text-[12px] text-red-600 hover:underline"
+                  data-testid={`button-delete-album-video-${v.id}`}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface AdminAlbumPhoto {
+  id: string;
+  albumId: string;
+  photoUrl: string;
+  caption: string | null;
+  position: number;
+}
+
+function AlbumPhotosSection({ albumId }: { albumId: string }) {
+  const queryClient = useQueryClient();
+  const { data: photos = [] } = useQuery<AdminAlbumPhoto[]>({
+    queryKey: ["/api/albums", albumId, "photos"],
+  });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "photos"] });
+
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleAddPhoto(file: File) {
+    setErr(null);
+    setBusy(true);
+    try {
+      const url = await uploadImageFile(file);
+      await apiRequest("POST", `/api/admin/albums/${albumId}/photos`, { photoUrl: url });
+      invalidate();
+    } catch (e: any) {
+      setErr(e.message || "Upload failed");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  const updatePhoto = useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<AdminAlbumPhoto> }) => {
+      const res = await apiRequest("PUT", `/api/admin/album-photos/${id}`, patch);
+      return res.json();
+    },
+    onSuccess: invalidate,
+  });
+  const deletePhoto = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/album-photos/${id}`);
+    },
+    onSuccess: invalidate,
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+          Photos
+        </h3>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
+          data-testid="button-add-album-photo"
+        >
+          {busy ? "Uploading…" : "+ Upload photo"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleAddPhoto(f);
+          }}
+        />
+      </div>
+      {err && <p className="text-[12px] text-red-600 mb-2">{err}</p>}
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        {photos.length === 0 && (
+          <div className="px-4 py-6 text-center text-slate-400 text-sm">
+            No photos yet. Upload an image to add a "Photos" section to the album.
+          </div>
+        )}
+        {photos.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3">
+            {photos.map((p) => (
+              <div
+                key={p.id}
+                className="space-y-1.5"
+                data-testid={`tile-album-photo-${p.id}`}
+              >
+                <img
+                  src={p.photoUrl}
+                  alt={p.caption ?? ""}
+                  className="w-full aspect-square object-cover rounded-md border border-slate-200"
+                />
+                <input
+                  type="text"
+                  defaultValue={p.caption ?? ""}
+                  placeholder="Caption (optional)"
+                  onBlur={(e) => {
+                    const val = e.target.value;
+                    if (val !== (p.caption ?? "")) updatePhoto.mutate({ id: p.id, patch: { caption: val || (null as any) } });
+                  }}
+                  className={`${inputCls} text-[12px]`}
+                  data-testid={`input-album-photo-caption-${p.id}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm("Delete this photo?")) deletePhoto.mutate(p.id);
+                  }}
+                  className="text-[11px] text-red-600 hover:underline"
+                  data-testid={`button-delete-album-photo-${p.id}`}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
-import { insertTrackWriterSchema, insertTrackPerformerSchema } from "@shared/schema";
+import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema } from "@shared/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -371,6 +371,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
     return `/objects/uploads/${id}`;
   }
+
+  // Video upload — separate route + multer instance because videos need
+  // a much larger size cap and a different MIME whitelist than artwork.
+  // We still derive extension from validated mimetype (never from
+  // originalname) and still gate behind requireAdminBearer.
+  const VIDEO_MIME_TO_EXT: Record<string, string> = {
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+  };
+  const uploadVideo = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 200 * 1024 * 1024 }, // 200MB cap — short music videos
+    fileFilter: (_req, file, cb) => {
+      if (!(file.mimetype in VIDEO_MIME_TO_EXT)) {
+        return cb(new Error("Only MP4, MOV, or WebM videos are allowed"));
+      }
+      cb(null, true);
+    },
+  });
+  app.post(
+    "/api/admin/upload-video",
+    requireAdminBearer,
+    uploadVideo.single("file"),
+    async (req, res) => {
+      const f = (req as any).file as Express.Multer.File | undefined;
+      if (!f) return res.status(400).json({ message: "No file uploaded" });
+      try {
+        const ext = VIDEO_MIME_TO_EXT[f.mimetype] || ".mp4";
+        const id = `${randomUUID()}${ext}`;
+        const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
+        const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
+        const firstSlash = trimmed.indexOf("/");
+        const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
+        const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
+        const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+        const file = objectStorageClient.bucket(bucketName).file(objectName);
+        await file.save(f.buffer, {
+          contentType: f.mimetype,
+          metadata: { cacheControl: "public, max-age=31536000, immutable" },
+          resumable: false,
+        });
+        await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+        return res.json({ url: `/objects/uploads/${id}` });
+      } catch (err) {
+        console.error("Video upload failed", err);
+        return res.status(500).json({ message: "Upload failed" });
+      }
+    },
+  );
 
   app.post(
     "/api/admin/upload",
@@ -995,6 +1045,109 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     await storage.deleteSong(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  // ----- Bonus album content: Videos + Photos ------------------------------
+  // Reads mirror the album-detail visibility model: requireAuth + an admin
+  // check unlocks hidden albums, fans get a 404 for hidden/nonexistent ids
+  // so bonus media can't leak via direct ID guessing. Writes use the
+  // bearer-only admin guard to match `/api/admin/upload` and dodge the
+  // CSRF risk that `sameSite: "none"` session cookies otherwise carry.
+  // Zod insert schemas validate bodies up front so unknown albumIds /
+  // malformed payloads surface as deterministic 4xx.
+  async function loadAlbumForBonusRead(req: Request, res: Response) {
+    const includeHidden = await isAdminUser(req);
+    const album = await storage.getAlbumById(String(req.params.id), { includeHidden });
+    if (!album) {
+      res.status(404).json({ message: "Album not found" });
+      return null;
+    }
+    return album;
+  }
+  async function ensureAlbumExists(albumId: string, res: Response) {
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) {
+      res.status(404).json({ message: "Album not found" });
+      return false;
+    }
+    return true;
+  }
+  // Update schemas: every field optional + posterUrl/caption nullable so
+  // "remove poster" can post explicit null without tripping the required
+  // checks on the insert schema.
+  const updateAlbumVideoSchema = insertAlbumVideoSchema.partial().extend({
+    posterUrl: insertAlbumVideoSchema.shape.posterUrl.nullable().optional(),
+  });
+  const updateAlbumPhotoSchema = insertAlbumPhotoSchema.partial().extend({
+    caption: insertAlbumPhotoSchema.shape.caption.nullable().optional(),
+  });
+
+  app.get("/api/albums/:id/videos", requireAuth, async (req, res) => {
+    const album = await loadAlbumForBonusRead(req, res);
+    if (!album) return;
+    const rows = await storage.listAlbumVideos(album.id);
+    return res.json(rows);
+  });
+  app.get("/api/albums/:id/photos", requireAuth, async (req, res) => {
+    const album = await loadAlbumForBonusRead(req, res);
+    if (!album) return;
+    const rows = await storage.listAlbumPhotos(album.id);
+    return res.json(rows);
+  });
+
+  app.post("/api/admin/albums/:id/videos", requireAdminBearer, async (req, res) => {
+    const albumId = String(req.params.id);
+    if (!(await ensureAlbumExists(albumId, res))) return;
+    const existing = await storage.listAlbumVideos(albumId);
+    const parsed = insertAlbumVideoSchema.safeParse({
+      albumId,
+      title: req.body?.title ?? "Untitled video",
+      videoUrl: req.body?.videoUrl,
+      posterUrl: req.body?.posterUrl ?? null,
+      position: typeof req.body?.position === "number" ? req.body.position : existing.length,
+    });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const v = await storage.createAlbumVideo(parsed.data);
+    return res.status(201).json(v);
+  });
+  app.put("/api/admin/album-videos/:id", requireAdminBearer, async (req, res) => {
+    const parsed = updateAlbumVideoSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    // `albumId` is immutable from this endpoint — strip it if a client sends it.
+    const { albumId: _i, ...patch } = parsed.data as any;
+    const v = await storage.updateAlbumVideo(String(req.params.id), patch);
+    if (!v) return res.status(404).json({ message: "Video not found" });
+    return res.json(v);
+  });
+  app.delete("/api/admin/album-videos/:id", requireAdminBearer, async (req, res) => {
+    await storage.deleteAlbumVideo(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+  app.post("/api/admin/albums/:id/photos", requireAdminBearer, async (req, res) => {
+    const albumId = String(req.params.id);
+    if (!(await ensureAlbumExists(albumId, res))) return;
+    const existing = await storage.listAlbumPhotos(albumId);
+    const parsed = insertAlbumPhotoSchema.safeParse({
+      albumId,
+      photoUrl: req.body?.photoUrl,
+      caption: req.body?.caption ?? null,
+      position: typeof req.body?.position === "number" ? req.body.position : existing.length,
+    });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const p = await storage.createAlbumPhoto(parsed.data);
+    return res.status(201).json(p);
+  });
+  app.put("/api/admin/album-photos/:id", requireAdminBearer, async (req, res) => {
+    const parsed = updateAlbumPhotoSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const { albumId: _i, ...patch } = parsed.data as any;
+    const p = await storage.updateAlbumPhoto(String(req.params.id), patch);
+    if (!p) return res.status(404).json({ message: "Photo not found" });
+    return res.json(p);
+  });
+  app.delete("/api/admin/album-photos/:id", requireAdminBearer, async (req, res) => {
+    await storage.deleteAlbumPhoto(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
 

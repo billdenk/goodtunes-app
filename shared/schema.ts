@@ -85,6 +85,38 @@ export const albums = pgTable("albums", {
   spotifyUrl: text("spotify_url"),
 });
 
+// Bonus content attached to an album. Both tables are intentionally
+// tiny — admin uploads a file via /api/admin/upload (Object Storage),
+// then POSTs the returned URL here as `videoUrl` / `photoUrl`. Fan-side
+// surfaces these only when there's at least one row, so a clean album
+// keeps the same scrolling layout it has today. `position` drives
+// display order so the admin can reorder without renumbering anything.
+// FK on delete cascade — wiping an album wipes its bonus content too.
+export const albumVideos = pgTable("album_videos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  title: text("title").notNull().default("Untitled video"),
+  // /objects/uploads/<uuid>.mp4 served by Object Storage. Uploaded MP4
+  // (or whatever video MIME the admin picked — we don't restrict here,
+  // the multer config does).
+  videoUrl: text("video_url").notNull(),
+  // Optional still frame for the thumbnail. When null the fan-side
+  // renders a generic play-icon tile.
+  posterUrl: text("poster_url"),
+  position: integer("position").notNull().default(0),
+});
+
+export const albumPhotos = pgTable("album_photos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  // /objects/uploads/<uuid>.<ext> — same upload path as album artwork
+  // and profile photos.
+  photoUrl: text("photo_url").notNull(),
+  // Optional caption rendered under the photo on the fan-side gallery.
+  caption: text("caption"),
+  position: integer("position").notNull().default(0),
+});
+
 export const songs = pgTable("songs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   albumId: varchar("album_id").notNull().references(() => albums.id),
@@ -342,6 +374,14 @@ export type Vendor = typeof vendors.$inferSelect;
 export const insertLabelSchema = createInsertSchema(labels).omit({ id: true, createdAt: true });
 export type InsertLabel = z.infer<typeof insertLabelSchema>;
 export type Label = typeof labels.$inferSelect;
+
+export const insertAlbumVideoSchema = createInsertSchema(albumVideos).omit({ id: true });
+export type InsertAlbumVideo = z.infer<typeof insertAlbumVideoSchema>;
+export type AlbumVideo = typeof albumVideos.$inferSelect;
+
+export const insertAlbumPhotoSchema = createInsertSchema(albumPhotos).omit({ id: true });
+export type InsertAlbumPhoto = z.infer<typeof insertAlbumPhotoSchema>;
+export type AlbumPhoto = typeof albumPhotos.$inferSelect;
 
 // Album reads denormalize the joined label entity so the fan-facing UI can
 // render label name/logo without a second fetch. `label` is null when an
