@@ -3647,10 +3647,11 @@ function InstrumentEditor({
   const { data, isLoading } = useQuery<AdminInstrument>({
     queryKey: ["/api/instruments", instrumentId],
   });
-  // Profile bundle — artists + tracks credited on this instrument. Powers
-  // the Tracks and Artists tabs below. Separate query so the About form
+  // Profile bundle — artists credited on this instrument. Powers the
+  // People tab count + listing below. Separate query so the About form
   // (which writes back to /api/instruments/:id) can invalidate without
-  // having to know about the catalog side.
+  // having to know about the catalog side. (The endpoint also returns
+  // a `tracks` array used by other admin surfaces; not rendered here.)
   type InstrumentProfile = {
     instrument: AdminInstrument;
     artists: Array<{
@@ -3679,10 +3680,10 @@ function InstrumentEditor({
   const { data: profile } = useQuery<InstrumentProfile>({
     queryKey: ["/api/instruments", instrumentId, "profile"],
   });
-  const [tab, setTab] = useState<"about" | "tracks" | "artists">("about");
+  const [tab, setTab] = useState<"about" | "vendors" | "people">("about");
   // Reset tab to About whenever the admin switches to a different
-  // instrument, so we never land on Tracks for a brand-new one with zero
-  // credits.
+  // instrument, so we never land on a tab with zero items for a brand-new
+  // one.
   useEffect(() => {
     setTab("about");
   }, [instrumentId]);
@@ -3815,15 +3816,16 @@ function InstrumentEditor({
       </div>
 
       {/* Tab strip — mirrors the Person editor pattern. About holds the
-          editing surface; Tracks + Artists are catalog views derived from
-          performer credits. Counts shown when > 0. */}
+          editing surface; Vendors holds the affiliate-link rows; People is
+          a catalog view derived from SuperCredits performer credits.
+          Counts shown when > 0. */}
       <div role="tablist" aria-label="Instrument editor sections" className="flex gap-5 border-b border-slate-200 -mx-6 px-6">
-        {(["about", "tracks", "artists"] as const).map((t) => {
+        {(["about", "vendors", "people"] as const).map((t) => {
           const active = tab === t;
-          const label = t === "about" ? "About" : t === "tracks" ? "Tracks" : "Artists";
+          const label = t === "about" ? "About" : t === "vendors" ? "Vendors" : "People";
           const count =
-            t === "tracks" ? profile?.tracks.length :
-            t === "artists" ? profile?.artists.length :
+            t === "vendors" ? form.vendors.length :
+            t === "people" ? profile?.artists.length :
             undefined;
           return (
             <button
@@ -3853,84 +3855,39 @@ function InstrumentEditor({
         })}
       </div>
 
-      {tab === "tracks" && (
-        <div role="tabpanel" id="panel-admin-instrument-tracks" aria-labelledby="tab-admin-instrument-tracks" data-testid="panel-admin-instrument-tracks">
-          {(() => {
-            const tracks = profile?.tracks ?? [];
-            if (tracks.length === 0) {
-              return (
-                <p className="text-slate-400 text-sm py-3">
-                  No tracks credit this instrument yet.
-                </p>
-              );
-            }
-            // Group by album so admins see "this 1973 Martin is on 4 tracks
-            // across Blue + Court and Spark" rather than a flat blob.
-            type AlbumGroup = { albumId: string; albumTitle: string; albumArtwork: string; albumYear: number | null; rows: typeof tracks };
-            const byAlbum = new Map<string, AlbumGroup>();
-            for (const t of tracks) {
-              const g = byAlbum.get(t.albumId) ?? {
-                albumId: t.albumId,
-                albumTitle: t.albumTitle,
-                albumArtwork: t.albumArtwork,
-                albumYear: t.albumYear,
-                rows: [],
-              };
-              g.rows.push(t);
-              byAlbum.set(t.albumId, g);
-            }
-            const groups = Array.from(byAlbum.values());
-            return (
-              <ul className="space-y-4">
-                {groups.map((g) => (
-                  <li key={g.albumId} data-testid={`group-instrument-album-${g.albumId}`}>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      {g.albumArtwork ? (
-                        <img src={g.albumArtwork} alt="" className="w-7 h-7 rounded object-cover" />
-                      ) : null}
-                      <span className="text-slate-900 text-[13px] font-semibold truncate">
-                        {g.albumTitle}
-                        {g.albumYear ? (
-                          <span className="text-slate-400 font-normal"> · {g.albumYear}</span>
-                        ) : null}
-                      </span>
-                      <span className="text-slate-400 text-[11px] ml-auto">
-                        {g.rows.length} track{g.rows.length === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                    <ul className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-                      {g.rows.map((t) => (
-                        <li
-                          key={t.performerId}
-                          className="flex items-center gap-3 px-3 py-2"
-                          data-testid={`row-instrument-track-${t.performerId}`}
-                        >
-                          <span className="text-slate-400 text-[11px] w-6 text-right tabular-nums">
-                            {t.trackNumber}
-                          </span>
-                          <span className="flex-1 min-w-0 text-slate-700 text-[12px] truncate">
-                            {t.songTitle}
-                            <span className="text-slate-400"> · {t.personName}</span>
-                            {t.role && t.role.toLowerCase() !== (form.shortCategory ?? form.category ?? "").toLowerCase() ? (
-                              <span className="text-slate-400"> · {t.role}</span>
-                            ) : null}
-                            {t.tuningNotes ? (
-                              <span className="text-slate-400 italic"> — {t.tuningNotes}</span>
-                            ) : null}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            );
-          })()}
+      {tab === "vendors" && (
+        <div role="tabpanel" id="panel-admin-instrument-vendors" aria-labelledby="tab-admin-instrument-vendors" className="space-y-3" data-testid="panel-admin-instrument-vendors">
+          <div className="flex items-center justify-between">
+            <p className="text-slate-500 text-[12px] leading-relaxed">
+              Affiliate links that surface in the in-app instrument sheet's
+              "Where to buy" list.
+            </p>
+            <button
+              type="button"
+              onClick={() => addVendor.mutate()}
+              disabled={addVendor.isPending}
+              className="text-[12px] text-[#319ED8] hover:underline flex-shrink-0 ml-3"
+              data-testid="button-new-vendor"
+            >
+              + Add vendor
+            </button>
+          </div>
+          <div className="space-y-2">
+            {form.vendors.map((v) => (
+              <VendorRow key={v.id} vendor={v} onChanged={invalidate} />
+            ))}
+            {form.vendors.length === 0 && (
+              <p className="text-slate-400 text-sm py-3">
+                No vendors yet. Paste a product URL in the About tab's Pull
+                bar, or click + Add vendor above.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
-      {tab === "artists" && (
-        <div role="tabpanel" id="panel-admin-instrument-artists" aria-labelledby="tab-admin-instrument-artists" data-testid="panel-admin-instrument-artists">
+      {tab === "people" && (
+        <div role="tabpanel" id="panel-admin-instrument-people" aria-labelledby="tab-admin-instrument-people" data-testid="panel-admin-instrument-people">
           {(() => {
             const artists = profile?.artists ?? [];
             if (artists.length === 0) {
@@ -4222,37 +4179,6 @@ function InstrumentEditor({
         </button>
       </div>
 
-      {/* Vendors */}
-      <div className="pt-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-slate-900 text-sm font-semibold">
-            Vendors{" "}
-            <span className="text-slate-400 font-normal">
-              ({form.vendors.length})
-            </span>
-          </h3>
-          <button
-            type="button"
-            onClick={() => addVendor.mutate()}
-            disabled={addVendor.isPending}
-            className="text-[12px] text-[#319ED8] hover:underline"
-            data-testid="button-new-vendor"
-          >
-            + Add vendor
-          </button>
-        </div>
-        <div className="space-y-2">
-          {form.vendors.map((v) => (
-            <VendorRow key={v.id} vendor={v} onChanged={invalidate} />
-          ))}
-          {form.vendors.length === 0 && (
-            <p className="text-slate-400 text-sm py-3">
-              No vendors yet. Affiliate links surface here in the in-app
-              instrument sheet.
-            </p>
-          )}
-        </div>
-      </div>
       </div>)}
     </div>
   );
