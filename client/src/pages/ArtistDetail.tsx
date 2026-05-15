@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
@@ -9,6 +9,7 @@ import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import type { PersonDiscography } from "@shared/schema";
 import { SiApplemusic, SiSpotify } from "react-icons/si";
+import { ChevronRight, ChevronLeft } from "lucide-react";
 
 export function ArtistDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -31,11 +32,6 @@ export function ArtistDetail() {
         ...s,
         album: artistAlbums.find((a) => a.id === s.albumId)!,
       })),
-    [artistAlbums],
-  );
-
-  const allVideos = useMemo(
-    () => artistAlbums.flatMap((a) => (a.videos ?? []).map((v) => ({ ...v, album: a }))),
     [artistAlbums],
   );
 
@@ -72,9 +68,13 @@ export function ArtistDetail() {
     () => streamingAll.filter((r) => !goodTunesTitles.has(r.name.toLowerCase())),
     [streamingAll, goodTunesTitles],
   );
-  // Three buckets, matching the admin Discography panel exactly so the
-  // admin sees what the fan sees. Singles are detected by trackCount === 1
-  // since iTunes marks them as collectionType "EP" with one track.
+  // Apple-style four-bucket layout: Albums / EPs / Singles / Appears On.
+  // Singles are detected by trackCount === 1 since iTunes marks them as
+  // collectionType "EP" with one track. "Appears On" is the slot for
+  // releases where the artist is a feature/guest, not the primary — we
+  // don't pull that data yet (needs an iTunes Lookup entity=song pass),
+  // so the bucket renders empty today and is hidden by the length filter.
+  // Schema slot is reserved for the follow-up pull.
   const streamingBuckets = useMemo(() => {
     const lps = streamingFiltered.filter(
       (r) => r.type === "album" && r.trackCount !== 1,
@@ -83,14 +83,28 @@ export function ArtistDetail() {
       (r) => r.type === "EP" && (r.trackCount ?? 0) > 1,
     );
     const singles = streamingFiltered.filter((r) => r.trackCount === 1);
+    const appearsOn: PersonDiscography[] = [];
+    // Appears On stays in the list even when empty so the surface mirrors
+    // Apple Music's four-bucket layout. Empty buckets render a "Coming
+    // soon" placeholder until the iTunes Lookup entity=song pass is wired
+    // up in admin to populate features/guest credits.
     return [
       { label: "Albums", items: lps },
       { label: "EPs", items: eps },
       { label: "Singles", items: singles },
-    ].filter((g) => g.items.length > 0);
+      { label: "Appears On", items: appearsOn },
+    ].filter((g) => g.items.length > 0 || g.label === "Appears On");
   }, [streamingFiltered]);
   // Open release for the How-to-Play sheet. Null = sheet closed.
   const [howToPlay, setHowToPlay] = useState<PersonDiscography | null>(null);
+  // Open bucket for the full 2-up grid sheet (caret tap). Null = closed.
+  const [openBucket, setOpenBucket] = useState<
+    { label: string; items: PersonDiscography[] } | null
+  >(null);
+  // Apple shows up to ~10 tiles in the horizontal scroller; the caret
+  // opens the rest in a full 2-up grid. We always cap the preview so the
+  // surface stays scannable even with 200 releases.
+  const PREVIEW_CAP = 10;
 
   const isFav = favArtists.has(artistName);
   const heroArt = artistAlbums[0]?.artwork;
@@ -236,82 +250,93 @@ export function ArtistDetail() {
           </div>
 
           {streamingBuckets.length > 0 && (
-            <div className="px-5 mt-9" data-testid="section-streaming">
-              <h2 className="text-white text-xl font-bold tracking-tight mb-1">Streaming</h2>
-              <p className="text-white/45 text-xs mb-4">
-                The rest of {artistName}'s catalog on Apple Music & Spotify.
-              </p>
-              {streamingBuckets.map((bucket) => (
-                <div key={bucket.label} className="mb-6 last:mb-0">
-                  <div className="flex items-baseline justify-between mb-2">
-                    <h3 className="text-white/80 text-[11px] font-semibold uppercase tracking-wider">
-                      {bucket.label}
-                    </h3>
-                    <span className="text-white/40 text-[11px]">{bucket.items.length}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {bucket.items.map((release) => (
-                      <button
-                        key={release.id}
-                        type="button"
-                        onClick={() => setHowToPlay(release)}
-                        className="flex flex-col text-left active:scale-[0.97] transition-transform"
-                        data-testid={`streaming-release-${release.id}`}
-                      >
-                        <div
-                          className="aspect-square rounded-2xl overflow-hidden bg-white/5"
-                          style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
-                        >
-                          {release.artworkUrl && (
-                            <img
-                              src={release.artworkUrl}
-                              alt={release.name}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-                        <p className="text-white text-sm font-semibold leading-tight truncate mt-2">
-                          {release.name}
-                        </p>
-                        <p className="text-white/50 text-xs truncate mt-0.5">
-                          {[release.year, bucket.label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {allVideos.length > 0 && (
-            <div className="mt-9">
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Music Videos</h2>
-              <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2">
-                {allVideos.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => navigate(`/album/${v.album.id}`)}
-                    className="relative flex-shrink-0 rounded-2xl overflow-hidden text-left active:opacity-90"
-                    style={{ width: 240, aspectRatio: "16 / 9" }}
-                    data-testid={`artist-video-${v.id}`}
-                  >
-                    <img src={v.thumbnail} alt={v.title} className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85) 0%, rgba(0,6,43,0.05) 60%)" }} />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.3)" }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff">
-                          <path d="M8 5.14v14l11-7-11-7z" />
-                        </svg>
-                      </div>
-                    </div>
-                    <p className="absolute bottom-2.5 left-3 right-3 text-white text-xs font-semibold leading-tight line-clamp-2">{v.title}</p>
-                  </button>
-                ))}
+            <div className="mt-9" data-testid="section-streaming">
+              <div className="px-5 mb-3">
+                <p className="text-white/45 text-[11px] uppercase tracking-[0.14em] font-semibold">
+                  The rest of {artistName}'s catalog on Apple Music & Spotify
+                </p>
               </div>
+              {streamingBuckets.map((bucket) => {
+                const preview = bucket.items.slice(0, PREVIEW_CAP);
+                const hasMore = bucket.items.length > PREVIEW_CAP;
+                const isEmpty = bucket.items.length === 0;
+                return (
+                  <div key={bucket.label} className="mb-7 last:mb-0">
+                    <button
+                      type="button"
+                      onClick={() => !isEmpty && setOpenBucket(bucket)}
+                      disabled={isEmpty}
+                      className="w-full flex items-center justify-between px-5 mb-3 text-left active:opacity-70 disabled:active:opacity-100 disabled:cursor-default"
+                      data-testid={`button-bucket-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <h2 className="text-white text-xl font-bold tracking-tight flex items-center gap-1.5">
+                        {bucket.label}
+                        {!isEmpty && <ChevronRight className="w-5 h-5 text-white/40" />}
+                      </h2>
+                      {!isEmpty && (
+                        <span className="text-white/40 text-[12px]">{bucket.items.length}</span>
+                      )}
+                    </button>
+                    {isEmpty ? (
+                      <div className="px-5">
+                        <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] px-4 py-5 text-center">
+                          <p className="text-white/50 text-[13px]">
+                            Coming soon — guest appearances will land here.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                    <div className="flex gap-4 overflow-x-auto scrollbar-hide px-5 pb-1">
+                      {preview.map((release) => (
+                        <button
+                          key={release.id}
+                          type="button"
+                          onClick={() => setHowToPlay(release)}
+                          className="flex-shrink-0 flex flex-col text-left active:scale-[0.97] transition-transform"
+                          style={{ width: 160 }}
+                          data-testid={`streaming-release-${release.id}`}
+                        >
+                          <div
+                            className="aspect-square rounded-2xl overflow-hidden bg-white/5"
+                            style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
+                          >
+                            {release.artworkUrl && (
+                              <img
+                                src={release.artworkUrl}
+                                alt={release.name}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </div>
+                          <p className="text-white text-sm font-semibold leading-tight truncate mt-2">
+                            {release.name}
+                          </p>
+                          <p className="text-white/50 text-xs truncate mt-0.5">
+                            {[release.year, bucket.label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        </button>
+                      ))}
+                      {hasMore && (
+                        <button
+                          type="button"
+                          onClick={() => setOpenBucket(bucket)}
+                          className="flex-shrink-0 flex flex-col items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.97] transition-all"
+                          style={{ width: 160, height: 160 }}
+                          data-testid={`button-bucket-more-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          <ChevronRight className="w-6 h-6 text-white/60" />
+                          <span className="text-white/60 text-[12px] font-semibold mt-1">
+                            See all {bucket.items.length}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -334,7 +359,129 @@ export function ArtistDetail() {
           onClose={() => setHowToPlay(null)}
         />
       )}
+
+      {openBucket && (
+        <BucketGridSheet
+          label={openBucket.label}
+          items={openBucket.items}
+          artistName={artistName}
+          onClose={() => setOpenBucket(null)}
+          onPick={(r) => {
+            setOpenBucket(null);
+            setHowToPlay(r);
+          }}
+        />
+      )}
     </main>
+  );
+}
+
+// Full-screen 2-up grid for a single bucket (Albums / EPs / Singles /
+// Appears On). Opens when the fan taps the section header caret or the
+// "See all N" tile in the horizontal scroller. Mirrors the Apple Music
+// "See All" screen: back chevron + bucket label up top, scrollable
+// 2-column grid below. Tapping a tile opens the existing HowToPlaySheet.
+function BucketGridSheet({
+  label,
+  items,
+  artistName,
+  onClose,
+  onPick,
+}: {
+  label: string;
+  items: PersonDiscography[];
+  artistName: string;
+  onClose: () => void;
+  onPick: (r: PersonDiscography) => void;
+}) {
+  // Accessibility: keep this surface modal-grade. Escape closes the
+  // sheet, focus moves to the back button on open, and the previously
+  // focused element is restored on close so screen-reader / keyboard
+  // users land back on the bucket header they came from.
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const headingId = `bucket-${label.toLowerCase().replace(/\s+/g, "-")}-title`;
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      prevFocus?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[110] bg-[#00062B] flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={headingId}
+      data-testid={`sheet-bucket-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      <div className="flex items-center gap-3 px-3 pt-3 pb-2 max-w-[440px] mx-auto w-full">
+        <button
+          ref={closeBtnRef}
+          type="button"
+          onClick={onClose}
+          className="w-10 h-10 rounded-full bg-white/8 hover:bg-white/12 flex items-center justify-center active:scale-95 transition-transform"
+          data-testid="button-bucket-close"
+          aria-label="Back"
+        >
+          <ChevronLeft className="w-6 h-6 text-white" />
+        </button>
+        <h2
+          id={headingId}
+          className="text-white text-[17px] font-semibold tracking-tight flex-1 text-center pr-10"
+        >
+          {label}
+        </h2>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-[440px] mx-auto w-full px-5 pb-10">
+          <p className="text-white/45 text-[12px] mb-4">
+            {artistName} · {items.length} {items.length === 1 ? "release" : "releases"}
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            {items.map((release) => (
+              <button
+                key={release.id}
+                type="button"
+                onClick={() => onPick(release)}
+                className="flex flex-col text-left active:scale-[0.97] transition-transform"
+                data-testid={`bucket-release-${release.id}`}
+              >
+                <div
+                  className="aspect-square rounded-2xl overflow-hidden bg-white/5"
+                  style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
+                >
+                  {release.artworkUrl && (
+                    <img
+                      src={release.artworkUrl}
+                      alt={release.name}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+                <p className="text-white text-sm font-semibold leading-tight truncate mt-2">
+                  {release.name}
+                </p>
+                <p className="text-white/50 text-xs truncate mt-0.5">
+                  {[release.year, label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
