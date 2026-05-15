@@ -185,6 +185,8 @@ interface AdminVendorGrouped {
     attachmentId: string;
     instrumentId: string;
     instrumentName: string;
+    instrumentPhotoUrl: string | null;
+    instrumentCategory: string | null;
     affiliateUrl: string;
     isHidden: boolean;
     position: number;
@@ -3140,7 +3142,21 @@ function VendorPaneEditor({
                     className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50"
                     data-testid={`link-vendor-instrument-${a.instrumentId}`}
                   >
-                    <span className="flex-1 text-sm text-slate-700 truncate">{a.instrumentName}</span>
+                    {a.instrumentPhotoUrl ? (
+                      <img
+                        src={a.instrumentPhotoUrl}
+                        alt=""
+                        className="w-10 h-10 rounded-md object-cover border border-slate-200 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 flex-shrink-0" aria-hidden="true" />
+                    )}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm text-slate-800 truncate">{a.instrumentName}</span>
+                      {a.instrumentCategory && (
+                        <span className="block text-[11px] text-slate-400 truncate">{a.instrumentCategory}</span>
+                      )}
+                    </span>
                     {a.isHidden && (
                       <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">
                         Hidden
@@ -5364,6 +5380,8 @@ export function Admin() {
           attachmentId: v.id,
           instrumentId: v.instrumentId,
           instrumentName: inst.name,
+          instrumentPhotoUrl: inst.photoUrl,
+          instrumentCategory: inst.shortCategory ?? inst.category ?? null,
           affiliateUrl: v.affiliateUrl,
           isHidden: v.isHidden,
           position: v.position,
