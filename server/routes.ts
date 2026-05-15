@@ -951,6 +951,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goodTunesReleaseDate: null,
       streamingReleaseDate: releaseDate ? releaseDate.slice(0, 10) : null,
       primaryArtistId,
+      // Apple's `primaryGenreName` on the collection row maps cleanly to
+      // our free-text `genre` column ("Indie Rock", "Hip-Hop/Rap", etc.).
+      // Admins can still rename it later from the About tab.
+      genre: collection.primaryGenreName
+        ? String(collection.primaryGenreName).trim() || null
+        : null,
       // Apple-URL seed only runs from the Albums column's "Seed an album"
       // button — admin is explicitly curating a GoodTunes release here.
       isGoodTunesRelease: true,
