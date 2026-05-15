@@ -3745,14 +3745,43 @@ function VendorPreviewCard({
 }: {
   vendor: AdminVendorGrouped;
 }) {
-  // Same favicon fallback the fan sheet uses, so an empty Logo field still
-  // looks correct in the preview rather than showing a blank circle.
-  const logoFallback = useMemo(() => {
-    if (vendor.logoUrl) return vendor.logoUrl;
-    if (vendor.domain)
-      return `https://www.google.com/s2/favicons?sz=128&domain=${vendor.domain}`;
-    return "";
-  }, [vendor.logoUrl, vendor.domain]);
+  // Mirror the fan-side VendorSheet About tab so admins see exactly what fans
+  // see. The real sheet has three tabs (About / Gear / Artists); the admin
+  // preview is static and locks to About since that's the field-driven view.
+  const visibleAttachments = vendor.attachments.filter((a) => !a.isHidden);
+  const gearCount = visibleAttachments.length;
+  // "Featured instrument" on the real sheet is the instrument that opened it;
+  // in the admin preview we don't have that context, so we show the first
+  // visible attachment as a representative example.
+  const featuredInstrumentName =
+    visibleAttachments[0]?.instrumentName ?? null;
+
+  const domain = (() => {
+    const raw = vendor.aboutUrl ?? vendor.homeUrl ?? "";
+    try {
+      return new URL(raw).hostname.replace(/^www\./, "");
+    } catch {
+      return vendor.domain || "";
+    }
+  })();
+  const tagline = vendor.tagline ?? domain;
+  const bioFallback = `${vendor.name || "This vendor"} is one of the trusted shops we link out to from SuperCredits™. Tap the globe icon to visit their full catalog, or start a chat to ask about availability, condition, and shipping.`;
+
+  const IconBtn = ({
+    children,
+    testId,
+  }: {
+    children: React.ReactNode;
+    testId?: string;
+  }) => (
+    <div
+      className="w-8 h-8 rounded-full flex items-center justify-center text-white/85"
+      style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+      data-testid={testId}
+    >
+      {children}
+    </div>
+  );
 
   return (
     <>
@@ -3769,181 +3798,251 @@ function VendorPreviewCard({
         data-testid="preview-vendor"
       >
         <div className="w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col">
-          {/* Mock status bar + back chevron (vendor is a sub-sheet of an instrument) */}
+          {/* Mock status bar */}
           <div className="flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white">
             <span>9:41</span>
             <span>● ● ●</span>
           </div>
-          <div className="flex-shrink-0 flex items-center justify-between px-3 pb-2">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white/70"
-              style={{ background: "rgba(255,255,255,0.10)" }}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              >
-                <path d="M15 6l-6 6 6 6" />
-              </svg>
-            </div>
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white/70"
-              style={{ background: "rgba(255,255,255,0.10)" }}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </div>
-          </div>
 
-          {/* Hero — full-bleed cover with gradient fade + vendor name overlay.
-              Mirrors VendorSheet in AlbumDetail.tsx (negative margin pulls
-              the image up under the sticky bar). Cover height is dialled in
-              so name + tagline always sit above the scroll fold. */}
-          <div
-            className="relative w-full flex-shrink-0"
-            style={{ height: 260 }}
-          >
-            {vendor.coverUrl ? (
-              <img
-                src={vendor.coverUrl}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover"
-                data-testid="img-preview-vendor-cover"
-              />
-            ) : (
+          {/* Scrollable region (preview is static but mirrors the fan sheet
+              order: floating toolbar → hero → profile row → tabs → About). */}
+          <div className="flex-1 overflow-hidden relative">
+            {/* Floating toolbar — back + bookmark + share + globe + chat */}
+            <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 pt-2">
+              <IconBtn testId="preview-vendor-back">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M15 6l-6 6 6 6" />
+                </svg>
+              </IconBtn>
+              <div className="flex items-center gap-1.5">
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  </svg>
+                </IconBtn>
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 3v12" />
+                    <path d="M7 8l5-5 5 5" />
+                    <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+                  </svg>
+                </IconBtn>
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M3 12h18" />
+                    <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
+                  </svg>
+                </IconBtn>
+                <IconBtn>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </IconBtn>
+              </div>
+            </div>
+
+            {/* Hero — square-ish cover (matches fan sheet aspectRatio: 1 / 1.05) */}
+            <div className="relative w-full" style={{ aspectRatio: "1 / 1.05" }}>
+              {vendor.coverUrl ? (
+                <img
+                  src={vendor.coverUrl}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  data-testid="img-preview-vendor-cover"
+                />
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)",
+                  }}
+                >
+                  {vendor.logoUrl && (
+                    <>
+                      <img
+                        src={vendor.logoUrl}
+                        alt=""
+                        aria-hidden
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{
+                          filter: "blur(40px) saturate(160%)",
+                          transform: "scale(1.3)",
+                          opacity: 0.85,
+                        }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div
+                          className="w-32 h-32 rounded-full flex items-center justify-center overflow-hidden"
+                          style={{
+                            background: "rgba(255,255,255,0.55)",
+                            backdropFilter: "blur(8px)",
+                          }}
+                        >
+                          <img
+                            src={vendor.logoUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            style={{ opacity: 0.92 }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {/* Bottom gradient — soft fade into #00062B so the avatar overlap
+                  sits clean against the page bg (matches fan sheet). */}
               <div
-                className="absolute inset-0"
+                className="absolute inset-x-0 bottom-0 h-1/3"
                 style={{
                   background:
-                    "linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)",
+                    "linear-gradient(to bottom, rgba(0,6,43,0) 0%, #00062B 100%)",
                 }}
+              />
+            </div>
+
+            {/* Instagram-style profile row: gradient-ring logo overlapping
+                the hero, then name + domain beside it. */}
+            <div className="px-5 -mt-10 relative flex items-end gap-3">
+              <div
+                className="flex-shrink-0 w-[72px] h-[72px] rounded-full p-[3px]"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)",
+                }}
+                data-testid="preview-vendor-avatar"
               >
-                {logoFallback && (
-                  <>
+                <div
+                  className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
+                  style={{ background: "#fff" }}
+                >
+                  {vendor.logoUrl ? (
                     <img
-                      src={logoFallback}
+                      src={vendor.logoUrl}
                       alt=""
-                      aria-hidden
-                      className="absolute inset-0 w-full h-full object-cover"
-                      style={{
-                        filter: "blur(40px) saturate(160%)",
-                        transform: "scale(1.3)",
-                        opacity: 0.85,
-                      }}
+                      className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div
-                        className="w-28 h-28 rounded-full flex items-center justify-center overflow-hidden"
-                        style={{
-                          background: "rgba(255,255,255,0.55)",
-                          backdropFilter: "blur(8px)",
-                        }}
-                      >
-                        <img
-                          src={logoFallback}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          style={{ opacity: 0.92 }}
-                        />
-                      </div>
-                    </div>
-                  </>
+                  ) : (
+                    <span
+                      className="text-[26px] font-bold"
+                      style={{ color: "#00062B" }}
+                    >
+                      {(vendor.name || "?").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 pb-1">
+                <h2
+                  className="text-white text-[20px] font-bold leading-tight tracking-tight truncate"
+                  data-testid="text-preview-vendor-name"
+                >
+                  {vendor.name || "Untitled vendor"}
+                </h2>
+                {tagline && (
+                  <p
+                    className="text-[13px] mt-0.5 truncate"
+                    style={{ color: "rgba(235,235,245,0.7)" }}
+                  >
+                    {tagline}
+                  </p>
                 )}
               </div>
-            )}
-            <div
-              className="absolute inset-x-0 bottom-0 h-2/3"
-              style={{
-                background:
-                  "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)",
-              }}
-            />
-            <div className="absolute left-5 right-5 bottom-3">
-              <h2
-                className="text-white text-[26px] font-bold leading-tight tracking-tight"
-                data-testid="text-preview-vendor-name"
-              >
-                {vendor.name || "Untitled vendor"}
-              </h2>
-              {vendor.tagline && (
-                <p
-                  className="text-[13px] mt-0.5"
-                  style={{ color: "rgba(235,235,245,0.7)" }}
-                >
-                  {vendor.tagline}
-                </p>
-              )}
             </div>
-          </div>
 
-          {/* Primary actions — Visit + View listing. Non-interactive in preview. */}
-          <div className="px-5 pt-3 flex gap-2 flex-shrink-0">
-            <div
-              className="flex-1 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold"
-              style={{ background: "#319ED8" }}
-            >
-              Visit website
+            {/* Tabs — About | Gear N | Artists (admin preview locks to About). */}
+            <div className="px-5 pt-4">
+              <div className="flex gap-5 border-b border-white/10">
+                {([
+                  { key: "about", label: "About", count: undefined as number | undefined },
+                  { key: "gear", label: "Gear", count: gearCount > 0 ? gearCount : undefined },
+                  { key: "artists", label: "Artists", count: undefined },
+                ]).map((t) => {
+                  const active = t.key === "about";
+                  return (
+                    <div
+                      key={t.key}
+                      className="relative pb-2 text-[14px] font-semibold"
+                      style={{
+                        color: active ? "#fff" : "rgba(235,235,245,0.55)",
+                      }}
+                    >
+                      {t.label}
+                      {typeof t.count === "number" && (
+                        <span
+                          className="ml-1.5 text-[12px] font-medium"
+                          style={{ color: "rgba(235,235,245,0.45)" }}
+                        >
+                          {t.count}
+                        </span>
+                      )}
+                      {active && (
+                        <span
+                          aria-hidden
+                          className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
+                          style={{ background: "#319ED8" }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div
-              className="h-9 px-4 rounded-full flex items-center justify-center text-white text-[13px] font-semibold"
-              style={{ background: "rgba(255,255,255,0.10)" }}
-            >
-              View listing
-            </div>
-          </div>
 
-          {/* Bio / about — same "About {name}" pattern as the fan sheet */}
-          <div className="px-5 pt-4 pb-2 flex-1 overflow-hidden">
-            <h3 className="text-white text-[16px] font-bold leading-tight tracking-tight mb-1.5">
-              About {vendor.name || "this vendor"}
-            </h3>
-            {vendor.bio ? (
+            {/* About content — bio + Web + Featured instrument */}
+            <div className="px-5 pt-4 pb-6">
+              <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-1.5">
+                About {vendor.name || "this vendor"}
+              </h3>
               <p
-                className="text-[13px] leading-relaxed line-clamp-6"
-                style={{ color: "rgba(255,255,255,0.85)" }}
+                className="text-[13px] leading-relaxed line-clamp-5"
+                style={{ color: "rgba(235,235,245,0.72)" }}
                 data-testid="text-preview-vendor-bio"
               >
-                {vendor.bio}
+                {vendor.bio || bioFallback}
               </p>
-            ) : (
-              <p
-                className="text-[12px]"
-                style={{ color: "rgba(235,235,245,0.4)" }}
-              >
-                No bio yet — add a short paragraph so fans know who they're
-                buying from.
-              </p>
-            )}
-            {vendor.location && (
-              <p
-                className="text-[12px] mt-3"
-                style={{ color: "rgba(235,235,245,0.55)" }}
-              >
-                <span aria-hidden>📍 </span>
-                {vendor.location}
-              </p>
-            )}
+
+              {vendor.location && (
+                <div className="mt-4">
+                  <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                    Location
+                  </p>
+                  <p className="text-white text-[14px]">{vendor.location}</p>
+                </div>
+              )}
+
+              {domain && (
+                <div className="mt-4">
+                  <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                    Web
+                  </p>
+                  <p className="text-[14px]" style={{ color: "#319ED8" }}>
+                    {domain}
+                  </p>
+                </div>
+              )}
+
+              {featuredInstrumentName && (
+                <div className="mt-4">
+                  <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
+                    Featured instrument
+                  </p>
+                  <p className="text-white text-[14px]">{featuredInstrumentName}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>
+                    The instrument that opened this page — tap the Gear tab to see the rest.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
       <p className="text-slate-300 text-xs mt-3">
-        Preview of the in-app VendorSheet hero — surfaces wherever this
-        vendor is attached ({vendor.attachments.length}{" "}
-        {vendor.attachments.length === 1 ? "instrument" : "instruments"}).
+        Preview of the in-app VendorSheet (About tab) — surfaces wherever this
+        vendor is attached ({gearCount}{" "}
+        {gearCount === 1 ? "instrument" : "instruments"}).
       </p>
     </>
   );
