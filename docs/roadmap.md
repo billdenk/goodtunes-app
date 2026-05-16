@@ -300,12 +300,34 @@ Either gate ends the sale: time **or** units, whichever first. UI shows whicheve
 ### Add-ons / bundle SKUs (per album)
 A drop isn't just digital audio. The cart can include physical/extra SKUs:
 - **GoodDeed™ Certificate** — printed and signed certificate of ownership for the buyer. Limited-edition feel. Numbered, e.g. "#37 of 250." Drives scarcity.
-- **Signed vinyl / CD** (physical add-on) — uses existing GT fulfillment pipeline.
+- **Vinyl** — 7" single, 10", 12" LP, double LP, picture disc, color variant. Signed or unsigned.
+- **CD** — standard, digipak, deluxe with booklet. Signed or unsigned.
+- **Cassette** (niche but real demand in indie circles).
 - **Behind-the-scenes / extended liner notes PDF** (digital add-on).
 - **Personal video message from the artist** for the first N buyers.
 - **Demo / unreleased session takes** for the first N buyers.
+- **Bundle SKUs** — one cart line that contains multiple physical items (e.g. "LP + signed cert + tote"). Internally a parent SKU with child references.
 
-Add-ons are SKU-shaped: each has its own `unitsAvailable`, price, fulfillment type (digital/physical), and can sell out independently of the main album.
+Add-ons are SKU-shaped: each has its own price, units available, fulfillment type, and can sell out independently of the main album. Each physical SKU also captures:
+
+- **Package contents** — free-text plus structured tags ("12-inch LP, 180g black vinyl, gatefold sleeve, digital download code") so we can render a clean cart line + a fulfillment pick-list.
+- **Format** enum: `vinyl_7 | vinyl_10 | vinyl_12 | vinyl_2lp | cd | cd_deluxe | cassette | cert | bundle | digital_extra`.
+- **Manufacturer / fulfillment vendor** — for our records: which plant pressed the vinyl, who printed the certs, who handles drop-ship. Not customer-facing. Useful for: chasing a late shipment, tracking defect rates, accounting, and re-ordering when an SKU restocks.
+  - Fields: `manufacturerName`, `manufacturerContact`, `manufacturerOrderRef`, `unitCostCents`, `leadTimeDays`.
+- **Weight + dimensions** (for shipping calc later).
+- **Inventory status** — `pre_order` (manufactured after sunset based on units sold) vs `in_stock` (we already have them on a shelf). Pre-order is the default — it's how indie drops avoid sitting on unsold inventory.
+
+### Manufacturers (new global entity)
+Like Studios, Manufacturers becomes a tiny global table so admins pick from a dropdown instead of retyping the vendor every time. One row per real plant / printer / fulfillment partner.
+
+```
+manufacturers {
+  id, name, kind (vinyl_plant|cd_duplicator|print_shop|fulfillment|merch),
+  contactName, contactEmail, contactPhone, website, notes
+}
+```
+
+Album SKUs reference a manufacturer FK, `SET NULL` on delete so a removed vendor leaves the SKU's history intact.
 
 ### Pre-sale + post-sale states
 - **Pre-sunrise**: album visible, **30-second previews only** per track, countdown to sunrise, "Notify me" capture (email/push).
@@ -332,9 +354,19 @@ albums + {
 }
 
 album_skus (new table) {
-  id, albumId, kind (cert|vinyl|cd|pdf|video_msg|bonus_audio|...),
-  title, description, priceCents, unitsAvailable?, unitsSold,
-  fulfillmentType (digital|physical), assetUrl?
+  id, albumId,
+  format (vinyl_7|vinyl_10|vinyl_12|vinyl_2lp|cd|cd_deluxe|cassette|cert|bundle|digital_extra|...),
+  title, description, packageContents,           -- "12in LP, 180g black, gatefold sleeve, DL code"
+  priceCents,
+  unitsAvailable?, unitsSold,
+  fulfillmentType (digital|physical),
+  manufacturerId? -> manufacturers.id,            -- our records, not customer-facing
+  manufacturerOrderRef?,                          -- their PO number
+  unitCostCents?,                                 -- what we pay per unit (margin math)
+  leadTimeDays?,                                  -- expected wait from order to ship
+  inventoryStatus (pre_order|in_stock),
+  weightGrams?, dimensionsCm?,                    -- for shipping calc later
+  assetUrl?                                       -- for digital extras only
 }
 ```
 
