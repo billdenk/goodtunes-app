@@ -7,6 +7,7 @@ import {
   ExternalLink,
   EyeOff,
   ArrowLeftRight,
+  Pencil,
   Music,
   Calendar,
   Tag as TagIcon,
@@ -250,7 +251,8 @@ export function AdminAlbum() {
           <TracksPanel album={album} onEdit={openInClassicAdmin} />
         )}
         {tab === "artwork" && <ArtworkPanel album={album} />}
-        {(tab === "masters" || tab === "bonus") && (
+        {tab === "masters" && <MastersPanel album={album} />}
+        {tab === "bonus" && (
           <PhasePlaceholder tab={tab} onEdit={openInClassicAdmin} />
         )}
       </div>
@@ -271,7 +273,7 @@ function OverviewPanel({
     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
       {/* Metadata card */}
       <section
-        className="md:col-span-2 rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
+        className="group md:col-span-2 rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
         data-testid="panel-overview-metadata"
       >
         <PanelHeader title="Metadata" onEdit={onEdit} />
@@ -314,7 +316,7 @@ function OverviewPanel({
 
       {/* Release & links card */}
       <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
+        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
         data-testid="panel-overview-release"
       >
         <PanelHeader title="Release" onEdit={onEdit} />
@@ -381,7 +383,7 @@ function TracksPanel({
           data-testid="button-add-tracks"
         >
           Add tracks in classic admin
-          <ExternalLink className="w-3.5 h-3.5" />
+          <ArrowLeftRight className="w-3.5 h-3.5" />
         </button>
       </section>
     );
@@ -680,22 +682,271 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
   );
 }
 
-/* ─── Phase placeholder (Masters / Bonus) ──────────────────────────── */
+/* ─── Masters tab ──────────────────────────────────────────────────── */
+
+async function uploadAudioFile(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error("Sign out and back in — your session token is missing.");
+  }
+  const res = await fetch("/api/admin/upload-audio", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
+// Read duration (in seconds, rounded) from an audio file via a hidden
+// <audio> element. Falls back to the song's existing duration if the
+// browser can't decode the file — the server requires a number.
+function readAudioDurationSeconds(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("audio");
+    a.preload = "metadata";
+    a.src = url;
+    const cleanup = () => URL.revokeObjectURL(url);
+    a.onloadedmetadata = () => {
+      const d = a.duration;
+      cleanup();
+      resolve(Number.isFinite(d) && d > 0 ? Math.round(d) : null);
+    };
+    a.onerror = () => {
+      cleanup();
+      resolve(null);
+    };
+  });
+}
+
+function MastersPanel({ album }: { album: AlbumFull }) {
+  const sorted = [...album.songs].sort(
+    (a, b) => a.trackNumber - b.trackNumber,
+  );
+  const withMaster = sorted.filter((s) => !!s.audioUrl).length;
+
+  if (sorted.length === 0) {
+    return (
+      <section
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-10 text-center"
+        data-testid="panel-masters-empty"
+      >
+        <div className="inline-flex items-center gap-2 text-slate-500 text-sm">
+          <AlertCircle className="w-4 h-4" />
+          Add tracks first, then come back here to upload their masters.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+      data-testid="panel-masters"
+    >
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+        <div>
+          <h2 className="text-slate-900 text-[14px] font-bold">
+            Streaming masters
+          </h2>
+          <p className="text-slate-400 text-[11.5px]">
+            <span
+              className={
+                withMaster === sorted.length
+                  ? "text-emerald-700 font-semibold"
+                  : "text-slate-500 font-semibold"
+              }
+            >
+              {withMaster} of {sorted.length}
+            </span>{" "}
+            uploaded · MP3, M4A, WAV, or FLAC · up to 150 MB each
+          </p>
+        </div>
+      </div>
+      <ol>
+        {sorted.map((song, i) => (
+          <MasterRow
+            key={song.id}
+            song={song}
+            albumId={album.id}
+            isLast={i === sorted.length - 1}
+          />
+        ))}
+      </ol>
+      <div className="px-5 py-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
+        Hi-res downloadable masters + stems are deferred — see roadmap.
+      </div>
+    </section>
+  );
+}
+
+function MasterRow({
+  song,
+  albumId,
+  isLast,
+}: {
+  song: SongLite;
+  albumId: string;
+  isLast: boolean;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const mut = useMutation({
+    mutationFn: async (file: File) => {
+      const detectedDuration = await readAudioDurationSeconds(file);
+      const url = await uploadAudioFile(file);
+      const body: Record<string, unknown> = { audioUrl: url };
+      if (detectedDuration) body.duration = detectedDuration;
+      await apiRequest("PUT", `/api/admin/songs/${song.id}`, body);
+      return url;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      toast({
+        title: song.audioUrl ? "Master replaced" : "Master uploaded",
+        description: song.title,
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Upload failed",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const acceptFile = (file: File | undefined | null) => {
+    if (!file) return;
+    if (!/^audio\//.test(file.type)) {
+      toast({
+        title: "That's not an audio file",
+        description: "Masters need to be MP3, M4A, WAV, or FLAC.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 150 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Keep masters under 150 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    mut.mutate(file);
+  };
+
+  const busy = mut.isPending;
+  const hasMaster = !!song.audioUrl;
+
+  return (
+    <li
+      className={[
+        "flex items-center gap-4 px-5 py-3.5 transition-colors",
+        !isLast && "border-b border-slate-100",
+        busy && "bg-slate-50",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-testid={`row-master-${song.id}`}
+    >
+      <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
+        {song.trackNumber}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div
+          className="text-slate-900 text-[13.5px] font-medium truncate"
+          data-testid={`text-master-title-${song.id}`}
+        >
+          {song.title}
+        </div>
+        <div className="flex items-center gap-2.5 mt-0.5">
+          <TrackChip
+            ok={hasMaster}
+            label={hasMaster ? "Master loaded" : "No master"}
+            testId={`chip-master-${song.id}`}
+          />
+          <span className="text-slate-400 text-[11px] tabular-nums">
+            {formatDuration(song.duration)}
+          </span>
+        </div>
+      </div>
+      {hasMaster && song.audioUrl && (
+        <audio
+          controls
+          src={song.audioUrl}
+          preload="none"
+          className="h-8 max-w-[220px]"
+          data-testid={`audio-preview-${song.id}`}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => !busy && fileInputRef.current?.click()}
+        disabled={busy}
+        className={[
+          "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 flex-shrink-0 transition-colors",
+          hasMaster
+            ? "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+            : "bg-[#319ED8] text-white hover:bg-[#2890c8]",
+          busy && "opacity-60 cursor-not-allowed",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-testid={`button-upload-master-${song.id}`}
+      >
+        {busy ? (
+          <>
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Uploading…
+          </>
+        ) : (
+          <>
+            <Upload className="w-3 h-3" />
+            {hasMaster ? "Replace" : "Upload master"}
+          </>
+        )}
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="audio/*,.flac"
+        className="hidden"
+        onChange={(e) => {
+          acceptFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+        data-testid={`input-master-file-${song.id}`}
+      />
+    </li>
+  );
+}
+
+/* ─── Phase placeholder (Bonus only) ──────────────────────────────── */
 
 function PhasePlaceholder({
   tab,
   onEdit,
 }: {
-  tab: Exclude<Tab, "overview" | "tracks" | "artwork">;
+  tab: Exclude<Tab, "overview" | "tracks" | "artwork" | "masters">;
   onEdit: () => void;
 }) {
   const meta = TABS.find((t) => t.key === tab)!;
   const blurb: Record<typeof tab, string> = {
-    masters:
-      "Streaming master (required), optional hi-res downloadable. Stems and per-track cover overrides are deferred.",
     bonus:
       "Bonus videos + photos. Lock-by-default with hover-reveal Edit/Trash. Future buckets: liner notes, lyric sheets, commentary, press kit.",
-  };
+  } as Record<typeof tab, string>;
 
   return (
     <section
@@ -716,7 +967,7 @@ function PhasePlaceholder({
           data-testid={`button-open-classic-${tab}`}
         >
           Edit in classic admin
-          <ExternalLink className="w-3.5 h-3.5" />
+          <ArrowLeftRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </section>
@@ -737,11 +988,12 @@ function PanelHeader({
       <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
       <button
         onClick={onEdit}
-        className="text-[#319ED8] text-[11.5px] font-semibold hover:underline inline-flex items-center gap-1"
+        aria-label="Edit in classic admin"
+        title="Edit in classic admin"
         data-testid={`button-edit-${title.toLowerCase()}`}
+        className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
-        Edit
-        <ExternalLink className="w-3 h-3" />
+        <Pencil className="w-3.5 h-3.5" />
       </button>
     </div>
   );
