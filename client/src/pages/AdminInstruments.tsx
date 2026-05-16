@@ -63,13 +63,7 @@ export function AdminInstruments() {
   }, [instruments, search]);
 
   const openInstrument = (id: string) => {
-    // Per-instrument detail comes next. For now, deep-link the classic
-    // admin's Gear tab onto this row.
-    try {
-      localStorage.setItem("gt:admin:entity", "gear");
-      localStorage.setItem("gt:admin:focus-instrument", id);
-    } catch {}
-    navigate("/admin");
+    navigate(`/admin/instruments/${id}`);
   };
 
   const openNewInstrument = () => {
