@@ -18,6 +18,7 @@ import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
 import { AdminAlbums } from "@/pages/AdminAlbums";
 import { AdminAlbum } from "@/pages/AdminAlbum";
+import { AdminPeople } from "@/pages/AdminPeople";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -99,6 +100,9 @@ function Router() {
         </Route>
         <Route path="/admin/albums">
           <ProtectedRoute component={AdminAlbums} />
+        </Route>
+        <Route path="/admin/people">
+          <ProtectedRoute component={AdminPeople} />
         </Route>
         <Route path="/admin">
           <ProtectedRoute component={Admin} />

@@ -16,8 +16,8 @@ import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
  * admin chip + back-to-player link, and left entity sidebar with live
  * counts. Wrap any admin page in this and pass which entity is active.
  *
- * People / Gear / Vendors / Labels don't have new-admin pages yet — the
- * sidebar deep-links them into the classic admin's matching tab via the
+ * Albums + People have new-admin pages today. Gear / Vendors / Labels
+ * still deep-link into the classic admin's matching tab via the
  * `gt:admin:entity` localStorage key the classic admin already reads.
  */
 export type EntityKey = "albums" | "people" | "gear" | "vendors" | "labels";
@@ -106,7 +106,7 @@ export function AdminFrame({
               label="People"
               count={people.length}
               active={active === "people"}
-              onClick={() => openClassic("people")}
+              onClick={() => navigate("/admin/people")}
               testId="nav-people"
             />
             <SidebarLink
