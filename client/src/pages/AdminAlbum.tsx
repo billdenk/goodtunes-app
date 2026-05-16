@@ -452,6 +452,14 @@ function TracksPanel({
   // snapshot taken before the mutation started.
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropOnId, setDropOnId] = useState<string | null>(null);
+  // Inline composer for new tracks. Stays open across saves so the user
+  // can hammer through a tracklist without clicking "Add track" each time.
+  const [adding, setAdding] = useState(false);
+
+  const invalidateAlbum = async () => {
+    await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+    await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+  };
 
   const reorderMut = useMutation({
     mutationFn: async (songIds: string[]) => {
@@ -531,7 +539,7 @@ function TracksPanel({
     reorderMut.mutate(next);
   };
 
-  if (sorted.length === 0) {
+  if (sorted.length === 0 && !adding) {
     return (
       <section
         className="rounded-2xl bg-white border border-slate-200 shadow-sm p-10 text-center"
@@ -542,12 +550,12 @@ function TracksPanel({
           This album has no tracks yet.
         </div>
         <button
-          onClick={onEdit}
+          onClick={() => setAdding(true)}
           className="mt-4 px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
-          data-testid="button-add-tracks"
+          data-testid="button-add-first-track"
         >
-          Add tracks in classic admin
-          <ArrowLeftRight className="w-3.5 h-3.5" />
+          <Plus className="w-3.5 h-3.5" />
+          Add the first track
         </button>
       </section>
     );
@@ -562,18 +570,30 @@ function TracksPanel({
         <div>
           <h2 className="text-slate-900 text-[14px] font-bold">Tracklist</h2>
           <p className="text-slate-400 text-[11.5px]">
-            {sorted.length} {sorted.length === 1 ? "track" : "tracks"} · Hover
-            a row to rename, delete, or drag the grip on the left to reorder.
+            {sorted.length === 0 ? (
+              <>Add your first track below. Press Enter to add and keep going.</>
+            ) : (
+              <>
+                {sorted.length} {sorted.length === 1 ? "track" : "tracks"} ·
+                Hover a row to rename, delete, or drag the grip on the left to
+                reorder.
+              </>
+            )}
           </p>
         </div>
         <button
-          onClick={onEdit}
-          className="px-2.5 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5"
-          data-testid="button-add-tracks"
+          onClick={() => setAdding((v) => !v)}
+          className={
+            "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 " +
+            (adding
+              ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50")
+          }
+          data-testid="button-toggle-add-track"
+          aria-expanded={adding}
         >
-          <Plus className="w-3 h-3" />
-          Add tracks
-          <ArrowLeftRight className="w-3 h-3 text-slate-400" />
+          <Plus className={"w-3 h-3 " + (adding ? "rotate-45" : "")} />
+          {adding ? "Done" : "Add track"}
         </button>
       </div>
       <ol>
@@ -601,7 +621,184 @@ function TracksPanel({
           );
         })}
       </ol>
+      {adding && (
+        <AddTrackForm
+          albumId={album.id}
+          nextTrackNumber={sorted.length + 1}
+          onSaved={invalidateAlbum}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </section>
+  );
+}
+
+/* ─── Inline composer for adding new tracks ──────────────────────────── */
+
+// Parses a duration string the way an admin would type it: "3:30", "0:42",
+// "210" (raw seconds), or "" (empty → fall back to the default). Returns
+// the seconds value plus an error flag so the form can surface bad input
+// inline without throwing.
+function parseDurationInput(raw: string): { seconds: number; error: string | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { seconds: 180, error: null };
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    if (n > 0 && n < 36000) return { seconds: n, error: null };
+    return { seconds: 180, error: "Pick a duration under 10 hours." };
+  }
+  const m = trimmed.match(/^(\d{1,2}):([0-5]?\d)$/);
+  if (m) {
+    const mins = Number(m[1]);
+    const secs = Number(m[2]);
+    const total = mins * 60 + secs;
+    if (total > 0 && total < 36000) return { seconds: total, error: null };
+    return { seconds: 180, error: "Pick a duration under 10 hours." };
+  }
+  return { seconds: 180, error: "Use mm:ss (e.g. 3:30) or whole seconds." };
+}
+
+function AddTrackForm({
+  albumId,
+  nextTrackNumber,
+  onSaved,
+  onClose,
+}: {
+  albumId: string;
+  nextTrackNumber: number;
+  onSaved: () => Promise<void> | void;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [title, setTitle] = useState("");
+  const [durationText, setDurationText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  // Focus the title field on first mount + after each successful save so
+  // the admin can stay on the keyboard and rip through a tracklist.
+  useEffect(() => {
+    queueMicrotask(() => titleRef.current?.focus());
+  }, []);
+
+  const createMut = useMutation({
+    mutationFn: async (input: { title: string; duration: number }) => {
+      const res = await apiRequest("POST", "/api/admin/songs", {
+        albumId,
+        title: input.title,
+        trackNumber: nextTrackNumber,
+        duration: input.duration,
+      });
+      return res.json();
+    },
+    onSuccess: async () => {
+      await onSaved();
+      toast({ title: `Track ${nextTrackNumber} added` });
+      // Clear and refocus so the user can keep adding without re-clicking.
+      setTitle("");
+      setDurationText("");
+      setError(null);
+      queueMicrotask(() => titleRef.current?.focus());
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't add the track",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const submit = () => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setError("Title is required.");
+      titleRef.current?.focus();
+      return;
+    }
+    const parsed = parseDurationInput(durationText);
+    if (parsed.error) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    createMut.mutate({ title: trimmed, duration: parsed.seconds });
+  };
+
+  return (
+    <div
+      className="border-t border-slate-200 bg-[#319ED8]/5 px-5 py-3.5"
+      data-testid="form-add-track"
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (!createMut.isPending) submit();
+        } else if (e.key === "Escape" && !createMut.isPending) {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
+          {nextTrackNumber}
+        </span>
+        <input
+          ref={titleRef}
+          type="text"
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            if (error) setError(null);
+          }}
+          placeholder="Track title"
+          disabled={createMut.isPending}
+          className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          data-testid="input-new-track-title"
+        />
+        <input
+          type="text"
+          value={durationText}
+          onChange={(e) => {
+            setDurationText(e.target.value);
+            if (error) setError(null);
+          }}
+          placeholder="3:00"
+          disabled={createMut.isPending}
+          aria-label="Track duration in mm:ss"
+          className="w-20 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          data-testid="input-new-track-duration"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={createMut.isPending}
+          className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+          data-testid="button-save-new-track"
+        >
+          {createMut.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            "Add"
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={createMut.isPending}
+          className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+          data-testid="button-close-add-track"
+        >
+          Done
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-500 mt-1.5 pl-9">
+        {error ? (
+          <span className="text-rose-600">{error}</span>
+        ) : (
+          <>Press Enter to add and keep going · Esc to close · Duration defaults to 3:00 if blank</>
+        )}
+      </p>
+    </div>
   );
 }
 
