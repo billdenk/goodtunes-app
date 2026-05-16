@@ -13,7 +13,7 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus } from "lucide-react";
+import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Loader2, Play } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1280,6 +1280,10 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
   async function handleImportFromUrl() {
     const url = urlValue.trim();
     if (!url) return;
+    // Dismiss immediately and surface progress as a spinner row in the
+    // videos list. If anything fails, reopen the dialog with the URL +
+    // friendly error preserved so the admin can try again.
+    setUrlOpen(false);
     setUrlErr(null);
     setUrlBusy(true);
     try {
@@ -1290,10 +1294,11 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
         title: suggestedTitle || "Imported video",
       });
       invalidate();
-      closeImportDialog();
+      setUrlValue("");
     } catch (e: any) {
       console.error("[AlbumVideosSection] handleImportFromUrl failed", e);
       setUrlErr(friendlyImportError(e?.message || ""));
+      setUrlOpen(true);
     } finally {
       setUrlBusy(false);
     }
@@ -1422,7 +1427,23 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
       </Dialog>
       {err && <p className="text-[12px] text-red-600 mb-2">{err}</p>}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
-        {videos.length === 0 && (
+        {urlBusy && (
+          <div
+            className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 bg-slate-50/60"
+            data-testid="row-import-video-pending"
+          >
+            <div className="w-28 h-16 rounded bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] text-slate-700 font-medium">Importing video…</div>
+              <div className="text-[12px] text-slate-400 mt-0.5">
+                Pulling the file into storage. This can take a minute for large videos.
+              </div>
+            </div>
+          </div>
+        )}
+        {videos.length === 0 && !urlBusy && (
           <div className="px-4 py-6 text-center text-slate-400 text-sm">
             No videos yet. Upload an MP4 to add a "Videos" section to the album.
           </div>
@@ -1485,13 +1506,29 @@ function AlbumVideoRow({
       className="flex items-start gap-3 p-3 border-b border-slate-100 last:border-b-0"
       data-testid={`row-album-video-${video.id}`}
     >
-      <video
-        src={video.videoUrl}
-        poster={video.posterUrl ?? undefined}
-        className="w-28 h-16 bg-slate-100 rounded object-cover flex-shrink-0"
-        controls
-        preload="metadata"
-      />
+      <a
+        href={video.videoUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="relative w-28 h-16 rounded overflow-hidden flex-shrink-0 group bg-slate-900"
+        aria-label="Preview video in a new tab"
+        data-testid={`thumb-album-video-${video.id}`}
+      >
+        {video.posterUrl ? (
+          <img
+            src={video.posterUrl}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
+        )}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+          <div className="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
+            <Play className="w-3.5 h-3.5 text-slate-900 ml-0.5" fill="currentColor" />
+          </div>
+        </div>
+      </a>
       <div className="flex-1 min-w-0 space-y-2">
         <input
           type="text"
