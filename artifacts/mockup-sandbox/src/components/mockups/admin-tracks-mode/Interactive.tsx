@@ -297,6 +297,17 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
                       setChipDraft(startLabel);
                       (e.target as HTMLInputElement).blur();
                     }
+                    // Arrow keys nudge by ±1 sec (or ±5 sec with shift). Apple inspector pattern.
+                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                      const step = e.shiftKey ? 5 : 1;
+                      const dir = e.key === "ArrowUp" ? 1 : -1;
+                      const next = Math.max(
+                        0,
+                        Math.min(TOTAL_SEC - WINDOW_SEC, startSec + dir * step),
+                      );
+                      setLeft((next / TOTAL_SEC) * 100);
+                    }
                   }}
                   aria-label="Snippet start time — type to fine-tune"
                   title="Type to fine-tune (mm:ss)"
@@ -355,23 +366,91 @@ function LyricsDetail({
   hasLyrics: boolean;
   onClose: () => void;
 }) {
+  const seed = hasLyrics
+    ? `[Verse 1]\nThe storms came in across the bay\nI didn't know what to say\n\n[Chorus]\nAnd I'd weather them all for you\nAnd I'd weather them all for you`
+    : "";
+  const [text, setText] = useState(seed);
+  const [url, setUrl] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const dirty = text !== seed;
+
   return (
     <DetailWrap title="Lyrics" onClose={onClose}>
+      {/* Three sources: drop a timed file · paste a URL · type below */}
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
+        {/* Drop zone — .vtt (WebVTT, real timing), .lrc (line-timed), .srt, or plain .txt */}
+        <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+          }}
+          className={[
+            "flex flex-col items-center justify-center text-center px-3 py-3 rounded-md border-2 border-dashed text-[11px] cursor-pointer transition-colors",
+            dragOver
+              ? "border-[#319ED8] bg-[#319ED8]/5 text-[#319ED8]"
+              : "border-slate-300 text-slate-500 hover:border-slate-400 hover:bg-slate-50",
+          ].join(" ")}
+        >
+          <Upload className="w-4 h-4 mb-1" />
+          <span className="font-semibold">Drop a lyrics file</span>
+          <span className="text-slate-400">.vtt · .lrc · .srt · .txt</span>
+          <input type="file" accept=".vtt,.lrc,.srt,.txt" className="sr-only" />
+        </label>
+
+        <div className="flex items-center text-[10px] uppercase tracking-wider font-semibold text-slate-400 self-center">
+          or
+        </div>
+
+        {/* URL import — for fetching from a hosted .vtt / .lrc */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
+            Import from URL
+          </label>
+          <div className="flex gap-1">
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com/storms.vtt"
+              className="flex-1 min-w-0 px-2 py-1.5 rounded-md border border-slate-200 text-[12px] focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
+            />
+            <button
+              disabled={!url}
+              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Import
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 pt-1">
+        Or paste/type below
+      </div>
       <textarea
-        defaultValue={
-          hasLyrics
-            ? `[Verse 1]\nThe storms came in across the bay\nI didn't know what to say\n\n[Chorus]\nAnd I'd weather them all for you\nAnd I'd weather them all for you`
-            : ""
-        }
+        value={text}
+        onChange={(e) => setText(e.target.value)}
         placeholder="Paste lyrics here. Use [Verse 1], [Chorus] markers to group sections."
         rows={8}
         className="w-full px-3 py-2 rounded-md border border-slate-200 bg-white text-[12.5px] leading-relaxed text-slate-900 font-mono focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
       />
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-slate-400">
-          Per-line timing is auto-distributed today; word-level karaoke later.
+          .vtt/.lrc bring real timing. Plain text auto-distributes — word-level karaoke later.
         </span>
-        <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[11.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8]">
+        <button
+          disabled={!dirty}
+          className={
+            dirty
+              ? "inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[11.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8]"
+              : "inline-flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-semibold text-slate-400 border-b border-slate-200 cursor-not-allowed"
+          }
+        >
           Save lyrics
         </button>
       </div>
