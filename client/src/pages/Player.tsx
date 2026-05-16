@@ -132,11 +132,46 @@ export function Player() {
     return active;
   }, [syncedLines, currentTime]);
   const lyricLineRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!showLyrics) return;
     const el = lyricLineRefs.current[activeLineIdx];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    const scroll = lyricsScrollRef.current;
+    if (!el || !scroll) return;
+    // Apple-style: land the active line ~28% down from the top of the
+    // scroll viewport (not flush with the top edge), so the line sits
+    // comfortably below the header fade-mask and there's room for the
+    // next 4-5 upcoming lines to be visible.
+    const targetOffset = scroll.clientHeight * 0.28;
+    const top = el.offsetTop - targetOffset;
+    scroll.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   }, [activeLineIdx, showLyrics]);
+
+  // Auto-hide the lyrics-overlay bottom controls after a few seconds of no
+  // interaction, the way Apple does on its full-screen Now Playing surface.
+  // Any tap / scroll / touch on the overlay re-shows them and restarts the
+  // 5-second timer.
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showControlsAndArmHide = useRef(() => {});
+  useEffect(() => {
+    showControlsAndArmHide.current = () => {
+      setControlsVisible(true);
+      if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
+      controlsHideTimerRef.current = setTimeout(() => setControlsVisible(false), 5000);
+    };
+  });
+  useEffect(() => {
+    if (!showLyrics) {
+      if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
+      setControlsVisible(true);
+      return;
+    }
+    showControlsAndArmHide.current();
+    return () => {
+      if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
+    };
+  }, [showLyrics]);
 
   if (!currentSong) return null;
 
@@ -425,7 +460,11 @@ export function Player() {
 
       {/* ─── Lyrics Overlay ─── */}
       {showLyrics && currentSong.lyrics && (
-        <div className="fixed inset-0 flex justify-center bg-[#00062B]" style={{ zIndex: 70 }}>
+        <div
+          className="fixed inset-0 flex justify-center bg-[#00062B]"
+          style={{ zIndex: 70 }}
+          onPointerDown={() => showControlsAndArmHide.current()}
+        >
           {/* Full-bleed blurred artwork background — Apple Music style */}
           <div className="absolute inset-0 overflow-hidden">
             <img
@@ -490,10 +529,22 @@ export function Player() {
               </button>
             </div>
 
-            {/* Lyrics text — scrollable, line-level synced */}
+            {/* Lyrics text — scrollable, line-level synced.
+                The mask-image gradient softly fades the very top and bottom
+                of the scroll viewport to transparent, so past lines dissolve
+                into the header (instead of slamming into it) and upcoming
+                lines fade into the controls. Matches Apple Music exactly. */}
             <div
+              ref={lyricsScrollRef}
               className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-6"
-              style={{ paddingTop: "30vh", paddingBottom: "30vh" }}
+              style={{
+                paddingTop: "18vh",
+                paddingBottom: "30vh",
+                WebkitMaskImage:
+                  "linear-gradient(to bottom, transparent 0, transparent 4%, rgba(0,0,0,0.4) 9%, #000 16%, #000 82%, rgba(0,0,0,0.4) 92%, transparent 100%)",
+                maskImage:
+                  "linear-gradient(to bottom, transparent 0, transparent 4%, rgba(0,0,0,0.4) 9%, #000 16%, #000 82%, rgba(0,0,0,0.4) 92%, transparent 100%)",
+              }}
               data-testid="lyrics-scroll"
             >
               <div className="flex flex-col gap-3">
@@ -563,8 +614,8 @@ export function Player() {
                         fontWeight: isActive ? 800 : 700,
                         // Active line is meaningfully larger so it punches
                         // out of the blurred stack — matches Apple's effect.
-                        fontSize: isActive ? "28px" : "24px",
-                        lineHeight: 1.28,
+                        fontSize: isActive ? "32px" : "26px",
+                        lineHeight: 1.22,
                         filter: blurPx > 0 ? `blur(${blurPx}px)` : "none",
                         transform: isActive ? "scale(1.02)" : "scale(1)",
                         transformOrigin: "left center",
@@ -585,7 +636,16 @@ export function Player() {
             </div>
 
             {/* Bottom controls */}
-            <div className="relative z-10 px-6 pt-3 pb-8">
+            <div
+              className="relative z-10 px-6 pt-3 pb-8"
+              style={{
+                opacity: controlsVisible ? 1 : 0,
+                transform: controlsVisible ? "translateY(0)" : "translateY(12px)",
+                pointerEvents: controlsVisible ? "auto" : "none",
+                transition: "opacity 350ms ease, transform 350ms ease",
+              }}
+              data-testid="lyrics-controls"
+            >
               {/* Progress bar */}
               <div className="relative w-full h-[3px] rounded-full overflow-hidden mb-2 cursor-pointer">
                 <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
