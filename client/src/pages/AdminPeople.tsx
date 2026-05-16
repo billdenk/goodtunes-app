@@ -1,18 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, X, User as UserIcon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Search, X, User as UserIcon, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 
 /**
- * Admin home · People (Phase 6a — first non-Albums entity in the new frame).
+ * Admin home · People (Phase 6a).
  *
  * Mirrors AdminAlbums: AdminFrame chrome, search affordance, grid view.
  * People don't have a release lifecycle so there are no tabs — just one
- * scrollable grid of avatar cards. Click → deep-link into the classic
- * admin's per-person editor (same staged-migration pattern Albums used:
- * list page first, per-person detail page later).
+ * scrollable grid of avatar cards. Click → /admin/people/:id.
+ *
+ * "New person" pops an inline sheet with two paths (Phase 6e):
+ *   1. Paste an Apple Music URL → scrape preview (name + photo + bio + a
+ *      cover-art row of releases) → confirm → POST /api/admin/people
+ *      then PUT /api/admin/people/:id/discography → navigate to the new
+ *      person's page.
+ *   2. "Add manually" → just a name field. The Person opens with empty
+ *      tabs and the admin fills in Photo / Streaming / Discography there.
  */
 interface PersonLite {
   id: string;
@@ -20,11 +28,32 @@ interface PersonLite {
   photoUrl: string | null;
   bio: string | null;
   labelId: string | null;
+  itunesArtistId: string | null;
 }
 
 interface LabelLite {
   id: string;
   name: string;
+}
+
+interface ScrapedAlbum {
+  collectionId: number;
+  name: string;
+  artworkUrl: string;
+  year: number | null;
+  trackCount: number | null;
+  type: "album" | "EP";
+  appleMusicUrl: string | null;
+}
+
+interface ScrapeResponse {
+  source: "apple" | "spotify" | "unknown";
+  name: string | null;
+  photoUrl: string | null;
+  bio: string | null;
+  itunesArtistId: string | null;
+  appleMusicUrl: string | null;
+  albums?: ScrapedAlbum[];
 }
 
 export function AdminPeople() {
@@ -33,6 +62,7 @@ export function AdminPeople() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -71,14 +101,6 @@ export function AdminPeople() {
 
   const openPerson = (id: string) => {
     navigate(`/admin/people/${id}`);
-  };
-
-  const openNewPerson = () => {
-    try {
-      localStorage.setItem("gt:admin:entity", "people");
-      localStorage.setItem("gt:admin:new", "person");
-    } catch {}
-    navigate("/admin");
   };
 
   if (authLoading) {
@@ -155,7 +177,7 @@ export function AdminPeople() {
           )}
           <button
             type="button"
-            onClick={openNewPerson}
+            onClick={() => setComposerOpen(true)}
             className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
             data-testid="button-new-person"
           >
@@ -188,6 +210,16 @@ export function AdminPeople() {
         </div>
       )}
 
+      {composerOpen && (
+        <NewPersonSheet
+          existingPeople={people}
+          onClose={() => setComposerOpen(false)}
+          onCreated={(id) => {
+            setComposerOpen(false);
+            navigate(`/admin/people/${id}`);
+          }}
+        />
+      )}
     </AdminFrame>
   );
 }
@@ -253,6 +285,472 @@ function EmptyState({ searching }: { searching: boolean }) {
           ? "Try a different name."
           : "Add an artist, performer, writer, or producer to start building the SuperCredits™ catalog."}
       </p>
+    </div>
+  );
+}
+
+/**
+ * NewPersonSheet — modal composer for adding a person.
+ *
+ * Two modes, switchable via a small tab strip:
+ *   "From Apple Music" (default) — paste a music.apple.com/artist URL,
+ *     press Preview → server scrape returns name/photo/bio + discography,
+ *     admin reviews, then Create → POST /api/admin/people followed by
+ *     PUT /api/admin/people/:id/discography. One round-trip for the
+ *     non-technical case: paste → confirm → done.
+ *   "Manual" — just a name field for cases where there's no Apple Music
+ *     page yet (session musician, indie writer). Creates the row and
+ *     drops the admin into the per-person editor.
+ *
+ * Either path ends with navigate(/admin/people/:id), so the admin is
+ * immediately in the right place to add photos, streaming links, etc.
+ */
+function NewPersonSheet({
+  existingPeople,
+  onClose,
+  onCreated,
+}: {
+  existingPeople: PersonLite[];
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<"apple" | "manual">("apple");
+  const [url, setUrl] = useState("");
+  const [manualName, setManualName] = useState("");
+  const [preview, setPreview] = useState<ScrapeResponse | null>(null);
+
+  // Duplicate guard. After a successful preview we check the catalog for a
+  // person already linked to that Apple itunesArtistId (the only reliable
+  // key — names from Apple can drift, e.g. "Beatles" vs "The Beatles").
+  // If we find one, we swap the Create button for "Open existing" so the
+  // admin can't accidentally seed two rows for the same artist.
+  const existingMatch = useMemo(() => {
+    if (!preview?.itunesArtistId) return null;
+    return (
+      existingPeople.find(
+        (p) => p.itunesArtistId === preview.itunesArtistId,
+      ) ?? null
+    );
+  }, [preview, existingPeople]);
+
+  // Close on Escape — keeps the modal feeling "real" without forcing the
+  // admin to mouse up to the X.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const previewMut = useMutation({
+    mutationFn: async (artistUrl: string) => {
+      const res = await apiRequest("POST", "/api/admin/people/scrape", {
+        url: artistUrl,
+      });
+      return (await res.json()) as ScrapeResponse;
+    },
+    onSuccess: (data) => {
+      if (!data.name) {
+        toast({
+          title: "Couldn't read that page",
+          description:
+            "We didn't find an artist name there. Double-check it's a music.apple.com/artist link.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setPreview(data);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't pull from Apple Music",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const createFromPreview = useMutation({
+    mutationFn: async (p: ScrapeResponse) => {
+      const created = await apiRequest("POST", "/api/admin/people", {
+        name: p.name,
+        photoUrl: p.photoUrl,
+        bio: p.bio,
+        appleMusicUrl: p.appleMusicUrl,
+        itunesArtistId: p.itunesArtistId,
+      });
+      const person = (await created.json()) as { id: string };
+      const albums = Array.isArray(p.albums) ? p.albums : [];
+      if (albums.length > 0) {
+        const items = albums.map((a, idx) => ({
+          collectionId: String(a.collectionId),
+          name: a.name,
+          artworkUrl: a.artworkUrl,
+          year: a.year,
+          trackCount: a.trackCount,
+          type: a.type,
+          appleMusicUrl: a.appleMusicUrl,
+          spotifyUrl: null,
+          position: idx,
+        }));
+        await apiRequest(
+          "PUT",
+          `/api/admin/people/${person.id}/discography`,
+          { items },
+        );
+      }
+      return { id: person.id, releaseCount: albums.length };
+    },
+    onSuccess: async ({ id, releaseCount }) => {
+      await qc.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({
+        title: `Added ${preview?.name ?? "person"}`,
+        description:
+          releaseCount > 0
+            ? `Pulled ${releaseCount} ${releaseCount === 1 ? "release" : "releases"} from Apple Music.`
+            : "No discography found on that page — you can add releases later.",
+      });
+      onCreated(id);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const createManual = useMutation({
+    mutationFn: async (name: string) => {
+      const created = await apiRequest("POST", "/api/admin/people", { name });
+      return (await created.json()) as { id: string };
+    },
+    onSuccess: async (person) => {
+      await qc.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: `Added ${manualName.trim()}` });
+      onCreated(person.id);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const busy =
+    previewMut.isPending || createFromPreview.isPending || createManual.isPending;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 sm:pt-24 px-4"
+      role="dialog"
+      aria-modal="true"
+      data-testid="sheet-new-person"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
+    >
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h2 className="text-slate-900 text-[15px] font-bold">
+            New person
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="text-slate-400 hover:text-slate-700 disabled:opacity-50"
+            aria-label="Close"
+            data-testid="button-close-new-person"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Mode tabs */}
+        <div className="flex items-center gap-4 px-5 pt-3 border-b border-slate-100">
+          <ModeTab
+            label="From Apple Music"
+            active={mode === "apple"}
+            onClick={() => {
+              setMode("apple");
+              setPreview(null);
+            }}
+            testId="tab-mode-apple"
+          />
+          <ModeTab
+            label="Manual"
+            active={mode === "manual"}
+            onClick={() => setMode("manual")}
+            testId="tab-mode-manual"
+          />
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          {mode === "apple" ? (
+            preview ? (
+              <PreviewBlock preview={preview} existingMatch={existingMatch} />
+            ) : (
+              <ApplePasteBlock
+                url={url}
+                setUrl={setUrl}
+                busy={previewMut.isPending}
+              />
+            )
+          ) : (
+            <ManualBlock name={manualName} setName={setManualName} />
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50">
+          {mode === "apple" && preview ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                disabled={busy}
+                className="px-3 py-1.5 rounded-md text-slate-600 text-[12.5px] font-semibold hover:bg-white disabled:opacity-50"
+                data-testid="button-preview-back"
+              >
+                Back
+              </button>
+              {existingMatch ? (
+                <button
+                  type="button"
+                  onClick={() => onCreated(existingMatch.id)}
+                  className="px-4 py-1.5 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+                  data-testid="button-open-existing-person"
+                >
+                  Open existing
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => createFromPreview.mutate(preview)}
+                  disabled={busy}
+                  className="px-4 py-1.5 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+                  data-testid="button-confirm-new-person"
+                >
+                  {createFromPreview.isPending && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  Add {preview.name}
+                </button>
+              )}
+            </>
+          ) : mode === "apple" ? (
+            <button
+              type="button"
+              onClick={() => previewMut.mutate(url.trim())}
+              disabled={busy || !url.trim()}
+              className="px-4 py-1.5 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+              data-testid="button-preview-apple"
+            >
+              {previewMut.isPending && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
+              Preview
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => createManual.mutate(manualName.trim())}
+              disabled={busy || !manualName.trim()}
+              className="px-4 py-1.5 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+              data-testid="button-create-manual"
+            >
+              {createManual.isPending && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
+              Create
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModeTab({
+  label,
+  active,
+  onClick,
+  testId,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "pb-2.5 text-[12.5px] font-semibold border-b-2 -mb-px " +
+        (active
+          ? "border-[#319ED8] text-slate-900"
+          : "border-transparent text-slate-500 hover:text-slate-700")
+      }
+      data-testid={testId}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ApplePasteBlock({
+  url,
+  setUrl,
+  busy,
+}: {
+  url: string;
+  setUrl: (v: string) => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-slate-700 text-[12.5px] font-semibold mb-1">
+          Apple Music artist URL
+        </label>
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          disabled={busy}
+          placeholder="https://music.apple.com/us/artist/…"
+          className="w-full px-3 py-2 rounded-md border border-slate-300 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8] disabled:opacity-50"
+          data-testid="input-apple-url"
+          autoFocus
+        />
+        <p className="text-slate-400 text-[11.5px] mt-1.5 leading-relaxed">
+          Open the artist on Apple Music, copy the page URL, paste it here.
+          We pull their name, photo, bio, and full release list.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PreviewBlock({
+  preview,
+  existingMatch,
+}: {
+  preview: ScrapeResponse;
+  existingMatch: PersonLite | null;
+}) {
+  const releaseCount = preview.albums?.length ?? 0;
+  return (
+    <div className="space-y-4" data-testid="preview-new-person">
+      {existingMatch && (
+        <div
+          className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-amber-900 text-[12px] leading-relaxed"
+          data-testid="warning-duplicate-person"
+        >
+          <span className="font-semibold">Already in your catalog</span> as{" "}
+          <span className="font-semibold">{existingMatch.name}</span>. Click
+          “Open existing” below to jump there instead of creating a duplicate.
+        </div>
+      )}
+      <div className="flex items-start gap-3">
+        <div className="w-16 h-16 rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200 flex-shrink-0">
+          {preview.photoUrl ? (
+            <img
+              src={preview.photoUrl}
+              alt={preview.name ?? ""}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white text-xl font-bold">
+              {preview.name ? preview.name.charAt(0).toUpperCase() : "?"}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-slate-900 text-[15px] font-bold truncate">
+            {preview.name}
+          </div>
+          {preview.bio && (
+            <p className="text-slate-500 text-[12px] mt-1 leading-snug line-clamp-4">
+              {preview.bio}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-slate-100 pt-3">
+        <div className="text-slate-700 text-[12px] font-semibold mb-2">
+          {releaseCount === 0
+            ? "No releases found"
+            : `${releaseCount} ${releaseCount === 1 ? "release" : "releases"} from Apple Music`}
+        </div>
+        {releaseCount > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {preview.albums!.slice(0, 14).map((a) => (
+              <div
+                key={a.collectionId}
+                className="flex-shrink-0 w-16"
+                title={a.name}
+              >
+                <div className="w-16 h-16 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200">
+                  <img
+                    src={a.artworkUrl}
+                    alt={a.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="text-slate-500 text-[10.5px] mt-1 truncate">
+                  {a.year ?? a.type}
+                </div>
+              </div>
+            ))}
+            {releaseCount > 14 && (
+              <div className="flex-shrink-0 w-16 h-16 rounded-md bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center text-slate-400 text-[11px] font-semibold">
+                +{releaseCount - 14}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ManualBlock({
+  name,
+  setName,
+}: {
+  name: string;
+  setName: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-slate-700 text-[12.5px] font-semibold mb-1">
+          Name
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Phoebe Bridgers"
+          className="w-full px-3 py-2 rounded-md border border-slate-300 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8]"
+          data-testid="input-manual-name"
+          autoFocus
+        />
+        <p className="text-slate-400 text-[11.5px] mt-1.5 leading-relaxed">
+          Use this for performers, writers, or producers who don't have an
+          Apple Music page (yet). You can add photo, bio, and streaming
+          links on the next screen.
+        </p>
+      </div>
     </div>
   );
 }
