@@ -20,6 +20,7 @@ import { AdminAlbums } from "@/pages/AdminAlbums";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { AdminPeople } from "@/pages/AdminPeople";
 import { AdminPerson } from "@/pages/AdminPerson";
+import { AdminInstruments } from "@/pages/AdminInstruments";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -107,6 +108,9 @@ function Router() {
         </Route>
         <Route path="/admin/people">
           <ProtectedRoute component={AdminPeople} />
+        </Route>
+        <Route path="/admin/instruments">
+          <ProtectedRoute component={AdminInstruments} />
         </Route>
         <Route path="/admin">
           <ProtectedRoute component={Admin} />
