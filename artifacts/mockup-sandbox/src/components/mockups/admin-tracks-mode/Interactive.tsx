@@ -268,10 +268,8 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
           aria-label={locked ? "Unlock snippet — allow sliding" : "Lock snippet in"}
           title={locked ? "Unlock to slide again" : "Lock in when done"}
           className={[
-            "w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0 transition-colors",
-            locked
-              ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-              : "bg-amber-50 text-amber-600 hover:bg-amber-100",
+            "w-8 h-8 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors hover:bg-slate-100",
+            locked ? "text-emerald-600" : "text-amber-600",
           ].join(" ")}
         >
           {locked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
