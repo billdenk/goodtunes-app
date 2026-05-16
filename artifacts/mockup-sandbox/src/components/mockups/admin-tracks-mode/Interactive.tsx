@@ -225,13 +225,19 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
               ))}
             </div>
 
-            {/* Floating start-time chip — Apple Voice Memo pattern. Only while unlocked. */}
+            {/* Floating start-time chip — editable. Click to fine-tune by typing,
+                or just slide the window on the waveform. Apple-Photos-crop pattern. */}
             {!locked && (
               <div
-                className="absolute -top-1 -translate-y-full px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums shadow-md pointer-events-none after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800"
+                className="absolute -top-1 -translate-y-full after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800"
                 style={{ left: `calc(${left}% + 4px)` }}
               >
-                1:05
+                <input
+                  defaultValue="1:05"
+                  aria-label="Snippet start time — type to fine-tune"
+                  title="Type to fine-tune (mm:ss)"
+                  className="w-[42px] px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums text-center shadow-md focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 cursor-text"
+                />
               </div>
             )}
 
@@ -272,23 +278,6 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      {/* Start input — only while unlocked. End is auto = Start + 30s, so hidden. */}
-      {!locked && (
-        <div className="flex items-end gap-2">
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
-              Start
-            </label>
-            <input
-              defaultValue="1:05"
-              className="w-20 px-2 py-1 rounded-md border border-slate-200 text-[12px] tabular-nums focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
-            />
-          </div>
-          <p className="text-[11px] text-slate-400 pb-2">
-            Type a fine adjustment, or slide the window on the waveform.
-          </p>
-        </div>
-      )}
     </DetailWrap>
   );
 }
