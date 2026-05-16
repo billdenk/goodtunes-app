@@ -1213,6 +1213,31 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
   const [urlOpen, setUrlOpen] = useState(false);
   const [urlValue, setUrlValue] = useState("");
   const [urlBusy, setUrlBusy] = useState(false);
+  const [urlErr, setUrlErr] = useState<string | null>(null);
+
+  // Server returns "<status>: {json}" via apiRequest's throw. Pull the
+  // human message out and rewrite known cases into something we'd actually
+  // say to a person.
+  function friendlyImportError(raw: string): string {
+    let msg = raw || "";
+    const jsonMatch = msg.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed?.message) msg = String(parsed.message);
+      } catch {}
+    }
+    if (/larger than the 500MB/i.test(msg) || /exceeded 500MB/i.test(msg)) {
+      return "Sorry, this video is larger than the 500MB import limit.";
+    }
+    if (/unsupported|mime|content[- ]type/i.test(msg)) {
+      return "That link doesn't look like an MP4, MOV, or WebM video.";
+    }
+    if (/fetch|network|timed? ?out|enotfound|econnrefused/i.test(msg)) {
+      return "We couldn't reach that link. Double-check the URL and try again.";
+    }
+    return msg || "Import failed.";
+  }
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleAddVideo(file: File) {
@@ -1241,10 +1266,15 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
   // Server-side ingest from a remote URL (Dropbox, S3, plain HTTPS). The
   // server downloads + re-uploads to Object Storage so the admin doesn't
   // have to round-trip a multi-hundred-MB file through their laptop.
+  function closeImportDialog() {
+    setUrlOpen(false);
+    setUrlErr(null);
+  }
+
   async function handleImportFromUrl() {
     const url = urlValue.trim();
     if (!url) return;
-    setErr(null);
+    setUrlErr(null);
     setUrlBusy(true);
     try {
       const res = await apiRequest("POST", "/api/admin/upload-video/from-url", { url });
@@ -1258,7 +1288,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
       setUrlValue("");
     } catch (e: any) {
       console.error("[AlbumVideosSection] handleImportFromUrl failed", e);
-      setErr(e?.message || "Import failed");
+      setUrlErr(friendlyImportError(e?.message || ""));
     } finally {
       setUrlBusy(false);
     }
@@ -1319,7 +1349,14 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
         />
       </div>
 
-      <Dialog open={urlOpen} onOpenChange={(o) => !urlBusy && setUrlOpen(o)}>
+      <Dialog
+        open={urlOpen}
+        onOpenChange={(o) => {
+          if (urlBusy) return;
+          if (!o) closeImportDialog();
+          else setUrlOpen(true);
+        }}
+      >
         <DialogContent
           className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-6 !gap-3 max-w-md [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
           data-testid="dialog-import-video-url"
@@ -1337,17 +1374,29 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
           <input
             type="url"
             value={urlValue}
-            onChange={(e) => setUrlValue(e.target.value)}
+            onChange={(e) => {
+              setUrlValue(e.target.value);
+              if (urlErr) setUrlErr(null);
+            }}
             placeholder="https://www.dropbox.com/scl/fi/… or https://…/video.mp4"
             className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8] disabled:opacity-50"
             autoFocus
             disabled={urlBusy}
             data-testid="input-import-video-url"
           />
+          {urlErr && (
+            <div
+              role="alert"
+              className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-[13px] leading-snug"
+              data-testid="banner-import-video-error"
+            >
+              {urlErr}
+            </div>
+          )}
           <DialogFooter className="gap-2 mt-1">
             <button
               type="button"
-              onClick={() => setUrlOpen(false)}
+              onClick={closeImportDialog}
               disabled={urlBusy}
               className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 text-[13px] font-medium disabled:opacity-50"
               data-testid="button-cancel-import-video"
