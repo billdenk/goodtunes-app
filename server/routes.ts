@@ -1493,6 +1493,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = insertAlbumVideoSchema.safeParse({
       albumId,
       title: req.body?.title ?? "Untitled video",
+      description: req.body?.description ?? null,
       videoUrl: req.body?.videoUrl,
       posterUrl: req.body?.posterUrl ?? null,
       position: typeof req.body?.position === "number" ? req.body.position : existing.length,

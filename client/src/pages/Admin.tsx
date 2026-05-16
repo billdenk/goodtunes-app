@@ -1194,10 +1194,40 @@ interface AdminAlbumVideo {
   id: string;
   albumId: string;
   title: string;
+  description: string | null;
   videoUrl: string;
   posterUrl: string | null;
   position: number;
 }
+
+// Server returns "<status>: {json}" via apiRequest's throw. Pull the
+// human message out and rewrite known cases into something we'd actually
+// say to a person. Shared between upload + import flows.
+function friendlyVideoError(raw: string): string {
+  let msg = raw || "";
+  const jsonMatch = msg.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed?.message) msg = String(parsed.message);
+    } catch {}
+  }
+  if (/larger than the 500MB/i.test(msg) || /exceeded 500MB/i.test(msg)) {
+    return "Sorry, this video is larger than the 500MB import limit.";
+  }
+  if (/unsupported|mime|content[- ]type/i.test(msg)) {
+    return "That link doesn't look like an MP4, MOV, or WebM video.";
+  }
+  if (/fetch|network|timed? ?out|enotfound|econnrefused/i.test(msg)) {
+    return "We couldn't reach that link. Double-check the URL and try again.";
+  }
+  return msg || "Upload failed.";
+}
+
+type VideoSheetMode =
+  | { kind: "closed" }
+  | { kind: "new" }
+  | { kind: "edit"; video: AdminAlbumVideo };
 
 function AlbumVideosSection({ albumId }: { albumId: string }) {
   const queryClient = useQueryClient();
@@ -1205,112 +1235,15 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
     queryKey: ["/api/albums", albumId, "videos"],
   });
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "videos"] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/albums", albumId, "videos"],
+    });
 
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [urlOpen, setUrlOpen] = useState(false);
-  const [urlValue, setUrlValue] = useState("");
-  const [urlBusy, setUrlBusy] = useState(false);
-  const [urlErr, setUrlErr] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<VideoSheetMode>({ kind: "closed" });
+  const [deleteConfirm, setDeleteConfirm] = useState<AdminAlbumVideo | null>(
+    null,
+  );
 
-  // Server returns "<status>: {json}" via apiRequest's throw. Pull the
-  // human message out and rewrite known cases into something we'd actually
-  // say to a person.
-  function friendlyImportError(raw: string): string {
-    let msg = raw || "";
-    const jsonMatch = msg.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed?.message) msg = String(parsed.message);
-      } catch {}
-    }
-    if (/larger than the 500MB/i.test(msg) || /exceeded 500MB/i.test(msg)) {
-      return "Sorry, this video is larger than the 500MB import limit.";
-    }
-    if (/unsupported|mime|content[- ]type/i.test(msg)) {
-      return "That link doesn't look like an MP4, MOV, or WebM video.";
-    }
-    if (/fetch|network|timed? ?out|enotfound|econnrefused/i.test(msg)) {
-      return "We couldn't reach that link. Double-check the URL and try again.";
-    }
-    return msg || "Import failed.";
-  }
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  async function handleAddVideo(file: File) {
-    setErr(null);
-    setBusy(true);
-    setProgress(0);
-    try {
-      const url = await uploadVideoFile(file, (f) =>
-        setProgress(Math.min(0.99, f)),
-      );
-      await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
-        videoUrl: url,
-        title: file.name.replace(/\.[^.]+$/, "") || "Untitled video",
-      });
-      invalidate();
-    } catch (e: any) {
-      console.error("[AlbumVideosSection] handleAddVideo failed", e);
-      setErr(e?.message || "Upload failed");
-    } finally {
-      setBusy(false);
-      setProgress(null);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  // Server-side ingest from a remote URL (Dropbox, S3, plain HTTPS). The
-  // server downloads + re-uploads to Object Storage so the admin doesn't
-  // have to round-trip a multi-hundred-MB file through their laptop.
-  function closeImportDialog() {
-    setUrlOpen(false);
-    setUrlErr(null);
-    setUrlValue("");
-  }
-  function openImportDialog() {
-    setUrlErr(null);
-    setUrlValue("");
-    setUrlOpen(true);
-  }
-
-  async function handleImportFromUrl() {
-    const url = urlValue.trim();
-    if (!url) return;
-    // Dismiss immediately and surface progress as a spinner row in the
-    // videos list. If anything fails, reopen the dialog with the URL +
-    // friendly error preserved so the admin can try again.
-    setUrlOpen(false);
-    setUrlErr(null);
-    setUrlBusy(true);
-    try {
-      const res = await apiRequest("POST", "/api/admin/upload-video/from-url", { url });
-      const { url: storedUrl, suggestedTitle } = await res.json();
-      await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
-        videoUrl: storedUrl,
-        title: suggestedTitle || "Imported video",
-      });
-      invalidate();
-      setUrlValue("");
-    } catch (e: any) {
-      console.error("[AlbumVideosSection] handleImportFromUrl failed", e);
-      setUrlErr(friendlyImportError(e?.message || ""));
-      setUrlOpen(true);
-    } finally {
-      setUrlBusy(false);
-    }
-  }
-
-  const updateVideo = useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<AdminAlbumVideo> }) => {
-      const res = await apiRequest("PUT", `/api/admin/album-videos/${id}`, patch);
-      return res.json();
-    },
-    onSuccess: invalidate,
-  });
   const deleteVideo = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/album-videos/${id}`);
@@ -1320,286 +1253,111 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
-          Videos
-        </h3>
+      {/* Header — Apple-clean: title + item count, "Add video" right-aligned
+          as an unstyled link-button. No box, no surrounding chrome. */}
+      <div className="mb-3 flex items-baseline justify-between">
+        <div className="flex items-baseline gap-3">
+          <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+            Videos
+          </h3>
+          {videos.length > 0 && (
+            <span className="text-[12px] text-slate-400">
+              {videos.length} {videos.length === 1 ? "item" : "items"}
+            </span>
+          )}
+        </div>
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-          className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
+          onClick={() => setSheet({ kind: "new" })}
+          className="flex items-center gap-1.5 text-[12px] font-medium text-[#319ED8] hover:text-[#2a8ac0]"
           data-testid="button-add-album-video"
         >
-          {busy
-            ? progress !== null
-              ? `Uploading… ${Math.round(progress * 100)}%`
-              : "Uploading…"
-            : "+ Upload video"}
+          Add video
+          <Plus className="w-3.5 h-3.5" />
         </button>
-        <span className="text-slate-300 text-[12px]">·</span>
+      </div>
+
+      {videos.length === 0 ? (
         <button
           type="button"
-          onClick={openImportDialog}
-          disabled={busy || urlBusy}
-          className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
-          data-testid="button-import-album-video-url"
+          onClick={() => setSheet({ kind: "new" })}
+          className="w-full aspect-[16/9] max-h-64 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors flex flex-col items-center justify-center group"
+          data-testid="button-empty-add-video"
         >
-          Import from URL
+          <div className="w-12 h-12 rounded-full bg-white border border-slate-200 group-hover:border-[#319ED8]/30 flex items-center justify-center mb-3 transition-colors shadow-sm">
+            <Plus className="w-5 h-5 text-slate-400 group-hover:text-[#319ED8] transition-colors" />
+          </div>
+          <p className="text-sm font-medium text-slate-700">
+            Click to add your first video
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Upload an MP4, MOV, or WebM — or paste a link
+          </p>
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="video/mp4,video/quicktime,video/webm"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleAddVideo(f);
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-6">
+          {videos.map((v) => (
+            <AlbumVideoTile
+              key={v.id}
+              video={v}
+              onEdit={() => setSheet({ kind: "edit", video: v })}
+              onDelete={() => setDeleteConfirm(v)}
+            />
+          ))}
+        </div>
+      )}
+
+      {sheet.kind !== "closed" && (
+        <AlbumVideoSheet
+          mode={sheet}
+          albumId={albumId}
+          onClose={() => setSheet({ kind: "closed" })}
+          onSaved={() => {
+            invalidate();
+            setSheet({ kind: "closed" });
+          }}
+          onRequestDelete={(v) => {
+            setSheet({ kind: "closed" });
+            setDeleteConfirm(v);
           }}
         />
-      </div>
+      )}
 
-      <Dialog
-        open={urlOpen}
+      <AlertDialog
+        open={!!deleteConfirm}
         onOpenChange={(o) => {
-          if (urlBusy) return;
-          if (!o) closeImportDialog();
-          else setUrlOpen(true);
+          if (!o) setDeleteConfirm(null);
         }}
       >
-        <DialogContent
-          className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-6 !gap-3 max-w-md [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
-          data-testid="dialog-import-video-url"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-slate-900 text-[17px] font-semibold">
-              Import video from URL
-            </DialogTitle>
-            <DialogDescription className="text-slate-500 text-[14px] leading-relaxed">
-              Paste a direct video link or a Dropbox share link. We'll pull
-              the file straight into storage — no need to download it first.
-              MP4, MOV, or WebM, up to 500MB.
-            </DialogDescription>
-          </DialogHeader>
-          <input
-            type="url"
-            value={urlValue}
-            onChange={(e) => {
-              setUrlValue(e.target.value);
-              if (urlErr) setUrlErr(null);
-            }}
-            placeholder="https://www.dropbox.com/scl/fi/… or https://…/video.mp4"
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8] disabled:opacity-50"
-            autoFocus
-            disabled={urlBusy}
-            data-testid="input-import-video-url"
-          />
-          {urlErr && (
-            <div
-              role="alert"
-              className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-[13px] leading-snug"
-              data-testid="banner-import-video-error"
-            >
-              {urlErr}
-            </div>
-          )}
-          <DialogFooter className="gap-2 mt-1">
-            <button
-              type="button"
-              onClick={closeImportDialog}
-              disabled={urlBusy}
-              className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 text-[13px] font-medium disabled:opacity-50"
-              data-testid="button-cancel-import-video"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleImportFromUrl}
-              disabled={urlBusy || !urlValue.trim()}
-              className="rounded-lg bg-[#319ED8] hover:bg-[#2a8ac0] text-white px-4 py-2 text-[13px] font-medium disabled:opacity-50"
-              data-testid="button-confirm-import-video"
-            >
-              {urlBusy ? "Importing…" : "Import"}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {err && <p className="text-[12px] text-red-600 mb-2">{err}</p>}
-      <div className="rounded-lg border border-slate-200 overflow-hidden">
-        {urlBusy && (
-          <div
-            className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 bg-slate-50/60"
-            data-testid="row-import-video-pending"
-          >
-            <div className="w-28 h-16 rounded bg-slate-100 flex items-center justify-center flex-shrink-0">
-              <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] text-slate-700 font-medium">Importing video…</div>
-              <div className="text-[12px] text-slate-400 mt-0.5">
-                Pulling the file into storage. This can take a minute for large videos.
-              </div>
-            </div>
-          </div>
-        )}
-        {videos.length === 0 && !urlBusy && (
-          <div className="px-4 py-6 text-center text-slate-400 text-sm">
-            No videos yet. Upload an MP4 to add a "Videos" section to the album.
-          </div>
-        )}
-        {videos.map((v) => (
-          <AlbumVideoRow
-            key={v.id}
-            video={v}
-            onTitleChange={(title) => updateVideo.mutate({ id: v.id, patch: { title } })}
-            onPosterChange={(posterUrl) => updateVideo.mutate({ id: v.id, patch: { posterUrl: posterUrl as any } })}
-            onPosterUploadError={(msg) => setErr(msg)}
-            onDelete={() => deleteVideo.mutate(v.id)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Single video row in the admin video manager. Pulled out so the
-// delete-confirmation AlertDialog can own its own open/closed state without
-// every row in the table sharing one boolean. Layout: 16:9 thumbnail on the
-// left, title input + compact poster controls in the middle, dedicated
-// trashcan on the far right (separated from the poster controls so it can't
-// be mistaken for "delete the poster").
-function AlbumVideoRow({
-  video,
-  onTitleChange,
-  onPosterChange,
-  onPosterUploadError,
-  onDelete,
-}: {
-  video: AdminAlbumVideo;
-  onTitleChange: (title: string) => void;
-  onPosterChange: (posterUrl: string | null) => void;
-  onPosterUploadError: (msg: string) => void;
-  onDelete: () => void;
-}) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  const pickPoster = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/png,image/jpeg,image/webp";
-    input.onchange = async () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      try {
-        const url = await uploadImageFile(f);
-        onPosterChange(url);
-      } catch (e: any) {
-        onPosterUploadError(e?.message || "Poster upload failed");
-      }
-    };
-    input.click();
-  };
-
-  return (
-    <div
-      className="flex items-start gap-3 p-3 border-b border-slate-100 last:border-b-0"
-      data-testid={`row-album-video-${video.id}`}
-    >
-      <a
-        href={video.videoUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="relative w-28 h-16 rounded overflow-hidden flex-shrink-0 group bg-slate-900"
-        aria-label="Preview video in a new tab"
-        data-testid={`thumb-album-video-${video.id}`}
-      >
-        {video.posterUrl ? (
-          <img
-            src={video.posterUrl}
-            alt=""
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
-        )}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
-          <div className="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-            <Play className="w-3.5 h-3.5 text-slate-900 ml-0.5" fill="currentColor" />
-          </div>
-        </div>
-      </a>
-      <div className="flex-1 min-w-0 space-y-2">
-        <input
-          type="text"
-          defaultValue={video.title}
-          placeholder="Video title"
-          onBlur={(e) => {
-            const val = e.target.value.trim();
-            if (val && val !== video.title) onTitleChange(val);
-          }}
-          className={inputCls}
-          data-testid={`input-album-video-title-${video.id}`}
-        />
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={pickPoster}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-            data-testid={`button-album-video-poster-${video.id}`}
-          >
-            <ImagePlus className="w-3.5 h-3.5" />
-            {video.posterUrl ? "Change poster" : "Add poster"}
-          </button>
-          {video.posterUrl && (
-            <button
-              type="button"
-              onClick={() => onPosterChange(null)}
-              className="px-2 py-1.5 text-[12px] text-slate-500 hover:text-slate-700"
-              data-testid={`button-remove-poster-${video.id}`}
-            >
-              Remove
-            </button>
-          )}
-          <span className="text-[11px] text-slate-400">
-            16:9 still · 1280×720 (or 1920×1080 retina) · JPG/PNG/WebP
-          </span>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={() => setConfirmOpen(true)}
-        className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50"
-        aria-label="Delete video"
-        data-testid={`button-delete-album-video-${video.id}`}
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent
           className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-6 !gap-3 max-w-md"
-          data-testid={`dialog-delete-video-${video.id}`}
+          data-testid="dialog-delete-video"
         >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-slate-900 text-[17px] font-semibold">
               Delete this video?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-slate-500 text-[14px] leading-relaxed">
-              {video.title ? `"${video.title}" ` : "This video "}
+              {deleteConfirm?.title
+                ? `"${deleteConfirm.title}" `
+                : "This video "}
               will be removed from the album. This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 mt-2">
             <AlertDialogCancel
               className="mt-0 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 text-[13px] font-medium shadow-none"
-              data-testid={`button-cancel-delete-video-${video.id}`}
+              data-testid="button-cancel-delete-video"
             >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={onDelete}
+              onClick={() => {
+                if (deleteConfirm) deleteVideo.mutate(deleteConfirm.id);
+                setDeleteConfirm(null);
+              }}
               className="rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-[13px] font-medium shadow-none"
-              data-testid={`button-confirm-delete-video-${video.id}`}
+              data-testid="button-confirm-delete-video"
             >
               Delete
             </AlertDialogAction>
@@ -1607,6 +1365,609 @@ function AlbumVideoRow({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// A single video card in the gallery grid. Hover (or keyboard focus on the
+// tile container) reveals the Edit / Delete buttons in the top-right; the
+// title below also surfaces a small pencil on hover. Clicking either the
+// thumbnail's edit button or the title opens the edit sheet.
+function AlbumVideoTile({
+  video,
+  onEdit,
+  onDelete,
+}: {
+  video: AdminAlbumVideo;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-2.5 group/tile focus-within:[&_[data-hover-controls]]:opacity-100"
+      data-testid={`tile-album-video-${video.id}`}
+    >
+      <div className="relative aspect-[16/9] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+        {video.posterUrl ? (
+          <img
+            src={video.posterUrl}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-100 flex items-center justify-center">
+            <Play className="w-7 h-7 text-slate-300 ml-0.5" strokeWidth={1.5} />
+          </div>
+        )}
+
+        {/* Decorative play overlay on hover. */}
+        <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 group-hover/tile:opacity-100 transition-opacity pointer-events-none">
+          <div className="w-11 h-11 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm">
+            <Play
+              className="w-4 h-4 text-slate-900 ml-0.5"
+              fill="currentColor"
+            />
+          </div>
+        </div>
+
+        {/* Hover-revealed controls. focus-within on the tile container also
+            reveals these so keyboard users can see + reach them. */}
+        <div
+          data-hover-controls
+          className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-0 group-hover/tile:opacity-100 transition-opacity [@media(hover:none)]:opacity-100"
+        >
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${video.title}`}
+            title="Edit video"
+            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-[#319ED8] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+            data-testid={`button-edit-album-video-${video.id}`}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={`Delete ${video.title}`}
+            title="Delete video"
+            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-red-600 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+            data-testid={`button-delete-album-video-${video.id}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Title — primary keyboard target for opening the editor. */}
+      <button
+        type="button"
+        onClick={onEdit}
+        className="group/title flex items-start justify-between gap-3 text-left px-0.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+        data-testid={`button-title-album-video-${video.id}`}
+      >
+        <span className="text-sm font-medium line-clamp-2 text-slate-900 group-hover/title:text-[#319ED8] transition-colors">
+          {video.title}
+        </span>
+        <Pencil className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover/title:opacity-100 shrink-0 mt-0.5" />
+      </button>
+    </div>
+  );
+}
+
+// Vimeo-style add/edit sheet. In "new" mode the admin picks a source
+// (file upload OR remote URL), gives the video a title + optional
+// description, optionally uploads a thumbnail, and submits. In "edit"
+// mode the existing video is shown read-only as a preview and the same
+// metadata fields can be tweaked. Submission performs the upload(s)
+// in-place with a busy state on the primary button so the admin sees
+// progress without the sheet collapsing.
+function AlbumVideoSheet({
+  mode,
+  albumId,
+  onClose,
+  onSaved,
+  onRequestDelete,
+}: {
+  mode: { kind: "new" } | { kind: "edit"; video: AdminAlbumVideo };
+  albumId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  onRequestDelete: (v: AdminAlbumVideo) => void;
+}) {
+  const isEdit = mode.kind === "edit";
+  const existing = isEdit ? mode.video : null;
+
+  // Metadata fields
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [posterUrl, setPosterUrl] = useState<string | null>(
+    existing?.posterUrl ?? null,
+  );
+
+  // Source selection (new mode only)
+  const [source, setSource] = useState<"upload" | "url">("upload");
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [pickedFilePreview, setPickedFilePreview] = useState<string | null>(
+    null,
+  );
+  const [importUrl, setImportUrl] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+
+  // Submit state
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const posterInputRef = useRef<HTMLInputElement>(null);
+
+  // Tear down the object URL we created for the picked-file preview so
+  // we don't leak blob: handles when the admin reopens / re-picks.
+  useEffect(() => {
+    return () => {
+      if (pickedFilePreview) URL.revokeObjectURL(pickedFilePreview);
+    };
+  }, [pickedFilePreview]);
+
+  function handlePickFile(file: File) {
+    if (pickedFilePreview) URL.revokeObjectURL(pickedFilePreview);
+    setPickedFile(file);
+    setPickedFilePreview(URL.createObjectURL(file));
+    if (!title) setTitle(file.name.replace(/\.[^.]+$/, "") || "Untitled video");
+  }
+
+  async function handlePickPoster(file: File) {
+    try {
+      setErr(null);
+      const url = await uploadImageFile(file);
+      setPosterUrl(url);
+    } catch (e: any) {
+      setErr(e?.message || "Poster upload failed");
+    }
+  }
+
+  // For URL imports we can fall back to the server's `suggestedTitle`,
+  // so an empty title field shouldn't block submit — matches the old
+  // import-from-URL behavior.
+  const canSubmit = isEdit
+    ? title.trim().length > 0
+    : (source === "upload" && !!pickedFile && title.trim().length > 0) ||
+      (source === "url" && importUrl.trim().length > 0);
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setBusy(true);
+    setErr(null);
+    setProgress(null);
+    try {
+      if (isEdit && existing) {
+        await apiRequest("PUT", `/api/admin/album-videos/${existing.id}`, {
+          title: title.trim(),
+          description: description.trim() || null,
+          posterUrl,
+        });
+      } else {
+        let videoUrl = "";
+        if (source === "upload" && pickedFile) {
+          setProgress(0);
+          videoUrl = await uploadVideoFile(pickedFile, (f) =>
+            setProgress(Math.min(0.99, f)),
+          );
+        } else if (source === "url") {
+          const res = await apiRequest(
+            "POST",
+            "/api/admin/upload-video/from-url",
+            { url: importUrl.trim() },
+          );
+          const data = await res.json();
+          videoUrl = data.url;
+          // Backfill an empty title with whatever the server inferred from
+          // the URL's filename — keeps parity with the old import flow.
+          if (!title.trim() && data.suggestedTitle) {
+            setTitle(data.suggestedTitle);
+          }
+        }
+        const finalTitle =
+          title.trim() ||
+          (source === "url" ? "Imported video" : "Untitled video");
+        await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
+          videoUrl,
+          title: finalTitle,
+          description: description.trim() || null,
+          posterUrl,
+        });
+      }
+      onSaved();
+    } catch (e: any) {
+      console.error("[AlbumVideoSheet] submit failed", e);
+      setErr(friendlyVideoError(e?.message || ""));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (busy) return;
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent
+        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        data-testid="dialog-album-video-sheet"
+      >
+        <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
+          <DialogTitle className="text-slate-900 text-[17px] font-semibold">
+            {isEdit ? "Edit video" : "Add a video"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEdit
+              ? "Update the video's title, description, or thumbnail."
+              : "Pick a video file or paste a link, then give it a title and an optional description."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Video preview / source picker */}
+          <div className="p-5 pb-4">
+            {isEdit ? (
+              <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
+                {existing?.posterUrl ? (
+                  <img
+                    src={existing.posterUrl}
+                    alt=""
+                    className="w-full h-full object-cover opacity-90"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Play
+                      className="w-10 h-10 text-slate-600"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                )}
+                <a
+                  href={existing?.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute inset-0 flex items-center justify-center"
+                  aria-label="Open video in a new tab"
+                  data-testid="link-preview-album-video"
+                >
+                  <div className="w-14 h-14 rounded-full bg-white/95 flex items-center justify-center shadow-lg">
+                    <Play
+                      className="w-5 h-5 text-slate-900 ml-1"
+                      fill="currentColor"
+                    />
+                  </div>
+                </a>
+              </div>
+            ) : pickedFile || pickedFilePreview ? (
+              <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
+                {pickedFilePreview ? (
+                  <video
+                    src={pickedFilePreview}
+                    className="w-full h-full object-contain bg-black"
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Play
+                      className="w-10 h-10 text-slate-600"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={busy}
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                  data-testid="button-replace-video-file"
+                >
+                  Replace video
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="inline-flex p-0.5 rounded-lg bg-slate-100 mb-3 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setSource("upload")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "upload"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-source-upload"
+                  >
+                    Upload file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSource("url")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "url"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-source-url"
+                  >
+                    Import from URL
+                  </button>
+                </div>
+
+                {source === "upload" ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragActive(false);
+                      if (e.dataTransfer.files?.[0])
+                        handlePickFile(e.dataTransfer.files[0]);
+                    }}
+                    className={
+                      "w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors " +
+                      (dragActive
+                        ? "border-[#319ED8] bg-blue-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                    }
+                    data-testid="button-video-dropzone"
+                  >
+                    {/* lucide cloud-upload, drawn inline so we don't have to
+                        add UploadCloud to the top-level imports just for one
+                        spot. Same stroke style as the rest of the surface. */}
+                    <svg
+                      className={
+                        "w-8 h-8 mb-3 transition-colors " +
+                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                      }
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                      <path d="M12 12v9" />
+                      <path d="m16 16-4-4-4 4" />
+                    </svg>
+                    <p className="text-sm font-medium text-slate-700">
+                      Drop a video here, or click to browse
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      MP4, MOV, or WebM · up to 500MB
+                    </p>
+                  </button>
+                ) : (
+                  <div className="w-full aspect-video rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6">
+                    <svg
+                      className="w-7 h-7 text-slate-400 mb-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+                      <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+                      <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                    <p className="text-sm font-medium text-slate-700 mb-3">
+                      Paste a video link
+                    </p>
+                    <input
+                      type="url"
+                      autoFocus
+                      placeholder="https://www.dropbox.com/scl/fi/… or https://…/video.mp4"
+                      value={importUrl}
+                      onChange={(e) => setImportUrl(e.target.value)}
+                      className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                      data-testid="input-video-import-url"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-2 text-center">
+                      We'll pull the file straight into storage — no need to
+                      download it first.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handlePickFile(e.target.files[0]);
+              }}
+            />
+          </div>
+
+          {/* Details */}
+          <div className="px-5 pb-2 space-y-4">
+            <div>
+              <label
+                htmlFor="album-video-title"
+                className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide"
+              >
+                Title
+              </label>
+              <input
+                id="album-video-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Live at the Troubadour — 2019"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                data-testid="input-album-video-title"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="album-video-description"
+                className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide"
+              >
+                Description
+                <span className="ml-2 normal-case tracking-normal text-slate-400 text-[11px] font-normal">
+                  optional
+                </span>
+              </label>
+              <textarea
+                id="album-video-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="A short note that shows under the video on the album page."
+                rows={2}
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30 resize-none"
+                data-testid="input-album-video-description"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
+                Thumbnail
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => posterInputRef.current?.click()}
+                  className="aspect-video w-28 rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+                  title="Upload custom thumbnail"
+                  data-testid="button-upload-album-video-poster"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+                {posterUrl ? (
+                  <div className="relative aspect-video w-28 rounded-lg overflow-hidden border-2 border-[#319ED8] flex-shrink-0">
+                    <img
+                      src={posterUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPosterUrl(null)}
+                      className="absolute top-1 right-1 p-0.5 rounded-full bg-white/90 hover:bg-white text-slate-600 hover:text-red-600 shadow-sm"
+                      title="Remove thumbnail"
+                      aria-label="Remove thumbnail"
+                      data-testid="button-remove-album-video-poster"
+                    >
+                      <XIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="aspect-video w-28 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center text-slate-300 flex-shrink-0">
+                    <ImagePlus className="w-5 h-5" strokeWidth={1.5} />
+                  </div>
+                )}
+                {/* Disabled "frames from video" placeholders — coming soon. */}
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="aspect-video w-28 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-50 opacity-40 flex items-center justify-center flex-shrink-0"
+                    title="Frames from video (coming soon)"
+                  >
+                    <Play
+                      className="w-4 h-4 text-slate-400 ml-0.5"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                Pick a frame from the video — coming soon. For now, upload a
+                still (16:9 · 1280×720 or 1920×1080 retina · JPG/PNG/WebP).
+              </p>
+              <input
+                ref={posterInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handlePickPoster(e.target.files[0]);
+                }}
+              />
+            </div>
+
+            {err && (
+              <div
+                role="alert"
+                className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-[13px] leading-snug"
+                data-testid="banner-album-video-error"
+              >
+                {err}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer — Delete on the left in edit mode, Cancel + primary on the right. */}
+        <DialogFooter className="px-5 py-3 border-t border-slate-100 flex items-center !justify-between bg-slate-50/50 flex-shrink-0 gap-2 sm:gap-2">
+          <div>
+            {isEdit && existing && (
+              <button
+                type="button"
+                onClick={() => onRequestDelete(existing)}
+                disabled={busy}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                data-testid="button-delete-from-sheet"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete video
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              data-testid="button-cancel-album-video-sheet"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit || busy}
+              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              data-testid="button-submit-album-video-sheet"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {progress !== null
+                    ? `Uploading ${Math.round(progress * 100)}%`
+                    : isEdit
+                      ? "Saving…"
+                      : "Adding…"}
+                </>
+              ) : (
+                <>{isEdit ? "Save" : "Add video"}</>
+              )}
+            </button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

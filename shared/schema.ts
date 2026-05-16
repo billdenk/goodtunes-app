@@ -102,6 +102,9 @@ export const albumVideos = pgTable("album_videos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
   title: text("title").notNull().default("Untitled video"),
+  // Short blurb shown under the video on the fan side. Optional —
+  // most album videos are self-explanatory from the title alone.
+  description: text("description"),
   // /objects/uploads/<uuid>.mp4 served by Object Storage. Uploaded MP4
   // (or whatever video MIME the admin picked — we don't restrict here,
   // the multer config does).
