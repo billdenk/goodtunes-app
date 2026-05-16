@@ -4,6 +4,21 @@ Long-form design notes and future-phase plans. Operational rules + active user p
 
 ---
 
+## Track publish requirements (locked)
+
+A track is "ready to publish" when **both** of the below are set. Lyrics + Credits remain optional (a track can ship without them and still play in the demo).
+
+1. **Master** — full-length audio file uploaded to object storage (existing flow).
+2. **30-second snippet** — start/end timestamps on the master defining a ≤30s preview clip. Used anywhere we currently auto-truncate audio (search results, library tiles, share-to-X previews) and for the future free-tier listening experience. Implementation plan:
+   - Add `snippetStartSec NUMERIC` + `snippetEndSec NUMERIC` to `tracks`. Validation: `0 ≤ start < end ≤ duration` and `end - start ≤ 30`.
+   - Admin UI: when a master is loaded, render a [`wavesurfer.js`](https://wavesurfer.xyz) waveform with two draggable handles. Right handle is clamped to ≤30s from the left. Play button auditions only the windowed slice. Save sets the two timestamps; no re-encoding of the master.
+   - Player: a `snippetUrl()` helper returns the master URL plus a `?range=` hint so the `<audio>` element seeks to `snippetStartSec` and stops at `snippetEndSec`. No new endpoint needed for v1; can move to backend-sliced delivery later if leak-prevention demands it.
+   - Tracks-tab dot meter ("N/2") is driven off these two flags.
+
+The Admin Tracks tab uses a dot meter on each row (●●  2/2) for the two required pieces; lyrics + credits live under an "Optional" divider in the expanded inline editor.
+
+---
+
 ## SuperCredits™ — Micro-Sponsorships (monetization layer)
 
 Outbound instrument links are affiliate links. Revenue split: **artist gets the lion's share, GoodTunes takes a small cut for the connection.** This makes credits a revenue stream for the musician, not just metadata — a real differentiator vs. Apple/Spotify.

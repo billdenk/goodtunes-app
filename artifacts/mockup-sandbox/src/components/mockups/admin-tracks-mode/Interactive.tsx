@@ -8,6 +8,7 @@ import {
   Pencil,
   ChevronDown,
   Upload,
+  Scissors,
   FileText,
   Users,
   Trash2,
@@ -16,16 +17,17 @@ import {
 type Mode = "edit" | "listen";
 
 const TRACKS = [
-  { n: 1, title: "Made for Us", master: true, lyrics: true, credits: true, duration: "3:30" },
-  { n: 2, title: "Storms", master: true, lyrics: true, credits: false, duration: "4:12" },
-  { n: 3, title: "Cold Night", master: true, lyrics: false, credits: true, duration: "2:58" },
-  { n: 4, title: "Hurts To Love You", master: true, lyrics: true, credits: true, duration: "3:47" },
-  { n: 5, title: "Lighthouse", master: false, lyrics: false, credits: false, duration: "—" },
+  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  credits: true,  duration: "3:30" },
+  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  credits: false, duration: "4:12" },
+  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: false, credits: true,  duration: "2:58" },
+  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  credits: true,  duration: "3:47" },
+  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, credits: false, duration: "—" },
 ];
 
 function DotMeter({ t }: { t: (typeof TRACKS)[number] }) {
-  const dots = [t.master, t.lyrics, t.credits];
-  const labels = ["Master", "Lyrics", "Credits"];
+  // Required to publish: master + 30-sec snippet
+  const dots = [t.master, t.snippet];
+  const labels = ["Master", "30-sec snippet"];
   const complete = dots.every(Boolean);
   return (
     <div
@@ -51,7 +53,7 @@ function DotMeter({ t }: { t: (typeof TRACKS)[number] }) {
           complete ? "text-slate-400" : "text-amber-600",
         ].join(" ")}
       >
-        {dots.filter(Boolean).length}/3
+        {dots.filter(Boolean).length}/2
       </span>
     </div>
   );
@@ -167,11 +169,8 @@ function EditRow({
         .filter(Boolean)
         .join(" ")}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full text-left px-5 py-3 flex items-center gap-4 cursor-pointer"
-        aria-expanded={expanded}
+      <div
+        className="w-full px-5 py-3 flex items-center gap-4"
       >
         <GripVertical className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 flex-shrink-0" />
         {/* Apple Music: # at rest, play on hover */}
@@ -189,54 +188,86 @@ function EditRow({
             <Play className="w-3 h-3 ml-0.5 fill-current" />
           </span>
         </div>
-        <div className="flex-1 min-w-0 text-slate-900 text-[13.5px] font-medium truncate">
-          {t.title}
-        </div>
-        <DotMeter t={t} />
-        <ChevronDown
-          className={[
-            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
-            expanded ? "rotate-180" : "",
-          ].join(" ")}
-        />
-      </button>
-
-      {expanded && (
-        <div className="px-5 pb-5 -mt-1 space-y-3">
-          {/* Title field */}
-          <div>
-            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
-              Title
-            </label>
+        {/* Title — plain text at rest, editable input when expanded */}
+        <div className="flex-1 min-w-0">
+          {expanded ? (
             <input
               defaultValue={t.title}
-              className="w-full px-3 py-1.5 rounded-md border border-slate-200 bg-white text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8]"
+              autoFocus
+              className="w-full px-2 -mx-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:bg-white focus:border-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20"
             />
+          ) : (
+            <button
+              type="button"
+              onClick={onToggle}
+              className="block w-full text-left text-slate-900 text-[13.5px] font-medium truncate"
+            >
+              {t.title}
+            </button>
+          )}
+        </div>
+        <DotMeter t={t} />
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex-shrink-0 w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+        >
+          <ChevronDown
+            className={[
+              "w-4 h-4 transition-transform",
+              expanded ? "rotate-180" : "",
+            ].join(" ")}
+          />
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="px-5 pb-5 -mt-1 space-y-4">
+          {/* Required */}
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              Required to publish
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <StatusBadge
+                ok={t.master}
+                icon={Upload}
+                okText="Master loaded"
+                missingText="No master"
+                cta={t.master ? "Replace" : "Upload"}
+              />
+              <StatusBadge
+                ok={t.snippet}
+                icon={Scissors}
+                okText="30-sec snippet set"
+                missingText="No 30-sec snippet"
+                cta={t.snippet ? "Edit" : "Set clip"}
+              />
+            </div>
           </div>
 
-          {/* Three status cards */}
-          <div className="grid grid-cols-3 gap-2">
-            <StatusBadge
-              ok={t.master}
-              icon={Upload}
-              okText="Master loaded"
-              missingText="No master"
-              cta={t.master ? "Replace" : "Upload"}
-            />
-            <StatusBadge
-              ok={t.lyrics}
-              icon={FileText}
-              okText="Lyrics set"
-              missingText="No lyrics"
-              cta={t.lyrics ? "Edit" : "Add"}
-            />
-            <StatusBadge
-              ok={t.credits}
-              icon={Users}
-              okText="Credits set"
-              missingText="No credits"
-              cta={t.credits ? "Edit" : "Add"}
-            />
+          {/* Optional */}
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              Optional
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <StatusBadge
+                ok={t.lyrics}
+                icon={FileText}
+                okText="Lyrics set"
+                missingText="No lyrics"
+                cta={t.lyrics ? "Edit" : "Add"}
+              />
+              <StatusBadge
+                ok={t.credits}
+                icon={Users}
+                okText="Credits set"
+                missingText="No credits"
+                cta={t.credits ? "Edit" : "Add"}
+              />
+            </div>
           </div>
 
           {/* Danger row */}
