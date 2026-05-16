@@ -1321,7 +1321,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
 
       <Dialog open={urlOpen} onOpenChange={(o) => !urlBusy && setUrlOpen(o)}>
         <DialogContent
-          className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 gap-3"
+          className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-6 !gap-3 max-w-md [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
           data-testid="dialog-import-video-url"
         >
           <DialogHeader>
@@ -1486,7 +1486,7 @@ function AlbumVideoRow({
       </button>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent
-          className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 gap-3"
+          className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-6 !gap-3 max-w-md"
           data-testid={`dialog-delete-video-${video.id}`}
         >
           <AlertDialogHeader>
