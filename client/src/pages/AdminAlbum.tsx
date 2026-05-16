@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,9 +12,14 @@ import {
   Tag as TagIcon,
   Disc,
   AlertCircle,
+  Upload,
+  Loader2,
+  ImageIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 /**
  * Admin · Single album. Wrapped in AdminFrame so it shares the top bar +
@@ -244,7 +249,8 @@ export function AdminAlbum() {
         {tab === "tracks" && (
           <TracksPanel album={album} onEdit={openInClassicAdmin} />
         )}
-        {(tab === "artwork" || tab === "masters" || tab === "bonus") && (
+        {tab === "artwork" && <ArtworkPanel album={album} />}
+        {(tab === "masters" || tab === "bonus") && (
           <PhasePlaceholder tab={tab} onEdit={openInClassicAdmin} />
         )}
       </div>
@@ -483,19 +489,208 @@ function TrackChip({
   );
 }
 
-/* ─── Phase placeholder (Artwork / Masters / Bonus) ────────────────── */
+/* ─── Artwork tab ──────────────────────────────────────────────────── */
+
+async function uploadImageFile(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error("Sign out and back in — your session token is missing.");
+  }
+  const res = await fetch("/api/admin/upload", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
+function ArtworkPanel({ album }: { album: AlbumFull }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const mut = useMutation({
+    mutationFn: async (file: File) => {
+      // Show an instant local preview so the swap feels immediate.
+      setPreviewUrl(URL.createObjectURL(file));
+      const url = await uploadImageFile(file);
+      await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
+        artwork: url,
+      });
+      return url;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      setPreviewUrl(null);
+      toast({ title: "Cover updated" });
+    },
+    onError: (e: any) => {
+      setPreviewUrl(null);
+      toast({
+        title: "Couldn't update the cover",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const acceptFile = (file: File | undefined | null) => {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) {
+      toast({
+        title: "That's not an image",
+        description: "Cover art needs to be a JPG, PNG, or WebP file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Keep covers under 15 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    mut.mutate(file);
+  };
+
+  const busy = mut.isPending;
+  const shownUrl = previewUrl || album.artwork;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* Current cover (big preview) */}
+      <section
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6"
+        data-testid="panel-artwork-current"
+      >
+        <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
+          Current cover
+        </div>
+        <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200">
+          {shownUrl ? (
+            <img
+              src={shownUrl}
+              alt={album.title}
+              className="w-full h-full object-cover"
+              data-testid="img-artwork-current"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-slate-400">
+              <ImageIcon className="w-10 h-10" />
+            </div>
+          )}
+          {busy && (
+            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 text-[#319ED8] animate-spin" />
+              <span className="text-[12px] text-slate-700 font-semibold">
+                Uploading…
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Replace */}
+      <section
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 flex flex-col"
+        data-testid="panel-artwork-upload"
+      >
+        <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
+          Replace cover
+        </div>
+        <button
+          type="button"
+          onClick={() => !busy && fileInputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!busy) setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            if (busy) return;
+            acceptFile(e.dataTransfer.files?.[0]);
+          }}
+          disabled={busy}
+          data-testid="dropzone-artwork"
+          className={[
+            "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
+            dragging
+              ? "border-[#319ED8] bg-[#319ED8]/5"
+              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+            busy && "opacity-60 cursor-not-allowed",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          <Upload
+            className={[
+              "w-7 h-7",
+              dragging ? "text-[#319ED8]" : "text-slate-400",
+            ].join(" ")}
+          />
+          <div className="text-slate-700 text-[13px] font-semibold">
+            {dragging
+              ? "Drop to upload"
+              : "Drag an image here, or click to pick"}
+          </div>
+          <div className="text-slate-400 text-[11.5px]">
+            JPG, PNG, or WebP · up to 15 MB
+          </div>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            acceptFile(e.target.files?.[0]);
+            // Reset so re-uploading the same file re-triggers onChange.
+            e.target.value = "";
+          }}
+          data-testid="input-artwork-file"
+        />
+        <div className="mt-4 space-y-2 text-[11.5px] text-slate-500 leading-relaxed">
+          <p>
+            <span className="font-semibold text-slate-700">Recommended:</span>{" "}
+            square, at least 3000×3000 px. Anything smaller will still work
+            but may look soft on big screens.
+          </p>
+          <p>
+            New cover goes live everywhere — store grid, player Now Playing,
+            playlist mosaics — as soon as the upload finishes.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ─── Phase placeholder (Masters / Bonus) ──────────────────────────── */
 
 function PhasePlaceholder({
   tab,
   onEdit,
 }: {
-  tab: Exclude<Tab, "overview" | "tracks">;
+  tab: Exclude<Tab, "overview" | "tracks" | "artwork">;
   onEdit: () => void;
 }) {
   const meta = TABS.find((t) => t.key === tab)!;
   const blurb: Record<typeof tab, string> = {
-    artwork:
-      "Album cover + alternate artwork. Per-track cover overrides are intentionally not here — most tracks reuse the album cover.",
     masters:
       "Streaming master (required), optional hi-res downloadable. Stems and per-track cover overrides are deferred.",
     bonus:
