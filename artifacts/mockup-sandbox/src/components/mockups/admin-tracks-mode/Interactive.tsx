@@ -15,6 +15,8 @@ import {
   Check,
   Upload,
   EyeOff,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 
 type Mode = "edit" | "listen";
@@ -185,74 +187,105 @@ function MasterDetail({
 }
 
 function SnippetDetail({ onClose }: { onClose: () => void }) {
-  /* iMovie-style fixed-width 30-sec window draggable along the waveform.
-     The total clip is 4:12 = 252s. Window = 30s starts at 65s → left=25.8%, width=11.9%. */
+  /* iMovie-style trim row: play · waveform · lock.
+     Total clip 4:12 = 252s · window = 30s starting at 65s → left=25.8%, width=11.9%.
+     Locking commits the clip and hides the Start/End inputs; preview always works. */
+  const [locked, setLocked] = useState(false);
   const left = 25.8;
   const width = 11.9;
   return (
     <DetailWrap title="30-sec snippet" onClose={onClose}>
       <p className="text-[11.5px] text-slate-500 -mt-1">
-        Drag the yellow window along the waveform. Width is locked to 30 seconds.
+        {locked
+          ? "Snippet locked in at 1:05–1:35. Tap the padlock to slide it again."
+          : "Slide the yellow window — width is locked to 30 seconds. Tap the padlock when you're done."}
       </p>
 
-      {/* Waveform with window overlay */}
-      <div className="relative h-20 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden">
-        <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
-          {WAVE_BARS.map((h, i) => (
-            <div
-              key={i}
-              className="flex-1 bg-slate-300 rounded-full"
-              style={{ height: `${h}%` }}
-            />
-          ))}
-        </div>
-        {/* Yellow 30-sec window */}
-        <div
-          className="absolute top-1 bottom-1 border-2 border-amber-400 bg-amber-400/15 rounded-md cursor-grab shadow-[0_0_0_3px_rgba(251,191,36,0.15)]"
-          style={{ left: `${left}%`, width: `${width}%` }}
+      {/* Trim row: play · waveform · lock — Apple iMovie pattern */}
+      <div className="flex items-center gap-2">
+        <button
+          aria-label="Preview snippet"
+          title="Preview snippet"
+          className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 inline-flex items-center justify-center flex-shrink-0"
         >
-          <div className="absolute left-0 top-0 bottom-0 w-1.5 -ml-0.5 bg-amber-400 rounded-l-md" />
-          <div className="absolute right-0 top-0 bottom-0 w-1.5 -mr-0.5 bg-amber-400 rounded-r-md" />
+          <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
+        </button>
+
+        <div className="relative h-20 flex-1 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden">
+          <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
+            {WAVE_BARS.map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 bg-slate-300 rounded-full"
+                style={{ height: `${h}%` }}
+              />
+            ))}
+          </div>
+          {/* 30-sec window — amber + draggable when unlocked, emerald + settled when locked */}
+          <div
+            className={[
+              "absolute top-1 bottom-1 rounded-md border-2 transition-colors",
+              locked
+                ? "border-emerald-500/70 bg-emerald-500/10 cursor-default"
+                : "border-amber-400 bg-amber-400/15 cursor-grab shadow-[0_0_0_3px_rgba(251,191,36,0.15)]",
+            ].join(" ")}
+            style={{ left: `${left}%`, width: `${width}%` }}
+          >
+            {!locked && (
+              <>
+                <div className="absolute left-0 top-0 bottom-0 w-1.5 -ml-0.5 bg-amber-400 rounded-l-md" />
+                <div className="absolute right-0 top-0 bottom-0 w-1.5 -mr-0.5 bg-amber-400 rounded-r-md" />
+              </>
+            )}
+          </div>
+          <div className="absolute -bottom-0.5 left-2 right-2 flex justify-between text-[9px] tabular-nums text-slate-400 pointer-events-none">
+            <span>0:00</span>
+            <span>1:03</span>
+            <span>2:06</span>
+            <span>3:09</span>
+            <span>4:12</span>
+          </div>
         </div>
-        {/* Timecodes */}
-        <div className="absolute -bottom-0.5 left-2 right-2 flex justify-between text-[9px] tabular-nums text-slate-400 pointer-events-none">
-          <span>0:00</span>
-          <span>1:03</span>
-          <span>2:06</span>
-          <span>3:09</span>
-          <span>4:12</span>
-        </div>
+
+        <button
+          onClick={() => setLocked(!locked)}
+          aria-label={locked ? "Unlock snippet — allow sliding" : "Lock snippet in"}
+          title={locked ? "Unlock to slide again" : "Lock in when done"}
+          className={[
+            "w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0 transition-colors",
+            locked
+              ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+              : "bg-amber-50 text-amber-600 hover:bg-amber-100",
+          ].join(" ")}
+        >
+          {locked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+        </button>
       </div>
 
-      {/* Inputs row */}
-      <div className="flex items-end gap-2">
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
-            Start
-          </label>
-          <input
-            defaultValue="1:05"
-            className="w-20 px-2 py-1 rounded-md border border-slate-200 text-[12px] tabular-nums focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
-          />
+      {/* Start/End inputs — only while unlocked */}
+      {!locked && (
+        <div className="flex items-end gap-2">
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
+              Start
+            </label>
+            <input
+              defaultValue="1:05"
+              className="w-20 px-2 py-1 rounded-md border border-slate-200 text-[12px] tabular-nums focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
+              End (auto)
+            </label>
+            <input
+              value="1:35"
+              readOnly
+              className="w-20 px-2 py-1 rounded-md border border-slate-200 bg-slate-50 text-slate-500 text-[12px] tabular-nums"
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
-            End (auto)
-          </label>
-          <input
-            value="1:35"
-            readOnly
-            className="w-20 px-2 py-1 rounded-md border border-slate-200 bg-slate-50 text-slate-500 text-[12px] tabular-nums"
-          />
-        </div>
-        <button className="ml-auto inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">
-          <Play className="w-3 h-3 ml-0.5 fill-current" />
-          Preview clip
-        </button>
-        <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[11.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8]">
-          Save snippet
-        </button>
-      </div>
+      )}
     </DetailWrap>
   );
 }
