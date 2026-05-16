@@ -1,27 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Plus,
-  Search,
-  Filter,
-  ChevronRight,
-  EyeOff,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { Plus, Search, Filter, EyeOff, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
- * Admin home · Albums list (Phase 1).
+ * Admin home · Albums (Phase 1).
  *
- * Frame 1 of the storyboard. Compact toolbar — search and filter live as
- * icon-only buttons that expand on demand; "New album" is just a `+`
- * next to them, matching how we collapse chrome elsewhere in the player.
+ * Apple-Music-store look in our white/light skin: big artwork tiles in a
+ * grid with title + artist underneath. Underline text tabs slice by
+ * lifecycle. Today we honestly only have two states:
+ *   - Live   = isGoodTunesRelease && !isHidden
+ *   - Hidden = isHidden
+ * "Prep" and "Sunset" are roadmap states (need sunrise/sunset dates and
+ * a draft flag in the schema). When those land, add tabs here.
  *
- * Data piggy-backs on /api/albums (same query the classic admin uses).
- * Per-album track count + credit-completion are Phase 2 (need a counts
- * query); not faking them in the meantime.
+ * Toolbar lives in the header — icon-only search/filter/+ to stay quiet.
+ * Per-album track count + credit-completion are still Phase 2.
  */
 interface AlbumLite {
   id: string;
@@ -35,9 +30,12 @@ interface AlbumLite {
   isGoodTunesRelease: boolean;
 }
 
+type TabKey = "live" | "hidden";
+
 export function AdminAlbums() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const [tab, setTab] = useState<TabKey>("live");
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -62,15 +60,32 @@ export function AdminAlbums() {
     () => albums.filter((a) => a.isGoodTunesRelease),
     [albums],
   );
+
+  const counts = useMemo(
+    () => ({
+      live: releases.filter((a) => !a.isHidden).length,
+      hidden: releases.filter((a) => a.isHidden).length,
+    }),
+    [releases],
+  );
+
+  const byTab = useMemo(
+    () =>
+      tab === "live"
+        ? releases.filter((a) => !a.isHidden)
+        : releases.filter((a) => a.isHidden),
+    [releases, tab],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return releases;
-    return releases.filter(
+    if (!q) return byTab;
+    return byTab.filter(
       (a) =>
         a.title.toLowerCase().includes(q) ||
         a.artist.toLowerCase().includes(q),
     );
-  }, [releases, search]);
+  }, [byTab, search]);
 
   if (authLoading) {
     return (
@@ -107,7 +122,7 @@ export function AdminAlbums() {
 
   return (
     <main className="min-h-screen bg-slate-50 p-8 font-sans antialiased">
-      <div className="max-w-[860px] mx-auto space-y-3">
+      <div className="max-w-[1180px] mx-auto space-y-5">
         {/* HEADER */}
         <div className="flex items-end justify-between gap-3 pb-1">
           <div className="min-w-0">
@@ -115,16 +130,15 @@ export function AdminAlbums() {
               GoodTunes Admin
             </div>
             <h1
-              className="text-slate-900 text-[22px] font-bold"
+              className="text-slate-900 text-[26px] font-bold tracking-tight"
               data-testid="heading-admin-albums"
             >
               Albums
             </h1>
-            <p className="text-slate-500 text-[12px]">
+            <p className="text-slate-500 text-[12.5px]">
               Manage everything that shows up in the GoodTunes® player.
             </p>
           </div>
-          {/* Toolbar — icon-only, expand-on-tap. Search + filter + new. */}
           <div className="flex items-center gap-1 flex-shrink-0">
             {searchOpen ? (
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
@@ -173,30 +187,45 @@ export function AdminAlbums() {
           </div>
         </div>
 
-        {/* ALBUM ROWS */}
-        <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-          {isLoading ? (
-            <div className="py-12 flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-sm">
-              {releases.length === 0
-                ? "No releases yet. Create one from the classic admin."
-                : "No releases match that search."}
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100" data-testid="list-admin-albums">
-              {filtered.map((a) => (
-                <AlbumRow key={a.id} album={a} />
-              ))}
-              <EmptyStateRow onClick={() => navigate("/admin")} />
-            </div>
-          )}
-        </section>
+        {/* TABS — underline style. Add Prep + Sunset when sunrise/sunset
+            schema lands (see Storefront in docs/roadmap.md). */}
+        <div className="border-b border-slate-200 flex items-center gap-6">
+          <TabBtn active={tab === "live"} onClick={() => setTab("live")} count={counts.live} testId="tab-live">
+            Live
+          </TabBtn>
+          <TabBtn active={tab === "hidden"} onClick={() => setTab("hidden")} count={counts.hidden} testId="tab-hidden">
+            Hidden
+          </TabBtn>
+        </div>
+
+        {/* GRID */}
+        {isLoading ? (
+          <div className="py-20 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 text-center text-slate-500 text-sm">
+            {tab === "hidden"
+              ? search
+                ? "No hidden releases match that search."
+                : "No hidden releases."
+              : search
+                ? "No releases match that search."
+                : "No live releases yet. Tap + to create one."}
+          </div>
+        ) : (
+          <div
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-7"
+            data-testid="grid-admin-albums"
+          >
+            {filtered.map((a) => (
+              <AlbumTile key={a.id} album={a} />
+            ))}
+          </div>
+        )}
 
         {/* FOOTER NOTE */}
-        <p className="text-slate-400 text-[11px] leading-relaxed px-1 pt-2">
+        <p className="text-slate-400 text-[11px] leading-relaxed px-1 pt-4">
           <span className="font-semibold text-slate-500">Scope:</span> the
           admin only manages what the player needs — cover art, metadata,
           credits, lyrics, files. No distribution, no royalty collection, no
@@ -207,78 +236,81 @@ export function AdminAlbums() {
   );
 }
 
-function AlbumRow({ album }: { album: AlbumLite }) {
+function AlbumTile({ album }: { album: AlbumLite }) {
   return (
     <Link
       href={`/admin/albums/${album.id}`}
-      className="w-full text-left flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-slate-50 active:bg-slate-100"
-      data-testid={`row-album-${album.id}`}
+      className="group block"
+      data-testid={`tile-album-${album.id}`}
     >
-      <img
-        src={album.artwork}
-        alt=""
-        className="w-14 h-14 rounded-lg object-cover bg-slate-100 flex-shrink-0 shadow-sm"
-      />
-      <div className="flex-1 min-w-0">
+      <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 shadow-sm group-hover:shadow-md transition-shadow ring-1 ring-slate-200/60">
+        <img
+          src={album.artwork}
+          alt={album.title}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+        {album.isHidden && (
+          <div className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/65 text-white text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm">
+            <EyeOff className="w-2.5 h-2.5" />
+            Hidden
+          </div>
+        )}
+      </div>
+      <div className="mt-2 px-0.5">
         <div
-          className="text-slate-900 text-[14.5px] font-bold truncate"
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
           data-testid={`text-album-title-${album.id}`}
         >
           {album.title}
         </div>
-        <div className="text-slate-500 text-[12px] mt-0.5 truncate">
+        <div className="text-slate-500 text-[12px] truncate">
           {album.artist}
         </div>
-        {album.description && (
-          <div className="text-slate-400 text-[11.5px] mt-1 line-clamp-1">
-            {album.description}
-          </div>
-        )}
-      </div>
-      {/* Right-side meta — pills + hidden badge, replaces the void where
-          the mockup had status / % credited (not faking those yet). */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        {album.year && (
-          <span className="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">
-            {album.year}
-          </span>
-        )}
-        <span className="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">
+        <div className="text-slate-400 text-[10.5px] mt-0.5 uppercase tracking-wide font-semibold">
           {album.type}
-        </span>
-        {album.isHidden && (
-          <span className="inline-flex items-center gap-1 px-1.5 py-px rounded bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-wide">
-            <EyeOff className="w-2.5 h-2.5" />
-            Hidden
-          </span>
-        )}
+          {album.year && <> · {album.year}</>}
+        </div>
       </div>
-      <ChevronRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
     </Link>
   );
 }
 
-function EmptyStateRow({ onClick }: { onClick: () => void }) {
+function TabBtn({
+  active,
+  onClick,
+  count,
+  children,
+  testId,
+}: {
+  active: boolean;
+  onClick: () => void;
+  count: number;
+  children: React.ReactNode;
+  testId?: string;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left flex items-center gap-4 px-4 py-5 hover:bg-slate-50"
-      data-testid="row-new-album"
+      data-testid={testId}
+      className={[
+        "relative py-2.5 text-[13.5px] font-semibold transition-colors inline-flex items-center gap-1.5",
+        active ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
+      ].join(" ")}
     >
-      <div className="w-14 h-14 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center flex-shrink-0 text-slate-300">
-        <Plus className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-slate-700 text-[13.5px] font-semibold inline-flex items-center gap-2">
-          New album
-          <Sparkles className="w-3.5 h-3.5 text-[#319ED8]" />
-        </div>
-        <div className="text-slate-500 text-[11.5px] mt-0.5">
-          Seed from an Apple Music URL or start blank
-        </div>
-      </div>
-      <ChevronRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
+      {children}
+      <span
+        className={[
+          "tabular-nums text-[11.5px] font-bold px-1.5 py-px rounded",
+          active ? "bg-slate-100 text-slate-600" : "bg-slate-50 text-slate-400",
+        ].join(" ")}
+      >
+        {count}
+      </span>
+      {active && (
+        <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+      )}
     </button>
   );
 }
