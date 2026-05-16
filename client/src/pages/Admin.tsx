@@ -1979,40 +1979,26 @@ interface AdminAlbumPhoto {
   position: number;
 }
 
+type PhotoSheetMode =
+  | { kind: "closed" }
+  | { kind: "new" }
+  | { kind: "edit"; photo: AdminAlbumPhoto };
+
 function AlbumPhotosSection({ albumId }: { albumId: string }) {
   const queryClient = useQueryClient();
   const { data: photos = [] } = useQuery<AdminAlbumPhoto[]>({
     queryKey: ["/api/albums", albumId, "photos"],
   });
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "photos"] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/albums", albumId, "photos"],
+    });
 
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [sheet, setSheet] = useState<PhotoSheetMode>({ kind: "closed" });
+  const [deleteConfirm, setDeleteConfirm] = useState<AdminAlbumPhoto | null>(
+    null,
+  );
 
-  async function handleAddPhoto(file: File) {
-    setErr(null);
-    setBusy(true);
-    try {
-      const url = await uploadImageFile(file);
-      await apiRequest("POST", `/api/admin/albums/${albumId}/photos`, { photoUrl: url });
-      invalidate();
-    } catch (e: any) {
-      setErr(e.message || "Upload failed");
-    } finally {
-      setBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  const updatePhoto = useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<AdminAlbumPhoto> }) => {
-      const res = await apiRequest("PUT", `/api/admin/album-photos/${id}`, patch);
-      return res.json();
-    },
-    onSuccess: invalidate,
-  });
   const deletePhoto = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/album-photos/${id}`);
@@ -2022,80 +2008,463 @@ function AlbumPhotosSection({ albumId }: { albumId: string }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
-          Photos
-        </h3>
+      <div className="mb-3 flex items-baseline justify-between">
+        <div className="flex items-baseline gap-3">
+          <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
+            Photos
+          </h3>
+          {photos.length > 0 && (
+            <span className="text-[12px] text-slate-400">
+              {photos.length} {photos.length === 1 ? "item" : "items"}
+            </span>
+          )}
+        </div>
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-          className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
+          onClick={() => setSheet({ kind: "new" })}
+          className="flex items-center gap-1.5 text-[12px] font-medium text-[#319ED8] hover:text-[#2a8ac0]"
           data-testid="button-add-album-photo"
         >
-          {busy ? "Uploading…" : "+ Upload photo"}
+          Add photo
+          <Plus className="w-3.5 h-3.5" />
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleAddPhoto(f);
+      </div>
+
+      {photos.length === 0 ? (
+        <button
+          type="button"
+          onClick={() => setSheet({ kind: "new" })}
+          className="w-full aspect-square max-h-64 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors flex flex-col items-center justify-center group"
+          data-testid="button-empty-add-photo"
+        >
+          <div className="w-12 h-12 rounded-full bg-white border border-slate-200 group-hover:border-[#319ED8]/30 flex items-center justify-center mb-3 transition-colors shadow-sm">
+            <ImagePlus
+              className="w-5 h-5 text-slate-400 group-hover:text-[#319ED8] transition-colors"
+              strokeWidth={1.75}
+            />
+          </div>
+          <p className="text-sm font-medium text-slate-700">
+            Click to add your first photo
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Square · 1200×1200 px recommended · JPG, PNG, WebP, or GIF
+          </p>
+        </button>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-6">
+          {photos.map((p) => (
+            <AlbumPhotoTile
+              key={p.id}
+              photo={p}
+              onEdit={() => setSheet({ kind: "edit", photo: p })}
+              onDelete={() => setDeleteConfirm(p)}
+            />
+          ))}
+        </div>
+      )}
+
+      {sheet.kind !== "closed" && (
+        <AlbumPhotoSheet
+          mode={sheet}
+          albumId={albumId}
+          onClose={() => setSheet({ kind: "closed" })}
+          onSaved={() => {
+            invalidate();
+            setSheet({ kind: "closed" });
+          }}
+          onRequestDelete={(p) => {
+            setSheet({ kind: "closed" });
+            setDeleteConfirm(p);
           }}
         />
+      )}
+
+      <AlertDialog
+        open={!!deleteConfirm}
+        onOpenChange={(o) => {
+          if (!o) setDeleteConfirm(null);
+        }}
+      >
+        <AlertDialogContent
+          className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-6 !gap-3 max-w-md"
+          data-testid="dialog-delete-photo"
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-900 text-[17px] font-semibold">
+              Delete this photo?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-500 text-[14px] leading-relaxed">
+              {deleteConfirm?.caption
+                ? `"${deleteConfirm.caption}" `
+                : "This photo "}
+              will be removed from the album. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 mt-2">
+            <AlertDialogCancel
+              className="mt-0 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 text-[13px] font-medium shadow-none"
+              data-testid="button-cancel-delete-photo"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteConfirm) deletePhoto.mutate(deleteConfirm.id);
+                setDeleteConfirm(null);
+              }}
+              className="rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-[13px] font-medium shadow-none"
+              data-testid="button-confirm-delete-photo"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// Square photo tile in the gallery. Same hover-reveal pattern as the
+// video tile: edit + delete pinned top-right on hover/focus-within,
+// caption below also clickable (opens the editor sheet).
+function AlbumPhotoTile({
+  photo,
+  onEdit,
+  onDelete,
+}: {
+  photo: AdminAlbumPhoto;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-2.5 group/tile focus-within:[&_[data-hover-controls]]:opacity-100"
+      data-testid={`tile-album-photo-${photo.id}`}
+    >
+      <div className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+        <img
+          src={photo.photoUrl}
+          alt={photo.caption ?? ""}
+          className="w-full h-full object-cover"
+        />
+        <div
+          data-hover-controls
+          className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-0 group-hover/tile:opacity-100 transition-opacity [@media(hover:none)]:opacity-100"
+        >
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={
+              photo.caption ? `Edit ${photo.caption}` : "Edit photo"
+            }
+            title="Edit photo"
+            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-[#319ED8] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+            data-testid={`button-edit-album-photo-${photo.id}`}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={
+              photo.caption ? `Delete ${photo.caption}` : "Delete photo"
+            }
+            title="Delete photo"
+            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-red-600 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+            data-testid={`button-delete-album-photo-${photo.id}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
-      <p className="text-[11px] text-slate-400 mb-2">
-        Square. 1200×1200 px recommended (2400×2400 retina). JPG, PNG, WebP, or GIF.
-      </p>
-      {err && <p className="text-[12px] text-red-600 mb-2">{err}</p>}
-      <div className="rounded-lg border border-slate-200 overflow-hidden">
-        {photos.length === 0 && (
-          <div className="px-4 py-6 text-center text-slate-400 text-sm">
-            No photos yet. Upload an image to add a "Photos" section to the album.
-          </div>
-        )}
-        {photos.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3">
-            {photos.map((p) => (
-              <div
-                key={p.id}
-                className="space-y-1.5"
-                data-testid={`tile-album-photo-${p.id}`}
-              >
+
+      <button
+        type="button"
+        onClick={onEdit}
+        className="group/caption flex items-start justify-between gap-3 text-left px-0.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+        data-testid={`button-caption-album-photo-${photo.id}`}
+      >
+        <span
+          className={
+            "text-sm line-clamp-2 transition-colors " +
+            (photo.caption
+              ? "font-medium text-slate-900 group-hover/caption:text-[#319ED8]"
+              : "text-slate-400 italic group-hover/caption:text-slate-600")
+          }
+        >
+          {photo.caption || "Add a caption"}
+        </span>
+        <Pencil className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover/caption:opacity-100 shrink-0 mt-0.5" />
+      </button>
+    </div>
+  );
+}
+
+// Add/edit sheet for a single photo. Shares the visual language of the
+// video sheet — same header/body/footer chrome — but pared down: one
+// image, one caption. New mode forces a file pick before submit; edit
+// mode shows the existing image with an inline "Replace photo" button.
+function AlbumPhotoSheet({
+  mode,
+  albumId,
+  onClose,
+  onSaved,
+  onRequestDelete,
+}: {
+  mode: { kind: "new" } | { kind: "edit"; photo: AdminAlbumPhoto };
+  albumId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  onRequestDelete: (p: AdminAlbumPhoto) => void;
+}) {
+  const isEdit = mode.kind === "edit";
+  const existing = isEdit ? mode.photo : null;
+
+  const [caption, setCaption] = useState(existing?.caption ?? "");
+  // For edit mode, photoUrl starts at the existing URL. For new mode it
+  // starts null and gets filled after the first upload. We upload-on-pick
+  // here (rather than upload-on-submit like videos) because images are
+  // small + instant and seeing the real preview is more reassuring than
+  // a blob: URL flash.
+  const [photoUrl, setPhotoUrl] = useState<string | null>(
+    existing?.photoUrl ?? null,
+  );
+  const [dragActive, setDragActive] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handlePickFile(file: File) {
+    setErr(null);
+    setUploadingImage(true);
+    try {
+      const url = await uploadImageFile(file);
+      setPhotoUrl(url);
+    } catch (e: any) {
+      setErr(e?.message || "Upload failed");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  const canSubmit = !!photoUrl && !uploadingImage && !busy;
+
+  async function handleSubmit() {
+    if (!canSubmit || !photoUrl) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const trimmed = caption.trim();
+      if (isEdit && existing) {
+        await apiRequest("PUT", `/api/admin/album-photos/${existing.id}`, {
+          photoUrl,
+          caption: trimmed || null,
+        });
+      } else {
+        await apiRequest("POST", `/api/admin/albums/${albumId}/photos`, {
+          photoUrl,
+          caption: trimmed || null,
+        });
+      }
+      onSaved();
+    } catch (e: any) {
+      console.error("[AlbumPhotoSheet] submit failed", e);
+      setErr(e?.message || "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (busy || uploadingImage) return;
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent
+        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        data-testid="dialog-album-photo-sheet"
+      >
+        <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
+          <DialogTitle className="text-slate-900 text-[17px] font-semibold">
+            {isEdit ? "Edit photo" : "Add a photo"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEdit
+              ? "Update the photo or its caption."
+              : "Pick an image, then add an optional caption."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-5 pb-4">
+            {photoUrl ? (
+              <div className="relative w-full max-w-sm mx-auto aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
                 <img
-                  src={p.photoUrl}
-                  alt={p.caption ?? ""}
-                  className="w-full aspect-square object-cover rounded-md border border-slate-200"
+                  src={photoUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
                 />
-                <input
-                  type="text"
-                  defaultValue={p.caption ?? ""}
-                  placeholder="Caption (optional)"
-                  onBlur={(e) => {
-                    const val = e.target.value;
-                    if (val !== (p.caption ?? "")) updatePhoto.mutate({ id: p.id, patch: { caption: val || (null as any) } });
-                  }}
-                  className={`${inputCls} text-[12px]`}
-                  data-testid={`input-album-photo-caption-${p.id}`}
-                />
+                {uploadingImage && (
+                  <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-[#319ED8] animate-spin" />
+                  </div>
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (confirm("Delete this photo?")) deletePhoto.mutate(p.id);
-                  }}
-                  className="text-[11px] text-red-600 hover:underline"
-                  data-testid={`button-delete-album-photo-${p.id}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage || busy}
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                  data-testid="button-replace-album-photo"
                 >
-                  Delete
+                  Replace photo
                 </button>
               </div>
-            ))}
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                  if (e.dataTransfer.files?.[0])
+                    handlePickFile(e.dataTransfer.files[0]);
+                }}
+                disabled={uploadingImage}
+                className={
+                  "w-full max-w-sm mx-auto block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
+                  (dragActive
+                    ? "border-[#319ED8] bg-blue-50"
+                    : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                }
+                data-testid="button-photo-dropzone"
+              >
+                {uploadingImage ? (
+                  <>
+                    <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                    <p className="text-sm font-medium text-slate-700">
+                      Uploading…
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus
+                      className={
+                        "w-8 h-8 mb-3 transition-colors " +
+                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                      }
+                      strokeWidth={1.75}
+                    />
+                    <p className="text-sm font-medium text-slate-700">
+                      Drop a photo here, or click to browse
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Square · 1200×1200 px recommended · JPG, PNG, WebP, or GIF
+                    </p>
+                  </>
+                )}
+              </button>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handlePickFile(e.target.files[0]);
+              }}
+            />
           </div>
-        )}
-      </div>
-    </div>
+
+          <div className="px-5 pb-2 space-y-4">
+            <div>
+              <label
+                htmlFor="album-photo-caption"
+                className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide"
+              >
+                Caption
+                <span className="ml-2 normal-case tracking-normal text-slate-400 text-[11px] font-normal">
+                  optional
+                </span>
+              </label>
+              <input
+                id="album-photo-caption"
+                type="text"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="e.g. Nick on stage — Brooklyn Steel, 2024"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                data-testid="input-album-photo-caption"
+              />
+            </div>
+
+            {err && (
+              <div
+                role="alert"
+                className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-[13px] leading-snug"
+                data-testid="banner-album-photo-error"
+              >
+                {err}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t border-slate-100 flex items-center !justify-between bg-slate-50/50 flex-shrink-0 gap-2 sm:gap-2">
+          <div>
+            {isEdit && existing && (
+              <button
+                type="button"
+                onClick={() => onRequestDelete(existing)}
+                disabled={busy || uploadingImage}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                data-testid="button-delete-photo-from-sheet"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete photo
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy || uploadingImage}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              data-testid="button-cancel-album-photo-sheet"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              data-testid="button-submit-album-photo-sheet"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {isEdit ? "Saving…" : "Adding…"}
+                </>
+              ) : (
+                <>{isEdit ? "Save" : "Add photo"}</>
+              )}
+            </button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
