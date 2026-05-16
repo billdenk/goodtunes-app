@@ -147,9 +147,6 @@ export function AdminAlbums() {
         {/* HEADER */}
         <div className="flex items-end justify-between gap-3 pb-1">
           <div className="min-w-0">
-            <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-              GoodTunes Admin
-            </div>
             <h1
               className="text-slate-900 text-[26px] font-bold tracking-tight"
               data-testid="heading-admin-albums"
