@@ -2,13 +2,14 @@ import {
   ChevronRight,
   ChevronLeft,
   Upload,
-  Sparkles,
   Check,
   Wand2,
   Play,
   Eye,
   Pencil,
   AlertCircle,
+  Mic2,
+  Search,
 } from "lucide-react";
 
 /**
@@ -52,24 +53,24 @@ export function TrackLyrics() {
           </div>
         </div>
 
-        {/* MODE TOGGLE */}
+        {/* SOURCE / PROVENANCE */}
         <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-          <header className="px-4 py-3 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/40 flex items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
-                Lyrics source
-                <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-wide">
-                  Auto-distributed
-                </span>
-              </h3>
-              <p className="text-slate-500 text-[11.5px] mt-0.5">
-                Drop in a WebVTT file for per-line timings, or paste plain
-                lyrics and the player will auto-distribute timestamps across
-                the song's duration.
-              </p>
-            </div>
+          <header className="px-4 py-3 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/40">
+            <h3 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+              Lyrics source
+              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wide">
+                Artist-provided
+              </span>
+            </h3>
+            <p className="text-slate-500 text-[11.5px] mt-0.5">
+              We're not a streaming service, so we don't license a lyrics feed.
+              The canonical source is the artist (or their lyricist) — typed,
+              pasted, or uploaded here. Fallback search providers below are
+              for when the artist doesn't have a clean copy on hand.
+            </p>
           </header>
-          <div className="grid grid-cols-2 divide-x divide-slate-100">
+
+          <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100">
             <ModeCard
               label="Plain lyrics"
               hint="Auto-distributed at runtime"
@@ -81,6 +82,29 @@ export function TrackLyrics() {
               hint="Line-level timings · upload .vtt"
               icon={<Upload className="w-4 h-4 text-slate-400" />}
             />
+          </div>
+
+          <div className="px-4 py-3 bg-slate-50/50">
+            <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider mb-2">
+              Fallback search (if the artist can't supply)
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <FallbackProvider
+                name="Musixmatch"
+                role="Catalog search · admin contact on file"
+                connected
+              />
+              <FallbackProvider
+                name="LyricFind"
+                role="Catalog search · admin contact on file"
+                connected
+              />
+            </div>
+            <p className="text-slate-400 text-[10.5px] mt-2 italic">
+              Both are reference lookups only — the artist still has to
+              confirm/edit before saving. We don't auto-write third-party
+              lyrics into the database.
+            </p>
           </div>
         </section>
 
@@ -97,7 +121,10 @@ export function TrackLyrics() {
             </div>
             <div className="flex items-center gap-1.5">
               <button className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] hover:bg-slate-50 inline-flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-[#319ED8]" /> Fetch from Muso
+                <Mic2 className="w-3 h-3 text-emerald-600" /> Request from artist
+              </button>
+              <button className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] hover:bg-slate-50 inline-flex items-center gap-1">
+                <Search className="w-3 h-3" /> Look up
               </button>
               <button className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] hover:bg-slate-50 inline-flex items-center gap-1">
                 <Eye className="w-3 h-3" /> Preview
@@ -200,16 +227,14 @@ Like every song I keep`}
           <AlertCircle className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
           <div className="text-[11.5px] text-slate-600 leading-relaxed">
             <span className="font-semibold text-slate-800">
-              Why both modes?
+              Why artist-direct first?
             </span>{" "}
-            Plain-lyrics mode is the shipped pattern today —{" "}
-            <code className="px-1 rounded bg-slate-100 text-slate-700 text-[10.5px]">
-              Player.tsx
-            </code>{" "}
-            auto-distributes timings across the song's duration with a small
-            lead-in. WebVTT mode is for once you have real timings (e.g. from
-            a karaoke pass or a label-provided file). Both render with the
-            same active-line styling.
+            Streaming services pay licensing fees to Musixmatch / LyricFind
+            because they need lyrics for tens of millions of tracks they
+            don't own. We have the opposite shape — a smaller catalog the
+            artist is uploading themselves — so the cleanest, cheapest, most
+            accurate source is the artist's own copy. The provider lookups
+            stay as a research aid for when memory fails.
           </div>
         </div>
 
@@ -229,6 +254,35 @@ Like every song I keep`}
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function FallbackProvider({
+  name,
+  role,
+  connected,
+}: {
+  name: string;
+  role: string;
+  connected?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 flex items-center gap-2.5">
+      <span className="w-7 h-7 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+        <Search className="w-3.5 h-3.5 text-slate-500" />
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-slate-900 text-[12px] font-semibold truncate inline-flex items-center gap-1.5">
+          {name}
+          {connected && (
+            <span className="inline-flex items-center gap-0.5 px-1 py-px rounded bg-emerald-50 text-emerald-700 text-[9.5px] font-bold uppercase tracking-wide">
+              <Check className="w-2.5 h-2.5" /> linked
+            </span>
+          )}
+        </div>
+        <div className="text-slate-500 text-[10.5px] truncate">{role}</div>
       </div>
     </div>
   );
