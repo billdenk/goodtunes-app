@@ -187,6 +187,11 @@ export function TitleOverview() {
             <CheckRow label="Title-level metadata (this page)" status="good" />
             <CheckRow label="17 tracks ingested · audio files attached" status="good" />
             <CheckRow
+              label="Track 17 — Take You with Me (Bonus Track)"
+              status="warn"
+              hint="Not present in the LLT credits doc (16 songs). Hide from the canonical tracklist, or capture credits separately?"
+            />
+            <CheckRow
               label="Credits per track"
               status="partial"
               hint="4 of 17 tracks have Performance filled"

@@ -7,7 +7,7 @@ import {
   Upload,
   Search,
   Music2,
-  Mic2,
+  Guitar,
   AlertCircle,
   Sparkles,
   Info,
@@ -144,8 +144,8 @@ export function ProgressiveV3() {
           title="Performance"
           subtitle="Who played, sang, engineered or mixed — and on what gear"
           required
-          count="2 people · 4 roles"
-          unresolved="2 missing instrument"
+          count="4 people · 8 roles"
+          unresolved="5 missing instrument"
           extraHeaderAction={
             <button className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11px] hover:bg-slate-50 inline-flex items-center gap-1">
               <Copy className="w-3 h-3" /> Apply to all 17 tracks
@@ -162,65 +162,117 @@ export function ProgressiveV3() {
                   Nick Carter
                 </span>
                 <span className="text-slate-300">·</span>
-                <span className="text-slate-600 truncate">Lead vocals</span>
+                <span className="text-slate-600 truncate">Vocals</span>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <AliasChip count={4} />
                 <span className="text-slate-300 text-[10.5px]">·</span>
                 <span className="text-slate-400 text-[10.5px] italic">
-                  No gear noted
+                  No mic noted
                 </span>
               </div>
             </div>
             <ChevronDown className="w-4 h-4 text-slate-300" />
           </div>
 
-          {/* Person 2 — Vic Martin, 3 roles, EXPANDED with gear */}
+          {/* Person 2 — Beck Nebel, 5 instrument roles + mastering, EXPANDED */}
           <div className="bg-[#FAFBFC]">
             <div className="flex items-center gap-3 px-3 py-2.5">
               <GripVertical className="w-4 h-4 text-slate-300 flex-shrink-0" />
-              <Avatar gradient="from-sky-400 to-indigo-600" initials="VM" />
+              <Avatar gradient="from-emerald-400 to-teal-600" initials="BN" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 text-[13px]">
                   <span className="text-slate-900 font-semibold truncate">
-                    Vic "BillboardKiller" Martin
+                    Beck Nebel
                   </span>
                   <span className="text-slate-300">·</span>
                   <span className="text-slate-600 truncate">
-                    Background vocals, Engineer, Mixing engineer
+                    Guitars, Bass, Synth, Drum programming, Piano, Mastered by
                   </span>
                 </div>
-                <AliasChip count={2} />
+                <AliasChip count={1} />
               </div>
               <ChevronUp className="w-4 h-4 text-slate-400" />
             </div>
 
             <div className="ml-10 mr-2 pb-2.5 space-y-1.5">
               <RoleRow
-                icon={<Mic2 className="w-3 h-3" />}
-                role="Background vocals"
-                instrument="Neumann U87"
-                instrumentCategory="Microphone"
-                notes="Through Avalon VT-737SP"
-              />
-              <RoleRow
-                icon={<Music2 className="w-3 h-3" />}
-                role="Engineer"
-                instrument="SSL 4000 G+"
-                instrumentCategory="Console"
-                notes="Pro Tools Ultimate, Studio A"
-              />
-              <RoleRow
-                icon={<Music2 className="w-3 h-3" />}
-                role="Mixing engineer"
+                icon={<Guitar className="w-3 h-3" />}
+                role="Guitars"
                 instrument={null}
                 notes={null}
-                hint="Link a console, mic, plugin or room…"
+                hint="Link a guitar…"
+              />
+              <RoleRow
+                icon={<Guitar className="w-3 h-3" />}
+                role="Bass"
+                instrument={null}
+                notes={null}
+                hint="Link a bass…"
+              />
+              <RoleRow
+                icon={<Music2 className="w-3 h-3" />}
+                role="Synth"
+                instrument={null}
+                notes={null}
+                hint="Link a synth…"
+              />
+              <RoleRow
+                icon={<Music2 className="w-3 h-3" />}
+                role="Drum programming"
+                instrument={null}
+                notes={null}
+                hint="DAW + drum library…"
+              />
+              <RoleRow
+                icon={<Music2 className="w-3 h-3" />}
+                role="Piano"
+                instrument={null}
+                notes={null}
+                hint="Link a piano…"
+              />
+              <RoleRow
+                icon={<Music2 className="w-3 h-3" />}
+                role="Mastered by"
+                instrument={null}
+                notes="In-the-box, home studio"
               />
               <button className="ml-1 mt-1 inline-flex items-center gap-1 text-[#319ED8] text-[11px] font-medium hover:underline">
-                <Plus className="w-3 h-3" /> Add another role for Vic
+                <Plus className="w-3 h-3" /> Add another role for Beck
               </button>
             </div>
+          </div>
+
+          {/* Person 3 — Bryan Shackle, additional vocals, collapsed */}
+          <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 group">
+            <GripVertical className="w-4 h-4 text-slate-200 group-hover:text-slate-400 flex-shrink-0" />
+            <Avatar gradient="from-amber-400 to-orange-600" initials="BS" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2 text-[13px]">
+                <span className="text-slate-900 font-semibold truncate">
+                  Bryan Shackle
+                </span>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-600 truncate">Additional vocals</span>
+              </div>
+            </div>
+            <ChevronDown className="w-4 h-4 text-slate-300" />
+          </div>
+
+          {/* Person 4 — John Rausch, mixed by, collapsed */}
+          <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 group">
+            <GripVertical className="w-4 h-4 text-slate-200 group-hover:text-slate-400 flex-shrink-0" />
+            <Avatar gradient="from-slate-400 to-slate-600" initials="JR" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2 text-[13px]">
+                <span className="text-slate-900 font-semibold truncate">
+                  John Rausch
+                </span>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-600 truncate">Mixed by</span>
+              </div>
+            </div>
+            <ChevronDown className="w-4 h-4 text-slate-300" />
           </div>
 
           {/* add-person picker (Songwriter Bank pattern, reused) */}
@@ -246,48 +298,43 @@ export function ProgressiveV3() {
           title="Writers & publishing"
           subtitle="Composer / lyricist / producer credits — plus publisher splits if you have them"
           encouraged
-          count="4 writers · 2 orgs"
-          unresolved="3 missing legal · 75% unassigned"
+          count="3 writers · 3 publishers"
+          unresolved="2 missing legal · IPI"
           extraHeaderAction={
             <button className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11px] hover:bg-slate-50 inline-flex items-center gap-1">
               <Copy className="w-3 h-3" /> Apply to all 17 tracks
             </button>
           }
         >
-          {/* Writer 1 — collapsed */}
-          <WriterRow
-            initials="NC"
-            gradient="from-pink-400 to-rose-600"
-            name="Nick Carter"
-            roles={["Lyricist", "Composer"]}
-            aliases={4}
-            sharePct={25}
-            publisher="Songs of Kaotic"
-          />
-
-          {/* Writer 2 — EXPANDED with legal fields + share */}
+          {/* Writer 1 — Nick Carter, EXPANDED with legal fields + share */}
           <div className="bg-[#FAFBFC]">
             <div className="flex items-center gap-3 px-3 py-2.5">
               <GripVertical className="w-4 h-4 text-slate-300 flex-shrink-0" />
-              <Avatar gradient="from-sky-400 to-indigo-600" initials="VM" />
+              <Avatar gradient="from-pink-400 to-rose-600" initials="NC" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 text-[13px]">
                   <span className="text-slate-900 font-semibold truncate">
-                    Vic "BillboardKiller" Martin
+                    Nick Carter
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   <RoleChip>Lyricist</RoleChip>
                   <RoleChip>Composer</RoleChip>
-                  <RoleChip>Producer</RoleChip>
-                  <span className="text-slate-300 text-[10.5px]">· 2 aliases</span>
+                  <span className="text-slate-400 text-[10.5px] inline-flex items-center gap-1">
+                    <Building2 className="w-2.5 h-2.5" />
+                    Songs of Kaotic
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-[#319ED8]/10 text-[#319ED8] text-[9.5px] font-bold tracking-wider">
+                    ASCAP
+                  </span>
+                  <span className="text-slate-300 text-[10.5px]">· 4 aliases</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="flex items-center rounded-md border border-slate-200 bg-white px-2 py-1">
                   <input
-                    defaultValue={25}
-                    className="w-9 bg-transparent text-[13px] text-slate-900 text-right tabular-nums focus:outline-none"
+                    defaultValue="33.33"
+                    className="w-12 bg-transparent text-[13px] text-slate-900 text-right tabular-nums focus:outline-none"
                   />
                   <span className="text-slate-400 text-[11px] pl-0.5">%</span>
                 </div>
@@ -299,7 +346,7 @@ export function ProgressiveV3() {
             <div className="ml-10 mr-3 pb-3 grid grid-cols-2 gap-x-3 gap-y-2">
               <Field
                 label="Legal name"
-                value="Victor Allen Martin Jr."
+                value="Nickolas Gene Carter"
                 icon={<FileCheck2 className="w-3 h-3" />}
               />
               <Field
@@ -309,18 +356,18 @@ export function ProgressiveV3() {
               />
               <Field
                 label="PRO"
-                value="BMI"
-                hint="#00497281"
+                value="ASCAP"
               />
               <Field
                 label="IPI / CAE"
-                value="00578291422"
+                value="—"
+                hint="Not yet provided"
               />
               <Field
                 label="Publisher"
                 value="Songs of Kaotic"
                 icon={<Building2 className="w-3 h-3" />}
-                hint="Admin: Hipgnosis"
+                hint="ASCAP"
               />
               <div className="flex items-center gap-2 mt-3">
                 <div className="w-7 h-4 rounded-full bg-emerald-500 relative">
@@ -333,58 +380,39 @@ export function ProgressiveV3() {
             </div>
           </div>
 
-          {/* Writer 3 + 4 — collapsed, no publisher yet */}
-          <WriterRow
-            initials="BS"
-            gradient="from-amber-400 to-orange-600"
-            name="Bryan Shackle"
-            roles={["Lyricist", "Composer", "Producer"]}
-            sharePct={null}
-          />
+          {/* Writers 2 + 3 — collapsed */}
           <WriterRow
             initials="BN"
             gradient="from-emerald-400 to-teal-600"
             name="Beck Nebel"
             roles={["Lyricist", "Composer", "Producer"]}
-            sharePct={null}
+            sharePct={33.33}
+            publisher="Grumblyrumpus Music"
+            pro="BMI"
           />
-
-          {/* Organization-only publishing rows (sub-publisher / admin) */}
-          <div className="px-3 py-1.5 bg-purple-50/20 border-t border-slate-100">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-purple-700/80 inline-flex items-center gap-1">
-              <Building2 className="w-3 h-3" /> Publishers & admins (no writer attached)
-            </div>
-          </div>
-          <PublisherOrgRow
-            initials="SK"
-            gradient="from-purple-500 to-fuchsia-600"
-            name="Songs of Kaotic"
-            badge="Sub-publisher"
-            extra="Admin: Hipgnosis · PRO: BMI"
-            percent={null}
-          />
-          <PublisherOrgRow
-            initials="HG"
-            gradient="from-slate-700 to-slate-900"
-            name="Hipgnosis Songs Fund"
-            badge="Admin only"
-            extra="Worldwide ex. North America"
-            percent={null}
+          <WriterRow
+            initials="BS"
+            gradient="from-amber-400 to-orange-600"
+            name="Bryan Shackle"
+            roles={["Lyricist", "Composer", "Producer"]}
+            sharePct={33.34}
+            publisher="Bear North Music"
+            pro="ASCAP"
           />
 
           {/* totals + shortcuts */}
-          <div className="flex items-center justify-between px-3 py-2 bg-amber-50/60 border-t border-amber-100">
-            <div className="flex items-center gap-2 text-[12px] text-amber-900">
-              <Info className="w-3.5 h-3.5" />
-              <span className="font-semibold">Publishing splits: 25% of 100%.</span>
-              <span className="text-amber-700">75% unassigned across 4 writers + 2 orgs.</span>
+          <div className="flex items-center justify-between px-3 py-2 bg-emerald-50/60 border-t border-emerald-100">
+            <div className="flex items-center gap-2 text-[12px] text-emerald-900">
+              <Check className="w-3.5 h-3.5" />
+              <span className="font-semibold">Publishing splits balance to 100%.</span>
+              <span className="text-emerald-700">Source: doc + Muso reconcile.</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <button className="px-2 py-0.5 rounded bg-white border border-amber-200 text-amber-800 text-[11px] font-medium hover:bg-amber-50">
+              <button className="px-2 py-0.5 rounded bg-white border border-emerald-200 text-emerald-800 text-[11px] font-medium hover:bg-emerald-50">
                 Even split
               </button>
-              <span className="text-amber-700 font-bold text-[12px] tabular-nums">
-                25% / 100%
+              <span className="text-emerald-700 font-bold text-[12px] tabular-nums">
+                100% / 100%
               </span>
             </div>
           </div>
@@ -462,7 +490,11 @@ export function ProgressiveV3() {
           home). Publishing splits + writer legal/PRO data are folded into the
           Writers card. Track stepper, prev/next, and "Save & next" make
           17-track albums tractable. "Apply to all 17 tracks" handles the
-          common case of a band that plays every cut.
+          common case of a band that plays every cut. Sample data above is
+          pulled verbatim from the LLT credits doc (Track 1 · Nick Carter,
+          Beck Nebel, Bryan Shackle — 33.33 / 33.33 / 33.34). Heads-up: the
+          docs list 16 songs but our DB has 17 — Track 17 "Take You with Me
+          (Bonus Track)" isn't in either credits doc.
         </p>
       </div>
     </div>
@@ -648,62 +680,6 @@ function RoleRow({
   );
 }
 
-function PublisherOrgRow({
-  initials,
-  gradient,
-  name,
-  badge,
-  extra,
-  percent,
-}: {
-  initials: string;
-  gradient: string;
-  name: string;
-  badge: string;
-  extra?: string;
-  percent: number | null;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-3 py-2.5 bg-purple-50/30 hover:bg-purple-50/60 group">
-      <GripVertical className="w-4 h-4 text-slate-200 group-hover:text-slate-400 flex-shrink-0" />
-      <div
-        className={`w-7 h-7 rounded-md bg-gradient-to-br ${gradient} text-white text-[10.5px] font-bold flex items-center justify-center flex-shrink-0`}
-      >
-        {initials}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap text-[13px]">
-          <span className="text-slate-900 font-semibold truncate">{name}</span>
-          <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wide flex-shrink-0">
-            {badge}
-          </span>
-        </div>
-        {extra && (
-          <div className="text-slate-500 text-[11px] mt-0.5 truncate">
-            {extra}
-          </div>
-        )}
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {percent === null ? (
-          <button className="px-2 py-1 rounded-md border border-dashed border-amber-300 bg-amber-50/50 text-amber-700 text-[11px] font-medium hover:bg-amber-50 inline-flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" /> Set %
-          </button>
-        ) : (
-          <div className="flex items-center rounded-md border border-slate-200 bg-white px-2 py-1">
-            <input
-              defaultValue={percent}
-              className="w-9 bg-transparent text-[13px] text-slate-900 text-right tabular-nums focus:outline-none"
-            />
-            <span className="text-slate-400 text-[11px] pl-0.5">%</span>
-          </div>
-        )}
-        <ChevronDown className="w-4 h-4 text-slate-300" />
-      </div>
-    </div>
-  );
-}
-
 function WriterRow({
   initials,
   gradient,
@@ -712,6 +688,7 @@ function WriterRow({
   aliases = 0,
   sharePct,
   publisher,
+  pro,
 }: {
   initials: string;
   gradient: string;
@@ -720,6 +697,7 @@ function WriterRow({
   aliases?: number;
   sharePct: number | null;
   publisher?: string;
+  pro?: string;
 }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 group">
@@ -744,6 +722,11 @@ function WriterRow({
               {publisher}
             </span>
           )}
+          {pro && (
+            <span className="px-1.5 py-0.5 rounded bg-[#319ED8]/10 text-[#319ED8] text-[9.5px] font-bold tracking-wider">
+              {pro}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
@@ -755,7 +738,7 @@ function WriterRow({
           <div className="flex items-center rounded-md border border-slate-200 bg-white px-2 py-1">
             <input
               defaultValue={sharePct}
-              className="w-9 bg-transparent text-[13px] text-slate-900 text-right tabular-nums focus:outline-none"
+              className="w-12 bg-transparent text-[13px] text-slate-900 text-right tabular-nums focus:outline-none"
             />
             <span className="text-slate-400 text-[11px] pl-0.5">%</span>
           </div>
