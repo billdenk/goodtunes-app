@@ -8,6 +8,10 @@ import {
   EyeOff,
   ArrowLeftRight,
   Pencil,
+  Trash2,
+  Plus,
+  Play,
+  Film,
   Music,
   Calendar,
   Tag as TagIcon,
@@ -253,7 +257,7 @@ export function AdminAlbum() {
         {tab === "artwork" && <ArtworkPanel album={album} />}
         {tab === "masters" && <MastersPanel album={album} />}
         {tab === "bonus" && (
-          <PhasePlaceholder tab={tab} onEdit={openInClassicAdmin} />
+          <BonusPanel album={album} onEdit={openInClassicAdmin} />
         )}
       </div>
     </AdminFrame>
@@ -933,46 +937,512 @@ function MasterRow({
   );
 }
 
-/* ─── Phase placeholder (Bonus only) ──────────────────────────────── */
+/* ─── Bonus tab (videos + photos) ──────────────────────────────────── */
 
-function PhasePlaceholder({
-  tab,
+interface AlbumVideo {
+  id: string;
+  albumId: string;
+  title: string;
+  description: string | null;
+  videoUrl: string;
+  posterUrl: string | null;
+  position: number;
+}
+interface AlbumPhoto {
+  id: string;
+  albumId: string;
+  photoUrl: string;
+  caption: string | null;
+  position: number;
+}
+
+async function uploadVideoFile(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error("Sign out and back in — your session token is missing.");
+  }
+  const res = await fetch("/api/admin/upload-video", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
+function BonusPanel({
+  album,
   onEdit,
 }: {
-  tab: Exclude<Tab, "overview" | "tracks" | "artwork" | "masters">;
+  album: AlbumFull;
   onEdit: () => void;
 }) {
-  const meta = TABS.find((t) => t.key === tab)!;
-  const blurb: Record<typeof tab, string> = {
-    bonus:
-      "Bonus videos + photos. Lock-by-default with hover-reveal Edit/Trash. Future buckets: liner notes, lyric sheets, commentary, press kit.",
-  } as Record<typeof tab, string>;
+  return (
+    <div className="space-y-5">
+      <BonusVideos albumId={album.id} onEdit={onEdit} />
+      <BonusPhotos albumId={album.id} onEdit={onEdit} />
+      <p className="text-slate-400 text-[11px] leading-relaxed px-1">
+        Liner notes, lyric sheets, commentary, and press-kit assets are
+        deferred — see roadmap.
+      </p>
+    </div>
+  );
+}
+
+function BonusVideos({
+  albumId,
+  onEdit,
+}: {
+  albumId: string;
+  onEdit: () => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: videos = [], isLoading } = useQuery<AlbumVideo[]>({
+    queryKey: ["/api/albums", albumId, "videos"],
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: async (file: File) => {
+      const videoUrl = await uploadVideoFile(file);
+      await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
+        title: file.name.replace(/\.[^.]+$/, ""),
+        videoUrl,
+      });
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({
+        queryKey: ["/api/albums", albumId, "videos"],
+      });
+      toast({ title: "Video added" });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't add the video",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/album-videos/${id}`);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({
+        queryKey: ["/api/albums", albumId, "videos"],
+      });
+      toast({ title: "Video removed" });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't remove the video",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const acceptFile = (file: File | undefined | null) => {
+    if (!file) return;
+    if (!/^video\//.test(file.type)) {
+      toast({
+        title: "That's not a video",
+        description: "Use an MP4, MOV, or WebM file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 200 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Keep videos under 200 MB for now.",
+        variant: "destructive",
+      });
+      return;
+    }
+    uploadMut.mutate(file);
+  };
+
+  const busy = uploadMut.isPending;
 
   return (
     <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm px-6 py-12"
-      data-testid={`panel-${tab}`}
+      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+      data-testid="panel-bonus-videos"
     >
-      <div className="max-w-[560px] mx-auto text-center space-y-4">
-        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10.5px] font-bold uppercase tracking-wider">
-          Phase {meta.phase} · coming soon
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+        <div>
+          <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+            <Film className="w-4 h-4 text-slate-400" />
+            Videos
+          </h2>
+          <p className="text-slate-400 text-[11.5px]">
+            {videos.length} {videos.length === 1 ? "video" : "videos"} ·
+            MP4 / MOV / WebM · up to 200 MB
+          </p>
         </div>
-        <h2 className="text-slate-900 text-lg font-bold">{meta.label}</h2>
-        <p className="text-slate-500 text-[13.5px] leading-relaxed">
-          {blurb[tab]}
-        </p>
-        <button
-          onClick={onEdit}
-          className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
-          data-testid={`button-open-classic-${tab}`}
-        >
-          Edit in classic admin
-          <ArrowLeftRight className="w-3.5 h-3.5" />
-        </button>
       </div>
+      <div className="p-5">
+        {isLoading ? (
+          <div className="py-10 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+          </div>
+        ) : (
+          <div
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+            data-testid="grid-bonus-videos"
+          >
+            {videos
+              .slice()
+              .sort((a, b) => a.position - b.position)
+              .map((v) => (
+                <VideoTile
+                  key={v.id}
+                  video={v}
+                  onDelete={() => {
+                    if (confirm(`Remove "${v.title}"?`)) {
+                      deleteMut.mutate(v.id);
+                    }
+                  }}
+                  onEdit={onEdit}
+                  busy={deleteMut.isPending}
+                />
+              ))}
+            <AddTile
+              busy={busy}
+              label={busy ? "Uploading…" : "Add video"}
+              onClick={() => !busy && fileInputRef.current?.click()}
+              testId="button-add-video"
+            />
+          </div>
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,video/webm"
+        className="hidden"
+        onChange={(e) => {
+          acceptFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+        data-testid="input-video-file"
+      />
     </section>
   );
 }
+
+function BonusPhotos({
+  albumId,
+  onEdit,
+}: {
+  albumId: string;
+  onEdit: () => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: photos = [], isLoading } = useQuery<AlbumPhoto[]>({
+    queryKey: ["/api/albums", albumId, "photos"],
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: async (file: File) => {
+      const photoUrl = await uploadImageFile(file);
+      await apiRequest("POST", `/api/admin/albums/${albumId}/photos`, {
+        photoUrl,
+      });
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({
+        queryKey: ["/api/albums", albumId, "photos"],
+      });
+      toast({ title: "Photo added" });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't add the photo",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/album-photos/${id}`);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({
+        queryKey: ["/api/albums", albumId, "photos"],
+      });
+      toast({ title: "Photo removed" });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't remove the photo",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const acceptFile = (file: File | undefined | null) => {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) {
+      toast({
+        title: "That's not an image",
+        description: "Photos need to be a JPG, PNG, or WebP file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Keep photos under 15 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    uploadMut.mutate(file);
+  };
+
+  const busy = uploadMut.isPending;
+
+  return (
+    <section
+      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+      data-testid="panel-bonus-photos"
+    >
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+        <div>
+          <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+            <ImageIcon className="w-4 h-4 text-slate-400" />
+            Photos
+          </h2>
+          <p className="text-slate-400 text-[11.5px]">
+            {photos.length} {photos.length === 1 ? "photo" : "photos"} ·
+            JPG / PNG / WebP · up to 15 MB
+          </p>
+        </div>
+      </div>
+      <div className="p-5">
+        {isLoading ? (
+          <div className="py-10 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+          </div>
+        ) : (
+          <div
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"
+            data-testid="grid-bonus-photos"
+          >
+            {photos
+              .slice()
+              .sort((a, b) => a.position - b.position)
+              .map((p) => (
+                <PhotoTile
+                  key={p.id}
+                  photo={p}
+                  onDelete={() => {
+                    if (confirm("Remove this photo?")) {
+                      deleteMut.mutate(p.id);
+                    }
+                  }}
+                  onEdit={onEdit}
+                />
+              ))}
+            <AddTile
+              busy={busy}
+              label={busy ? "Uploading…" : "Add photo"}
+              onClick={() => !busy && fileInputRef.current?.click()}
+              testId="button-add-photo"
+            />
+          </div>
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          acceptFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+        data-testid="input-photo-file"
+      />
+    </section>
+  );
+}
+
+function VideoTile({
+  video,
+  onDelete,
+  onEdit,
+  busy,
+}: {
+  video: AlbumVideo;
+  onDelete: () => void;
+  onEdit: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div
+      className="group relative aspect-video rounded-xl overflow-hidden bg-slate-900 ring-1 ring-slate-200 shadow-sm"
+      data-testid={`tile-video-${video.id}`}
+    >
+      {video.posterUrl ? (
+        <img
+          src={video.posterUrl}
+          alt=""
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <video
+          src={video.videoUrl}
+          preload="metadata"
+          className="w-full h-full object-cover"
+          muted
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+      <Play className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 text-white/85 drop-shadow-lg" />
+      <div
+        className="absolute bottom-2 left-2 right-2 text-white text-[12px] font-semibold truncate drop-shadow"
+        data-testid={`text-video-title-${video.id}`}
+      >
+        {video.title}
+      </div>
+      <TileActions onEdit={onEdit} onDelete={onDelete} disabled={busy} />
+    </div>
+  );
+}
+
+function PhotoTile({
+  photo,
+  onDelete,
+  onEdit,
+}: {
+  photo: AlbumPhoto;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div
+      className="group relative aspect-square rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200 shadow-sm"
+      data-testid={`tile-photo-${photo.id}`}
+    >
+      <img
+        src={photo.photoUrl}
+        alt={photo.caption || ""}
+        className="w-full h-full object-cover"
+      />
+      {photo.caption && (
+        <>
+          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 to-transparent" />
+          <div
+            className="absolute bottom-2 left-2 right-2 text-white text-[11.5px] font-medium truncate drop-shadow"
+            data-testid={`text-photo-caption-${photo.id}`}
+          >
+            {photo.caption}
+          </div>
+        </>
+      )}
+      <TileActions onEdit={onEdit} onDelete={onDelete} />
+    </div>
+  );
+}
+
+function TileActions({
+  onEdit,
+  onDelete,
+  disabled,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit();
+        }}
+        disabled={disabled}
+        aria-label="Edit in classic admin"
+        title="Edit in classic admin"
+        className="w-7 h-7 rounded-full bg-white/90 backdrop-blur-sm text-slate-700 hover:bg-white hover:text-slate-900 inline-flex items-center justify-center shadow"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        disabled={disabled}
+        aria-label="Delete"
+        title="Delete"
+        className="w-7 h-7 rounded-full bg-white/90 backdrop-blur-sm text-rose-600 hover:bg-white hover:text-rose-700 inline-flex items-center justify-center shadow"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function AddTile({
+  busy,
+  label,
+  onClick,
+  testId,
+}: {
+  busy: boolean;
+  label: string;
+  onClick: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      data-testid={testId}
+      className={[
+        "aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 text-slate-400 transition-colors",
+        busy
+          ? "border-slate-200 bg-slate-50 cursor-not-allowed"
+          : "border-slate-200 hover:border-[#319ED8] hover:text-[#319ED8] hover:bg-[#319ED8]/5",
+      ].join(" ")}
+    >
+      {busy ? (
+        <Loader2 className="w-5 h-5 animate-spin" />
+      ) : (
+        <Plus className="w-6 h-6" />
+      )}
+      <span className="text-[11.5px] font-semibold">{label}</span>
+    </button>
+  );
+}
+
+/* ─── (No more phase placeholders — all five tabs are real) ────────── */
+
 
 /* ─── Bits ─────────────────────────────────────────────────────────── */
 
