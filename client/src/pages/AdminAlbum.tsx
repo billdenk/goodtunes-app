@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+interface LabelLite {
+  id: string;
+  name: string;
+}
 import {
   ChevronLeft,
   ChevronRight,
@@ -47,7 +52,9 @@ interface AlbumFull {
   isHidden: boolean;
   isGoodTunesRelease: boolean;
   genre?: string | null;
-  label?: string | null;
+  labelId?: string | null;
+  // Server-joined label row from AlbumWithLabel (storage.getAlbumById).
+  label?: { id: string; name: string } | null;
   goodTunesReleaseDate?: string | null;
   streamingReleaseDate?: string | null;
   appleMusicUrl?: string | null;
@@ -207,7 +214,7 @@ export function AdminAlbum() {
                 {album.songs.length}{" "}
                 {album.songs.length === 1 ? "track" : "tracks"}
               </span>
-              {album.label && <span>· {album.label}</span>}
+              {album.label && <span>· {album.label.name}</span>}
             </div>
           </div>
           <button
@@ -270,13 +277,17 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
     ["/api/albums"],
   ];
   const endpoint = `/api/admin/albums/${album.id}`;
-  // album.label is the joined Label row (or null); name lives at .name.
-  const labelName =
-    typeof album.label === "string"
-      ? album.label
-      : album.label
-        ? (album.label as { name?: string }).name ?? null
-        : null;
+  const { data: labels = [] } = useQuery<LabelLite[]>({
+    queryKey: ["/api/labels"],
+  });
+  // Build the dropdown options. Most-used label names first would be
+  // nicer but the list is short — alphabetical is fine.
+  const labelOptions = [
+    { value: "", label: "Independent" },
+    ...[...labels]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((l) => ({ value: l.id, label: l.name })),
+  ];
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
       <div className="md:col-span-2">
@@ -290,6 +301,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             type: album.type,
             year: album.year ? String(album.year) : "",
             genre: album.genre,
+            labelId: album.labelId ?? "",
             description: album.description,
           }}
           invalidate={invalidate}
@@ -315,36 +327,18 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             },
             { key: "genre", label: "Genre", type: "text" },
             {
+              key: "labelId",
+              label: "Label",
+              type: "select",
+              options: labelOptions,
+            },
+            {
               key: "description",
               label: "Description",
               type: "textarea",
               placeholder: "Liner-notes-style blurb shown on the album page.",
             },
           ]}
-          readExtras={
-            <div
-              className="pt-3 border-t border-slate-100"
-              data-testid="field-label"
-            >
-              <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                <TagIcon className="w-3 h-3" />
-                Label
-              </dt>
-              <dd
-                className={[
-                  "text-[13.5px]",
-                  labelName
-                    ? "text-slate-900 font-medium"
-                    : "text-slate-300 italic",
-                ].join(" ")}
-              >
-                {labelName || "Not set"}
-                <span className="ml-2 text-slate-300 text-[11px] italic font-normal">
-                  · change in classic admin
-                </span>
-              </dd>
-            </div>
-          }
         />
       </div>
       <EditablePanel

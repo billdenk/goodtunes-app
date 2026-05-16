@@ -214,7 +214,7 @@ export function AdminPerson() {
 
         {/* TAB CONTENT */}
         {tab === "overview" && (
-          <OverviewPanel person={person} labelName={labelName} />
+          <OverviewPanel person={person} labels={labels} />
         )}
         {tab === "photo" && <ImageUploadPanel person={person} field="photo" />}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
@@ -270,16 +270,22 @@ function PersonAvatar({
 
 function OverviewPanel({
   person,
-  labelName,
+  labels,
 }: {
   person: PersonFull;
-  labelName: string | null;
+  labels: LabelLite[];
 }) {
   const invalidate: (readonly unknown[])[] = [
     ["/api/people", person.id],
     ["/api/people"],
   ];
   const endpoint = `/api/admin/people/${person.id}`;
+  const labelOptions = [
+    { value: "", label: "Independent" },
+    ...[...labels]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((l) => ({ value: l.id, label: l.name })),
+  ];
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
       <div className="md:col-span-2">
@@ -287,10 +293,20 @@ function OverviewPanel({
           title="Identity"
           testId="panel-overview-identity"
           endpoint={endpoint}
-          values={{ name: person.name, bio: person.bio }}
+          values={{
+            name: person.name,
+            bio: person.bio,
+            labelId: person.labelId ?? "",
+          }}
           invalidate={invalidate}
           fields={[
             { key: "name", label: "Name", type: "text", required: true },
+            {
+              key: "labelId",
+              label: "Label",
+              type: "select",
+              options: labelOptions,
+            },
             {
               key: "bio",
               label: "Bio",
@@ -298,22 +314,6 @@ function OverviewPanel({
               placeholder: "A short paragraph about the artist.",
             },
           ]}
-          readExtras={
-            <div
-              className="pt-3 border-t border-slate-100"
-              data-testid="field-label"
-            >
-              <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
-                Label
-              </dt>
-              <dd className="text-[13.5px] text-slate-900 font-medium">
-                {labelName ?? "Independent"}
-                <span className="ml-2 text-slate-300 text-[11px] italic font-normal">
-                  · change in classic admin
-                </span>
-              </dd>
-            </div>
-          }
         />
       </div>
       <EditablePanel
