@@ -168,7 +168,7 @@ export function AdminPeople() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="h-9 w-9 rounded-md bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 inline-flex items-center justify-center"
+              className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
               aria-label="Search"
               data-testid="button-open-search"
             >

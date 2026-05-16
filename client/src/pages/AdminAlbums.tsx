@@ -362,10 +362,10 @@ function IconBtn({
       title={label}
       data-testid={testId}
       className={[
-        "w-9 h-9 inline-flex items-center justify-center rounded-md border transition-colors",
+        "w-9 h-9 inline-flex items-center justify-center rounded-md transition-colors",
         tone === "primary"
-          ? "bg-[#319ED8] hover:bg-[#2890c8] text-white border-[#319ED8]"
-          : "bg-white hover:bg-slate-50 text-slate-600 border-slate-200",
+          ? "bg-[#319ED8] hover:bg-[#2890c8] text-white"
+          : "text-slate-500 hover:text-slate-900 hover:bg-slate-100",
       ].join(" ")}
     >
       {children}
