@@ -222,7 +222,41 @@ export const people = pgTable("people", {
   blueskyUrl: text("bluesky_url"),
   facebookUrl: text("facebook_url"),
   websiteUrl: text("website_url"),
+  // Optional muso.ai profile UUID — captured when a Person is imported from a
+  // muso credits dump so re-imports can match this row instantly. muso.ai
+  // splits the same human across multiple UUIDs (e.g. "Nick Carter", "Nick
+  // (us) Carter", "Nickolas G Carter") — only ONE of those gets pinned here;
+  // the rest live as rows in `person_aliases` below. Not unique on purpose.
+  musoId: text("muso_id"),
 });
+
+// Alias rows for a Person — extra names + extra source IDs that all point
+// at the same canonical human. Two main uses today:
+//   1. muso.ai dedup — fold the 3–4 muso UUIDs muso.ai splits a real artist
+//      across into a single People row, with each original (id, name) kept
+//      here so future re-imports route back to the same Person.
+//   2. Stage / legal-name variants (e.g. "Aleks Šebek" ↔ "Aleksandar Šebek")
+//      so credits typed by one variant still resolve to the right Person.
+// CASCADE on personId so cleanup is automatic when a Person is deleted.
+export const personAliases = pgTable(
+  "person_aliases",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    personId: varchar("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // Optional foreign-system ID this alias represents (e.g. a muso UUID).
+    // When set we'll prefer a `source` so we can disambiguate sources later
+    // ("muso", "spotify", "isni", …) without inventing a new column.
+    source: text("source"), // "muso" | "spotify" | "isni" | null
+    sourceId: text("source_id"),
+  },
+  (t) => ({
+    // The same external (source, sourceId) pair must only map to one Person.
+    sourceUnique: uniqueIndex("person_aliases_source_id_uniq")
+      .on(t.source, t.sourceId)
+      .where(sql`${t.source} IS NOT NULL AND ${t.sourceId} IS NOT NULL`),
+  }),
+);
 
 // Cached iTunes Lookup discography for a Person. We pull this in admin
 // (`/api/admin/people/scrape`) and persist it here so the fan-side artist
@@ -322,6 +356,66 @@ export const trackPerformers = pgTable("track_performers", {
   name: text("name").notNull(), // snapshot of person.name at credit time
   role: text("role").notNull(), // "Guitar" / "Bass" / "Composer · Violin"
   tuningNotes: text("tuning_notes"), // "DADGAD", "Dropped D, capo 3"
+  position: integer("position").notNull().default(0),
+});
+
+// ----- Organizations (labels-publishers as legal entities) --------------
+// A muso-style "Organizations" credit (Record Label, Publisher, PRO, etc.)
+// is a *legal entity*, not a person. We already have a richer `labels` table
+// for record labels we actually release on — `organizations` is the broader
+// catch-all: any company that needs to show up on a publishing/mechanical
+// split (publishers, sub-publishers, admin shops, distributors, sometimes a
+// label not yet promoted into `labels`). `musoId` is captured when imported
+// so re-imports dedup. `kind` is a free text tag for now ("label",
+// "publisher", "pro", …) — promotable to an enum once we stop discovering
+// new shapes.
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  kind: text("kind").notNull(), // "label" | "publisher" | "pro" | "distributor" | …
+  musoId: text("muso_id"),
+  websiteUrl: text("website_url"),
+  logoUrl: text("logo_url"),
+  // Optional FK promoting an Organization that's also a GoodTunes-tracked
+  // label into the richer `labels` row — so admins editing the label there
+  // don't need to keep two records in sync.
+  labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ----- Mechanical (master-side) splits ----------------------------------
+// Per-track percentage split of the *recording* (master) revenue — the
+// "mechanical" side of the song. Rows can credit either a Person (artist,
+// session player who negotiated points) or an Organization (label, distrib).
+// Percentages are stored as integer basis-points (12.5% → 1250) to dodge
+// float drift; UI divides by 100 for display. Sum across a song SHOULD be
+// 10000 but isn't enforced in DB — admin tooling validates. Admin-only
+// surface: never returned to the fan-side credits endpoint.
+export const trackMechanicalSplits = pgTable("track_mechanical_splits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  songId: varchar("song_id").notNull().references(() => songs.id, { onDelete: "cascade" }),
+  personId: varchar("person_id").references(() => people.id, { onDelete: "set null" }),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  role: text("role").notNull(), // "Featured Artist" / "Label" / "Distributor" / …
+  percentBp: integer("percent_bp").notNull().default(0),
+  position: integer("position").notNull().default(0),
+});
+
+// ----- Publishing (writers-side) splits ---------------------------------
+// Per-track percentage split of the *composition* (publishing) revenue —
+// the songwriter / publisher side. Each row also captures the PRO the
+// writer is affiliated with so reporting can roll up by society (ASCAP /
+// BMI / SESAC / PRS / SOCAN / …). Same basis-points convention. Admin-only.
+export const trackPublishingSplits = pgTable("track_publishing_splits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  songId: varchar("song_id").notNull().references(() => songs.id, { onDelete: "cascade" }),
+  personId: varchar("person_id").references(() => people.id, { onDelete: "set null" }),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  role: text("role").notNull(), // "Writer" / "Co-Writer" / "Publisher" / "Sub-Publisher"
+  proAffiliation: text("pro_affiliation"), // "ASCAP" | "BMI" | "SESAC" | "PRS" | …
+  percentBp: integer("percent_bp").notNull().default(0),
   position: integer("position").notNull().default(0),
 });
 
@@ -468,6 +562,22 @@ export type TrackWriter = typeof trackWriters.$inferSelect;
 export const insertTrackPerformerSchema = createInsertSchema(trackPerformers).omit({ id: true });
 export type InsertTrackPerformer = z.infer<typeof insertTrackPerformerSchema>;
 export type TrackPerformer = typeof trackPerformers.$inferSelect;
+
+export const insertPersonAliasSchema = createInsertSchema(personAliases).omit({ id: true });
+export type InsertPersonAlias = z.infer<typeof insertPersonAliasSchema>;
+export type PersonAlias = typeof personAliases.$inferSelect;
+
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true });
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type Organization = typeof organizations.$inferSelect;
+
+export const insertTrackMechanicalSplitSchema = createInsertSchema(trackMechanicalSplits).omit({ id: true });
+export type InsertTrackMechanicalSplit = z.infer<typeof insertTrackMechanicalSplitSchema>;
+export type TrackMechanicalSplit = typeof trackMechanicalSplits.$inferSelect;
+
+export const insertTrackPublishingSplitSchema = createInsertSchema(trackPublishingSplits).omit({ id: true });
+export type InsertTrackPublishingSplit = z.infer<typeof insertTrackPublishingSplitSchema>;
+export type TrackPublishingSplit = typeof trackPublishingSplits.$inferSelect;
 
 export const insertCreditRoleSchema = createInsertSchema(creditRoles)
   .omit({ id: true, createdAt: true })
