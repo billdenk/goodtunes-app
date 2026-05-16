@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   EyeOff,
   ArrowLeftRight,
   Pencil,
@@ -13,9 +12,7 @@ import {
   Play,
   Film,
   Music,
-  Calendar,
   Tag as TagIcon,
-  Disc,
   AlertCircle,
   Upload,
   Loader2,
@@ -23,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -249,7 +247,7 @@ export function AdminAlbum() {
 
         {/* TAB CONTENT */}
         {tab === "overview" && (
-          <OverviewPanel album={album} onEdit={openInClassicAdmin} />
+          <OverviewPanel album={album} />
         )}
         {tab === "tracks" && (
           <TracksPanel album={album} onEdit={openInClassicAdmin} />
@@ -266,94 +264,125 @@ export function AdminAlbum() {
 
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
-function OverviewPanel({
-  album,
-  onEdit,
-}: {
-  album: AlbumFull;
-  onEdit: () => void;
-}) {
+function OverviewPanel({ album }: { album: AlbumFull }) {
+  const invalidate: (readonly unknown[])[] = [
+    ["/api/albums", album.id],
+    ["/api/albums"],
+  ];
+  const endpoint = `/api/admin/albums/${album.id}`;
+  // album.label is the joined Label row (or null); name lives at .name.
+  const labelName =
+    typeof album.label === "string"
+      ? album.label
+      : album.label
+        ? (album.label as { name?: string }).name ?? null
+        : null;
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-      {/* Metadata card */}
-      <section
-        className="group md:col-span-2 rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-metadata"
-      >
-        <PanelHeader title="Metadata" onEdit={onEdit} />
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <Field label="Title" value={album.title} testId="field-title" />
-          <Field label="Artist" value={album.artist} testId="field-artist" />
-          <Field label="Type" value={album.type} testId="field-type" />
-          <Field
-            label="Year"
-            value={album.year ? String(album.year) : null}
-            testId="field-year"
-          />
-          <Field
-            label="Label"
-            value={album.label || null}
-            testId="field-label"
-            icon={TagIcon}
-          />
-          <Field
-            label="Genre"
-            value={album.genre || null}
-            testId="field-genre"
-            icon={Disc}
-          />
-        </dl>
-        {album.description && (
-          <div>
-            <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-              Description
-            </div>
-            <p
-              className="text-slate-700 text-[13.5px] leading-relaxed whitespace-pre-wrap"
-              data-testid="text-description"
+      <div className="md:col-span-2">
+        <EditablePanel
+          title="Metadata"
+          testId="panel-overview-metadata"
+          endpoint={endpoint}
+          values={{
+            title: album.title,
+            artist: album.artist,
+            type: album.type,
+            year: album.year ? String(album.year) : "",
+            genre: album.genre,
+            description: album.description,
+          }}
+          invalidate={invalidate}
+          fields={[
+            { key: "title", label: "Title", type: "text", required: true },
+            { key: "artist", label: "Artist", type: "text", required: true },
+            {
+              key: "type",
+              label: "Type",
+              type: "select",
+              required: true,
+              options: [
+                { value: "LP", label: "LP (8+ tracks)" },
+                { value: "EP", label: "EP (3–7 tracks)" },
+                { value: "Single", label: "Single (1–2 tracks)" },
+              ],
+            },
+            {
+              key: "year",
+              label: "Year",
+              type: "number",
+              placeholder: "2025",
+            },
+            { key: "genre", label: "Genre", type: "text" },
+            {
+              key: "description",
+              label: "Description",
+              type: "textarea",
+              placeholder: "Liner-notes-style blurb shown on the album page.",
+            },
+          ]}
+          readExtras={
+            <div
+              className="pt-3 border-t border-slate-100"
+              data-testid="field-label"
             >
-              {album.description}
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* Release & links card */}
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-release"
-      >
-        <PanelHeader title="Release" onEdit={onEdit} />
-        <dl className="space-y-4">
-          <Field
-            label="GoodTunes release date"
-            value={formatDate(album.goodTunesReleaseDate)}
-            testId="field-gt-release"
-            icon={Calendar}
-          />
-          <Field
-            label="Streaming release date"
-            value={formatDate(album.streamingReleaseDate)}
-            testId="field-streaming-release"
-            icon={Calendar}
-          />
-        </dl>
-        <div className="pt-3 border-t border-slate-100 space-y-2">
-          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
-            Streaming handoff
-          </div>
-          <ExternalRow
-            label="Apple Music"
-            url={album.appleMusicUrl}
-            testId="link-apple-music"
-          />
-          <ExternalRow
-            label="Spotify"
-            url={album.spotifyUrl}
-            testId="link-spotify"
-          />
-        </div>
-      </section>
+              <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <TagIcon className="w-3 h-3" />
+                Label
+              </dt>
+              <dd
+                className={[
+                  "text-[13.5px]",
+                  labelName
+                    ? "text-slate-900 font-medium"
+                    : "text-slate-300 italic",
+                ].join(" ")}
+              >
+                {labelName || "Not set"}
+                <span className="ml-2 text-slate-300 text-[11px] italic font-normal">
+                  · change in classic admin
+                </span>
+              </dd>
+            </div>
+          }
+        />
+      </div>
+      <EditablePanel
+        title="Release"
+        testId="panel-overview-release"
+        endpoint={endpoint}
+        values={{
+          goodTunesReleaseDate: album.goodTunesReleaseDate,
+          streamingReleaseDate: album.streamingReleaseDate,
+          appleMusicUrl: album.appleMusicUrl,
+          spotifyUrl: album.spotifyUrl,
+        }}
+        invalidate={invalidate}
+        fields={[
+          {
+            key: "goodTunesReleaseDate",
+            label: "GoodTunes release date",
+            type: "date",
+          },
+          {
+            key: "streamingReleaseDate",
+            label: "Streaming release date",
+            type: "date",
+          },
+          {
+            key: "appleMusicUrl",
+            label: "Apple Music",
+            type: "url",
+            placeholder: "https://music.apple.com/…",
+          },
+          {
+            key: "spotifyUrl",
+            label: "Spotify",
+            type: "url",
+            placeholder: "https://open.spotify.com/album/…",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -1446,92 +1475,6 @@ function AddTile({
 
 /* ─── Bits ─────────────────────────────────────────────────────────── */
 
-function PanelHeader({
-  title,
-  onEdit,
-}: {
-  title: string;
-  onEdit: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-      <button
-        onClick={onEdit}
-        aria-label="Edit in classic admin"
-        title="Edit in classic admin"
-        data-testid={`button-edit-${title.toLowerCase()}`}
-        className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-      >
-        <Pencil className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  testId,
-  icon: Icon,
-}: {
-  label: string;
-  value: string | null;
-  testId?: string;
-  icon?: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-        {Icon && <Icon className="w-3 h-3" />}
-        {label}
-      </dt>
-      <dd
-        className={[
-          "text-[13.5px]",
-          value ? "text-slate-900 font-medium" : "text-slate-300 italic",
-        ].join(" ")}
-      >
-        {value || "Not set"}
-      </dd>
-    </div>
-  );
-}
-
-function ExternalRow({
-  label,
-  url,
-  testId,
-}: {
-  label: string;
-  url: string | null | undefined;
-  testId?: string;
-}) {
-  if (!url) {
-    return (
-      <div className="flex items-center justify-between text-[12.5px]">
-        <span className="text-slate-500">{label}</span>
-        <span className="text-slate-300 italic text-[11.5px]">Not linked</span>
-      </div>
-    );
-  }
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="flex items-center justify-between text-[12.5px] group"
-      data-testid={testId}
-    >
-      <span className="text-slate-700 group-hover:text-[#319ED8]">{label}</span>
-      <span className="text-slate-400 group-hover:text-[#319ED8] inline-flex items-center gap-1">
-        Open
-        <ExternalLink className="w-3 h-3" />
-      </span>
-    </a>
-  );
-}
-
 function LifecyclePill({
   label,
   tone,
@@ -1556,21 +1499,6 @@ function LifecyclePill({
       {label}
     </span>
   );
-}
-
-function formatDate(d: string | null | undefined): string | null {
-  if (!d) return null;
-  try {
-    const dt = new Date(d);
-    if (isNaN(dt.getTime())) return null;
-    return dt.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return null;
-  }
 }
 
 function formatDuration(seconds: number): string {

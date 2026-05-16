@@ -16,6 +16,7 @@ import {
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -213,11 +214,7 @@ export function AdminPerson() {
 
         {/* TAB CONTENT */}
         {tab === "overview" && (
-          <OverviewPanel
-            person={person}
-            labelName={labelName}
-            onEdit={openInClassicAdmin}
-          />
+          <OverviewPanel person={person} labelName={labelName} />
         )}
         {tab === "photo" && <ImageUploadPanel person={person} field="photo" />}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
@@ -274,71 +271,109 @@ function PersonAvatar({
 function OverviewPanel({
   person,
   labelName,
-  onEdit,
 }: {
   person: PersonFull;
   labelName: string | null;
-  onEdit: () => void;
 }) {
+  const invalidate: (readonly unknown[])[] = [
+    ["/api/people", person.id],
+    ["/api/people"],
+  ];
+  const endpoint = `/api/admin/people/${person.id}`;
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-      {/* Identity card */}
-      <section
-        className="group md:col-span-2 rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-identity"
-      >
-        <PanelHeader title="Identity" onEdit={onEdit} />
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <Field label="Name" value={person.name} testId="field-name" />
-          <Field
-            label="Label"
-            value={labelName ?? "Independent"}
-            testId="field-label"
-          />
-        </dl>
-        <div>
-          <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-            Bio
-          </dt>
-          <dd
-            className={[
-              "text-[13.5px] leading-relaxed whitespace-pre-line",
-              person.bio ? "text-slate-700" : "text-slate-300 italic",
-            ].join(" ")}
-            data-testid="field-bio"
-          >
-            {person.bio || "No bio yet"}
-          </dd>
-        </div>
-      </section>
-
-      {/* Socials card */}
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-socials"
-      >
-        <PanelHeader title="Socials" onEdit={onEdit} />
-        <div className="space-y-2">
-          <SocialRow
-            icon={SiInstagram}
-            label="Instagram"
-            url={person.instagramUrl}
-          />
-          <SocialRow icon={SiTiktok} label="TikTok" url={person.tiktokUrl} />
-          <SocialRow icon={SiX} label="X / Twitter" url={person.twitterUrl} />
-          <SocialRow
-            icon={SiBluesky}
-            label="Bluesky"
-            url={person.blueskyUrl}
-          />
-          <SocialRow
-            icon={SiFacebook}
-            label="Facebook"
-            url={person.facebookUrl}
-          />
-          <SocialRow icon={Globe} label="Website" url={person.websiteUrl} />
-        </div>
-      </section>
+      <div className="md:col-span-2">
+        <EditablePanel
+          title="Identity"
+          testId="panel-overview-identity"
+          endpoint={endpoint}
+          values={{ name: person.name, bio: person.bio }}
+          invalidate={invalidate}
+          fields={[
+            { key: "name", label: "Name", type: "text", required: true },
+            {
+              key: "bio",
+              label: "Bio",
+              type: "textarea",
+              placeholder: "A short paragraph about the artist.",
+            },
+          ]}
+          readExtras={
+            <div
+              className="pt-3 border-t border-slate-100"
+              data-testid="field-label"
+            >
+              <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
+                Label
+              </dt>
+              <dd className="text-[13.5px] text-slate-900 font-medium">
+                {labelName ?? "Independent"}
+                <span className="ml-2 text-slate-300 text-[11px] italic font-normal">
+                  · change in classic admin
+                </span>
+              </dd>
+            </div>
+          }
+        />
+      </div>
+      <EditablePanel
+        title="Socials"
+        testId="panel-overview-socials"
+        endpoint={endpoint}
+        values={{
+          instagramUrl: person.instagramUrl,
+          tiktokUrl: person.tiktokUrl,
+          twitterUrl: person.twitterUrl,
+          blueskyUrl: person.blueskyUrl,
+          facebookUrl: person.facebookUrl,
+          websiteUrl: person.websiteUrl,
+        }}
+        invalidate={invalidate}
+        fields={[
+          {
+            key: "instagramUrl",
+            label: "Instagram",
+            type: "url",
+            readIcon: SiInstagram,
+            placeholder: "https://instagram.com/…",
+          },
+          {
+            key: "tiktokUrl",
+            label: "TikTok",
+            type: "url",
+            readIcon: SiTiktok,
+            placeholder: "https://tiktok.com/@…",
+          },
+          {
+            key: "twitterUrl",
+            label: "X / Twitter",
+            type: "url",
+            readIcon: SiX,
+            placeholder: "https://x.com/…",
+          },
+          {
+            key: "blueskyUrl",
+            label: "Bluesky",
+            type: "url",
+            readIcon: SiBluesky,
+            placeholder: "https://bsky.app/profile/…",
+          },
+          {
+            key: "facebookUrl",
+            label: "Facebook",
+            type: "url",
+            readIcon: SiFacebook,
+            placeholder: "https://facebook.com/…",
+          },
+          {
+            key: "websiteUrl",
+            label: "Website",
+            type: "url",
+            readIcon: Globe,
+            placeholder: "https://…",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -705,32 +740,6 @@ function PanelHeader({
       >
         <Pencil className="w-3.5 h-3.5" />
       </button>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: string | null;
-  testId?: string;
-}) {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
-        {label}
-      </dt>
-      <dd
-        className={[
-          "text-[13.5px]",
-          value ? "text-slate-900 font-medium" : "text-slate-300 italic",
-        ].join(" ")}
-      >
-        {value || "Not set"}
-      </dd>
     </div>
   );
 }

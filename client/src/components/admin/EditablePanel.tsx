@@ -15,7 +15,18 @@ import { useToast } from "@/hooks/use-toast";
  * Save commits all changed fields in that group in one request.
  */
 
-export type FieldType = "text" | "url" | "textarea";
+export type FieldType =
+  | "text"
+  | "url"
+  | "textarea"
+  | "number"
+  | "date"
+  | "select";
+
+export interface FieldOption {
+  value: string;
+  label: string;
+}
 
 export interface FieldConfig {
   key: string;
@@ -26,6 +37,34 @@ export interface FieldConfig {
   // For url fields: optional inline icon to show next to the link in
   // read mode (e.g. Instagram glyph). Edit-mode UI is unchanged.
   readIcon?: React.ComponentType<{ className?: string }>;
+  // For select fields: the choices. value goes on the wire, label is
+  // shown in both the dropdown and the read-mode value cell.
+  options?: FieldOption[];
+}
+
+/* Format a YYYY-MM-DD (or ISO) date string for read mode. Returns the
+ * raw string if it isn't parseable so we never lose information.
+ *
+ * For bare YYYY-MM-DD we parse the parts ourselves and build a Date in
+ * local time. The naive `new Date("2025-05-16")` would be UTC midnight,
+ * which `toLocaleDateString` then renders in local time — so anyone
+ * west of UTC sees the previous day. Release dates are calendar dates,
+ * not instants, so the displayed day must match what the admin typed. */
+function formatDateRead(d: string): string {
+  try {
+    const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+    const dt = ymd
+      ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+      : new Date(d);
+    if (isNaN(dt.getTime())) return d;
+    return dt.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return d;
+  }
 }
 
 export interface EditablePanelProps {
@@ -40,6 +79,10 @@ export interface EditablePanelProps {
   // full TanStack v5 array key. The list query for the entity should
   // also be included so card chrome updates immediately.
   invalidate: (readonly unknown[])[];
+  // Optional extra content rendered after the field list in read mode
+  // only. Use for read-only metadata that doesn't belong in the form
+  // (e.g. a label name that needs a dropdown to actually change).
+  readExtras?: React.ReactNode;
 }
 
 export function EditablePanel({
@@ -49,6 +92,7 @@ export function EditablePanel({
   values,
   fields,
   invalidate,
+  readExtras,
 }: EditablePanelProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -266,6 +310,7 @@ export function EditablePanel({
       {longFields.map((f) => (
         <ReadField key={f.key} field={f} value={values[f.key] ?? null} />
       ))}
+      {readExtras}
     </section>
   );
 }
@@ -331,6 +376,14 @@ function ReadField({
     );
   }
 
+  // text / number / date / select all use the same compact layout in
+  // read mode — the difference is just how `value` is rendered.
+  let display: string | null = value;
+  if (value && field.type === "date") display = formatDateRead(value);
+  else if (value && field.type === "select" && field.options) {
+    display =
+      field.options.find((o) => o.value === value)?.label ?? value;
+  }
   return (
     <div data-testid={testId}>
       <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
@@ -339,10 +392,10 @@ function ReadField({
       <dd
         className={[
           "text-[13.5px]",
-          value ? "text-slate-900 font-medium" : "text-slate-300 italic",
+          display ? "text-slate-900 font-medium" : "text-slate-300 italic",
         ].join(" ")}
       >
-        {value || "Not set"}
+        {display || "Not set"}
       </dd>
     </div>
   );
@@ -391,12 +444,43 @@ function EditInput({
     );
   }
 
+  if (field.type === "select") {
+    return (
+      <div>
+        {baseLabel}
+        <select
+          ref={inputRef as React.RefObject<HTMLInputElement> | undefined as any}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+          data-testid={testId}
+        >
+          {!field.required && <option value="">—</option>}
+          {(field.options ?? []).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  const inputType =
+    field.type === "url"
+      ? "url"
+      : field.type === "number"
+        ? "number"
+        : field.type === "date"
+          ? "date"
+          : "text";
+
   return (
     <div>
       {baseLabel}
       <input
         ref={inputRef as React.RefObject<HTMLInputElement> | undefined}
-        type={field.type === "url" ? "url" : "text"}
+        type={inputType}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={field.placeholder}
