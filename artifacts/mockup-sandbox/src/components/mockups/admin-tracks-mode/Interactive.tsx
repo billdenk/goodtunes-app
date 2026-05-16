@@ -471,49 +471,50 @@ function EditRow({
 
       {expanded && (
         <div className="pl-20 pr-16 pb-5 -mt-1 space-y-4">
-          {/* Required */}
-          <div>
-            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-              Required to publish
+          {/* One row of cards: Required pair · divider · Optional pair */}
+          <div className="flex items-stretch gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+                Required
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <StatusBadge
+                  ok={t.master}
+                  icon={Disc3}
+                  label="Master"
+                  active={openSection === "master"}
+                  onClick={() => toggleSection("master")}
+                />
+                <StatusBadge
+                  ok={t.snippet}
+                  icon={Scissors}
+                  label="30-sec snippet"
+                  active={openSection === "snippet"}
+                  onClick={() => toggleSection("snippet")}
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <StatusBadge
-                ok={t.master}
-                icon={Disc3}
-                label="Master"
-                active={openSection === "master"}
-                onClick={() => toggleSection("master")}
-              />
-              <StatusBadge
-                ok={t.snippet}
-                icon={Scissors}
-                label="30-sec snippet"
-                active={openSection === "snippet"}
-                onClick={() => toggleSection("snippet")}
-              />
-            </div>
-          </div>
-
-          {/* Optional */}
-          <div>
-            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-              Optional
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <StatusBadge
-                ok={t.lyrics}
-                icon={FileText}
-                label="Lyrics"
-                active={openSection === "lyrics"}
-                onClick={() => toggleSection("lyrics")}
-              />
-              <StatusBadge
-                ok={t.credits}
-                icon={Users}
-                label="Credits"
-                active={openSection === "credits"}
-                onClick={() => toggleSection("credits")}
-              />
+            <div className="w-px bg-slate-200 self-stretch mt-5" aria-hidden />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+                Optional
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <StatusBadge
+                  ok={t.lyrics}
+                  icon={FileText}
+                  label="Lyrics"
+                  active={openSection === "lyrics"}
+                  onClick={() => toggleSection("lyrics")}
+                />
+                <StatusBadge
+                  ok={t.credits}
+                  icon={Users}
+                  label="Credits"
+                  active={openSection === "credits"}
+                  onClick={() => toggleSection("credits")}
+                />
+              </div>
             </div>
           </div>
 
