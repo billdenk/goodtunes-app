@@ -7,28 +7,53 @@ import {
   ExternalLink,
   EyeOff,
   ArrowLeftRight,
+  Music,
+  Calendar,
+  Tag as TagIcon,
+  Disc,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { AdminFrame } from "@/components/admin/AdminFrame";
 
 /**
- * Admin · Single album (Phase 1 of admin restructure).
+ * Admin · Single album. Wrapped in AdminFrame so it shares the top bar +
+ * left entity sidebar with /admin/albums.
  *
- * Per-album storyboard shell. The five tabs (Overview / Tracks / Artwork /
- * Masters / Bonus) match the storyboard frames on the canvas. In Phase 1
- * each tab renders a placeholder + an "Open in classic admin →" deep-link
- * that selects this album in the existing single-page editor (via the
- * `gt:admin:*` localStorage keys it already reads). That keeps the new
- * surface navigable + demoable while the real tab content gets migrated
- * tab-by-tab in subsequent phases.
+ * Tabs:
+ *   Overview · Tracks  — real data (Phase 2)
+ *   Artwork · Masters · Bonus — Phase 3-5 placeholders that deep-link to
+ *   the classic admin for now.
+ *
+ * Editing is still done in the classic admin — this surface is a clean
+ * read view + jump-off. Each tab has a contextual "Edit in classic" button.
  */
-interface AlbumLite {
+interface AlbumFull {
   id: string;
   title: string;
   artist: string;
   artwork: string;
   year: number | null;
   type: "Single" | "EP" | "LP";
+  description: string | null;
   isHidden: boolean;
+  isGoodTunesRelease: boolean;
+  genre?: string | null;
+  label?: string | null;
+  goodTunesReleaseDate?: string | null;
+  streamingReleaseDate?: string | null;
+  appleMusicUrl?: string | null;
+  spotifyUrl?: string | null;
+  songs: SongLite[];
+}
+
+interface SongLite {
+  id: string;
+  title: string;
+  trackNumber: number;
+  duration: number;
+  lyrics: string | null;
+  audioUrl: string | null;
 }
 
 type Tab = "overview" | "tracks" | "artwork" | "masters" | "bonus";
@@ -54,17 +79,11 @@ export function AdminAlbum() {
     };
   }, []);
 
-  const { data: album, isLoading, error } = useQuery<AlbumLite>({
+  const { data: album, isLoading, error } = useQuery<AlbumFull>({
     queryKey: ["/api/albums", albumId],
     enabled: !!user?.isAdmin && !!albumId,
   });
 
-  /**
-   * Deep-link into the classic /admin editor with this album pre-selected.
-   * The existing Admin component reads `gt:admin:entity` and
-   * `gt:admin:selectedByEntity` from localStorage on mount, so writing
-   * them here before navigating is enough to land in the album-edit view.
-   */
   const openInClassicAdmin = () => {
     try {
       localStorage.setItem("gt:admin:entity", "albums");
@@ -82,9 +101,11 @@ export function AdminAlbum() {
 
   if (authLoading || isLoading) {
     return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
-      </main>
+      <AdminFrame active="albums">
+        <div className="py-20 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AdminFrame>
     );
   }
 
@@ -98,8 +119,8 @@ export function AdminAlbum() {
 
   if (error || !album) {
     return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
-        <div className="text-center space-y-3">
+      <AdminFrame active="albums">
+        <div className="py-20 text-center space-y-3">
           <h1 className="text-slate-900 text-lg font-semibold">
             Album not found
           </h1>
@@ -112,15 +133,22 @@ export function AdminAlbum() {
             Back to albums
           </Link>
         </div>
-      </main>
+      </AdminFrame>
     );
   }
 
+  // Lifecycle pill — derived from the same logic the Albums grid uses.
+  const lifecycle = !album.isGoodTunesRelease
+    ? { label: "Prepping", tone: "slate" as const }
+    : album.isHidden
+      ? { label: "Sunset", tone: "amber" as const }
+      : { label: "Live", tone: "mint" as const };
+
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="max-w-[1080px] mx-auto px-6 py-6">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium mb-4">
+    <AdminFrame active="albums">
+      <div className="space-y-6">
+        {/* BREADCRUMB */}
+        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           <Link
             href="/admin/albums"
             className="hover:text-slate-700"
@@ -134,12 +162,12 @@ export function AdminAlbum() {
           </span>
         </div>
 
-        {/* Header */}
-        <div className="flex items-start gap-5 mb-6">
+        {/* HEADER */}
+        <div className="flex items-start gap-5">
           <img
             src={album.artwork}
             alt=""
-            className="w-20 h-20 rounded-lg object-cover bg-slate-100 flex-shrink-0 border border-slate-200"
+            className="w-24 h-24 rounded-xl object-cover bg-slate-100 flex-shrink-0 border border-slate-200 shadow-sm"
             data-testid="img-album-cover"
           />
           <div className="flex-1 min-w-0">
@@ -147,28 +175,36 @@ export function AdminAlbum() {
               <span>
                 {album.type} · {album.artist}
               </span>
+              <LifecyclePill {...lifecycle} />
               {album.isHidden && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold uppercase">
-                  <EyeOff className="w-2.5 h-2.5" />
-                  Hidden
+                <span
+                  className="inline-flex items-center gap-1 text-amber-700 text-[10.5px] font-medium normal-case tracking-normal"
+                  title="Pulled from sale — owners keep access"
+                >
+                  <EyeOff className="w-3 h-3" />
+                  Hidden from store
                 </span>
               )}
             </div>
             <h1
-              className="text-slate-900 text-2xl font-bold mt-0.5 truncate"
+              className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate"
               data-testid="heading-album-title"
             >
               {album.title}
             </h1>
-            {album.year && (
-              <div className="text-slate-500 text-sm mt-0.5">
-                {album.year}
-              </div>
-            )}
+            <div className="text-slate-500 text-[13px] mt-0.5 flex items-center gap-3 flex-wrap">
+              {album.year && <span>{album.year}</span>}
+              <span className="inline-flex items-center gap-1">
+                <Music className="w-3 h-3" />
+                {album.songs.length}{" "}
+                {album.songs.length === 1 ? "track" : "tracks"}
+              </span>
+              {album.label && <span>· {album.label}</span>}
+            </div>
           </div>
           <button
             onClick={openInClassicAdmin}
-            className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 flex-shrink-0"
+            className="px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5 flex-shrink-0"
             data-testid="button-open-classic-admin"
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />
@@ -176,9 +212,9 @@ export function AdminAlbum() {
           </button>
         </div>
 
-        {/* Tab strip */}
+        {/* TABS */}
         <div
-          className="flex items-center gap-5 border-b border-slate-200 mb-6 overflow-x-auto"
+          className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto"
           data-testid="tabs-admin-album"
         >
           {TABS.map((t) => (
@@ -186,52 +222,289 @@ export function AdminAlbum() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={[
-                "px-1 pb-2.5 text-[13px] font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors",
+                "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
                 tab === t.key
-                  ? "text-slate-900 border-[#319ED8]"
-                  : "text-slate-400 border-transparent hover:text-slate-600",
+                  ? "text-slate-900"
+                  : "text-slate-400 hover:text-slate-700",
               ].join(" ")}
               data-testid={`tab-${t.key}`}
             >
               {t.label}
+              {tab === t.key && (
+                <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+              )}
             </button>
           ))}
         </div>
 
-        {/* Tab content — Phase 1 stubs */}
-        <TabPlaceholder
-          tab={tab}
-          onOpenClassic={openInClassicAdmin}
-        />
+        {/* TAB CONTENT */}
+        {tab === "overview" && (
+          <OverviewPanel album={album} onEdit={openInClassicAdmin} />
+        )}
+        {tab === "tracks" && (
+          <TracksPanel album={album} onEdit={openInClassicAdmin} />
+        )}
+        {(tab === "artwork" || tab === "masters" || tab === "bonus") && (
+          <PhasePlaceholder tab={tab} onEdit={openInClassicAdmin} />
+        )}
       </div>
-    </main>
+    </AdminFrame>
   );
 }
 
-function TabPlaceholder({
-  tab,
-  onOpenClassic,
+/* ─── Overview tab ─────────────────────────────────────────────────── */
+
+function OverviewPanel({
+  album,
+  onEdit,
 }: {
-  tab: Tab;
-  onOpenClassic: () => void;
+  album: AlbumFull;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* Metadata card */}
+      <section
+        className="md:col-span-2 rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
+        data-testid="panel-overview-metadata"
+      >
+        <PanelHeader title="Metadata" onEdit={onEdit} />
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+          <Field label="Title" value={album.title} testId="field-title" />
+          <Field label="Artist" value={album.artist} testId="field-artist" />
+          <Field label="Type" value={album.type} testId="field-type" />
+          <Field
+            label="Year"
+            value={album.year ? String(album.year) : null}
+            testId="field-year"
+          />
+          <Field
+            label="Label"
+            value={album.label || null}
+            testId="field-label"
+            icon={TagIcon}
+          />
+          <Field
+            label="Genre"
+            value={album.genre || null}
+            testId="field-genre"
+            icon={Disc}
+          />
+        </dl>
+        {album.description && (
+          <div>
+            <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+              Description
+            </div>
+            <p
+              className="text-slate-700 text-[13.5px] leading-relaxed whitespace-pre-wrap"
+              data-testid="text-description"
+            >
+              {album.description}
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Release & links card */}
+      <section
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
+        data-testid="panel-overview-release"
+      >
+        <PanelHeader title="Release" onEdit={onEdit} />
+        <dl className="space-y-4">
+          <Field
+            label="GoodTunes release date"
+            value={formatDate(album.goodTunesReleaseDate)}
+            testId="field-gt-release"
+            icon={Calendar}
+          />
+          <Field
+            label="Streaming release date"
+            value={formatDate(album.streamingReleaseDate)}
+            testId="field-streaming-release"
+            icon={Calendar}
+          />
+        </dl>
+        <div className="pt-3 border-t border-slate-100 space-y-2">
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
+            Streaming handoff
+          </div>
+          <ExternalRow
+            label="Apple Music"
+            url={album.appleMusicUrl}
+            testId="link-apple-music"
+          />
+          <ExternalRow
+            label="Spotify"
+            url={album.spotifyUrl}
+            testId="link-spotify"
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ─── Tracks tab ───────────────────────────────────────────────────── */
+
+function TracksPanel({
+  album,
+  onEdit,
+}: {
+  album: AlbumFull;
+  onEdit: () => void;
+}) {
+  const sorted = [...album.songs].sort(
+    (a, b) => a.trackNumber - b.trackNumber,
+  );
+
+  if (sorted.length === 0) {
+    return (
+      <section
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-10 text-center"
+        data-testid="panel-tracks-empty"
+      >
+        <div className="inline-flex items-center gap-2 text-slate-500 text-sm">
+          <AlertCircle className="w-4 h-4" />
+          This album has no tracks yet.
+        </div>
+        <button
+          onClick={onEdit}
+          className="mt-4 px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+          data-testid="button-add-tracks"
+        >
+          Add tracks in classic admin
+          <ExternalLink className="w-3.5 h-3.5" />
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+      data-testid="panel-tracks"
+    >
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+        <div>
+          <h2 className="text-slate-900 text-[14px] font-bold">Tracklist</h2>
+          <p className="text-slate-400 text-[11.5px]">
+            {sorted.length} {sorted.length === 1 ? "track" : "tracks"} · Tap a
+            row to edit credits, lyrics, and master in classic admin.
+          </p>
+        </div>
+        <button
+          onClick={onEdit}
+          className="px-2.5 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5"
+          data-testid="button-reorder-tracks"
+        >
+          <ArrowLeftRight className="w-3 h-3" />
+          Reorder
+        </button>
+      </div>
+      <ol>
+        {sorted.map((song, i) => (
+          <li
+            key={song.id}
+            className={[
+              "flex items-center gap-4 px-5 py-3 hover:bg-slate-50 cursor-pointer transition-colors",
+              i !== sorted.length - 1 && "border-b border-slate-100",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={onEdit}
+            data-testid={`row-track-${song.id}`}
+          >
+            <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
+              {song.trackNumber}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div
+                className="text-slate-900 text-[13.5px] font-medium truncate"
+                data-testid={`text-track-title-${song.id}`}
+              >
+                {song.title}
+              </div>
+              <div className="flex items-center gap-2.5 mt-0.5">
+                <TrackChip
+                  ok={!!song.audioUrl}
+                  label={song.audioUrl ? "Master" : "No master"}
+                  testId={`chip-master-${song.id}`}
+                />
+                <TrackChip
+                  ok={!!song.lyrics}
+                  label={song.lyrics ? "Lyrics" : "No lyrics"}
+                  testId={`chip-lyrics-${song.id}`}
+                />
+              </div>
+            </div>
+            <span
+              className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
+              data-testid={`text-track-duration-${song.id}`}
+            >
+              {formatDuration(song.duration)}
+            </span>
+            <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function TrackChip({
+  ok,
+  label,
+  testId,
+}: {
+  ok: boolean;
+  label: string;
+  testId?: string;
+}) {
+  return (
+    <span
+      data-testid={testId}
+      className={[
+        "inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-semibold uppercase tracking-wide",
+        ok
+          ? "bg-[#4AFFCA]/15 text-emerald-700"
+          : "bg-slate-100 text-slate-400",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "w-1 h-1 rounded-full",
+          ok ? "bg-emerald-500" : "bg-slate-300",
+        ].join(" ")}
+      />
+      {label}
+    </span>
+  );
+}
+
+/* ─── Phase placeholder (Artwork / Masters / Bonus) ────────────────── */
+
+function PhasePlaceholder({
+  tab,
+  onEdit,
+}: {
+  tab: Exclude<Tab, "overview" | "tracks">;
+  onEdit: () => void;
 }) {
   const meta = TABS.find((t) => t.key === tab)!;
-  const blurb: Record<Tab, string> = {
-    overview:
-      "Title, artist, year, type, label, genre, GoodTunes release date, streaming handoff URLs, hidden toggle.",
-    tracks:
-      "Tracklist with drag-to-reorder. Click a track to open its per-track editor (Details · Credits · Lyrics).",
+  const blurb: Record<typeof tab, string> = {
     artwork:
       "Album cover + alternate artwork. Per-track cover overrides are intentionally not here — most tracks reuse the album cover.",
     masters:
-      "Streaming master (required), optional hi-res downloadable. Stems and track-cover-overrides are deferred.",
+      "Streaming master (required), optional hi-res downloadable. Stems and per-track cover overrides are deferred.",
     bonus:
       "Bonus videos + photos. Lock-by-default with hover-reveal Edit/Trash. Future buckets: liner notes, lyric sheets, commentary, press kit.",
   };
 
   return (
     <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm px-6 py-10"
+      className="rounded-2xl bg-white border border-slate-200 shadow-sm px-6 py-12"
       data-testid={`panel-${tab}`}
     >
       <div className="max-w-[560px] mx-auto text-center space-y-4">
@@ -242,12 +515,8 @@ function TabPlaceholder({
         <p className="text-slate-500 text-[13.5px] leading-relaxed">
           {blurb[tab]}
         </p>
-        <p className="text-slate-400 text-[12px] italic">
-          The full editor lives in the classic admin while this surface gets
-          built out tab-by-tab.
-        </p>
         <button
-          onClick={onOpenClassic}
+          onClick={onEdit}
           className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
           data-testid={`button-open-classic-${tab}`}
         >
@@ -257,4 +526,138 @@ function TabPlaceholder({
       </div>
     </section>
   );
+}
+
+/* ─── Bits ─────────────────────────────────────────────────────────── */
+
+function PanelHeader({
+  title,
+  onEdit,
+}: {
+  title: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
+      <button
+        onClick={onEdit}
+        className="text-[#319ED8] text-[11.5px] font-semibold hover:underline inline-flex items-center gap-1"
+        data-testid={`button-edit-${title.toLowerCase()}`}
+      >
+        Edit
+        <ExternalLink className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  testId,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | null;
+  testId?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div data-testid={testId}>
+      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
+        {Icon && <Icon className="w-3 h-3" />}
+        {label}
+      </dt>
+      <dd
+        className={[
+          "text-[13.5px]",
+          value ? "text-slate-900 font-medium" : "text-slate-300 italic",
+        ].join(" ")}
+      >
+        {value || "Not set"}
+      </dd>
+    </div>
+  );
+}
+
+function ExternalRow({
+  label,
+  url,
+  testId,
+}: {
+  label: string;
+  url: string | null | undefined;
+  testId?: string;
+}) {
+  if (!url) {
+    return (
+      <div className="flex items-center justify-between text-[12.5px]">
+        <span className="text-slate-500">{label}</span>
+        <span className="text-slate-300 italic text-[11.5px]">Not linked</span>
+      </div>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center justify-between text-[12.5px] group"
+      data-testid={testId}
+    >
+      <span className="text-slate-700 group-hover:text-[#319ED8]">{label}</span>
+      <span className="text-slate-400 group-hover:text-[#319ED8] inline-flex items-center gap-1">
+        Open
+        <ExternalLink className="w-3 h-3" />
+      </span>
+    </a>
+  );
+}
+
+function LifecyclePill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "slate" | "amber" | "mint";
+}) {
+  const cls =
+    tone === "mint"
+      ? "bg-[#4AFFCA]/15 text-emerald-700"
+      : tone === "amber"
+        ? "bg-amber-50 text-amber-700"
+        : "bg-slate-100 text-slate-600";
+  return (
+    <span
+      className={[
+        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider normal-case",
+        cls,
+      ].join(" ")}
+      data-testid="badge-lifecycle"
+    >
+      {label}
+    </span>
+  );
+}
+
+function formatDate(d: string | null | undefined): string | null {
+  if (!d) return null;
+  try {
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return null;
+    return dt.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return null;
+  }
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
