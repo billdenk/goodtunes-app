@@ -384,6 +384,23 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
 
 /* ─── Tracks tab ───────────────────────────────────────────────────── */
 
+type AlbumCreditsMap = {
+  bySongId: Record<
+    string,
+    {
+      writers: { id: string; name: string; role: string; person: { name: string; photoUrl?: string | null } | null }[];
+      performers: {
+        id: string;
+        name: string;
+        role: string;
+        tuningNotes: string | null;
+        person: { name: string; photoUrl?: string | null } | null;
+        instrument: { name: string; category?: string | null } | null;
+      }[];
+    }
+  >;
+};
+
 function TracksPanel({
   album,
   onEdit,
@@ -394,6 +411,9 @@ function TracksPanel({
   const sorted = [...album.songs].sort(
     (a, b) => a.trackNumber - b.trackNumber,
   );
+  const { data: albumCredits } = useQuery<AlbumCreditsMap>({
+    queryKey: ["/api/albums", album.id, "credits"],
+  });
 
   if (sorted.length === 0) {
     return (
@@ -441,32 +461,46 @@ function TracksPanel({
         </button>
       </div>
       <ol>
-        {sorted.map((song, i) => (
-          <TrackRow
-            key={song.id}
-            song={song}
-            albumId={album.id}
-            onOpen={onEdit}
-            withBorder={i !== sorted.length - 1}
-          />
-        ))}
+        {sorted.map((song, i) => {
+          const songCredits = albumCredits?.bySongId[song.id];
+          const creditCount =
+            (songCredits?.writers.length ?? 0) +
+            (songCredits?.performers.length ?? 0);
+          return (
+            <TrackRow
+              key={song.id}
+              song={song}
+              albumId={album.id}
+              onOpen={onEdit}
+              withBorder={i !== sorted.length - 1}
+              creditCount={creditCount}
+              credits={songCredits ?? null}
+            />
+          );
+        })}
       </ol>
     </section>
   );
 }
 
-type TrackMode = "view" | "rename" | "audio" | "lyrics" | "synced";
+type TrackMode = "view" | "rename" | "audio" | "lyrics" | "synced" | "credits";
+
+type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
 
 function TrackRow({
   song,
   albumId,
   onOpen,
   withBorder,
+  creditCount,
+  credits,
 }: {
   song: SongLite;
   albumId: string;
   onOpen: () => void;
   withBorder: boolean;
+  creditCount: number;
+  credits: SongCreditsLite | null;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
   const [draft, setDraft] = useState(song.title);
@@ -560,6 +594,12 @@ function TrackRow({
   const closeSynced = () => {
     setMode("view");
     queueMicrotask(() => syncedChipRef.current?.focus());
+  };
+
+  const creditsChipRef = useRef<HTMLButtonElement>(null);
+  const closeCredits = () => {
+    setMode("view");
+    queueMicrotask(() => creditsChipRef.current?.focus());
   };
 
   const liCls = [
@@ -701,6 +741,28 @@ function TrackRow({
                     interactive
                   />
                 </button>
+                <button
+                  ref={creditsChipRef}
+                  type="button"
+                  onClick={() =>
+                    setMode((m) => (m === "credits" ? "view" : "credits"))
+                  }
+                  aria-label="View credits"
+                  title="View credits (writers + performers)"
+                  data-testid={`button-view-credits-${song.id}`}
+                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                >
+                  <TrackChip
+                    ok={creditCount > 0}
+                    label={
+                      creditCount > 0
+                        ? `Credits · ${creditCount}`
+                        : "No credits"
+                    }
+                    testId={`chip-credits-${song.id}`}
+                    interactive
+                  />
+                </button>
               </div>
             </div>
             <span
@@ -781,6 +843,14 @@ function TrackRow({
           song={song}
           onClose={closeSynced}
           onSaved={invalidate}
+        />
+      )}
+
+      {mode === "credits" && (
+        <CreditsPreview
+          credits={credits}
+          onClose={closeCredits}
+          onEditInClassic={onOpen}
         />
       )}
     </li>
@@ -930,6 +1000,13 @@ function SyncedLyricsEditor({
   const [localError, setLocalError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Autofocus the textarea on mount so the editor's own keydown handlers
+  // (Escape to close) take effect immediately without an extra click.
+  useEffect(() => {
+    queueMicrotask(() => textareaRef.current?.focus());
+  }, []);
 
   const cueCount = draft?.length ?? 0;
   const origCount = song.syncedLyrics?.length ?? 0;
@@ -1098,11 +1175,13 @@ function SyncedLyricsEditor({
         </div>
 
         <textarea
+          ref={textareaRef}
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
           onBlur={() => {
-            const t = rawText.trim();
-            if (t && /^WEBVTT/i.test(t)) {
+            // parseVtt tolerates a missing WEBVTT header, so attempt to
+            // parse anything non-empty and let the parser decide.
+            if (rawText.trim()) {
               parseAndSet(rawText, "the pasted text");
             }
           }}
@@ -1181,6 +1260,180 @@ function SyncedLyricsEditor({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── Per-track credits preview (read-only; edits → classic admin) ──── */
+
+function CreditsPreview({
+  credits,
+  onClose,
+  onEditInClassic,
+}: {
+  credits: SongCreditsLite | null;
+  onClose: () => void;
+  onEditInClassic: () => void;
+}) {
+  const writers = credits?.writers ?? [];
+  const performers = credits?.performers ?? [];
+  const total = writers.length + performers.length;
+
+  return (
+    <div
+      className="px-5 pb-4"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
+            SuperCredits
+            {total > 0 && (
+              <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
+                · {writers.length} writer{writers.length === 1 ? "" : "s"} ·{" "}
+                {performers.length} performer{performers.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </span>
+        </div>
+
+        {total === 0 ? (
+          <p className="text-[12px] text-slate-500 leading-snug">
+            No credits on this track yet. Add writers (composer / lyricist /
+            producer) and performers (with the specific instrument used on this
+            track) to enable the SuperCredits badge.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {writers.length > 0 && (
+              <div>
+                <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+                  Writers
+                </div>
+                <ul
+                  className="space-y-1"
+                  data-testid="list-credits-writers"
+                >
+                  {writers.map((w) => (
+                    <li
+                      key={w.id}
+                      className="flex items-center gap-2 text-[12.5px]"
+                      data-testid={`item-credit-writer-${w.id}`}
+                    >
+                      <PersonAvatar
+                        name={w.person?.name ?? w.name}
+                        photoUrl={w.person?.photoUrl ?? null}
+                      />
+                      <span className="text-slate-900 font-medium truncate">
+                        {w.person?.name ?? w.name}
+                      </span>
+                      <span className="text-slate-400">·</span>
+                      <span className="text-slate-500 truncate">{w.role}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {performers.length > 0 && (
+              <div>
+                <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+                  Performers
+                </div>
+                <ul
+                  className="space-y-1"
+                  data-testid="list-credits-performers"
+                >
+                  {performers.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center gap-2 text-[12.5px]"
+                      data-testid={`item-credit-performer-${p.id}`}
+                    >
+                      <PersonAvatar
+                        name={p.person?.name ?? p.name}
+                        photoUrl={p.person?.photoUrl ?? null}
+                      />
+                      <span className="text-slate-900 font-medium truncate flex-shrink-0">
+                        {p.person?.name ?? p.name}
+                      </span>
+                      <span className="text-slate-400">·</span>
+                      <span className="text-slate-500 truncate">{p.role}</span>
+                      {p.instrument && (
+                        <>
+                          <span className="text-slate-300">on</span>
+                          <span className="text-slate-700 truncate">
+                            {p.instrument.name}
+                          </span>
+                        </>
+                      )}
+                      {p.tuningNotes && (
+                        <span className="text-slate-400 italic truncate">
+                          ({p.tuningNotes})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="text-[10.5px] text-slate-400 leading-snug pt-1 border-t border-slate-200">
+          Inline credits editing is coming to the new admin next. For now, add
+          / edit / reorder credits in classic admin.
+        </p>
+
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+            data-testid="button-cancel-credits-preview"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={onEditInClassic}
+            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+            data-testid="button-edit-credits-classic"
+          >
+            {total > 0 ? "Edit credits" : "Add credits"} in classic
+            <ArrowLeftRight className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PersonAvatar({
+  name,
+  photoUrl,
+}: {
+  name: string;
+  photoUrl: string | null;
+}) {
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  if (photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt=""
+        className="w-5 h-5 rounded-full object-cover flex-shrink-0 bg-slate-200"
+      />
+    );
+  }
+  return (
+    <span className="w-5 h-5 rounded-full bg-[#319ED8]/15 text-[#319ED8] text-[10px] font-bold inline-flex items-center justify-center flex-shrink-0">
+      {initial}
+    </span>
   );
 }
 
