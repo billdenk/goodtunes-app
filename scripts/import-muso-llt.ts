@@ -30,11 +30,45 @@ import {
   trackPublishingSplits,
 } from "../shared/schema";
 import { and, eq } from "drizzle-orm";
+import { albums } from "../shared/schema";
 
+// ── CLI ───────────────────────────────────────────────────────────────────
+//   tsx scripts/import-muso-llt.ts \
+//     --album-id <uuid|slug>                    (required)
+//     [--apply]                                 actually write (default: dry run)
+//     [--allow-name-fallback]                   permit matching existing People
+//                                               by normalized name when no muso
+//                                               alias exists. OFF by default in
+//                                               --apply to avoid mis-merging
+//                                               unrelated people in prod.
+//     [--muso-file <path>]                      defaults to LLT dump
+//     [--manifest-file <path>]                  defaults to LLT manifest
+//     [--expect-title "<title>"]                preflight guard — refuse to run
+//                                               if the album row's title differs
+//     [--expect-artist "<artist>"]              preflight guard — same, for artist
+//     [--min-matched-tracks N]                  preflight guard — refuse if
+//                                               fewer than N muso tracks line up
+//                                               with songs on the target album
+function arg(name: string, fallback?: string): string | undefined {
+  const i = process.argv.indexOf(name);
+  if (i === -1) return fallback;
+  const v = process.argv[i + 1];
+  if (!v || v.startsWith("--")) return fallback;
+  return v;
+}
 const DRY_RUN = !process.argv.includes("--apply");
-const ALBUM_ID = "album-5";
-const MUSO_FILE = path.resolve("server/data/muso-love-life-tragedy.json");
-const MANIFEST_FILE = path.resolve("server/data/muso-people-manifest.json");
+const ALLOW_NAME_FALLBACK = process.argv.includes("--allow-name-fallback");
+const ALBUM_ID = arg("--album-id");
+const MUSO_FILE = path.resolve(arg("--muso-file", "server/data/muso-love-life-tragedy.json")!);
+const MANIFEST_FILE = path.resolve(arg("--manifest-file", "server/data/muso-people-manifest.json")!);
+const EXPECT_TITLE = arg("--expect-title");
+const EXPECT_ARTIST = arg("--expect-artist");
+const MIN_MATCHED_TRACKS = Number(arg("--min-matched-tracks", "0"));
+
+if (!ALBUM_ID) {
+  console.error("ERROR: --album-id is required (e.g. --album-id album-5 or --album-id <uuid>).");
+  process.exit(2);
+}
 
 // ── Canonical-name override map ───────────────────────────────────────────
 // muso splits some humans across multiple UUIDs. Map every variant UUID to
@@ -80,6 +114,14 @@ function canonicalName(p: MusoPerson): string {
   return MUSO_PERSON_OVERRIDES[p.id] ?? p.name.trim();
 }
 
+// muso uses a small set of "unknown placeholder" rows when a credit is
+// missing identity info — we drop them so they don't create junk People.
+// "Inconnu Compositeur Auteur" = French for "Unknown Composer Lyricist".
+const SKIP_NAMES = new Set(["inconnu compositeur auteur"]);
+function shouldSkipPerson(p: MusoPerson): boolean {
+  return SKIP_NAMES.has(normName(canonicalName(p)));
+}
+
 // Maps role groups in muso to which destination table+role our schema wants.
 // "writer" → track_writers (Composer/Lyricist/Producer)
 // "performer" → track_performers (Vocals, Background Vocals, Guitar, Bass, …)
@@ -122,6 +164,27 @@ async function main() {
   console.log(`\n${DRY_RUN ? "🟡 DRY RUN" : "🟢 APPLY"} — album=${ALBUM_ID}`);
   console.log(`  source: ${path.basename(MUSO_FILE)}  (${dump.tracks.length} tracks)`);
   console.log(`  photos: ${Object.keys(manifest.manifest).length} muso person avatars staged in object storage`);
+  console.log(`  name-fallback person matching: ${ALLOW_NAME_FALLBACK ? "ON" : "OFF (alias-only)"}`);
+
+  // ── PREFLIGHT ─────────────────────────────────────────────────────────
+  const [targetAlbum] = await db.select().from(albums).where(eq(albums.id, ALBUM_ID!));
+  if (!targetAlbum) {
+    console.error(`\n❌ Preflight failed: no album row with id="${ALBUM_ID}".`);
+    process.exit(3);
+  }
+  console.log(`  album row:   "${targetAlbum.title}" — primaryArtistId=${targetAlbum.primaryArtistId ?? "(none)"}`);
+  if (EXPECT_TITLE && normName(targetAlbum.title) !== normName(EXPECT_TITLE)) {
+    console.error(`\n❌ Preflight failed: album title "${targetAlbum.title}" does not match --expect-title "${EXPECT_TITLE}".`);
+    process.exit(3);
+  }
+  if (EXPECT_ARTIST) {
+    // We don't denormalize artist name onto albums, so just log; the dump's
+    // album.artist string is a softer check we surface to the user.
+    if (normName(dump.album.artist) !== normName(EXPECT_ARTIST)) {
+      console.error(`\n❌ Preflight failed: muso dump artist "${dump.album.artist}" does not match --expect-artist "${EXPECT_ARTIST}".`);
+      process.exit(3);
+    }
+  }
 
   // 1. Build the global Person plan first (walk every track, collect unique
   //    canonical-named humans). This lets us upsert People once before we
@@ -151,6 +214,7 @@ async function main() {
       }
       for (const list of Object.values(byRole ?? {})) {
         for (const p of list ?? []) {
+          if (shouldSkipPerson(p)) continue;
           const canon = canonicalName(p);
           const entry = personPlan.get(canon) ?? {
             canonicalName: canon,
@@ -166,8 +230,9 @@ async function main() {
   }
 
   // 2. Per-track credit plan. Match by `position` → `track_number`.
-  const dbSongs = await db.select().from(songs).where(eq(songs.albumId, ALBUM_ID));
+  const dbSongs = await db.select().from(songs).where(eq(songs.albumId, ALBUM_ID!));
   const songByPos = new Map(dbSongs.map((s) => [s.trackNumber, s]));
+  console.log(`  songs on album: ${dbSongs.length}`);
 
   type Planned = {
     songId: string;
@@ -207,6 +272,7 @@ async function main() {
       }
       for (const [role, list] of Object.entries(byRole ?? {})) {
         for (const p of list ?? []) {
+          if (shouldSkipPerson(p)) continue;
           const decision = routeRole(group, role);
           if (decision.kind === "skip") continue;
           const canon = canonicalName(p);
@@ -260,147 +326,158 @@ async function main() {
     for (const u of unmatched) console.log("    " + u);
   }
 
+  if (MIN_MATCHED_TRACKS > 0 && trackPlans.length < MIN_MATCHED_TRACKS) {
+    console.error(`\n❌ Preflight failed: matched ${trackPlans.length} tracks but --min-matched-tracks=${MIN_MATCHED_TRACKS}.`);
+    process.exit(3);
+  }
+
   if (DRY_RUN) {
     console.log(`\n🟡 DRY RUN — no DB writes. Re-run with --apply to commit.\n`);
     return;
   }
 
-  // ── APPLY ───────────────────────────────────────────────────────────────
-  console.log(`\n🟢 APPLY — writing to DB…`);
+  // ── APPLY (all-or-nothing) ──────────────────────────────────────────────
+  console.log(`\n🟢 APPLY — writing to DB inside a single transaction…`);
 
-  // 2a. Upsert people (match by muso UUID → person_aliases, then by name).
-  const canonToPersonId = new Map<string, string>();
-  for (const [canon, entry] of personPlan) {
-    let personId: string | undefined;
-    // Try every known muso UUID for this canonical name against person_aliases.
-    for (const variant of entry.musoIds) {
-      const [hit] = await db
-        .select()
-        .from(personAliases)
-        .where(and(eq(personAliases.source, "muso"), eq(personAliases.sourceId, variant.id)));
-      if (hit) { personId = hit.personId; break; }
-    }
-    // Fallback: match by exact name (case/diacritic insensitive).
-    if (!personId) {
-      const existing = await db.select().from(people);
-      const hit = existing.find((p) => normName(p.name) === normName(canon));
-      if (hit) personId = hit.id;
-    }
-    // Create.
-    if (!personId) {
-      const [created] = await db
-        .insert(people)
-        .values({
-          name: canon,
-          photoUrl: entry.photoUrl,
-          musoId: entry.musoIds[0]?.id ?? null,
-        } as any)
-        .returning();
-      personId = created.id;
-    } else if (entry.photoUrl) {
-      // Backfill photo if missing.
-      const [existing] = await db.select().from(people).where(eq(people.id, personId));
-      if (existing && !existing.photoUrl) {
-        await db.update(people).set({ photoUrl: entry.photoUrl }).where(eq(people.id, personId));
+  await db.transaction(async (tx) => {
+    // 2a. Upsert people (match by muso UUID → person_aliases, then optionally
+    //     by name when --allow-name-fallback is set).
+    const canonToPersonId = new Map<string, string>();
+    for (const [canon, entry] of personPlan) {
+      let personId: string | undefined;
+      // Try every known muso UUID for this canonical name against person_aliases.
+      for (const variant of entry.musoIds) {
+        const [hit] = await tx
+          .select()
+          .from(personAliases)
+          .where(and(eq(personAliases.source, "muso"), eq(personAliases.sourceId, variant.id)));
+        if (hit) { personId = hit.personId; break; }
+      }
+      // Optional fallback: case/diacritic-insensitive name match across
+      // the whole people table. Off by default in prod to avoid mis-merging
+      // unrelated humans who happen to share a name.
+      if (!personId && ALLOW_NAME_FALLBACK) {
+        const existing = await tx.select().from(people);
+        const hit = existing.find((p) => normName(p.name) === normName(canon));
+        if (hit) personId = hit.id;
+      }
+      // Create.
+      if (!personId) {
+        const [created] = await tx
+          .insert(people)
+          .values({
+            name: canon,
+            photoUrl: entry.photoUrl,
+            musoId: entry.musoIds[0]?.id ?? null,
+          } as any)
+          .returning();
+        personId = created.id;
+      } else if (entry.photoUrl) {
+        const [existing] = await tx.select().from(people).where(eq(people.id, personId));
+        if (existing && !existing.photoUrl) {
+          await tx.update(people).set({ photoUrl: entry.photoUrl }).where(eq(people.id, personId));
+        }
+      }
+      canonToPersonId.set(canon, personId);
+
+      // Record every muso variant as an alias.
+      for (const variant of entry.musoIds) {
+        const [existsAlias] = await tx
+          .select()
+          .from(personAliases)
+          .where(and(eq(personAliases.source, "muso"), eq(personAliases.sourceId, variant.id)));
+        if (!existsAlias) {
+          await tx.insert(personAliases).values({
+            personId,
+            name: variant.name,
+            source: "muso",
+            sourceId: variant.id,
+          });
+        }
       }
     }
-    canonToPersonId.set(canon, personId);
 
-    // Make sure every muso variant is recorded as an alias.
-    for (const variant of entry.musoIds) {
-      const [existsAlias] = await db
+    // 2b. Upsert organizations (match by muso UUID).
+    const orgMusoToId = new Map<string, string>();
+    for (const [musoId, o] of orgPlan) {
+      const [hit] = await tx
         .select()
-        .from(personAliases)
-        .where(and(eq(personAliases.source, "muso"), eq(personAliases.sourceId, variant.id)));
-      if (!existsAlias) {
-        await db.insert(personAliases).values({
+        .from(organizations)
+        .where(eq(organizations.musoId, musoId));
+      let id = hit?.id;
+      if (!id) {
+        const [created] = await tx
+          .insert(organizations)
+          .values({ name: o.name, kind: o.kind, musoId } as any)
+          .returning();
+        id = created.id;
+      }
+      orgMusoToId.set(musoId, id);
+    }
+
+    // 2c. Per-track: clear existing rows, then re-insert. The whole loop is
+    //     in the same transaction as 2a/2b — a failure anywhere rolls back
+    //     every change.
+    for (const p of trackPlans) {
+      await tx.delete(trackWriters).where(eq(trackWriters.songId, p.songId));
+      await tx.delete(trackPerformers).where(eq(trackPerformers.songId, p.songId));
+      await tx.delete(trackMechanicalSplits).where(eq(trackMechanicalSplits.songId, p.songId));
+      await tx.delete(trackPublishingSplits).where(eq(trackPublishingSplits.songId, p.songId));
+
+      let pos = 0;
+      for (const w of p.writers) {
+        const personId = canonToPersonId.get(w.canon)!;
+        await tx.insert(trackWriters).values({
+          songId: p.songId,
           personId,
-          name: variant.name,
-          source: "muso",
-          sourceId: variant.id,
+          name: w.canon,
+          role: w.role,
+          position: pos++,
         });
       }
-    }
-  }
-
-  // 2b. Upsert organizations.
-  const orgMusoToId = new Map<string, string>();
-  for (const [musoId, o] of orgPlan) {
-    const [hit] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.musoId, musoId));
-    let id = hit?.id;
-    if (!id) {
-      const [created] = await db
-        .insert(organizations)
-        .values({ name: o.name, kind: o.kind, musoId } as any)
-        .returning();
-      id = created.id;
-    }
-    orgMusoToId.set(musoId, id);
-  }
-
-  // 2c. Per-track: clear existing rows, then re-insert.
-  for (const p of trackPlans) {
-    await db.delete(trackWriters).where(eq(trackWriters.songId, p.songId));
-    await db.delete(trackPerformers).where(eq(trackPerformers.songId, p.songId));
-    await db.delete(trackMechanicalSplits).where(eq(trackMechanicalSplits.songId, p.songId));
-    await db.delete(trackPublishingSplits).where(eq(trackPublishingSplits.songId, p.songId));
-
-    let pos = 0;
-    for (const w of p.writers) {
-      const personId = canonToPersonId.get(w.canon)!;
-      await db.insert(trackWriters).values({
-        songId: p.songId,
-        personId,
-        name: w.canon,
-        role: w.role,
-        position: pos++,
-      });
-    }
-    pos = 0;
-    for (const perf of p.performers) {
-      const personId = canonToPersonId.get(perf.canon)!;
-      await db.insert(trackPerformers).values({
-        songId: p.songId,
-        personId,
-        name: perf.canon,
-        role: perf.role,
-        position: pos++,
-      });
-    }
-    // Org credits → publishing-split placeholder rows (percentBp=0, admin
-    // fills in actual splits later). Labels go to mechanical, others to
-    // publishing — matches the broad master/composition split.
-    let pubPos = 0, mechPos = 0;
-    for (const oc of p.orgRoles) {
-      const orgId = orgMusoToId.get(oc.orgMusoId)!;
-      const [orgRow] = await db.select().from(organizations).where(eq(organizations.id, orgId));
-      const isMech = orgRow.kind === "label" || orgRow.kind === "distributor";
-      if (isMech) {
-        await db.insert(trackMechanicalSplits).values({
+      pos = 0;
+      for (const perf of p.performers) {
+        const personId = canonToPersonId.get(perf.canon)!;
+        await tx.insert(trackPerformers).values({
           songId: p.songId,
-          organizationId: orgId,
-          name: orgRow.name,
-          role: oc.role,
-          percentBp: 0,
-          position: mechPos++,
-        });
-      } else {
-        await db.insert(trackPublishingSplits).values({
-          songId: p.songId,
-          organizationId: orgId,
-          name: orgRow.name,
-          role: oc.role,
-          percentBp: 0,
-          position: pubPos++,
+          personId,
+          name: perf.canon,
+          role: perf.role,
+          position: pos++,
         });
       }
+      // Org credits → split placeholder rows (percentBp=0, admin fills in
+      // actual percentages later). Labels/distributors go to mechanical,
+      // publishers/PROs/etc. go to publishing — broad master/composition split.
+      let pubPos = 0, mechPos = 0;
+      for (const oc of p.orgRoles) {
+        const orgId = orgMusoToId.get(oc.orgMusoId)!;
+        const [orgRow] = await tx.select().from(organizations).where(eq(organizations.id, orgId));
+        const isMech = orgRow.kind === "label" || orgRow.kind === "distributor";
+        if (isMech) {
+          await tx.insert(trackMechanicalSplits).values({
+            songId: p.songId,
+            organizationId: orgId,
+            name: orgRow.name,
+            role: oc.role,
+            percentBp: 0,
+            position: mechPos++,
+          });
+        } else {
+          await tx.insert(trackPublishingSplits).values({
+            songId: p.songId,
+            organizationId: orgId,
+            name: orgRow.name,
+            role: oc.role,
+            percentBp: 0,
+            position: pubPos++,
+          });
+        }
+      }
     }
-  }
+  });
 
-  console.log(`✅ APPLY done — wrote credits for ${trackPlans.length} tracks.\n`);
+  console.log(`✅ APPLY done — wrote credits for ${trackPlans.length} tracks (transactional).\n`);
 }
 
 main().catch((err) => {
