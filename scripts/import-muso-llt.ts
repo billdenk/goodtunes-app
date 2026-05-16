@@ -117,6 +117,17 @@ function canonicalName(p: MusoPerson): string {
   return MUSO_PERSON_OVERRIDES[p.id] ?? p.name.trim();
 }
 
+// The merge key decides which muso people collapse onto one Person row.
+// - When an override exists, every muso UUID mapped to the same canonical
+//   name collapses (this is how the four "Nick Carter" muso UUIDs merge).
+// - When no override exists, the muso UUID itself is the key — so two
+//   genuinely distinct humans who happen to share a display name stay
+//   separate. (Earlier versions keyed on canonicalName alone and would
+//   silently merge same-named strangers.)
+function mergeKey(p: MusoPerson): string {
+  return MUSO_PERSON_OVERRIDES[p.id] ?? `muso:${p.id}`;
+}
+
 // muso uses a small set of "unknown placeholder" rows when a credit is
 // missing identity info — we drop them so they don't create junk People.
 // "Inconnu Compositeur Auteur" = French for "Unknown Composer Lyricist".
@@ -218,15 +229,15 @@ async function main() {
       for (const list of Object.values(byRole ?? {})) {
         for (const p of list ?? []) {
           if (shouldSkipPerson(p)) continue;
-          const canon = canonicalName(p);
-          const entry = personPlan.get(canon) ?? {
-            canonicalName: canon,
+          const key = mergeKey(p);
+          const entry = personPlan.get(key) ?? {
+            canonicalName: canonicalName(p),
             photoUrl: null as string | null,
             musoIds: [] as { id: string; name: string }[],
           };
           if (!entry.musoIds.some((m) => m.id === p.id)) entry.musoIds.push({ id: p.id, name: p.name });
           if (!entry.photoUrl) entry.photoUrl = manifest.manifest[p.id]?.localUrl ?? null;
-          personPlan.set(canon, entry);
+          personPlan.set(key, entry);
         }
       }
     }
@@ -241,13 +252,13 @@ async function main() {
     songId: string;
     trackNumber: number;
     songTitle: string;
-    writers: { canon: string; role: string }[];
-    performers: { canon: string; role: string }[];
+    writers: { mergeKey: string; canon: string; role: string }[];
+    performers: { mergeKey: string; canon: string; role: string }[];
     orgRoles: { orgMusoId: string; role: string }[];
   };
   const trackPlans: Planned[] = [];
   const unmatched: string[] = [];
-  const dedupKey = (canon: string, role: string) => `${canon}::${role}`;
+  const dedupKey = (k: string, role: string) => `${k}::${role}`;
 
   for (const track of dump.tracks) {
     const dbSong = songByPos.get(track.position);
@@ -278,16 +289,17 @@ async function main() {
           if (shouldSkipPerson(p)) continue;
           const decision = routeRole(group, role);
           if (decision.kind === "skip") continue;
+          const key = mergeKey(p);
           const canon = canonicalName(p);
-          const k = dedupKey(canon, decision.role);
+          const k = dedupKey(key, decision.role);
           if (decision.kind === "writer") {
             if (writersSeen.has(k)) continue;
             writersSeen.add(k);
-            planned.writers.push({ canon, role: decision.role });
+            planned.writers.push({ mergeKey: key, canon, role: decision.role });
           } else {
             if (performersSeen.has(k)) continue;
             performersSeen.add(k);
-            planned.performers.push({ canon, role: decision.role });
+            planned.performers.push({ mergeKey: key, canon, role: decision.role });
           }
         }
       }
@@ -345,8 +357,9 @@ async function main() {
   await db.transaction(async (tx) => {
     // 2a. Upsert people (match by muso UUID → person_aliases, then optionally
     //     by name when --allow-name-fallback is set).
-    const canonToPersonId = new Map<string, string>();
-    for (const [canon, entry] of personPlan) {
+    const mergeKeyToPersonId = new Map<string, string>();
+    for (const [key, entry] of personPlan) {
+      const canon = entry.canonicalName;
       let personId: string | undefined;
       // Try every known muso UUID for this canonical name against person_aliases.
       for (const variant of entry.musoIds) {
@@ -381,7 +394,7 @@ async function main() {
           await tx.update(people).set({ photoUrl: entry.photoUrl }).where(eq(people.id, personId));
         }
       }
-      canonToPersonId.set(canon, personId);
+      mergeKeyToPersonId.set(key, personId);
 
       // Record every muso variant as an alias.
       for (const variant of entry.musoIds) {
@@ -429,7 +442,7 @@ async function main() {
 
       let pos = 0;
       for (const w of p.writers) {
-        const personId = canonToPersonId.get(w.canon)!;
+        const personId = mergeKeyToPersonId.get(w.mergeKey)!;
         await tx.insert(trackWriters).values({
           songId: p.songId,
           personId,
@@ -440,7 +453,7 @@ async function main() {
       }
       pos = 0;
       for (const perf of p.performers) {
-        const personId = canonToPersonId.get(perf.canon)!;
+        const personId = mergeKeyToPersonId.get(perf.mergeKey)!;
         await tx.insert(trackPerformers).values({
           songId: p.songId,
           personId,

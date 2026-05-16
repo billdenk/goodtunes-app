@@ -369,19 +369,30 @@ export const trackPerformers = pgTable("track_performers", {
 // so re-imports dedup. `kind` is a free text tag for now ("label",
 // "publisher", "pro", …) — promotable to an enum once we stop discovering
 // new shapes.
-export const organizations = pgTable("organizations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  kind: text("kind").notNull(), // "label" | "publisher" | "pro" | "distributor" | …
-  musoId: text("muso_id"),
-  websiteUrl: text("website_url"),
-  logoUrl: text("logo_url"),
-  // Optional FK promoting an Organization that's also a GoodTunes-tracked
-  // label into the richer `labels` row — so admins editing the label there
-  // don't need to keep two records in sync.
-  labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    kind: text("kind").notNull(), // "label" | "publisher" | "pro" | "distributor" | …
+    musoId: text("muso_id"),
+    websiteUrl: text("website_url"),
+    logoUrl: text("logo_url"),
+    // Optional FK promoting an Organization that's also a GoodTunes-tracked
+    // label into the richer `labels` row — so admins editing the label there
+    // don't need to keep two records in sync.
+    labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    // Mirrors the partial unique index created in
+    // scripts/migrate-muso-tables.sql — keeps the Drizzle schema and the live
+    // DB invariants aligned so a future `drizzle-kit push` doesn't see drift.
+    musoIdUniq: uniqueIndex("organizations_muso_id_uniq")
+      .on(t.musoId)
+      .where(sql`${t.musoId} IS NOT NULL`),
+  }),
+);
 
 // ----- Mechanical (master-side) splits ----------------------------------
 // Per-track percentage split of the *recording* (master) revenue — the
