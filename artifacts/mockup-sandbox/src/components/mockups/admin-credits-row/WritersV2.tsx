@@ -124,9 +124,13 @@ export function WritersV2() {
               verified
               percent="33.33"
               publisher={{
-                name: "Nebel House Songs",
+                name: "Grumblyrumpus Music",
                 pro: "BMI",
-                ipi: "812450033",
+                ipi: "1210523125",
+                admin: {
+                  name: "Beck Nebel (self-admin)",
+                  email: "becknebel@gmail.com",
+                },
               }}
             />
             <WriterRow
