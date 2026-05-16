@@ -17,6 +17,7 @@ import {
   EyeOff,
   Lock,
   LockOpen,
+  Link as LinkIcon,
 } from "lucide-react";
 
 type Mode = "edit" | "listen";
@@ -148,38 +149,102 @@ function MasterDetail({
   hasMaster: boolean;
   onClose: () => void;
 }) {
+  const [dragOver, setDragOver] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <DetailWrap title="Master" onClose={onClose}>
       {hasMaster ? (
-        <>
-          {/* Whole file pill is the audition trigger; vinyl badge swaps to play glyph on hover */}
+        // Single row: [▶ subdued play] [filename + meta] [Replace ▾]
+        // The whole row is a drop target — drag a new .wav/.aiff/.flac to swap.
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+          }}
+          className={[
+            "group relative flex items-center gap-3 p-2.5 rounded-md border-2 transition-colors",
+            dragOver
+              ? "border-dashed border-[#319ED8] bg-[#319ED8]/5"
+              : "border-slate-200 bg-slate-50",
+          ].join(" ")}
+        >
+          {/* Play — subdued slate at rest, brand-blue on row hover */}
           <button
             type="button"
             aria-label="Play storms_master_24-96.wav"
-            className="group w-full flex items-center gap-3 p-2.5 rounded-md bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors text-left"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 bg-slate-200/70 text-slate-500 group-hover:bg-[#319ED8] group-hover:text-white transition-colors"
           >
-            <span className="relative w-9 h-9 rounded-md bg-[#00062B] text-[#4AFFCA] inline-flex items-center justify-center flex-shrink-0">
-              <Disc3 className="w-4 h-4 transition-opacity group-hover:opacity-0" />
-              <Play className="absolute w-4 h-4 translate-x-[1px] fill-current opacity-0 transition-opacity group-hover:opacity-100" />
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12.5px] font-semibold text-slate-900 truncate">
-                storms_master_24-96.wav
-              </div>
-              <div className="text-[11px] text-slate-500">
-                24-bit · 96 kHz · 4:12 · 47.3 MB
-              </div>
+            <Play className="w-4 h-4 translate-x-[1px] fill-current" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12.5px] font-semibold text-slate-900 truncate">
+              storms_master_24-96.wav
             </div>
-          </button>
-          <button className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 inline-flex items-center gap-1">
-            <Upload className="w-3 h-3" />
-            Replace master
-          </button>
-        </>
+            <div className="text-[11px] text-slate-500">
+              24-bit · 96 kHz · 4:12 · 47.3 MB
+            </div>
+          </div>
+
+          {/* Replace — opens a small menu: upload from device · paste a link */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1"
+            >
+              <Upload className="w-3 h-3" />
+              Replace
+            </button>
+            {menuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setMenuOpen(false)}
+                  aria-hidden
+                />
+                <div className="absolute right-0 mt-1 z-20 w-56 rounded-md border border-slate-200 bg-white shadow-lg overflow-hidden text-left">
+                  <button className="w-full flex items-start gap-2 px-3 py-2 text-[12px] hover:bg-slate-50">
+                    <Upload className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-slate-500" />
+                    <div>
+                      <div className="font-semibold text-slate-900">
+                        Upload from this device
+                      </div>
+                      <div className="text-[10.5px] text-slate-500">
+                        .wav · .aiff · .flac
+                      </div>
+                    </div>
+                  </button>
+                  <div className="border-t border-slate-100" />
+                  <button className="w-full flex items-start gap-2 px-3 py-2 text-[12px] hover:bg-slate-50">
+                    <LinkIcon className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-slate-500" />
+                    <div>
+                      <div className="font-semibold text-slate-900">
+                        Paste a link
+                      </div>
+                      <div className="text-[10.5px] text-slate-500">
+                        Dropbox · Drive · any URL
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {dragOver && (
+            <div className="absolute inset-0 rounded-md bg-[#319ED8]/10 flex items-center justify-center text-[12px] font-semibold text-[#319ED8] pointer-events-none">
+              Drop to replace master
+            </div>
+          )}
+        </div>
       ) : (
         <button className="w-full px-3 py-6 rounded-md border-2 border-dashed border-slate-300 hover:border-[#319ED8] hover:bg-[#319ED8]/5 text-[12.5px] font-semibold text-slate-500 hover:text-[#319ED8]">
           <Upload className="w-4 h-4 mx-auto mb-1" />
-          Drop a WAV or AIFF master here, or click to choose
+          Drop a WAV, AIFF, or FLAC master here, or click to choose
         </button>
       )}
     </DetailWrap>
