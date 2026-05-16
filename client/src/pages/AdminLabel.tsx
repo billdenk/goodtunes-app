@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -239,9 +240,7 @@ export function AdminLabel() {
           ))}
         </div>
 
-        {tab === "overview" && (
-          <OverviewPanel label={label} onEdit={openInClassicAdmin} />
-        )}
+        {tab === "overview" && <OverviewPanel label={label} />}
         {tab === "logo" && <LogoPanel label={label} />}
         {tab === "cover" && <CoverPanel label={label} />}
         {tab === "releases" && <ReleasesPanel releases={releases} />}
@@ -250,65 +249,67 @@ export function AdminLabel() {
   );
 }
 
-/* ─── Overview ─────────────────────────────────────────────────────── */
+/* ─── Overview (inline-editable) ───────────────────────────────────── */
 
-function OverviewPanel({
-  label,
-  onEdit,
-}: {
-  label: Label;
-  onEdit: () => void;
-}) {
+function OverviewPanel({ label }: { label: Label }) {
+  const invalidate: (readonly unknown[])[] = [
+    ["/api/labels", label.id],
+    ["/api/labels"],
+  ];
+  const endpoint = `/api/admin/labels/${label.id}`;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-identity"
-      >
-        <PanelHeader title="Identity" onEdit={onEdit} />
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <Field label="Name" value={label.name} testId="field-name" />
-          <Field
-            label="Location"
-            value={label.location}
-            testId="field-location"
-          />
-        </dl>
-        <div>
-          <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-            Bio
-          </dt>
-          <dd
-            className={[
-              "text-[13.5px] leading-relaxed whitespace-pre-line",
-              label.bio ? "text-slate-700" : "text-slate-300 italic",
-            ].join(" ")}
-            data-testid="field-bio"
-          >
-            {label.bio || "No bio yet"}
-          </dd>
-        </div>
-      </section>
-
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-links"
-      >
-        <PanelHeader title="Links" onEdit={onEdit} />
-        <dl className="space-y-4">
-          <LinkField
-            label="Website"
-            value={label.websiteUrl}
-            testId="field-website-url"
-          />
-          <LinkField
-            label="Instagram"
-            value={label.instagramUrl}
-            testId="field-instagram-url"
-            icon={Instagram}
-          />
-        </dl>
-      </section>
+      <EditablePanel
+        title="Identity"
+        testId="panel-overview-identity"
+        endpoint={endpoint}
+        values={{
+          name: label.name,
+          location: label.location,
+          bio: label.bio,
+        }}
+        invalidate={invalidate}
+        fields={[
+          { key: "name", label: "Name", type: "text", required: true },
+          {
+            key: "location",
+            label: "Location",
+            type: "text",
+            placeholder: "Brooklyn, NY",
+          },
+          {
+            key: "bio",
+            label: "Bio",
+            type: "textarea",
+            placeholder: "A short paragraph about the label.",
+          },
+        ]}
+      />
+      <EditablePanel
+        title="Links"
+        testId="panel-overview-links"
+        endpoint={endpoint}
+        values={{
+          websiteUrl: label.websiteUrl,
+          instagramUrl: label.instagramUrl,
+        }}
+        invalidate={invalidate}
+        fields={[
+          {
+            key: "websiteUrl",
+            label: "Website",
+            type: "url",
+            placeholder: "https://example.com/",
+          },
+          {
+            key: "instagramUrl",
+            label: "Instagram",
+            type: "url",
+            placeholder: "https://instagram.com/yourlabel",
+            readIcon: Instagram,
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -612,94 +613,5 @@ function ReleasesPanel({ releases }: { releases: AlbumLite[] }) {
         ))}
       </ul>
     </section>
-  );
-}
-
-/* ─── Bits ─────────────────────────────────────────────────────────── */
-
-function PanelHeader({
-  title,
-  onEdit,
-}: {
-  title: string;
-  onEdit: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-      <button
-        onClick={onEdit}
-        aria-label="Edit in classic admin"
-        title="Edit in classic admin"
-        data-testid={`button-edit-${title.toLowerCase().replace(/[^a-z]+/g, "-")}`}
-        className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-      >
-        <Pencil className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: string | null;
-  testId?: string;
-}) {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
-        {label}
-      </dt>
-      <dd
-        className={[
-          "text-[13.5px]",
-          value ? "text-slate-900 font-medium" : "text-slate-300 italic",
-        ].join(" ")}
-      >
-        {value || "Not set"}
-      </dd>
-    </div>
-  );
-}
-
-function LinkField({
-  label,
-  value,
-  testId,
-  icon: Icon,
-}: {
-  label: string;
-  value: string | null;
-  testId?: string;
-  icon?: typeof ExternalLink;
-}) {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
-        {label}
-      </dt>
-      <dd className="text-[13.5px]">
-        {value ? (
-          <a
-            href={value}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[#319ED8] font-medium hover:underline inline-flex items-center gap-1"
-          >
-            {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
-            <span className="truncate max-w-[320px]">
-              {value.replace(/^https?:\/\//, "")}
-            </span>
-            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-          </a>
-        ) : (
-          <span className="text-slate-300 italic">Not set</span>
-        )}
-      </dd>
-    </div>
   );
 }

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -236,9 +237,7 @@ export function AdminVendor() {
         </div>
 
         {/* CONTENT */}
-        {tab === "overview" && (
-          <OverviewPanel vendor={vendor} onEdit={openInClassicAdmin} />
-        )}
+        {tab === "overview" && <OverviewPanel vendor={vendor} />}
         {tab === "logo" && <LogoPanel vendor={vendor} />}
         {tab === "cover" && <CoverPanel vendor={vendor} />}
         {tab === "instruments" && (
@@ -249,74 +248,82 @@ export function AdminVendor() {
   );
 }
 
-/* ─── Overview ─────────────────────────────────────────────────────── */
+/* ─── Overview (inline-editable) ───────────────────────────────────── */
 
-function OverviewPanel({
-  vendor,
-  onEdit,
-}: {
-  vendor: Vendor;
-  onEdit: () => void;
-}) {
+function OverviewPanel({ vendor }: { vendor: Vendor }) {
+  const invalidate: (readonly unknown[])[] = [
+    ["/api/vendors", vendor.id, "profile"],
+    ["/api/vendors"],
+    ["/api/instruments"],
+  ];
+  const endpoint = `/api/admin/vendors/${vendor.id}`;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-identity"
-      >
-        <PanelHeader title="Identity" onEdit={onEdit} />
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <Field label="Name" value={vendor.name} testId="field-name" />
-          <Field
-            label="Domain"
-            value={vendor.domain}
-            testId="field-domain"
-          />
-          <Field
-            label="Tagline"
-            value={vendor.tagline}
-            testId="field-tagline"
-          />
-          <Field
-            label="Location"
-            value={vendor.location}
-            testId="field-location"
-          />
-        </dl>
-      </section>
-
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-links-bio"
-      >
-        <PanelHeader title="Links & bio" onEdit={onEdit} />
-        <dl className="space-y-4">
-          <LinkField
-            label="Home URL"
-            value={vendor.homeUrl}
-            testId="field-home-url"
-          />
-          <LinkField
-            label="About URL"
-            value={vendor.aboutUrl}
-            testId="field-about-url"
-          />
-        </dl>
-        <div>
-          <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-            Bio
-          </dt>
-          <dd
-            className={[
-              "text-[13.5px] leading-relaxed whitespace-pre-line",
-              vendor.bio ? "text-slate-700" : "text-slate-300 italic",
-            ].join(" ")}
-            data-testid="field-bio"
-          >
-            {vendor.bio || "No bio yet"}
-          </dd>
-        </div>
-      </section>
+      <EditablePanel
+        title="Identity"
+        testId="panel-overview-identity"
+        endpoint={endpoint}
+        values={{
+          name: vendor.name,
+          domain: vendor.domain,
+          tagline: vendor.tagline,
+          location: vendor.location,
+        }}
+        invalidate={invalidate}
+        fields={[
+          { key: "name", label: "Name", type: "text", required: true },
+          {
+            key: "domain",
+            label: "Domain",
+            type: "text",
+            required: true,
+            placeholder: "reverb.com",
+          },
+          {
+            key: "tagline",
+            label: "Tagline",
+            type: "text",
+            placeholder: "Short line shown on vendor cards.",
+          },
+          {
+            key: "location",
+            label: "Location",
+            type: "text",
+            placeholder: "Nashville, TN",
+          },
+        ]}
+      />
+      <EditablePanel
+        title="Links & bio"
+        testId="panel-overview-links-bio"
+        endpoint={endpoint}
+        values={{
+          homeUrl: vendor.homeUrl,
+          aboutUrl: vendor.aboutUrl,
+          bio: vendor.bio,
+        }}
+        invalidate={invalidate}
+        fields={[
+          {
+            key: "homeUrl",
+            label: "Home URL",
+            type: "url",
+            placeholder: "https://reverb.com/",
+          },
+          {
+            key: "aboutUrl",
+            label: "About URL",
+            type: "url",
+            placeholder: "https://reverb.com/about",
+          },
+          {
+            key: "bio",
+            label: "Bio",
+            type: "textarea",
+            placeholder: "A short paragraph about the shop.",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -630,88 +637,3 @@ function InstrumentsPanel({
   );
 }
 
-/* ─── Bits ─────────────────────────────────────────────────────────── */
-
-function PanelHeader({
-  title,
-  onEdit,
-}: {
-  title: string;
-  onEdit: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-      <button
-        onClick={onEdit}
-        aria-label="Edit in classic admin"
-        title="Edit in classic admin"
-        data-testid={`button-edit-${title.toLowerCase().replace(/[^a-z]+/g, "-")}`}
-        className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-      >
-        <Pencil className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: string | null;
-  testId?: string;
-}) {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
-        {label}
-      </dt>
-      <dd
-        className={[
-          "text-[13.5px]",
-          value ? "text-slate-900 font-medium" : "text-slate-300 italic",
-        ].join(" ")}
-      >
-        {value || "Not set"}
-      </dd>
-    </div>
-  );
-}
-
-function LinkField({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: string | null;
-  testId?: string;
-}) {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
-        {label}
-      </dt>
-      <dd className="text-[13.5px]">
-        {value ? (
-          <a
-            href={value}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[#319ED8] font-medium hover:underline inline-flex items-center gap-1"
-          >
-            <span className="truncate max-w-[320px]">
-              {value.replace(/^https?:\/\//, "")}
-            </span>
-            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-          </a>
-        ) : (
-          <span className="text-slate-300 italic">Not set</span>
-        )}
-      </dd>
-    </div>
-  );
-}

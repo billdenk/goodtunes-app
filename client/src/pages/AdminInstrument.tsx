@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -219,12 +220,7 @@ export function AdminInstrument() {
         </div>
 
         {/* TAB CONTENT */}
-        {tab === "overview" && (
-          <OverviewPanel
-            instrument={instrument}
-            onEdit={openInClassicAdmin}
-          />
-        )}
+        {tab === "overview" && <OverviewPanel instrument={instrument} />}
         {tab === "photo" && <PhotoPanel instrument={instrument} />}
         {tab === "vendors" && (
           <VendorsPanel
@@ -237,73 +233,68 @@ export function AdminInstrument() {
   );
 }
 
-/* ─── Overview ─────────────────────────────────────────────────────── */
+/* ─── Overview (inline-editable) ───────────────────────────────────── */
 
-function OverviewPanel({
-  instrument,
-  onEdit,
-}: {
-  instrument: InstrumentFull;
-  onEdit: () => void;
-}) {
+function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
+  const invalidate: (readonly unknown[])[] = [
+    ["/api/instruments", instrument.id],
+    ["/api/instruments"],
+  ];
+  const endpoint = `/api/admin/instruments/${instrument.id}`;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-identity"
-      >
-        <PanelHeader title="Identity" onEdit={onEdit} />
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <Field label="Name" value={instrument.name} testId="field-name" />
-          <Field
-            label="Category"
-            value={instrument.category}
-            testId="field-category"
-          />
-          <Field
-            label="Short category"
-            value={instrument.shortCategory}
-            testId="field-short-category"
-          />
-        </dl>
-      </section>
-
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-notes"
-      >
-        <PanelHeader title="Notes" onEdit={onEdit} />
-        <div>
-          <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-            About
-          </dt>
-          <dd
-            className={[
-              "text-[13.5px] leading-relaxed whitespace-pre-line",
-              instrument.about ? "text-slate-700" : "text-slate-300 italic",
-            ].join(" ")}
-            data-testid="field-about"
-          >
-            {instrument.about || "No description yet"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-            Artist note
-          </dt>
-          <dd
-            className={[
-              "text-[13.5px] leading-relaxed whitespace-pre-line",
-              instrument.artistNote
-                ? "text-slate-700"
-                : "text-slate-300 italic",
-            ].join(" ")}
-            data-testid="field-artist-note"
-          >
-            {instrument.artistNote || "No artist note yet"}
-          </dd>
-        </div>
-      </section>
+      <EditablePanel
+        title="Identity"
+        testId="panel-overview-identity"
+        endpoint={endpoint}
+        values={{
+          name: instrument.name,
+          category: instrument.category,
+          shortCategory: instrument.shortCategory,
+        }}
+        invalidate={invalidate}
+        fields={[
+          { key: "name", label: "Name", type: "text", required: true },
+          {
+            key: "category",
+            label: "Category",
+            type: "text",
+            required: true,
+            placeholder: "e.g. Electric Guitar",
+          },
+          {
+            key: "shortCategory",
+            label: "Short category",
+            type: "text",
+            placeholder: "e.g. Guitar",
+          },
+        ]}
+      />
+      <EditablePanel
+        title="Notes"
+        testId="panel-overview-notes"
+        endpoint={endpoint}
+        values={{
+          about: instrument.about,
+          artistNote: instrument.artistNote,
+        }}
+        invalidate={invalidate}
+        fields={[
+          {
+            key: "about",
+            label: "About",
+            type: "textarea",
+            placeholder: "Background on the instrument itself.",
+          },
+          {
+            key: "artistNote",
+            label: "Artist note",
+            type: "textarea",
+            placeholder:
+              "What the artist says about why this instrument matters to them.",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -723,57 +714,6 @@ function VendorRow({
         </button>
       </div>
     </li>
-  );
-}
-
-/* ─── Bits ─────────────────────────────────────────────────────────── */
-
-function PanelHeader({
-  title,
-  onEdit,
-}: {
-  title: string;
-  onEdit: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-      <button
-        onClick={onEdit}
-        aria-label="Edit in classic admin"
-        title="Edit in classic admin"
-        data-testid={`button-edit-${title.toLowerCase().replace(/\s+/g, "-")}`}
-        className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-      >
-        <Pencil className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: string | null;
-  testId?: string;
-}) {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
-        {label}
-      </dt>
-      <dd
-        className={[
-          "text-[13.5px]",
-          value ? "text-slate-900 font-medium" : "text-slate-300 italic",
-        ].join(" ")}
-      >
-        {value || "Not set"}
-      </dd>
-    </div>
   );
 }
 
