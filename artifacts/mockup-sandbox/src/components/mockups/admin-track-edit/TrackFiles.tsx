@@ -20,6 +20,10 @@ import {
  * uploaded file (if any) shown inline with its format, sample rate and
  * checksum. Stems are a single zip slot for now — expand later if we want
  * per-stem uploads.
+ *
+ * Files are uploaded direct by the artist / admin. Muso doesn't host audio
+ * (credits only) and we're not pulling masters from streaming services, so
+ * the only bulk path is "drop a folder" or link a cloud storage folder.
  */
 export function TrackFiles() {
   return (
@@ -126,11 +130,11 @@ export function TrackFiles() {
               13 of 17 tracks still missing a master.
             </span>{" "}
             <button className="underline font-medium">
-              Bulk-upload from Muso
-            </button>{" "}
-            ·{" "}
-            <button className="underline font-medium">
               Drop a folder of files
+            </button>{" "}
+            (we'll match by filename) ·{" "}
+            <button className="underline font-medium">
+              Link a Dropbox / Drive folder
             </button>
           </div>
         </div>
