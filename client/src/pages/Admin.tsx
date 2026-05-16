@@ -13,7 +13,17 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag } from "lucide-react";
+import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface AdminAlbum {
   id: string;
@@ -1269,80 +1279,139 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
           </div>
         )}
         {videos.map((v) => (
-          <div
+          <AlbumVideoRow
             key={v.id}
-            className="flex items-start gap-3 p-3 border-b border-slate-100 last:border-b-0"
-            data-testid={`row-album-video-${v.id}`}
-          >
-            <video
-              src={v.videoUrl}
-              poster={v.posterUrl ?? undefined}
-              className="w-28 h-16 bg-slate-100 rounded object-cover flex-shrink-0"
-              controls
-              preload="metadata"
-            />
-            <div className="flex-1 min-w-0 space-y-2">
-              <input
-                type="text"
-                defaultValue={v.title}
-                onBlur={(e) => {
-                  const val = e.target.value.trim();
-                  if (val && val !== v.title) updateVideo.mutate({ id: v.id, patch: { title: val } });
-                }}
-                className={inputCls}
-                data-testid={`input-album-video-title-${v.id}`}
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const input = document.createElement("input");
-                    input.type = "file";
-                    input.accept = "image/png,image/jpeg,image/webp";
-                    input.onchange = async () => {
-                      const f = input.files?.[0];
-                      if (!f) return;
-                      try {
-                        const url = await uploadImageFile(f);
-                        updateVideo.mutate({ id: v.id, patch: { posterUrl: url } });
-                      } catch (e: any) {
-                        setErr(e.message || "Poster upload failed");
-                      }
-                    };
-                    input.click();
-                  }}
-                  className="px-3 py-1.5 text-[12px] rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-                  data-testid={`button-album-video-poster-${v.id}`}
-                >
-                  {v.posterUrl ? "Change poster" : "Add poster"}
-                </button>
-                {v.posterUrl && (
-                  <button
-                    type="button"
-                    onClick={() => updateVideo.mutate({ id: v.id, patch: { posterUrl: null as any } })}
-                    className="px-2 py-1.5 text-[12px] text-slate-500 hover:text-red-600"
-                  >
-                    Remove poster
-                  </button>
-                )}
-                <span className="text-[11px] text-slate-400">
-                  16:9 still. 1280×720 px recommended (1920×1080 retina). JPG, PNG, or WebP.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm(`Delete "${v.title}"?`)) deleteVideo.mutate(v.id);
-                  }}
-                  className="ml-auto px-2 py-1.5 text-[12px] text-red-600 hover:underline"
-                  data-testid={`button-delete-album-video-${v.id}`}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
+            video={v}
+            onTitleChange={(title) => updateVideo.mutate({ id: v.id, patch: { title } })}
+            onPosterChange={(posterUrl) => updateVideo.mutate({ id: v.id, patch: { posterUrl: posterUrl as any } })}
+            onPosterUploadError={(msg) => setErr(msg)}
+            onDelete={() => deleteVideo.mutate(v.id)}
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+// Single video row in the admin video manager. Pulled out so the
+// delete-confirmation AlertDialog can own its own open/closed state without
+// every row in the table sharing one boolean. Layout: 16:9 thumbnail on the
+// left, title input + compact poster controls in the middle, dedicated
+// trashcan on the far right (separated from the poster controls so it can't
+// be mistaken for "delete the poster").
+function AlbumVideoRow({
+  video,
+  onTitleChange,
+  onPosterChange,
+  onPosterUploadError,
+  onDelete,
+}: {
+  video: AdminAlbumVideo;
+  onTitleChange: (title: string) => void;
+  onPosterChange: (posterUrl: string | null) => void;
+  onPosterUploadError: (msg: string) => void;
+  onDelete: () => void;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const pickPoster = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp";
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      try {
+        const url = await uploadImageFile(f);
+        onPosterChange(url);
+      } catch (e: any) {
+        onPosterUploadError(e?.message || "Poster upload failed");
+      }
+    };
+    input.click();
+  };
+
+  return (
+    <div
+      className="flex items-start gap-3 p-3 border-b border-slate-100 last:border-b-0"
+      data-testid={`row-album-video-${video.id}`}
+    >
+      <video
+        src={video.videoUrl}
+        poster={video.posterUrl ?? undefined}
+        className="w-28 h-16 bg-slate-100 rounded object-cover flex-shrink-0"
+        controls
+        preload="metadata"
+      />
+      <div className="flex-1 min-w-0 space-y-2">
+        <input
+          type="text"
+          defaultValue={video.title}
+          placeholder="Video title"
+          onBlur={(e) => {
+            const val = e.target.value.trim();
+            if (val && val !== video.title) onTitleChange(val);
+          }}
+          className={inputCls}
+          data-testid={`input-album-video-title-${video.id}`}
+        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={pickPoster}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+            data-testid={`button-album-video-poster-${video.id}`}
+          >
+            <ImagePlus className="w-3.5 h-3.5" />
+            {video.posterUrl ? "Change poster" : "Add poster"}
+          </button>
+          {video.posterUrl && (
+            <button
+              type="button"
+              onClick={() => onPosterChange(null)}
+              className="px-2 py-1.5 text-[12px] text-slate-500 hover:text-slate-700"
+              data-testid={`button-remove-poster-${video.id}`}
+            >
+              Remove
+            </button>
+          )}
+          <span className="text-[11px] text-slate-400">
+            16:9 still · 1280×720 (or 1920×1080 retina) · JPG/PNG/WebP
+          </span>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => setConfirmOpen(true)}
+        className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50"
+        aria-label="Delete video"
+        data-testid={`button-delete-album-video-${video.id}`}
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent data-testid={`dialog-delete-video-${video.id}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {video.title ? `"${video.title}" ` : "This video "}
+              will be removed from the album. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-delete-video-${video.id}`}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid={`button-confirm-delete-video-${video.id}`}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
