@@ -1,15 +1,16 @@
 import { useState } from "react";
 import {
   GripVertical,
-  Pencil,
-  MoreHorizontal,
   Plus,
-  Check,
-  AlignLeft,
-  Users,
   Play,
   Pause,
   Headphones,
+  Pencil,
+  ChevronDown,
+  Upload,
+  FileText,
+  Users,
+  Trash2,
 } from "lucide-react";
 
 type Mode = "edit" | "listen";
@@ -22,17 +23,81 @@ const TRACKS = [
   { n: 5, title: "Lighthouse", master: false, lyrics: false, credits: false, duration: "—" },
 ];
 
-function Chip({ ok, icon: Icon, label }: { ok: boolean; icon: any; label: string }) {
+function DotMeter({ t }: { t: (typeof TRACKS)[number] }) {
+  const dots = [t.master, t.lyrics, t.credits];
+  const labels = ["Master", "Lyrics", "Credits"];
+  const complete = dots.every(Boolean);
   return (
-    <span
-      className={[
-        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold",
-        ok ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400",
-      ].join(" ")}
+    <div
+      className="flex items-center gap-1.5 flex-shrink-0"
+      title={dots
+        .map((ok, i) => `${labels[i]}: ${ok ? "✓" : "missing"}`)
+        .join(" · ")}
     >
-      <Icon className="w-2.5 h-2.5" />
-      {label}
-    </span>
+      <div className="flex items-center gap-0.5">
+        {dots.map((ok, i) => (
+          <span
+            key={i}
+            className={[
+              "w-1.5 h-1.5 rounded-full",
+              ok ? "bg-emerald-500" : "bg-slate-200",
+            ].join(" ")}
+          />
+        ))}
+      </div>
+      <span
+        className={[
+          "text-[10.5px] font-semibold tabular-nums",
+          complete ? "text-slate-400" : "text-amber-600",
+        ].join(" ")}
+      >
+        {dots.filter(Boolean).length}/3
+      </span>
+    </div>
+  );
+}
+
+function StatusBadge({
+  ok,
+  icon: Icon,
+  okText,
+  missingText,
+  cta,
+}: {
+  ok: boolean;
+  icon: any;
+  okText: string;
+  missingText: string;
+  cta: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200">
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          className={[
+            "w-7 h-7 rounded-md inline-flex items-center justify-center flex-shrink-0",
+            ok
+              ? "bg-emerald-50 text-emerald-600"
+              : "bg-amber-50 text-amber-600",
+          ].join(" ")}
+        >
+          <Icon className="w-3.5 h-3.5" />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[11.5px] font-semibold text-slate-900 truncate">
+            {ok ? okText : missingText}
+          </div>
+        </div>
+      </div>
+      <button
+        className={[
+          "text-[11.5px] font-semibold flex-shrink-0",
+          ok ? "text-slate-500 hover:text-slate-700" : "text-[#319ED8] hover:underline",
+        ].join(" ")}
+      >
+        {cta}
+      </button>
+    </div>
   );
 }
 
@@ -81,55 +146,111 @@ function SegmentedControl({
   );
 }
 
-function EditRow({ t, isLast }: { t: (typeof TRACKS)[number]; isLast: boolean }) {
+function EditRow({
+  t,
+  isLast,
+  expanded,
+  onToggle,
+}: {
+  t: (typeof TRACKS)[number];
+  isLast: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   return (
     <li
       className={[
-        "group px-5 py-3 transition-colors hover:bg-slate-50/70",
+        "group transition-colors",
+        expanded ? "bg-slate-50/80" : "hover:bg-slate-50/70",
         !isLast && "border-b border-slate-100",
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="flex items-center gap-4">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full text-left px-5 py-3 flex items-center gap-4 cursor-pointer"
+        aria-expanded={expanded}
+      >
         <GripVertical className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 flex-shrink-0" />
-        {/* Apple Music pattern: track # at rest, swaps to play button on hover */}
+        {/* Apple Music: # at rest, play on hover */}
         <div className="w-5 -ml-1.5 flex-shrink-0 flex items-center justify-center">
           <span className="text-slate-400 text-[12px] tabular-nums font-medium group-hover:hidden">
             {t.n}
           </span>
-          <button
-            disabled={!t.master}
+          <span
             className={[
-              "hidden group-hover:inline-flex w-5 h-5 rounded-full items-center justify-center transition-colors",
-              t.master
-                ? "text-slate-700 hover:text-[#319ED8]"
-                : "text-slate-300 cursor-not-allowed",
+              "hidden group-hover:inline-flex w-5 h-5 rounded-full items-center justify-center",
+              t.master ? "text-slate-700" : "text-slate-300",
             ].join(" ")}
             aria-label={`Play ${t.title}`}
           >
             <Play className="w-3 h-3 ml-0.5 fill-current" />
-          </button>
+          </span>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-slate-900 text-[13.5px] font-medium truncate">
-            {t.title}
+        <div className="flex-1 min-w-0 text-slate-900 text-[13.5px] font-medium truncate">
+          {t.title}
+        </div>
+        <DotMeter t={t} />
+        <ChevronDown
+          className={[
+            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
+            expanded ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </button>
+
+      {expanded && (
+        <div className="px-5 pb-5 -mt-1 space-y-3">
+          {/* Title field */}
+          <div>
+            <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
+              Title
+            </label>
+            <input
+              defaultValue={t.title}
+              className="w-full px-3 py-1.5 rounded-md border border-slate-200 bg-white text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8]"
+            />
           </div>
-          <div className="flex items-center gap-1.5 mt-1">
-            <Chip ok={t.master} icon={Check} label={t.master ? "Master loaded" : "No master"} />
-            <Chip ok={t.lyrics} icon={AlignLeft} label="Lyrics" />
-            <Chip ok={t.credits} icon={Users} label="Credits" />
+
+          {/* Three status cards */}
+          <div className="grid grid-cols-3 gap-2">
+            <StatusBadge
+              ok={t.master}
+              icon={Upload}
+              okText="Master loaded"
+              missingText="No master"
+              cta={t.master ? "Replace" : "Upload"}
+            />
+            <StatusBadge
+              ok={t.lyrics}
+              icon={FileText}
+              okText="Lyrics set"
+              missingText="No lyrics"
+              cta={t.lyrics ? "Edit" : "Add"}
+            />
+            <StatusBadge
+              ok={t.credits}
+              icon={Users}
+              okText="Credits set"
+              missingText="No credits"
+              cta={t.credits ? "Edit" : "Add"}
+            />
+          </div>
+
+          {/* Danger row */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[11px] text-slate-400">
+              Track ID · t_{1000 + t.n}
+            </span>
+            <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11.5px] font-semibold text-rose-600 hover:bg-rose-50">
+              <Trash2 className="w-3 h-3" />
+              Delete track
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button className="w-7 h-7 rounded-md text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center">
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button className="w-7 h-7 rounded-md text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center">
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
+      )}
     </li>
   );
 }
@@ -215,6 +336,7 @@ function ListenRow({
 export function Interactive() {
   const [mode, setMode] = useState<Mode>("edit");
   const [playingId, setPlayingId] = useState<number | null>(2);
+  const [expandedId, setExpandedId] = useState<number | null>(2);
 
   return (
     <div className="min-h-screen bg-slate-50 p-10 font-[Inter,system-ui,-apple-system,sans-serif]">
@@ -253,7 +375,15 @@ export function Interactive() {
           <ul>
             {TRACKS.map((t, i) =>
               mode === "edit" ? (
-                <EditRow key={t.n} t={t} isLast={i === TRACKS.length - 1} />
+                <EditRow
+                  key={t.n}
+                  t={t}
+                  isLast={i === TRACKS.length - 1}
+                  expanded={expandedId === t.n}
+                  onToggle={() =>
+                    setExpandedId(expandedId === t.n ? null : t.n)
+                  }
+                />
               ) : (
                 <ListenRow
                   key={t.n}
@@ -277,10 +407,10 @@ export function Interactive() {
         </div>
 
         <p className="mt-4 text-[11.5px] text-slate-400 text-center">
-          Tap{" "}
+          Tap any row to expand · tap{" "}
           <span className="font-semibold text-slate-600">Edit</span> ·{" "}
-          <span className="font-semibold text-slate-600">Listen</span> above to
-          switch modes
+          <span className="font-semibold text-slate-600">Listen</span> to switch
+          modes
         </p>
       </div>
     </div>
