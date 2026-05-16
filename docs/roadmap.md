@@ -385,3 +385,51 @@ The storefront IS the product on day one. Streaming-without-purchase comes later
 ### Out of scope for now
 Cart UX, Stripe checkout, fulfillment dashboard, post-purchase delivery email, refund flow, sales reporting per artist/label, public sold-out leaderboards. All of that is post-admin-restructure work.
 
+
+## Masters tab — consolidate into Tracks (proposed May 16, 2026)
+
+Bill's call: a "master" is just the audio file attached to a track, not a separate entity. Today we render the same per-track info on both the Tracks tab (rich row with chips for Master / Lyrics / Sync / Credits) **and** a dedicated Masters tab (bulk listening + upload). The Masters tab is redundant.
+
+Plan:
+- Drop the dedicated Masters tab from `AdminAlbum.tsx`.
+- Add a **View toggle** at the top of the Tracks tab: `Edit · Listen`.
+  - **Edit** (default) = today's rich rows with chips + rename/delete.
+  - **Listen** = compact row per track: track # · title · MASTER LOADED chip · transport (▶ / ⏸ / scrubber) · duration. No edit affordances. Optional "play all" header button. Purpose: bulk-QA the audio before a release.
+- Drag-and-drop / paste-URL / remove-master move into the per-track AudioEditor (already there on the Master chip) — Listen mode is read-only.
+- Keep the explanatory banner ("a master is the streaming audio file for a track") but on the Tracks tab in Listen mode.
+
+Risk: a couple weeks ago Bill liked the standalone Masters tab. If consolidation lands and he misses it, we can bring it back as a per-album route (`/admin/albums/:id/masters`) without restoring the tab in the entity tabbar.
+
+## Preview clips — 30-second trim + multiple named takes (deferred)
+
+Goal: every track gets a 30-second preview clip that plays for non-purchasers / Apple-Music-style sample players. Bill's mental model: Apple's QuickTime trim tool — yellow timeline strip with a fixed-width 30s window the admin slides across the song, then taps **Create preview**.
+
+Phase 1 — single preview per track:
+- Schema: `songs.previewUrl: text | null`, `songs.previewStartSec: integer | null` (where the 30s starts in the master).
+- Admin UI: Tracks-tab row → Master chip sheet adds a "Preview" sub-panel. Shows the song waveform (peaks JSON pre-computed server-side from the master), a draggable 30s window overlay, ▶ on the windowed section, **Create preview** button.
+- Backend: small ffmpeg job — input master + startSec, output `previewUrl` (encoded MP3 ~128 kbps so it's tiny). Stored in object storage alongside masters.
+- Player: when a non-purchaser hits play on a sample-only track, source from `previewUrl` instead of `audioUrl`, hard-stop at 30s.
+
+Phase 2 — multiple named takes:
+- Like Vimeo thumbnails: admin can create *several* named 30s previews ("Chorus drop", "Intro hook", "Outro"), then radio-select which one is active. Schema becomes `song_previews: { id, songId, name, startSec, previewUrl, isActive }` — `audioUrl` stays on the song.
+- Why: A&R folks tend to A/B which 30s lands best on socials / shop. Keeping the takes lets us change the public sample without re-rendering.
+
+Phase 3 — open questions:
+- Word-stamped previews? Not now — keep the trim time-based.
+- Auto-suggest the loudest 30s (RMS analysis) as a starting position. Nice-to-have.
+
+## Quality ladder — low-bandwidth fallback for masters (deferred)
+
+When a fan is on weak signal, drop to a smaller file. Industry-standard ladder:
+
+- **Hi**: original master (FLAC / WAV / 320 kbps MP3) — current `audioUrl`.
+- **Mid**: 192 kbps AAC — default playback on good Wi-Fi / LTE.
+- **Lo**: 64 kbps HE-AAC — emergency fallback on weak/expensive connections.
+
+Plan:
+- On master upload, server kicks off two background ffmpeg encodes (mid + lo) into the same storage bucket, paths `…/mid.m4a` and `…/lo.m4a`.
+- Schema: `songs.audioUrlMid: text | null`, `songs.audioUrlLo: text | null`. Or a structured `songs.audioVariants: jsonb` if we expect more rungs.
+- Player: pick rung based on `navigator.connection.effectiveType` + a manual quality picker in Settings ("Auto · High · Standard · Data Saver"). Apple Music has the same toggle.
+- Pre-cache the mid rung in IndexedDB for downloaded / favorited tracks (covers the offline-on-flight case).
+
+Open: do this **after** preview clips ship — same ffmpeg pipeline, so we want to design the encoding worker once.

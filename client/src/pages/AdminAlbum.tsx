@@ -301,62 +301,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
       .map((l) => ({ value: l.id, label: l.name })),
   ];
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-      <div className="md:col-span-2">
-        <EditablePanel
-          title="Metadata"
-          testId="panel-overview-metadata"
-          endpoint={endpoint}
-          values={{
-            title: album.title,
-            artist: album.artist,
-            type: album.type,
-            year: album.year ? String(album.year) : "",
-            genre: album.genre,
-            labelId: album.labelId ?? "",
-            description: album.description,
-          }}
-          invalidate={invalidate}
-          fields={[
-            { key: "title", label: "Title", type: "text", required: true },
-            { key: "artist", label: "Artist", type: "text", required: true },
-            {
-              key: "type",
-              label: "Type",
-              type: "select",
-              required: true,
-              options: [
-                { value: "LP", label: "LP (8+ tracks)" },
-                { value: "EP", label: "EP (3–7 tracks)" },
-                { value: "Single", label: "Single (1–2 tracks)" },
-              ],
-            },
-            {
-              key: "year",
-              label: "Year",
-              type: "number",
-              placeholder: "2025",
-            },
-            { key: "genre", label: "Genre", type: "text" },
-            {
-              key: "labelId",
-              label: "Label",
-              type: "select",
-              options: labelOptions,
-            },
-            {
-              key: "description",
-              label: "Description",
-              type: "textarea",
-              placeholder: "Liner-notes-style blurb shown on the album page.",
-            },
-          ]}
-        />
-      </div>
+    <div className="space-y-5">
       <EditablePanel
         title="Release"
         testId="panel-overview-release"
         endpoint={endpoint}
+        columns={4}
         values={{
           goodTunesReleaseDate: album.goodTunesReleaseDate,
           streamingReleaseDate: album.streamingReleaseDate,
@@ -386,6 +336,56 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "Spotify",
             type: "url",
             placeholder: "https://open.spotify.com/album/…",
+          },
+        ]}
+      />
+      <EditablePanel
+        title="Metadata"
+        testId="panel-overview-metadata"
+        endpoint={endpoint}
+        columns={4}
+        values={{
+          title: album.title,
+          artist: album.artist,
+          type: album.type,
+          year: album.year ? String(album.year) : "",
+          genre: album.genre,
+          labelId: album.labelId ?? "",
+          description: album.description,
+        }}
+        invalidate={invalidate}
+        fields={[
+          { key: "title", label: "Title", type: "text", required: true },
+          { key: "artist", label: "Artist", type: "text", required: true },
+          {
+            key: "type",
+            label: "Type",
+            type: "select",
+            required: true,
+            options: [
+              { value: "LP", label: "LP (8+ tracks)" },
+              { value: "EP", label: "EP (3–7 tracks)" },
+              { value: "Single", label: "Single (1–2 tracks)" },
+            ],
+          },
+          {
+            key: "year",
+            label: "Year",
+            type: "number",
+            placeholder: "2025",
+          },
+          { key: "genre", label: "Genre", type: "text" },
+          {
+            key: "labelId",
+            label: "Label",
+            type: "select",
+            options: labelOptions,
+          },
+          {
+            key: "description",
+            label: "Description",
+            type: "textarea",
+            placeholder: "Liner-notes-style blurb shown on the album page.",
           },
         ]}
       />

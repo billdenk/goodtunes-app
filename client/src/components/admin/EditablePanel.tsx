@@ -83,6 +83,9 @@ export interface EditablePanelProps {
   // only. Use for read-only metadata that doesn't belong in the form
   // (e.g. a label name that needs a dropdown to actually change).
   readExtras?: React.ReactNode;
+  // Field grid width. Default 2 (legacy two-column layout). Use 4 for
+  // wide horizontal panels (e.g. album Overview Release strip).
+  columns?: 2 | 4;
 }
 
 export function EditablePanel({
@@ -93,6 +96,7 @@ export function EditablePanel({
   fields,
   invalidate,
   readExtras,
+  columns = 2,
 }: EditablePanelProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -216,7 +220,14 @@ export function EditablePanel({
           </span>
         </div>
         {shortFields.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+          <div
+            className={[
+              "grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4",
+              columns === 4 ? "lg:grid-cols-4" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
             {shortFields.map((f, i) => (
               <EditInput
                 key={f.key}
@@ -297,7 +308,14 @@ export function EditablePanel({
         </button>
       </div>
       {shortFields.length > 0 && (
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+        <dl
+          className={[
+            "grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4",
+            columns === 4 ? "lg:grid-cols-4" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           {shortFields.map((f) => (
             <ReadField
               key={f.key}
