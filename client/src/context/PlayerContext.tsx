@@ -284,7 +284,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    const onTime = () => setCurrentTime(Math.floor(a.currentTime));
+    // Keep fractional seconds so synced-lyric cues (which carry ms-precision
+    // timestamps) light up on the right beat instead of drifting up to ~1s
+    // late waiting for the next integer-second tick. Vimeo's player works
+    // because it never floors video.currentTime; we shouldn't either.
+    const onTime = () => setCurrentTime(a.currentTime);
+    // Also push currentTime immediately after a seek so the lyrics overlay
+    // jumps to the new line on tap instead of waiting for the next
+    // timeupdate (which can be 100-250ms away).
+    const onSeeked = () => setCurrentTime(a.currentTime);
     const onMeta = () => {
       if (Number.isFinite(a.duration)) setAudioDuration(Math.floor(a.duration));
     };
@@ -302,6 +310,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
     };
     a.addEventListener("timeupdate", onTime);
+    a.addEventListener("seeked", onSeeked);
     a.addEventListener("loadedmetadata", onMeta);
     a.addEventListener("durationchange", onMeta);
     a.addEventListener("ended", onEnded);
@@ -309,6 +318,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     a.addEventListener("playing", onPlaying);
     return () => {
       a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("seeked", onSeeked);
       a.removeEventListener("loadedmetadata", onMeta);
       a.removeEventListener("durationchange", onMeta);
       a.removeEventListener("ended", onEnded);
