@@ -11,9 +11,10 @@ import { useAuth } from "@/hooks/useAuth";
  * grid with title + artist underneath. Underline text tabs slice by
  * lifecycle. Today we honestly only have two states:
  *   - Live   = isGoodTunesRelease && !isHidden
- *   - Hidden = isHidden
- * "Prep" and "Sunset" are roadmap states (need sunrise/sunset dates and
- * a draft flag in the schema). When those land, add tabs here.
+ *   - Sunset = isHidden  (pulled from sale; existing owners keep it)
+ * "Prep" is a roadmap state (needs a sunrise/draft flag in the schema).
+ * Auto-sunset by scheduled date also lives in the roadmap. When those
+ * land, add tabs here.
  *
  * Toolbar lives in the header — icon-only search/filter/+ to stay quiet.
  * Per-album track count + credit-completion are still Phase 2.
@@ -30,7 +31,7 @@ interface AlbumLite {
   isGoodTunesRelease: boolean;
 }
 
-type TabKey = "live" | "hidden";
+type TabKey = "live" | "sunset";
 
 export function AdminAlbums() {
   const { user, isLoading: authLoading } = useAuth();
@@ -61,10 +62,13 @@ export function AdminAlbums() {
     [albums],
   );
 
+  // "Sunset" = pulled from sale (isHidden). Existing owners keep the
+  // album in their Collection regardless — Collection is per-user and
+  // orthogonal to the album's storefront visibility.
   const counts = useMemo(
     () => ({
       live: releases.filter((a) => !a.isHidden).length,
-      hidden: releases.filter((a) => a.isHidden).length,
+      sunset: releases.filter((a) => a.isHidden).length,
     }),
     [releases],
   );
@@ -193,8 +197,8 @@ export function AdminAlbums() {
           <TabBtn active={tab === "live"} onClick={() => setTab("live")} count={counts.live} testId="tab-live">
             Live
           </TabBtn>
-          <TabBtn active={tab === "hidden"} onClick={() => setTab("hidden")} count={counts.hidden} testId="tab-hidden">
-            Hidden
+          <TabBtn active={tab === "sunset"} onClick={() => setTab("sunset")} count={counts.sunset} testId="tab-sunset">
+            Sunset
           </TabBtn>
         </div>
 
@@ -205,10 +209,10 @@ export function AdminAlbums() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-20 text-center text-slate-500 text-sm">
-            {tab === "hidden"
+            {tab === "sunset"
               ? search
-                ? "No hidden releases match that search."
-                : "No hidden releases."
+                ? "No sunset releases match that search."
+                : "No sunset releases. Pulled-from-sale albums show up here."
               : search
                 ? "No releases match that search."
                 : "No live releases yet. Tap + to create one."}
@@ -251,9 +255,12 @@ function AlbumTile({ album }: { album: AlbumLite }) {
           loading="lazy"
         />
         {album.isHidden && (
-          <div className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/65 text-white text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm">
+          <div
+            className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/65 text-white text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm"
+            title="Pulled from sale — owners keep access"
+          >
             <EyeOff className="w-2.5 h-2.5" />
-            Hidden
+            Sunset
           </div>
         )}
       </div>

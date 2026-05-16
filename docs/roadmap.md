@@ -291,7 +291,7 @@ Captured while planning admin redesign, May 16 2026. Not in the current build pa
 ### Core sale model
 Albums on GoodTunes are **time-windowed, supply-limited drops** — not "buy anytime forever." Each album has:
 - **`saleStartsAt`** (sunrise) — drop goes live; album becomes purchasable. Before this: card visible with countdown, no buy button.
-- **`saleEndsAt`** (sunset) — automatic end. Album becomes unpurchasable. Existing owners keep their entitlement forever (Apple/Spotify rules don't apply — they bought it).
+- **`saleEndsAt`** (sunset) — automatic end. Album becomes unpurchasable. Existing owners keep their entitlement forever (Apple/Spotify rules don't apply — they bought it). Today's `albums.isHidden` is the primitive, manual version of this — the admin's **Sunset** tab in `/admin/albums` already lists those, and the semantics (pulled from sale, owners keep access) are identical.
 - **`unitsAvailable`** (optional cap) — sells out when reached, even if before sunset. "First-N gets it" mechanic.
 - **`unitsSold`** — running count. Public-facing "X of Y remaining" badge if `unitsAvailable` is set.
 
