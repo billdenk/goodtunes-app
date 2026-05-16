@@ -11,6 +11,7 @@ import {
   ChevronRight,
   EyeOff,
   ArrowLeftRight,
+  GripVertical,
   Pencil,
   Trash2,
   Plus,
@@ -436,12 +437,99 @@ function TracksPanel({
   album: AlbumFull;
   onEdit: () => void;
 }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const sorted = [...album.songs].sort(
     (a, b) => a.trackNumber - b.trackNumber,
   );
   const { data: albumCredits } = useQuery<AlbumCreditsMap>({
     queryKey: ["/api/albums", album.id, "credits"],
   });
+
+  // Drag-to-reorder state lives at the panel level so a row knows when
+  // another row is being dragged over it. We pair an optimistic cache
+  // rewrite with a server POST; on error we roll the cache back to the
+  // snapshot taken before the mutation started.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropOnId, setDropOnId] = useState<string | null>(null);
+
+  const reorderMut = useMutation({
+    mutationFn: async (songIds: string[]) => {
+      await apiRequest(
+        "POST",
+        `/api/admin/albums/${album.id}/tracks/reorder`,
+        { songIds },
+      );
+    },
+    onMutate: async (songIds: string[]) => {
+      await qc.cancelQueries({ queryKey: ["/api/albums", album.id] });
+      const prev = qc.getQueryData<AlbumFull>(["/api/albums", album.id]);
+      if (prev) {
+        const byId = new Map(prev.songs.map((s) => [s.id, s]));
+        const nextSongs = songIds
+          .map((id, i) => {
+            const s = byId.get(id);
+            return s ? { ...s, trackNumber: i + 1 } : null;
+          })
+          .filter((s): s is (typeof prev.songs)[number] => s !== null);
+        qc.setQueryData<AlbumFull>(["/api/albums", album.id], {
+          ...prev,
+          songs: nextSongs,
+        });
+      }
+      return { prev };
+    },
+    onError: (e: any, _songIds, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(["/api/albums", album.id], ctx.prev);
+      }
+      toast({
+        title: "Couldn't reorder tracks",
+        description: e?.message || "Order has been reverted.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      qc.invalidateQueries({ queryKey: ["/api/albums"] });
+    },
+  });
+
+  const handleDragStart = (id: string) => (e: React.DragEvent) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = "move";
+    try {
+      e.dataTransfer.setData("text/plain", id);
+    } catch {
+      // Some browsers throw if setData is called too late; ignore.
+    }
+  };
+  const handleDragOver = (id: string) => (e: React.DragEvent) => {
+    if (!dragId || dragId === id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dropOnId !== id) setDropOnId(id);
+  };
+  const handleDragEnd = () => {
+    setDragId(null);
+    setDropOnId(null);
+  };
+  const handleDrop = (targetId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const src = dragId;
+    setDragId(null);
+    setDropOnId(null);
+    if (!src || src === targetId) return;
+    const ids = sorted.map((s) => s.id);
+    const from = ids.indexOf(src);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const next = ids.slice();
+    next.splice(from, 1);
+    next.splice(from < to ? to - 1 : to, 0, src);
+    if (next.every((id, i) => id === ids[i])) return;
+    reorderMut.mutate(next);
+  };
 
   if (sorted.length === 0) {
     return (
@@ -475,17 +563,17 @@ function TracksPanel({
           <h2 className="text-slate-900 text-[14px] font-bold">Tracklist</h2>
           <p className="text-slate-400 text-[11.5px]">
             {sorted.length} {sorted.length === 1 ? "track" : "tracks"} · Hover
-            a row to rename or delete. Open a row for credits, lyrics, and
-            master in classic admin.
+            a row to rename, delete, or drag the grip on the left to reorder.
           </p>
         </div>
         <button
           onClick={onEdit}
           className="px-2.5 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5"
-          data-testid="button-reorder-tracks"
+          data-testid="button-add-tracks"
         >
-          <ArrowLeftRight className="w-3 h-3" />
-          Reorder
+          <Plus className="w-3 h-3" />
+          Add tracks
+          <ArrowLeftRight className="w-3 h-3 text-slate-400" />
         </button>
       </div>
       <ol>
@@ -503,6 +591,12 @@ function TracksPanel({
               withBorder={i !== sorted.length - 1}
               creditCount={creditCount}
               credits={songCredits ?? null}
+              isDragging={dragId === song.id}
+              isDropTarget={dropOnId === song.id && dragId !== song.id}
+              onDragStart={handleDragStart(song.id)}
+              onDragOver={handleDragOver(song.id)}
+              onDrop={handleDrop(song.id)}
+              onDragEnd={handleDragEnd}
             />
           );
         })}
@@ -522,6 +616,12 @@ function TrackRow({
   withBorder,
   creditCount,
   credits,
+  isDragging,
+  isDropTarget,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   song: SongLite;
   albumId: string;
@@ -529,6 +629,12 @@ function TrackRow({
   withBorder: boolean;
   creditCount: number;
   credits: SongCreditsLite | null;
+  isDragging: boolean;
+  isDropTarget: boolean;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
   const [draft, setDraft] = useState(song.title);
@@ -631,23 +737,60 @@ function TrackRow({
   };
 
   const liCls = [
-    "group flex flex-col transition-colors",
+    "group relative flex flex-col transition-colors",
     withBorder && "border-b border-slate-100",
     mode !== "view" ? "bg-[#319ED8]/5" : "",
+    isDragging ? "opacity-40" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <li className={liCls} data-testid={`row-track-${song.id}`}>
+    <li
+      className={liCls}
+      data-testid={`row-track-${song.id}`}
+      onDragOver={mode === "view" ? onDragOver : undefined}
+      onDrop={mode === "view" ? onDrop : undefined}
+      onDragEnd={onDragEnd}
+    >
+      {/* Drop-target indicator — thin blue bar at the top of the row
+          the user is currently hovering over while dragging another row.
+          Absolute-positioned so it never shifts the row's layout. */}
+      {isDropTarget && (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 right-0 -top-px h-0.5 bg-[#319ED8] z-10"
+          data-testid={`indicator-drop-${song.id}`}
+        />
+      )}
       <div
         className={[
-          "flex items-center gap-4 px-5 py-3",
+          "flex items-center gap-2 px-3 py-3",
           mode === "view" && "hover:bg-slate-50",
         ]
           .filter(Boolean)
           .join(" ")}
       >
+        {/* Drag handle — only active while we're in resting view mode so
+            it never fights with the rename input or the open editors.
+            Hidden until row-hover (or always visible on touch) to keep
+            the resting row tidy. */}
+        <button
+          type="button"
+          draggable={mode === "view"}
+          onDragStart={mode === "view" ? onDragStart : undefined}
+          aria-label="Drag to reorder"
+          title="Drag to reorder"
+          className={[
+            "w-5 h-7 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded transition-opacity",
+            mode === "view"
+              ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
+              : "opacity-0 pointer-events-none",
+          ].join(" ")}
+          data-testid={`grip-track-${song.id}`}
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
         <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
           {song.trackNumber}
         </span>
