@@ -535,6 +535,138 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // Ingest a video from a remote URL (Dropbox, S3, plain HTTPS, etc).
+  // Streams the bytes server-side into Object Storage so the admin doesn't
+  // have to download a multi-hundred-MB file to their laptop just to
+  // re-upload it. We:
+  //   1. Normalize known share-link patterns (Dropbox `?dl=0` → `?dl=1`).
+  //   2. Issue a GET, inspect the response Content-Type / extension.
+  //   3. Pick a server-validated extension from the VIDEO_MIME_TO_EXT
+  //      allow-list. If the upstream returns `application/octet-stream`
+  //      (Dropbox sometimes does), fall back to inferring from the URL
+  //      path's extension — never from a user-supplied filename.
+  //   4. Stream response.body → GCS via createWriteStream() so we never
+  //      buffer the whole file in memory.
+  //   5. Cap at 500MB to keep abuse / runaway streams bounded.
+  //   6. Flip the ACL to public and return the `/objects/uploads/<id>`
+  //      path the existing /api/admin/albums/:id/videos POST can store.
+  app.post(
+    "/api/admin/upload-video/from-url",
+    requireAdminBearer,
+    async (req, res) => {
+      const MAX_BYTES = 500 * 1024 * 1024;
+      try {
+        const raw = String(req.body?.url || "").trim();
+        if (!raw) return res.status(400).json({ message: "URL is required" });
+        let parsed: URL;
+        try {
+          parsed = new URL(raw);
+        } catch {
+          return res.status(400).json({ message: "That doesn't look like a valid URL" });
+        }
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+          return res.status(400).json({ message: "Only http(s) URLs are allowed" });
+        }
+
+        // Normalize Dropbox share links. `dl=0` shows the preview page;
+        // `dl=1` (or the `dl.dropboxusercontent.com` host) serves the raw
+        // file. Works for both legacy /s/ links and the newer /scl/ links.
+        if (
+          parsed.hostname === "www.dropbox.com" ||
+          parsed.hostname === "dropbox.com"
+        ) {
+          parsed.searchParams.set("dl", "1");
+        }
+        const fetchUrl = parsed.toString();
+
+        const upstream = await fetch(fetchUrl, { redirect: "follow" });
+        if (!upstream.ok || !upstream.body) {
+          return res
+            .status(400)
+            .json({ message: `Couldn't fetch that URL (${upstream.status})` });
+        }
+        const lenHeader = upstream.headers.get("content-length");
+        if (lenHeader && Number(lenHeader) > MAX_BYTES) {
+          return res
+            .status(400)
+            .json({ message: "Video is larger than the 500MB import limit" });
+        }
+        // Pick an extension from the validated MIME, else from the URL path.
+        const upstreamMime = (upstream.headers.get("content-type") || "")
+          .split(";")[0]
+          .trim()
+          .toLowerCase();
+        let ext: string | undefined = VIDEO_MIME_TO_EXT[upstreamMime];
+        let storedMime = upstreamMime;
+        if (!ext) {
+          const pathExt = parsed.pathname.toLowerCase().match(/\.(mp4|mov|webm)(?:$|[?#])/);
+          if (pathExt) {
+            const map: Record<string, [string, string]> = {
+              mp4: [".mp4", "video/mp4"],
+              mov: [".mov", "video/quicktime"],
+              webm: [".webm", "video/webm"],
+            };
+            [ext, storedMime] = map[pathExt[1]];
+          }
+        }
+        if (!ext) {
+          return res.status(400).json({
+            message: "That URL didn't return an MP4, MOV, or WebM video",
+          });
+        }
+
+        const id = `${randomUUID()}${ext}`;
+        const { bucketName, objectName } = uploadDestination(id);
+        const file = objectStorageClient.bucket(bucketName).file(objectName);
+
+        // Stream upstream → GCS. Abort if we cross the size cap mid-stream.
+        let received = 0;
+        const writeStream = file.createWriteStream({
+          contentType: storedMime,
+          metadata: { cacheControl: "public, max-age=31536000, immutable" },
+          resumable: false,
+        });
+        const { Readable } = await import("stream");
+        const nodeReadable = Readable.fromWeb(upstream.body as any);
+
+        let aborted = false;
+        await new Promise<void>((resolve, reject) => {
+          nodeReadable.on("data", (chunk: Buffer) => {
+            received += chunk.length;
+            if (received > MAX_BYTES && !aborted) {
+              aborted = true;
+              nodeReadable.destroy();
+              writeStream.destroy(new Error("Video exceeded 500MB import cap"));
+            }
+          });
+          nodeReadable.on("error", reject);
+          writeStream.on("error", reject);
+          writeStream.on("finish", resolve);
+          nodeReadable.pipe(writeStream);
+        });
+
+        await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+
+        // Try to recover a sensible default title from the URL path —
+        // ("Video Name.mp4" → "Video Name"). The client can still
+        // override before save.
+        const lastSeg = decodeURIComponent(parsed.pathname.split("/").pop() || "");
+        const suggestedTitle = lastSeg.replace(/\.[^.]+$/, "") || "Imported video";
+
+        return res.json({
+          url: `/objects/uploads/${id}`,
+          suggestedTitle,
+          bytes: received,
+        });
+      } catch (err: any) {
+        console.error("Video from-URL ingest failed", err);
+        return res.status(500).json({
+          message: err?.message || "Could not import video from that URL",
+        });
+      }
+    },
+  );
+
   // Audio upload — same pattern as video. We deliberately keep audio on
   // its own route + multer instance so we can cap size differently (full
   // tracks can be 30–80MB lossless, way beyond the 8MB artwork limit)

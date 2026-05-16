@@ -24,6 +24,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface AdminAlbum {
   id: string;
@@ -1202,6 +1210,9 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [urlOpen, setUrlOpen] = useState(false);
+  const [urlValue, setUrlValue] = useState("");
+  const [urlBusy, setUrlBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleAddVideo(file: File) {
@@ -1224,6 +1235,32 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
       setBusy(false);
       setProgress(null);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  // Server-side ingest from a remote URL (Dropbox, S3, plain HTTPS). The
+  // server downloads + re-uploads to Object Storage so the admin doesn't
+  // have to round-trip a multi-hundred-MB file through their laptop.
+  async function handleImportFromUrl() {
+    const url = urlValue.trim();
+    if (!url) return;
+    setErr(null);
+    setUrlBusy(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/upload-video/from-url", { url });
+      const { url: storedUrl, suggestedTitle } = await res.json();
+      await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
+        videoUrl: storedUrl,
+        title: suggestedTitle || "Imported video",
+      });
+      invalidate();
+      setUrlOpen(false);
+      setUrlValue("");
+    } catch (e: any) {
+      console.error("[AlbumVideosSection] handleImportFromUrl failed", e);
+      setErr(e?.message || "Import failed");
+    } finally {
+      setUrlBusy(false);
     }
   }
 
@@ -1260,6 +1297,16 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
               : "Uploading…"
             : "+ Upload video"}
         </button>
+        <span className="text-slate-300 text-[12px]">·</span>
+        <button
+          type="button"
+          onClick={() => setUrlOpen(true)}
+          disabled={busy || urlBusy}
+          className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
+          data-testid="button-import-album-video-url"
+        >
+          Import from URL
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -1271,6 +1318,49 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
           }}
         />
       </div>
+
+      <Dialog open={urlOpen} onOpenChange={(o) => !urlBusy && setUrlOpen(o)}>
+        <DialogContent data-testid="dialog-import-video-url">
+          <DialogHeader>
+            <DialogTitle>Import video from URL</DialogTitle>
+            <DialogDescription>
+              Paste a direct video link or a Dropbox share link. We'll pull the
+              file straight into Object Storage — no need to download it first.
+              MP4, MOV, or WebM, up to 500MB.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            type="url"
+            value={urlValue}
+            onChange={(e) => setUrlValue(e.target.value)}
+            placeholder="https://www.dropbox.com/scl/fi/... or https://…/video.mp4"
+            className={inputCls}
+            autoFocus
+            disabled={urlBusy}
+            data-testid="input-import-video-url"
+          />
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setUrlOpen(false)}
+              disabled={urlBusy}
+              className="px-3 py-1.5 text-[12px] rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-50"
+              data-testid="button-cancel-import-video"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleImportFromUrl}
+              disabled={urlBusy || !urlValue.trim()}
+              className="px-3 py-1.5 text-[12px] rounded-md bg-[#319ED8] hover:bg-[#2a8ac0] text-white disabled:opacity-50"
+              data-testid="button-confirm-import-video"
+            >
+              {urlBusy ? "Importing…" : "Import"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {err && <p className="text-[12px] text-red-600 mb-2">{err}</p>}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         {videos.length === 0 && (
