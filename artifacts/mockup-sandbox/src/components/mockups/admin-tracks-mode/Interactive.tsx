@@ -596,27 +596,12 @@ function EditRow({
             />
           )}
 
-          {/* Danger row */}
-          <div className="flex items-center justify-between pt-1">
+          {/* Hide / Trash live in the row header next to the chevron now —
+              this footer is just the track ID for reference. */}
+          <div className="pt-1">
             <span className="text-[11px] text-slate-400">
               Track ID · t_{1000 + t.n}
             </span>
-            <div className="flex items-center gap-0.5">
-              <button
-                aria-label="Hide track (parks it without losing lyrics or credits)"
-                title="Hide track (parks it without losing lyrics or credits)"
-                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-              >
-                <EyeOff className="w-3.5 h-3.5" />
-              </button>
-              <button
-                aria-label="Delete track"
-                title="Delete track"
-                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
           </div>
         </div>
       )}
