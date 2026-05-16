@@ -332,20 +332,20 @@ function ReadField({
   if (field.type === "url") {
     const Icon = field.readIcon;
     return (
-      <div data-testid={testId}>
+      <div className="min-w-0" data-testid={testId}>
         <dt className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-0.5">
           {field.label}
         </dt>
-        <dd className="text-[13.5px]">
+        <dd className="text-[13.5px] min-w-0">
           {value ? (
             <a
               href={value}
               target="_blank"
               rel="noreferrer"
-              className="text-[#319ED8] font-medium hover:underline inline-flex items-center gap-1"
+              className="text-[#319ED8] font-medium hover:underline flex items-center gap-1 min-w-0 max-w-full"
             >
               {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
-              <span className="truncate max-w-[320px]">
+              <span className="truncate min-w-0 flex-1">
                 {value.replace(/^https?:\/\//, "")}
               </span>
               <ExternalLink className="w-3 h-3 flex-shrink-0" />
