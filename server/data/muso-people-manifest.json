@@ -1,4 +1,11 @@
 {
+  "generatedAt": "2026-05-16T03:20:38.696Z",
+  "personOverrides": {
+    "f9b83378-d34b-4052-a928-61ecd2d6747f": "Nick Carter",
+    "e90476f6-3b43-4649-9a1e-b79fc37e6165": "Nick Carter",
+    "9278f526-6d91-4755-a79b-089d9c1daaa4": "Nick Carter",
+    "36ad0a57-2ef2-44b1-bdc4-c2c0d05fd472": "Nick Carter"
+  },
   "manifest": {
     "f9b83378-d34b-4052-a928-61ecd2d6747f": {
       "name": "Nick Carter",
@@ -104,6 +111,5 @@
       "url": "https://assets-cdn-prod.muso.ai/images/avatar/d62ef066-01d2-425d-bb9b-da4d31d98225_ed8f6bc5-985c-492e-ae37-1ee67cf28eef.jpeg",
       "reason": "unknown bytes (size=119886, head=3c21646f63747970)"
     }
-  ],
-  "generatedAt": "2026-05-16T03:20:38.696Z"
+  ]
 }

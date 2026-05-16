@@ -71,15 +71,18 @@ if (!ALBUM_ID) {
 }
 
 // ── Canonical-name override map ───────────────────────────────────────────
-// muso splits some humans across multiple UUIDs. Map every variant UUID to
-// the SAME canonical name; the importer collapses them onto one Person row.
-const MUSO_PERSON_OVERRIDES: Record<string, string> = {
-  // Nick Carter — 4 muso UUIDs all mean the same human
-  "f9b83378-d34b-4052-a928-61ecd2d6747f": "Nick Carter",
-  "e90476f6-3b43-4649-9a1e-b79fc37e6165": "Nick Carter", // "Nick (us) Carter"
-  "9278f526-6d91-4755-a79b-089d9c1daaa4": "Nick Carter", // "Nickolas G Carter"
-  "36ad0a57-2ef2-44b1-bdc4-c2c0d05fd472": "Nick Carter", // "George Milton Nicholas Carter"
-};
+// muso splits some humans across multiple UUIDs. The map (muso UUID → canonical
+// name) is loaded from the manifest JSON's `personOverrides` block so non-
+// engineers can edit it without touching code. Every variant UUID listed there
+// is collapsed onto a single Person row carrying every variant as an alias.
+const MUSO_PERSON_OVERRIDES: Record<string, string> = (() => {
+  try {
+    const raw = JSON.parse(fs.readFileSync(MANIFEST_FILE, "utf8"));
+    return (raw.personOverrides ?? {}) as Record<string, string>;
+  } catch {
+    return {};
+  }
+})();
 
 type MusoPerson = { id: string; name: string };
 type MusoTrack = {
