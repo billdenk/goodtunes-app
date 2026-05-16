@@ -1473,13 +1473,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     caption: insertAlbumPhotoSchema.shape.caption.nullable().optional(),
   });
 
-  app.get("/api/albums/:id/videos", requireAuth, async (req, res) => {
+  // Public read — bonus videos/photos are listener-facing content, surfaced
+  // on the fan AlbumDetail page below the tracklist. Anonymous fans hit this,
+  // so no auth gate. `loadAlbumForBonusRead` separately checks isAdminUser
+  // to decide whether to include hidden albums, so admins still see drafts.
+  app.get("/api/albums/:id/videos", async (req, res) => {
     const album = await loadAlbumForBonusRead(req, res);
     if (!album) return;
     const rows = await storage.listAlbumVideos(album.id);
     return res.json(rows);
   });
-  app.get("/api/albums/:id/photos", requireAuth, async (req, res) => {
+  app.get("/api/albums/:id/photos", async (req, res) => {
     const album = await loadAlbumForBonusRead(req, res);
     if (!album) return;
     const rows = await storage.listAlbumPhotos(album.id);
