@@ -55,21 +55,13 @@ export function ProgressiveV3() {
 
           {/* title row */}
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <button className="w-8 h-8 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex items-center justify-center flex-shrink-0">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <div className="min-w-0">
-                <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-                  Track 1 of 17 · Love Life Tragedy · Nick Carter
-                </div>
-                <h2 className="text-slate-900 text-[20px] font-bold truncate">
-                  Made for Us
-                </h2>
+            <div className="min-w-0">
+              <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                Track 1 of 17 · Love Life Tragedy · Nick Carter
               </div>
-              <button className="w-8 h-8 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex items-center justify-center flex-shrink-0">
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              <h2 className="text-slate-900 text-[20px] font-bold truncate">
+                Made for Us
+              </h2>
             </div>
             <button className="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 flex-shrink-0">
               <Sparkles className="w-3.5 h-3.5 text-[#319ED8]" />
@@ -85,8 +77,12 @@ export function ProgressiveV3() {
             <Tab label="Files" />
           </div>
 
-          {/* chip strip — 17 tracks */}
-          <div className="flex items-center gap-1 overflow-x-auto pt-2 pb-1 -mx-1 px-1">
+          {/* chip strip — 17 tracks, prev/next anchored at the ends */}
+          <div className="flex items-center gap-1.5 pt-2 pb-1">
+            <button className="w-7 h-7 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex items-center justify-center flex-shrink-0" title="Previous track">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0 -mx-1 px-1">
             {Array.from({ length: 17 }).map((_, i) => {
               const n = i + 1;
               const isActive = n === 1;
@@ -118,6 +114,10 @@ export function ProgressiveV3() {
             <span className="text-slate-300 text-[11px] px-2 flex-shrink-0">
               4 of 17 complete
             </span>
+            </div>
+            <button className="w-7 h-7 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex items-center justify-center flex-shrink-0" title="Next track">
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
 
           {/* dense-mode filter row */}
