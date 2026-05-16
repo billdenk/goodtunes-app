@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowLeftRight,
-  Pencil,
   Upload,
   Loader2,
   ImageIcon,
@@ -219,7 +218,7 @@ export function AdminPerson() {
         {tab === "photo" && <ImageUploadPanel person={person} field="photo" />}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
         {tab === "streaming" && (
-          <StreamingPanel person={person} onEdit={openInClassicAdmin} />
+          <StreamingPanel person={person} />
         )}
         {tab === "discography" && (
           <DiscographyPanel personId={person.id} onEdit={openInClassicAdmin} />
@@ -589,38 +588,41 @@ function ImageUploadPanel({
 
 /* ─── Streaming tab ───────────────────────────────────────────────── */
 
-function StreamingPanel({
-  person,
-  onEdit,
-}: {
-  person: PersonFull;
-  onEdit: () => void;
-}) {
+function StreamingPanel({ person }: { person: PersonFull }) {
   return (
-    <section
-      className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5 max-w-2xl"
-      data-testid="panel-streaming"
-    >
-      <PanelHeader title="Streaming services" onEdit={onEdit} />
-      <div className="space-y-2">
-        <SocialRow
-          icon={SiApplemusic}
-          label="Apple Music"
-          url={person.appleMusicUrl}
-        />
-        <SocialRow
-          icon={SiSpotify}
-          label="Spotify"
-          url={person.spotifyUrl}
-        />
-      </div>
-      <p className="text-slate-400 text-[11.5px] leading-relaxed">
+    <div className="max-w-2xl space-y-3">
+      <EditablePanel
+        title="Streaming services"
+        testId="panel-streaming"
+        endpoint={`/api/admin/people/${person.id}`}
+        values={{
+          appleMusicUrl: person.appleMusicUrl,
+          spotifyUrl: person.spotifyUrl,
+        }}
+        invalidate={[["/api/people", person.id], ["/api/people"]]}
+        fields={[
+          {
+            key: "appleMusicUrl",
+            label: "Apple Music",
+            type: "url",
+            readIcon: SiApplemusic,
+            placeholder: "https://music.apple.com/…",
+          },
+          {
+            key: "spotifyUrl",
+            label: "Spotify",
+            type: "url",
+            readIcon: SiSpotify,
+            placeholder: "https://open.spotify.com/artist/…",
+          },
+        ]}
+      />
+      <p className="text-slate-400 text-[11.5px] leading-relaxed px-1">
         Per replit.md: GoodTunes hosts a song in-app for the first ~2 weeks,
         then routes fans to these URLs. The Apple Music URL also feeds the
-        iTunes Lookup pull used by the Discography tab. URL pasting +
-        scraping lives in the classic editor for now.
+        iTunes Lookup pull used by the Discography tab.
       </p>
-    </section>
+    </div>
   );
 }
 
@@ -719,66 +721,3 @@ function DiscographyPanel({
   );
 }
 
-/* ─── Bits ─────────────────────────────────────────────────────────── */
-
-function PanelHeader({
-  title,
-  onEdit,
-}: {
-  title: string;
-  onEdit: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-      <button
-        onClick={onEdit}
-        aria-label="Edit in classic admin"
-        title="Edit in classic admin"
-        data-testid={`button-edit-${title.toLowerCase().replace(/\s+/g, "-")}`}
-        className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-      >
-        <Pencil className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function SocialRow({
-  icon: Icon,
-  label,
-  url,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  url: string | null | undefined;
-}) {
-  if (!url) {
-    return (
-      <div className="flex items-center justify-between text-[12.5px] py-1">
-        <span className="text-slate-500 inline-flex items-center gap-2">
-          <Icon className="w-4 h-4 text-slate-400" />
-          {label}
-        </span>
-        <span className="text-slate-300 italic text-[11.5px]">Not linked</span>
-      </div>
-    );
-  }
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="flex items-center justify-between text-[12.5px] py-1 group/social"
-      data-testid={`link-social-${label.toLowerCase().replace(/[^a-z]/g, "")}`}
-    >
-      <span className="text-slate-700 group-hover/social:text-[#319ED8] inline-flex items-center gap-2">
-        <Icon className="w-4 h-4 text-slate-500 group-hover/social:text-[#319ED8]" />
-        {label}
-      </span>
-      <span className="text-slate-400 group-hover/social:text-[#319ED8] truncate max-w-[260px]">
-        {url.replace(/^https?:\/\//, "")}
-      </span>
-    </a>
-  );
-}
