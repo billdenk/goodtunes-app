@@ -454,7 +454,7 @@ function TracksPanel({
   );
 }
 
-type TrackMode = "view" | "rename" | "audio";
+type TrackMode = "view" | "rename" | "audio" | "lyrics";
 
 function TrackRow({
   song,
@@ -547,6 +547,12 @@ function TrackRow({
   const closeAudio = () => {
     setMode("view");
     queueMicrotask(() => masterChipRef.current?.focus());
+  };
+
+  const lyricsChipRef = useRef<HTMLButtonElement>(null);
+  const closeLyrics = () => {
+    setMode("view");
+    queueMicrotask(() => lyricsChipRef.current?.focus());
   };
 
   const liCls = [
@@ -649,10 +655,14 @@ function TrackRow({
                   />
                 </button>
                 <button
+                  ref={lyricsChipRef}
                   type="button"
-                  onClick={onOpen}
-                  aria-label="Edit lyrics in classic admin"
-                  title="Edit lyrics in classic admin"
+                  onClick={() =>
+                    setMode((m) => (m === "lyrics" ? "view" : "lyrics"))
+                  }
+                  aria-label="Edit lyrics"
+                  title="Edit lyrics"
+                  data-testid={`button-edit-lyrics-${song.id}`}
                   className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
                 >
                   <TrackChip
@@ -728,7 +738,138 @@ function TrackRow({
           onSaved={invalidate}
         />
       )}
+
+      {mode === "lyrics" && (
+        <LyricsEditor
+          song={song}
+          onClose={closeLyrics}
+          onSaved={invalidate}
+        />
+      )}
     </li>
+  );
+}
+
+/* ─── Per-track lyrics editor ────────────────────────────────────────── */
+
+function LyricsEditor({
+  song,
+  onClose,
+  onSaved,
+}: {
+  song: SongLite;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [draft, setDraft] = useState<string>(song.lyrics ?? "");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Seed the draft + focus the textarea only on first mount.
+  // Anti-clobber: a background refetch of `song.lyrics` won't wipe the
+  // in-progress edit because we don't depend on it after mount.
+  useEffect(() => {
+    queueMicrotask(() => {
+      textareaRef.current?.focus();
+      const el = textareaRef.current;
+      if (el) el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }, []);
+
+  const normalized = draft.trim() ? draft : "";
+  const dirty = (normalized || null) !== (song.lyrics ?? null);
+
+  const saveMut = useMutation({
+    mutationFn: async () =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+        lyrics: normalized || null,
+      }),
+    onSuccess: async () => {
+      await onSaved();
+      toast({
+        title: normalized ? "Lyrics saved" : "Lyrics cleared",
+      });
+      onClose();
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save lyrics",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const lineCount = draft ? draft.split("\n").length : 0;
+
+  return (
+    <div
+      className="px-5 pb-4"
+      onKeyDown={(e) => {
+        // Cmd/Ctrl+Enter saves; Escape cancels.
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          e.preventDefault();
+          if (dirty && !saveMut.isPending) saveMut.mutate();
+        } else if (e.key === "Escape" && !saveMut.isPending) {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 space-y-2.5">
+        <div className="flex items-center gap-2">
+          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
+            Lyrics
+          </span>
+          <span className="text-[10.5px] text-slate-400 tabular-nums">
+            {lineCount} {lineCount === 1 ? "line" : "lines"}
+          </span>
+        </div>
+
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={12}
+          placeholder={
+            "[Verse 1]\nFirst line of the verse\nSecond line of the verse\n\n[Chorus]\nFirst line of the chorus"
+          }
+          disabled={saveMut.isPending}
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          data-testid={`textarea-lyrics-${song.id}`}
+        />
+
+        <p className="text-[10.5px] text-slate-400 leading-snug">
+          Section headers go in square brackets — <code className="font-mono">[Verse 1]</code>,{" "}
+          <code className="font-mono">[Chorus]</code>,{" "}
+          <code className="font-mono">[Bridge]</code> — they render dimmed in the player and are skipped when timing is auto-distributed.
+        </p>
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saveMut.isPending}
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            data-testid={`button-cancel-lyrics-${song.id}`}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => saveMut.mutate()}
+            disabled={!dirty || saveMut.isPending}
+            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+            data-testid={`button-save-lyrics-${song.id}`}
+          >
+            {saveMut.isPending && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            )}
+            Save lyrics
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
