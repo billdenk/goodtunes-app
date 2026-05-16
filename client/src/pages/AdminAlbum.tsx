@@ -454,6 +454,8 @@ function TracksPanel({
   );
 }
 
+type TrackMode = "view" | "rename" | "audio";
+
 function TrackRow({
   song,
   albumId,
@@ -465,21 +467,19 @@ function TrackRow({
   onOpen: () => void;
   withBorder: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<TrackMode>("view");
   const [draft, setDraft] = useState(song.title);
   const inputRef = useRef<HTMLInputElement>(null);
   const pencilRef = useRef<HTMLButtonElement>(null);
+  const masterChipRef = useRef<HTMLButtonElement>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  // Resync the draft from the source-of-truth title only on entry to
-  // edit mode — mirrors EditablePanel's anti-clobber pattern so a
-  // background refetch can't wipe out the user's in-progress typing.
-  // `song.title` is intentionally NOT in the deps; we read its latest
-  // value at the moment the user opens the editor and then leave the
-  // draft alone until they save or cancel.
+  // Resync the title draft from the source-of-truth only on entry to
+  // rename mode — anti-clobber so a background refetch can't wipe out
+  // the user's in-progress typing. `song.title` intentionally NOT in deps.
   useEffect(() => {
-    if (editing) {
+    if (mode === "rename") {
       setDraft(song.title);
       queueMicrotask(() => {
         inputRef.current?.focus();
@@ -487,7 +487,7 @@ function TrackRow({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing]);
+  }, [mode]);
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
@@ -499,7 +499,7 @@ function TrackRow({
       apiRequest("PUT", `/api/admin/songs/${song.id}`, { title }),
     onSuccess: async () => {
       await invalidate();
-      setEditing(false);
+      setMode("view");
       queueMicrotask(() => pencilRef.current?.focus());
       toast({ title: "Track renamed" });
     },
@@ -525,154 +525,422 @@ function TrackRow({
       }),
   });
 
-  const submit = () => {
+  const submitRename = () => {
     const next = draft.trim();
     if (!next) {
       toast({ title: "Title can't be empty", variant: "destructive" });
       return;
     }
     if (next === song.title) {
-      setEditing(false);
+      setMode("view");
       queueMicrotask(() => pencilRef.current?.focus());
       return;
     }
     renameMut.mutate(next);
   };
 
-  const cancel = () => {
-    setEditing(false);
+  const cancelRename = () => {
+    setMode("view");
     queueMicrotask(() => pencilRef.current?.focus());
   };
 
-  const rowCls = [
-    "group flex items-center gap-4 px-5 py-3 transition-colors",
+  const closeAudio = () => {
+    setMode("view");
+    queueMicrotask(() => masterChipRef.current?.focus());
+  };
+
+  const liCls = [
+    "group flex flex-col transition-colors",
     withBorder && "border-b border-slate-100",
-    editing ? "bg-[#319ED8]/5" : "hover:bg-slate-50",
+    mode !== "view" ? "bg-[#319ED8]/5" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <li className={rowCls} data-testid={`row-track-${song.id}`}>
-      <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
-        {song.trackNumber}
-      </span>
+    <li className={liCls} data-testid={`row-track-${song.id}`}>
+      <div
+        className={[
+          "flex items-center gap-4 px-5 py-3",
+          mode === "view" && "hover:bg-slate-50",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
+          {song.trackNumber}
+        </span>
 
-      {editing ? (
-        <div className="flex-1 min-w-0 flex items-center gap-2">
+        {mode === "rename" ? (
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitRename();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelRename();
+                }
+              }}
+              className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+              data-testid={`input-track-title-${song.id}`}
+            />
+            <button
+              type="button"
+              onClick={submitRename}
+              disabled={renameMut.isPending}
+              className="px-2.5 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+              data-testid={`button-save-track-${song.id}`}
+            >
+              {renameMut.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                "Save"
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={cancelRename}
+              disabled={renameMut.isPending}
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+              data-testid={`button-cancel-track-${song.id}`}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={onOpen}
+                className="block w-full text-left"
+                data-testid={`button-open-track-${song.id}`}
+              >
+                <div
+                  className="text-slate-900 text-[13.5px] font-medium truncate"
+                  data-testid={`text-track-title-${song.id}`}
+                >
+                  {song.title}
+                </div>
+              </button>
+              <div className="flex items-center gap-2.5 mt-0.5">
+                <button
+                  ref={masterChipRef}
+                  type="button"
+                  onClick={() =>
+                    setMode((m) => (m === "audio" ? "view" : "audio"))
+                  }
+                  aria-label="Edit master audio file"
+                  title="Edit master"
+                  data-testid={`button-edit-master-${song.id}`}
+                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                >
+                  <TrackChip
+                    ok={!!song.audioUrl}
+                    label={song.audioUrl ? "Master" : "No master"}
+                    testId={`chip-master-${song.id}`}
+                    interactive
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpen}
+                  aria-label="Edit lyrics in classic admin"
+                  title="Edit lyrics in classic admin"
+                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                >
+                  <TrackChip
+                    ok={!!song.lyrics}
+                    label={song.lyrics ? "Lyrics" : "No lyrics"}
+                    testId={`chip-lyrics-${song.id}`}
+                    interactive
+                  />
+                </button>
+              </div>
+            </div>
+            <span
+              className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
+              data-testid={`text-track-duration-${song.id}`}
+            >
+              {formatDuration(song.duration)}
+            </span>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                ref={pencilRef}
+                type="button"
+                onClick={() => setMode("rename")}
+                aria-label="Rename track"
+                title="Rename"
+                className="w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                data-testid={`button-rename-track-${song.id}`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
+                    )
+                  ) {
+                    deleteMut.mutate();
+                  }
+                }}
+                disabled={deleteMut.isPending}
+                aria-label="Delete track"
+                title="Delete"
+                className="w-7 h-7 rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+                data-testid={`button-delete-track-${song.id}`}
+              >
+                {deleteMut.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onOpen}
+                aria-label="Open in classic admin"
+                title="Open in classic admin"
+                className="w-7 h-7 rounded-full text-slate-300 hover:bg-slate-200 hover:text-slate-700 inline-flex items-center justify-center transition-colors"
+                data-testid={`button-classic-track-${song.id}`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {mode === "audio" && (
+        <AudioEditor
+          song={song}
+          albumId={albumId}
+          onClose={closeAudio}
+          onSaved={invalidate}
+        />
+      )}
+    </li>
+  );
+}
+
+/* ─── Per-track audio editor (drag-drop, file picker, paste URL) ─────── */
+
+function AudioEditor({
+  song,
+  albumId: _albumId,
+  onClose,
+  onSaved,
+}: {
+  song: SongLite;
+  albumId: string;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [draftUrl, setDraftUrl] = useState<string>(song.audioUrl ?? "");
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const dirty = (draftUrl || null) !== (song.audioUrl ?? null);
+
+  const handleFile = async (f: File) => {
+    setLocalError(null);
+    if (!/^audio\//.test(f.type) && !/\.(mp3|m4a|aac|wav|flac|ogg)$/i.test(f.name)) {
+      setLocalError("That's not an audio file. Use MP3, M4A/AAC, WAV, FLAC, or OGG.");
+      return;
+    }
+    if (f.size > 150 * 1024 * 1024) {
+      setLocalError("File too large — keep masters under 150 MB.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const url = await uploadAudioFile(f);
+      setDraftUrl(url);
+    } catch (e: any) {
+      setLocalError(e?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const saveMut = useMutation({
+    mutationFn: async () =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+        audioUrl: draftUrl || null,
+      }),
+    onSuccess: async () => {
+      await onSaved();
+      toast({ title: song.audioUrl ? "Master updated" : "Master added" });
+      onClose();
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save the master",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div
+      className="px-5 pb-4"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !uploading && !saveMut.isPending) {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) handleFile(f);
+        }}
+        className={[
+          "rounded-xl border-2 border-dashed px-4 py-4 space-y-3 transition-colors",
+          dragOver
+            ? "border-[#319ED8] bg-[#319ED8]/10"
+            : "border-slate-200 bg-slate-50/60",
+        ].join(" ")}
+        data-testid={`dropzone-audio-${song.id}`}
+      >
+        <div className="flex items-center gap-2">
+          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
+            Master audio
+            {uploading && (
+              <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
+                · uploading…
+              </span>
+            )}
+          </span>
           <input
-            ref={inputRef}
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                submit();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                cancel();
-              }
+            ref={fileRef}
+            type="file"
+            accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+              e.target.value = "";
             }}
-            className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
-            data-testid={`input-track-title-${song.id}`}
+            data-testid={`input-audio-file-${song.id}`}
           />
           <button
             type="button"
-            onClick={submit}
-            disabled={renameMut.isPending}
-            className="px-2.5 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
-            data-testid={`button-save-track-${song.id}`}
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading || saveMut.isPending}
+            className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-40 font-semibold"
+            data-testid={`button-choose-audio-${song.id}`}
           >
-            {renameMut.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              "Save"
-            )}
+            {draftUrl ? "Replace file" : "Choose file"}
           </button>
-          <button
-            type="button"
-            onClick={cancel}
-            disabled={renameMut.isPending}
-            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
-            data-testid={`button-cancel-track-${song.id}`}
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <>
-          <button
-            type="button"
-            onClick={onOpen}
-            className="flex-1 min-w-0 text-left"
-            data-testid={`button-open-track-${song.id}`}
-          >
-            <div
-              className="text-slate-900 text-[13.5px] font-medium truncate"
-              data-testid={`text-track-title-${song.id}`}
-            >
-              {song.title}
-            </div>
-            <div className="flex items-center gap-2.5 mt-0.5">
-              <TrackChip
-                ok={!!song.audioUrl}
-                label={song.audioUrl ? "Master" : "No master"}
-                testId={`chip-master-${song.id}`}
-              />
-              <TrackChip
-                ok={!!song.lyrics}
-                label={song.lyrics ? "Lyrics" : "No lyrics"}
-                testId={`chip-lyrics-${song.id}`}
-              />
-            </div>
-          </button>
-          <span
-            className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
-            data-testid={`text-track-duration-${song.id}`}
-          >
-            {formatDuration(song.duration)}
-          </span>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              ref={pencilRef}
-              type="button"
-              onClick={() => setEditing(true)}
-              aria-label="Rename track"
-              title="Rename"
-              className="w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-              data-testid={`button-rename-track-${song.id}`}
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
+          {draftUrl && (
             <button
               type="button"
               onClick={() => {
-                if (
-                  window.confirm(
-                    `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
-                  )
-                ) {
-                  deleteMut.mutate();
-                }
+                setDraftUrl("");
+                setLocalError(null);
               }}
-              disabled={deleteMut.isPending}
-              aria-label="Delete track"
-              title="Delete"
-              className="w-7 h-7 rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
-              data-testid={`button-delete-track-${song.id}`}
+              disabled={uploading || saveMut.isPending}
+              className="text-[12px] text-slate-500 hover:text-slate-700 hover:underline disabled:opacity-40"
+              data-testid={`button-clear-audio-${song.id}`}
             >
-              {deleteMut.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="w-3.5 h-3.5" />
-              )}
+              Clear
             </button>
-            <ChevronRight className="w-4 h-4 text-slate-300" />
-          </div>
-        </>
-      )}
-    </li>
+          )}
+        </div>
+
+        <input
+          type="text"
+          value={draftUrl}
+          onChange={(e) => {
+            setDraftUrl(e.target.value);
+            setLocalError(null);
+          }}
+          placeholder="Drop a file here, choose one, or paste a URL"
+          disabled={uploading || saveMut.isPending}
+          className="w-full h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          data-testid={`input-audio-url-${song.id}`}
+        />
+
+        {draftUrl && (
+          <audio
+            controls
+            src={draftUrl}
+            preload="none"
+            onError={() =>
+              setLocalError(
+                "Preview failed to load. If you pasted a URL, make sure it's a direct audio link (not a share page).",
+              )
+            }
+            className="w-full h-8"
+            data-testid={`audio-preview-${song.id}`}
+          />
+        )}
+
+        {localError && (
+          <p
+            className="text-[11px] text-rose-600"
+            data-testid={`text-audio-error-${song.id}`}
+          >
+            {localError}
+          </p>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={uploading || saveMut.isPending}
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            data-testid={`button-cancel-audio-${song.id}`}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => saveMut.mutate()}
+            disabled={!dirty || uploading || saveMut.isPending}
+            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+            data-testid={`button-save-audio-${song.id}`}
+          >
+            {saveMut.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5" />
+            )}
+            Save master
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -680,10 +948,12 @@ function TrackChip({
   ok,
   label,
   testId,
+  interactive,
 }: {
   ok: boolean;
   label: string;
   testId?: string;
+  interactive?: boolean;
 }) {
   return (
     <span
@@ -693,7 +963,10 @@ function TrackChip({
         ok
           ? "bg-[#4AFFCA]/15 text-emerald-700"
           : "bg-slate-100 text-slate-400",
-      ].join(" ")}
+        interactive && "hover:ring-1 hover:ring-[#319ED8]/40 transition-shadow",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <span
         className={[
