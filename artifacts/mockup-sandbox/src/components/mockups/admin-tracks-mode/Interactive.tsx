@@ -211,34 +211,44 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
           <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
         </button>
 
-        <div className="relative h-20 flex-1 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden">
-          <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
-            {WAVE_BARS.map((h, i) => (
-              <div
-                key={i}
-                className="flex-1 bg-slate-300 rounded-full"
-                style={{ height: `${h}%` }}
-              />
-            ))}
-          </div>
-          {/* 30-sec window — amber + draggable when unlocked, emerald + settled when locked */}
-          <div
-            className={[
-              "absolute top-1 bottom-1 rounded-md border-2 transition-colors",
-              locked
-                ? "border-emerald-500/70 bg-emerald-500/10 cursor-default"
-                : "border-amber-400 bg-amber-400/15 cursor-grab shadow-[0_0_0_3px_rgba(251,191,36,0.15)]",
-            ].join(" ")}
-            style={{ left: `${left}%`, width: `${width}%` }}
-          >
+        <div className="flex-1 min-w-0">
+          {/* Waveform area — no side handles (fixed 30-sec window, the whole
+              rectangle is the grab target). Timecode axis sits below it, not behind it. */}
+          <div className="relative h-20 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden">
+            <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
+              {WAVE_BARS.map((h, i) => (
+                <div
+                  key={i}
+                  className="flex-1 bg-slate-300 rounded-full"
+                  style={{ height: `${h}%` }}
+                />
+              ))}
+            </div>
+
+            {/* Floating start-time chip — Apple Voice Memo pattern. Only while unlocked. */}
             {!locked && (
-              <>
-                <div className="absolute left-0 top-0 bottom-0 w-1.5 -ml-0.5 bg-amber-400 rounded-l-md" />
-                <div className="absolute right-0 top-0 bottom-0 w-1.5 -mr-0.5 bg-amber-400 rounded-r-md" />
-              </>
+              <div
+                className="absolute -top-1 -translate-y-full px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums shadow-md pointer-events-none after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800"
+                style={{ left: `calc(${left}% + 4px)` }}
+              >
+                1:05
+              </div>
             )}
+
+            {/* 30-sec window — amber + grabbable when unlocked, emerald + settled when locked.
+                No side handles: nothing to imply resizing. */}
+            <div
+              className={[
+                "absolute top-1 bottom-1 rounded-md border-2 transition-colors",
+                locked
+                  ? "border-emerald-500/70 bg-emerald-500/20 cursor-default"
+                  : "border-amber-400 bg-amber-400/25 cursor-grab active:cursor-grabbing shadow-[0_0_0_3px_rgba(251,191,36,0.15)]",
+              ].join(" ")}
+              style={{ left: `${left}%`, width: `${width}%` }}
+            />
           </div>
-          <div className="absolute -bottom-0.5 left-2 right-2 flex justify-between text-[9px] tabular-nums text-slate-400 pointer-events-none">
+          {/* Timecode axis — own row, won't be covered by the window */}
+          <div className="flex justify-between text-[9px] tabular-nums text-slate-400 mt-1 px-2">
             <span>0:00</span>
             <span>1:03</span>
             <span>2:06</span>
@@ -262,7 +272,7 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      {/* Start/End inputs — only while unlocked */}
+      {/* Start input — only while unlocked. End is auto = Start + 30s, so hidden. */}
       {!locked && (
         <div className="flex items-end gap-2">
           <div>
@@ -274,16 +284,9 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
               className="w-20 px-2 py-1 rounded-md border border-slate-200 text-[12px] tabular-nums focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
             />
           </div>
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
-              End (auto)
-            </label>
-            <input
-              value="1:35"
-              readOnly
-              className="w-20 px-2 py-1 rounded-md border border-slate-200 bg-slate-50 text-slate-500 text-[12px] tabular-nums"
-            />
-          </div>
+          <p className="text-[11px] text-slate-400 pb-2">
+            Type a fine adjustment, or slide the window on the waveform.
+          </p>
         </div>
       )}
     </DetailWrap>
