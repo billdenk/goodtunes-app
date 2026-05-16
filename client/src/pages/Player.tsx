@@ -516,6 +516,32 @@ export function Player() {
                   const isActive = i === activeLineIdx;
                   const isPast = activeLineIdx >= 0 && i < activeLineIdx;
                   const seekable = line.time != null;
+                  // Apple-Music-style focus stack: the active line is sharp +
+                  // pure white + slightly larger, and every other line is
+                  // progressively blurred + faded as it moves away from the
+                  // active one. Past lines fade harder than upcoming lines
+                  // so the eye naturally tracks down the page. Distance is
+                  // measured in *lines* (ignoring empties/headers would be
+                  // nicer, but the visual gradient holds up fine with raw
+                  // index distance for typical lyric densities).
+                  const distance = activeLineIdx < 0 ? 0 : Math.abs(i - activeLineIdx);
+                  // Blur ramp — soft, capped so the furthest lines stay just
+                  // legible. 0 → sharp, 1 → 0.8px, 2 → 1.8px, 3 → 3px, 4+ → 4.5px.
+                  const blurPx = isActive
+                    ? 0
+                    : distance === 1
+                      ? 0.8
+                      : distance === 2
+                        ? 1.8
+                        : distance === 3
+                          ? 3
+                          : 4.5;
+                  // Opacity ramp — past lines fade faster than future ones.
+                  const opacity = isActive
+                    ? 1
+                    : isPast
+                      ? Math.max(0.18, 0.55 - distance * 0.12)
+                      : Math.max(0.32, 0.85 - distance * 0.1);
                   return (
                     <div
                       key={i}
@@ -532,19 +558,21 @@ export function Player() {
                       } : undefined}
                       className={`select-none ${seekable ? "cursor-pointer" : "cursor-default"}`}
                       style={{
-                        color: isActive
-                          ? "#FFFFFF"
-                          : isPast
-                            ? "rgba(255,255,255,0.32)"
-                            : "rgba(255,255,255,0.55)",
+                        color: "#FFFFFF",
+                        opacity,
                         fontWeight: isActive ? 800 : 700,
-                        fontSize: "22px",
-                        lineHeight: 1.32,
-                        transform: isActive ? "scale(1.04)" : "scale(1)",
+                        // Active line is meaningfully larger so it punches
+                        // out of the blurred stack — matches Apple's effect.
+                        fontSize: isActive ? "28px" : "24px",
+                        lineHeight: 1.28,
+                        filter: blurPx > 0 ? `blur(${blurPx}px)` : "none",
+                        transform: isActive ? "scale(1.02)" : "scale(1)",
                         transformOrigin: "left center",
-                        transition: "color 350ms ease, transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1), text-shadow 350ms ease",
-                        textShadow: isActive ? "0 1px 18px rgba(74,255,202,0.18)" : "none",
+                        transition:
+                          "opacity 400ms ease, filter 400ms ease, font-size 350ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1), text-shadow 350ms ease",
+                        textShadow: isActive ? "0 1px 18px rgba(0,0,0,0.35)" : "none",
                         letterSpacing: "-0.01em",
+                        willChange: "filter, opacity, font-size",
                       }}
                       data-testid={`lyric-line-${i}`}
                       data-active={isActive}
