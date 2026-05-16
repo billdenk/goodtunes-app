@@ -4,8 +4,6 @@ import {
   Upload,
   Check,
   FileAudio,
-  FileImage,
-  FileBox,
   AlertCircle,
   MoreHorizontal,
   Replace,
@@ -29,32 +27,24 @@ export function TrackFiles() {
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans antialiased">
       <div className="max-w-[720px] mx-auto space-y-3">
-        {/* HEADER */}
+        {/* HEADER — note: this is now the album-level Masters tab (not per-track) */}
         <div className="space-y-2 pb-1">
           <div className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
             <span>Albums</span>
             <ChevronRight className="w-3 h-3" />
-            <span>Love Life Tragedy</span>
-            <ChevronRight className="w-3 h-3" />
-            <span>Tracks</span>
+            <span className="text-slate-700 font-semibold">Love Life Tragedy</span>
           </div>
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-                Track 1 of 17 · Love Life Tragedy · Nick Carter
-              </div>
-              <h2 className="text-slate-900 text-[20px] font-bold truncate">
-                Made for Us
-              </h2>
-            </div>
+          <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+            Album · Nick Carter
           </div>
+          <h2 className="text-slate-900 text-[22px] font-bold">Love Life Tragedy</h2>
 
-          <div className="flex items-center gap-4 border-b border-slate-200 pt-1">
-            <Tab label="Details" />
-            <Tab label="Credits" badge="7 to fill" />
-            <Tab label="Lyrics" />
-            <Tab label="Files" active />
+          <div className="flex items-center gap-5 border-b border-slate-200 pt-1">
+            <Tab label="Overview" />
+            <Tab label="Tracks" badge="17" />
+            <Tab label="Artwork" />
+            <Tab label="Masters" active />
+            <Tab label="Bonus" />
           </div>
         </div>
 
@@ -84,32 +74,6 @@ export function TrackFiles() {
           <EmptyDropZone
             label="Drop a hi-res FLAC or WAV"
             hint="≥ 96 kHz / 24-bit recommended · max 200 MB"
-          />
-        </Section>
-
-        {/* STEMS */}
-        <Section
-          title="Stems"
-          subtitle="Optional · powers future remix / karaoke / 'isolate vocal' features"
-        >
-          <FilledSlot
-            icon={<FileBox className="w-5 h-5 text-[#7F10A7]" />}
-            name="made-for-us-stems.zip"
-            meta="ZIP · 5 stems · 412 MB"
-            checksum="vocals · drums · bass · guitar · keys"
-            badges={[{ label: "5 stems", tone: "purple" }]}
-          />
-        </Section>
-
-        {/* TRACK COVER OVERRIDE */}
-        <Section
-          title="Track cover override"
-          subtitle="Optional · most tracks use the album cover. Use this for single-art or visualizer art."
-        >
-          <EmptyDropZone
-            label="Drop a square cover image"
-            hint="3000×3000 RGB JPG or PNG · uses album cover when empty"
-            icon={<FileImage className="w-6 h-6" />}
           />
         </Section>
 
@@ -143,14 +107,14 @@ export function TrackFiles() {
         <div className="sticky bottom-0 -mx-1 mt-2">
           <div className="flex items-center justify-between gap-3 rounded-xl bg-white border border-slate-200 shadow-md px-3 py-2.5">
             <button className="px-2.5 py-1.5 rounded-md text-slate-600 text-[12px] hover:bg-slate-50 inline-flex items-center gap-1">
-              <ChevronLeft className="w-3.5 h-3.5" /> Lyrics
+              <ChevronLeft className="w-3.5 h-3.5" /> Artwork
             </button>
             <div className="flex items-center gap-1.5">
               <button className="px-3 py-1.5 rounded-md bg-slate-100 text-slate-700 text-[12px] font-medium hover:bg-slate-200">
                 Save
               </button>
               <button className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1">
-                Open Track 2 <ChevronRight className="w-3.5 h-3.5" />
+                Next: Bonus <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

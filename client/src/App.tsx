@@ -16,6 +16,8 @@ import { EditAccount } from "@/pages/EditAccount";
 import { ArtistDetail } from "@/pages/ArtistDetail";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
+import { AdminAlbums } from "@/pages/AdminAlbums";
+import { AdminAlbum } from "@/pages/AdminAlbum";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -87,6 +89,16 @@ function Router() {
         </Route>
         <Route path="/account">
           <ProtectedRoute component={Account} />
+        </Route>
+        {/* New per-album admin shell (Phase 1 — order matters: list these before
+            the classic /admin route so wouter's Switch picks the more specific
+            match first). The classic /admin route remains the source of truth
+            for all editing until each tab is migrated. */}
+        <Route path="/admin/albums/:id">
+          <ProtectedRoute component={AdminAlbum} />
+        </Route>
+        <Route path="/admin/albums">
+          <ProtectedRoute component={AdminAlbums} />
         </Route>
         <Route path="/admin">
           <ProtectedRoute component={Admin} />

@@ -281,3 +281,66 @@ Phase 4 — Masters tab w/ pared-down pipeline (1 session)
 Phase 5 — Bonus tab (album-level move; 1 session)
 Phase 6 — ASCAP pull + Person-record memory + co-writer suggestions (1 session)
 
+
+---
+
+## Storefront — sunrise/sunset album sales (designed, not built)
+
+Captured while planning admin redesign, May 16 2026. Not in the current build pass — locking the design intent so the schema we ship in Phase 1–6 doesn't paint us into a corner.
+
+### Core sale model
+Albums on GoodTunes are **time-windowed, supply-limited drops** — not "buy anytime forever." Each album has:
+- **`saleStartsAt`** (sunrise) — drop goes live; album becomes purchasable. Before this: card visible with countdown, no buy button.
+- **`saleEndsAt`** (sunset) — automatic end. Album becomes unpurchasable. Existing owners keep their entitlement forever (Apple/Spotify rules don't apply — they bought it).
+- **`unitsAvailable`** (optional cap) — sells out when reached, even if before sunset. "First-N gets it" mechanic.
+- **`unitsSold`** — running count. Public-facing "X of Y remaining" badge if `unitsAvailable` is set.
+
+Either gate ends the sale: time **or** units, whichever first. UI shows whichever's closer. Admin can also **manually end early** with one click.
+
+### Add-ons / bundle SKUs (per album)
+A drop isn't just digital audio. The cart can include physical/extra SKUs:
+- **GoodDeed™ Certificate** — printed and signed certificate of ownership for the buyer. Limited-edition feel. Numbered, e.g. "#37 of 250." Drives scarcity.
+- **Signed vinyl / CD** (physical add-on) — uses existing GT fulfillment pipeline.
+- **Behind-the-scenes / extended liner notes PDF** (digital add-on).
+- **Personal video message from the artist** for the first N buyers.
+- **Demo / unreleased session takes** for the first N buyers.
+
+Add-ons are SKU-shaped: each has its own `unitsAvailable`, price, fulfillment type (digital/physical), and can sell out independently of the main album.
+
+### Pre-sale + post-sale states
+- **Pre-sunrise**: album visible, **30-second previews only** per track, countdown to sunrise, "Notify me" capture (email/push).
+- **Live window**: previews + full streaming for logged-in owners; non-owners can buy.
+- **Post-sunset / sold out**: previews stay (~30s clips), full streaming for owners only. Public page reads "Sold out · [N] copies pressed."
+- **Owner-forever**: a buyer's entitlement never expires, regardless of sunset. Sunset only ends *new* sales.
+
+### Private artist promo link
+- Each album gets a **private link** the artist can share before sunrise (`/album/:slug?promo=<token>`).
+- Pre-sunrise: token grants preview-page access + email capture flow + maybe a sneak-peek track.
+- Optional: token-gated early access (first 24h reserved for the artist's list, then public).
+- Per-token analytics: clicks, signups, conversions — so the artist can see which channel (Insta DM, mailing list, friend) drove sales.
+
+### Schema implications (touch shared/schema.ts later)
+```
+albums + {
+  saleStartsAt: timestamp (nullable — null = "no sale window, always for sale" legacy mode)
+  saleEndsAt:   timestamp (nullable)
+  unitsAvailable: integer (nullable — null = unlimited)
+  unitsSold:    integer (default 0)
+  saleStatus:   enum('draft','scheduled','live','sold_out','ended','manually_closed')
+  promoToken:   text (random, regenerable)
+  previewSeconds: integer (default 30) — per-track preview length pre-purchase
+}
+
+album_skus (new table) {
+  id, albumId, kind (cert|vinyl|cd|pdf|video_msg|bonus_audio|...),
+  title, description, priceCents, unitsAvailable?, unitsSold,
+  fulfillmentType (digital|physical), assetUrl?
+}
+```
+
+### Why this matters
+The storefront IS the product on day one. Streaming-without-purchase comes later via the handoff flow. Sunrise/sunset + scarcity is what makes a GT drop feel like a Kickstarter / Bandcamp drop rather than a Spotify catalog entry — and is the reason artists make more per fan here than via streaming.
+
+### Out of scope for now
+Cart UX, Stripe checkout, fulfillment dashboard, post-purchase delivery email, refund flow, sales reporting per artist/label, public sold-out leaderboards. All of that is post-admin-restructure work.
+

@@ -664,44 +664,45 @@ function RoleRow({
   hint?: string;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5">
+    <div className="group flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5">
       <span className="px-1.5 py-0.5 rounded bg-sky-50 text-[#319ED8] text-[10.5px] font-semibold tracking-wide flex-shrink-0 inline-flex items-center gap-1">
         {icon}
         {role.toUpperCase()}
       </span>
       {instrument ? (
-        <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-violet-50 border border-violet-100 text-violet-800 text-[11.5px] font-medium flex-shrink-0 max-w-[180px]">
-          <Link2 className="w-3 h-3 text-violet-500 flex-shrink-0" />
-          <span className="truncate">{instrument}</span>
-          {instrumentCategory && (
-            <span className="text-violet-400 text-[9.5px] font-bold uppercase tracking-wide flex-shrink-0">
-              · {instrumentCategory}
+        <>
+          <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-violet-50 border border-violet-100 text-violet-800 text-[11.5px] font-medium flex-shrink-0 max-w-[180px]">
+            <Link2 className="w-3 h-3 text-violet-500 flex-shrink-0" />
+            <span className="truncate">{instrument}</span>
+            {instrumentCategory && (
+              <span className="text-violet-400 text-[9.5px] font-bold uppercase tracking-wide flex-shrink-0">
+                · {instrumentCategory}
+              </span>
+            )}
+          </span>
+          {notes && (
+            <span className="text-slate-500 text-[11.5px] truncate inline-flex items-center gap-1">
+              <StickyNote className="w-3 h-3 text-slate-300 flex-shrink-0" />
+              {notes}
             </span>
           )}
-        </span>
+          {/* hover-only edit affordances (lock-by-default pattern) */}
+          <div className="ml-auto flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button className="text-slate-400 text-[11px] hover:text-slate-700 px-1">
+              Edit
+            </button>
+            <button className="text-slate-400 hover:text-red-500 p-0.5">
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        </>
       ) : (
-        <button className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-dashed border-slate-300 bg-white text-slate-500 text-[11px] hover:bg-slate-50 flex-shrink-0">
-          <Link2 className="w-3 h-3" /> Link instrument
+        /* Empty state — single category-aware Link button (no duplicated "Link instrument" + "Link a guitar…") */
+        <button className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-dashed border-slate-300 bg-white text-slate-500 hover:text-[#319ED8] hover:border-[#319ED8] hover:bg-[#319ED8]/[0.04] text-[11.5px] flex-shrink-0">
+          <Link2 className="w-3 h-3" />
+          <span className="italic">{hint || `Link a ${role.toLowerCase()}…`}</span>
         </button>
       )}
-      {notes ? (
-        <span className="text-slate-500 text-[11.5px] truncate inline-flex items-center gap-1">
-          <StickyNote className="w-3 h-3 text-slate-300 flex-shrink-0" />
-          {notes}
-        </span>
-      ) : (
-        <span className="text-slate-400 text-[11px] italic truncate">
-          {hint || "No notes"}
-        </span>
-      )}
-      <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-        <button className="text-slate-300 text-[11px] hover:text-slate-700 px-1">
-          Edit
-        </button>
-        <button className="text-slate-300 hover:text-red-500 p-0.5">
-          <Trash2 className="w-3 h-3" />
-        </button>
-      </div>
     </div>
   );
 }
