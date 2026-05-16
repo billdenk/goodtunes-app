@@ -288,6 +288,15 @@ Phase 6 — ASCAP pull + Person-record memory + co-writer suggestions (1 session
 
 Captured while planning admin redesign, May 16 2026. Not in the current build pass — locking the design intent so the schema we ship in Phase 1–6 doesn't paint us into a corner.
 
+### Release lifecycle (canonical, 4 states)
+
+Every album moves through these states in order. The new admin's Albums page (`/admin/albums`) already shows them as the four underline tabs:
+
+1. **Prepping** — we're working on it. Cover art, metadata, credits, lyrics, masters are still being assembled. Not visible to fans. Today this maps to `isGoodTunesRelease=false` (imported albums that haven't been promoted yet); will gain a proper `lifecycle='prepping'` enum / draft flag with the schema work below.
+2. **Staged** — ready to release. All prep work done, just waiting for sunrise. Not visible to fans yet. **No schema field today** — count shows 0 in the admin until `saleStartsAt` (sunrise) is wired and the admin can flip an album into staged-and-scheduled.
+3. **Live** — fans can see and purchase. Today: `isGoodTunesRelease && !isHidden`. After sunrise/sunset land: between `saleStartsAt` and `saleEndsAt`, and `unitsAvailable` not yet hit.
+4. **Sunset** — pulled from sale. Either the admin manually hid it (`isHidden=true` today) or `saleEndsAt` passed or `unitsAvailable` was reached. **Existing owners keep their entitlement forever** — Collection is per-user and entirely orthogonal to storefront visibility. Sunset only ends *new* sales.
+
 ### Core sale model
 Albums on GoodTunes are **time-windowed, supply-limited drops** — not "buy anytime forever." Each album has:
 - **`saleStartsAt`** (sunrise) — drop goes live; album becomes purchasable. Before this: card visible with countdown, no buy button.
