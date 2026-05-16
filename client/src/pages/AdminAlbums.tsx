@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -6,28 +6,22 @@ import {
   Search,
   Filter,
   ChevronRight,
-  Disc3,
-  Music2,
   EyeOff,
   Sparkles,
-  ArrowLeft,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
  * Admin home · Albums list (Phase 1).
  *
- * Mirrors artifacts/mockup-sandbox/.../AlbumsHome.tsx — the canvas
- * storyboard's frame 1. Stats strip, search/filter toolbar, polished
- * album rows with cover + meta + status badge + chevron. Tapping a row
- * opens /admin/albums/:id (the per-album shell). "New album" still
- * deep-links to the classic /admin while creation hasn't been migrated.
+ * Frame 1 of the storyboard. Compact toolbar — search and filter live as
+ * icon-only buttons that expand on demand; "New album" is just a `+`
+ * next to them, matching how we collapse chrome elsewhere in the player.
  *
- * Data: piggy-backs on /api/albums (same query the classic admin uses),
- * so anything created or hidden over there shows up here without an
- * extra refetch. Per-album track count + credit-completion are TODOs
- * for Phase 2 — surfacing them requires either a heavier list endpoint
- * or a separate counts query; not faking them in the meantime.
+ * Data piggy-backs on /api/albums (same query the classic admin uses).
+ * Per-album track count + credit-completion are Phase 2 (need a counts
+ * query); not faking them in the meantime.
  */
 interface AlbumLite {
   id: string;
@@ -36,6 +30,7 @@ interface AlbumLite {
   artwork: string;
   year: number | null;
   type: "Single" | "EP" | "LP";
+  description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
 }
@@ -44,6 +39,8 @@ export function AdminAlbums() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -51,6 +48,10 @@ export function AdminAlbums() {
       document.body.classList.remove("gt-admin");
     };
   }, []);
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   const { data: albums = [], isLoading } = useQuery<AlbumLite[]>({
     queryKey: ["/api/albums"],
@@ -70,11 +71,6 @@ export function AdminAlbums() {
         a.artist.toLowerCase().includes(q),
     );
   }, [releases, search]);
-
-  const hiddenCount = useMemo(
-    () => releases.filter((a) => a.isHidden).length,
-    [releases],
-  );
 
   if (authLoading) {
     return (
@@ -104,11 +100,16 @@ export function AdminAlbums() {
     );
   }
 
+  const closeSearch = () => {
+    setSearch("");
+    setSearchOpen(false);
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 p-8 font-sans antialiased">
       <div className="max-w-[860px] mx-auto space-y-3">
         {/* HEADER */}
-        <div className="flex items-center justify-between gap-3 pb-1">
+        <div className="flex items-end justify-between gap-3 pb-1">
           <div className="min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
               GoodTunes Admin
@@ -123,77 +124,53 @@ export function AdminAlbums() {
               Manage everything that shows up in the GoodTunes® player.
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Link
-              href="/admin"
-              className="px-3 py-2 rounded-md border border-slate-200 bg-white text-slate-600 text-[12px] hover:bg-slate-50 inline-flex items-center gap-1.5"
-              data-testid="link-classic-admin"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Classic admin
-            </Link>
-            <button
+          {/* Toolbar — icon-only, expand-on-tap. Search + filter + new. */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {searchOpen ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
+                <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  className="w-48 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                  placeholder="Find an album or artist…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") closeSearch();
+                  }}
+                  data-testid="input-search-albums"
+                />
+                <button
+                  type="button"
+                  onClick={closeSearch}
+                  className="text-slate-400 hover:text-slate-700"
+                  data-testid="button-close-search"
+                  aria-label="Close search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <IconBtn
+                onClick={() => setSearchOpen(true)}
+                label="Search"
+                testId="button-open-search"
+              >
+                <Search className="w-4 h-4" />
+              </IconBtn>
+            )}
+            <IconBtn label="Filter" testId="button-filter">
+              <Filter className="w-4 h-4" />
+            </IconBtn>
+            <IconBtn
               onClick={() => navigate("/admin")}
-              className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
-              data-testid="button-new-album"
+              label="New album"
+              testId="button-new-album"
+              tone="primary"
             >
-              <Plus className="w-3.5 h-3.5" /> New album
-            </button>
+              <Plus className="w-4 h-4" />
+            </IconBtn>
           </div>
-        </div>
-
-        {/* TOOLBAR */}
-        <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-2.5 flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-50 border border-slate-200">
-            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-            <input
-              className="flex-1 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none"
-              placeholder="Find an album, track or artist…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="input-search-albums"
-            />
-          </div>
-          <button
-            className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[12px] hover:bg-slate-50 inline-flex items-center gap-1.5 flex-shrink-0"
-            data-testid="button-filter-artists"
-          >
-            <Filter className="w-3.5 h-3.5" /> All artists
-          </button>
-        </section>
-
-        {/* STATS — inline strip, not full-width cards. Counts are small
-            integers; cards-per-stat felt empty. */}
-        <div className="flex items-center gap-4 px-3 py-2 rounded-xl bg-white border border-slate-200 shadow-sm text-[12px]">
-          <InlineStat
-            label="Releases"
-            value={String(releases.length)}
-            testId="stat-releases"
-          />
-          <span className="text-slate-200">·</span>
-          <InlineStat
-            label="Visible"
-            value={String(releases.length - hiddenCount)}
-            testId="stat-visible"
-          />
-          <span className="text-slate-200">·</span>
-          <InlineStat
-            label="Hidden"
-            value={String(hiddenCount)}
-            tone={hiddenCount > 0 ? "warn" : undefined}
-            testId="stat-hidden"
-          />
-          {search && (
-            <>
-              <span className="text-slate-200">·</span>
-              <InlineStat
-                label="Matching filter"
-                value={String(filtered.length)}
-                tone="ok"
-                testId="stat-filtered"
-              />
-            </>
-          )}
         </div>
 
         {/* ALBUM ROWS */}
@@ -206,7 +183,7 @@ export function AdminAlbums() {
             <div className="py-12 text-center text-slate-500 text-sm">
               {releases.length === 0
                 ? "No releases yet. Create one from the classic admin."
-                : "No releases match that filter."}
+                : "No releases match that search."}
             </div>
           ) : (
             <div className="divide-y divide-slate-100" data-testid="list-admin-albums">
@@ -243,41 +220,38 @@ function AlbumRow({ album }: { album: AlbumLite }) {
         className="w-14 h-14 rounded-lg object-cover bg-slate-100 flex-shrink-0 shadow-sm"
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className="text-slate-900 text-[14.5px] font-bold truncate"
-            data-testid={`text-album-title-${album.id}`}
-          >
-            {album.title}
-          </span>
-          {album.year && (
-            <span className="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[9.5px] font-bold uppercase tracking-wide flex-shrink-0">
-              {album.year}
-            </span>
-          )}
-          <span className="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[9.5px] font-bold uppercase tracking-wide flex-shrink-0">
-            {album.type}
-          </span>
-          {album.isHidden && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-px rounded bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-wide flex-shrink-0">
-              <EyeOff className="w-2.5 h-2.5" />
-              Hidden
-            </span>
-          )}
+        <div
+          className="text-slate-900 text-[14.5px] font-bold truncate"
+          data-testid={`text-album-title-${album.id}`}
+        >
+          {album.title}
         </div>
-        <div className="text-slate-500 text-[12px] mt-0.5 truncate inline-flex items-center gap-1.5">
-          <Music2 className="w-3 h-3 text-slate-400" />
+        <div className="text-slate-500 text-[12px] mt-0.5 truncate">
           {album.artist}
         </div>
-        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
-          {/* TODO Phase 2 — real tracks count + credit-completion from a
-              counts query. Holding the slot so the row height stays
-              consistent once it's wired. */}
-          <span className="inline-flex items-center gap-1 text-slate-300">
-            <Disc3 className="w-3 h-3" />
-            tracks · pending
+        {album.description && (
+          <div className="text-slate-400 text-[11.5px] mt-1 line-clamp-1">
+            {album.description}
+          </div>
+        )}
+      </div>
+      {/* Right-side meta — pills + hidden badge, replaces the void where
+          the mockup had status / % credited (not faking those yet). */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        {album.year && (
+          <span className="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">
+            {album.year}
           </span>
-        </div>
+        )}
+        <span className="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">
+          {album.type}
+        </span>
+        {album.isHidden && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-px rounded bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-wide">
+            <EyeOff className="w-2.5 h-2.5" />
+            Hidden
+          </span>
+        )}
       </div>
       <ChevronRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
     </Link>
@@ -309,32 +283,34 @@ function EmptyStateRow({ onClick }: { onClick: () => void }) {
   );
 }
 
-function InlineStat({
+function IconBtn({
+  children,
+  onClick,
   label,
-  value,
-  tone,
   testId,
+  tone,
 }: {
+  children: React.ReactNode;
+  onClick?: () => void;
   label: string;
-  value: string;
-  tone?: "ok" | "warn";
   testId?: string;
+  tone?: "primary";
 }) {
   return (
-    <span className="inline-flex items-baseline gap-1.5" data-testid={testId}>
-      <span
-        className={[
-          "font-bold tabular-nums text-[13px]",
-          tone === "ok"
-            ? "text-emerald-700"
-            : tone === "warn"
-              ? "text-amber-700"
-              : "text-slate-900",
-        ].join(" ")}
-      >
-        {value}
-      </span>
-      <span className="text-slate-500">{label.toLowerCase()}</span>
-    </span>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      className={[
+        "w-9 h-9 inline-flex items-center justify-center rounded-md border transition-colors",
+        tone === "primary"
+          ? "bg-[#319ED8] hover:bg-[#2890c8] text-white border-[#319ED8]"
+          : "bg-white hover:bg-slate-50 text-slate-600 border-slate-200",
+      ].join(" ")}
+    >
+      {children}
+    </button>
   );
 }
