@@ -1320,12 +1320,17 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
       </div>
 
       <Dialog open={urlOpen} onOpenChange={(o) => !urlBusy && setUrlOpen(o)}>
-        <DialogContent data-testid="dialog-import-video-url">
+        <DialogContent
+          className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 gap-3"
+          data-testid="dialog-import-video-url"
+        >
           <DialogHeader>
-            <DialogTitle>Import video from URL</DialogTitle>
-            <DialogDescription>
-              Paste a direct video link or a Dropbox share link. We'll pull the
-              file straight into Object Storage — no need to download it first.
+            <DialogTitle className="text-slate-900 text-[17px] font-semibold">
+              Import video from URL
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 text-[14px] leading-relaxed">
+              Paste a direct video link or a Dropbox share link. We'll pull
+              the file straight into storage — no need to download it first.
               MP4, MOV, or WebM, up to 500MB.
             </DialogDescription>
           </DialogHeader>
@@ -1333,18 +1338,18 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
             type="url"
             value={urlValue}
             onChange={(e) => setUrlValue(e.target.value)}
-            placeholder="https://www.dropbox.com/scl/fi/... or https://…/video.mp4"
-            className={inputCls}
+            placeholder="https://www.dropbox.com/scl/fi/… or https://…/video.mp4"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8] disabled:opacity-50"
             autoFocus
             disabled={urlBusy}
             data-testid="input-import-video-url"
           />
-          <DialogFooter>
+          <DialogFooter className="gap-2 mt-1">
             <button
               type="button"
               onClick={() => setUrlOpen(false)}
               disabled={urlBusy}
-              className="px-3 py-1.5 text-[12px] rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-50"
+              className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 text-[13px] font-medium disabled:opacity-50"
               data-testid="button-cancel-import-video"
             >
               Cancel
@@ -1353,7 +1358,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
               type="button"
               onClick={handleImportFromUrl}
               disabled={urlBusy || !urlValue.trim()}
-              className="px-3 py-1.5 text-[12px] rounded-md bg-[#319ED8] hover:bg-[#2a8ac0] text-white disabled:opacity-50"
+              className="rounded-lg bg-[#319ED8] hover:bg-[#2a8ac0] text-white px-4 py-2 text-[13px] font-medium disabled:opacity-50"
               data-testid="button-confirm-import-video"
             >
               {urlBusy ? "Importing…" : "Import"}
@@ -1480,21 +1485,29 @@ function AlbumVideoRow({
         <Trash2 className="w-4 h-4" />
       </button>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent data-testid={`dialog-delete-video-${video.id}`}>
+        <AlertDialogContent
+          className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 gap-3"
+          data-testid={`dialog-delete-video-${video.id}`}
+        >
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this video?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-slate-900 text-[17px] font-semibold">
+              Delete this video?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-500 text-[14px] leading-relaxed">
               {video.title ? `"${video.title}" ` : "This video "}
               will be removed from the album. This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid={`button-cancel-delete-video-${video.id}`}>
+          <AlertDialogFooter className="gap-2 mt-2">
+            <AlertDialogCancel
+              className="mt-0 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 text-[13px] font-medium shadow-none"
+              data-testid={`button-cancel-delete-video-${video.id}`}
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={onDelete}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-[13px] font-medium shadow-none"
               data-testid={`button-confirm-delete-video-${video.id}`}
             >
               Delete
