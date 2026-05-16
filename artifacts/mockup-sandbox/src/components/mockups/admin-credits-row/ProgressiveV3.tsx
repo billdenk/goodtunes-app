@@ -48,7 +48,7 @@ export function ProgressiveV3() {
           <div className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
             <span>Albums</span>
             <ChevronRight className="w-3 h-3" />
-            <span>Helium</span>
+            <span>Love Life Tragedy</span>
             <ChevronRight className="w-3 h-3" />
             <span className="text-slate-700 font-semibold">Tracks</span>
           </div>
@@ -61,7 +61,7 @@ export function ProgressiveV3() {
               </button>
               <div className="min-w-0">
                 <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-                  Track 1 of 14 · Helium · Nick Carter
+                  Track 1 of 17 · Love Life Tragedy · Nick Carter
                 </div>
                 <h2 className="text-slate-900 text-[20px] font-bold truncate">
                   Made for Us
@@ -85,9 +85,9 @@ export function ProgressiveV3() {
             <Tab label="Files" />
           </div>
 
-          {/* chip strip — 14 tracks */}
+          {/* chip strip — 17 tracks */}
           <div className="flex items-center gap-1 overflow-x-auto pt-2 pb-1 -mx-1 px-1">
-            {Array.from({ length: 14 }).map((_, i) => {
+            {Array.from({ length: 17 }).map((_, i) => {
               const n = i + 1;
               const isActive = n === 1;
               const isDone = [2, 3, 4, 7].includes(n);
@@ -116,7 +116,7 @@ export function ProgressiveV3() {
               );
             })}
             <span className="text-slate-300 text-[11px] px-2 flex-shrink-0">
-              4 of 14 complete
+              4 of 17 complete
             </span>
           </div>
 
@@ -148,7 +148,7 @@ export function ProgressiveV3() {
           unresolved="2 missing instrument"
           extraHeaderAction={
             <button className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11px] hover:bg-slate-50 inline-flex items-center gap-1">
-              <Copy className="w-3 h-3" /> Apply to all 14 tracks
+              <Copy className="w-3 h-3" /> Apply to all 17 tracks
             </button>
           }
         >
@@ -250,7 +250,7 @@ export function ProgressiveV3() {
           unresolved="3 missing legal · 75% unassigned"
           extraHeaderAction={
             <button className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11px] hover:bg-slate-50 inline-flex items-center gap-1">
-              <Copy className="w-3 h-3" /> Apply to all 14 tracks
+              <Copy className="w-3 h-3" /> Apply to all 17 tracks
             </button>
           }
         >
@@ -456,7 +456,7 @@ export function ProgressiveV3() {
           Gear now lives on each role row inside Performance (one canonical
           home). Publishing splits + writer legal/PRO data are folded into the
           Writers card. Track stepper, prev/next, and "Save & next" make
-          14-track albums tractable. "Apply to all 14 tracks" handles the
+          17-track albums tractable. "Apply to all 17 tracks" handles the
           common case of a band that plays every cut.
         </p>
       </div>

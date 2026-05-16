@@ -39,7 +39,7 @@ export function TitleOverview() {
           <div className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
             <span>Albums</span>
             <ChevronRight className="w-3 h-3" />
-            <span className="text-slate-700 font-semibold">Helium</span>
+            <span className="text-slate-700 font-semibold">Love Life Tragedy</span>
           </div>
 
           <div className="flex items-center justify-between gap-3">
@@ -48,7 +48,7 @@ export function TitleOverview() {
                 Album · Nick Carter
               </div>
               <h2 className="text-slate-900 text-[20px] font-bold truncate">
-                Helium
+                Love Life Tragedy
               </h2>
             </div>
             <button className="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5">
@@ -60,7 +60,7 @@ export function TitleOverview() {
           {/* tabs */}
           <div className="flex items-center gap-4 border-b border-slate-200 pt-1">
             <Tab label="Overview" active />
-            <Tab label="Tracks" badge="14" />
+            <Tab label="Tracks" badge="17" />
             <Tab label="Artwork" />
             <Tab label="Files" />
           </div>
@@ -71,8 +71,8 @@ export function TitleOverview() {
           <div className="flex items-stretch gap-4 p-4">
             {/* cover */}
             <div className="w-32 h-32 rounded-lg bg-gradient-to-br from-purple-500 via-fuchsia-500 to-rose-500 flex-shrink-0 relative overflow-hidden shadow-md">
-              <div className="absolute inset-0 flex items-center justify-center text-white text-[28px] font-black tracking-tight opacity-90">
-                He
+              <div className="absolute inset-0 flex items-center justify-center text-white text-[36px] font-black tracking-tight opacity-90">
+                LLT
               </div>
               <button className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-md bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60">
                 <Pencil className="w-3 h-3" />
@@ -185,16 +185,16 @@ export function TitleOverview() {
           <div className="divide-y divide-slate-100">
             <CheckRow label="Cover art — 3000×3000, RGB, JPG or PNG" status="good" />
             <CheckRow label="Title-level metadata (this page)" status="good" />
-            <CheckRow label="14 tracks ingested · audio files attached" status="good" />
+            <CheckRow label="17 tracks ingested · audio files attached" status="good" />
             <CheckRow
               label="Credits per track"
               status="partial"
-              hint="4 of 14 tracks have Performance filled"
+              hint="4 of 17 tracks have Performance filled"
             />
             <CheckRow
               label="Publishing splits"
               status="warn"
-              hint="Optional — only 1 of 14 has any %"
+              hint="Optional — only 1 of 17 has any %"
             />
             <CheckRow
               label="UPC / barcode"
@@ -209,7 +209,7 @@ export function TitleOverview() {
           <div className="flex items-center justify-between gap-3 rounded-xl bg-white border border-slate-200 shadow-md px-3 py-2.5">
             <div className="flex items-center gap-2 text-[11.5px] text-slate-500">
               <Disc3 className="w-3.5 h-3.5 text-slate-400" />
-              <span>Helium · 14 tracks · 4 fully credited</span>
+              <span>Love Life Tragedy · 17 tracks · 4 fully credited</span>
             </div>
             <div className="flex items-center gap-1.5">
               <button className="px-3 py-1.5 rounded-md bg-slate-100 text-slate-700 text-[12px] font-medium hover:bg-slate-200">
