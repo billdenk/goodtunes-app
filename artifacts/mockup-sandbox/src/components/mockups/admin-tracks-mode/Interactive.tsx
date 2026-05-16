@@ -18,6 +18,9 @@ import {
   Lock,
   LockOpen,
   Link as LinkIcon,
+  Sparkles,
+  Loader2,
+  Check as CheckIcon,
 } from "lucide-react";
 
 type Mode = "edit" | "listen";
@@ -437,7 +440,17 @@ function LyricsDetail({
   const [text, setText] = useState(seed);
   const [url, setUrl] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  // 'plain' = no timing · 'syncing' = forced-alignment call in flight · 'synced' = word-level VTT stored
+  const [syncState, setSyncState] = useState<"plain" | "syncing" | "synced">(
+    "plain",
+  );
   const dirty = text !== seed;
+  const canSync = text.trim().length > 0 && syncState !== "syncing";
+  const handleAutoSync = () => {
+    setSyncState("syncing");
+    // mock: forced-aligner round trip ~2s. Real call goes to ElevenLabs Forced Alignment API.
+    setTimeout(() => setSyncState("synced"), 2000);
+  };
 
   return (
     <DetailWrap title="Lyrics" onClose={onClose}>
@@ -504,10 +517,52 @@ function LyricsDetail({
         rows={8}
         className="w-full px-3 py-2 rounded-md border border-slate-200 bg-white text-[12.5px] leading-relaxed text-slate-900 font-mono focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
       />
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-slate-400">
-          .vtt/.lrc bring real timing. Plain text auto-distributes — word-level karaoke later.
-        </span>
+      <div className="flex items-center justify-between gap-3">
+        {/* Status pill — shows current timing fidelity */}
+        <div className="flex items-center gap-2">
+          {syncState === "plain" && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+              Plain text · auto-distributed
+            </span>
+          )}
+          {syncState === "syncing" && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#319ED8]/10 text-[#319ED8] text-[10.5px] font-semibold uppercase tracking-wider">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Auto-syncing to audio…
+            </span>
+          )}
+          {syncState === "synced" && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#4AFFCA]/20 text-emerald-700 text-[10.5px] font-semibold uppercase tracking-wider">
+              <CheckIcon className="w-3 h-3" />
+              Word-level synced
+            </span>
+          )}
+          {/* Auto-sync button — kicks off forced alignment (ElevenLabs API in real impl). */}
+          {syncState !== "synced" && (
+            <button
+              onClick={handleAutoSync}
+              disabled={!canSync}
+              className={
+                canSync
+                  ? "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-[#319ED8] text-[#319ED8] hover:bg-[#319ED8]/5"
+                  : "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-50 border border-slate-200 text-slate-400 cursor-not-allowed"
+              }
+            >
+              <Sparkles className="w-3 h-3" />
+              {syncState === "syncing" ? "Syncing…" : "Auto-sync to audio"}
+            </button>
+          )}
+          {syncState === "synced" && (
+            <button
+              onClick={() => setSyncState("plain")}
+              className="text-[11px] text-slate-400 hover:text-slate-600 underline underline-offset-2"
+            >
+              Re-sync
+            </button>
+          )}
+        </div>
+
         <button
           disabled={!dirty}
           className={
