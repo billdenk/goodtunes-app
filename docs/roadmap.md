@@ -17,6 +17,14 @@ A track is "ready to publish" when **both** of the below are set. Lyrics + Credi
 
 The Admin Tracks tab uses a dot meter on each row (●●  2/2) for the two required pieces; lyrics + credits live under an "Optional" divider in the expanded inline editor.
 
+### Master replacement vs. removal
+
+The Master detail panel offers **Replace** only — there is no "Remove master." Replacing swaps the audio while preserving the lyrics + credits work attached to the track. If a track should be gone entirely, the row-level trash deletes the row (and all its metadata together).
+
+### Track publish state (`draft` / `hidden` / `live`)
+
+Each track row carries a publish state — `draft` by default, `hidden` for soft-deleted/parked rows, `live` once the album ships. Hide is the recoverable parking spot ("not on the public album, but lyrics + credits + master stay intact"); Trash is the unrecoverable nuke. The admin row's danger strip surfaces both: `EyeOff` icon → toggle hidden, `Trash2` icon → confirm + delete. Same muted-slate-at-rest hover-tint treatment (slate for Hide, rose for Delete) so neither pulls the eye at rest.
+
 ---
 
 ## SuperCredits™ — Micro-Sponsorships (monetization layer)

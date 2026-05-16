@@ -14,7 +14,7 @@ import {
   Trash2,
   Check,
   Upload,
-  X,
+  EyeOff,
 } from "lucide-react";
 
 type Mode = "edit" | "listen";
@@ -150,9 +150,15 @@ function MasterDetail({
     <DetailWrap title="Master" onClose={onClose}>
       {hasMaster ? (
         <>
-          <div className="flex items-center gap-3 p-2.5 rounded-md bg-slate-50 border border-slate-200">
-            <span className="w-9 h-9 rounded-md bg-[#00062B] text-[#4AFFCA] inline-flex items-center justify-center flex-shrink-0">
-              <Disc3 className="w-4 h-4" />
+          {/* Whole file pill is the audition trigger; vinyl badge swaps to play glyph on hover */}
+          <button
+            type="button"
+            aria-label="Play storms_master_24-96.wav"
+            className="group w-full flex items-center gap-3 p-2.5 rounded-md bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors text-left"
+          >
+            <span className="relative w-9 h-9 rounded-md bg-[#00062B] text-[#4AFFCA] inline-flex items-center justify-center flex-shrink-0">
+              <Disc3 className="w-4 h-4 transition-opacity group-hover:opacity-0" />
+              <Play className="absolute w-4 h-4 translate-x-[1px] fill-current opacity-0 transition-opacity group-hover:opacity-100" />
             </span>
             <div className="flex-1 min-w-0">
               <div className="text-[12.5px] font-semibold text-slate-900 truncate">
@@ -162,19 +168,11 @@ function MasterDetail({
                 24-bit · 96 kHz · 4:12 · 47.3 MB
               </div>
             </div>
-            <button className="w-8 h-8 rounded-full bg-[#319ED8] text-white inline-flex items-center justify-center flex-shrink-0">
-              <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 inline-flex items-center gap-1">
-              <Upload className="w-3 h-3" />
-              Replace master
-            </button>
-            <button className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold text-rose-600 hover:bg-rose-50">
-              Remove
-            </button>
-          </div>
+          </button>
+          <button className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 inline-flex items-center gap-1">
+            <Upload className="w-3 h-3" />
+            Replace master
+          </button>
         </>
       ) : (
         <button className="w-full px-3 py-6 rounded-md border-2 border-dashed border-slate-300 hover:border-[#319ED8] hover:bg-[#319ED8]/5 text-[12.5px] font-semibold text-slate-500 hover:text-[#319ED8]">
@@ -547,13 +545,22 @@ function EditRow({
             <span className="text-[11px] text-slate-400">
               Track ID · t_{1000 + t.n}
             </span>
-            <button
-              aria-label="Delete track"
-              title="Delete track"
-              className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                aria-label="Hide track (parks it without losing lyrics or credits)"
+                title="Hide track (parks it without losing lyrics or credits)"
+                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+              </button>
+              <button
+                aria-label="Delete track"
+                title="Delete track"
+                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       )}
