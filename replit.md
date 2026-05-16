@@ -22,6 +22,17 @@ Mobile-first, Apple-Music-inspired web player.
 
 ## User preferences
 
+### Design system (app-wide — admin + player)
+**One design system covers the entire product** — the mobile player, the admin/CMS, and every mockup. Identical concepts must look identical everywhere. No one-off colors, button sizes, hover treatments, or icon sizes outside the primitives.
+
+- **Primitives home**: `client/src/components/ui/` is the canonical home. Mockups in `artifacts/mockup-sandbox/` prove a pattern first in a local `_shared.tsx`, then the primitive graduates into `client/src/components/ui/` when the pattern ships to real code.
+- **Default to Apple HIG** whenever a size/weight/spacing/radius/font isn't explicitly specified for a surface:
+  - Type: SF / system font stack. Body 17pt, secondary 15pt, footnote 13pt, caption 11pt. Headings use Apple's title scale (Title 1 / 2 / 3).
+  - Touch targets: **44×44pt minimum** on mobile surfaces (already enforced in this README).
+  - Corner radii, padding rhythm, hover/pressed states: match Apple Music / Apple-iOS conventions over inventing our own.
+- **Icons**: a single icon set per family (Lucide for UI chrome; `react-icons/si` for company logos). One play triangle, one trash can, one chevron, one pencil — used in every surface that needs that concept.
+- **Color**: only the five brand colors listed above + Tailwind slate for neutrals. New colors require a discussion, not a one-off.
+
 ### Spelling
 - Use **US English** for all user-facing strings (e.g. "color", not "colour"; "favorite", not "favourite"). Code identifiers can stay as they are; only the visible UI copy needs to read American.
 
