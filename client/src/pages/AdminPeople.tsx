@@ -69,12 +69,8 @@ export function AdminPeople() {
     return rows;
   }, [people, search]);
 
-  const openPersonInClassic = (id: string) => {
-    try {
-      localStorage.setItem("gt:admin:entity", "people");
-      localStorage.setItem("gt:admin:focus-person", id);
-    } catch {}
-    navigate("/admin");
+  const openPerson = (id: string) => {
+    navigate(`/admin/people/${id}`);
   };
 
   const openNewPerson = () => {
@@ -186,16 +182,12 @@ export function AdminPeople() {
               key={p.id}
               person={p}
               labelName={p.labelId ? labelById.get(p.labelId) ?? null : null}
-              onOpen={() => openPersonInClassic(p.id)}
+              onOpen={() => openPerson(p.id)}
             />
           ))}
         </div>
       )}
 
-      <p className="text-slate-400 text-[11px] mt-8 px-1">
-        Per-person detail pages are coming next. For now, opening a card
-        deep-links to the classic editor.
-      </p>
     </AdminFrame>
   );
 }
