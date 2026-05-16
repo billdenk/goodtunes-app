@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,10 +8,11 @@ import {
   Pencil,
   Upload,
   Loader2,
-  Guitar,
-  Store,
+  Tag,
   ExternalLink,
   MapPin,
+  Disc,
+  Instagram,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -19,58 +20,50 @@ import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 /**
- * Admin · Single vendor (Phase 6e).
+ * Admin · Single label (Phase 6f).
  *
- * Tabs: Overview · Logo · Cover · Instruments
+ * Tabs: Overview · Logo · Cover · Releases
  *
- * Logo + Cover are real drag-drop uploads that PUT photoUrl/coverUrl on
- * /api/admin/vendors/:id. Identity + bio still defer to the classic
- * admin (hover-reveal pencil) for now — single-source-of-truth edits.
- * Instruments tab is a live read of /api/vendors/:id/profile → each row
- * links straight to that instrument's new admin page.
+ * Releases is derived client-side from /api/albums filtered by labelId
+ * — no dedicated endpoint, but the album list is already cached.
  */
 
-interface Vendor {
+interface Label {
   id: string;
   name: string;
-  domain: string;
-  homeUrl: string | null;
-  aboutUrl: string | null;
   logoUrl: string | null;
-  tagline: string | null;
   bio: string | null;
   location: string | null;
+  websiteUrl: string | null;
+  instagramUrl: string | null;
   coverUrl: string | null;
 }
 
-interface VendorInstrument {
+interface AlbumLite {
   id: string;
-  name: string;
-  category: string;
-  shortCategory: string | null;
-  photoUrl: string | null;
+  title: string;
+  artist: string;
+  artwork: string;
+  year: number | null;
+  type: string;
+  labelId: string | null;
+  isHidden: boolean;
 }
 
-interface VendorProfile {
-  vendor: Vendor;
-  instruments: VendorInstrument[];
-  artists: Array<{ id: string; name: string; trackCount: number }>;
-}
-
-type Tab = "overview" | "logo" | "cover" | "instruments";
+type Tab = "overview" | "logo" | "cover" | "releases";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "logo", label: "Logo" },
   { key: "cover", label: "Cover" },
-  { key: "instruments", label: "Instruments" },
+  { key: "releases", label: "Releases" },
 ];
 
-export function AdminVendor() {
+export function AdminLabel() {
   const { user, isLoading: authLoading } = useAuth();
-  const [, params] = useRoute<{ id: string }>("/admin/vendors/:id");
+  const [, params] = useRoute<{ id: string }>("/admin/labels/:id");
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
-  const vendorId = params?.id ?? "";
+  const labelId = params?.id ?? "";
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -79,22 +72,35 @@ export function AdminVendor() {
     };
   }, []);
 
-  const { data: profile, isLoading, error } = useQuery<VendorProfile>({
-    queryKey: ["/api/vendors", vendorId, "profile"],
-    enabled: !!user?.isAdmin && !!vendorId,
+  const { data: label, isLoading, error } = useQuery<Label>({
+    queryKey: ["/api/labels", labelId],
+    enabled: !!user?.isAdmin && !!labelId,
   });
+
+  const { data: allAlbums = [] } = useQuery<AlbumLite[]>({
+    queryKey: ["/api/albums"],
+    enabled: !!user?.isAdmin,
+  });
+
+  const releases = useMemo(
+    () =>
+      allAlbums
+        .filter((a) => a.labelId === labelId)
+        .sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
+    [allAlbums, labelId],
+  );
 
   const openInClassicAdmin = () => {
     try {
-      localStorage.setItem("gt:admin:entity", "vendors");
-      localStorage.setItem("gt:admin:focus-vendor", vendorId);
+      localStorage.setItem("gt:admin:entity", "labels");
+      localStorage.setItem("gt:admin:focus-label", labelId);
     } catch {}
     navigate("/admin");
   };
 
   if (authLoading || isLoading) {
     return (
-      <AdminFrame active="vendors">
+      <AdminFrame active="labels">
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
         </div>
@@ -110,89 +116,87 @@ export function AdminVendor() {
     );
   }
 
-  if (error || !profile) {
+  if (error || !label) {
     return (
-      <AdminFrame active="vendors">
+      <AdminFrame active="labels">
         <div className="py-20 text-center space-y-3">
           <h1 className="text-slate-900 text-lg font-semibold">
-            Vendor not found
+            Label not found
           </h1>
           <Link
-            href="/admin/vendors"
+            href="/admin/labels"
             className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
-            data-testid="link-back-to-vendors"
+            data-testid="link-back-to-labels"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
-            Back to vendors
+            Back to labels
           </Link>
         </div>
       </AdminFrame>
     );
   }
 
-  const { vendor, instruments } = profile;
-
   return (
-    <AdminFrame active="vendors">
+    <AdminFrame active="labels">
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           <Link
-            href="/admin/vendors"
+            href="/admin/labels"
             className="hover:text-slate-700"
-            data-testid="link-breadcrumb-vendors"
+            data-testid="link-breadcrumb-labels"
           >
-            Vendors
+            Labels
           </Link>
           <ChevronRight className="w-3 h-3" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">
-            {vendor.name}
+            {label.name}
           </span>
         </div>
 
         {/* HEADER */}
         <div className="flex items-start gap-5">
           <div className="w-24 h-24 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center">
-            {vendor.logoUrl ? (
+            {label.logoUrl ? (
               <img
-                src={vendor.logoUrl}
-                alt={vendor.name}
+                src={label.logoUrl}
+                alt={label.name}
                 className="w-full h-full object-contain p-2"
-                data-testid="img-vendor-logo"
+                data-testid="img-label-logo"
               />
             ) : (
-              <Store className="w-10 h-10 text-slate-300" />
+              <Tag className="w-10 h-10 text-slate-300" />
             )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-              {vendor.domain}
+              Label
             </div>
             <h1
               className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5"
-              data-testid="heading-vendor-name"
+              data-testid="heading-label-name"
             >
-              {vendor.name}
+              {label.name}
             </h1>
             <div className="flex items-center gap-3 text-slate-500 text-[12.5px] mt-1">
               <span className="inline-flex items-center gap-1.5">
-                <Guitar className="w-3.5 h-3.5 text-slate-400" />
-                {instruments.length}{" "}
-                {instruments.length === 1 ? "instrument" : "instruments"}
+                <Disc className="w-3.5 h-3.5 text-slate-400" />
+                {releases.length}{" "}
+                {releases.length === 1 ? "release" : "releases"}
               </span>
-              {vendor.location && (
+              {label.location && (
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  {vendor.location}
+                  {label.location}
                 </span>
               )}
-              {vendor.homeUrl && (
+              {label.websiteUrl && (
                 <a
-                  href={vendor.homeUrl}
+                  href={label.websiteUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 hover:text-[#319ED8]"
-                  data-testid="link-vendor-home"
+                  data-testid="link-label-website"
                 >
                   Visit
                   <ExternalLink className="w-3 h-3" />
@@ -213,7 +217,7 @@ export function AdminVendor() {
         {/* TABS */}
         <div
           className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto"
-          data-testid="tabs-admin-vendor"
+          data-testid="tabs-admin-label"
         >
           {TABS.map((t) => (
             <button
@@ -235,15 +239,12 @@ export function AdminVendor() {
           ))}
         </div>
 
-        {/* CONTENT */}
         {tab === "overview" && (
-          <OverviewPanel vendor={vendor} onEdit={openInClassicAdmin} />
+          <OverviewPanel label={label} onEdit={openInClassicAdmin} />
         )}
-        {tab === "logo" && <LogoPanel vendor={vendor} />}
-        {tab === "cover" && <CoverPanel vendor={vendor} />}
-        {tab === "instruments" && (
-          <InstrumentsPanel instruments={instruments} />
-        )}
+        {tab === "logo" && <LogoPanel label={label} />}
+        {tab === "cover" && <CoverPanel label={label} />}
+        {tab === "releases" && <ReleasesPanel releases={releases} />}
       </div>
     </AdminFrame>
   );
@@ -252,10 +253,10 @@ export function AdminVendor() {
 /* ─── Overview ─────────────────────────────────────────────────────── */
 
 function OverviewPanel({
-  vendor,
+  label,
   onEdit,
 }: {
-  vendor: Vendor;
+  label: Label;
   onEdit: () => void;
 }) {
   return (
@@ -266,40 +267,11 @@ function OverviewPanel({
       >
         <PanelHeader title="Identity" onEdit={onEdit} />
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <Field label="Name" value={vendor.name} testId="field-name" />
-          <Field
-            label="Domain"
-            value={vendor.domain}
-            testId="field-domain"
-          />
-          <Field
-            label="Tagline"
-            value={vendor.tagline}
-            testId="field-tagline"
-          />
+          <Field label="Name" value={label.name} testId="field-name" />
           <Field
             label="Location"
-            value={vendor.location}
+            value={label.location}
             testId="field-location"
-          />
-        </dl>
-      </section>
-
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
-        data-testid="panel-overview-links-bio"
-      >
-        <PanelHeader title="Links & bio" onEdit={onEdit} />
-        <dl className="space-y-4">
-          <LinkField
-            label="Home URL"
-            value={vendor.homeUrl}
-            testId="field-home-url"
-          />
-          <LinkField
-            label="About URL"
-            value={vendor.aboutUrl}
-            testId="field-about-url"
           />
         </dl>
         <div>
@@ -309,13 +281,33 @@ function OverviewPanel({
           <dd
             className={[
               "text-[13.5px] leading-relaxed whitespace-pre-line",
-              vendor.bio ? "text-slate-700" : "text-slate-300 italic",
+              label.bio ? "text-slate-700" : "text-slate-300 italic",
             ].join(" ")}
             data-testid="field-bio"
           >
-            {vendor.bio || "No bio yet"}
+            {label.bio || "No bio yet"}
           </dd>
         </div>
+      </section>
+
+      <section
+        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-5"
+        data-testid="panel-overview-links"
+      >
+        <PanelHeader title="Links" onEdit={onEdit} />
+        <dl className="space-y-4">
+          <LinkField
+            label="Website"
+            value={label.websiteUrl}
+            testId="field-website-url"
+          />
+          <LinkField
+            label="Instagram"
+            value={label.instagramUrl}
+            testId="field-instagram-url"
+            icon={Instagram}
+          />
+        </dl>
       </section>
     </div>
   );
@@ -344,22 +336,18 @@ async function uploadImageFile(file: File): Promise<string> {
   return url as string;
 }
 
-/* ─── Generic image-upload panel ───────────────────────────────────── */
-
 function ImageUploadPanel({
-  vendor,
+  label,
   field,
   fieldLabel,
   description,
   aspect,
-  emptyIcon: EmptyIcon,
 }: {
-  vendor: Vendor;
+  label: Label;
   field: "logoUrl" | "coverUrl";
   fieldLabel: string;
   description: string;
   aspect: "square" | "wide";
-  emptyIcon: typeof Store;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -371,17 +359,16 @@ function ImageUploadPanel({
     mutationFn: async (file: File) => {
       setPreviewUrl(URL.createObjectURL(file));
       const url = await uploadImageFile(file);
-      await apiRequest("PUT", `/api/admin/vendors/${vendor.id}`, {
+      await apiRequest("PUT", `/api/admin/labels/${label.id}`, {
         [field]: url,
       });
       return url;
     },
     onSuccess: async () => {
       await qc.invalidateQueries({
-        queryKey: ["/api/vendors", vendor.id, "profile"],
+        queryKey: ["/api/labels", label.id],
       });
-      await qc.invalidateQueries({ queryKey: ["/api/vendors"] });
-      await qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      await qc.invalidateQueries({ queryKey: ["/api/labels"] });
       setPreviewUrl(null);
       toast({ title: `${fieldLabel} updated` });
     },
@@ -417,7 +404,7 @@ function ImageUploadPanel({
   };
 
   const busy = mut.isPending;
-  const shownUrl = previewUrl || vendor[field];
+  const shownUrl = previewUrl || label[field];
   const aspectClass = aspect === "square" ? "aspect-square" : "aspect-[3/1]";
   const objectFitClass =
     field === "logoUrl" ? "object-contain p-3" : "object-cover";
@@ -440,13 +427,13 @@ function ImageUploadPanel({
           {shownUrl ? (
             <img
               src={shownUrl}
-              alt={vendor.name}
+              alt={label.name}
               className={["w-full h-full", objectFitClass].join(" ")}
               data-testid={`img-${field}-current`}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-              <EmptyIcon className="w-12 h-12" />
+              <Tag className="w-12 h-12" />
             </div>
           )}
           {busy && (
@@ -527,54 +514,48 @@ function ImageUploadPanel({
   );
 }
 
-function LogoPanel({ vendor }: { vendor: Vendor }) {
+function LogoPanel({ label }: { label: Label }) {
   return (
     <ImageUploadPanel
-      vendor={vendor}
+      label={label}
       field="logoUrl"
       fieldLabel="Logo"
       aspect="square"
-      emptyIcon={Store}
-      description="Square works best — used in the SuperCredits™ vendor row and every instrument that links to this vendor."
+      description="Square works best — used in admin lists and any future fan-facing label page."
     />
   );
 }
 
-function CoverPanel({ vendor }: { vendor: Vendor }) {
+function CoverPanel({ label }: { label: Label }) {
   return (
     <ImageUploadPanel
-      vendor={vendor}
+      label={label}
       field="coverUrl"
       fieldLabel="Cover"
       aspect="wide"
-      emptyIcon={Store}
-      description="3:1 banner — used as the header backdrop on the fan-facing VendorSheet."
+      description="3:1 banner — reserved for a future fan-facing label page header."
     />
   );
 }
 
-/* ─── Instruments ──────────────────────────────────────────────────── */
+/* ─── Releases ─────────────────────────────────────────────────────── */
 
-function InstrumentsPanel({
-  instruments,
-}: {
-  instruments: VendorInstrument[];
-}) {
-  if (instruments.length === 0) {
+function ReleasesPanel({ releases }: { releases: AlbumLite[] }) {
+  if (releases.length === 0) {
     return (
       <section
         className="rounded-2xl bg-white border border-slate-200 shadow-sm p-10 text-center"
-        data-testid="panel-instruments-empty"
+        data-testid="panel-releases-empty"
       >
         <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-          <Guitar className="w-6 h-6" />
+          <Disc className="w-6 h-6" />
         </div>
         <p className="text-slate-700 text-[14px] font-semibold">
-          No instruments link to this vendor yet
+          No releases on this label yet
         </p>
         <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
-          Attach a product URL to any instrument and this vendor will
-          appear here.
+          Assign this label to an album from the album's Overview tab and
+          it'll show up here.
         </p>
       </section>
     );
@@ -582,43 +563,47 @@ function InstrumentsPanel({
   return (
     <section
       className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
-      data-testid="panel-instruments"
+      data-testid="panel-releases"
     >
       <div className="px-6 py-4 border-b border-slate-100">
         <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
-          <Guitar className="w-4 h-4 text-slate-400" />
-          Instruments
+          <Disc className="w-4 h-4 text-slate-400" />
+          Releases
         </h2>
         <p className="text-slate-400 text-[11.5px]">
-          {instruments.length}{" "}
-          {instruments.length === 1 ? "instrument" : "instruments"} attached
+          {releases.length}{" "}
+          {releases.length === 1 ? "release" : "releases"} · newest first
         </p>
       </div>
-      <ul className="divide-y divide-slate-100" data-testid="list-instruments">
-        {instruments.map((i) => (
-          <li key={i.id}>
+      <ul className="divide-y divide-slate-100" data-testid="list-releases">
+        {releases.map((a) => (
+          <li key={a.id}>
             <Link
-              href={`/admin/instruments/${i.id}`}
+              href={`/admin/albums/${a.id}`}
               className="flex items-center gap-3.5 px-6 py-3 hover:bg-slate-50 transition-colors"
-              data-testid={`row-instrument-${i.id}`}
+              data-testid={`row-release-${a.id}`}
             >
-              <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
-                {i.photoUrl ? (
-                  <img
-                    src={i.photoUrl}
-                    alt={i.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Guitar className="w-4 h-4 text-slate-400" />
-                )}
+              <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
+                <img
+                  src={a.artwork}
+                  alt={a.title}
+                  className="w-full h-full object-cover"
+                />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-slate-900 text-[13.5px] font-semibold truncate">
-                  {i.name}
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-900 text-[13.5px] font-semibold truncate">
+                    {a.title}
+                  </span>
+                  {a.isHidden && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold uppercase tracking-wider flex-shrink-0">
+                      Hidden
+                    </span>
+                  )}
                 </div>
                 <div className="text-slate-400 text-[11.5px] truncate">
-                  {i.shortCategory || i.category}
+                  {a.artist}
+                  {a.year ? ` · ${a.year}` : ""} · {a.type}
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
@@ -685,10 +670,12 @@ function LinkField({
   label,
   value,
   testId,
+  icon: Icon,
 }: {
   label: string;
   value: string | null;
   testId?: string;
+  icon?: typeof ExternalLink;
 }) {
   return (
     <div data-testid={testId}>
@@ -703,6 +690,7 @@ function LinkField({
             rel="noreferrer"
             className="text-[#319ED8] font-medium hover:underline inline-flex items-center gap-1"
           >
+            {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
             <span className="truncate max-w-[320px]">
               {value.replace(/^https?:\/\//, "")}
             </span>

@@ -24,6 +24,8 @@ import { AdminInstruments } from "@/pages/AdminInstruments";
 import { AdminInstrument } from "@/pages/AdminInstrument";
 import { AdminVendors } from "@/pages/AdminVendors";
 import { AdminVendor } from "@/pages/AdminVendor";
+import { AdminLabels } from "@/pages/AdminLabels";
+import { AdminLabel } from "@/pages/AdminLabel";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -123,6 +125,12 @@ function Router() {
         </Route>
         <Route path="/admin/vendors">
           <ProtectedRoute component={AdminVendors} />
+        </Route>
+        <Route path="/admin/labels/:id">
+          <ProtectedRoute component={AdminLabel} />
+        </Route>
+        <Route path="/admin/labels">
+          <ProtectedRoute component={AdminLabels} />
         </Route>
         <Route path="/admin">
           <ProtectedRoute component={Admin} />

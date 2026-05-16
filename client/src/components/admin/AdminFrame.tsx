@@ -16,9 +16,10 @@ import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
  * admin chip + back-to-player link, and left entity sidebar with live
  * counts. Wrap any admin page in this and pass which entity is active.
  *
- * Albums + People + Gear + Vendors have new-admin pages today. Labels
- * still deep-links into the classic admin's matching tab via the
- * `gt:admin:entity` localStorage key the classic admin already reads.
+ * Albums + People + Gear + Vendors + Labels all have new-admin pages
+ * now — every sidebar row routes into the new frame. The classic admin
+ * is reached only via per-page "Open in classic admin" jump-offs that
+ * set their own focus keys.
  */
 export type EntityKey = "albums" | "people" | "gear" | "vendors" | "labels";
 
@@ -52,13 +53,6 @@ export function AdminFrame({
     queryKey: ["/api/labels"],
     enabled: !!user?.isAdmin,
   });
-
-  const openClassic = (entity: Exclude<EntityKey, "albums">) => {
-    try {
-      localStorage.setItem("gt:admin:entity", entity);
-    } catch {}
-    navigate("/admin");
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans antialiased">
@@ -130,7 +124,7 @@ export function AdminFrame({
               label="Labels"
               count={labels.length}
               active={active === "labels"}
-              onClick={() => openClassic("labels")}
+              onClick={() => navigate("/admin/labels")}
               testId="nav-labels"
             />
           </nav>

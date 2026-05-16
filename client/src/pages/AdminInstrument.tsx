@@ -375,10 +375,10 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
       });
       return;
     }
-    if (file.size > 15 * 1024 * 1024) {
+    if (file.size > 8 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Keep images under 15 MB.",
+        description: "Keep images under 8 MB.",
         variant: "destructive",
       });
       return;
@@ -467,7 +467,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
               : "Drag an image here, or click to pick"}
           </div>
           <div className="text-slate-400 text-[11.5px]">
-            JPG, PNG, or WebP · up to 15 MB
+            JPG, PNG, or WebP · up to 8 MB
           </div>
         </button>
         <input

@@ -561,10 +561,10 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
       });
       return;
     }
-    if (file.size > 15 * 1024 * 1024) {
+    if (file.size > 8 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Keep covers under 15 MB.",
+        description: "Keep covers under 8 MB.",
         variant: "destructive",
       });
       return;
@@ -655,7 +655,7 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
               : "Drag an image here, or click to pick"}
           </div>
           <div className="text-slate-400 text-[11.5px]">
-            JPG, PNG, or WebP · up to 15 MB
+            JPG, PNG, or WebP · up to 8 MB
           </div>
         </button>
         <input
@@ -1209,10 +1209,10 @@ function BonusPhotos({
       });
       return;
     }
-    if (file.size > 15 * 1024 * 1024) {
+    if (file.size > 8 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Keep photos under 15 MB.",
+        description: "Keep photos under 8 MB.",
         variant: "destructive",
       });
       return;
@@ -1235,7 +1235,7 @@ function BonusPhotos({
           </h2>
           <p className="text-slate-400 text-[11.5px]">
             {photos.length} {photos.length === 1 ? "photo" : "photos"} ·
-            JPG / PNG / WebP · up to 15 MB
+            JPG / PNG / WebP · up to 8 MB
           </p>
         </div>
       </div>
