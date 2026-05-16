@@ -1,0 +1,395 @@
+Here is the complete JSON file — save this as `love_life_tragedy.json` (about 66 KB). It contains the album metadata, all 16 tracks with full per-track per-role credits, and a people directory of all 45 collaborators with their profile UUIDs and image URLs.
+
+```json
+{
+  "album": {
+    "id": "bbbd05a1-6d78-44d5-8e81-94e3ffb744ef",
+    "title": "LOVE LIFE TRAGEDY",
+    "type": "Album",
+    "artist": "Nick Carter",
+    "artistId": "f9b83378-d34b-4052-a928-61ecd2d6747f",
+    "released": "2025-05-15",
+    "copyright": {
+      "c": "2025 Popkid Productions, Inc.",
+      "p": "2025 Popkid Productions, Inc."
+    },
+    "collaborators_count": 45,
+    "sourceUrl": "https://credits.muso.ai/album/bbbd05a1-6d78-44d5-8e81-94e3ffb744ef",
+    "links": { "spotify": true }
+  },
+  "tracks": [
+    {
+      "position": 1,
+      "id": "a84f1296-3522-4e7b-a37b-1ed111cdc8e4",
+      "title": "Made For Us",
+      "artists": ["Nick Carter"],
+      "duration": "03:27",
+      "collaborators_count": 7,
+      "credits": {
+        "Songwriters": {
+          "Lyricist": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ],
+          "Composer": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Musicians": {
+          "Vocals": [{"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"}],
+          "Background Vocals": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}]
+        },
+        "Visual": {},
+        "Organizations": {
+          "Record Label": [{"id": "38df2f26-19e7-4e78-a049-13fc68e5631b", "name": "Popkid Productions, Inc."}],
+          "Publisher": [{"id": "69b4bbe5-6ba6-439b-8e71-7d6cbb9d7ee9", "name": "SONGS OF KAOTIC"}]
+        },
+        "Producers": {
+          "Producer": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Engineers": {
+          "Engineer": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}],
+          "Mixing": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}]
+        },
+        "Management": {},
+        "Others": {}
+      }
+    },
+    {
+      "position": 2,
+      "id": "6702a150-4cc4-4960-88f8-aa7bb41bf134",
+      "title": "Nothing Without Your Love",
+      "artists": ["Nick Carter"],
+      "duration": "03:31",
+      "collaborators_count": 7,
+      "credits": {
+        "Songwriters": {
+          "Composer": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ],
+          "Lyricist": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Musicians": {
+          "Vocals": [{"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"}],
+          "Background Vocals": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Visual": {},
+        "Organizations": {
+          "Record Label": [{"id": "38df2f26-19e7-4e78-a049-13fc68e5631b", "name": "Popkid Productions, Inc."}],
+          "Publisher": [{"id": "69b4bbe5-6ba6-439b-8e71-7d6cbb9d7ee9", "name": "SONGS OF KAOTIC"}]
+        },
+        "Producers": {
+          "Producer": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Engineers": {
+          "Engineer": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}],
+          "Mixing": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ],
+          "Mastering": [{"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}]
+        },
+        "Management": {},
+        "Others": {}
+      }
+    },
+    {
+      "position": 3,
+      "id": "7fff26eb-0c41-4d09-9974-f7df6eab9a90",
+      "title": "Good Love",
+      "artists": ["Nick Carter"],
+      "duration": "02:56",
+      "collaborators_count": 10,
+      "credits": {
+        "Songwriters": {
+          "Lyricist": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "a0a62d07-6341-4fa5-996e-63ade2f56770", "name": "Josh Goode"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"},
+            {"id": "7f10e802-314d-4632-ab07-02088a49bd56", "name": "vinny venditto"},
+            {"id": "4fea7ec2-c8ed-4111-b706-ce2adcf1577a", "name": "John Christian Frasca"}
+          ],
+          "Composer": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "a0a62d07-6341-4fa5-996e-63ade2f56770", "name": "Josh Goode"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"}
+          ]
+        },
+        "Musicians": {
+          "Vocals": [{"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"}],
+          "Background Vocals": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}],
+          "Guitar": [{"id": "a0a62d07-6341-4fa5-996e-63ade2f56770", "name": "Josh Goode"}]
+        },
+        "Visual": {},
+        "Organizations": {
+          "Record Label": [{"id": "38df2f26-19e7-4e78-a049-13fc68e5631b", "name": "Popkid Productions, Inc."}],
+          "Publisher": [{"id": "69b4bbe5-6ba6-439b-8e71-7d6cbb9d7ee9", "name": "SONGS OF KAOTIC"}]
+        },
+        "Producers": {
+          "Producer": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "7f10e802-314d-4632-ab07-02088a49bd56", "name": "vinny venditto"}
+          ]
+        },
+        "Engineers": {
+          "Engineer": [
+            {"id": "b6425314-ad45-4d73-8d22-897f99f6a2c4", "name": "Daniel Clarke-DiCandilo"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}
+          ],
+          "Mixing": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "7f10e802-314d-4632-ab07-02088a49bd56", "name": "vinny venditto"}
+          ],
+          "Mastering": [{"id": "756263ce-7db2-4396-bd91-7ccfa2bbed5d", "name": "Cee \"OhhMrCope\" Copeland"}]
+        },
+        "Management": {},
+        "Others": {}
+      }
+    },
+    {
+      "position": 4,
+      "id": "c288e6a1-e1ef-4987-9b50-e9f6b5823921",
+      "title": "Hey Kid",
+      "artists": ["Nick Carter"],
+      "duration": "03:35",
+      "collaborators_count": 6,
+      "credits": {
+        "Songwriters": {
+          "Composer": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"}
+          ],
+          "Lyricist": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"}
+          ]
+        },
+        "Musicians": {
+          "Vocals": [{"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"}],
+          "Background Vocals": [
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Visual": {},
+        "Organizations": {
+          "Record Label": [{"id": "38df2f26-19e7-4e78-a049-13fc68e5631b", "name": "Popkid Productions, Inc."}],
+          "Publisher": [{"id": "69b4bbe5-6ba6-439b-8e71-7d6cbb9d7ee9", "name": "SONGS OF KAOTIC"}]
+        },
+        "Producers": {
+          "Producer": [
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Engineers": {
+          "Mixing": [{"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}],
+          "Mastering": [{"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}]
+        },
+        "Management": {},
+        "Others": {}
+      }
+    },
+    {
+      "position": 5,
+      "id": "2b9ea80e-d037-4ab0-bb9c-a204ae9b88b2",
+      "title": "Searchlight",
+      "artists": ["Nick Carter"],
+      "duration": "03:45",
+      "collaborators_count": 7,
+      "credits": {
+        "Songwriters": {
+          "Composer": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ],
+          "Lyricist": [
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Musicians": {
+          "Vocals": [{"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"}],
+          "Background Vocals": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Visual": {},
+        "Organizations": {
+          "Record Label": [{"id": "38df2f26-19e7-4e78-a049-13fc68e5631b", "name": "Popkid Productions, Inc."}],
+          "Publisher": [{"id": "69b4bbe5-6ba6-439b-8e71-7d6cbb9d7ee9", "name": "SONGS OF KAOTIC"}]
+        },
+        "Producers": {
+          "Producer": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "0fca5ac5-e1aa-4d59-9a3a-de4e0bf7aacf", "name": "Bryan Shackle"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ]
+        },
+        "Engineers": {
+          "Engineer": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}],
+          "Mixing": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}
+          ],
+          "Mastering": [{"id": "1c9b1fb4-65a9-4ff5-871c-dbf0183f5709", "name": "Beck Nebel"}]
+        },
+        "Management": {},
+        "Others": {}
+      }
+    },
+    {
+      "position": 6,
+      "id": "bb295246-ed42-4a24-a824-c22667daf708",
+      "title": "Never Break My Heart (Not Again)",
+      "artists": ["Nick Carter"],
+      "duration": "03:53",
+      "collaborators_count": 12,
+      "credits": {
+        "Songwriters": {
+          "Composer": [
+            {"id": "7747017f-34ee-4948-8de7-3ed26d0c4b2e", "name": "Abraham Poythress"},
+            {"id": "55aebbac-b3e4-4b65-928d-fe503c103112", "name": "Adrian X Porter"},
+            {"id": "5a24a632-7a05-4da5-bc65-e9331add3243", "name": "Vincent Anthony Venditto"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "f4901d08-2fd5-4028-87da-e06c85453f37", "name": "Edward Carl Martin"},
+            {"id": "4fea7ec2-c8ed-4111-b706-ce2adcf1577a", "name": "John Christian Frasca"},
+            {"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"},
+            {"id": "e90476f6-3b43-4649-9a1e-b79fc37e6165", "name": "Nick (us) Carter"}
+          ],
+          "Lyricist": [
+            {"id": "7747017f-34ee-4948-8de7-3ed26d0c4b2e", "name": "Abraham Poythress"},
+            {"id": "55aebbac-b3e4-4b65-928d-fe503c103112", "name": "Adrian X Porter"}
+          ]
+        },
+        "Musicians": {
+          "Background Vocals": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}],
+          "Vocals": [{"id": "f9b83378-d34b-4052-a928-61ecd2d6747f", "name": "Nick Carter"}]
+        },
+        "Visual": {},
+        "Organizations": {
+          "Record Label": [{"id": "38df2f26-19e7-4e78-a049-13fc68e5631b", "name": "Popkid Productions, Inc."}],
+          "Publisher": [{"id": "69b4bbe5-6ba6-439b-8e71-7d6cbb9d7ee9", "name": "SONGS OF KAOTIC"}]
+        },
+        "Producers": {
+          "Producer": [
+            {"id": "7747017f-34ee-4948-8de7-3ed26d0c4b2e", "name": "Abraham Poythress"},
+            {"id": "d3249c28-498d-44b1-9f5f-724070ee53e5", "name": "Let Mii Rok Out"},
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "7f10e802-314d-4632-ab07-02088a49bd56", "name": "vinny venditto"}
+          ]
+        },
+        "Engineers": {
+          "Engineer": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}],
+          "Mixing": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}]
+        },
+        "Management": {},
+        "Others": {}
+      }
+    },
+    {
+      "position": 7,
+      "id": "d947ad96-dc6c-484e-a593-eee27fdc6efc",
+      "title": "Easy - Home Version",
+      "artists": ["Nick Carter"],
+      "duration": "02:54",
+      "collaborators_count": 6,
+      "credits": {
+        "Songwriters": {
+          "Composer": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "9278f526-6d91-4755-a79b-089d9c1daaa4", "name": "Nickolas G Carter"},
+            {"id": "d62ef066-01d2-425d-bb9b-da4d31d98225", "name": "Inconnu Compositeur Auteur"}
+          ],
+          "Lyricist": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "9278f526-6d91-4755-a79b-089d9c1daaa4", "name": "Nickolas G Carter"},
+            {"id": "d62ef066-01d2-425d-bb9b-da4d31d98225", "name": "Inconnu Compositeur Auteur"}
+          ]
+        },
+        "Musicians": {
+          "Background Vocals": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}]
+        },
+        "Visual": {},
+        "Organizations": {
+          "Record Label": [{"id": "38df2f26-19e7-4e78-a049-13fc68e5631b", "name": "Popkid Productions, Inc."}],
+          "Publisher": [{"id": "59cb3e9e-97f8-4d25-9236-d52ad26fd5d4", "name": "VYDIA MUSIC PUBLISHING"}]
+        },
+        "Producers": {
+          "Producer": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}]
+        },
+        "Engineers": {
+          "Engineer": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}],
+          "Mixing": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"}]
+        },
+        "Management": {},
+        "Others": {}
+      }
+    },
+    {
+      "position": 8,
+      "id": "96f5f236-a762-4ec0-b5b1-4830b405305c",
+      "title": "Hurts to Love You - Remastered 2025",
+      "artists": ["Nick Carter"],
+      "duration": "04:00",
+      "collaborators_count": 10,
+      "credits": {
+        "Songwriters": {
+          "Composer": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "6e84c3f1-6f58-4da0-99ae-830eabc81e45", "name": "Tommy Lee James"},
+            {"id": "e8e45235-7714-42de-85fb-a87fa5350d7b", "name": "Stuart Crichton"},
+            {"id": "9278f526-6d91-4755-a79b-089d9c1daaa4", "name": "Nickolas G Carter"}
+          ],
+          "Lyricist": [
+            {"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"},
+            {"id": "6e84c3f1-6f58-4da0-99ae-830eabc81e45", "name": "Tommy Lee James"},
+            {"id": "e8e45235-7714-42de-85fb-a87fa5350d7b", "name": "Stuart Crichton"},
+            {"id": "9278f526-6d91-4755-a79b-089d9c1daaa4", "name": "Nickolas G Carter"}
+          ]
+        },
+        "Musicians": {
+          "Background Vocals": [{"id": "c3db08cc-7503-414e-a9c4-293cf3e164e3", "name": "Vic “BillboardKiller” Martin"
