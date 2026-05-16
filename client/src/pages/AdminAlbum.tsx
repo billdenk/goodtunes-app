@@ -23,12 +23,22 @@ import {
   Upload,
   Loader2,
   ImageIcon,
+  ImagePlus,
+  X as XIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /**
  * Admin · Single album. Wrapped in AdminFrame so it shares the top bar +
@@ -3087,26 +3097,95 @@ interface AlbumPhoto {
   position: number;
 }
 
-async function uploadVideoFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
+// Three-step direct-to-GCS upload (sign → PUT → finalize) so files past
+// Replit's ~32MB inbound proxy cap still work, with optional progress.
+async function uploadVideoFile(
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<string> {
   const token = getAuthToken();
   if (!token) {
     throw new Error("Sign out and back in — your session token is missing.");
   }
-  const res = await fetch("/api/admin/upload-video", {
+  const signRes = await fetch("/api/admin/upload-video/sign", {
     method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     credentials: "include",
+    body: JSON.stringify({ contentType: file.type || "video/mp4" }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
+  if (!signRes.ok) {
+    const body = await signRes.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${signRes.status})`);
   }
-  const { url } = await res.json();
-  return url as string;
+  const { uploadUrl, finalPath, contentType } = (await signRes.json()) as {
+    uploadUrl: string;
+    finalPath: string;
+    contentType: string;
+  };
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl, true);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed — network error"));
+    xhr.send(file);
+  });
+  const finRes = await fetch("/api/admin/upload-video/finalize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    credentials: "include",
+    body: JSON.stringify({ finalPath }),
+  });
+  if (!finRes.ok) {
+    const body = await finRes.json().catch(() => ({}));
+    throw new Error(body.message || `Upload finalize failed (${finRes.status})`);
+  }
+  const { url } = (await finRes.json()) as { url: string };
+  return url;
 }
+
+function friendlyVideoError(raw: string): string {
+  let msg = raw || "";
+  const jsonMatch = msg.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed?.message) msg = String(parsed.message);
+    } catch {}
+  }
+  if (/larger than the 500MB/i.test(msg) || /exceeded 500MB/i.test(msg)) {
+    return "Sorry, this video is larger than the 500MB import limit.";
+  }
+  if (/unsupported|mime|content[- ]type/i.test(msg)) {
+    return "That link doesn't look like an MP4, MOV, or WebM video.";
+  }
+  if (/fetch|network|timed? ?out|enotfound|econnrefused/i.test(msg)) {
+    return "We couldn't reach that link. Double-check the URL and try again.";
+  }
+  return msg || "Upload failed.";
+}
+
+type VideoSheetMode =
+  | { kind: "closed" }
+  | { kind: "new" }
+  | { kind: "edit"; video: AlbumVideo };
+
+type PhotoSheetMode =
+  | { kind: "closed" }
+  | { kind: "new" }
+  | { kind: "edit"; photo: AlbumPhoto };
 
 function BonusPanel({
   album,
@@ -3129,40 +3208,17 @@ function BonusPanel({
 
 function BonusVideos({
   albumId,
-  onEdit,
+  onEdit: _onEdit,
 }: {
   albumId: string;
   onEdit: () => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sheet, setSheet] = useState<VideoSheetMode>({ kind: "closed" });
 
   const { data: videos = [], isLoading } = useQuery<AlbumVideo[]>({
     queryKey: ["/api/albums", albumId, "videos"],
-  });
-
-  const uploadMut = useMutation({
-    mutationFn: async (file: File) => {
-      const videoUrl = await uploadVideoFile(file);
-      await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
-        title: file.name.replace(/\.[^.]+$/, ""),
-        videoUrl,
-      });
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({
-        queryKey: ["/api/albums", albumId, "videos"],
-      });
-      toast({ title: "Video added" });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't add the video",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
   });
 
   const deleteMut = useMutation({
@@ -3184,29 +3240,6 @@ function BonusVideos({
     },
   });
 
-  const acceptFile = (file: File | undefined | null) => {
-    if (!file) return;
-    if (!/^video\//.test(file.type)) {
-      toast({
-        title: "That's not a video",
-        description: "Use an MP4, MOV, or WebM file.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (file.size > 200 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Keep videos under 200 MB for now.",
-        variant: "destructive",
-      });
-      return;
-    }
-    uploadMut.mutate(file);
-  };
-
-  const busy = uploadMut.isPending;
-
   return (
     <section
       className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
@@ -3220,7 +3253,7 @@ function BonusVideos({
           </h2>
           <p className="text-slate-400 text-[11.5px]">
             {videos.length} {videos.length === 1 ? "video" : "videos"} ·
-            MP4 / MOV / WebM · up to 200 MB
+            MP4 / MOV / WebM · up to 500 MB
           </p>
         </div>
       </div>
@@ -3246,69 +3279,58 @@ function BonusVideos({
                       deleteMut.mutate(v.id);
                     }
                   }}
-                  onEdit={onEdit}
+                  onEdit={() => setSheet({ kind: "edit", video: v })}
                   busy={deleteMut.isPending}
                 />
               ))}
             <AddTile
-              busy={busy}
-              label={busy ? "Uploading…" : "Add video"}
-              onClick={() => !busy && fileInputRef.current?.click()}
+              busy={false}
+              label="Add video"
+              onClick={() => setSheet({ kind: "new" })}
               testId="button-add-video"
             />
           </div>
         )}
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/mp4,video/quicktime,video/webm"
-        className="hidden"
-        onChange={(e) => {
-          acceptFile(e.target.files?.[0]);
-          e.target.value = "";
-        }}
-        data-testid="input-video-file"
-      />
+      {sheet.kind !== "closed" && (
+        <AlbumVideoSheet
+          mode={sheet}
+          albumId={albumId}
+          onClose={() => setSheet({ kind: "closed" })}
+          onSaved={async () => {
+            setSheet({ kind: "closed" });
+            await qc.invalidateQueries({
+              queryKey: ["/api/albums", albumId, "videos"],
+            });
+            toast({
+              title: sheet.kind === "edit" ? "Video updated" : "Video added",
+            });
+          }}
+          onRequestDelete={(v) => {
+            if (confirm(`Remove "${v.title}"?`)) {
+              deleteMut.mutate(v.id);
+              setSheet({ kind: "closed" });
+            }
+          }}
+        />
+      )}
     </section>
   );
 }
 
 function BonusPhotos({
   albumId,
-  onEdit,
+  onEdit: _onEdit,
 }: {
   albumId: string;
   onEdit: () => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sheet, setSheet] = useState<PhotoSheetMode>({ kind: "closed" });
 
   const { data: photos = [], isLoading } = useQuery<AlbumPhoto[]>({
     queryKey: ["/api/albums", albumId, "photos"],
-  });
-
-  const uploadMut = useMutation({
-    mutationFn: async (file: File) => {
-      const photoUrl = await uploadImageFile(file);
-      await apiRequest("POST", `/api/admin/albums/${albumId}/photos`, {
-        photoUrl,
-      });
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({
-        queryKey: ["/api/albums", albumId, "photos"],
-      });
-      toast({ title: "Photo added" });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't add the photo",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
   });
 
   const deleteMut = useMutation({
@@ -3329,29 +3351,6 @@ function BonusPhotos({
       });
     },
   });
-
-  const acceptFile = (file: File | undefined | null) => {
-    if (!file) return;
-    if (!/^image\//.test(file.type)) {
-      toast({
-        title: "That's not an image",
-        description: "Photos need to be a JPG, PNG, or WebP file.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Keep photos under 8 MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-    uploadMut.mutate(file);
-  };
-
-  const busy = uploadMut.isPending;
 
   return (
     <section
@@ -3392,29 +3391,40 @@ function BonusPhotos({
                       deleteMut.mutate(p.id);
                     }
                   }}
-                  onEdit={onEdit}
+                  onEdit={() => setSheet({ kind: "edit", photo: p })}
                 />
               ))}
             <AddTile
-              busy={busy}
-              label={busy ? "Uploading…" : "Add photo"}
-              onClick={() => !busy && fileInputRef.current?.click()}
+              busy={false}
+              label="Add photo"
+              onClick={() => setSheet({ kind: "new" })}
               testId="button-add-photo"
             />
           </div>
         )}
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          acceptFile(e.target.files?.[0]);
-          e.target.value = "";
-        }}
-        data-testid="input-photo-file"
-      />
+      {sheet.kind !== "closed" && (
+        <AlbumPhotoSheet
+          mode={sheet}
+          albumId={albumId}
+          onClose={() => setSheet({ kind: "closed" })}
+          onSaved={async () => {
+            setSheet({ kind: "closed" });
+            await qc.invalidateQueries({
+              queryKey: ["/api/albums", albumId, "photos"],
+            });
+            toast({
+              title: sheet.kind === "edit" ? "Photo updated" : "Photo added",
+            });
+          }}
+          onRequestDelete={(p) => {
+            if (confirm("Remove this photo?")) {
+              deleteMut.mutate(p.id);
+              setSheet({ kind: "closed" });
+            }
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -3507,7 +3517,7 @@ function TileActions({
   disabled?: boolean;
 }) {
   return (
-    <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+    <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
       <button
         type="button"
         onClick={(e) => {
@@ -3515,8 +3525,8 @@ function TileActions({
           onEdit();
         }}
         disabled={disabled}
-        aria-label="Edit in classic admin"
-        title="Edit in classic admin"
+        aria-label="Edit"
+        title="Edit"
         className="w-7 h-7 rounded-full bg-white/90 backdrop-blur-sm text-slate-700 hover:bg-white hover:text-slate-900 inline-flex items-center justify-center shadow"
       >
         <Pencil className="w-3.5 h-3.5" />
@@ -3607,4 +3617,760 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/* ─── Add/Edit video sheet ─────────────────────────────────────────── */
+
+function AlbumVideoSheet({
+  mode,
+  albumId,
+  onClose,
+  onSaved,
+  onRequestDelete,
+}: {
+  mode: { kind: "new" } | { kind: "edit"; video: AlbumVideo };
+  albumId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  onRequestDelete: (v: AlbumVideo) => void;
+}) {
+  const isEdit = mode.kind === "edit";
+  const existing = isEdit ? mode.video : null;
+
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [posterUrl, setPosterUrl] = useState<string | null>(
+    existing?.posterUrl ?? null,
+  );
+
+  const [source, setSource] = useState<"upload" | "url">("upload");
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [pickedFilePreview, setPickedFilePreview] = useState<string | null>(
+    null,
+  );
+  const [importUrl, setImportUrl] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const posterInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pickedFilePreview) URL.revokeObjectURL(pickedFilePreview);
+    };
+  }, [pickedFilePreview]);
+
+  function handlePickFile(file: File) {
+    if (pickedFilePreview) URL.revokeObjectURL(pickedFilePreview);
+    setPickedFile(file);
+    setPickedFilePreview(URL.createObjectURL(file));
+    if (!title) setTitle(file.name.replace(/\.[^.]+$/, "") || "Untitled video");
+  }
+
+  async function handlePickPoster(file: File) {
+    try {
+      setErr(null);
+      const url = await uploadImageFile(file);
+      setPosterUrl(url);
+    } catch (e: any) {
+      setErr(e?.message || "Poster upload failed");
+    }
+  }
+
+  const canSubmit = isEdit
+    ? title.trim().length > 0
+    : (source === "upload" && !!pickedFile && title.trim().length > 0) ||
+      (source === "url" && importUrl.trim().length > 0);
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setBusy(true);
+    setErr(null);
+    setProgress(null);
+    try {
+      if (isEdit && existing) {
+        await apiRequest("PUT", `/api/admin/album-videos/${existing.id}`, {
+          title: title.trim(),
+          description: description.trim() || null,
+          posterUrl,
+        });
+      } else {
+        let videoUrl = "";
+        if (source === "upload" && pickedFile) {
+          setProgress(0);
+          videoUrl = await uploadVideoFile(pickedFile, (f) =>
+            setProgress(Math.min(0.99, f)),
+          );
+        } else if (source === "url") {
+          const res = await apiRequest(
+            "POST",
+            "/api/admin/upload-video/from-url",
+            { url: importUrl.trim() },
+          );
+          const data = await res.json();
+          videoUrl = data.url;
+          if (!title.trim() && data.suggestedTitle) {
+            setTitle(data.suggestedTitle);
+          }
+        }
+        const finalTitle =
+          title.trim() ||
+          (source === "url" ? "Imported video" : "Untitled video");
+        await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
+          videoUrl,
+          title: finalTitle,
+          description: description.trim() || null,
+          posterUrl,
+        });
+      }
+      onSaved();
+    } catch (e: any) {
+      console.error("[AlbumVideoSheet] submit failed", e);
+      setErr(friendlyVideoError(e?.message || ""));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (busy) return;
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent
+        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        data-testid="dialog-album-video-sheet"
+      >
+        <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
+          <DialogTitle className="text-slate-900 text-[17px] font-semibold">
+            {isEdit ? "Edit video" : "Add a video"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEdit
+              ? "Update the video's title, description, or thumbnail."
+              : "Pick a video file or paste a link, then give it a title and an optional description."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-5 pb-4">
+            {isEdit ? (
+              <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
+                {existing?.posterUrl ? (
+                  <img
+                    src={existing.posterUrl}
+                    alt=""
+                    className="w-full h-full object-cover opacity-90"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Play
+                      className="w-10 h-10 text-slate-600"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                )}
+                <a
+                  href={existing?.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute inset-0 flex items-center justify-center"
+                  aria-label="Open video in a new tab"
+                  data-testid="link-preview-album-video"
+                >
+                  <div className="w-14 h-14 rounded-full bg-white/95 flex items-center justify-center shadow-lg">
+                    <Play
+                      className="w-5 h-5 text-slate-900 ml-1"
+                      fill="currentColor"
+                    />
+                  </div>
+                </a>
+              </div>
+            ) : pickedFile || pickedFilePreview ? (
+              <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
+                {pickedFilePreview ? (
+                  <video
+                    src={pickedFilePreview}
+                    className="w-full h-full object-contain bg-black"
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Play
+                      className="w-10 h-10 text-slate-600"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={busy}
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                  data-testid="button-replace-video-file"
+                >
+                  Replace video
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="inline-flex p-0.5 rounded-lg bg-slate-100 mb-3 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setSource("upload")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "upload"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-source-upload"
+                  >
+                    Upload file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSource("url")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "url"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-source-url"
+                  >
+                    Import from URL
+                  </button>
+                </div>
+
+                {source === "upload" ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragActive(false);
+                      if (e.dataTransfer.files?.[0])
+                        handlePickFile(e.dataTransfer.files[0]);
+                    }}
+                    className={
+                      "w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors " +
+                      (dragActive
+                        ? "border-[#319ED8] bg-blue-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                    }
+                    data-testid="button-video-dropzone"
+                  >
+                    <svg
+                      className={
+                        "w-8 h-8 mb-3 transition-colors " +
+                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                      }
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                      <path d="M12 12v9" />
+                      <path d="m16 16-4-4-4 4" />
+                    </svg>
+                    <p className="text-sm font-medium text-slate-700">
+                      Drop a video here, or click to browse
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      MP4, MOV, or WebM · up to 500MB
+                    </p>
+                  </button>
+                ) : (
+                  <div className="w-full aspect-video rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6">
+                    <svg
+                      className="w-7 h-7 text-slate-400 mb-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+                      <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+                      <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                    <p className="text-sm font-medium text-slate-700 mb-3">
+                      Paste a video link
+                    </p>
+                    <input
+                      type="url"
+                      autoFocus
+                      placeholder="https://www.dropbox.com/scl/fi/… or https://…/video.mp4"
+                      value={importUrl}
+                      onChange={(e) => setImportUrl(e.target.value)}
+                      className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                      data-testid="input-video-import-url"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-2 text-center">
+                      We'll pull the file straight into storage — no need to
+                      download it first.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handlePickFile(e.target.files[0]);
+              }}
+            />
+          </div>
+
+          <div className="px-5 pb-2 space-y-4">
+            <div>
+              <label
+                htmlFor="album-video-title"
+                className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide"
+              >
+                Title
+              </label>
+              <input
+                id="album-video-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Live at the Troubadour — 2019"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                data-testid="input-album-video-title"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="album-video-description"
+                className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide"
+              >
+                Description
+                <span className="ml-2 normal-case tracking-normal text-slate-400 text-[11px] font-normal">
+                  optional
+                </span>
+              </label>
+              <textarea
+                id="album-video-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="A short note that shows under the video on the album page."
+                rows={2}
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30 resize-none"
+                data-testid="input-album-video-description"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
+                Thumbnail
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => posterInputRef.current?.click()}
+                  className="aspect-video w-28 rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+                  title="Upload custom thumbnail"
+                  data-testid="button-upload-album-video-poster"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+                {posterUrl ? (
+                  <div className="relative aspect-video w-28 rounded-lg overflow-hidden border-2 border-[#319ED8] flex-shrink-0">
+                    <img
+                      src={posterUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPosterUrl(null)}
+                      className="absolute top-1 right-1 p-0.5 rounded-full bg-white/90 hover:bg-white text-slate-600 hover:text-red-600 shadow-sm"
+                      title="Remove thumbnail"
+                      aria-label="Remove thumbnail"
+                      data-testid="button-remove-album-video-poster"
+                    >
+                      <XIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="aspect-video w-28 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center text-slate-300 flex-shrink-0">
+                    <ImagePlus className="w-5 h-5" strokeWidth={1.5} />
+                  </div>
+                )}
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="aspect-video w-28 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-50 opacity-40 flex items-center justify-center flex-shrink-0"
+                    title="Frames from video (coming soon)"
+                  >
+                    <Play
+                      className="w-4 h-4 text-slate-400 ml-0.5"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                Pick a frame from the video — coming soon. For now, upload a
+                still (16:9 · 1280×720 or 1920×1080 retina · JPG/PNG/WebP).
+              </p>
+              <input
+                ref={posterInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handlePickPoster(e.target.files[0]);
+                }}
+              />
+            </div>
+
+            {err && (
+              <div
+                role="alert"
+                className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-[13px] leading-snug"
+                data-testid="banner-album-video-error"
+              >
+                {err}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t border-slate-100 flex items-center !justify-between bg-slate-50/50 flex-shrink-0 gap-2 sm:gap-2">
+          <div>
+            {isEdit && existing && (
+              <button
+                type="button"
+                onClick={() => onRequestDelete(existing)}
+                disabled={busy}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                data-testid="button-delete-from-sheet"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete video
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              data-testid="button-cancel-album-video-sheet"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit || busy}
+              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              data-testid="button-submit-album-video-sheet"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {progress !== null
+                    ? `Uploading ${Math.round(progress * 100)}%`
+                    : isEdit
+                      ? "Saving…"
+                      : "Adding…"}
+                </>
+              ) : (
+                <>{isEdit ? "Save" : "Add video"}</>
+              )}
+            </button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── Add/Edit photo sheet ─────────────────────────────────────────── */
+
+function AlbumPhotoSheet({
+  mode,
+  albumId,
+  onClose,
+  onSaved,
+  onRequestDelete,
+}: {
+  mode: { kind: "new" } | { kind: "edit"; photo: AlbumPhoto };
+  albumId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  onRequestDelete: (p: AlbumPhoto) => void;
+}) {
+  const isEdit = mode.kind === "edit";
+  const existing = isEdit ? mode.photo : null;
+
+  const [caption, setCaption] = useState(existing?.caption ?? "");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(
+    existing?.photoUrl ?? null,
+  );
+  const [dragActive, setDragActive] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handlePickFile(file: File) {
+    setErr(null);
+    setUploadingImage(true);
+    try {
+      const url = await uploadImageFile(file);
+      setPhotoUrl(url);
+    } catch (e: any) {
+      setErr(e?.message || "Upload failed");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  const canSubmit = !!photoUrl && !uploadingImage && !busy;
+
+  async function handleSubmit() {
+    if (!canSubmit || !photoUrl) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const trimmed = caption.trim();
+      if (isEdit && existing) {
+        await apiRequest("PUT", `/api/admin/album-photos/${existing.id}`, {
+          photoUrl,
+          caption: trimmed || null,
+        });
+      } else {
+        await apiRequest("POST", `/api/admin/albums/${albumId}/photos`, {
+          photoUrl,
+          caption: trimmed || null,
+        });
+      }
+      onSaved();
+    } catch (e: any) {
+      console.error("[AlbumPhotoSheet] submit failed", e);
+      setErr(e?.message || "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (busy || uploadingImage) return;
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent
+        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        data-testid="dialog-album-photo-sheet"
+      >
+        <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
+          <DialogTitle className="text-slate-900 text-[17px] font-semibold">
+            {isEdit ? "Edit photo" : "Add a photo"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEdit
+              ? "Update the photo or its caption."
+              : "Pick an image, then add an optional caption."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-5 pb-4">
+            {photoUrl ? (
+              <div className="relative w-full max-w-sm mx-auto aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                <img
+                  src={photoUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+                {uploadingImage && (
+                  <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-[#319ED8] animate-spin" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage || busy}
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                  data-testid="button-replace-album-photo"
+                >
+                  Replace photo
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                  if (e.dataTransfer.files?.[0])
+                    handlePickFile(e.dataTransfer.files[0]);
+                }}
+                disabled={uploadingImage}
+                className={
+                  "w-full max-w-sm mx-auto block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
+                  (dragActive
+                    ? "border-[#319ED8] bg-blue-50"
+                    : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                }
+                data-testid="button-photo-dropzone"
+              >
+                {uploadingImage ? (
+                  <>
+                    <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                    <p className="text-sm font-medium text-slate-700">
+                      Uploading…
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus
+                      className={
+                        "w-8 h-8 mb-3 transition-colors " +
+                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                      }
+                      strokeWidth={1.75}
+                    />
+                    <p className="text-sm font-medium text-slate-700">
+                      Drop a photo here, or click to browse
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Square · 1200×1200 px recommended · JPG, PNG, WebP, or GIF
+                    </p>
+                  </>
+                )}
+              </button>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handlePickFile(e.target.files[0]);
+              }}
+            />
+          </div>
+
+          <div className="px-5 pb-2 space-y-4">
+            <div>
+              <label
+                htmlFor="album-photo-caption"
+                className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide"
+              >
+                Caption
+                <span className="ml-2 normal-case tracking-normal text-slate-400 text-[11px] font-normal">
+                  optional
+                </span>
+              </label>
+              <input
+                id="album-photo-caption"
+                type="text"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="e.g. Nick on stage — Brooklyn Steel, 2024"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                data-testid="input-album-photo-caption"
+              />
+            </div>
+
+            {err && (
+              <div
+                role="alert"
+                className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-[13px] leading-snug"
+                data-testid="banner-album-photo-error"
+              >
+                {err}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t border-slate-100 flex items-center !justify-between bg-slate-50/50 flex-shrink-0 gap-2 sm:gap-2">
+          <div>
+            {isEdit && existing && (
+              <button
+                type="button"
+                onClick={() => onRequestDelete(existing)}
+                disabled={busy || uploadingImage}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                data-testid="button-delete-photo-from-sheet"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete photo
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy || uploadingImage}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              data-testid="button-cancel-album-photo-sheet"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              data-testid="button-submit-album-photo-sheet"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {isEdit ? "Saving…" : "Adding…"}
+                </>
+              ) : (
+                <>{isEdit ? "Save" : "Add photo"}</>
+              )}
+            </button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
