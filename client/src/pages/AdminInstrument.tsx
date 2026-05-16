@@ -127,7 +127,7 @@ export function AdminInstrument() {
       <AdminFrame active="gear">
         <div className="py-20 text-center space-y-3">
           <h1 className="text-slate-900 text-lg font-semibold">
-            Instrument not found
+            Gear not found
           </h1>
           <Link
             href="/admin/instruments"
@@ -290,14 +290,14 @@ function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
             key: "about",
             label: "About",
             type: "textarea",
-            placeholder: "Background on the instrument itself.",
+            placeholder: "Background on this piece of gear itself.",
           },
           {
             key: "artistNote",
             label: "Artist note",
             type: "textarea",
             placeholder:
-              "What the artist says about why this instrument matters to them.",
+              "What the artist says about why this gear matters to them.",
           },
         ]}
       />
@@ -604,7 +604,7 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
               vendor={v}
               onToggleHidden={() => toggleHidden.mutate(v)}
               onDetach={() => {
-                if (confirm(`Detach "${v.name}" from this instrument?`)) {
+                if (confirm(`Detach "${v.name}" from this gear?`)) {
                   detach.mutate(v.id);
                 }
               }}
@@ -1210,8 +1210,8 @@ function VendorEditForm({
 
       {/* Affiliate URL (attachment-only) */}
       <Field
-        label="Affiliate URL for this instrument"
-        hint="The product page link fans land on from this instrument's SuperCredits card. Vendor-wide fields above apply everywhere this vendor appears."
+        label="Affiliate URL for this gear"
+        hint="The product page link fans land on from this gear's SuperCredits card. Vendor-wide fields above apply everywhere this vendor appears."
         className="mb-4"
       >
         <input

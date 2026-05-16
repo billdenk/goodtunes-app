@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 
 /**
- * Admin home · Gear / Instruments (Phase 6c).
+ * Admin home · Gear (Phase 6c).
  *
  * Mirrors AdminPeople / AdminAlbums: AdminFrame chrome + search +
  * grid of cards. Each instrument has its photo, name, short category,
@@ -106,7 +106,7 @@ export function AdminInstruments() {
             Gear
           </h1>
           <p className="text-slate-500 text-[13px] mt-0.5">
-            Instruments + per-instrument vendor links — the SuperCredits™
+            Gear + per-gear vendor links — the SuperCredits™
             Micro-Sponsorship surface.
           </p>
         </div>
@@ -153,7 +153,7 @@ export function AdminInstruments() {
             data-testid="button-new-instrument"
           >
             <Plus className="w-4 h-4" />
-            New instrument
+            New gear
           </button>
         </div>
       </div>

@@ -1702,7 +1702,7 @@ function CreditsSheet({
 
       {!credits ? (
         <div className="px-5 pb-4 text-white/55 text-sm">
-          Detailed credits for this track haven't been published yet. Check back soon — every song will eventually show writers, performers, and the exact instruments they used.
+          Detailed credits for this track haven't been published yet. Check back soon — every song will eventually show writers, performers, and the exact gear they used.
         </div>
       ) : (
         <>
@@ -1788,7 +1788,7 @@ function CreditsSheet({
                       onClick={() => onOpenInstrument(instrument, perf.tuningNotes, { personId: person.id, songId: song.id })}
                       className="flex items-center gap-1 pl-3 -mr-1 active:opacity-70"
                       data-testid={`button-instrument-${instrument.id}`}
-                      aria-label={`Instrument: ${instrument.name}`}
+                      aria-label={`Gear: ${instrument.name}`}
                     >
                       <span className="text-white/70 text-[14px]">{shortLabel}</span>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
@@ -1905,7 +1905,7 @@ function PerformerSheet({
         if (!t.instrumentId) continue;
         const entry = byInstrument.get(t.instrumentId) ?? {
           id: t.instrumentId,
-          name: t.instrumentName ?? "Instrument",
+          name: t.instrumentName ?? "Gear",
           shortCategory: t.instrumentShortCategory,
           category: t.instrumentCategory,
           photoUrl: t.instrumentPhotoUrl,
@@ -1964,7 +1964,7 @@ function PerformerSheet({
     const synthetic: Instrument = {
       id: instrumentId,
       name: fallback.name,
-      category: fallback.category ?? "Instrument",
+      category: fallback.category ?? "Gear",
       shortCategory: fallback.shortCategory ?? undefined,
       photoUrl: fallback.photoUrl ?? undefined,
     };
@@ -2173,7 +2173,7 @@ function PerformerSheet({
                       type="button"
                       onClick={() => openByIdWithFallback(
                         t.instrumentId!,
-                        { name: t.instrumentName ?? "Instrument", category: t.instrumentCategory, shortCategory: t.instrumentShortCategory, photoUrl: t.instrumentPhotoUrl },
+                        { name: t.instrumentName ?? "Gear", category: t.instrumentCategory, shortCategory: t.instrumentShortCategory, photoUrl: t.instrumentPhotoUrl },
                         t.tuningNotes,
                         t.songId,
                       )}
@@ -2228,7 +2228,7 @@ function PerformerSheet({
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-[15px] font-medium truncate">{g.name}</p>
                   <p className="text-white/55 text-[12px] truncate">
-                    {g.shortCategory ?? g.category ?? "Instrument"} · {g.trackCount} track{g.trackCount === 1 ? "" : "s"}
+                    {g.shortCategory ?? g.category ?? "Gear"} · {g.trackCount} track{g.trackCount === 1 ? "" : "s"}
                   </p>
                 </div>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
@@ -2729,7 +2729,7 @@ function InstrumentSheet({
             ))}
           </div>
           <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-            From SuperCredits™ — artists credited with playing this instrument on a track.
+            From SuperCredits™ — artists credited with playing this gear on a track.
           </p>
         </section>
       )}

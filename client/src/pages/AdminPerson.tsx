@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
-  ArrowLeftRight,
   Upload,
   Loader2,
   ImageIcon,
   User as UserIcon,
   Globe,
   Music as MusicIcon,
+  RefreshCw,
 } from "lucide-react";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,9 +25,9 @@ import { useToast } from "@/hooks/use-toast";
  *
  * Tabs:
  *   Overview · Photo · Cover · Streaming — real read + drag-drop image upload
- *   Discography — small jump-to-classic card (full discography editor is
- *   the next phase; the classic admin's PersonEditor handles iTunes pulls
- *   and per-row toggles today).
+ *   Discography — inline "Pull from Apple Music" using the artist's
+ *     Apple Music URL on the Streaming tab. One click → iTunes Lookup
+ *     scrape → full replace of the cached release list.
  */
 interface PersonFull {
   id: string;
@@ -64,7 +64,6 @@ const TABS: { key: Tab; label: string }[] = [
 export function AdminPerson() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/people/:id");
-  const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
   const personId = params?.id ?? "";
 
@@ -88,14 +87,6 @@ export function AdminPerson() {
     person?.labelId
       ? labels.find((l) => l.id === person.labelId)?.name ?? null
       : null;
-
-  const openInClassicAdmin = () => {
-    try {
-      localStorage.setItem("gt:admin:entity", "people");
-      localStorage.setItem("gt:admin:focus-person", personId);
-    } catch {}
-    navigate("/admin");
-  };
 
   if (authLoading || isLoading) {
     return (
@@ -176,14 +167,6 @@ export function AdminPerson() {
               </p>
             )}
           </div>
-          <button
-            onClick={openInClassicAdmin}
-            className="px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5 flex-shrink-0"
-            data-testid="button-open-classic-admin"
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5" />
-            Open in classic admin
-          </button>
         </div>
 
         {/* TABS */}
@@ -220,9 +203,7 @@ export function AdminPerson() {
         {tab === "streaming" && (
           <StreamingPanel person={person} />
         )}
-        {tab === "discography" && (
-          <DiscographyPanel personId={person.id} onEdit={openInClassicAdmin} />
-        )}
+        {tab === "discography" && <DiscographyPanel person={person} />}
       </div>
     </AdminFrame>
   );
@@ -636,18 +617,90 @@ interface DiscographyRow {
   type: string;
 }
 
-function DiscographyPanel({
-  personId,
-  onEdit,
-}: {
-  personId: string;
-  onEdit: () => void;
-}) {
+// Loose response shape from POST /api/admin/people/scrape — we only
+// touch the fields we forward into PUT /api/admin/people/:id/discography.
+interface ScrapeResponse {
+  albums?: Array<{
+    collectionId: number;
+    name: string;
+    artworkUrl: string;
+    year: number | null;
+    trackCount: number | null;
+    type: "album" | "EP";
+    appleMusicUrl: string | null;
+  }>;
+}
+
+function DiscographyPanel({ person }: { person: PersonFull }) {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const { data: rows = [], isLoading } = useQuery<DiscographyRow[]>({
-    queryKey: ["/api/people", personId, "discography"],
-    enabled: !!user?.isAdmin && !!personId,
+    queryKey: ["/api/people", person.id, "discography"],
+    enabled: !!user?.isAdmin && !!person.id,
   });
+
+  const hasAppleUrl = !!person.appleMusicUrl;
+
+  // Pull = scrape the Apple Music artist page (iTunes Lookup) → full
+  // discography replace. The endpoint returns name/photo/bio too, but
+  // we intentionally only touch the discography from this button —
+  // editing the artist's name + bio is the Overview tab's job. This
+  // keeps Pull a single-purpose, idempotent "refresh from Apple Music"
+  // action the admin can re-run without surprises.
+  const pullMut = useMutation({
+    mutationFn: async () => {
+      if (!person.appleMusicUrl) {
+        throw new Error("Set the Apple Music URL on the Streaming tab first.");
+      }
+      const scrape = await apiRequest("POST", "/api/admin/people/scrape", {
+        url: person.appleMusicUrl,
+      });
+      const data = (await scrape.json()) as ScrapeResponse;
+      const albums = Array.isArray(data.albums) ? data.albums : [];
+      if (albums.length === 0) {
+        throw new Error(
+          "Apple Music didn't return any releases for that URL.",
+        );
+      }
+      const items = albums.map((a, idx) => ({
+        collectionId: String(a.collectionId),
+        name: a.name,
+        artworkUrl: a.artworkUrl,
+        year: a.year,
+        trackCount: a.trackCount,
+        type: a.type,
+        appleMusicUrl: a.appleMusicUrl,
+        spotifyUrl: null,
+        position: idx,
+      }));
+      await apiRequest(
+        "PUT",
+        `/api/admin/people/${person.id}/discography`,
+        { items },
+      );
+      return albums.length;
+    },
+    onSuccess: async (count: number) => {
+      await qc.invalidateQueries({
+        queryKey: ["/api/people", person.id, "discography"],
+      });
+      toast({
+        title: "Discography refreshed",
+        description: `Pulled ${count} ${count === 1 ? "release" : "releases"} from Apple Music.`,
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't pull discography",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const subline = hasAppleUrl
+    ? `${rows.length} ${rows.length === 1 ? "release" : "releases"} cached from Apple Music · click Pull to refresh`
+    : "Set the Apple Music URL on the Streaming tab to enable the pull";
 
   return (
     <section
@@ -660,18 +713,29 @@ function DiscographyPanel({
             <MusicIcon className="w-4 h-4 text-slate-400" />
             Discography
           </h2>
-          <p className="text-slate-400 text-[11.5px]">
-            {rows.length} {rows.length === 1 ? "release" : "releases"} cached
-            from Apple Music · pull + edit lives in the classic editor
-          </p>
+          <p className="text-slate-400 text-[11.5px]">{subline}</p>
         </div>
         <button
-          onClick={onEdit}
-          className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
-          data-testid="button-edit-discography"
+          onClick={() => pullMut.mutate()}
+          disabled={!hasAppleUrl || pullMut.isPending}
+          title={
+            hasAppleUrl
+              ? "Pull the latest discography from Apple Music"
+              : "Set the Apple Music URL on the Streaming tab first"
+          }
+          className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 disabled:hover:bg-[#319ED8] inline-flex items-center gap-1.5"
+          data-testid="button-pull-discography"
         >
-          <ArrowLeftRight className="w-3.5 h-3.5" />
-          Edit in classic
+          {pullMut.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+          {pullMut.isPending
+            ? "Pulling…"
+            : rows.length === 0
+              ? "Pull from Apple Music"
+              : "Refresh from Apple Music"}
         </button>
       </div>
       <div className="p-6">
@@ -680,9 +744,10 @@ function DiscographyPanel({
             <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
         ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-slate-500 text-[12.5px]">
-            No discography pulled yet. Paste an Apple Music artist URL in the
-            classic editor's "Pull from Apple Music" panel to import.
+          <div className="py-10 text-center text-slate-500 text-[12.5px] max-w-sm mx-auto">
+            {hasAppleUrl
+              ? 'No discography pulled yet. Click "Pull from Apple Music" above to import this artist\'s full release list.'
+              : "Paste this artist's Apple Music URL on the Streaming tab, then come back to pull their discography."}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
