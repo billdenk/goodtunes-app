@@ -558,9 +558,12 @@ function EditRow({
             <span className="text-[11px] text-slate-400">
               Track ID · t_{1000 + t.n}
             </span>
-            <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11.5px] font-semibold text-rose-600 hover:bg-rose-50">
-              <Trash2 className="w-3 h-3" />
-              Delete track
+            <button
+              aria-label="Delete track"
+              title="Delete track"
+              className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
