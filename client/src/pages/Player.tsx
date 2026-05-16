@@ -189,7 +189,11 @@ export function Player() {
               className="w-full aspect-square rounded-3xl overflow-hidden flex-shrink-0"
               style={{
                 boxShadow: "0 24px 64px rgba(0,0,0,0.65)",
-                transform: isPlaying ? "scale(1.02)" : "scale(0.96)",
+                // Apple's Now Playing shrinks the cover noticeably on
+                // pause and grows back on play. 1.0 → ~0.82 matches the
+                // visible delta in their iOS 17/18 player; the spring-y
+                // cubic-bezier gives it the same little settle.
+                transform: isPlaying ? "scale(1)" : "scale(0.82)",
                 transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)",
               }}
             >

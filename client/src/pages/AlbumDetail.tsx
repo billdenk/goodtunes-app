@@ -196,14 +196,6 @@ export function AlbumDetail() {
     return album ? getSongsByAlbum(id) : [];
   }, [apiAlbum, album, id]);
 
-  // True when the currently-playing track belongs to this album AND the
-  // player is actively playing (not paused). Drives the Apple-style
-  // shrink/grow of the album artwork in the hero.
-  const isAlbumPlaying = useMemo(() => {
-    if (!isPlaying || !currentSong) return false;
-    return songs.some((s) => s.id === currentSong.id);
-  }, [isPlaying, currentSong, songs]);
-
   // SuperCredits™ — fetch every song's credits for this album in one round-trip.
   // CreditsSheet + PerformerSheet both render from the resolved maps below;
   // the static `TRACK_CREDITS` / `PEOPLE` / `INSTRUMENTS` seed is kept as a
@@ -347,20 +339,30 @@ export function AlbumDetail() {
   return (
     <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
       <section className="relative w-full h-screen text-white flex flex-col">
+        {/* Apple-Music-style top chrome:
+            • back is a stand-alone 36px circle on the left
+            • share + ⋯ share a single connected pill on the right (one rounded
+              background, thin divider between glyphs) instead of two
+              separate circles
+            • both groups sit at top-14 (~56px) so they clear the status bar
+              / Dynamic Island cleanly, not floating up at top-11 */}
         <button
           type="button"
           onClick={() => navigate("/collection")}
           aria-label="Back to collection"
-          className="absolute top-11 left-4 z-50 w-12 h-12 rounded-full backdrop-blur flex items-center justify-center text-white active:opacity-70"
+          className="absolute top-14 left-4 z-50 w-9 h-9 rounded-full backdrop-blur flex items-center justify-center text-white active:opacity-70"
           style={{ background: "rgba(0,0,0,0.45)" }}
           data-testid="button-back-album"
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
 
-        <div className="absolute top-11 right-4 z-50 flex items-center gap-2">
+        <div
+          className="absolute top-14 right-4 z-50 flex items-center rounded-full backdrop-blur"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+        >
           <button
             type="button"
             onClick={async () => {
@@ -376,17 +378,17 @@ export function AlbumDetail() {
               } catch {}
             }}
             aria-label="Share album"
-            className="w-12 h-12 rounded-full backdrop-blur flex items-center justify-center text-white active:opacity-70"
-            style={{ background: "rgba(0,0,0,0.45)" }}
+            className="w-9 h-9 flex items-center justify-center text-white active:opacity-70"
             data-testid="button-share-album"
           >
             {/* iOS share glyph — square + up arrow */}
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 16V4" />
               <path d="M8 8l4-4 4 4" />
               <path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
             </svg>
           </button>
+          <div className="w-px h-4 bg-white/15" aria-hidden />
           <div className="relative">
             <button
               type="button"
@@ -394,11 +396,10 @@ export function AlbumDetail() {
               aria-label="Album options"
               aria-haspopup="menu"
               aria-expanded={showMenu}
-              className="w-12 h-12 rounded-full backdrop-blur flex items-center justify-center text-white active:opacity-70"
-              style={{ background: "rgba(0,0,0,0.45)" }}
+              className="w-9 h-9 flex items-center justify-center text-white active:opacity-70"
               data-testid="button-album-menu"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="5" cy="12" r="1.8" />
                 <circle cx="12" cy="12" r="1.8" />
                 <circle cx="19" cy="12" r="1.8" />
@@ -476,23 +477,17 @@ export function AlbumDetail() {
               album header more literally (per design feedback). The label
               now lives only in the metadata footer below the tracklist. */}
           <div style={{ background: "#00062B" }}>
-            {/* pt-24 reserves a clear band above the artwork for the
-                floating back / share / ⋯ chrome (anchored at top-11 with
-                12-unit buttons → ends around 92px). Without this padding
-                those buttons sat on top of the cover art, exactly the
-                overlap Apple avoids in their album header. */}
-            <div className="pt-24 px-6 flex justify-center">
+            {/* Reserves a clear band above the artwork for the floating
+                back / share / ⋯ chrome (anchored at top-14 with 9-unit
+                buttons → ends around 92px). Apple leaves a ~30–40px gap
+                between the chrome row and the top of the cover art —
+                pt-32 (128px) hits that rhythm. */}
+            <div className="pt-32 px-6 flex justify-center">
               <div
-                className="w-[72%] max-w-[300px] rounded-xl overflow-hidden transition-transform duration-300 ease-out"
+                className="w-[72%] max-w-[300px] rounded-xl overflow-hidden"
                 style={{
                   aspectRatio: "1 / 1",
                   boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
-                  // Apple-style play/pause "breathing" — when a track
-                  // from this album is the active, *playing* song, the
-                  // cover sits at full size; otherwise it shrinks to
-                  // ~92% so the difference is felt the moment the user
-                  // taps play (and again the moment they pause).
-                  transform: isAlbumPlaying ? "scale(1)" : "scale(0.92)",
                 }}
               >
                 <img
