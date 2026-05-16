@@ -490,7 +490,7 @@ function EditRow({
             When expanded: meter is redundant (all 4 cards are visible), so swap
             in the destructive controls — clearly track-scoped, sitting next to the chevron. */}
         {expanded ? (
-          <div className="flex items-center gap-0.5 flex-shrink-0">
+          <div className="flex items-center flex-shrink-0">
             <button
               aria-label="Hide track (parks it without losing lyrics or credits)"
               title="Hide track (parks it without losing lyrics or credits)"
@@ -498,9 +498,11 @@ function EditRow({
             >
               <EyeOff className="w-3.5 h-3.5" />
             </button>
+            {/* Hairline spacer so a thumb can't fall from Hide straight onto Trash */}
+            <span className="mx-2 h-4 w-px bg-slate-200" aria-hidden />
             <button
-              aria-label="Delete track"
-              title="Delete track"
+              aria-label="Delete track (asks to confirm)"
+              title="Delete track — asks to confirm"
               className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50"
             >
               <Trash2 className="w-3.5 h-3.5" />
