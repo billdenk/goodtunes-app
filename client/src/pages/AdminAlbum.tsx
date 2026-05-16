@@ -1184,16 +1184,6 @@ function TrackRow({
                   <Trash2 className="w-3.5 h-3.5" />
                 )}
               </button>
-              <button
-                type="button"
-                onClick={onOpen}
-                aria-label="Open in classic admin"
-                title="Open in classic admin"
-                className="w-7 h-7 rounded-full text-slate-300 hover:bg-slate-200 hover:text-slate-700 inline-flex items-center justify-center transition-colors"
-                data-testid={`button-classic-track-${song.id}`}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
             </div>
           </>
         )}
@@ -2916,6 +2906,13 @@ function MastersPanel({ album }: { album: AlbumFull }) {
           </p>
         </div>
       </div>
+      <div className="px-5 py-2.5 bg-slate-50/60 border-b border-slate-100 text-[11.5px] text-slate-500 leading-relaxed">
+        A <span className="font-semibold text-slate-700">master</span> is the
+        streaming audio file for a track. One row below = one track on this
+        album. To add a new master, first{" "}
+        <span className="font-semibold text-slate-700">add a track</span> on the
+        Tracks tab — its master slot will show up here.
+      </div>
       <ol>
         {sorted.map((song, i) => (
           <MasterRow
@@ -2945,8 +2942,13 @@ function MasterRow({
   const { toast } = useToast();
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [urlDraft, setUrlDraft] = useState("");
+  const [dragOver, setDragOver] = useState(false);
 
-  const mut = useMutation({
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+
+  const uploadMut = useMutation({
     mutationFn: async (file: File) => {
       const detectedDuration = await readAudioDurationSeconds(file);
       const url = await uploadAudioFile(file);
@@ -2956,7 +2958,7 @@ function MasterRow({
       return url;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      await invalidate();
       toast({
         title: song.audioUrl ? "Master replaced" : "Master uploaded",
         description: song.title,
@@ -2971,12 +2973,53 @@ function MasterRow({
     },
   });
 
+  const setUrlMut = useMutation({
+    mutationFn: async (url: string) => {
+      await apiRequest("PUT", `/api/admin/songs/${song.id}`, { audioUrl: url });
+    },
+    onSuccess: async () => {
+      await invalidate();
+      setUrlDraft("");
+      toast({
+        title: song.audioUrl ? "Master replaced" : "Master added",
+        description: song.title,
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save that URL",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+        audioUrl: null,
+      });
+    },
+    onSuccess: async () => {
+      await invalidate();
+      toast({ title: "Master removed", description: song.title });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't remove the master",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
   const acceptFile = (file: File | undefined | null) => {
     if (!file) return;
-    if (!/^audio\//.test(file.type)) {
+    if (
+      !/^audio\//.test(file.type) &&
+      !/\.(mp3|m4a|aac|wav|flac|ogg)$/i.test(file.name)
+    ) {
       toast({
         title: "That's not an audio file",
-        description: "Masters need to be MP3, M4A, WAV, or FLAC.",
+        description: "Masters need to be MP3, M4A, WAV, FLAC, or OGG.",
         variant: "destructive",
       });
       return;
@@ -2989,80 +3032,163 @@ function MasterRow({
       });
       return;
     }
-    mut.mutate(file);
+    uploadMut.mutate(file);
   };
 
-  const busy = mut.isPending;
+  const submitUrl = () => {
+    const trimmed = urlDraft.trim();
+    if (!trimmed) return;
+    if (trimmed === song.audioUrl) {
+      setUrlDraft("");
+      return;
+    }
+    setUrlMut.mutate(trimmed);
+  };
+
+  const busy =
+    uploadMut.isPending || setUrlMut.isPending || removeMut.isPending;
   const hasMaster = !!song.audioUrl;
 
   return (
     <li
       className={[
-        "flex items-center gap-4 px-5 py-3.5 transition-colors",
+        "px-5 py-3 transition-colors",
         !isLast && "border-b border-slate-100",
         busy && "bg-slate-50",
+        dragOver && "bg-[#319ED8]/5",
       ]
         .filter(Boolean)
         .join(" ")}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        if (!busy) setDragOver(true);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!busy) setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        if (busy) return;
+        acceptFile(e.dataTransfer.files?.[0]);
+      }}
       data-testid={`row-master-${song.id}`}
     >
-      <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
-        {song.trackNumber}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div
-          className="text-slate-900 text-[13.5px] font-medium truncate"
-          data-testid={`text-master-title-${song.id}`}
-        >
-          {song.title}
+      <div className="flex items-center gap-4">
+        <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
+          {song.trackNumber}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div
+            className="text-slate-900 text-[13.5px] font-medium truncate"
+            data-testid={`text-master-title-${song.id}`}
+          >
+            {song.title}
+          </div>
+          <div className="flex items-center gap-2.5 mt-0.5">
+            <TrackChip
+              ok={hasMaster}
+              label={hasMaster ? "Master loaded" : "No master"}
+              testId={`chip-master-${song.id}`}
+            />
+            <span className="text-slate-400 text-[11px] tabular-nums">
+              {formatDuration(song.duration)}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2.5 mt-0.5">
-          <TrackChip
-            ok={hasMaster}
-            label={hasMaster ? "Master loaded" : "No master"}
-            testId={`chip-master-${song.id}`}
+        {hasMaster && song.audioUrl && (
+          <audio
+            controls
+            src={song.audioUrl}
+            preload="none"
+            className="h-8 max-w-[220px]"
+            data-testid={`audio-preview-${song.id}`}
           />
-          <span className="text-slate-400 text-[11px] tabular-nums">
-            {formatDuration(song.duration)}
-          </span>
-        </div>
-      </div>
-      {hasMaster && song.audioUrl && (
-        <audio
-          controls
-          src={song.audioUrl}
-          preload="none"
-          className="h-8 max-w-[220px]"
-          data-testid={`audio-preview-${song.id}`}
-        />
-      )}
-      <button
-        type="button"
-        onClick={() => !busy && fileInputRef.current?.click()}
-        disabled={busy}
-        className={[
-          "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 flex-shrink-0 transition-colors",
-          hasMaster
-            ? "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-            : "bg-[#319ED8] text-white hover:bg-[#2890c8]",
-          busy && "opacity-60 cursor-not-allowed",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        data-testid={`button-upload-master-${song.id}`}
-      >
-        {busy ? (
-          <>
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Uploading…
-          </>
-        ) : (
-          <>
-            <Upload className="w-3 h-3" />
-            {hasMaster ? "Replace" : "Upload master"}
-          </>
         )}
-      </button>
+        <button
+          type="button"
+          onClick={() => !busy && fileInputRef.current?.click()}
+          disabled={busy}
+          className={[
+            "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 flex-shrink-0 transition-colors",
+            hasMaster
+              ? "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+              : "bg-[#319ED8] text-white hover:bg-[#2890c8]",
+            busy && "opacity-60 cursor-not-allowed",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          data-testid={`button-upload-master-${song.id}`}
+        >
+          {uploadMut.isPending ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Uploading…
+            </>
+          ) : (
+            <>
+              <Upload className="w-3 h-3" />
+              {hasMaster ? "Replace" : "Upload master"}
+            </>
+          )}
+        </button>
+        {hasMaster && (
+          <button
+            type="button"
+            onClick={() => {
+              if (busy) return;
+              if (
+                window.confirm(
+                  `Remove the master from "${song.title}"? The track keeps its title, lyrics, and credits.`,
+                )
+              ) {
+                removeMut.mutate();
+              }
+            }}
+            disabled={busy}
+            className="px-2 py-1.5 rounded-md text-[11.5px] font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-600 flex-shrink-0 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+            data-testid={`button-remove-master-${song.id}`}
+            aria-label="Remove master"
+            title="Remove master"
+          >
+            {removeMut.isPending ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Trash2 className="w-3 h-3" />
+            )}
+          </button>
+        )}
+      </div>
+      <div className="pl-11 mt-2 flex items-center gap-2">
+        <input
+          type="text"
+          value={urlDraft}
+          onChange={(e) => setUrlDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submitUrl();
+            }
+          }}
+          onBlur={submitUrl}
+          placeholder={
+            hasMaster
+              ? "Or paste a different URL…"
+              : "Drop a file on this row, or paste a URL"
+          }
+          disabled={busy}
+          className="flex-1 h-7 rounded-md border border-slate-200 bg-white px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          data-testid={`input-master-url-${song.id}`}
+        />
+        {setUrlMut.isPending && (
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+        )}
+      </div>
       <input
         ref={fileInputRef}
         type="file"
