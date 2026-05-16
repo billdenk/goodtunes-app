@@ -10,6 +10,7 @@ export const modules: ModuleMap = {
   "./components/mockups/admin-credits-row/Stacked.tsx": () => import("../components/mockups/admin-credits-row/Stacked.tsx"),
   "./components/mockups/admin-credits-row/TwoColumn.tsx": () => import("../components/mockups/admin-credits-row/TwoColumn.tsx"),
   "./components/mockups/admin-credits-row/WritersV2.tsx": () => import("../components/mockups/admin-credits-row/WritersV2.tsx"),
+  "./components/mockups/admin-credits-row/WritersV3.tsx": () => import("../components/mockups/admin-credits-row/WritersV3.tsx"),
   "./components/mockups/admin-track-edit/TrackDetails.tsx": () => import("../components/mockups/admin-track-edit/TrackDetails.tsx"),
   "./components/mockups/admin-track-edit/TrackFiles.tsx": () => import("../components/mockups/admin-track-edit/TrackFiles.tsx"),
   "./components/mockups/admin-track-edit/TrackLyrics.tsx": () => import("../components/mockups/admin-track-edit/TrackLyrics.tsx"),

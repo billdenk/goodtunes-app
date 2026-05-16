@@ -8,6 +8,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
+import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 
 const scryptAsync = promisify(scrypt);
 
@@ -2599,6 +2600,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   </div>
 </body>
 </html>`);
+  });
+
+  // ============================ ASCAP staging lookup ============================
+  // Filtered slice of the ASCAP catalog (writers + publishers for roster titles).
+  // Used by the admin Writers row to auto-fill writer-on-record + publisher chain.
+  app.get("/api/admin/ascap/status", requireAdmin, async (_req, res) => {
+    res.json(ascapStatus());
+  });
+
+  app.get("/api/admin/ascap/lookup", requireAdmin, async (req, res) => {
+    const title = String(req.query.title || "").trim();
+    if (!title) return res.status(400).json({ message: "title required" });
+    if (title.length > 200) return res.status(400).json({ message: "title too long" });
+    const rosterOnly = String(req.query.rosterOnly || "") === "1";
+    const hit = lookupTitle(title, { rosterOnly });
+    if (!hit) return res.status(404).json({ message: "no ASCAP match for title", title });
+    res.json(hit);
+  });
+
+  app.get("/api/admin/ascap/search-writer", requireAdmin, async (req, res) => {
+    const name = String(req.query.name || "").trim();
+    if (!name) return res.status(400).json({ message: "name required" });
+    if (name.length > 200) return res.status(400).json({ message: "name too long" });
+    res.json(searchWriter(name));
   });
 
   return httpServer;
