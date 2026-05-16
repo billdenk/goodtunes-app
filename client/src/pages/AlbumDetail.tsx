@@ -725,7 +725,7 @@ export function AlbumDetail() {
             </p>
           </div>
 
-          {/* Editorial panel — slightly lighter shelf for Music Videos / Photos / More By */}
+          {/* Editorial panel — slightly lighter shelf for Videos / Photos / More By */}
           {(hasVideos || hasPhotos || hasMoreBy) && (
           <div
             className="mt-8 pt-7 pb-4"
@@ -734,10 +734,10 @@ export function AlbumDetail() {
               borderTop: "1px solid rgba(255,255,255,0.07)",
             }}
           >
-          {/* Music Videos */}
+          {/* Videos */}
           {hasVideos && (
             <div>
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Music Videos</h2>
+              <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Videos</h2>
               <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2" data-testid="section-videos">
                 {album.videos!.map((v) => (
                   <button
@@ -3592,6 +3592,26 @@ function AlbumBonusContent({ albumId }: { albumId: string }) {
     queryKey: ["/api/albums", albumId, "photos"],
   });
   const [activePhoto, setActivePhoto] = useState<BonusPhoto | null>(null);
+  // "See all" overlay for the videos shelf. We cap the inline shelf at
+  // VIDEO_SHELF_LIMIT tiles (Apple-style); anything past that lives in a
+  // full-screen sheet opened via the Videos > header. Album shelves cap
+  // at 10 because covers are square; video tiles are ~16:9 and roughly
+  // twice as wide as an album cover, so 5 fills the same horizontal
+  // budget on the same device.
+  const VIDEO_SHELF_LIMIT = 5;
+  const [showAllVideos, setShowAllVideos] = useState(false);
+  const hasOverflow = videos.length > VIDEO_SHELF_LIMIT;
+  const shelfVideos = hasOverflow ? videos.slice(0, VIDEO_SHELF_LIMIT) : videos;
+
+  // Escape dismisses the "See all" sheet — Apple/standard a11y behavior.
+  useEffect(() => {
+    if (!showAllVideos) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowAllVideos(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAllVideos]);
 
   if (videos.length === 0 && photos.length === 0) return null;
 
@@ -3599,12 +3619,28 @@ function AlbumBonusContent({ albumId }: { albumId: string }) {
     <>
       {videos.length > 0 && (
         <div className="mt-8 px-5">
-          <h3 className="text-white text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-videos">
-            Music Videos
-          </h3>
+          {hasOverflow ? (
+            <button
+              type="button"
+              onClick={() => setShowAllVideos(true)}
+              className="flex items-center gap-1 mb-3 active:opacity-70"
+              data-testid="link-all-album-videos"
+            >
+              <h3 className="text-white text-[22px] font-bold tracking-tight" data-testid="heading-album-videos">
+                Videos
+              </h3>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          ) : (
+            <h3 className="text-white text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-videos">
+              Videos
+            </h3>
+          )}
           <div className="-mx-5 px-5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
             <div className="flex gap-3 pb-2" style={{ width: "max-content" }}>
-              {videos.map((v) => (
+              {shelfVideos.map((v) => (
                 <div
                   key={v.id}
                   className="w-[260px] flex-shrink-0"
@@ -3621,6 +3657,55 @@ function AlbumBonusContent({ albumId }: { albumId: string }) {
                     />
                   </div>
                   <p className="mt-2 text-[14px] text-white font-medium truncate">{v.title}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* "See all" sheet — fullscreen overlay listing every video for this
+          album in a single vertical scroll. Tap the chevron next to the
+          Videos header to open it, tap × to close. Mirrors the album
+          More-By overflow pattern. */}
+      {showAllVideos && (
+        <div
+          className="fixed inset-0 z-[120] bg-[#00062B] flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-label="All videos"
+          data-testid="overlay-all-album-videos"
+        >
+          <div className="flex items-center justify-between px-4 pt-12 pb-3">
+            <h3 className="text-white text-[22px] font-bold tracking-tight">Videos</h3>
+            <button
+              type="button"
+              onClick={() => setShowAllVideos(false)}
+              aria-label="Close"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
+              style={{ background: "rgba(255,255,255,0.10)" }}
+              data-testid="button-close-all-album-videos"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 pb-10">
+            <div className="flex flex-col gap-5">
+              {videos.map((v) => (
+                <div key={v.id} data-testid={`tile-all-album-video-${v.id}`}>
+                  <div className="relative rounded-lg overflow-hidden bg-black/40" style={{ aspectRatio: "16 / 9" }}>
+                    <video
+                      src={v.videoUrl}
+                      poster={v.posterUrl ?? undefined}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <p className="mt-2 text-[15px] text-white font-medium">{v.title}</p>
                 </div>
               ))}
             </div>

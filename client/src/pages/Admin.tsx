@@ -1208,7 +1208,8 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
       });
       invalidate();
     } catch (e: any) {
-      setErr(e.message || "Upload failed");
+      console.error("[AlbumVideosSection] handleAddVideo failed", e);
+      setErr(e?.message || "Upload failed");
     } finally {
       setBusy(false);
       setProgress(null);
@@ -1234,7 +1235,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
     <div>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
-          Music videos
+          Videos
         </h3>
         <button
           type="button"
@@ -1264,7 +1265,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         {videos.length === 0 && (
           <div className="px-4 py-6 text-center text-slate-400 text-sm">
-            No videos yet. Upload an MP4 to add a "Music Videos" section to the album.
+            No videos yet. Upload an MP4 to add a "Videos" section to the album.
           </div>
         )}
         {videos.map((v) => (
