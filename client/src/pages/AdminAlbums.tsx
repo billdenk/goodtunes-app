@@ -364,7 +364,7 @@ function IconBtn({
       className={[
         "w-9 h-9 inline-flex items-center justify-center rounded-md transition-colors",
         tone === "primary"
-          ? "bg-white border border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white"
+          ? "bg-transparent border border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
           : "text-slate-500 hover:text-slate-900 hover:bg-slate-100",
       ].join(" ")}
     >
