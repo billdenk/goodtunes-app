@@ -121,25 +121,14 @@ function StatusBadge({
 
 function DetailWrap({
   title,
-  onClose,
   children,
 }: {
   title: string;
-  onClose: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="mt-2 rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[12.5px] font-bold text-slate-900">{title}</h3>
-        <button
-          onClick={onClose}
-          className="w-6 h-6 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center"
-          aria-label="Close"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <h3 className="text-[12.5px] font-bold text-slate-900">{title}</h3>
       {children}
     </div>
   );
@@ -174,7 +163,7 @@ function MasterDetail({
               </div>
             </div>
             <button className="w-8 h-8 rounded-full bg-[#319ED8] text-white inline-flex items-center justify-center flex-shrink-0">
-              <Play className="w-3.5 h-3.5 ml-0.5 fill-current" />
+              <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -611,7 +600,7 @@ function ListenRow({
           {active ? (
             <Pause className="w-3.5 h-3.5 fill-current" />
           ) : (
-            <Play className="w-3.5 h-3.5 ml-0.5 fill-current" />
+            <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
           )}
         </button>
         <span className="w-5 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
@@ -673,7 +662,7 @@ export function Interactive() {
                   {playingId !== null ? (
                     <Pause className="w-4 h-4 fill-current" />
                   ) : (
-                    <Play className="w-4 h-4 ml-0.5 fill-current" />
+                    <Play className="w-4 h-4 translate-x-[1.5px] fill-current" />
                   )}
                 </button>
               )}
