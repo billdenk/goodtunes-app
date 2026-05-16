@@ -63,6 +63,10 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    proxy: {
+      "/objects": "http://localhost:5000",
+      "/api": "http://localhost:5000",
+    },
   },
   preview: {
     port,

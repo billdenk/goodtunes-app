@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Trash2,
   GripVertical,
@@ -143,7 +144,7 @@ export function ProgressiveV3() {
           letter="A"
           title="Performance"
           subtitle="Who played, sang, engineered or mixed — and on what gear"
-          required
+          required={true}
           count="4 people · 8 roles"
           unresolved="5 missing instrument"
           extraHeaderAction={
@@ -155,7 +156,10 @@ export function ProgressiveV3() {
           {/* Person 1 — Nick Carter, single role, collapsed */}
           <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 group">
             <GripVertical className="w-4 h-4 text-slate-200 group-hover:text-slate-400 flex-shrink-0" />
-            <Avatar gradient="from-pink-400 to-rose-600" initials="NC" />
+            <Avatar
+              initials="NC"
+              photoUrl="/objects/uploads/7a8089b0-59aa-4318-9996-8273b2fd576b.jpg"
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 text-[13px]">
                 <span className="text-slate-900 font-semibold truncate">
@@ -179,7 +183,7 @@ export function ProgressiveV3() {
           <div className="bg-[#FAFBFC]">
             <div className="flex items-center gap-3 px-3 py-2.5">
               <GripVertical className="w-4 h-4 text-slate-300 flex-shrink-0" />
-              <Avatar gradient="from-emerald-400 to-teal-600" initials="BN" />
+              <Avatar initials="BN" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 text-[13px]">
                   <span className="text-slate-900 font-semibold truncate">
@@ -246,7 +250,10 @@ export function ProgressiveV3() {
           {/* Person 3 — Bryan Shackle, additional vocals, collapsed */}
           <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 group">
             <GripVertical className="w-4 h-4 text-slate-200 group-hover:text-slate-400 flex-shrink-0" />
-            <Avatar gradient="from-amber-400 to-orange-600" initials="BS" />
+            <Avatar
+              initials="BS"
+              photoUrl="/objects/uploads/9be37638-5031-473f-b92d-f47c76f1f34c.jpg"
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 text-[13px]">
                 <span className="text-slate-900 font-semibold truncate">
@@ -262,7 +269,7 @@ export function ProgressiveV3() {
           {/* Person 4 — John Rausch, mixed by, collapsed */}
           <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 group">
             <GripVertical className="w-4 h-4 text-slate-200 group-hover:text-slate-400 flex-shrink-0" />
-            <Avatar gradient="from-slate-400 to-slate-600" initials="JR" />
+            <Avatar initials="JR" />
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 text-[13px]">
                 <span className="text-slate-900 font-semibold truncate">
@@ -310,7 +317,10 @@ export function ProgressiveV3() {
           <div className="bg-[#FAFBFC]">
             <div className="flex items-center gap-3 px-3 py-2.5">
               <GripVertical className="w-4 h-4 text-slate-300 flex-shrink-0" />
-              <Avatar gradient="from-pink-400 to-rose-600" initials="NC" />
+              <Avatar
+                initials="NC"
+                photoUrl="/objects/uploads/7a8089b0-59aa-4318-9996-8273b2fd576b.jpg"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 text-[13px]">
                   <span className="text-slate-900 font-semibold truncate">
@@ -383,7 +393,6 @@ export function ProgressiveV3() {
           {/* Writers 2 + 3 — collapsed */}
           <WriterRow
             initials="BN"
-            gradient="from-emerald-400 to-teal-600"
             name="Beck Nebel"
             roles={["Lyricist", "Composer", "Producer"]}
             sharePct={33.33}
@@ -392,7 +401,7 @@ export function ProgressiveV3() {
           />
           <WriterRow
             initials="BS"
-            gradient="from-amber-400 to-orange-600"
+            photoUrl="/objects/uploads/9be37638-5031-473f-b92d-f47c76f1f34c.jpg"
             name="Bryan Shackle"
             roles={["Lyricist", "Composer", "Producer"]}
             sharePct={33.34}
@@ -543,16 +552,18 @@ function SectionShell({
   children: React.ReactNode;
   extraHeaderAction?: React.ReactNode;
 }) {
+  // All credit data is optional — nothing here gates publishing. The chip is a
+  // soft hint about completeness expectations, not a gate.
   const statusChip = required ? (
-    <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-bold uppercase tracking-wide">
-      Required
+    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold uppercase tracking-wide">
+      Recommended
     </span>
   ) : encouraged ? (
-    <span className="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 text-[10px] font-bold uppercase tracking-wide">
+    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold uppercase tracking-wide">
       Encouraged
     </span>
   ) : optional ? (
-    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">
+    <span className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-400 text-[10px] font-semibold uppercase tracking-wide">
       Optional
     </span>
   ) : null;
@@ -594,11 +605,26 @@ function SectionShell({
 
 /* =============================== bits ===================================== */
 
-function Avatar({ gradient, initials }: { gradient: string; initials: string }) {
+function Avatar({
+  initials,
+  photoUrl,
+}: {
+  initials: string;
+  photoUrl?: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  if (photoUrl && !broken) {
+    return (
+      <img
+        src={photoUrl}
+        alt=""
+        onError={() => setBroken(true)}
+        className="w-7 h-7 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200"
+      />
+    );
+  }
   return (
-    <div
-      className={`w-7 h-7 rounded-full bg-gradient-to-br ${gradient} text-white text-[10.5px] font-bold flex items-center justify-center flex-shrink-0`}
-    >
+    <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 text-[10.5px] font-semibold flex items-center justify-center flex-shrink-0 ring-1 ring-slate-200">
       {initials}
     </div>
   );
@@ -682,7 +708,7 @@ function RoleRow({
 
 function WriterRow({
   initials,
-  gradient,
+  photoUrl,
   name,
   roles,
   aliases = 0,
@@ -691,7 +717,7 @@ function WriterRow({
   pro,
 }: {
   initials: string;
-  gradient: string;
+  photoUrl?: string;
   name: string;
   roles: string[];
   aliases?: number;
@@ -702,7 +728,7 @@ function WriterRow({
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 group">
       <GripVertical className="w-4 h-4 text-slate-200 group-hover:text-slate-400 flex-shrink-0" />
-      <Avatar gradient={gradient} initials={initials} />
+      <Avatar initials={initials} photoUrl={photoUrl} />
       <div className="flex-1 min-w-0">
         <div className="text-slate-900 text-[13px] font-semibold truncate">
           {name}
