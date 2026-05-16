@@ -1269,6 +1269,12 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
   function closeImportDialog() {
     setUrlOpen(false);
     setUrlErr(null);
+    setUrlValue("");
+  }
+  function openImportDialog() {
+    setUrlErr(null);
+    setUrlValue("");
+    setUrlOpen(true);
   }
 
   async function handleImportFromUrl() {
@@ -1284,8 +1290,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
         title: suggestedTitle || "Imported video",
       });
       invalidate();
-      setUrlOpen(false);
-      setUrlValue("");
+      closeImportDialog();
     } catch (e: any) {
       console.error("[AlbumVideosSection] handleImportFromUrl failed", e);
       setUrlErr(friendlyImportError(e?.message || ""));
@@ -1330,7 +1335,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
         <span className="text-slate-300 text-[12px]">·</span>
         <button
           type="button"
-          onClick={() => setUrlOpen(true)}
+          onClick={openImportDialog}
           disabled={busy || urlBusy}
           className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-50"
           data-testid="button-import-album-video-url"
