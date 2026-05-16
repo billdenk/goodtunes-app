@@ -486,7 +486,29 @@ function EditRow({
             </button>
           )}
         </div>
-        <DotMeter t={t} />
+        {/* When collapsed: dot meter shows status at a glance.
+            When expanded: meter is redundant (all 4 cards are visible), so swap
+            in the destructive controls — clearly track-scoped, sitting next to the chevron. */}
+        {expanded ? (
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <button
+              aria-label="Hide track (parks it without losing lyrics or credits)"
+              title="Hide track (parks it without losing lyrics or credits)"
+              className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+            </button>
+            <button
+              aria-label="Delete track"
+              title="Delete track"
+              className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <DotMeter t={t} />
+        )}
         <button
           type="button"
           onClick={onToggle}
