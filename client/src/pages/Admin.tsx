@@ -13,7 +13,7 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Loader2, Play } from "lucide-react";
+import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Loader2, Play, Pencil } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -2617,7 +2617,7 @@ function SongRow({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      <div className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50">
+      <div className="group/row flex items-center gap-2 px-3 py-2 hover:bg-slate-50">
         {/* Grip handle — visually signals draggability. Drag events are
             wired on the parent row so grabbing anywhere on the bar works,
             but this icon gives the user a clear target. */}
@@ -2648,13 +2648,30 @@ function SongRow({
         <span className="text-slate-400 text-xs tabular-nums">
           {fmtDuration(song.duration)}
         </span>
+        {/* Pencil-on-hover edit affordance — no surrounding box. When the
+            editor is open we keep the icon visible (and switch to an X) so
+            the user always has a clear close target. */}
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="text-[12px] text-[#319ED8] hover:underline"
+          className={
+            "p-1 -mr-1 rounded-md text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 transition-opacity flex-shrink-0 focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 " +
+            (open
+              ? "opacity-100"
+              : // Hidden until hover/focus on pointer-fine devices, but
+                // always visible on touch / coarse-pointer (no hover) so
+                // admins on iPad / phone can still find Edit.
+                "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60")
+          }
+          aria-label={open ? "Close editor" : "Edit song"}
+          title={open ? "Close" : "Edit"}
           data-testid={`button-edit-song-${song.id}`}
         >
-          {open ? "Close" : "Edit"}
+          {open ? (
+            <XIcon className="w-3.5 h-3.5" />
+          ) : (
+            <Pencil className="w-3.5 h-3.5" />
+          )}
         </button>
       </div>
       {open && (
