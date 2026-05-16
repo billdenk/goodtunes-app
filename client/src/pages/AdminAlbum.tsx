@@ -69,6 +69,7 @@ interface SongLite {
   duration: number;
   lyrics: string | null;
   audioUrl: string | null;
+  syncedLyrics?: { timeMs: number; text: string }[] | null;
 }
 
 type Tab = "overview" | "tracks" | "artwork" | "masters" | "bonus";
@@ -454,7 +455,7 @@ function TracksPanel({
   );
 }
 
-type TrackMode = "view" | "rename" | "audio" | "lyrics";
+type TrackMode = "view" | "rename" | "audio" | "lyrics" | "synced";
 
 function TrackRow({
   song,
@@ -553,6 +554,12 @@ function TrackRow({
   const closeLyrics = () => {
     setMode("view");
     queueMicrotask(() => lyricsChipRef.current?.focus());
+  };
+
+  const syncedChipRef = useRef<HTMLButtonElement>(null);
+  const closeSynced = () => {
+    setMode("view");
+    queueMicrotask(() => syncedChipRef.current?.focus());
   };
 
   const liCls = [
@@ -672,6 +679,28 @@ function TrackRow({
                     interactive
                   />
                 </button>
+                <button
+                  ref={syncedChipRef}
+                  type="button"
+                  onClick={() =>
+                    setMode((m) => (m === "synced" ? "view" : "synced"))
+                  }
+                  aria-label="Edit synced lyrics"
+                  title="Edit synced lyrics (WebVTT)"
+                  data-testid={`button-edit-synced-${song.id}`}
+                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                >
+                  <TrackChip
+                    ok={!!(song.syncedLyrics && song.syncedLyrics.length)}
+                    label={
+                      song.syncedLyrics && song.syncedLyrics.length
+                        ? `Synced · ${song.syncedLyrics.length}`
+                        : "No sync"
+                    }
+                    testId={`chip-synced-${song.id}`}
+                    interactive
+                  />
+                </button>
               </div>
             </div>
             <span
@@ -743,6 +772,14 @@ function TrackRow({
         <LyricsEditor
           song={song}
           onClose={closeLyrics}
+          onSaved={invalidate}
+        />
+      )}
+
+      {mode === "synced" && (
+        <SyncedLyricsEditor
+          song={song}
+          onClose={closeSynced}
           onSaved={invalidate}
         />
       )}
@@ -866,6 +903,280 @@ function LyricsEditor({
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             )}
             Save lyrics
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Per-track synced lyrics editor (WebVTT) ──────────────────────── */
+
+function SyncedLyricsEditor({
+  song,
+  onClose,
+  onSaved,
+}: {
+  song: SongLite;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [draft, setDraft] = useState<{ timeMs: number; text: string }[] | null>(
+    song.syncedLyrics ?? null,
+  );
+  const [rawText, setRawText] = useState<string>("");
+  const [dragOver, setDragOver] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const cueCount = draft?.length ?? 0;
+  const origCount = song.syncedLyrics?.length ?? 0;
+  const dirty =
+    JSON.stringify(draft ?? null) !== JSON.stringify(song.syncedLyrics ?? null);
+
+  const parseAndSet = async (text: string, sourceLabel: string) => {
+    setLocalError(null);
+    setParsing(true);
+    try {
+      const { parseVtt } = await import("@/lib/vttParser");
+      const cues = parseVtt(text);
+      if (cues.length === 0) {
+        setLocalError(
+          `No cues found in ${sourceLabel}. Make sure it's a WebVTT file (header line "WEBVTT" + cues like "00:00:12.000 --> 00:00:15.000").`,
+        );
+        return;
+      }
+      setDraft(cues);
+    } catch (e: any) {
+      setLocalError(e?.message || `Couldn't parse ${sourceLabel}.`);
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleFile = async (f: File) => {
+    setLocalError(null);
+    if (!/\.vtt$/i.test(f.name) && f.type && f.type !== "text/vtt") {
+      setLocalError("That doesn't look like a .vtt file.");
+      return;
+    }
+    try {
+      const text = await f.text();
+      setRawText(text);
+      await parseAndSet(text, "the file");
+    } catch (e: any) {
+      setLocalError(e?.message || "Couldn't read the file.");
+    }
+  };
+
+  const saveMut = useMutation({
+    mutationFn: async () =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+        syncedLyrics: draft && draft.length > 0 ? draft : null,
+      }),
+    onSuccess: async () => {
+      await onSaved();
+      toast({
+        title:
+          draft && draft.length > 0
+            ? `Synced lyrics saved · ${draft.length} cue${draft.length === 1 ? "" : "s"}`
+            : "Synced lyrics cleared",
+      });
+      onClose();
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save synced lyrics",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const fmtTimestamp = (ms: number) =>
+    `${Math.floor(ms / 60000)
+      .toString()
+      .padStart(2, "0")}:${Math.floor((ms % 60000) / 1000)
+      .toString()
+      .padStart(2, "0")}.${(ms % 1000).toString().padStart(3, "0")}`;
+
+  return (
+    <div
+      className="px-5 pb-4"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !parsing && !saveMut.isPending) {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) handleFile(f);
+        }}
+        className={[
+          "rounded-xl border-2 border-dashed px-4 py-3 space-y-3 transition-colors",
+          dragOver
+            ? "border-[#319ED8] bg-[#319ED8]/10"
+            : "border-slate-200 bg-slate-50/60",
+        ].join(" ")}
+        data-testid={`dropzone-vtt-${song.id}`}
+      >
+        <div className="flex items-center gap-2">
+          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
+            Synced lyrics (WebVTT)
+            {cueCount > 0 && (
+              <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
+                · {cueCount} cue{cueCount === 1 ? "" : "s"}
+                {dirty && origCount !== cueCount && (
+                  <span className="text-[#319ED8]">
+                    {" "}
+                    (was {origCount})
+                  </span>
+                )}
+              </span>
+            )}
+            {parsing && (
+              <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
+                · parsing…
+              </span>
+            )}
+          </span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".vtt,text/vtt"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+              e.target.value = "";
+            }}
+            data-testid={`input-vtt-file-${song.id}`}
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={parsing || saveMut.isPending}
+            className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-40 font-semibold"
+            data-testid={`button-choose-vtt-${song.id}`}
+          >
+            {cueCount > 0 ? "Replace .vtt" : "Upload .vtt"}
+          </button>
+          {cueCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(null);
+                setRawText("");
+                setLocalError(null);
+              }}
+              disabled={parsing || saveMut.isPending}
+              className="text-[12px] text-slate-500 hover:text-slate-700 hover:underline disabled:opacity-40"
+              data-testid={`button-clear-vtt-${song.id}`}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <textarea
+          value={rawText}
+          onChange={(e) => setRawText(e.target.value)}
+          onBlur={() => {
+            const t = rawText.trim();
+            if (t && /^WEBVTT/i.test(t)) {
+              parseAndSet(rawText, "the pasted text");
+            }
+          }}
+          rows={4}
+          placeholder={
+            "Or paste WebVTT text here:\nWEBVTT\n\n00:00:12.000 --> 00:00:15.500\nFirst line of lyric"
+          }
+          disabled={parsing || saveMut.isPending}
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[11.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          data-testid={`textarea-vtt-raw-${song.id}`}
+        />
+
+        {draft && draft.length > 0 ? (
+          <div className="rounded-md bg-white border border-slate-200 px-3 py-2">
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              Preview · first {Math.min(draft.length, 5)} cue
+              {Math.min(draft.length, 5) === 1 ? "" : "s"}
+            </div>
+            <ul
+              className="text-[11.5px] font-mono text-slate-700 space-y-0.5"
+              data-testid={`list-vtt-preview-${song.id}`}
+            >
+              {draft.slice(0, 5).map((c, i) => (
+                <li key={i} className="flex gap-2 items-baseline">
+                  <span className="text-slate-400 tabular-nums flex-shrink-0">
+                    {fmtTimestamp(c.timeMs)}
+                  </span>
+                  <span className="truncate">{c.text}</span>
+                </li>
+              ))}
+              {draft.length > 5 && (
+                <li className="text-slate-400 italic">
+                  + {draft.length - 5} more cue{draft.length - 5 === 1 ? "" : "s"}…
+                </li>
+              )}
+            </ul>
+          </div>
+        ) : (
+          <p className="text-[10.5px] text-slate-400 leading-snug">
+            No file loaded. The player will fall back to even auto-distributed
+            timing across the song's duration.
+          </p>
+        )}
+
+        {localError && (
+          <p
+            className="text-[11px] text-rose-600"
+            data-testid={`text-vtt-error-${song.id}`}
+          >
+            {localError}
+          </p>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={parsing || saveMut.isPending}
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            data-testid={`button-cancel-vtt-${song.id}`}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => saveMut.mutate()}
+            disabled={!dirty || parsing || saveMut.isPending}
+            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+            data-testid={`button-save-vtt-${song.id}`}
+          >
+            {saveMut.isPending && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            )}
+            Save sync
           </button>
         </div>
       </div>
