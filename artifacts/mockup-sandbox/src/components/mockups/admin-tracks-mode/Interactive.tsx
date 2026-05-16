@@ -483,7 +483,7 @@ function EditRow({
       </div>
 
       {expanded && (
-        <div className="pl-20 pr-5 pb-5 -mt-1 space-y-4">
+        <div className="pl-20 pr-16 pb-5 -mt-1 space-y-4">
           {/* Required */}
           <div>
             <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
