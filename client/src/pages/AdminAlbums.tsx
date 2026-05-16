@@ -162,12 +162,38 @@ export function AdminAlbums() {
           </button>
         </section>
 
-        {/* STATS */}
-        <div className="grid grid-cols-4 gap-2">
-          <Stat label="Releases" value={String(releases.length)} testId="stat-releases" />
-          <Stat label="Visible" value={String(releases.length - hiddenCount)} testId="stat-visible" />
-          <Stat label="Hidden" value={String(hiddenCount)} tone={hiddenCount > 0 ? "warn" : undefined} testId="stat-hidden" />
-          <Stat label="Filtered" value={String(filtered.length)} testId="stat-filtered" />
+        {/* STATS — inline strip, not full-width cards. Counts are small
+            integers; cards-per-stat felt empty. */}
+        <div className="flex items-center gap-4 px-3 py-2 rounded-xl bg-white border border-slate-200 shadow-sm text-[12px]">
+          <InlineStat
+            label="Releases"
+            value={String(releases.length)}
+            testId="stat-releases"
+          />
+          <span className="text-slate-200">·</span>
+          <InlineStat
+            label="Visible"
+            value={String(releases.length - hiddenCount)}
+            testId="stat-visible"
+          />
+          <span className="text-slate-200">·</span>
+          <InlineStat
+            label="Hidden"
+            value={String(hiddenCount)}
+            tone={hiddenCount > 0 ? "warn" : undefined}
+            testId="stat-hidden"
+          />
+          {search && (
+            <>
+              <span className="text-slate-200">·</span>
+              <InlineStat
+                label="Matching filter"
+                value={String(filtered.length)}
+                tone="ok"
+                testId="stat-filtered"
+              />
+            </>
+          )}
         </div>
 
         {/* ALBUM ROWS */}
@@ -283,7 +309,7 @@ function EmptyStateRow({ onClick }: { onClick: () => void }) {
   );
 }
 
-function Stat({
+function InlineStat({
   label,
   value,
   tone,
@@ -295,16 +321,10 @@ function Stat({
   testId?: string;
 }) {
   return (
-    <div
-      className="rounded-xl bg-white border border-slate-200 shadow-sm px-3 py-2.5"
-      data-testid={testId}
-    >
-      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
-        {label}
-      </div>
-      <div
+    <span className="inline-flex items-baseline gap-1.5" data-testid={testId}>
+      <span
         className={[
-          "text-[20px] font-bold tabular-nums mt-0.5",
+          "font-bold tabular-nums text-[13px]",
           tone === "ok"
             ? "text-emerald-700"
             : tone === "warn"
@@ -313,7 +333,8 @@ function Stat({
         ].join(" ")}
       >
         {value}
-      </div>
-    </div>
+      </span>
+      <span className="text-slate-500">{label.toLowerCase()}</span>
+    </span>
   );
 }
