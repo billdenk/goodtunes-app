@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GripVertical,
   Plus,
@@ -188,16 +188,68 @@ function MasterDetail({
 
 function SnippetDetail({ onClose }: { onClose: () => void }) {
   /* iMovie-style trim row: play · waveform · lock.
-     Total clip 4:12 = 252s · window = 30s starting at 65s → left=25.8%, width=11.9%.
-     Locking commits the clip and hides the Start/End inputs; preview always works. */
+     Total clip 4:12 = 252s · window = 30s (= 11.9% of width).
+     Drag anywhere inside the yellow window to slide; the chip updates live.
+     Type into the chip to fine-tune; the window snaps to the new position.
+     Locking freezes the clip and hides the chip; preview always works. */
+  const TOTAL_SEC = 252; // 4:12
+  const WINDOW_SEC = 30;
+  const width = (WINDOW_SEC / TOTAL_SEC) * 100;
+
   const [locked, setLocked] = useState(false);
-  const left = 25.8;
-  const width = 11.9;
+  const [left, setLeft] = useState(25.8); // % from waveform's left edge
+  const maxLeft = 100 - width;
+
+  const wfRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startLeft: number } | null>(null);
+
+  const startSec = (left / 100) * TOTAL_SEC;
+  const fmt = (s: number) =>
+    `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const startLabel = fmt(startSec);
+  const endLabel = fmt(startSec + WINDOW_SEC);
+
+  // Chip input — controlled, synced from drag, parsed on commit
+  const [chipDraft, setChipDraft] = useState(startLabel);
+  useEffect(() => {
+    setChipDraft(startLabel);
+  }, [startLabel]);
+
+  const commitChip = () => {
+    const m = chipDraft.match(/^(\d+):(\d{1,2})$/);
+    if (!m) {
+      setChipDraft(startLabel);
+      return;
+    }
+    const sec = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    const clamped = Math.max(0, Math.min(TOTAL_SEC - WINDOW_SEC, sec));
+    setLeft((clamped / TOTAL_SEC) * 100);
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (locked) return;
+    dragRef.current = { startX: e.clientX, startLeft: left };
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current || !wfRef.current) return;
+    const rect = wfRef.current.getBoundingClientRect();
+    const dxPct = ((e.clientX - dragRef.current.startX) / rect.width) * 100;
+    const next = Math.max(
+      0,
+      Math.min(maxLeft, dragRef.current.startLeft + dxPct),
+    );
+    setLeft(next);
+  };
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragRef.current = null;
+    (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+  };
   return (
     <DetailWrap title="30-sec snippet" onClose={onClose}>
       <p className="text-[11.5px] text-slate-500 -mt-1">
         {locked
-          ? "Snippet locked in at 1:05–1:35. Tap the padlock to slide it again."
+          ? `Snippet locked in at ${startLabel}–${endLabel}. Tap the padlock to slide it again.`
           : "Slide the yellow window — width is locked to 30 seconds. Tap the padlock when you're done."}
       </p>
 
@@ -214,7 +266,10 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
         <div className="flex-1 min-w-0">
           {/* Waveform area — no side handles (fixed 30-sec window, the whole
               rectangle is the grab target). Timecode axis sits below it, not behind it. */}
-          <div className="relative h-20 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden">
+          <div
+            ref={wfRef}
+            className="relative h-20 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden touch-none select-none"
+          >
             <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
               {WAVE_BARS.map((h, i) => (
                 <div
@@ -225,15 +280,24 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
               ))}
             </div>
 
-            {/* Floating start-time chip — editable. Click to fine-tune by typing,
-                or just slide the window on the waveform. Apple-Photos-crop pattern. */}
+            {/* Floating start-time chip — editable. Tracks the window's left edge live.
+                Type to fine-tune, or just drag the window. */}
             {!locked && (
               <div
-                className="absolute -top-1 -translate-y-full after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800"
+                className="absolute -top-1 -translate-y-full after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800 transition-[left] duration-0"
                 style={{ left: `calc(${left}% + 4px)` }}
               >
                 <input
-                  defaultValue="1:05"
+                  value={chipDraft}
+                  onChange={(e) => setChipDraft(e.target.value)}
+                  onBlur={commitChip}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    if (e.key === "Escape") {
+                      setChipDraft(startLabel);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
                   aria-label="Snippet start time — type to fine-tune"
                   title="Type to fine-tune (mm:ss)"
                   className="w-[42px] px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums text-center shadow-md focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 cursor-text"
@@ -241,9 +305,13 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* 30-sec window — amber + grabbable when unlocked, emerald + settled when locked.
+            {/* 30-sec window — drag anywhere inside to slide.
                 No side handles: nothing to imply resizing. */}
             <div
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
               className={[
                 "absolute top-1 bottom-1 rounded-md border-2 transition-colors",
                 locked
