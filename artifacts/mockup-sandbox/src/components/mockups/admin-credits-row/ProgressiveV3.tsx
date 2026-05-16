@@ -413,6 +413,11 @@ export function ProgressiveV3() {
           subtitle="Master/recording revenue · who gets paid for the audio file itself"
           optional
           count="1 of 1 participant"
+          extraHeaderAction={
+            <button className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11px] hover:bg-slate-50 inline-flex items-center gap-1">
+              <Copy className="w-3 h-3" /> Apply to all 17 tracks
+            </button>
+          }
         >
           <SplitRow
             kind="org"
