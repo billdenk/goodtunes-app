@@ -204,3 +204,80 @@ Pre-fill anything the provider gave us; ask for whatever's missing:
 - `displayName` required (defaults from fullName or username).
 - Account linking later: match on verified email when both providers verified it; otherwise keep separate and let user merge manually.
 - Never email a relay address expecting a reply — forward-only and revocable.
+
+---
+
+## Admin restructure — May 16, 2026 decision log
+
+Bill's pass over the storyboard mockups. Locking these in so future sessions have a single source of truth before code moves.
+
+### Tab layout (album level)
+**Overview · Tracks · Artwork · Masters · Bonus**
+
+- "Files" renamed to **Masters** (matches the deliverable language engineers actually use; "Files" sounds clerical).
+- **Bonus** is a new album-level tab sitting after Masters. Houses the existing Videos + Photos blocks plus future buckets (liner notes, lyric sheets, commentary, press kit). Videos/photos are deliberately NOT moved to per-track scope — they're album-wide and Bill is happy with the album-level UX today.
+
+### Track-level tabs
+**Details · Credits · Lyrics** (no Files tab at track level — masters live at album level).
+
+### Decisions by topic
+
+1. **Gear-to-credits pipeline (point 2).** SuperCredits storytelling requires performers to be grouped by instrument category (Guitars / Bass / Synth / Drum programming / Piano / Mastered by). Data model already supports it via `trackPerformers.instrumentId → instruments.category`; what's missing is the visual grouping in the Credits row UI. Build category-bucket layout when Credits tab is implemented.
+
+2. **Writers & Publishing stays first-class (point 3).** Platoon's May 7 reply confirms vendors require: (a) vendor secures mechanical licensing, (b) vendor handles royalty accounting and pays artists + Platoon directly, (c) vendor assumes legal title of inventory. So our W&P fields aren't admin paperwork — they're the on-ramp for every distribution partner.
+
+3. **Label + payment routing (point 4).** Need to add per album:
+   - `label` (record label name + contact)
+   - `payeeMap` (% split: artist / label / writers / publishers — must reconcile to 100%)
+   - `mechLicenseRoute` per track: `self` | `harry-fox` | `mlc` | `rumblefish`
+   - Sales-unit reporting hooks (vendors need unit counts per period).
+
+4. **Ownership documentation (point 5).** Per-track `ownership` field: `label-owned` | `artist-100` | `split`, plus the ability to attach a signed ownership PDF to the track record. Protects against cover-song liability if the artist didn't actually clear it.
+
+5. **Lyrics services pinned (point 6).** Musixmatch ($200/mo) and LyricFind (no public pricing, no email reply) are both deferred. We do **plain lyrics + synced .vtt** in-house only. The "Request from artist" + "Look up" buttons are removed from the Lyrics tab. Synced-lyrics-as-a-service is a future monetization play.
+
+6. **Masters tab — pared down (point 7):**
+   - Streaming master ✓
+   - Hi-res downloadable ✓
+   - Stems ✗ (deferred)
+   - Per-track cover override ✗ (deferred — albums already have artwork)
+
+7. **Apple-style lyrics player preview (point 8).** Section headers (`[Verse 1]`) hidden in render, large bold active line, neighbors blur and fade, left-aligned, blurred album-art backdrop, no progress bar inside the lyric pane. Matches the IMG_3607 reference (Apple Music "Superman" view). Editor still uses section headers — they just don't render to fans.
+
+8. **Studios as an entity (point 9).** Convert "Recorded at" from free text to a **dropdown + create-new**. Globally-shared studio table:
+   - Default option `"Home studio"` (generic — used when an artist records at home; no contact info required).
+   - Real studios get full records (name, city, contact, phone, email) so we can reach them later if needed.
+   - Studios are global across the app — every artist sees the same dropdown and can pick from existing rows or create new ones. (Bill's confirmed answer: one generic "Home studio" entry; real named studios are first-class records.)
+   - Schema: `studios { id, name, city?, contactName?, email?, phone?, isGeneric }`. Track's `recordedAtStudioId` FK.
+
+9. **Single Link button per instrument category (point 10).** Collapse "Link instrument" + "Link a guitar..." duplicate UI to one button with category-aware label: "Link a guitar", "Link a bass", "Link a synth", etc. Link / Edit / 🗑 affordances render **hover-only** to keep the resting state clean.
+
+10. **Track ribbon — elegant + minimum-complete (point 11).** Thinner row, smaller numerals, dots (not icons) for status: `·` incomplete · green dot complete · amber dot warning. Tooltip on hover for missing-field detail.
+
+    **Minimum-complete threshold (Bill's confirmed answer B):**
+    - Title ✓ (required)
+    - Audio master ✓ (required)
+    - Writers — best effort, not required
+    - Performers — best effort, not required
+    - Splits — optional (no enforced 100% gate)
+
+    A track turns "green" once title + audio are present. Writers/performers/splits surface as soft warnings, not blockers.
+
+11. **Relationships block pinned (point 12).** "Alternate version of / sample / cover / remix" UI hidden for now. Schema can stay (cheap) but no UI consumer until we have a clear use case (CD Baby ingest, etc.).
+
+12. **Lock-by-default + hover-edit pattern (point 13).** Standard interaction for every field on the new admin: at rest, fields render as locked read-only text; hover reveals Edit + 🗑. **First-entry exception:** brand-new empty fields render as live inputs so the user knows to type; once filled + saved, they switch to locked read-only. (Matches the Notion / Linear pattern + Bill's existing videos/photos UX he already likes.)
+
+13. **Section-level permission locks deferred (point 14).** Password-to-edit per section is a later add — wait until multi-user/roles exist. Not building this in the current pass.
+
+### Mockups updated / added in this pass
+- `admin-track-edit/TrackLyrics.tsx` — removed "Request from artist" + "Look up" buttons, removed Musixmatch/LyricFind fallback block, rebuilt the Player Preview pane in Apple Music style (blurred backdrop, left-aligned, no section headers visible, no progress bar in pane).
+- `admin-album-bonus/BonusTab.tsx` — NEW. Album-level Bonus tab demonstrating the lock-by-default + hover-reveal pattern on videos + photos, plus dashed scaffolding for future bonus buckets (liner notes, lyric sheets, commentary, press kit).
+
+### Build phasing (recap from prior turn)
+Phase 1 — Albums list + Album page route split (1 session) · **next up**
+Phase 2 — Per-track edit page with Details + Credits tabs (2 sessions)
+Phase 3 — Lyrics tab w/ Apple-style player preview (1 session)
+Phase 4 — Masters tab w/ pared-down pipeline (1 session)
+Phase 5 — Bonus tab (album-level move; 1 session)
+Phase 6 — ASCAP pull + Person-record memory + co-writer suggestions (1 session)
+

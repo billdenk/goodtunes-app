@@ -4,12 +4,10 @@ import {
   Upload,
   Check,
   Wand2,
-  Play,
   Eye,
-  Pencil,
   AlertCircle,
-  Mic2,
-  Search,
+  Star,
+  MoreHorizontal,
 } from "lucide-react";
 
 /**
@@ -63,14 +61,13 @@ export function TrackLyrics() {
               </span>
             </h3>
             <p className="text-slate-500 text-[11.5px] mt-0.5">
-              We're not a streaming service, so we don't license a lyrics feed.
-              The canonical source is the artist (or their lyricist) — typed,
-              pasted, or uploaded here. Fallback search providers below are
-              for when the artist doesn't have a clean copy on hand.
+              Canonical source is the artist — typed, pasted, or uploaded here.
+              Third-party lyric services (Musixmatch, LyricFind) are deferred;
+              synced timing can become a paid service we offer the artist later.
             </p>
           </header>
 
-          <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100">
+          <div className="grid grid-cols-2 divide-x divide-slate-100">
             <ModeCard
               label="Plain lyrics"
               hint="Auto-distributed at runtime"
@@ -82,29 +79,6 @@ export function TrackLyrics() {
               hint="Line-level timings · upload .vtt"
               icon={<Upload className="w-4 h-4 text-slate-400" />}
             />
-          </div>
-
-          <div className="px-4 py-3 bg-slate-50/50">
-            <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider mb-2">
-              Fallback search (if the artist can't supply)
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <FallbackProvider
-                name="Musixmatch"
-                role="Catalog search · admin contact on file"
-                connected
-              />
-              <FallbackProvider
-                name="LyricFind"
-                role="Catalog search · admin contact on file"
-                connected
-              />
-            </div>
-            <p className="text-slate-400 text-[10.5px] mt-2 italic">
-              Both are reference lookups only — the artist still has to
-              confirm/edit before saving. We don't auto-write third-party
-              lyrics into the database.
-            </p>
           </div>
         </section>
 
@@ -120,12 +94,6 @@ export function TrackLyrics() {
               </p>
             </div>
             <div className="flex items-center gap-1.5">
-              <button className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] hover:bg-slate-50 inline-flex items-center gap-1">
-                <Mic2 className="w-3 h-3 text-emerald-600" /> Request from artist
-              </button>
-              <button className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] hover:bg-slate-50 inline-flex items-center gap-1">
-                <Search className="w-3 h-3" /> Look up
-              </button>
               <button className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] hover:bg-slate-50 inline-flex items-center gap-1">
                 <Eye className="w-3 h-3" /> Preview
               </button>
@@ -166,59 +134,80 @@ Like every song I keep`}
           </div>
         </section>
 
-        {/* PREVIEW */}
+        {/* PREVIEW — Apple Music style */}
         <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
           <header className="px-4 py-3 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/40 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h3 className="text-slate-900 text-[14px] font-bold">Player preview</h3>
               <p className="text-slate-500 text-[11.5px] mt-0.5">
-                Live render of the lyrics overlay at 0:42 (active line bold,
-                past lines fade, future lines preview)
+                Apple Music-style overlay at 0:42 · section headers hidden,
+                active line big &amp; bold, neighbors blur
               </p>
             </div>
             <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wide">
               Live
             </span>
           </header>
-          <div className="px-4 py-4 bg-[#00062B] text-white space-y-2 text-center font-sans">
-            <div className="text-slate-500/60 text-[12px] tracking-wide uppercase">
-              [Verse 1]
-            </div>
-            <div className="text-white/35 text-[15px]">
-              The lights came up too early
-            </div>
-            <div className="text-white/35 text-[15px]">
-              Like a film we didn't write
-            </div>
-            <div className="text-white text-[17px] font-bold scale-[1.04]">
-              Two ghosts in someone's hallway
-            </div>
-            <div className="text-white/55 text-[15px]">
-              Holding on against the night
-            </div>
-            <div className="text-slate-500/60 text-[12px] tracking-wide uppercase pt-1">
-              [Pre-chorus]
-            </div>
-            <div className="text-white/55 text-[15px]">
-              And every time I close my eyes
-            </div>
-            <div className="text-white/55 text-[15px]">
-              I see the way you held my hand
+
+          {/* Lyric stage: blurred art backdrop, left-aligned, no section header, no progress bar in pane */}
+          <div className="relative overflow-hidden">
+            {/* soft tonal backdrop standing in for blurred album art */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(120% 90% at 30% 20%, #c9a3a3 0%, #8e7474 40%, #4a3a3a 75%, #2a2222 100%)",
+              }}
+            />
+            <div className="absolute inset-0 backdrop-blur-3xl bg-black/10" />
+
+            <div className="relative px-5 pt-4 pb-5">
+              {/* mini now-playing strip */}
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-9 h-9 rounded-md bg-gradient-to-br from-[#FF5470] via-[#7F10A7] to-[#00062B] shadow-md flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-white text-[12.5px] font-semibold leading-tight truncate">
+                    Made for Us
+                  </div>
+                  <div className="text-white/70 text-[11px] leading-tight truncate">
+                    Nick Carter
+                  </div>
+                </div>
+                <button className="w-7 h-7 rounded-full bg-white/15 backdrop-blur flex items-center justify-center">
+                  <Star className="w-3.5 h-3.5 text-white" />
+                </button>
+                <button className="w-7 h-7 rounded-full bg-white/15 backdrop-blur flex items-center justify-center">
+                  <MoreHorizontal className="w-3.5 h-3.5 text-white" />
+                </button>
+              </div>
+
+              {/* lyric lines — left-aligned, Apple-style */}
+              <div className="space-y-2.5 text-left">
+                <div className="text-white/25 text-[15px] font-bold leading-tight blur-[1.5px]">
+                  The lights came up too early
+                </div>
+                <div className="text-white/35 text-[15px] font-bold leading-tight blur-[0.5px]">
+                  Like a film we didn't write
+                </div>
+                <div className="text-white text-[22px] font-bold leading-tight tracking-tight">
+                  Two ghosts in someone's hallway
+                </div>
+                <div className="text-white/55 text-[15px] font-bold leading-tight blur-[0.5px]">
+                  Holding on against the night
+                </div>
+                <div className="text-white/40 text-[15px] font-bold leading-tight blur-[1px]">
+                  And every time I close my eyes
+                </div>
+                <div className="text-white/30 text-[15px] font-bold leading-tight blur-[1.5px]">
+                  I see the way you held my hand
+                </div>
+              </div>
             </div>
           </div>
+
           <div className="px-3 py-2 flex items-center justify-between gap-2 text-[11px] text-slate-500 border-t border-slate-100">
-            <div className="flex items-center gap-2">
-              <button className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center">
-                <Play className="w-3 h-3 fill-white" />
-              </button>
-              <span className="tabular-nums">0:42 / 3:28</span>
-            </div>
-            <div className="flex-1 mx-2 h-1 rounded-full bg-slate-200 overflow-hidden">
-              <div className="h-full bg-[#319ED8]" style={{ width: "20%" }} />
-            </div>
-            <button className="text-slate-400 hover:text-slate-700 inline-flex items-center gap-1">
-              <Pencil className="w-3 h-3" /> Tap any line to seek
-            </button>
+            <span className="tabular-nums">0:42 / 3:28</span>
+            <span className="text-slate-400">Tap any line to seek</span>
           </div>
         </section>
 
@@ -227,14 +216,12 @@ Like every song I keep`}
           <AlertCircle className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
           <div className="text-[11.5px] text-slate-600 leading-relaxed">
             <span className="font-semibold text-slate-800">
-              Why artist-direct first?
+              Apple-parity preview.
             </span>{" "}
-            Streaming services pay licensing fees to Musixmatch / LyricFind
-            because they need lyrics for tens of millions of tracks they
-            don't own. We have the opposite shape — a smaller catalog the
-            artist is uploading themselves — so the cleanest, cheapest, most
-            accurate source is the artist's own copy. The provider lookups
-            stay as a research aid for when memory fails.
+            Section headers like <code className="px-1 rounded bg-slate-100 text-slate-700">[Verse 1]</code>
+            {" "}stay in the editor for the artist's benefit but render hidden
+            in the player — matching the Apple Music lyrics view. Active line
+            is large + bold; neighbors blur and fade like the iOS overlay.
           </div>
         </div>
 
@@ -254,35 +241,6 @@ Like every song I keep`}
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function FallbackProvider({
-  name,
-  role,
-  connected,
-}: {
-  name: string;
-  role: string;
-  connected?: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 flex items-center gap-2.5">
-      <span className="w-7 h-7 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
-        <Search className="w-3.5 h-3.5 text-slate-500" />
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-slate-900 text-[12px] font-semibold truncate inline-flex items-center gap-1.5">
-          {name}
-          {connected && (
-            <span className="inline-flex items-center gap-0.5 px-1 py-px rounded bg-emerald-50 text-emerald-700 text-[9.5px] font-bold uppercase tracking-wide">
-              <Check className="w-2.5 h-2.5" /> linked
-            </span>
-          )}
-        </div>
-        <div className="text-slate-500 text-[10.5px] truncate">{role}</div>
       </div>
     </div>
   );
