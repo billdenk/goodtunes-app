@@ -787,8 +787,12 @@ export function getSongsByAlbum(albumId: string): Song[] {
 }
 
 export function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  // `seconds` can be fractional now that the player keeps ms-precision
+  // currentTime for lyric sync. Floor here so the visible timecode stays
+  // `0:14`, not `0:14.7230885…`.
+  const total = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 

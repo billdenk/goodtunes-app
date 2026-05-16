@@ -59,8 +59,14 @@ function buildSyncedLines(
     if (/^\[.*\]$/.test(t)) return;
     timeable.push(i);
   });
-  const lead = Math.max(2, Math.round(duration * 0.06));
-  const tail = Math.max(2, Math.round(duration * 0.04));
+  // Small fixed lead-in / outro so the first line doesn't fire at t=0 and
+  // the last line doesn't fire right at the end. Previously these scaled
+  // with duration (6% / 4%), which on a 3:30 song delayed the first line
+  // by ~13s — way past where vocals actually start. With no VTT we can't
+  // know the true intro length, so keep the lead tight (~1.5s) and trust
+  // that a real .vtt upload will override this entirely.
+  const lead = 1.5;
+  const tail = 2;
   const usable = Math.max(1, duration - lead - tail);
   const denom = Math.max(1, timeable.length - 1);
   const timeMap: Record<number, number> = {};
@@ -129,7 +135,7 @@ export function Player() {
   useEffect(() => {
     if (!showLyrics) return;
     const el = lyricLineRefs.current[activeLineIdx];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activeLineIdx, showLyrics]);
 
   if (!currentSong) return null;
