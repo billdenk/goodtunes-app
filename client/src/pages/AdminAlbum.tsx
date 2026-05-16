@@ -425,8 +425,9 @@ function TracksPanel({
         <div>
           <h2 className="text-slate-900 text-[14px] font-bold">Tracklist</h2>
           <p className="text-slate-400 text-[11.5px]">
-            {sorted.length} {sorted.length === 1 ? "track" : "tracks"} · Tap a
-            row to edit credits, lyrics, and master in classic admin.
+            {sorted.length} {sorted.length === 1 ? "track" : "tracks"} · Hover
+            a row to rename or delete. Open a row for credits, lyrics, and
+            master in classic admin.
           </p>
         </div>
         <button
@@ -440,51 +441,238 @@ function TracksPanel({
       </div>
       <ol>
         {sorted.map((song, i) => (
-          <li
+          <TrackRow
             key={song.id}
-            className={[
-              "flex items-center gap-4 px-5 py-3 hover:bg-slate-50 cursor-pointer transition-colors",
-              i !== sorted.length - 1 && "border-b border-slate-100",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            onClick={onEdit}
-            data-testid={`row-track-${song.id}`}
-          >
-            <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
-              {song.trackNumber}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div
-                className="text-slate-900 text-[13.5px] font-medium truncate"
-                data-testid={`text-track-title-${song.id}`}
-              >
-                {song.title}
-              </div>
-              <div className="flex items-center gap-2.5 mt-0.5">
-                <TrackChip
-                  ok={!!song.audioUrl}
-                  label={song.audioUrl ? "Master" : "No master"}
-                  testId={`chip-master-${song.id}`}
-                />
-                <TrackChip
-                  ok={!!song.lyrics}
-                  label={song.lyrics ? "Lyrics" : "No lyrics"}
-                  testId={`chip-lyrics-${song.id}`}
-                />
-              </div>
-            </div>
-            <span
-              className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
-              data-testid={`text-track-duration-${song.id}`}
-            >
-              {formatDuration(song.duration)}
-            </span>
-            <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-          </li>
+            song={song}
+            albumId={album.id}
+            onOpen={onEdit}
+            withBorder={i !== sorted.length - 1}
+          />
         ))}
       </ol>
     </section>
+  );
+}
+
+function TrackRow({
+  song,
+  albumId,
+  onOpen,
+  withBorder,
+}: {
+  song: SongLite;
+  albumId: string;
+  onOpen: () => void;
+  withBorder: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(song.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pencilRef = useRef<HTMLButtonElement>(null);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  // Resync the draft from the source-of-truth title only on entry to
+  // edit mode — mirrors EditablePanel's anti-clobber pattern so a
+  // background refetch can't wipe out the user's in-progress typing.
+  // `song.title` is intentionally NOT in the deps; we read its latest
+  // value at the moment the user opens the editor and then leave the
+  // draft alone until they save or cancel.
+  useEffect(() => {
+    if (editing) {
+      setDraft(song.title);
+      queueMicrotask(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+  const invalidate = async () => {
+    await qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+    await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+  };
+
+  const renameMut = useMutation({
+    mutationFn: async (title: string) =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, { title }),
+    onSuccess: async () => {
+      await invalidate();
+      setEditing(false);
+      queueMicrotask(() => pencilRef.current?.focus());
+      toast({ title: "Track renamed" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't rename the track",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async () => apiRequest("DELETE", `/api/admin/songs/${song.id}`),
+    onSuccess: async () => {
+      await invalidate();
+      toast({ title: "Track deleted" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't delete the track",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const submit = () => {
+    const next = draft.trim();
+    if (!next) {
+      toast({ title: "Title can't be empty", variant: "destructive" });
+      return;
+    }
+    if (next === song.title) {
+      setEditing(false);
+      queueMicrotask(() => pencilRef.current?.focus());
+      return;
+    }
+    renameMut.mutate(next);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    queueMicrotask(() => pencilRef.current?.focus());
+  };
+
+  const rowCls = [
+    "group flex items-center gap-4 px-5 py-3 transition-colors",
+    withBorder && "border-b border-slate-100",
+    editing ? "bg-[#319ED8]/5" : "hover:bg-slate-50",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <li className={rowCls} data-testid={`row-track-${song.id}`}>
+      <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
+        {song.trackNumber}
+      </span>
+
+      {editing ? (
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+            data-testid={`input-track-title-${song.id}`}
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={renameMut.isPending}
+            className="px-2.5 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+            data-testid={`button-save-track-${song.id}`}
+          >
+            {renameMut.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              "Save"
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={cancel}
+            disabled={renameMut.isPending}
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+            data-testid={`button-cancel-track-${song.id}`}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={onOpen}
+            className="flex-1 min-w-0 text-left"
+            data-testid={`button-open-track-${song.id}`}
+          >
+            <div
+              className="text-slate-900 text-[13.5px] font-medium truncate"
+              data-testid={`text-track-title-${song.id}`}
+            >
+              {song.title}
+            </div>
+            <div className="flex items-center gap-2.5 mt-0.5">
+              <TrackChip
+                ok={!!song.audioUrl}
+                label={song.audioUrl ? "Master" : "No master"}
+                testId={`chip-master-${song.id}`}
+              />
+              <TrackChip
+                ok={!!song.lyrics}
+                label={song.lyrics ? "Lyrics" : "No lyrics"}
+                testId={`chip-lyrics-${song.id}`}
+              />
+            </div>
+          </button>
+          <span
+            className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
+            data-testid={`text-track-duration-${song.id}`}
+          >
+            {formatDuration(song.duration)}
+          </span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              ref={pencilRef}
+              type="button"
+              onClick={() => setEditing(true)}
+              aria-label="Rename track"
+              title="Rename"
+              className="w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+              data-testid={`button-rename-track-${song.id}`}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
+                  )
+                ) {
+                  deleteMut.mutate();
+                }
+              }}
+              disabled={deleteMut.isPending}
+              aria-label="Delete track"
+              title="Delete"
+              className="w-7 h-7 rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+              data-testid={`button-delete-track-${song.id}`}
+            >
+              {deleteMut.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <ChevronRight className="w-4 h-4 text-slate-300" />
+          </div>
+        </>
+      )}
+    </li>
   );
 }
 
