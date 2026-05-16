@@ -388,17 +388,45 @@ type AlbumCreditsMap = {
   bySongId: Record<
     string,
     {
-      writers: { id: string; name: string; role: string; person: { name: string; photoUrl?: string | null } | null }[];
+      writers: {
+        id: string;
+        songId: string;
+        personId: string | null;
+        name: string;
+        role: string;
+        position: number;
+        person: { id: string; name: string; photoUrl?: string | null } | null;
+      }[];
       performers: {
         id: string;
+        songId: string;
+        personId: string | null;
+        instrumentId: string | null;
         name: string;
         role: string;
         tuningNotes: string | null;
-        person: { name: string; photoUrl?: string | null } | null;
-        instrument: { name: string; category?: string | null } | null;
+        position: number;
+        person: { id: string; name: string; photoUrl?: string | null } | null;
+        instrument: { id: string; name: string; category?: string | null } | null;
       }[];
     }
   >;
+};
+
+type AdminPersonLite = {
+  id: string;
+  name: string;
+  photoUrl?: string | null;
+};
+type AdminInstrumentLite = {
+  id: string;
+  name: string;
+  category?: string | null;
+};
+type AdminCreditRole = {
+  id: string;
+  kind: "writer" | "performer";
+  name: string;
 };
 
 function TracksPanel({
@@ -847,10 +875,11 @@ function TrackRow({
       )}
 
       {mode === "credits" && (
-        <CreditsPreview
+        <CreditsEditor
+          songId={song.id}
+          albumId={albumId}
           credits={credits}
           onClose={closeCredits}
-          onEditInClassic={onOpen}
         />
       )}
     </li>
@@ -1263,17 +1292,36 @@ function SyncedLyricsEditor({
   );
 }
 
-/* ─── Per-track credits preview (read-only; edits → classic admin) ──── */
+/* ─── Per-track credits editor (inline add / edit / delete) ─────────── */
 
-function CreditsPreview({
+function CreditsEditor({
+  songId,
+  albumId,
   credits,
   onClose,
-  onEditInClassic,
 }: {
+  songId: string;
+  albumId: string;
   credits: SongCreditsLite | null;
   onClose: () => void;
-  onEditInClassic: () => void;
 }) {
+  const qc = useQueryClient();
+  const { data: people = [] } = useQuery<AdminPersonLite[]>({
+    queryKey: ["/api/people"],
+  });
+  const { data: instruments = [] } = useQuery<AdminInstrumentLite[]>({
+    queryKey: ["/api/instruments"],
+  });
+  const { data: roles = [] } = useQuery<AdminCreditRole[]>({
+    queryKey: ["/api/admin/credit-roles"],
+  });
+  const [adding, setAdding] = useState<null | "writer" | "performer">(null);
+
+  const invalidate = () =>
+    qc.invalidateQueries({
+      queryKey: ["/api/albums", albumId, "credits"],
+    });
+
   const writers = credits?.writers ?? [];
   const performers = credits?.performers ?? [];
   const total = writers.length + performers.length;
@@ -1282,7 +1330,7 @@ function CreditsPreview({
     <div
       className="px-5 pb-4"
       onKeyDown={(e) => {
-        if (e.key === "Escape") {
+        if (e.key === "Escape" && !adding) {
           e.preventDefault();
           onClose();
         }
@@ -1296,120 +1344,674 @@ function CreditsPreview({
             {total > 0 && (
               <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
                 · {writers.length} writer{writers.length === 1 ? "" : "s"} ·{" "}
-                {performers.length} performer{performers.length === 1 ? "" : "s"}
+                {performers.length} performer
+                {performers.length === 1 ? "" : "s"}
               </span>
             )}
           </span>
         </div>
 
-        {total === 0 ? (
+        {total === 0 && !adding && (
           <p className="text-[12px] text-slate-500 leading-snug">
             No credits on this track yet. Add writers (composer / lyricist /
-            producer) and performers (with the specific instrument used on this
-            track) to enable the SuperCredits badge.
+            producer) and performers (with the specific instrument used on
+            this track) to enable the SuperCredits badge.
           </p>
-        ) : (
-          <div className="space-y-3">
-            {writers.length > 0 && (
-              <div>
-                <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-                  Writers
-                </div>
-                <ul
-                  className="space-y-1"
-                  data-testid="list-credits-writers"
-                >
-                  {writers.map((w) => (
-                    <li
-                      key={w.id}
-                      className="flex items-center gap-2 text-[12.5px]"
-                      data-testid={`item-credit-writer-${w.id}`}
-                    >
-                      <PersonAvatar
-                        name={w.person?.name ?? w.name}
-                        photoUrl={w.person?.photoUrl ?? null}
-                      />
-                      <span className="text-slate-900 font-medium truncate">
-                        {w.person?.name ?? w.name}
-                      </span>
-                      <span className="text-slate-400">·</span>
-                      <span className="text-slate-500 truncate">{w.role}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {performers.length > 0 && (
-              <div>
-                <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-                  Performers
-                </div>
-                <ul
-                  className="space-y-1"
-                  data-testid="list-credits-performers"
-                >
-                  {performers.map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex items-center gap-2 text-[12.5px]"
-                      data-testid={`item-credit-performer-${p.id}`}
-                    >
-                      <PersonAvatar
-                        name={p.person?.name ?? p.name}
-                        photoUrl={p.person?.photoUrl ?? null}
-                      />
-                      <span className="text-slate-900 font-medium truncate flex-shrink-0">
-                        {p.person?.name ?? p.name}
-                      </span>
-                      <span className="text-slate-400">·</span>
-                      <span className="text-slate-500 truncate">{p.role}</span>
-                      {p.instrument && (
-                        <>
-                          <span className="text-slate-300">on</span>
-                          <span className="text-slate-700 truncate">
-                            {p.instrument.name}
-                          </span>
-                        </>
-                      )}
-                      {p.tuningNotes && (
-                        <span className="text-slate-400 italic truncate">
-                          ({p.tuningNotes})
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+        )}
+
+        {writers.length > 0 && (
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              Writers
+            </div>
+            <ul className="space-y-1" data-testid="list-credits-writers">
+              {writers.map((w) => (
+                <CreditRowItem
+                  key={`writer-${w.id}`}
+                  kind="writer"
+                  row={w}
+                  songId={songId}
+                  people={people}
+                  instruments={instruments}
+                  roles={roles}
+                  onInvalidate={invalidate}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+        {performers.length > 0 && (
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              Performers
+            </div>
+            <ul className="space-y-1" data-testid="list-credits-performers">
+              {performers.map((p) => (
+                <CreditRowItem
+                  key={`performer-${p.id}`}
+                  kind="performer"
+                  row={p}
+                  songId={songId}
+                  people={people}
+                  instruments={instruments}
+                  roles={roles}
+                  onInvalidate={invalidate}
+                />
+              ))}
+            </ul>
           </div>
         )}
 
-        <p className="text-[10.5px] text-slate-400 leading-snug pt-1 border-t border-slate-200">
-          Inline credits editing is coming to the new admin next. For now, add
-          / edit / reorder credits in classic admin.
-        </p>
+        {adding && (
+          <AddCreditForm
+            kind={adding}
+            songId={songId}
+            people={people}
+            instruments={instruments}
+            roles={roles}
+            onCancel={() => setAdding(null)}
+            onSaved={async () => {
+              await invalidate();
+              setAdding(null);
+            }}
+          />
+        )}
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setAdding("writer")}
+              disabled={!!adding}
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1"
+              data-testid="button-add-writer"
+            >
+              <Plus className="w-3 h-3" />
+              Writer
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdding("performer")}
+              disabled={!!adding}
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1"
+              data-testid="button-add-performer"
+            >
+              <Plus className="w-3 h-3" />
+              Performer
+            </button>
+          </div>
           <button
             type="button"
             onClick={onClose}
             className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
-            data-testid="button-cancel-credits-preview"
+            data-testid="button-close-credits"
           >
             Close
-          </button>
-          <button
-            type="button"
-            onClick={onEditInClassic}
-            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
-            data-testid="button-edit-credits-classic"
-          >
-            {total > 0 ? "Edit credits" : "Add credits"} in classic
-            <ArrowLeftRight className="w-3 h-3" />
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+type WriterRow = SongCreditsLite["writers"][number];
+type PerformerRow = SongCreditsLite["performers"][number];
+
+function CreditRowItem({
+  kind,
+  row,
+  songId,
+  people,
+  instruments,
+  roles,
+  onInvalidate,
+}: {
+  kind: "writer" | "performer";
+  row: WriterRow | PerformerRow;
+  songId: string;
+  people: AdminPersonLite[];
+  instruments: AdminInstrumentLite[];
+  roles: AdminCreditRole[];
+  onInvalidate: () => Promise<void> | void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+
+  // Edit-mode draft (one piece of state, anti-clobber resync on entry).
+  const [eKind, setEKind] = useState<"writer" | "performer">(kind);
+  const [personId, setPersonId] = useState<string | null>(row.personId);
+  const [name, setName] = useState<string>(row.name);
+  const [role, setRole] = useState<string>(row.role);
+  const [instrumentId, setInstrumentId] = useState<string | null>(
+    "instrumentId" in row ? row.instrumentId : null,
+  );
+  const [tuningNotes, setTuningNotes] = useState<string>(
+    "tuningNotes" in row ? row.tuningNotes ?? "" : "",
+  );
+  const editPersonRef = useRef<HTMLSelectElement>(null);
+
+  // Reset on entry to edit mode only — keeps a background refetch from
+  // wiping in-progress edits. `row` intentionally NOT in deps.
+  useEffect(() => {
+    if (editing) {
+      setEKind(kind);
+      setPersonId(row.personId);
+      setName(row.name);
+      setRole(row.role);
+      setInstrumentId("instrumentId" in row ? row.instrumentId : null);
+      setTuningNotes("tuningNotes" in row ? row.tuningNotes ?? "" : "");
+      // Move focus into the row so the editor's own Escape handler is
+      // active immediately and keyboard users can start changing fields
+      // without an extra click.
+      queueMicrotask(() => editPersonRef.current?.focus());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const sameKind = eKind === kind;
+      const trimmedTuning = tuningNotes.trim() || null;
+      const effectiveName = (() => {
+        if (personId) {
+          const p = people.find((pp) => pp.id === personId);
+          return p?.name ?? name;
+        }
+        return name;
+      })();
+      if (sameKind) {
+        const url =
+          kind === "writer"
+            ? `/api/admin/writers/${row.id}`
+            : `/api/admin/performers/${row.id}`;
+        const body: any = { personId, name: effectiveName, role };
+        if (kind === "performer") {
+          body.instrumentId = instrumentId;
+          body.tuningNotes = trimmedTuning;
+        }
+        await apiRequest("PUT", url, body);
+      } else {
+        // Cross-kind flip — non-atomic on the server. Create on the new
+        // table first, then delete the old row. If the delete fails we
+        // roll back by deleting the row we just created so the user
+        // never ends up with a duplicate credit.
+        const createUrl =
+          eKind === "writer"
+            ? `/api/admin/songs/${songId}/writers`
+            : `/api/admin/songs/${songId}/performers`;
+        const createBody: any = {
+          personId,
+          name: effectiveName,
+          role,
+        };
+        if (eKind === "performer") {
+          createBody.instrumentId = instrumentId;
+          createBody.tuningNotes = trimmedTuning;
+        }
+        const createRes = await apiRequest("POST", createUrl, createBody);
+        const created = (await createRes.json()) as { id: string };
+        const delUrl =
+          kind === "writer"
+            ? `/api/admin/writers/${row.id}`
+            : `/api/admin/performers/${row.id}`;
+        try {
+          await apiRequest("DELETE", delUrl);
+        } catch (e) {
+          // Best-effort compensation: remove the row we just created so
+          // we don't leave the track with duplicate credits. If the
+          // rollback itself fails we surface the original error.
+          const rollbackUrl =
+            eKind === "writer"
+              ? `/api/admin/writers/${created.id}`
+              : `/api/admin/performers/${created.id}`;
+          try {
+            await apiRequest("DELETE", rollbackUrl);
+          } catch {
+            // Rollback failed too — surface the original delete error.
+          }
+          throw e;
+        }
+      }
+    },
+    onSuccess: async () => {
+      await onInvalidate();
+      setEditing(false);
+      toast({ title: "Credit saved" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save credit",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const del = useMutation({
+    mutationFn: async () => {
+      const url =
+        kind === "writer"
+          ? `/api/admin/writers/${row.id}`
+          : `/api/admin/performers/${row.id}`;
+      await apiRequest("DELETE", url);
+    },
+    onSuccess: async () => {
+      await onInvalidate();
+      toast({ title: "Credit deleted" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't delete credit",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  if (editing) {
+    return (
+      <li
+        className="rounded-md bg-white border border-[#319ED8]/40 px-2.5 py-2 space-y-1.5"
+        data-testid={`row-credit-edit-${row.id}`}
+        onKeyDown={(e) => {
+          // Escape cancels the row edit. Stop propagation so the parent
+          // CreditsEditor doesn't also close the whole panel.
+          if (e.key === "Escape" && !save.isPending) {
+            e.preventDefault();
+            e.stopPropagation();
+            setEditing(false);
+          }
+        }}
+      >
+        <div className="grid grid-cols-[1fr_1fr] gap-1.5">
+          <PersonSelect
+            people={people}
+            value={personId}
+            onChange={(id) => {
+              setPersonId(id);
+              if (id) {
+                const p = people.find((pp) => pp.id === id);
+                if (p) setName(p.name);
+              }
+            }}
+            selectRef={editPersonRef}
+            testId={`select-person-${row.id}`}
+          />
+          <RoleSelect
+            roles={roles}
+            kind={eKind}
+            role={role}
+            onChange={(k, r) => {
+              setEKind(k);
+              setRole(r);
+            }}
+            testId={`select-role-${row.id}`}
+          />
+        </div>
+        {eKind === "performer" && (
+          <div className="grid grid-cols-[1fr_1fr] gap-1.5">
+            <InstrumentSelect
+              instruments={instruments}
+              value={instrumentId}
+              onChange={setInstrumentId}
+              testId={`select-instrument-${row.id}`}
+            />
+            <input
+              type="text"
+              value={tuningNotes}
+              onChange={(e) => setTuningNotes(e.target.value)}
+              placeholder="Tuning / setup notes…"
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+              data-testid={`input-tuning-${row.id}`}
+            />
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-1.5 pt-1">
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            disabled={save.isPending}
+            className="px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            data-testid={`button-cancel-credit-${row.id}`}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => save.mutate()}
+            disabled={save.isPending || !role}
+            className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+            data-testid={`button-save-credit-${row.id}`}
+          >
+            {save.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+            Save
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li
+      className="group flex items-center gap-2 text-[12.5px] hover:bg-slate-100/50 rounded px-1 py-0.5"
+      data-testid={`item-credit-${kind}-${row.id}`}
+    >
+      <PersonAvatar
+        name={row.person?.name ?? row.name}
+        photoUrl={row.person?.photoUrl ?? null}
+      />
+      <span className="text-slate-900 font-medium truncate flex-shrink-0">
+        {row.person?.name ?? row.name}
+      </span>
+      <span className="text-slate-400">·</span>
+      <span className="text-slate-500 truncate">{row.role}</span>
+      {kind === "performer" && (row as PerformerRow).instrument && (
+        <>
+          <span className="text-slate-300">on</span>
+          <span className="text-slate-700 truncate">
+            {(row as PerformerRow).instrument!.name}
+          </span>
+        </>
+      )}
+      {kind === "performer" && (row as PerformerRow).tuningNotes && (
+        <span className="text-slate-400 italic truncate">
+          ({(row as PerformerRow).tuningNotes})
+        </span>
+      )}
+      <span className="flex-1" />
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label="Edit credit"
+          title="Edit"
+          className="w-6 h-6 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center"
+          data-testid={`button-edit-credit-${row.id}`}
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (
+              window.confirm(
+                `Delete this credit (${row.person?.name ?? row.name} · ${row.role})?`,
+              )
+            ) {
+              del.mutate();
+            }
+          }}
+          disabled={del.isPending}
+          aria-label="Delete credit"
+          title="Delete"
+          className="w-6 h-6 rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center disabled:opacity-50"
+          data-testid={`button-delete-credit-${row.id}`}
+        >
+          {del.isPending ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Trash2 className="w-3 h-3" />
+          )}
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function AddCreditForm({
+  kind,
+  songId,
+  people,
+  instruments,
+  roles,
+  onCancel,
+  onSaved,
+}: {
+  kind: "writer" | "performer";
+  songId: string;
+  people: AdminPersonLite[];
+  instruments: AdminInstrumentLite[];
+  roles: AdminCreditRole[];
+  onCancel: () => void;
+  onSaved: () => Promise<void> | void;
+}) {
+  const { toast } = useToast();
+  const defaultRole =
+    roles.find((r) => r.kind === kind)?.name ??
+    (kind === "writer" ? "Composer" : "Performer");
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [role, setRole] = useState<string>(defaultRole);
+  const [instrumentId, setInstrumentId] = useState<string | null>(null);
+  const [tuningNotes, setTuningNotes] = useState<string>("");
+
+  const personSelectRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    queueMicrotask(() => personSelectRef.current?.focus());
+  }, []);
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const url =
+        kind === "writer"
+          ? `/api/admin/songs/${songId}/writers`
+          : `/api/admin/songs/${songId}/performers`;
+      const person = personId ? people.find((p) => p.id === personId) : null;
+      const body: any = {
+        personId,
+        name: person?.name ?? "",
+        role,
+      };
+      if (kind === "performer") {
+        body.instrumentId = instrumentId;
+        body.tuningNotes = tuningNotes.trim() || null;
+      }
+      await apiRequest("POST", url, body);
+    },
+    onSuccess: async () => {
+      await onSaved();
+      toast({ title: `${kind === "writer" ? "Writer" : "Performer"} added` });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't add credit",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div
+      className="rounded-md bg-white border border-[#319ED8]/40 px-2.5 py-2 space-y-1.5"
+      data-testid={`form-add-credit-${kind}`}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !create.isPending) {
+          e.preventDefault();
+          onCancel();
+        }
+      }}
+    >
+      <div className="text-[10.5px] uppercase tracking-wider font-semibold text-[#319ED8]">
+        Add {kind}
+      </div>
+      <div className="grid grid-cols-[1fr_1fr] gap-1.5">
+        <PersonSelect
+          people={people}
+          value={personId}
+          onChange={setPersonId}
+          selectRef={personSelectRef}
+          testId={`select-person-new-${kind}`}
+        />
+        <RoleSelect
+          roles={roles}
+          kind={kind}
+          role={role}
+          onChange={(_, r) => setRole(r)}
+          lockKind
+          testId={`select-role-new-${kind}`}
+        />
+      </div>
+      {kind === "performer" && (
+        <div className="grid grid-cols-[1fr_1fr] gap-1.5">
+          <InstrumentSelect
+            instruments={instruments}
+            value={instrumentId}
+            onChange={setInstrumentId}
+            testId={`select-instrument-new-${kind}`}
+          />
+          <input
+            type="text"
+            value={tuningNotes}
+            onChange={(e) => setTuningNotes(e.target.value)}
+            placeholder="Tuning / setup notes…"
+            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+            data-testid={`input-tuning-new-${kind}`}
+          />
+        </div>
+      )}
+      <div className="flex items-center justify-end gap-1.5 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={create.isPending}
+          className="px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+          data-testid={`button-cancel-add-${kind}`}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => create.mutate()}
+          disabled={create.isPending || !personId || !role}
+          className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+          data-testid={`button-save-add-${kind}`}
+        >
+          {create.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Credit pickers (simple selects backed by /api/people, /api/instruments,
+       /api/admin/credit-roles). Searchable comboboxes + inline-create
+       live in classic admin — admins can add people / instruments there
+       and they appear here on next refetch. ──────────────────────── */
+
+function PersonSelect({
+  people,
+  value,
+  onChange,
+  selectRef,
+  testId,
+}: {
+  people: AdminPersonLite[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  selectRef?: React.RefObject<HTMLSelectElement>;
+  testId?: string;
+}) {
+  const sorted = [...people].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <select
+      ref={selectRef}
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+      data-testid={testId}
+    >
+      <option value="">— Pick a person —</option>
+      {sorted.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function InstrumentSelect({
+  instruments,
+  value,
+  onChange,
+  testId,
+}: {
+  instruments: AdminInstrumentLite[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  testId?: string;
+}) {
+  const sorted = [...instruments].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+      data-testid={testId}
+    >
+      <option value="">— No instrument —</option>
+      {sorted.map((i) => (
+        <option key={i.id} value={i.id}>
+          {i.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function RoleSelect({
+  roles,
+  kind,
+  role,
+  onChange,
+  lockKind = false,
+  testId,
+}: {
+  roles: AdminCreditRole[];
+  kind: "writer" | "performer";
+  role: string;
+  onChange: (kind: "writer" | "performer", role: string) => void;
+  lockKind?: boolean;
+  testId?: string;
+}) {
+  const writerRoles = roles.filter((r) => r.kind === "writer");
+  const performerRoles = roles.filter((r) => r.kind === "performer");
+  // Encode as "kind:role" so flipping kinds via the same select works
+  // without a second dropdown. The edit-row save path picks up the kind
+  // change and triggers delete-then-create on the server.
+  const value = `${kind}:${role}`;
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        const [k, ...rest] = e.target.value.split(":");
+        onChange(k as "writer" | "performer", rest.join(":"));
+      }}
+      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+      data-testid={testId}
+    >
+      {(lockKind ? kind === "writer" : true) && writerRoles.length > 0 && (
+        <optgroup label="Writer">
+          {writerRoles.map((r) => (
+            <option key={r.id} value={`writer:${r.name}`}>
+              {r.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {(lockKind ? kind === "performer" : true) && performerRoles.length > 0 && (
+        <optgroup label="Performer">
+          {performerRoles.map((r) => (
+            <option key={r.id} value={`performer:${r.name}`}>
+              {r.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {/* Always include the current role even if it's not in the canonical
+          list (legacy data, custom role added via classic admin, etc.). */}
+      {!roles.some((r) => r.kind === kind && r.name === role) && role && (
+        <option value={value}>{role}</option>
+      )}
+    </select>
   );
 }
 
