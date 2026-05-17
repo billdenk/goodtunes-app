@@ -1677,9 +1677,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // a 30-word run-on.
     const LINE_GAP_S = 0.55;
     const MAX_WORDS_PER_LINE = 12;
-    const out: { timeMs: number; text: string }[] = [];
+    const out: { timeMs: number; endMs: number; text: string }[] = [];
     let curWords: string[] = [];
     let curStart = words[0].start;
+    let curEnd = words[0].end;
     let prevEnd = -1;
     let prevEndedSentence = false;
     const sentenceEnd = /[.!?]\s*$/;
@@ -1691,17 +1692,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (shouldBreak) {
         out.push({
           timeMs: Math.round(curStart * 1000),
+          endMs: Math.round(curEnd * 1000),
           text: curWords.join(" "),
         });
         curWords = [];
         curStart = w.start;
       }
       curWords.push(w.text);
+      curEnd = w.end;
       prevEnd = w.end;
       prevEndedSentence = sentenceEnd.test(w.text);
     }
     if (curWords.length) {
-      out.push({ timeMs: Math.round(curStart * 1000), text: curWords.join(" ") });
+      out.push({
+        timeMs: Math.round(curStart * 1000),
+        endMs: Math.round(curEnd * 1000),
+        text: curWords.join(" "),
+      });
     }
 
     const updated = await storage.updateSong(id, { syncedLyrics: out });

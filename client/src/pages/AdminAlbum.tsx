@@ -2516,26 +2516,35 @@ function GoodSyncPanel({
                   const isActive = i === activeIdx;
                   const isPast = i < activeIdx;
                   // Apple-Music-style three-dot pulse for *real*
-                  // instrumental gaps. Threshold is 6s — normal lyric
-                  // breathing room (3–5s between lines) shouldn't
-                  // trigger dots; only genuine silences (intros,
-                  // bridges, solos) should. Bill: "they started
-                  // jumping lines and inserting themselves" — that
-                  // was the old 3s threshold catching ordinary line
-                  // breaks. Intro gap counts too: prev time is 0 for
-                  // the first cue.
-                  const prevTime =
-                    i === 0 ? 0 : previewCues[i - 1].timeMs / 1000;
+                  // instrumental gaps. We measure the silence AFTER
+                  // the previous line ends (endMs from STT) — not
+                  // from when it started — so the dots no longer
+                  // start counting up while the previous line is
+                  // still being sung. Threshold is 3s of actual
+                  // silence; ordinary line breathing (≤2s) stays
+                  // dot-free. Intro gap counts: prevEnd is 0 for
+                  // the first cue. If endMs is missing (older synced
+                  // data), fall back to a short fixed estimate so
+                  // dots still appear during obvious instrumentals.
+                  const prevCue = i === 0 ? null : previewCues[i - 1];
                   const cueTime = cue.timeMs / 1000;
-                  const gap = cueTime - prevTime;
+                  const prevEnd = !prevCue
+                    ? 0
+                    : prevCue.endMs != null
+                      ? prevCue.endMs / 1000
+                      : Math.min(
+                          cueTime - 0.3,
+                          prevCue.timeMs / 1000 + 3,
+                        );
+                  const silence = cueTime - prevEnd;
                   const inGap =
-                    currentTime >= prevTime &&
+                    currentTime >= prevEnd &&
                     currentTime < cueTime &&
-                    gap >= 6;
+                    silence >= 3;
                   const gapProgress = inGap
                     ? Math.max(
                         0,
-                        Math.min(1, (currentTime - prevTime) / gap),
+                        Math.min(1, (currentTime - prevEnd) / silence),
                       )
                     : 0;
                   return (
@@ -2764,7 +2773,7 @@ function LyricsEditor({
             the right (Bill's spec). On narrow viewports they stack so
             admin-on-mobile still works. The outer ExpandedPanel header
             already announces "Lyrics" globally — we call the left pane
-            "Words" inside so the two siblings ("Words" / "GoodSync™")
+            "Plain" inside so the two siblings ("Plain" / "GoodSync™")
             each have a unique label and the section title doesn't
             duplicate itself. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -2772,7 +2781,7 @@ function LyricsEditor({
           <div className="flex flex-col gap-2 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-[13px] font-semibold text-slate-800">
-                Words
+                Plain
               </h4>
               <span className="text-[10px] text-slate-400 tabular-nums">
                 {lineCount} {lineCount === 1 ? "line" : "lines"}
