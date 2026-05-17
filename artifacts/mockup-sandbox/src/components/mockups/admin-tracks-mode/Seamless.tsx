@@ -29,26 +29,25 @@ import {
 } from "lucide-react";
 
 /* ── GoodSync™ glyph ───────────────────────────────────────────────────
-   Custom inline mark — five rounded vertical bars whose TOPS trace an
-   arrowhead pointing up: short, medium, tallest (center), medium, short.
-   Reads as "audio waves rising to a peak" — visually says synced /
-   highlighted moment without conflicting with Lucide icons already in
-   use elsewhere (Sparkles, Zap, AudioLines, RefreshCw all carry meaning
-   in other admin surfaces). 24×24 viewBox, bars centered on x=12 so the
-   mark sits dead-center when scaled into the small blue circle.       */
+   Custom inline mark — four rounded vertical bars that peak just LEFT
+   of center and taper down to the right, like a waveform decaying. Reads
+   as "audio with forward motion" rather than a symmetric mountain. Bar
+   coordinates were authored by Bill in a 100×100 grid and ported in 1:1.
+   No Lucide collision: Sparkles, Zap, AudioLines, RefreshCw all carry
+   meaning elsewhere in the admin surfaces. Bars are vertically centered
+   around y=50 so the glyph sits dead-center inside its badge.          */
 function WaveArrowGlyph(props: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 24 24"
+      viewBox="0 0 100 100"
       fill="currentColor"
       className={props.className}
       aria-hidden
     >
-      <rect x="3"  y="10.5" width="2" height="3"  rx="1" />
-      <rect x="7"  y="8"    width="2" height="8"  rx="1" />
-      <rect x="11" y="5"    width="2" height="14" rx="1" />
-      <rect x="15" y="8"    width="2" height="8"  rx="1" />
-      <rect x="19" y="10.5" width="2" height="3"  rx="1" />
+      <rect x="26.5" y="40" width="8" height="20" rx="4" />
+      <rect x="39.5" y="28" width="8" height="44" rx="4" />
+      <rect x="52.5" y="34" width="8" height="32" rx="4" />
+      <rect x="65.5" y="43" width="8" height="14" rx="4" />
     </svg>
   );
 }
