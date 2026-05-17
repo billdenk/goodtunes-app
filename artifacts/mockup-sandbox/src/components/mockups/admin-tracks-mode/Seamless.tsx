@@ -50,10 +50,10 @@ function WaveArrowGlyph(props: { className?: string }) {
       className={props.className}
       aria-hidden
     >
-      <rect x="14" y="40" width="10" height="20" rx="2" />
-      <rect x="32" y="22" width="10" height="56" rx="2" />
-      <rect x="50" y="32" width="10" height="36" rx="2" />
-      <rect x="68" y="42" width="10" height="16" rx="2" />
+      <rect x="18" y="40" width="10" height="20" rx="2" />
+      <rect x="36" y="22" width="10" height="56" rx="2" />
+      <rect x="54" y="32" width="10" height="36" rx="2" />
+      <rect x="72" y="42" width="10" height="16" rx="2" />
     </svg>
   );
 }
@@ -207,17 +207,16 @@ function StatusMeter({
   // vs. ring).
   const renderDot = (state: DotState) => {
     if (state === "synced") {
-      // Synced badge is deliberately ~30% bigger than its 14px siblings —
-      // the green check vs blue badge contrast alone gets lost at small
-      // size, but a small physical lift makes the row read "this one is
-      // the premium state" at a glance. Glyph fills ~70% of the badge so
-      // the bars have edge-margin breathing room.
+      // Synced badge sits a hair larger than its 14px siblings (16px vs
+      // 14) — just enough lift to read as "the premium state" without
+      // shouting over the row's name/duration. Glyph fills ~62% of the
+      // badge so the bars keep edge-margin breathing room.
       return (
         <span
-          className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center"
+          className="w-4 h-4 rounded-full inline-flex items-center justify-center"
           style={{ backgroundColor: "#319ED8" }}
         >
-          <WaveArrowGlyph className="w-[13px] h-[13px] text-white" />
+          <WaveArrowGlyph className="w-2.5 h-2.5 text-white" />
         </span>
       );
     }
