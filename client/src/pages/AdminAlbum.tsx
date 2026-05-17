@@ -1250,10 +1250,15 @@ function StatusBadge({
   testId?: string;
   buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
+  // Single icon color per concept — same in collapsed AND expanded
+  // states so tapping a tile doesn't make the glyph appear to swap
+  // identities. Brand blue everywhere (Master / Preview / Lyrics /
+  // Credits all read as "GoodTunes editor"); the only deviation is
+  // amber for a still-required Master, which is a real warning.
   const notOkIcon =
     severity === "required"
       ? "bg-amber-50 text-amber-600"
-      : "bg-slate-100 text-slate-500";
+      : "bg-[#319ED8]/10 text-[#319ED8]";
   const emphasized = size === "emphasized";
   // Active = "you've opened this tile's editor." Apple's pattern for
   // a selected cell: tinted background + brand-color ring, not just a
@@ -1282,7 +1287,7 @@ function StatusBadge({
         <span
           className={[
             "w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0",
-            ok ? "bg-emerald-50 text-emerald-600" : notOkIcon,
+            notOkIcon,
           ].join(" ")}
         >
           <Icon className="w-4 h-4" />
@@ -1319,7 +1324,7 @@ function StatusBadge({
           className={[
             "rounded-md inline-flex items-center justify-center flex-shrink-0",
             emphasized ? "w-10 h-10" : "w-7 h-7",
-            ok ? "bg-emerald-50 text-emerald-600" : notOkIcon,
+            notOkIcon,
           ].join(" ")}
         >
           <Icon className={emphasized ? "w-5 h-5" : "w-3.5 h-3.5"} />
@@ -1880,7 +1885,7 @@ function TrackRow({
                 hide. Tapping the panel header collapses back to the
                 3-up grid. */}
             <div>
-              <div className="flex items-center gap-2 mb-2.5">
+              <div className="flex items-center gap-2 mb-3.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Optional
                 </span>
@@ -2197,11 +2202,10 @@ function LyricsEditor({
       }}
     >
       <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 space-y-2.5">
-        <div className="flex items-center gap-2">
-          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
-            Lyrics
-          </span>
+        {/* No inner header — the ExpandedPanel already shows the
+            Lyrics icon + label up top. We only surface the line
+            count as a quiet right-aligned counter. */}
+        <div className="flex items-center justify-end">
           <span className="text-[10.5px] text-slate-400 tabular-nums">
             {lineCount} {lineCount === 1 ? "line" : "lines"}
           </span>
@@ -2408,20 +2412,20 @@ function SyncedLyricsEditor({
         ].join(" ")}
         data-testid={`dropzone-vtt-${song.id}`}
       >
-        <div className="flex items-center gap-2">
-          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
-            Synced lyrics (WebVTT)
-            {cueCount > 0 && (
-              <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
-                · {cueCount} cue{cueCount === 1 ? "" : "s"}
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-[10.5px] text-slate-400 tabular-nums">
+            {cueCount > 0 ? (
+              <>
+                {cueCount} cue{cueCount === 1 ? "" : "s"}
                 {dirty && origCount !== cueCount && (
                   <span className="text-[#319ED8]">
                     {" "}
                     (was {origCount})
                   </span>
                 )}
-              </span>
+              </>
+            ) : (
+              "No cues yet"
             )}
             {parsing && (
               <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
@@ -2601,19 +2605,18 @@ function CreditsEditor({
       }}
     >
       <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
-            SuperCredits
-            {total > 0 && (
-              <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
-                · {writers.length} writer{writers.length === 1 ? "" : "s"} ·{" "}
-                {performers.length} performer
-                {performers.length === 1 ? "" : "s"}
-              </span>
-            )}
-          </span>
-        </div>
+        {/* ExpandedPanel already shows the Credits icon + "Credits"
+            label at the top. We keep just the quiet stats line on
+            the right. */}
+        {total > 0 && (
+          <div className="flex items-center justify-end">
+            <span className="text-[10.5px] text-slate-400">
+              {writers.length} writer{writers.length === 1 ? "" : "s"} ·{" "}
+              {performers.length} performer
+              {performers.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
 
         {total === 0 && !adding && (
           <p className="text-[12px] text-slate-500 leading-snug">
