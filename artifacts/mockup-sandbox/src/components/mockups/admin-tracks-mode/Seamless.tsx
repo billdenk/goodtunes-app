@@ -24,15 +24,23 @@ import {
   Volume2,
   VolumeX,
   Mic2,
+  CheckCircle2,
+  BadgeCheck,
+  Circle,
 } from "lucide-react";
 
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
+// `lyricsSync` flags GoodSync™-verified lyrics (the middle dot renders brand
+// blue instead of green to signal the premium/authenticated state).
+// `creditsPartial` is true when the artist has filled SOME credit slots but
+// not all of them — the credits dot renders amber so the row reads as
+// "in progress" rather than "empty or done."
 const TRACKS = [
-  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  duration: "3:30" },
-  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  instrumental: false, credits: false, duration: "4:12" },
-  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: false, instrumental: true,  credits: true,  duration: "2:58" },
-  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  duration: "3:47" },
-  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, duration: "—" },
+  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: false, creditsPartial: false, duration: "3:30" },
+  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  instrumental: false, credits: false, lyricsSync: false, creditsPartial: true,  duration: "4:12" },
+  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: false, instrumental: true,  credits: true,  lyricsSync: false, creditsPartial: false, duration: "2:58" },
+  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: true,  creditsPartial: false, duration: "3:47" },
+  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, lyricsSync: false, creditsPartial: false, duration: "—" },
 ];
 
 /* ── Animated 3-bar equalizer for the "now-playing" row indicator.
@@ -59,7 +67,7 @@ function WaveBars({ paused = false }: { paused?: boolean }) {
   );
 }
 
-/* ── Dot meter (collapsed row, right side) ─────────────────────────── */
+/* ── Completion meter (collapsed row, right side) ──────────────────── */
 function StatusMeter({
   t,
   onExpand,
@@ -67,74 +75,171 @@ function StatusMeter({
   t: (typeof TRACKS)[number];
   onExpand: () => void;
 }) {
-  // Completeness meter — three dots (master · lyrics · credits) + n/3 count.
-  // Replaces the old READY/MASTER/DRAFT word + 2-dot pill. Picked from
-  // EditRowOptions Option C because:
-  //   • Shape carries the signal (filled circle vs hollow ring), so a
-  //     deuteranopic reader gets the state without depending on green.
-  //   • Compact — sits flush with the duration label at the right edge.
-  //   • No new brand colors — emerald-500 (filled) + slate hairline ring
-  //     (empty) + amber-600 (count when incomplete) reuses what's already
-  //     on the page.
-  //   • Tooltip on the wrapper expands "•○•  2/3" into a plain-English
-  //     "Master: ✓ · Lyrics: missing · Credits: ✓" line.
+  // Master is the GATE. Everything else is optional polish on top of a
+  // real master, so the meter has two distinct shapes:
   //
-  // Instrumental tracks count as "lyrics complete" — the instrumental
-  // flag is the artist explicitly saying "this song has no lyrics, that's
-  // intentional," which is the same publish-state as having a lyric sheet.
-  const dots = [
-    { ok: t.master, label: "Master" },
-    { ok: t.lyrics || t.instrumental, label: t.instrumental ? "Lyrics (instrumental)" : "Lyrics" },
-    { ok: t.credits, label: "Credits" },
+  //   • Master MISSING → render a single "Upload" call-to-action where
+  //     the dots would normally sit. Duration is already "—" on these
+  //     rows (see TRACKS data), so the row reads at a glance as
+  //     "no master · needs upload." We don't show the optional dots at
+  //     all in this state — they'd be moot (no master = nothing to
+  //     preview, no lyrics to attach, no credits to fill).
+  //
+  //   • Master PRESENT → 3 small dots for Preview · Lyrics · Credits
+  //     (all optional). Each dot is hollow grey when empty, filled
+  //     emerald when complete. Two color exceptions carry extra signal:
+  //
+  //       LYRICS  — if the artist used GoodSync™ to sync lyrics, the
+  //                 middle dot renders GoodTunes brand BLUE (#319ED8)
+  //                 instead of emerald. Same "done" shape, but the color
+  //                 calls out the premium/authenticated state. (Future
+  //                 polish: swap the circle for a small checkmark glyph
+  //                 inside so the verified state reads without needing
+  //                 to read color — Bill's "authenticated graphics"
+  //                 idea. Deferred until the GoodSync feature ships.)
+  //
+  //       CREDITS — if the artist has filled SOME credit categories but
+  //                 not all of them, the last dot renders AMBER (in-
+  //                 progress) instead of grey-empty or green-done. Shape
+  //                 stays "filled" so a deuteranopic reader still sees
+  //                 it as "this one has activity, click to finish."
+  //
+  // Order is Preview · Lyrics · Credits (left to right) because that's
+  // the order a real artist tackles them after uploading a master.
+  //
+  // Instrumental still counts as "Lyrics done" — the instrumental flag
+  // is the artist explicitly saying "this song has no lyrics, that's
+  // intentional," which is the same publish-state as a real lyric sheet.
+
+  // ── Master-missing branch: render the Upload call-to-action only ──
+  if (!t.master) {
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        aria-label={`${t.title}: master is missing — tap to upload`}
+        title="Master is missing — tap to upload"
+        className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wider text-amber-600 hover:bg-amber-50"
+      >
+        Upload
+      </button>
+    );
+  }
+
+  // ── Master-present branch: 3 optional-piece dots ──────────────────
+  type DotState = "empty" | "done" | "synced" | "partial";
+  const lyricsDone = t.lyrics || t.instrumental;
+  const dots: { state: DotState; label: string; hint: string }[] = [
+    {
+      state: t.snippet ? "done" : "empty",
+      label: "Preview",
+      hint: t.snippet ? "30-sec preview uploaded" : "30-sec preview not set",
+    },
+    {
+      state: t.lyricsSync
+        ? "synced"
+        : lyricsDone
+        ? "done"
+        : "empty",
+      label: "Lyrics",
+      hint: t.lyricsSync
+        ? "Lyrics synced with GoodSync™"
+        : t.instrumental
+        ? "Marked instrumental"
+        : t.lyrics
+        ? "Lyrics added"
+        : "Lyrics not added",
+    },
+    {
+      state: t.credits
+        ? "done"
+        : t.creditsPartial
+        ? "partial"
+        : "empty",
+      label: "Credits",
+      hint: t.credits
+        ? "Credits complete"
+        : t.creditsPartial
+        ? "Credits partially filled"
+        : "Credits not added",
+    },
   ];
-  const complete = dots.every((d) => d.ok);
-  const filled = dots.filter((d) => d.ok).length;
-  // Spell out the state for screen readers — the visual is shape + count,
-  // but a SR user can't see "filled vs hollow" through a title-attr alone.
-  const ariaLabel = complete
-    ? `${t.title}: all required pieces complete`
-    : `${t.title}: ${filled} of 3 complete — ${dots
-        .filter((d) => !d.ok)
-        .map((d) => d.label)
-        .join(", ")} still needed`;
-  // Clickable when incomplete so a tap routes the artist to the expanded
-  // row where Master/Lyrics/Credits live. Complete rows aren't a control —
-  // nothing left to do — so we render a plain span there.
-  const Tag = complete ? "span" : "button";
+
+  // Per-dot glyph. Shape is now the primary signal — "done" states wear
+  // a tiny check inside their badge, "synced" wears the same check but
+  // inside a SCALLOPED verification badge (same family as Twitter/Apple
+  // verified marks), "partial" is a filled amber circle without a check
+  // (work-in-progress, not yet earned a check), and "empty" is a hollow
+  // grey ring. Color still carries meaning, but a deuteranopic reader
+  // can tell the four states apart from the silhouette alone.
+  const renderDot = (state: DotState) => {
+    if (state === "synced")
+      return (
+        <BadgeCheck
+          className="w-3.5 h-3.5 text-[#319ED8]"
+          strokeWidth={2.25}
+          fill="#319ED8"
+          stroke="white"
+        />
+      );
+    if (state === "done")
+      return (
+        <CheckCircle2
+          className="w-3.5 h-3.5 text-emerald-500"
+          strokeWidth={2.25}
+          fill="currentColor"
+          stroke="white"
+        />
+      );
+    if (state === "partial")
+      return (
+        <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
+      );
+    return (
+      <Circle
+        className="w-3 h-3 text-slate-300"
+        strokeWidth={1.5}
+      />
+    );
+  };
+
+  // Spell the state out for screen readers — color and fill don't carry
+  // through a `title` attribute alone.
+  const allEmpty = dots.every((d) => d.state === "empty");
+  const allDone = dots.every(
+    (d) => d.state === "done" || d.state === "synced",
+  );
+  const ariaLabel = `${t.title}: ${dots
+    .map((d) => `${d.label} — ${d.hint}`)
+    .join("; ")}`;
+
+  // Clickable when there's something the artist could still do (i.e. not
+  // every optional piece is complete). A fully-finished row is just a
+  // status display, not a control — render as `<span>`.
+  const Tag = allDone ? "span" : "button";
+
   return (
     <Tag
-      {...(complete
+      {...(allDone
         ? {}
         : { type: "button" as const, onClick: onExpand })}
       aria-label={ariaLabel}
-      title={dots.map((d) => `${d.label}: ${d.ok ? "✓" : "missing"}`).join(" · ")}
+      title={dots.map((d) => `${d.label}: ${d.hint}`).join(" · ")}
       className={[
-        "flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md",
-        complete ? "cursor-default" : "hover:bg-slate-100",
+        "flex-shrink-0 inline-flex items-center gap-0.5 px-2 py-1 rounded-md",
+        allDone
+          ? "cursor-default"
+          : allEmpty
+          ? "hover:bg-slate-100"
+          : "hover:bg-slate-100",
       ].join(" ")}
     >
-      {/* Shape-coded row of 3 dots — filled emerald = done, hairline ring
-          = needed. Reads at a glance even when color drops out. */}
-      <span className="flex items-center gap-0.5" aria-hidden>
+      <span className="flex items-center gap-1" aria-hidden>
         {dots.map((d, i) => (
-          <span
-            key={i}
-            className={[
-              "w-2 h-2 rounded-full",
-              d.ok
-                ? "bg-emerald-500"
-                : "bg-transparent ring-1 ring-inset ring-slate-300",
-            ].join(" ")}
-          />
+          <span key={i} className="inline-flex items-center justify-center">
+            {renderDot(d.state)}
+          </span>
         ))}
-      </span>
-      <span
-        className={[
-          "text-[10.5px] font-semibold tabular-nums",
-          complete ? "text-slate-400" : "text-amber-600",
-        ].join(" ")}
-      >
-        {filled}/3
       </span>
     </Tag>
   );
@@ -394,9 +499,15 @@ function Row({
           </div>
         ) : (
           <div className="flex items-center gap-3 flex-shrink-0">
-            <span className="text-slate-400 text-[11.5px] tabular-nums w-9 text-right">
-              {t.duration}
-            </span>
+            {/* When the master is missing, the StatusMeter renders an
+                "Upload" call-to-action on its own — no duration dash
+                next to it, since the orange CTA already carries both
+                "no master" and "what to do about it." */}
+            {t.master && (
+              <span className="text-slate-400 text-[11.5px] tabular-nums w-9 text-right">
+                {t.duration}
+              </span>
+            )}
             <StatusMeter t={t} onExpand={onExpand} />
           </div>
         )}
