@@ -29,6 +29,7 @@ import {
   Circle,
   CheckCircle2,
   Ban,
+  Lock,
 } from "lucide-react";
 import {
   Popover,
@@ -92,6 +93,8 @@ interface SongLite {
   audioUrl: string | null;
   syncedLyrics?: { timeMs: number; text: string }[] | null;
   instrumental?: boolean | null;
+  previewStartMs?: number | null;
+  previewEndMs?: number | null;
 }
 
 type Tab = "overview" | "tracks" | "artwork" | "masters" | "bonus";
@@ -839,6 +842,7 @@ type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
      · empty        — hollow grey ring (Circle)
      · done         — green disc + white check (CheckCircle2)
      · synced       — brand-blue disc + custom WaveArrowGlyph (GoodSync™)
+     · custom       — gold disc + ClipGlyph (admin hand-picked preview)
      · partial      — solid amber disc (credits: some but not all)
      · instrumental — grey disc + Ban glyph (lyrics: none by design)
    ──────────────────────────────────────────────────────────────── */
@@ -859,7 +863,33 @@ function WaveArrowGlyph({ className = "" }: { className?: string }) {
   );
 }
 
-type DotState = "empty" | "done" | "synced" | "partial" | "instrumental";
+/* Timeline-clip glyph for the gold "custom preview window" state.
+   A wide rounded rectangle (the chosen slice) sitting on a thin
+   baseline (the master's full timeline). Reads as "a window picked
+   out of a longer thing" at 10–14px. */
+function ClipGlyph({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      {/* Baseline (the full master) */}
+      <rect x="10" y="64" width="80" height="6" rx="3" fill="white" opacity="0.55" />
+      {/* Chosen window (the 30s clip) */}
+      <rect x="28" y="34" width="44" height="28" rx="6" fill="white" />
+    </svg>
+  );
+}
+
+type DotState =
+  | "empty"
+  | "done"
+  | "synced"
+  | "custom"
+  | "partial"
+  | "instrumental";
 
 function renderDot(state: DotState) {
   if (state === "done")
@@ -877,6 +907,22 @@ function renderDot(state: DotState) {
         <WaveArrowGlyph className="w-2.5 h-2.5" />
       </span>
     );
+  if (state === "custom")
+    return (
+      <span
+        className="w-4 h-4 rounded-full inline-flex items-center justify-center"
+        // Gold with a subtle inner highlight so it reads metallic, not
+        // mustard. Differentiated from amber "partial" (flat color) and
+        // from blue "synced" so each pip carries a distinct meaning.
+        style={{
+          background:
+            "linear-gradient(180deg, #F2C94C 0%, #D4A017 60%, #B8860B 100%)",
+          boxShadow: "inset 0 0.5px 0 rgba(255,255,255,0.55)",
+        }}
+      >
+        <ClipGlyph className="w-2.5 h-2.5" />
+      </span>
+    );
   if (state === "partial")
     return (
       <span className="w-3.5 h-3.5 rounded-full bg-amber-500 inline-block" />
@@ -892,6 +938,7 @@ function renderDot(state: DotState) {
 
 function dotHint(label: string, state: DotState): string {
   if (state === "synced") return `${label} · GoodSync™ ready`;
+  if (state === "custom") return `${label} — custom 30-sec clip picked`;
   if (state === "done") return `${label} complete`;
   if (state === "partial") return `${label} partial — keep going`;
   if (state === "instrumental") return "Lyrics — instrumental (none by design)";
@@ -1164,7 +1211,14 @@ function TrackRow({
                   );
                 }
                 // Master is uploaded — derive the three optional dots.
-                const previewState: DotState = "done"; // v1: auto from master
+                // Preview dot:
+                //   · auto-derived from master (default) → green check
+                //   · admin hand-picked a window → gold disc + ClipGlyph
+                // The server enforces an atomic window (both fields null
+                // or both finite); we key state off start only so the row
+                // dot and the in-editor pip never disagree.
+                const previewState: DotState =
+                  song.previewStartMs != null ? "custom" : "done";
                 const lyricsState: DotState = song.instrumental
                   ? "instrumental"
                   : (song.syncedLyrics?.length ?? 0) > 0
@@ -2584,6 +2638,230 @@ function PersonAvatar({
   );
 }
 
+/* ─── Preview window editor (v0 of the GoodTunes Preview Slider™) ─────
+   30-second in-app preview. Two paths today:
+     · Auto (default) → first 30s of the master · Preview dot is green
+     · Custom         → admin typed a start MM:SS · Preview dot is gold
+
+   This is the typed-input precursor to the visual slider. Same data
+   path: `previewStartMs` + `previewEndMs` on the song row. When the
+   waveform slider lands it will replace this MM:SS input and write to
+   the same two fields, so the gold-disc + dot meter already work.
+   ──────────────────────────────────────────────────────────────────── */
+
+function formatTimeMs(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function parseTimeStr(s: string): number | null {
+  // Forgiving M:S / M:SS / MM:SS. Single-digit seconds (e.g. "1:5")
+  // is accepted and treated as "1:05" — admins type fast.
+  const m = s.trim().match(/^(\d{1,3}):(\d{1,2})$/);
+  if (!m) return null;
+  const min = Number(m[1]);
+  const sec = Number(m[2]);
+  if (!Number.isFinite(min) || !Number.isFinite(sec) || sec >= 60) return null;
+  return (min * 60 + sec) * 1000;
+}
+
+function PreviewWindowEditor({
+  song,
+  onSaved,
+}: {
+  song: SongLite;
+  onSaved: () => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const hasCustom = song.previewStartMs != null;
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string>(
+    hasCustom ? formatTimeMs(song.previewStartMs!) : "0:00",
+  );
+
+  const durationMs = (song.duration ?? 0) * 1000;
+  const maxStartMs = Math.max(0, durationMs - 30000);
+
+  const saveMut = useMutation({
+    mutationFn: async (
+      next: { startMs: number; endMs: number } | null,
+    ) =>
+      apiRequest(
+        "PUT",
+        `/api/admin/songs/${song.id}`,
+        next
+          ? { previewStartMs: next.startMs, previewEndMs: next.endMs }
+          : { previewStartMs: null, previewEndMs: null },
+      ),
+    onSuccess: async (_d, next) => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      await onSaved();
+      toast({
+        title: next ? "Custom preview saved" : "Preview reset to auto",
+      });
+      setOpen(false);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save the preview window",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const handleSave = () => {
+    const startMs = parseTimeStr(draft);
+    if (startMs == null) {
+      toast({
+        title: "Enter a time like 1:05",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (durationMs > 0 && startMs > maxStartMs) {
+      toast({
+        title: `Start can't be past ${formatTimeMs(maxStartMs)}`,
+        description: `Master ends at ${formatTimeMs(durationMs)} — leave at least 30 seconds.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    saveMut.mutate({ startMs, endMs: startMs + 30000 });
+  };
+
+  return (
+    <div
+      className="rounded-lg bg-white border border-slate-200 px-3 py-2 space-y-2"
+      data-testid={`preview-window-${song.id}`}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="w-4 h-4 rounded-full inline-flex items-center justify-center flex-shrink-0"
+          style={
+            hasCustom
+              ? {
+                  background:
+                    "linear-gradient(180deg, #F2C94C 0%, #D4A017 60%, #B8860B 100%)",
+                  boxShadow: "inset 0 0.5px 0 rgba(255,255,255,0.55)",
+                }
+              : undefined
+          }
+        >
+          {hasCustom ? (
+            <ClipGlyph className="w-2.5 h-2.5" />
+          ) : (
+            <CheckCircle2
+              className="w-4 h-4 text-emerald-500"
+              fill="currentColor"
+              stroke="white"
+              strokeWidth={2.25}
+            />
+          )}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12.5px] font-semibold text-slate-700 leading-tight">
+            {hasCustom ? "Custom 30-second preview" : "Auto preview"}
+          </div>
+          <div className="text-[10.5px] text-slate-400 leading-tight mt-0.5">
+            {hasCustom
+              ? `${formatTimeMs(song.previewStartMs!)} – ${formatTimeMs(
+                  song.previewEndMs ?? song.previewStartMs! + 30000,
+                )}`
+              : `First 30 seconds (0:00 – 0:30)`}
+          </div>
+        </div>
+        {!open && (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(
+                hasCustom ? formatTimeMs(song.previewStartMs!) : "0:00",
+              );
+              setOpen(true);
+            }}
+            className="text-[11.5px] text-[#319ED8] hover:underline font-semibold"
+            data-testid={`button-edit-preview-${song.id}`}
+          >
+            {hasCustom ? "Edit" : "Pick custom"}
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+          <label
+            htmlFor={`input-preview-start-${song.id}`}
+            className="text-[11px] text-slate-500 font-semibold mt-2"
+          >
+            Start
+          </label>
+          <input
+            id={`input-preview-start-${song.id}`}
+            type="text"
+            inputMode="numeric"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="0:00"
+            disabled={saveMut.isPending}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSave();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setOpen(false);
+              }
+            }}
+            className="w-16 h-7 rounded-md border border-slate-300 bg-white px-2 text-[12.5px] text-slate-900 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent mt-2"
+            data-testid={`input-preview-start-${song.id}`}
+          />
+          <span className="text-[10.5px] text-slate-400 mt-2">
+            → ends 30s later
+          </span>
+          <div className="flex-1" />
+          {hasCustom && (
+            <button
+              type="button"
+              onClick={() => saveMut.mutate(null)}
+              disabled={saveMut.isPending}
+              className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40 mt-2"
+              data-testid={`button-reset-preview-${song.id}`}
+            >
+              Reset to auto
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            disabled={saveMut.isPending}
+            className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40 mt-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saveMut.isPending}
+            className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1 mt-2"
+            data-testid={`button-save-preview-${song.id}`}
+          >
+            {saveMut.isPending ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Lock className="w-3 h-3" />
+            )}
+            Save &amp; lock
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Per-track audio editor (drag-drop, file picker, paste URL) ─────── */
 
 function AudioEditor({
@@ -2765,6 +3043,12 @@ function AudioEditor({
             {localError}
           </p>
         )}
+
+        {/* Preview window — auto by default, custom on demand. Only
+            meaningful once the master exists; before then there's
+            nothing to clip. The Preview status dot on the tracklist
+            row reads off the same previewStartMs/End fields. */}
+        {song.audioUrl && <PreviewWindowEditor song={song} onSaved={onSaved} />}
 
         {/* Instrumental flag lives with the master — it's a property of
             the audio itself. When on, the LyricsEditor disables its

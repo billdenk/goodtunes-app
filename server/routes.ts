@@ -1374,7 +1374,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics, instrumental } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics, instrumental, previewStartMs, previewEndMs } = req.body ?? {};
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
@@ -1382,6 +1382,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
     if (audioUrl !== undefined) updates.audioUrl = audioUrl ? String(audioUrl) : null;
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
+    // Preview window is atomic: either both fields null (auto-derived
+    // from the master, default) or both finite non-negative integers
+    // with end > start. We reject partial/NaN updates with a 400 so
+    // the dot meter and the editor can never disagree about state.
+    if (previewStartMs !== undefined || previewEndMs !== undefined) {
+      const sIn = previewStartMs;
+      const eIn = previewEndMs;
+      if (sIn === null && eIn === null) {
+        updates.previewStartMs = null;
+        updates.previewEndMs = null;
+      } else {
+        const sN = Number(sIn);
+        const eN = Number(eIn);
+        if (
+          !Number.isFinite(sN) ||
+          !Number.isFinite(eN) ||
+          sN < 0 ||
+          eN <= sN
+        ) {
+          return res.status(400).json({
+            error:
+              "previewStartMs and previewEndMs must be finite non-negative integers with end > start (or both null).",
+          });
+        }
+        updates.previewStartMs = Math.round(sN);
+        updates.previewEndMs = Math.round(eN);
+      }
+    }
     // Synced lyrics: an array of { timeMs, text } cues parsed client-side
     // from a .vtt file. Validate the shape defensively — anything that
     // doesn't look like a non-empty cue array is stored as null so the

@@ -143,6 +143,17 @@ export const songs = pgTable("songs", {
   // outro). The Lyrics status dot then reads "intentionally none" (grey
   // Ban glyph) instead of "missing" (empty grey ring). Default false.
   instrumental: boolean("instrumental").notNull().default(false),
+  // The 30-second in-app preview window. When both are null, the player
+  // auto-derives a preview from the first 30s of the master (v1 default
+  // → Preview status dot reads "auto-set", green check). When the admin
+  // hand-picks a window via the Preview Slider™ — by dragging the
+  // handles, typing a timestamp, or uploading a custom clip — these
+  // store the chosen window in milliseconds and the Preview dot flips
+  // to the gold "custom clip" state (rounded-rectangle glyph). FK is
+  // implicit: the window lives on the master, not the song row, but the
+  // master is one-to-one with the song so we colocate the fields here.
+  previewStartMs: integer("preview_start_ms"),
+  previewEndMs: integer("preview_end_ms"),
 });
 
 export const userAlbums = pgTable(
