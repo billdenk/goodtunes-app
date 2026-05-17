@@ -4038,9 +4038,14 @@ function PinpointLyricsButton({
       <PopoverContent
         side="bottom"
         align="end"
-        className="w-[380px] p-0"
+        className="w-[380px] p-0 bg-white border-slate-200 text-slate-900"
       >
           <div className="px-3 pt-3 pb-2 border-b border-slate-100">
+            <div className="flex items-baseline gap-1.5 mb-1.5">
+              <span className="text-[12.5px] font-semibold text-slate-900">
+                Search GoodSync<sup className="text-[8px] font-medium">™</sup>
+              </span>
+            </div>
             <p className="text-[11.5px] text-slate-500 mb-2 leading-snug">
               Search a word or scroll to a line — the preview window
               jumps to that moment.

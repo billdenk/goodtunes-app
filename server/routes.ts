@@ -1530,6 +1530,112 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const FA_MAX_LYRIC_CHARS = 30_000;
   const FA_TIMEOUT_MS = 120_000; // alignments rarely exceed 60s; double for headroom
 
+  // ─── refineCuesAgainstPlain ──────────────────────────────────────
+  // Run AFTER STT produces line-grouped cues. Aligns each cue to a
+  // matching window of the typed Plain lyrics by exact word-position
+  // match (window length locked to cue length), then swaps the words
+  // STT clearly got wrong. Conservative on purpose:
+  //   - requires ≥65% of the cue's words to already match Plain at
+  //     the same positions before any swap (else cue is left alone),
+  //   - skips stylistic-variant pairs (cuz/cause, yeah/ya, till/until…),
+  //   - at the very first or last position, requires ≥2 shared
+  //     consecutive chars (blocks "So" → "Over" boundary artifacts),
+  //   - preserves STT's natural casing + trailing punctuation so the
+  //     cue still reads like dictation, not a copy-paste from Plain.
+  function refineCuesAgainstPlain(
+    cues: Array<{ timeMs: number; endMs?: number; text: string }>,
+    plainLyrics: string,
+  ) {
+    if (!plainLyrics) return cues;
+    const headerRe = /^(v\d+|pre\d+|chorus\d*|bridge\d*|outro|intro|hook|tag|verse\d*)$/i;
+    const decorRe = /^[.…\-_·•]+$/;
+    const plainTokens: string[] = [];
+    for (const raw of plainLyrics.split(/\s+/)) {
+      const t = raw.trim();
+      if (!t) continue;
+      const bare = t.replace(/[^\w]/g, "");
+      if (headerRe.test(bare)) continue;
+      if (decorRe.test(t)) continue;
+      plainTokens.push(t);
+    }
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const pn = plainTokens.map(norm);
+    if (pn.length === 0) return cues;
+
+    const EQUIV_GROUPS = [
+      ["cuz", "cause", "because", "cos", "coz"],
+      ["yeah", "yea", "ya"],
+      ["til", "till", "until"],
+      ["em", "them"],
+      ["wanna", "want", "wanta"],
+      ["gonna", "going"],
+      ["gotta", "got"],
+      ["kinda", "kind"],
+      ["aint", "isnt", "arent"],
+      ["ok", "okay"],
+    ];
+    const eqClass = new Map<string, number>();
+    EQUIV_GROUPS.forEach((g, i) => g.forEach((w) => eqClass.set(w, i)));
+    const sameClass = (a: string, b: string) => {
+      if (a === b) return true;
+      const ca = eqClass.get(a), cb = eqClass.get(b);
+      return ca !== undefined && ca === cb;
+    };
+    const lcsLen = (a: string, b: string) => {
+      let best = 0;
+      for (let i = 0; i < a.length; i++)
+        for (let j = 0; j < b.length; j++) {
+          let k = 0;
+          while (i + k < a.length && j + k < b.length && a[i + k] === b[j + k]) k++;
+          if (k > best) best = k;
+        }
+      return best;
+    };
+    const stripPunct = (s: string) => s.replace(/[^\p{L}\p{N}'’]/gu, "");
+    const matchCase = (cueWord: string, plainWord: string) => {
+      const p = stripPunct(plainWord);
+      const c = cueWord;
+      const lead = /^[A-Z]/.test(c);
+      const allCaps = /^[A-Z]+$/.test(c.replace(/[^A-Za-z]/g, ""));
+      let out = p.toLowerCase();
+      if (allCaps && c.length > 1) out = p.toUpperCase();
+      else if (lead) out = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+      const trail = c.match(/[^\p{L}\p{N}'’]+$/u);
+      if (trail) out += trail[0];
+      return out;
+    };
+
+    return cues.map((cue) => {
+      const cueTokens = cue.text.split(/\s+/).filter(Boolean);
+      const cn = cueTokens.map(norm);
+      const n = cn.length;
+      if (n < 3) return cue;
+      let bestScore = 0, bestStart = -1;
+      const L = n;
+      for (let i = 0; i + L <= pn.length; i++) {
+        let matches = 0;
+        for (let k = 0; k < L; k++) if (pn[i + k] === cn[k]) matches++;
+        const score = matches / n;
+        if (score > bestScore) { bestScore = score; bestStart = i; }
+      }
+      if (bestScore < 0.65 || bestStart < 0) return cue;
+      const newTokens = cueTokens.slice();
+      let changed = false;
+      for (let k = 0; k < n; k++) {
+        const cWord = cueTokens[k];
+        const pWord = plainTokens[bestStart + k];
+        const cN = cn[k], pN = pn[bestStart + k];
+        if (cN === pN) continue;
+        if (sameClass(cN, pN)) continue;
+        if ((k === 0 || k === n - 1) && lcsLen(cN, pN) < 2) continue;
+        newTokens[k] = matchCase(cWord, pWord);
+        changed = true;
+      }
+      if (!changed) return cue;
+      return { ...cue, text: newTokens.join(" ") };
+    });
+  }
+
   app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
     const id = String(req.params.id);
     const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -1711,7 +1817,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     }
 
-    const updated = await storage.updateSong(id, { syncedLyrics: out });
+    // ─── Final pass: refine cue text against the typed Plain lyrics ───
+    // STT mishears the occasional word ("till the end" vs "to the
+    // edge", "what we wanted" vs "but we wanted"). When the admin has
+    // typed Plain lyrics, we run a conservative word-level diff and
+    // swap only the words that clearly differ — preserving STT's
+    // natural sentence-casing and punctuation, and skipping stylistic
+    // variants (cuz/cause, yeah/ya, till/until, etc.).
+    const refined = song.lyrics
+      ? refineCuesAgainstPlain(out, song.lyrics)
+      : out;
+
+    const updated = await storage.updateSong(id, { syncedLyrics: refined });
     return res.json({
       song: updated,
       lineCount: out.length,
