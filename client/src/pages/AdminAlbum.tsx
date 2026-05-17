@@ -34,6 +34,7 @@ import {
   LockOpen,
   MoveHorizontal,
   ChevronDown,
+  ChevronUp,
   Disc3,
   Headphones,
   FileText,
@@ -1161,6 +1162,59 @@ function dotHint(label: string, state: DotState): string {
   return `${label} not started`;
 }
 
+/* ── ExpandedPanel ────────────────────────────────────────────────────
+   The active state of a tile. When the user taps Preview / Lyrics /
+   Credits / Master, the tile transforms into this panel: same icon +
+   label header at top (acts as collapse trigger via chevron-up), and
+   the editor body lives directly below — no separate boxed editor,
+   no X close. One continuous rounded card with a brand-blue border
+   so it reads as "this tile is now open." */
+function ExpandedPanel({
+  icon: Icon,
+  label,
+  sublabel,
+  onCollapse,
+  testId,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  sublabel?: string;
+  onCollapse: () => void;
+  testId?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className="rounded-xl border border-[#319ED8]/50 bg-white shadow-sm overflow-hidden"
+    >
+      <button
+        type="button"
+        onClick={onCollapse}
+        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 focus:outline-none focus:bg-slate-50"
+        data-testid={testId ? `${testId}-collapse` : undefined}
+      >
+        <span className="w-7 h-7 rounded-full bg-[#319ED8]/10 inline-flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-[#319ED8]" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[12.5px] font-semibold text-slate-900 leading-tight">
+            {label}
+          </span>
+          {sublabel && (
+            <span className="block text-[11px] text-slate-500 leading-tight truncate">
+              {sublabel}
+            </span>
+          )}
+        </span>
+        <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
+      </button>
+      <div className="border-t border-slate-100">{children}</div>
+    </div>
+  );
+}
+
 /* ── Status tile (expanded row, REQUIRED + 3-up OPTIONAL) ─────────────
    Graduated 1:1 from the Seamless mockup. Same two shapes:
      • emphasized = full-width REQUIRED tile (Master)
@@ -1784,6 +1838,12 @@ function TrackRow({
       {expanded && (
         <div className="pl-12 sm:pl-20 pr-8 sm:pr-16 pb-5 -mt-1 space-y-4">
           <div className="space-y-4">
+            {/* REQUIRED — Master.
+                View mode: a single full-width tile (StatusBadge).
+                Audio mode: the tile transforms into an ExpandedPanel
+                whose header IS the collapse trigger (chevron-up). No
+                separate boxed editor below; the editor body lives
+                inside the same card, flush against the header. */}
             <div>
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
@@ -1791,25 +1851,51 @@ function TrackRow({
                 </span>
                 <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
               </div>
-              <StatusBadge
-                ok={!!song.audioUrl}
-                icon={Disc3}
-                label="Master"
-                subtitle={
-                  song.audioUrl
-                    ? "Uploaded · tap to replace"
-                    : "Required to publish"
-                }
-                severity="required"
-                size="emphasized"
-                active={mode === "audio"}
-                onClick={() =>
-                  setMode((m) => (m === "audio" ? "view" : "audio"))
-                }
-                testId={`tile-master-${song.id}`}
-                buttonRef={masterChipRef}
-              />
+              {mode === "audio" ? (
+                <ExpandedPanel
+                  icon={Disc3}
+                  label="Master"
+                  sublabel={
+                    song.audioUrl
+                      ? "Uploaded · tap to collapse"
+                      : "Required to publish"
+                  }
+                  onCollapse={closeAudio}
+                  testId={`panel-master-${song.id}`}
+                >
+                  <AudioEditor
+                    song={song}
+                    albumId={albumId}
+                    onClose={closeAudio}
+                    onSaved={invalidate}
+                  />
+                </ExpandedPanel>
+              ) : (
+                <StatusBadge
+                  ok={!!song.audioUrl}
+                  icon={Disc3}
+                  label="Master"
+                  subtitle={
+                    song.audioUrl
+                      ? "Uploaded · tap to replace"
+                      : "Required to publish"
+                  }
+                  severity="required"
+                  size="emphasized"
+                  active={false}
+                  onClick={() => setMode("audio")}
+                  testId={`tile-master-${song.id}`}
+                  buttonRef={masterChipRef}
+                />
+              )}
             </div>
+
+            {/* OPTIONAL — Preview / Lyrics / Credits.
+                View mode: 3-up tile grid + quiet trailing GoodSync™ link.
+                Any active mode: the row collapses into ONE full-width
+                ExpandedPanel for the active tile. The other two tiles
+                hide. Tapping the panel header collapses back to the
+                3-up grid. */}
             <div>
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
@@ -1817,150 +1903,170 @@ function TrackRow({
                 </span>
                 <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <StatusBadge
-                  ok={song.previewStartMs != null}
+              {mode === "preview" && song.audioUrl ? (
+                <ExpandedPanel
                   icon={Headphones}
                   label="Preview"
-                  subtitle={
+                  sublabel={
                     song.previewStartMs != null
                       ? "Custom 30-sec clip"
                       : "Auto · first 30 sec"
                   }
-                  severity="soft"
-                  compact
-                  active={mode === "preview"}
-                  onClick={() => {
-                    if (!song.audioUrl) {
-                      toast({
-                        title: "Upload a master first",
-                        description: "The preview window comes from the master file.",
-                      });
-                      return;
-                    }
-                    setMode((m) => (m === "preview" ? "view" : "preview"));
-                  }}
-                  testId={`tile-preview-${song.id}`}
-                  buttonRef={previewChipRef}
-                />
-                <StatusBadge
-                  ok={
-                    song.instrumental ||
-                    (song.syncedLyrics?.length ?? 0) > 0 ||
-                    !!(song.lyrics && song.lyrics.trim())
-                  }
+                  onCollapse={closePreview}
+                  testId={`panel-preview-${song.id}`}
+                >
+                  <PreviewWindowEditor
+                    song={song}
+                    onClose={closePreview}
+                    onSaved={invalidate}
+                    standalone
+                  />
+                </ExpandedPanel>
+              ) : mode === "lyrics" ? (
+                <ExpandedPanel
                   icon={FileText}
                   label="Lyrics"
-                  subtitle={
+                  sublabel={
                     song.instrumental
                       ? "Instrumental"
                       : (song.syncedLyrics?.length ?? 0) > 0
                         ? `GoodSync™ · ${song.syncedLyrics?.length} cues`
                         : undefined
                   }
-                  severity="soft"
-                  compact
-                  active={mode === "lyrics"}
-                  onClick={() =>
-                    setMode((m) => (m === "lyrics" ? "view" : "lyrics"))
+                  onCollapse={closeLyrics}
+                  testId={`panel-lyrics-${song.id}`}
+                >
+                  <LyricsEditor
+                    song={song}
+                    onClose={closeLyrics}
+                    onSaved={invalidate}
+                  />
+                </ExpandedPanel>
+              ) : mode === "synced" ? (
+                <ExpandedPanel
+                  icon={FileText}
+                  label="GoodSync™"
+                  sublabel={
+                    (song.syncedLyrics?.length ?? 0) > 0
+                      ? `${song.syncedLyrics?.length} cues`
+                      : "Sync lyrics to audio"
                   }
-                  testId={`tile-lyrics-${song.id}`}
-                  buttonRef={lyricsChipRef}
-                />
-                <StatusBadge
-                  ok={
-                    (credits?.writers.length ?? 0) > 0 &&
-                    (credits?.performers.length ?? 0) > 0
-                  }
+                  onCollapse={closeSynced}
+                  testId={`panel-synced-${song.id}`}
+                >
+                  <SyncedLyricsEditor
+                    song={song}
+                    onClose={closeSynced}
+                    onSaved={invalidate}
+                  />
+                </ExpandedPanel>
+              ) : mode === "credits" ? (
+                <ExpandedPanel
                   icon={Users}
                   label="Credits"
-                  severity="soft"
-                  compact
-                  active={mode === "credits"}
-                  onClick={() =>
-                    setMode((m) => (m === "credits" ? "view" : "credits"))
-                  }
-                  testId={`tile-credits-${song.id}`}
-                  buttonRef={creditsChipRef}
-                />
-              </div>
-              {/* GoodSync™ entry — quiet trailing link, only when there
-                  ARE lyrics to sync (a master file alone isn't enough —
-                  you need words). Two visual states:
-                  – synced: brand-blue "GoodSync™ ✓" (no count noise)
-                  – not synced: low-emphasis "GoodSync™"
-                  Apple's pattern: short proper-noun label, checkmark
-                  for "done," no chore-y verbs like "Add" or ellipses. */}
-              {!song.instrumental &&
-                song.audioUrl &&
-                (song.lyrics?.trim()?.length ?? 0) > 0 && (
-                  <div className="flex justify-end pt-1.5">
-                    <button
-                      ref={syncedChipRef}
-                      type="button"
-                      onClick={() =>
-                        setMode((m) => (m === "synced" ? "view" : "synced"))
+                  onCollapse={closeCredits}
+                  testId={`panel-credits-${song.id}`}
+                >
+                  <CreditsEditor
+                    songId={song.id}
+                    albumId={albumId}
+                    credits={credits}
+                    onClose={closeCredits}
+                  />
+                </ExpandedPanel>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <StatusBadge
+                      ok={song.previewStartMs != null}
+                      icon={Headphones}
+                      label="Preview"
+                      subtitle={
+                        song.previewStartMs != null
+                          ? "Custom 30-sec clip"
+                          : "Auto · first 30 sec"
                       }
-                      className={
-                        "inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
-                        ((song.syncedLyrics?.length ?? 0) > 0
-                          ? "text-[#319ED8] hover:bg-[#319ED8]/10"
-                          : "text-slate-400 hover:text-slate-700 hover:bg-slate-100")
+                      severity="soft"
+                      compact
+                      active={false}
+                      onClick={() => {
+                        if (!song.audioUrl) {
+                          toast({
+                            title: "Upload a master first",
+                            description:
+                              "The preview window comes from the master file.",
+                          });
+                          return;
+                        }
+                        setMode("preview");
+                      }}
+                      testId={`tile-preview-${song.id}`}
+                      buttonRef={previewChipRef}
+                    />
+                    <StatusBadge
+                      ok={
+                        song.instrumental ||
+                        (song.syncedLyrics?.length ?? 0) > 0 ||
+                        !!(song.lyrics && song.lyrics.trim())
                       }
-                      data-testid={`button-edit-synced-${song.id}`}
-                    >
-                      <span>GoodSync™</span>
-                      {(song.syncedLyrics?.length ?? 0) > 0 && (
-                        <Check className="w-3 h-3" />
-                      )}
-                    </button>
+                      icon={FileText}
+                      label="Lyrics"
+                      subtitle={
+                        song.instrumental
+                          ? "Instrumental"
+                          : (song.syncedLyrics?.length ?? 0) > 0
+                            ? `GoodSync™ · ${song.syncedLyrics?.length} cues`
+                            : undefined
+                      }
+                      severity="soft"
+                      compact
+                      active={false}
+                      onClick={() => setMode("lyrics")}
+                      testId={`tile-lyrics-${song.id}`}
+                      buttonRef={lyricsChipRef}
+                    />
+                    <StatusBadge
+                      ok={
+                        (credits?.writers.length ?? 0) > 0 &&
+                        (credits?.performers.length ?? 0) > 0
+                      }
+                      icon={Users}
+                      label="Credits"
+                      severity="soft"
+                      compact
+                      active={false}
+                      onClick={() => setMode("credits")}
+                      testId={`tile-credits-${song.id}`}
+                      buttonRef={creditsChipRef}
+                    />
                   </div>
-                )}
+                  {!song.instrumental &&
+                    song.audioUrl &&
+                    (song.lyrics?.trim()?.length ?? 0) > 0 && (
+                      <div className="flex justify-end pt-1.5">
+                        <button
+                          ref={syncedChipRef}
+                          type="button"
+                          onClick={() => setMode("synced")}
+                          className={
+                            "inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
+                            ((song.syncedLyrics?.length ?? 0) > 0
+                              ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                              : "text-slate-400 hover:text-slate-700 hover:bg-slate-100")
+                          }
+                          data-testid={`button-edit-synced-${song.id}`}
+                        >
+                          <span>GoodSync™</span>
+                          {(song.syncedLyrics?.length ?? 0) > 0 && (
+                            <Check className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                </>
+              )}
             </div>
           </div>
-
-          {mode === "audio" && (
-            <AudioEditor
-              song={song}
-              albumId={albumId}
-              onClose={closeAudio}
-              onSaved={invalidate}
-            />
-          )}
-
-          {mode === "preview" && song.audioUrl && (
-            <PreviewWindowEditor
-              song={song}
-              onClose={closePreview}
-              onSaved={invalidate}
-              standalone
-            />
-          )}
-
-          {mode === "lyrics" && (
-            <LyricsEditor
-              song={song}
-              onClose={closeLyrics}
-              onSaved={invalidate}
-            />
-          )}
-
-          {mode === "synced" && (
-            <SyncedLyricsEditor
-              song={song}
-              onClose={closeSynced}
-              onSaved={invalidate}
-            />
-          )}
-
-          {mode === "credits" && (
-            <CreditsEditor
-              songId={song.id}
-              albumId={albumId}
-              credits={credits}
-              onClose={closeCredits}
-            />
-          )}
 
           <div className="pt-1">
             <span className="text-[11px] text-slate-400">
@@ -3246,19 +3352,21 @@ function parseTimeStr(s: string): number | null {
 function RichPreviewEditor({
   song,
   onSaved,
-  onClose,
 }: {
   song: SongLite;
   onSaved: () => Promise<void>;
-  onClose?: () => void;
 }) {
   // Rich waveform-driven editor — graduated from the Tracks-tab Interactive
-  // mockup. Five-state header (auto-locked / dirty / drag-tip / custom /
-  // locked-custom), draggable amber window, ghost emerald box showing
-  // committed position while dirty, floating editable start-time chip,
-  // padlock = save+lock when dirty / toggle when clean, confirm sheet on
-  // dirty close. Fed by the real `song.waveform` (200 peaks 0–1) we ship
-  // server-side from ffmpeg, and the real `song.duration`.
+  // mockup. Stable-height status row (icon + title + sub), draggable amber
+  // window, ghost emerald box showing committed position while dirty,
+  // floating editable start-time chip, padlock = save+lock when dirty /
+  // toggle-lock when clean, revert icon throws the draft away.
+  //
+  // Now embedded inside an ExpandedPanel: no outer card chrome, no X,
+  // no confirm sheet. Collapse is owned by the panel header and the
+  // editor auto-saves on unmount if dirty (Apple Photos behavior).
+  // Fed by the real `song.waveform` (200 peaks 0–1) we ship server-side
+  // from ffmpeg, and the real `song.duration`.
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -3389,14 +3497,30 @@ function RichPreviewEditor({
     else setLocked((v) => !v);
   };
 
-  // macOS NSSavePanel-on-close pattern: dirty + X → present a
-  // small sheet with three stacked pill buttons (Save · Revert · Cancel).
-  // Lighter than Apple's dark sheet — fits our light editor surface.
-  const [confirmClose, setConfirmClose] = useState(false);
-  const guardedClose = () => {
-    if (isDirty) setConfirmClose(true);
-    else onClose?.();
-  };
+  // No close button + no confirm sheet: this editor is now embedded
+  // inside an ExpandedPanel whose header is the collapse trigger.
+  // The padlock is the explicit save; revert is the explicit discard.
+  //
+  // Apple-Photos-style auto-save on collapse: if the admin drags the
+  // window and then taps the panel header to close (which unmounts
+  // this editor) without tapping padlock, we still commit the edit
+  // for them. Two refs keep the cleanup effect free of dependencies
+  // so it only fires on actual unmount, never on re-render.
+  const dirtyRef = useRef(false);
+  const flushRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+    flushRef.current = () => {
+      const startMs = Math.round(draftSec * 1000);
+      if (startMs === 0) saveMut.mutate(null);
+      else saveMut.mutate({ startMs, endMs: startMs + 30000 });
+    };
+  });
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current) flushRef.current();
+    };
+  }, []);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (locked) return;
@@ -3492,25 +3616,8 @@ function RichPreviewEditor({
   return (
     <div
       data-testid={`preview-window-${song.id}`}
-      className="relative rounded-xl border border-slate-200 bg-white p-4 space-y-3"
+      className="relative space-y-3"
     >
-      {/* Header — title + X close */}
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[12.5px] font-bold text-slate-900">
-          Preview
-        </h3>
-        <button
-          type="button"
-          onClick={guardedClose}
-          aria-label="Close preview panel"
-          title="Close"
-          className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-          data-testid={`button-preview-close-${song.id}`}
-        >
-          <XIcon className="w-4 h-4" />
-        </button>
-      </div>
-
       {/* Stable-height status row.
           Bill: the old approach inflated the banner with an inline Lock
           Preview + Revert button row, pushing the waveform down whenever
@@ -3879,62 +3986,6 @@ function RichPreviewEditor({
         </div>
       )}
 
-      {/* macOS-style "Do you want to save…?" sheet — light variant.
-          Stacked rounded-pill buttons exactly like NSSavePanel on
-          document close. Save is the primary; Revert Changes throws
-          the draft away and closes; Cancel returns to editing. */}
-      {confirmClose && (
-        <div
-          className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/30 rounded-xl backdrop-blur-[2px] p-4"
-          data-testid={`sheet-preview-confirm-${song.id}`}
-        >
-          <div className="w-full max-w-xs bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-5 space-y-4">
-            <div className="space-y-1.5">
-              <div className="text-[15px] font-semibold text-slate-900 leading-snug">
-                Save your preview edit?
-              </div>
-              <div className="text-[12.5px] text-slate-500 leading-snug">
-                You can revert later to undo this change.
-              </div>
-            </div>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  saveAndLock();
-                  setConfirmClose(false);
-                  onClose?.();
-                }}
-                disabled={saveMut.isPending}
-                className="w-full h-10 inline-flex items-center justify-center rounded-full text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90 disabled:opacity-50"
-                data-testid={`button-preview-confirm-save-${song.id}`}
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftLeft(committedLeft);
-                  setConfirmClose(false);
-                  onClose?.();
-                }}
-                className="w-full h-10 inline-flex items-center justify-center rounded-full text-[13px] font-medium bg-slate-100 text-slate-800 hover:bg-slate-200"
-                data-testid={`button-preview-confirm-revert-${song.id}`}
-              >
-                Revert Changes
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmClose(false)}
-                className="w-full h-10 inline-flex items-center justify-center rounded-full text-[13px] font-medium bg-slate-100 text-slate-800 hover:bg-slate-200"
-                data-testid={`button-preview-confirm-cancel-${song.id}`}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -3958,7 +4009,7 @@ function PreviewWindowEditor({
   // (still rendered inside the legacy AudioEditor) keeps the simple inline
   // form below to avoid breaking that surface during the demo push.
   if (standalone) {
-    return <RichPreviewEditor song={song} onSaved={onSaved} onClose={onClose} />;
+    return <RichPreviewEditor song={song} onSaved={onSaved} />;
   }
 
   const { toast } = useToast();
