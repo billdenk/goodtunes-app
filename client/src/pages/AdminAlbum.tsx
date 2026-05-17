@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -1168,7 +1169,21 @@ function dotHint(label: string, state: DotState): string {
    label header at top (acts as collapse trigger via chevron-up), and
    the editor body lives directly below — no separate boxed editor,
    no X close. One continuous rounded card with a brand-blue border
-   so it reads as "this tile is now open." */
+   so it reads as "this tile is now open."
+
+   The header exposes a slot to the immediate **left** of the chevron
+   via `ExpandedPanelHeaderSlotContext`. Editors rendered as children
+   (e.g. PreviewTrim) can `createPortal` a small inline action into it
+   — typically a quiet "Reset" / "Revert" link — so the action lives
+   at a stable position next to the collapse caret and never moves
+   when transient banners (Unsaved pill, etc.) mount or unmount below.
+   The header is a div (not a button) so portal'd children stay valid
+   HTML; an absolutely-positioned invisible button overlays the
+   non-action area and carries the actual collapse click. */
+const ExpandedPanelHeaderSlotContext = createContext<HTMLSpanElement | null>(
+  null,
+);
+
 function ExpandedPanel({
   icon: Icon,
   label,
@@ -1184,21 +1199,28 @@ function ExpandedPanel({
   testId?: string;
   children: React.ReactNode;
 }) {
+  const [headerSlot, setHeaderSlot] = useState<HTMLSpanElement | null>(null);
   return (
     <div
       data-testid={testId}
       className="rounded-xl border border-[#319ED8]/50 bg-white shadow-sm overflow-hidden"
     >
-      <button
-        type="button"
-        onClick={onCollapse}
-        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 focus:outline-none focus:bg-slate-50"
-        data-testid={testId ? `${testId}-collapse` : undefined}
-      >
-        <span className="w-8 h-8 rounded-md bg-[#319ED8]/10 inline-flex items-center justify-center flex-shrink-0">
+      <div className="relative flex items-center gap-2.5 px-4 py-2.5 hover:bg-slate-50">
+        {/* Invisible click target covering the whole header. Sits
+            behind the foreground elements so chevron + icon + labels
+            all collapse on click, while the headerSlot in the
+            foreground (z-10) can host its own clickable action. */}
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-label={`Collapse ${label}`}
+          className="absolute inset-0 z-0 focus:outline-none focus:bg-slate-50/0"
+          data-testid={testId ? `${testId}-collapse` : undefined}
+        />
+        <span className="relative z-0 w-8 h-8 rounded-md bg-[#319ED8]/10 inline-flex items-center justify-center flex-shrink-0">
           <Icon className="w-4 h-4 text-[#319ED8]" />
         </span>
-        <span className="flex-1 min-w-0">
+        <span className="relative z-0 flex-1 min-w-0 pointer-events-none">
           <span className="block text-[12.5px] font-semibold text-slate-900 leading-tight">
             {label}
           </span>
@@ -1208,9 +1230,21 @@ function ExpandedPanel({
             </span>
           )}
         </span>
-        <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
-      </button>
-      <div className="border-t border-slate-100">{children}</div>
+        {/* Header action slot — descendant editors portal small inline
+            actions (e.g. Reset) here so they sit fixed next to the
+            chevron regardless of editor body state. */}
+        <span
+          ref={setHeaderSlot}
+          onClick={(e) => e.stopPropagation()}
+          className="relative z-10 flex items-center gap-1 flex-shrink-0"
+        />
+        <ChevronUp className="relative z-0 w-4 h-4 text-slate-400 flex-shrink-0 pointer-events-none" />
+      </div>
+      <div className="border-t border-slate-100">
+        <ExpandedPanelHeaderSlotContext.Provider value={headerSlot}>
+          {children}
+        </ExpandedPanelHeaderSlotContext.Provider>
+      </div>
     </div>
   );
 }
@@ -3335,6 +3369,42 @@ function parseTimeStr(s: string): number | null {
   return (min * 60 + sec) * 1000;
 }
 
+/* Quiet "Reset" link that portals into the surrounding ExpandedPanel's
+   header slot (just left of the collapse chevron). When the panel
+   isn't an ancestor (e.g. PreviewTrim nested under the Master editor),
+   `headerSlot` is null and nothing renders — caller can fall back to
+   an inline button if needed. */
+function PreviewResetAction({
+  visible,
+  disabled,
+  onReset,
+  testId,
+}: {
+  visible: boolean;
+  disabled: boolean;
+  onReset: () => void;
+  testId: string;
+}) {
+  const headerSlot = useContext(ExpandedPanelHeaderSlotContext);
+  if (!visible || !headerSlot) return null;
+  return createPortal(
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onReset();
+      }}
+      disabled={disabled}
+      title="Reset to auto-pick (first 30 seconds)"
+      className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40 px-1.5 py-0.5 rounded"
+      data-testid={testId}
+    >
+      Reset
+    </button>,
+    headerSlot,
+  );
+}
+
 function RichPreviewEditor({
   song,
   onSaved,
@@ -3614,40 +3684,35 @@ function RichPreviewEditor({
           chevron — visually it reads as a header-right status
           indicator without the deeper refactor of hoisting draft
           state into ExpandedPanel itself. */}
-      {(isDirty || (!locked && hasCustom && committedLeft >= 0.5)) && (
-        <div className="-mt-1 flex justify-end items-center gap-2">
-          {isDirty && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-medium text-amber-800">
-              <MoveHorizontal className="w-3 h-3" />
-              Unsaved — fans still hear{" "}
-              {committedLeft < 0.5
-                ? "0:00–0:30"
-                : `${committedStartLabel}–${committedEndLabel}`}
-            </span>
-          )}
-          {/* Reset — only appears once the preview is unlocked and a custom
-              start has been saved. Wipes back to the auto-pick (first 30s).
-              Tooltip carries the full meaning so the button can stay short
-              (Bill: "should just say 'Reset'"). */}
-          {!locked && hasCustom && committedLeft >= 0.5 && (
-            <button
-              type="button"
-              onClick={() => {
-                setCommittedLeft(0);
-                setDraftLeft(0);
-                setLocked(true);
-                saveMut.mutate(null);
-              }}
-              disabled={saveMut.isPending}
-              title="Reset to auto-pick (first 30 seconds)"
-              className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
-              data-testid={`button-preview-reset-${song.id}`}
-            >
-              Reset
-            </button>
-          )}
+      {isDirty && (
+        <div className="-mt-1 flex justify-end">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+            <MoveHorizontal className="w-3 h-3" />
+            Unsaved — fans still hear{" "}
+            {committedLeft < 0.5
+              ? "0:00–0:30"
+              : `${committedStartLabel}–${committedEndLabel}`}
+          </span>
         </div>
       )}
+
+      {/* Reset action — portals into the ExpandedPanel header slot
+          (just left of the collapse chevron) so it sits at a stable
+          position regardless of what mounts/unmounts in the editor
+          body below. Visible only once the preview is unlocked AND a
+          custom start time has been saved (Bill: "should just say
+          'Reset' and only happen after you unlock"). */}
+      <PreviewResetAction
+        visible={!locked && hasCustom && committedLeft >= 0.5}
+        disabled={saveMut.isPending}
+        onReset={() => {
+          setCommittedLeft(0);
+          setDraftLeft(0);
+          setLocked(true);
+          saveMut.mutate(null);
+        }}
+        testId={`button-preview-reset-${song.id}`}
+      />
 
       {/* Hidden window-scoped <audio> element — same master as the player,
           but its currentTime is constrained to [draftSec, draftSec + 30]. */}
