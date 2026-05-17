@@ -348,7 +348,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           },
           {
             key: "streamingReleaseDate",
-            label: "Streaming release date",
+            label: "Apple Music / Spotify release date",
             type: "date",
           },
           {
