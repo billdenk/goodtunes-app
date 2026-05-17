@@ -2399,13 +2399,13 @@ function GoodSyncPanel({
               </p>
             </div>
             <p className="text-slate-700">
-              Line-timed lyrics that scroll in sync with the master —
-              same feel as Apple Music's synced lyrics. We auto-align
-              your typed words to the audio so you don't have to
-              stopwatch every line.
+              Line-timed lyrics that scroll with the master. We
+              auto-align your typed words to the audio so you don't
+              have to stopwatch every line.
             </p>
             <p className="text-slate-500 mt-2 text-[11px]">
-              The preview is live as you type. Hit Save to lock it in.
+              Edit the words in <span className="font-medium text-slate-700">Lyrics</span>;
+              GoodSync handles the timing. Cues aren't edited directly.
             </p>
           </PopoverContent>
         </Popover>
