@@ -36,11 +36,17 @@ const MASTERED_COUNT = TRACKS.filter((t) => t.master).length;
    STATUS (this row is playing) rather than offering a control. The
    bars are NOT the pause button; pause lives in the bottom dock. ─── */
 function WaveBars({ paused = false }: { paused?: boolean }) {
+  // animation-play-state doesn't inherit — has to live on the children that
+  // actually animate. We hand the parent a class and let CSS target the bars.
   return (
     <span
-      className="inline-flex items-end gap-[2px] h-3"
+      className={[
+        "inline-flex items-end gap-[2px] h-3",
+        paused && "gt-eq-paused",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-hidden
-      style={paused ? { animationPlayState: "paused" } : undefined}
     >
       <span className="gt-eq-bar" />
       <span className="gt-eq-bar" />
@@ -662,6 +668,7 @@ export function Seamless() {
         }
         .gt-eq-bar:nth-child(2) { animation-duration: 900ms; animation-delay: -150ms; }
         .gt-eq-bar:nth-child(3) { animation-duration: 600ms; animation-delay: -300ms; }
+        .gt-eq-paused .gt-eq-bar { animation-play-state: paused; }
       `}</style>
 
       <div className="max-w-3xl mx-auto">
