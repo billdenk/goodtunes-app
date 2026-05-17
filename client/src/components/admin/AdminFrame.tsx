@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -7,9 +8,13 @@ import {
   Store,
   Tag,
   ArrowLeft,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
+
+const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
 
 /**
  * Shared chrome for the new admin: top bar with GoodTunes wordmark +
@@ -25,13 +30,38 @@ export type EntityKey = "albums" | "people" | "gear" | "vendors" | "labels";
 
 export function AdminFrame({
   active,
+  preview,
   children,
 }: {
   active: EntityKey;
+  /**
+   * Optional fan-side preview to render in the collapsible right pane.
+   * When omitted (list pages, loading/error states) the pane is hidden
+   * entirely so the editor gets the full main column.
+   */
+  preview?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
   const [, navigate] = useLocation();
+
+  // Toggle state for the right preview pane. Persisted so once you tuck
+  // it away it stays tucked across navigations / refreshes — matches
+  // the macOS Mail / VS Code sidebar pattern.
+  const [previewOpen, setPreviewOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const raw = window.localStorage.getItem(PREVIEW_OPEN_KEY);
+      return raw === null ? true : raw === "1";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PREVIEW_OPEN_KEY, previewOpen ? "1" : "0");
+    } catch {}
+  }, [previewOpen]);
 
   const { data: albums = [] } = useQuery<unknown[]>({
     queryKey: ["/api/albums"],
@@ -133,6 +163,57 @@ export function AdminFrame({
         <main className="flex-1 min-w-0 p-6 sm:p-8 overflow-x-hidden">
           <div className="max-w-[1180px]">{children}</div>
         </main>
+
+        {/* RIGHT PREVIEW PANE — rendered only when the page passes
+            preview content. Toggle persists in localStorage. Collapsed
+            state leaves a 44px rail with the toggle so it's always one
+            tap to bring the preview back. */}
+        {preview && (
+          <aside
+            className={[
+              "border-l border-slate-200 bg-white flex-shrink-0 transition-[width] duration-200 ease-out hidden lg:flex flex-col",
+              previewOpen ? "w-[440px]" : "w-11",
+            ].join(" ")}
+            data-testid="admin-preview-pane"
+            data-open={previewOpen ? "true" : "false"}
+          >
+            <div
+              className={[
+                "h-12 flex-shrink-0 border-b border-slate-100 flex items-center",
+                previewOpen ? "justify-between px-3" : "justify-center px-0",
+              ].join(" ")}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewOpen((v) => !v)}
+                className="w-8 h-8 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                title={previewOpen ? "Hide preview" : "Show preview"}
+                aria-label={previewOpen ? "Hide preview" : "Show preview"}
+                aria-pressed={previewOpen}
+                data-testid="button-toggle-preview"
+              >
+                {previewOpen ? (
+                  <PanelRightClose className="w-4 h-4" />
+                ) : (
+                  <PanelRightOpen className="w-4 h-4" />
+                )}
+              </button>
+              {previewOpen && (
+                <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                  Preview
+                </span>
+              )}
+            </div>
+            {previewOpen && (
+              <div
+                className="flex-1 overflow-y-auto p-6"
+                data-testid="admin-preview-content"
+              >
+                {preview}
+              </div>
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );

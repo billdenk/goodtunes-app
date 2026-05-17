@@ -17,6 +17,11 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import {
+  LabelPreviewCard,
+  type LabelPreviewAlbum,
+  type LabelPreviewPerson,
+} from "@/components/admin/previews/LabelPreviewCard";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -49,6 +54,7 @@ interface AlbumLite {
   type: string;
   labelId: string | null;
   isHidden: boolean;
+  primaryArtistId: string | null;
 }
 
 type Tab = "overview" | "logo" | "cover" | "releases";
@@ -80,6 +86,11 @@ export function AdminLabel() {
 
   const { data: allAlbums = [] } = useQuery<AlbumLite[]>({
     queryKey: ["/api/albums"],
+    enabled: !!user?.isAdmin,
+  });
+
+  const { data: allPeople = [] } = useQuery<LabelPreviewPerson[]>({
+    queryKey: ["/api/people"],
     enabled: !!user?.isAdmin,
   });
 
@@ -137,8 +148,29 @@ export function AdminLabel() {
     );
   }
 
+  const previewAlbums: LabelPreviewAlbum[] = allAlbums.map((a) => ({
+    id: a.id,
+    title: a.title,
+    artist: a.artist,
+    artwork: a.artwork,
+    year: a.year,
+    type: a.type,
+    labelId: a.labelId,
+    isHidden: a.isHidden,
+    primaryArtistId: a.primaryArtistId,
+  }));
+
   return (
-    <AdminFrame active="labels">
+    <AdminFrame
+      active="labels"
+      preview={
+        <LabelPreviewCard
+          label={label}
+          albums={previewAlbums}
+          people={allPeople}
+        />
+      }
+    >
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
