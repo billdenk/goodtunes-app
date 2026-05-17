@@ -31,6 +31,8 @@ import {
   CheckCircle2,
   Ban,
   Lock,
+  LockOpen,
+  MoveHorizontal,
   ChevronDown,
   Disc3,
   Headphones,
@@ -1168,6 +1170,7 @@ function StatusBadge({
   severity = "soft",
   size = "default",
   compact = false,
+  active = false,
   onClick,
   testId,
   buttonRef,
@@ -1179,6 +1182,10 @@ function StatusBadge({
   severity?: "required" | "soft";
   size?: "default" | "emphasized";
   compact?: boolean;
+  /** True when this tile's editor is currently open. Adds a brand-blue
+   *  ring + tinted surface so the active tile reads as "you are here,"
+   *  matching Apple's segmented / selected-cell pattern. */
+  active?: boolean;
   onClick?: () => void;
   testId?: string;
   buttonRef?: React.Ref<HTMLButtonElement>;
@@ -1188,6 +1195,13 @@ function StatusBadge({
       ? "bg-amber-50 text-amber-600"
       : "bg-slate-100 text-slate-500";
   const emphasized = size === "emphasized";
+  // Active = "you've opened this tile's editor." Apple's pattern for
+  // a selected cell: tinted background + brand-color ring, not just a
+  // heavier border. Ring sits OUTSIDE the existing border so the
+  // tile doesn't shift by 1px when it becomes active.
+  const activeCls = active
+    ? "border-[#319ED8] bg-[#319ED8]/5 ring-2 ring-[#319ED8]/30 hover:bg-[#319ED8]/5 hover:border-[#319ED8]"
+    : "border-slate-200 hover:border-slate-300 hover:bg-slate-50";
   if (compact) {
     return (
       <button
@@ -1195,7 +1209,11 @@ function StatusBadge({
         type="button"
         onClick={onClick}
         data-testid={testId}
-        className="group/card flex flex-col items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-center w-full transition-all relative focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+        aria-pressed={active}
+        className={[
+          "group/card flex flex-col items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-white border text-center w-full transition-all relative focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
+          activeCls,
+        ].join(" ")}
       >
         <span
           className={[
@@ -1228,9 +1246,11 @@ function StatusBadge({
       type="button"
       onClick={onClick}
       data-testid={testId}
+      aria-pressed={active}
       className={[
-        "group/card flex items-center justify-between gap-2 rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left w-full transition-all focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
+        "group/card flex items-center justify-between gap-2 rounded-lg bg-white border text-left w-full transition-all focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
         emphasized ? "px-4 py-3" : "px-3 py-2",
+        activeCls,
       ].join(" ")}
     >
       <div className="flex items-center gap-2.5 min-w-0">
@@ -1776,6 +1796,7 @@ function TrackRow({
                 }
                 severity="required"
                 size="emphasized"
+                active={mode === "audio"}
                 onClick={() =>
                   setMode((m) => (m === "audio" ? "view" : "audio"))
                 }
@@ -1802,6 +1823,7 @@ function TrackRow({
                   }
                   severity="soft"
                   compact
+                  active={mode === "preview"}
                   onClick={() => {
                     if (!song.audioUrl) {
                       toast({
@@ -1832,6 +1854,7 @@ function TrackRow({
                   }
                   severity="soft"
                   compact
+                  active={mode === "lyrics"}
                   onClick={() =>
                     setMode((m) => (m === "lyrics" ? "view" : "lyrics"))
                   }
@@ -1847,6 +1870,7 @@ function TrackRow({
                   label="Credits"
                   severity="soft"
                   compact
+                  active={mode === "credits"}
                   onClick={() =>
                     setMode((m) => (m === "credits" ? "view" : "credits"))
                   }
