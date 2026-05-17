@@ -40,7 +40,7 @@ const NavItem = ({
     >
       <span
         aria-hidden
-        className="absolute inset-x-0 -inset-y-1.5 rounded-full transition-colors duration-200"
+        className="absolute inset-0 rounded-full transition-colors duration-200"
         style={{ background: active ? "rgba(49,158,216,0.18)" : "transparent" }}
       />
       <div className="relative w-14 h-8 flex items-center justify-center">
