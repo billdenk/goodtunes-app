@@ -255,14 +255,30 @@ function MasterDetail({
             </div>
           </div>
 
-          {/* Replace — hidden at rest, fades in when the pill is active (Apple Music pattern).
-              Stays visible whenever its menu is open so it doesn't disappear mid-click. */}
+          {/* Replace — the "ghost pill" pattern.
+              Apple HIG default for secondary actions on an existing item:
+              ALWAYS visible (so users know what's available) but quiet at
+              rest, only lifting on hover. Same treatment as Snippet's
+              "Import" button, the Override/Add-gear buttons in Credits,
+              and the pencil edit button — one secondary-action vocabulary
+              across every surface.
+
+              Three states:
+                rest          → slate-400 text, transparent bg + border
+                row-active    → slate-700 text, white bg, slate-200 border
+                                (subtle lift signaling "this is the action")
+                button-hover  → slate-100 bg, slate-900 text (commit hint)
+
+              Menu-open is folded into row-active so the pill never
+              disappears mid-click. */}
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className={[
-                "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1 transition-opacity",
-                active ? "opacity-100" : "opacity-0",
+                "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1 transition-colors border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+                active
+                  ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                  : "bg-transparent border-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-900",
               ].join(" ")}
             >
               <Upload className="w-3 h-3" />
