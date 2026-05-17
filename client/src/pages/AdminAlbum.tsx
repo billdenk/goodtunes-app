@@ -1443,17 +1443,20 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
 
   return (
     <div
-      className="flex items-center gap-3 rounded-lg bg-white border border-slate-200 px-3 py-2"
+      className="flex items-center gap-2.5 px-1"
       data-testid={`toggle-instrumental-${song.id}`}
     >
-      <Ban className="w-4 h-4 text-slate-400 flex-shrink-0" />
+      <Ban
+        className="w-3.5 h-3.5 text-slate-400 flex-shrink-0"
+        aria-hidden="true"
+      />
       <div className="flex-1 min-w-0">
-        <div className="text-[12.5px] font-semibold text-slate-700 leading-tight">
+        <span className="text-[11.5px] text-slate-600 font-medium">
           Instrumental
-        </div>
-        <div className="text-[10.5px] text-slate-400 leading-tight mt-0.5">
-          No lyrics, no singer credits (interlude, solo, outro)
-        </div>
+        </span>
+        <span className="text-[10.5px] text-slate-400 ml-1.5">
+          · no lyrics or singer credits
+        </span>
       </div>
       {/* Force iOS-on-white look. The shadcn Switch's unchecked state
           falls back to `bg-input`, which our theme tunes to dark navy
@@ -2741,13 +2744,13 @@ function PreviewWindowEditor({
 
   return (
     <div
-      className="rounded-lg bg-white border border-slate-200 px-3 py-2 space-y-2"
+      className="px-1 space-y-1.5"
       data-testid={`preview-window-${song.id}`}
     >
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className="w-4 h-4 rounded-full inline-flex items-center justify-center flex-shrink-0"
+          className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center flex-shrink-0"
           style={
             hasCustom
               ? {
@@ -2759,27 +2762,28 @@ function PreviewWindowEditor({
           }
         >
           {hasCustom ? (
-            <ClipGlyph className="w-2.5 h-2.5" />
+            <ClipGlyph className="w-2 h-2" />
           ) : (
             <CheckCircle2
-              className="w-4 h-4 text-emerald-500"
+              className="w-3.5 h-3.5 text-emerald-500"
               fill="currentColor"
               stroke="white"
               strokeWidth={2.25}
             />
           )}
         </span>
-        <div className="flex-1 min-w-0">
-          <div className="text-[12.5px] font-semibold text-slate-700 leading-tight">
-            {hasCustom ? "Custom 30-second preview" : "Auto preview"}
-          </div>
-          <div className="text-[10.5px] text-slate-400 leading-tight mt-0.5">
+        <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+          <span className="text-[11.5px] text-slate-600 font-medium">
+            {hasCustom ? "Custom preview" : "Auto preview"}
+          </span>
+          <span className="text-[10.5px] text-slate-400">
+            ·{" "}
             {hasCustom
               ? `${formatTimeMs(song.previewStartMs!)} – ${formatTimeMs(
                   song.previewEndMs ?? song.previewStartMs! + 30000,
                 )}`
-              : `First 30 seconds (0:00 – 0:30)`}
-          </div>
+              : "first 30 sec"}
+          </span>
         </div>
         {!open && (
           <button
@@ -3051,16 +3055,18 @@ function AudioEditor({
           </p>
         )}
 
-        {/* Preview window — auto by default, custom on demand. Only
-            meaningful once the master exists; before then there's
-            nothing to clip. The Preview status dot on the tracklist
-            row reads off the same previewStartMs/End fields. */}
-        {song.audioUrl && <PreviewWindowEditor song={song} onSaved={onSaved} />}
-
-        {/* Instrumental flag lives with the master — it's a property of
-            the audio itself. When on, the LyricsEditor disables its
-            textarea and the row's Lyrics dot shows the grey Ban glyph. */}
-        <InstrumentalToggle song={song} />
+        {/* Preview window + Instrumental flag are both properties of
+            the master — they only make sense once audio exists. Hide
+            until upload so the empty state stays clean (dropzone + URL
+            field + buttons only). Both rows live without card chrome
+            so they read as secondary controls of the audio block, not
+            as equal-weight sections. */}
+        {song.audioUrl && (
+          <div className="space-y-2 pt-1">
+            <PreviewWindowEditor song={song} onSaved={onSaved} />
+            <InstrumentalToggle song={song} />
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <button
