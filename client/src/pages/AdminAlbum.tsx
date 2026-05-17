@@ -2688,6 +2688,31 @@ function GoodSyncPanel({
 
 /* ─── Per-track lyrics editor ────────────────────────────────────────── */
 
+/**
+ * Strip writers' shorthand from a raw lyric paste so the displayed
+ * "Editable Lyrics" reads like a fan would see it. Removes:
+ *   - section labels on their own line: V1, V2, PRE1, CHORUS, CHORUS x2,
+ *     BRIDGE, INTRO, OUTRO, HOOK, TAG, VERSE 2, etc.
+ *   - decoration-only lines: rows of dots / dashes / bullets
+ * Collapses runs of 3+ blank lines down to 2 so the result reads
+ * cleanly without leaving big gaps where labels used to be.
+ */
+function cleanLyricsForEditor(raw: string): string {
+  if (!raw) return "";
+  const headerRe = /^(v|pre|chorus|bridge|verse|intro|outro|hook|tag)\s*\d*(\s*x\s*\d+)?\s*$/i;
+  const decorRe = /^[\s.…\-_·•]+$/;
+  const kept: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) { kept.push(""); continue; }
+    if (headerRe.test(t)) continue;
+    if (decorRe.test(t)) continue;
+    kept.push(line);
+  }
+  // Collapse 3+ consecutive blank lines down to a single blank.
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function LyricsEditor({
   song,
   onClose,
@@ -2703,7 +2728,26 @@ function LyricsEditor({
   onUpgradeSync?: () => void;
 }) {
   const { toast } = useToast();
-  const [draft, setDraft] = useState<string>(song.lyrics ?? "");
+  // The artist's original paste — frozen at mount time. Used by the
+  // "View original" popover so the writers' shorthand (V1 / PRE1 /
+  // CHORUS x2 / decorative dots) is never lost, even though the
+  // editable view below strips those for clarity.
+  //
+  // Demo-stage simplification: once the user saves, the cleaned text
+  // overwrites `song.lyrics`, so "original" only survives this
+  // session. Post-demo: split into `lyrics` + `originalLyrics`
+  // columns so the original is preserved permanently.
+  const originalRef = useRef<string>(song.lyrics ?? "");
+  const [draft, setDraft] = useState<string>(() =>
+    cleanLyricsForEditor(song.lyrics ?? ""),
+  );
+  const [showOriginal, setShowOriginal] = useState(false);
+  // Autosave guard: only persist after the writer actively edits
+  // the textarea. Without this, simply opening the editor on a song
+  // with shorthand (V1 / PRE1 / etc.) would silently overwrite
+  // `song.lyrics` with the cleaned version 800ms later — destroying
+  // the artist's original paste even if they made no changes.
+  const userEditedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Seed the draft + focus the textarea only on first mount.
@@ -2751,6 +2795,7 @@ function LyricsEditor({
   useEffect(() => {
     if (song.instrumental) return;
     if (!dirty) return;
+    if (!userEditedRef.current) return; // never save without a real edit
     if (saveMut.isPending) return;
     const t = setTimeout(() => saveMut.mutate(), 800);
     return () => clearTimeout(t);
@@ -2832,13 +2877,83 @@ function LyricsEditor({
                 Without this, the right box starts ~6px lower than the
                 left and the two panes don't visually align. */}
             <div className="flex items-center justify-between gap-2 h-7">
-              <h4 className="text-[13px] font-semibold text-slate-800">
-                Plain
-              </h4>
-              <span className="text-[10px] text-slate-400 tabular-nums">
-                {lineCount} {lineCount === 1 ? "line" : "lines"}
-              </span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h4 className="text-[13px] font-semibold text-slate-800">
+                  Editable Lyrics
+                </h4>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      title="What is Editable Lyrics?"
+                      className="inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-400 hover:text-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                      data-testid={`button-editable-lyrics-info-${song.id}`}
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="bottom"
+                    align="start"
+                    className="w-72 text-[12px] leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+                  >
+                    <p className="font-semibold text-slate-900 mb-1.5">
+                      Editable Lyrics
+                    </p>
+                    <p className="text-slate-700">
+                      A cleaned-up copy of the typed lyrics — section
+                      labels like <span className="font-mono text-[11px]">V1</span>,
+                      {" "}<span className="font-mono text-[11px]">PRE1</span>,
+                      {" "}<span className="font-mono text-[11px]">CHORUS</span> and
+                      decorative marks are stripped so it reads like a
+                      fan would see it.
+                    </p>
+                    <p className="text-slate-500 mt-2 text-[11px]">
+                      Your original paste is preserved — tap{" "}
+                      <span className="font-medium text-slate-700">View original</span>{" "}
+                      to see it.
+                    </p>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex items-center gap-2">
+                {originalRef.current && originalRef.current !== draft && (
+                  <button
+                    type="button"
+                    onClick={() => setShowOriginal(true)}
+                    className="text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded"
+                    data-testid={`button-view-original-lyrics-${song.id}`}
+                  >
+                    View original
+                  </button>
+                )}
+                <span className="text-[10px] text-slate-400 tabular-nums">
+                  {lineCount} {lineCount === 1 ? "line" : "lines"}
+                </span>
+              </div>
             </div>
+
+            {/* View-original popover: read-only display of the artist's
+                raw paste (with V1 / PRE1 / CHORUS x2 / etc.) so the
+                writers' shorthand isn't lost when the editable view
+                shows the cleaned copy. */}
+            <Dialog open={showOriginal} onOpenChange={setShowOriginal}>
+              <DialogContent className="max-w-lg bg-white">
+                <DialogHeader>
+                  <DialogTitle className="text-slate-900">Original lyrics</DialogTitle>
+                </DialogHeader>
+                <p className="text-[12px] text-slate-500 -mt-1">
+                  Exactly what was typed — section labels and all.
+                  Read-only; edits happen in the Editable Lyrics pane.
+                </p>
+                <pre
+                  className="max-h-[420px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[12.5px] leading-relaxed text-slate-800 font-mono whitespace-pre-wrap"
+                  data-testid={`text-original-lyrics-${song.id}`}
+                >
+                  {originalRef.current || "(empty)"}
+                </pre>
+              </DialogContent>
+            </Dialog>
 
             {song.instrumental ? (
               <div
@@ -2857,7 +2972,10 @@ function LyricsEditor({
               <textarea
                 ref={textareaRef}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => {
+                  userEditedRef.current = true;
+                  setDraft(e.target.value);
+                }}
                 rows={8}
                 placeholder={
                   "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus"
