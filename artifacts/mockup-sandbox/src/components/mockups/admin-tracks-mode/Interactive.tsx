@@ -50,31 +50,35 @@ function StatusMeter({
   t: (typeof TRACKS)[number];
   onJumpTo: (section: "master" | "snippet") => void;
 }) {
+  // Master is the only gate now. The 30-sec snippet auto-defaults to the
+  // first 30 seconds of the master — the artist can override the window
+  // but never has to. So:
+  //   dot 1 = master ready (filled emerald) or needed (hollow ring)
+  //   dot 2 = custom snippet chosen (filled emerald) or using auto default
+  //           (hollow ring). Never warns — it's a "did the artist pick a
+  //           hook?" signal, not a "you must do this" signal.
   const dots = [t.master, t.snippet];
   let word: string;
   let target: "master" | "snippet" | null;
   let tone: "ready" | "warn" | "draft";
   let hint: string;
-  if (t.master && t.snippet) {
+  if (t.master) {
     word = "Ready";
     target = null;
     tone = "ready";
-    hint = "Master + 30-sec snippet both in. Track is publishable.";
-  } else if (!t.master && !t.snippet) {
-    word = "Draft";
-    target = "master"; // master is the prerequisite — start there
-    tone = "draft";
-    hint = "Tap to add the master file. Snippet comes after.";
-  } else if (!t.master) {
+    hint = t.snippet
+      ? "Master is in and a custom 30-sec snippet is set. Publishable."
+      : "Master is in. Snippet defaults to the first 30 seconds — tap to customize.";
+  } else if (t.snippet || t.lyrics || t.credits) {
     word = "Master";
     target = "master";
     tone = "warn";
     hint = "Tap to drop a .wav, .flac, or .aiff master.";
   } else {
-    word = "Snippet";
-    target = "snippet";
-    tone = "warn";
-    hint = "Tap to pick a 30-second clip from your master.";
+    word = "Draft";
+    target = "master";
+    tone = "draft";
+    hint = "Tap to add the master file. Everything else can come after.";
   }
   const isClickable = target !== null;
   const wordColor =
@@ -124,15 +128,27 @@ function StatusBadge({
   ok,
   icon: Icon,
   label,
+  subtitle,
+  severity = "soft",
   active,
   onClick,
 }: {
   ok: boolean;
   icon: any;
   label: string;
+  // Optional second line under the label, e.g. "Auto · first 30 sec" for the
+  // snippet tile when the artist hasn't customized the window.
+  subtitle?: string;
+  // 'required' → not-ok renders amber (Master). 'soft' → not-ok renders
+  // neutral slate (Lyrics, Credits, Snippet — none of these block publish).
+  severity?: "required" | "soft";
   active: boolean;
   onClick: () => void;
 }) {
+  const notOkIconClasses =
+    severity === "required"
+      ? "bg-amber-50 text-amber-600"
+      : "bg-slate-100 text-slate-500";
   return (
     <button
       type="button"
@@ -148,13 +164,20 @@ function StatusBadge({
         <span
           className={[
             "w-7 h-7 rounded-md inline-flex items-center justify-center flex-shrink-0",
-            ok ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600",
+            ok ? "bg-emerald-50 text-emerald-600" : notOkIconClasses,
           ].join(" ")}
         >
           <Icon className="w-3.5 h-3.5" />
         </span>
-        <div className="text-[12px] font-semibold text-slate-900 truncate">
-          {label}
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-slate-900 truncate">
+            {label}
+          </div>
+          {subtitle && (
+            <div className="text-[10px] text-slate-500 truncate leading-tight">
+              {subtitle}
+            </div>
+          )}
         </div>
       </div>
       {/* Right slot: check (complete, at rest) → pencil (on hover) */}
@@ -354,7 +377,11 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
   const width = (WINDOW_SEC / TOTAL_SEC) * 100;
 
   const [locked, setLocked] = useState(false);
-  const [left, setLeft] = useState(25.8); // % from waveform's left edge
+  // Default position is 0% — the first 30 seconds. That's what plays
+  // automatically if the artist never opens this screen. Once they drag,
+  // they've "customized" their hook; a Reset link appears to put it back.
+  const [left, setLeft] = useState(0);
+  const isCustom = left > 0.5; // % — anything past a hair of slop counts as moved
   const maxLeft = 100 - width;
 
   const wfRef = useRef<HTMLDivElement>(null);
@@ -404,11 +431,28 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
   };
   return (
     <DetailWrap title="30-sec snippet" onClose={onClose}>
-      <p className="text-[11.5px] text-slate-500 -mt-1">
-        {locked
-          ? `Snippet locked in at ${startLabel}–${endLabel}. Tap the padlock to slide it again.`
-          : "Slide the yellow window — width is locked to 30 seconds. Tap the padlock when you're done."}
-      </p>
+      {/* Copy explains the default behavior so the artist never feels
+          blocked. Three states: auto default · custom (unlocked) · locked. */}
+      <div className="flex items-start justify-between gap-3 -mt-1">
+        <p className="text-[11.5px] text-slate-500 flex-1">
+          {locked
+            ? `Locked in at ${startLabel}–${endLabel}. Tap the padlock to slide it again.`
+            : isCustom
+              ? `Custom hook at ${startLabel}–${endLabel}. Tap the padlock when you're satisfied.`
+              : "Using the first 30 seconds by default. Slide the yellow window to pick a different hook — or leave it as is."}
+        </p>
+        {/* Reset to default — only shows once the artist has moved the
+            window. Ghost-pill pattern, same as everywhere else. */}
+        {isCustom && !locked && (
+          <button
+            onClick={() => setLeft(0)}
+            className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+            title="Reset the snippet to the first 30 seconds"
+          >
+            Reset to default
+          </button>
+        )}
+      </div>
 
       {/* Trim row: play · waveform · lock — Apple iMovie pattern */}
       <div className="flex items-center gap-2">
@@ -1354,51 +1398,48 @@ function EditRow({
 
       {expanded && (
         <div className="pl-20 pr-16 pb-5 -mt-1 space-y-4">
-          {/* One row of cards: Required pair · divider · Optional pair */}
-          <div className="flex items-stretch gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-                Required
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <StatusBadge
-                  ok={t.master}
-                  icon={Disc3}
-                  label="Master"
-                  active={openSection === "master"}
-                  onClick={() => toggleSection("master")}
-                />
-                <StatusBadge
-                  ok={t.snippet}
-                  icon={Scissors}
-                  label="30-sec snippet"
-                  active={openSection === "snippet"}
-                  onClick={() => toggleSection("snippet")}
-                />
-              </div>
-            </div>
-            <div className="w-px bg-slate-200 self-stretch mt-5" aria-hidden />
-            <div className="flex-1 min-w-0">
-              <div className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-                Optional
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <StatusBadge
-                  ok={t.lyrics}
-                  icon={FileText}
-                  label="Lyrics"
-                  active={openSection === "lyrics"}
-                  onClick={() => toggleSection("lyrics")}
-                />
-                <StatusBadge
-                  ok={t.credits}
-                  icon={Users}
-                  label="Credits"
-                  active={openSection === "credits"}
-                  onClick={() => toggleSection("credits")}
-                />
-              </div>
-            </div>
+          {/* Single 2×2 grid of all four facets — Required/Optional headers
+              are gone now that snippet auto-defaults. Master is the only
+              one that warns amber when missing (severity="required"); the
+              others sit quiet when not yet done (severity="soft"). The
+              snippet tile always reports ok=true because the snippet
+              always exists in some form — its subtitle says whether
+              that's an auto default or a custom hook. */}
+          <div className="grid grid-cols-2 gap-2">
+            <StatusBadge
+              ok={t.master}
+              icon={Disc3}
+              label="Master"
+              subtitle={t.master ? undefined : "Required to publish"}
+              severity="required"
+              active={openSection === "master"}
+              onClick={() => toggleSection("master")}
+            />
+            <StatusBadge
+              ok
+              icon={Scissors}
+              label="30-sec snippet"
+              subtitle={t.snippet ? "Custom hook" : "Auto · first 30 sec"}
+              severity="soft"
+              active={openSection === "snippet"}
+              onClick={() => toggleSection("snippet")}
+            />
+            <StatusBadge
+              ok={t.lyrics}
+              icon={FileText}
+              label="Lyrics"
+              severity="soft"
+              active={openSection === "lyrics"}
+              onClick={() => toggleSection("lyrics")}
+            />
+            <StatusBadge
+              ok={t.credits}
+              icon={Users}
+              label="Credits"
+              severity="soft"
+              active={openSection === "credits"}
+              onClick={() => toggleSection("credits")}
+            />
           </div>
 
           {/* Detail panel for whichever section is open */}
