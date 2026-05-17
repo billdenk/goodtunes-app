@@ -17,6 +17,8 @@ import {
   SkipForward,
   Shuffle,
   Repeat,
+  Volume,
+  Volume1,
   Volume2,
   VolumeX,
   Mic2,
@@ -500,14 +502,39 @@ function BottomDock({
 }) {
   const playable = current.master;
 
-  // Volume affordance mirrors Apple's dock anatomy: the speaker icon
-  // is the always-visible control; the slider only appears on hover
-  // (sliding out to the LEFT of the speaker), and clicking the speaker
-  // toggles mute, which swaps Volume2 → VolumeX. Demo level is fixed at
-  // 65% — when this graduates into PlayerDock the value comes from real
-  // audio state.
+  // Volume affordance mirrors Apple's dock anatomy:
+  //   • Speaker icon is the always-visible control; slider slides out
+  //     to its LEFT on hover.
+  //   • Click the speaker → toggle mute (preserves previous level).
+  //   • Click anywhere on the rail → set level to that point and unmute.
+  //   • The speaker GLYPH itself changes with the level, matching Apple:
+  //       muted or 0%  → VolumeX  (speaker-slash)
+  //       1–14%        → Volume   (speaker, no waves)
+  //       15–64%       → Volume1  (speaker, one wave)
+  //       65–100%      → Volume2  (speaker, two waves)
+  //     When this graduates into PlayerDock, the level is driven by real
+  //     audio state and the icon swap comes for free.
   const [volumeMuted, setVolumeMuted] = useState(false);
-  const volumeLevel = 65;
+  const [volumeLevel, setVolumeLevel] = useState(65);
+
+  const VolumeIcon =
+    volumeMuted || volumeLevel === 0
+      ? VolumeX
+      : volumeLevel < 15
+      ? Volume
+      : volumeLevel < 65
+      ? Volume1
+      : Volume2;
+
+  const handleVolumeRail = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(
+      0,
+      Math.min(100, ((e.clientX - rect.left) / rect.width) * 100),
+    );
+    setVolumeLevel(Math.round(pct));
+    if (volumeMuted) setVolumeMuted(false);
+  };
 
   // demo-only elapsed/total derived from `progress` so the scrubber
   // labels feel real even though playback is mocked.
@@ -663,9 +690,13 @@ function BottomDock({
                 <div className="group/vol flex items-center pr-0.5">
                   <div
                     className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5"
-                    aria-hidden={volumeMuted ? undefined : true}
                   >
-                    <div className="relative w-16 h-[3px] bg-white/15 rounded-full">
+                    {/* Click anywhere on the rail to set volume to that
+                        point — demonstrates the icon swap as Bill drags. */}
+                    <div
+                      className="relative w-16 h-[3px] bg-white/15 rounded-full cursor-pointer"
+                      onClick={handleVolumeRail}
+                    >
                       <div
                         className="absolute inset-y-0 left-0 bg-white rounded-full transition-[width] duration-150"
                         style={{ width: volumeMuted ? "0%" : `${volumeLevel}%` }}
@@ -686,11 +717,7 @@ function BottomDock({
                     onClick={() => setVolumeMuted((v) => !v)}
                     className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                   >
-                    {volumeMuted ? (
-                      <VolumeX className="w-4 h-4" />
-                    ) : (
-                      <Volume2 className="w-4 h-4" />
-                    )}
+                    <VolumeIcon className="w-4 h-4" />
                   </button>
                 </div>
               </div>
