@@ -718,20 +718,25 @@ function BottomDock({
                   doesn't need a duplicate — dropped per Bill's call.
                   Shuffle + Repeat remain on the LEFT cluster because this
                   dock graduates to the consumer player where both matter. */}
-              <div className="flex items-center gap-0.5 flex-shrink-0">
+              {/* gap-1.5 between mic and volume cluster — Apple's right
+                  cluster has visible breathing room between each icon
+                  (not the tight gap-0.5 used inside the transport row).
+                  Buttons bump to w-10 (40px) so 20px icons sit centered
+                  with proper Apple-HIG hit-zone margin. */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
                   aria-label="Show lyrics"
                   title="Show lyrics — QA-preview synced lyrics while the master plays"
-                  className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                  className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                 >
                   {/* Lyrics glyph — Lucide Mic2 (singer's mic). Matches
                       the canonical primitive at client/src/components/ui/
                       LyricsIcon.tsx. Sandbox can't import that primitive,
                       so use Mic2 directly here. Keep both surfaces aligned.
-                      Icon at 18px matches the left-cluster skip arrows so
-                      the two ends of the pill read at the same weight —
-                      Apple's right cluster is visibly chunkier than 16px. */}
-                  <Mic2 className="w-[18px] h-[18px]" />
+                      20px on the right cluster (vs 18px transport-skip
+                      arrows) — Apple's right-side glyphs read chunkier
+                      than the transport row in the reference. */}
+                  <Mic2 className="w-5 h-5" />
                 </button>
                 {/* Volume cluster — Apple's pattern:
                     • Default: just the speaker icon (no slider clutter).
@@ -769,9 +774,9 @@ function BottomDock({
                     aria-label={volumeMuted ? "Unmute" : "Mute"}
                     title={volumeMuted ? "Unmute" : "Mute"}
                     onClick={() => setVolumeMuted((v) => !v)}
-                    className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                   >
-                    <VolumeIcon className="w-[18px] h-[18px]" />
+                    <VolumeIcon className="w-5 h-5" />
                   </button>
                 </div>
               </div>
@@ -787,10 +792,12 @@ function BottomDock({
             is nearest on either side. Bar does NOT run under the
             transport buttons or the lyrics/volume icons.
 
-            Pixel insets (left-[228px] / right-[98px]) are tuned so the
-            ~12px gap-to-nearest-icon is equal on both ends:
+            Pixel insets (left-[228px] / right-[120px]) are tuned so
+            the gap-to-nearest-icon reads as visually balanced on both
+            ends (right cluster needs more breathing room because the
+            mic + volume glyphs are chunkier than the transport icons):
               left  = px-3 (12) + transport (196) + divider zone (~17) + ~3
-              right = px-3 (12) + right cluster (~74) + ~12
+              right = px-3 (12) + right cluster (~86) + ~22 clear
             If the cluster shapes change, retune these two numbers.
 
             • At REST: 2px rounded bar, time labels collapsed to w-0.
@@ -808,7 +815,7 @@ function BottomDock({
                 bar's hover area. */}
             <div
               className={[
-                "absolute left-[228px] right-[98px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
+                "absolute left-[228px] right-[120px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
                 "transition-opacity duration-150",
                 scrubHover ? "opacity-100" : "opacity-0",
               ].join(" ")}
@@ -825,7 +832,7 @@ function BottomDock({
                 hover the cover+title behind it blur via scrubHover
                 state, and the bar itself thickens 2 → 4 → 5px. */}
             <div
-              className="group/scrub absolute left-[228px] right-[98px] bottom-1.5 h-3 flex items-center cursor-pointer"
+              className="group/scrub absolute left-[228px] right-[120px] bottom-1.5 h-3 flex items-center cursor-pointer"
               onMouseEnter={() => setScrubHover(true)}
               onMouseLeave={() => setScrubHover(false)}
             >
