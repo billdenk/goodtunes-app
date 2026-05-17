@@ -49,6 +49,11 @@ type AdminCreditRole = {
   kind: "writer" | "performer";
   name: string;
 };
+type AdminInstrumentLite = {
+  id: string;
+  name: string;
+  category?: string | null;
+};
 
 type Bucket = "song" | "performance" | "production";
 
@@ -91,7 +96,15 @@ type PersonCard = {
   personId: string | null;
   name: string;
   photoUrl: string | null;
-  rows: Array<{ id: string; kind: "writer" | "performer"; role: string }>;
+  rows: Array<{
+    id: string;
+    kind: "writer" | "performer";
+    role: string;
+    // Performer rows only — null for writers. The instrument USED on this
+    // track (e.g. "1973 Martin D-28") and any tuning / setup note ("Open D").
+    instrument: { id: string; name: string } | null;
+    tuningNotes: string | null;
+  }>;
 };
 
 function PersonColumn({
@@ -159,9 +172,30 @@ function PersonColumn({
         {p.name}
       </div>
       <div className="mt-0.5 space-y-0 text-[11.5px] leading-snug text-slate-500">
-        {p.rows.map((r) => (
-          <div key={r.id}>{r.role}</div>
-        ))}
+        {p.rows.map((r) => {
+          const hasExtra = !!r.instrument || !!r.tuningNotes;
+          return (
+            <div key={r.id} className={hasExtra ? "pt-0.5 first:pt-0" : ""}>
+              <div>{r.role}</div>
+              {r.instrument && (
+                <div
+                  className="italic text-slate-600"
+                  data-testid={`text-credit-instrument-${r.id}`}
+                >
+                  {r.instrument.name}
+                </div>
+              )}
+              {r.tuningNotes && (
+                <div
+                  className="text-[10.5px] text-slate-400"
+                  data-testid={`text-credit-tuning-${r.id}`}
+                >
+                  {r.tuningNotes}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -172,6 +206,7 @@ function PersonColumn({
 function AddPicker({
   people,
   roles,
+  instruments,
   bucket,
   busy,
   onAdd,
@@ -179,6 +214,7 @@ function AddPicker({
 }: {
   people: AdminPersonLite[];
   roles: AdminCreditRole[];
+  instruments: AdminInstrumentLite[];
   bucket: Bucket;
   busy: boolean;
   onAdd: (args: {
@@ -186,6 +222,8 @@ function AddPicker({
     name: string;
     role: string;
     kind: "writer" | "performer";
+    instrumentId: string | null;
+    tuningNotes: string | null;
   }) => Promise<void>;
   onClose: () => void;
 }) {
@@ -199,6 +237,14 @@ function AddPicker({
   const [pickedRoleId, setPickedRoleId] = useState<string>(
     validRoles[0]?.id ?? "",
   );
+  // Instrument + tuning are only relevant when the chosen role is a
+  // performer-kind role (Vocals, Guitar, Engineer, …). Writer-kind roles
+  // (Composer, Lyricist, Producer) ignore these fields.
+  const [instrumentId, setInstrumentId] = useState<string>("");
+  const [tuningNotes, setTuningNotes] = useState<string>("");
+
+  const currentRole = validRoles.find((r) => r.id === pickedRoleId);
+  const showInstrumentFields = currentRole?.kind === "performer";
 
   // Refresh default role when the role list (or bucket) changes.
   useEffect(() => {
@@ -228,6 +274,11 @@ function AddPicker({
         name: picked.name,
         role: role.name,
         kind: role.kind,
+        instrumentId: role.kind === "performer" && instrumentId ? instrumentId : null,
+        tuningNotes:
+          role.kind === "performer" && tuningNotes.trim()
+            ? tuningNotes.trim()
+            : null,
       });
     } else if (query.trim()) {
       await onAdd({
@@ -235,6 +286,11 @@ function AddPicker({
         name: query.trim(),
         role: role.name,
         kind: role.kind,
+        instrumentId: role.kind === "performer" && instrumentId ? instrumentId : null,
+        tuningNotes:
+          role.kind === "performer" && tuningNotes.trim()
+            ? tuningNotes.trim()
+            : null,
       });
     }
   };
@@ -356,6 +412,46 @@ function AddPicker({
           Add
         </button>
       </div>
+
+      {showInstrumentFields && (
+        <div className="mt-2 space-y-2 rounded-md bg-white border border-slate-200 px-2 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-500 flex-shrink-0">
+              Instrument
+            </span>
+            <select
+              value={instrumentId}
+              onChange={(e) => setInstrumentId(e.target.value)}
+              className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              data-testid="select-credit-instrument"
+            >
+              <option value="">— None on file —</option>
+              {instruments.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}
+                  {i.category ? ` · ${i.category}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-500 flex-shrink-0">
+              Tuning / setup
+            </span>
+            <input
+              value={tuningNotes}
+              onChange={(e) => setTuningNotes(e.target.value)}
+              placeholder='e.g. Open D, capo II'
+              className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              data-testid="input-credit-tuning"
+            />
+          </div>
+          <p className="text-[10.5px] text-slate-400 leading-tight">
+            Both optional. Don't see the instrument? Add it from the
+            Instruments admin first, then pick it here.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -369,6 +465,7 @@ function Section({
   albumId,
   people,
   roles,
+  instruments,
 }: {
   bucket: Bucket;
   cards: PersonCard[];
@@ -376,6 +473,7 @@ function Section({
   albumId: string;
   people: AdminPersonLite[];
   roles: AdminCreditRole[];
+  instruments: AdminInstrumentLite[];
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -417,16 +515,24 @@ function Section({
       name: string;
       role: string;
       kind: "writer" | "performer";
+      instrumentId: string | null;
+      tuningNotes: string | null;
     }) => {
       const url =
         args.kind === "writer"
           ? `/api/admin/songs/${songId}/writers`
           : `/api/admin/songs/${songId}/performers`;
-      await apiRequest("POST", url, {
+      // Writers ignore instrument/tuning; performers carry them through.
+      const body: Record<string, unknown> = {
         personId: args.personId,
         name: args.name,
         role: args.role,
-      });
+      };
+      if (args.kind === "performer") {
+        body.instrumentId = args.instrumentId;
+        body.tuningNotes = args.tuningNotes;
+      }
+      await apiRequest("POST", url, body);
     },
     onSuccess: async () => {
       await invalidate();
@@ -572,6 +678,7 @@ function Section({
           <AddPicker
             people={people}
             roles={roles}
+            instruments={instruments}
             bucket={bucket}
             busy={addMut.isPending}
             onAdd={async (args) => {
@@ -678,6 +785,9 @@ export default function TrackCreditsPanel({
   const { data: roles = [] } = useQuery<AdminCreditRole[]>({
     queryKey: ["/api/admin/credit-roles"],
   });
+  const { data: instruments = [] } = useQuery<AdminInstrumentLite[]>({
+    queryKey: ["/api/instruments"],
+  });
 
   const cards = useMemo(() => {
     const writers = (credits?.writers ?? []).map((w) => ({
@@ -717,7 +827,13 @@ export default function TrackCreditsPanel({
         };
         buckets[bucket].set(key, card);
       }
-      card.rows.push({ id: item.id, kind: item._kind, role: item.role });
+      card.rows.push({
+        id: item.id,
+        kind: item._kind,
+        role: item.role,
+        instrument: item._kind === "performer" ? item.instrument : null,
+        tuningNotes: item._kind === "performer" ? item.tuningNotes : null,
+      });
     }
 
     return {
@@ -744,6 +860,7 @@ export default function TrackCreditsPanel({
                   songId={songId}
                   albumId={albumId}
                   people={people}
+                  instruments={instruments}
                   roles={roles}
                 />
               </div>
