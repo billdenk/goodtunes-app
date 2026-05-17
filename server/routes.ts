@@ -1601,113 +1601,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(502).json({ message: "Could not read master audio from storage" });
     }
 
-    // Section-header detection + songwriter-shorthand expansion.
-    //
-    // Bill's writers hand us lyrics in industry shorthand: the chorus is
-    // written ONCE at the top under a `CHORUS` header, then later a bare
-    // `CHORUS` on its own line means "sing it again here". Same with
-    // `Hook\nHook` (twice in a row → sing twice), `CHORUS x2 OUT`, etc.
-    // The recorded master sings all those repeats out loud, so when we
-    // shipped only the written text to ElevenLabs we'd get back 2-3× as
-    // many words as our text and the alignment would 422 fail.
-    //
-    // Fix: pre-expand every reference using the previously-defined body
-    // before alignment. The expanded line array is also what we walk to
-    // assign timestamps — so each sung chorus repetition gets its own
-    // syncedLyrics entry. The user's editable `lyrics` field stays in
-    // the compact shorthand form.
-    //
-    // HEADER_LINE_RE is permissive: bracketed (`[Verse 1]`), short
-    // (V1/V2), spelled-out (VERSE 1), Pre/B, PRE1, PRE-CHORUS, HOOK,
-    // VAMP HOOK, REFRAIN, plus trailing `x2` and/or `OUT` markers.
-    const HEADER_LINE_RE =
-      /^\[?\s*(VAMP\s+HOOK|HOOK|VERSE(?:\s+\d+)?|V\d+|PRE(?:[-\s\/]?(?:CHORUS|B))?\d*|POST(?:-?\s*CHORUS)?|CHORUS|BRIDGE|INTRO|OUTRO|REFRAIN)\s*(?:x\s*(\d+))?(?:\s+OUT)?\s*\]?\s*$/i;
-    function parseHeader(line: string): { name: string; mult: number } | null {
-      const m = line.trim().match(HEADER_LINE_RE);
-      if (!m) return null;
-      return {
-        name: m[1].toUpperCase().replace(/\s+/g, " ").trim(),
-        mult: m[2] ? Math.max(1, parseInt(m[2], 10)) : 1,
-      };
-    }
-    const isHeaderLine = (line: string) => parseHeader(line) != null;
-    const hasAlphaNum = (s: string) => /[A-Za-z0-9]/.test(s);
-
-    // Walk lyrics into alternating header-runs + body-runs, then expand
-    // references against the registry of previously-seen bodies.
-    function expandLyricShorthand(rawLyrics: string): string[] {
-      type Block = { headers: { name: string; mult: number }[]; body: string[] };
-      const blocks: Block[] = [];
-      let cur: Block = { headers: [], body: [] };
-      let mode: "headers" | "body" | "init" = "init";
-      for (const raw of rawLyrics.split("\n")) {
-        const trimmed = raw.trim();
-        if (!trimmed || !hasAlphaNum(trimmed)) continue; // skip blank + dot-only lines
-        const hdr = parseHeader(trimmed);
-        if (hdr) {
-          if (mode === "body") {
-            blocks.push(cur);
-            cur = { headers: [hdr], body: [] };
-          } else {
-            cur.headers.push(hdr);
-          }
-          mode = "headers";
-        } else {
-          cur.body.push(trimmed);
-          mode = "body";
-        }
-      }
-      if (cur.headers.length || cur.body.length) blocks.push(cur);
-
-      const registry = new Map<string, string[]>();
-      const out: string[] = [];
-      for (const block of blocks) {
-        if (block.body.length > 0) {
-          for (const h of block.headers) {
-            if (!registry.has(h.name)) registry.set(h.name, block.body);
-          }
-          for (const h of block.headers) {
-            for (let i = 0; i < h.mult; i++) {
-              out.push(h.name);
-              out.push(...block.body);
-            }
-          }
-        } else {
-          for (const h of block.headers) {
-            const body = registry.get(h.name);
-            if (!body) continue;
-            for (let i = 0; i < h.mult; i++) {
-              out.push(h.name);
-              out.push(...body);
-            }
-          }
-        }
-      }
-      return out;
-    }
-
-    const expandedLines = expandLyricShorthand(song.lyrics);
-    const alignmentText = expandedLines
-      .filter((l) => !isHeaderLine(l))
-      .join("\n");
-    if (alignmentText.length > FA_MAX_LYRIC_CHARS) {
-      return res.status(413).json({
-        message: `Expanded lyrics too long (${alignmentText.length} chars; cap ${FA_MAX_LYRIC_CHARS}).`,
-      });
-    }
-
-    // Call ElevenLabs Forced Alignment. multipart/form-data with `file` + `text`.
-    // AbortController prevents a hung upstream from tying up the server.
-    let alignment: { words: Array<{ text: string; start: number; end: number }> };
+    // Call ElevenLabs Speech-to-Text (Scribe v1). We deliberately do NOT
+    // pass our `song.lyrics` as a hint — forced alignment kept failing
+    // because the writers' shorthand (bare `CHORUS`, `Hook x2 OUT`, etc.)
+    // doesn't match the actual sung word count. Transcribing what was
+    // actually sung gives us bulletproof word-level cues, and Bill can
+    // visually compare the transcription against his written lyrics.
+    let stt: {
+      text?: string;
+      words?: Array<{ text: string; start?: number; end?: number; type?: string }>;
+    };
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), FA_TIMEOUT_MS);
     try {
       const form = new FormData();
       const ext = (song.audioUrl.match(/\.(\w+)$/)?.[1] || "wav").toLowerCase();
       form.append("file", new Blob([audioBuf], { type: audioMime }), `song-${id}.${ext}`);
-      form.append("text", alignmentText);
+      form.append("model_id", "scribe_v1");
+      form.append("timestamps_granularity", "word");
+      form.append("language_code", "en");
 
-      const upstream = await fetch("https://api.elevenlabs.io/v1/forced-alignment", {
+      const upstream = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
         method: "POST",
         headers: { "xi-api-key": apiKey },
         body: form,
@@ -1715,87 +1629,79 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       if (!upstream.ok) {
         const errBody = await upstream.text().catch(() => "");
-        console.error("ElevenLabs forced-alignment failed", upstream.status, errBody);
+        console.error("ElevenLabs STT failed", upstream.status, errBody);
         return res.status(502).json({
-          message: `Forced alignment failed (${upstream.status})`,
+          message: `Transcription failed (${upstream.status})`,
           detail: errBody.slice(0, 500),
         });
       }
-      alignment = (await upstream.json()) as typeof alignment;
+      stt = (await upstream.json()) as typeof stt;
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        console.error("auto-sync: ElevenLabs call timed out");
-        return res.status(504).json({ message: "Forced alignment timed out" });
+        console.error("auto-sync: ElevenLabs STT timed out");
+        return res.status(504).json({ message: "Transcription timed out" });
       }
-      console.error("auto-sync: ElevenLabs call threw", err);
-      return res.status(502).json({ message: "Forced alignment service unreachable" });
+      console.error("auto-sync: ElevenLabs STT threw", err);
+      return res.status(502).json({ message: "Transcription service unreachable" });
     } finally {
       clearTimeout(timer);
     }
 
-    // Validate the response shape before we trust it.
-    const words = Array.isArray(alignment?.words) ? alignment.words : [];
-    if (
-      words.length === 0 ||
-      !words.every(
+    // Keep only real word events (drop spacing/audio_event entries) and
+    // require usable timestamps. Scribe occasionally returns words without
+    // an end time on the very last token — synthesize one from start.
+    const rawWords = Array.isArray(stt?.words) ? stt.words : [];
+    const words = rawWords
+      .filter(
         (w) =>
-          typeof w?.start === "number" &&
-          typeof w?.end === "number" &&
-          typeof w?.text === "string",
+          w &&
+          (w.type === undefined || w.type === "word") &&
+          typeof w.text === "string" &&
+          w.text.trim().length > 0 &&
+          typeof w.start === "number",
       )
-    ) {
-      return res.status(502).json({ message: "Forced alignment returned an unexpected shape" });
+      .map((w) => ({
+        text: w.text!.trim(),
+        start: w.start as number,
+        end: typeof w.end === "number" ? w.end : (w.start as number) + 0.2,
+      }));
+    if (words.length === 0) {
+      return res.status(502).json({ message: "Transcription returned no words" });
     }
 
-    // Convert word-level alignment → per-line {timeMs, text}[] for Player.tsx.
-    // ElevenLabs returns words in source order, so we walk the lyric lines and
-    // consume one alignment word per non-whitespace lyric token. Drift between
-    // our local tokenizer and ElevenLabs's is the main failure mode — we
-    // count both totals and fail fast if they diverge by more than 10%
-    // rather than silently emitting timeMs=0 lines.
-    const wordRe = /[\p{L}\p{N}'']+/gu;
-    const lines = expandedLines;
-    let expectedTokens = 0;
-    for (const raw of lines) {
-      const t = raw.trim();
-      if (!t || isHeaderLine(t)) continue;
-      expectedTokens += t.match(wordRe)?.length ?? 0;
-    }
-    const drift = Math.abs(expectedTokens - words.length) / Math.max(1, expectedTokens);
-    if (drift > 0.1) {
-      return res.status(422).json({
-        message: `Lyric/audio mismatch — our text has ${expectedTokens} words, ElevenLabs returned ${words.length}. Check the lyric text for typos or extra lines, then retry.`,
-        expectedTokens,
-        returnedWords: words.length,
-      });
-    }
-
+    // Group transcribed words into lines. Heuristic: a new line begins
+    // when the silence between words exceeds LINE_GAP_S, OR when the
+    // previous word ends with sentence-final punctuation in the source
+    // text (Scribe returns commas/periods attached to the word text).
+    // Cap line length so a quiet section without breath doesn't produce
+    // a 30-word run-on.
+    const LINE_GAP_S = 0.55;
+    const MAX_WORDS_PER_LINE = 12;
     const out: { timeMs: number; text: string }[] = [];
-    const pendingHeaders: { timeMs: number; text: string }[] = [];
-    let wi = 0;
-    for (const raw of lines) {
-      const trimmed = raw.trim();
-      if (!trimmed) continue;
-      if (isHeaderLine(trimmed)) {
-        pendingHeaders.push({ timeMs: 0, text: trimmed }); // patched below
-        continue;
+    let curWords: string[] = [];
+    let curStart = words[0].start;
+    let prevEnd = -1;
+    let prevEndedSentence = false;
+    const sentenceEnd = /[.!?]\s*$/;
+    for (const w of words) {
+      const gap = prevEnd < 0 ? 0 : w.start - prevEnd;
+      const shouldBreak =
+        curWords.length > 0 &&
+        (gap >= LINE_GAP_S || prevEndedSentence || curWords.length >= MAX_WORDS_PER_LINE);
+      if (shouldBreak) {
+        out.push({
+          timeMs: Math.round(curStart * 1000),
+          text: curWords.join(" "),
+        });
+        curWords = [];
+        curStart = w.start;
       }
-      const tokens = trimmed.match(wordRe) ?? [];
-      const firstWord = words[wi];
-      // If we run out of aligned words mid-walk (shouldn't happen after the
-      // 10% drift gate above, but guard anyway), inherit the previous line's
-      // timing rather than emitting a misleading zero.
-      const timeMs = firstWord
-        ? Math.round(firstWord.start * 1000)
-        : out[out.length - 1]?.timeMs ?? 0;
-      for (const h of pendingHeaders) out.push({ ...h, timeMs });
-      pendingHeaders.length = 0;
-      out.push({ timeMs, text: trimmed });
-      wi += tokens.length;
+      curWords.push(w.text);
+      prevEnd = w.end;
+      prevEndedSentence = sentenceEnd.test(w.text);
     }
-    if (pendingHeaders.length) {
-      const last = out[out.length - 1]?.timeMs ?? 0;
-      for (const h of pendingHeaders) out.push({ ...h, timeMs: last });
+    if (curWords.length) {
+      out.push({ timeMs: Math.round(curStart * 1000), text: curWords.join(" ") });
     }
 
     const updated = await storage.updateSong(id, { syncedLyrics: out });
@@ -1803,6 +1709,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       song: updated,
       lineCount: out.length,
       wordCount: words.length,
+      transcript: stt.text ?? "",
     });
   });
 
