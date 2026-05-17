@@ -2366,7 +2366,7 @@ function GoodSyncPanel({
      heading-above-textarea layout per Bill's mock). The box itself
      is rendered separately below this header row. */
   const header = (
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex items-center justify-between gap-2 h-7">
       <div className="flex items-center gap-2 min-w-0">
         <span className="w-5 h-5 rounded-full bg-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
           <WaveArrowGlyph className="w-3 h-3" />
@@ -2827,7 +2827,11 @@ function LyricsEditor({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* LEFT — typed words (a.k.a. the master lyric text) */}
           <div className="flex flex-col gap-2 min-w-0">
-            <div className="flex items-center justify-between gap-2">
+            {/* Header row is locked to h-7 so it matches the GoodSync™
+                header (which carries a taller "Sync with audio" pill).
+                Without this, the right box starts ~6px lower than the
+                left and the two panes don't visually align. */}
+            <div className="flex items-center justify-between gap-2 h-7">
               <h4 className="text-[13px] font-semibold text-slate-800">
                 Plain
               </h4>
