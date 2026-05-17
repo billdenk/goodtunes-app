@@ -1030,7 +1030,7 @@ function AddTrackForm({
   );
 }
 
-type TrackMode = "view" | "rename" | "audio" | "lyrics" | "synced" | "credits";
+type TrackMode = "view" | "audio" | "lyrics" | "synced" | "credits";
 
 type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
 
@@ -1330,47 +1330,36 @@ function TrackRow({
   // open we force-expand so the tile context stays visible while editing.
   const [userExpanded, setUserExpanded] = useState(false);
   const expanded = userExpanded || mode !== "view";
-  const [draft, setDraft] = useState(song.title);
   const inputRef = useRef<HTMLInputElement>(null);
-  const pencilRef = useRef<HTMLButtonElement>(null);
   const masterChipRef = useRef<HTMLButtonElement>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
-
-  // Resync the title draft from the source-of-truth only on entry to
-  // rename mode — anti-clobber so a background refetch can't wipe out
-  // the user's in-progress typing. `song.title` intentionally NOT in deps.
-  useEffect(() => {
-    if (mode === "rename") {
-      setDraft(song.title);
-      queueMicrotask(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
     await qc.invalidateQueries({ queryKey: ["/api/albums"] });
   };
 
+  // Title rename — fires from the inline title input's onBlur / Enter.
+  // No separate rename mode anymore: the title IS the editor when the
+  // row is expanded (Apple-Music-row pattern, matches the Seamless mockup).
   const renameMut = useMutation({
     mutationFn: async (title: string) =>
       apiRequest("PUT", `/api/admin/songs/${song.id}`, { title }),
     onSuccess: async () => {
       await invalidate();
-      setMode("view");
-      queueMicrotask(() => pencilRef.current?.focus());
       toast({ title: "Track renamed" });
     },
-    onError: (e: any) =>
+    onError: (e: any) => {
+      // Roll the input back to the canonical title so the user sees what
+      // actually persisted (or didn't).
+      if (inputRef.current) inputRef.current.value = song.title;
       toast({
         title: "Couldn't rename the track",
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
-      }),
+      });
+    },
   });
 
   const deleteMut = useMutation({
@@ -1386,25 +1375,6 @@ function TrackRow({
         variant: "destructive",
       }),
   });
-
-  const submitRename = () => {
-    const next = draft.trim();
-    if (!next) {
-      toast({ title: "Title can't be empty", variant: "destructive" });
-      return;
-    }
-    if (next === song.title) {
-      setMode("view");
-      queueMicrotask(() => pencilRef.current?.focus());
-      return;
-    }
-    renameMut.mutate(next);
-  };
-
-  const cancelRename = () => {
-    setMode("view");
-    queueMicrotask(() => pencilRef.current?.focus());
-  };
 
   const closeAudio = () => {
     setMode("view");
@@ -1442,8 +1412,8 @@ function TrackRow({
     <li
       className={liCls}
       data-testid={`row-track-${song.id}`}
-      onDragOver={mode === "view" ? onDragOver : undefined}
-      onDrop={mode === "view" ? onDrop : undefined}
+      onDragOver={!expanded ? onDragOver : undefined}
+      onDrop={!expanded ? onDrop : undefined}
       onDragEnd={onDragEnd}
     >
       {/* Drop-target indicator — thin blue bar at the top of the row
@@ -1458,25 +1428,24 @@ function TrackRow({
       )}
       <div
         className={[
-          "flex items-center gap-2 px-3 py-3",
-          mode === "view" && "hover:bg-slate-50",
+          "flex items-center gap-4 px-5 py-3",
+          mode === "view" && !expanded && "hover:bg-slate-50",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {/* Drag handle — only active while we're in resting view mode so
-            it never fights with the rename input or the open editors.
-            Hidden until row-hover (or always visible on touch) to keep
-            the resting row tidy. */}
+            it never fights with the title input or the open editors.
+            Hidden until row-hover to keep the resting row tidy. */}
         <button
           type="button"
-          draggable={mode === "view"}
-          onDragStart={mode === "view" ? onDragStart : undefined}
+          draggable={!expanded}
+          onDragStart={!expanded ? onDragStart : undefined}
           aria-label="Drag to reorder"
           title="Drag to reorder"
           className={[
-            "w-5 h-7 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded transition-opacity",
-            mode === "view"
+            "w-3.5 h-5 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded transition-opacity",
+            !expanded
               ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
               : "opacity-0 pointer-events-none",
           ].join(" ")}
@@ -1485,17 +1454,16 @@ function TrackRow({
           <GripVertical className="w-3.5 h-3.5" />
         </button>
         {/* Track-number cell doubles as play/pause affordance.
-            • Resting: shows the track number.
+            • Resting: shows the track number (slate-400, 12px tabular).
             • Row hover (master exists): swaps in a play triangle.
             • Currently playing: pause icon in brand blue.
             • Currently selected but paused: play in brand blue.
             Apple Music uses this exact pattern — the number IS the play
-            button. Tracks without a master keep their number (the inline
-            "Upload master" CTA owns the action in that state). */}
-        <div className="w-7 h-7 flex-shrink-0 relative">
+            button. Slimmer cell (w-5 / 12px glyph) to match Seamless. */}
+        <div className="w-5 h-5 -ml-1.5 flex-shrink-0 relative">
           <span
             className={[
-              "absolute inset-0 inline-flex items-center justify-end pr-0.5 text-[12px] tabular-nums font-medium transition-opacity",
+              "absolute inset-0 inline-flex items-center justify-center text-[12px] tabular-nums font-medium transition-opacity",
               isCurrent ? "text-[#319ED8]" : "text-slate-400",
               song.audioUrl
                 ? isCurrent
@@ -1520,69 +1488,66 @@ function TrackRow({
               title={isCurrent && isPlaying ? "Pause" : "Play"}
               data-testid={`button-play-track-${song.id}`}
               className={[
-                "absolute inset-0 inline-flex items-center justify-center rounded-md transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+                "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
                 isCurrent
                   ? "opacity-100 text-[#319ED8]"
-                  : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700",
+                  : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]",
               ].join(" ")}
             >
               {isCurrent && isPlaying ? (
-                <Pause className="w-3.5 h-3.5 fill-current" />
+                <Pause className="w-3 h-3 fill-current" />
               ) : (
-                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                <Play className="w-3 h-3 fill-current ml-0.5" />
               )}
             </button>
           )}
         </div>
 
-        {mode === "rename" ? (
-          <div className="flex-1 min-w-0 flex items-center gap-2">
+        {/* Title — plain at rest, inline input when expanded. No more
+            pencil: clicking the title (or the caret) opens the row, and
+            the same input takes the user's edits. Saves on blur / Enter,
+            reverts on Escape. Apple-Music-row sizing (13.5px medium). */}
+        <div className="flex-1 min-w-0">
+          {expanded ? (
             <input
               ref={inputRef}
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              defaultValue={song.title}
+              autoFocus
+              aria-label={`Track title — ${song.title}`}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  submitRename();
+                  (e.target as HTMLInputElement).blur();
                 } else if (e.key === "Escape") {
                   e.preventDefault();
-                  cancelRename();
+                  if (inputRef.current) {
+                    inputRef.current.value = song.title;
+                  }
+                  (e.target as HTMLInputElement).blur();
                 }
               }}
-              className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                if (!next) {
+                  e.target.value = song.title;
+                  toast({
+                    title: "Title can't be empty",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                if (next === song.title) return;
+                renameMut.mutate(next);
+              }}
+              disabled={renameMut.isPending}
+              className="w-full px-2 -mx-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:bg-white focus:border-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-60"
               data-testid={`input-track-title-${song.id}`}
             />
-            <button
-              type="button"
-              onClick={submitRename}
-              disabled={renameMut.isPending}
-              className="px-2.5 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
-              data-testid={`button-save-track-${song.id}`}
-            >
-              {renameMut.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                "Save"
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={cancelRename}
-              disabled={renameMut.isPending}
-              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
-              data-testid={`button-cancel-track-${song.id}`}
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex-1 min-w-0">
+          ) : (
+            <>
               <button
                 type="button"
-                onClick={() => setUserExpanded((v) => !v)}
+                onClick={() => setUserExpanded(true)}
                 aria-expanded={expanded}
                 className="block w-full text-left"
                 data-testid={`button-open-track-${song.id}`}
@@ -1590,7 +1555,7 @@ function TrackRow({
                 <div
                   className={[
                     "text-[13.5px] font-medium truncate",
-                    expanded ? "text-[#319ED8]" : "text-slate-900",
+                    isCurrent ? "text-[#319ED8]" : "text-slate-900",
                   ].join(" ")}
                   data-testid={`text-track-title-${song.id}`}
                 >
@@ -1598,9 +1563,8 @@ function TrackRow({
                 </div>
               </button>
               {/* "Upload master" CTA stays inline under the title — it's a
-                  do-this-next affordance, not status. Dots have moved to
-                  the right side next to duration (Interactive pattern). */}
-              {!expanded && !song.audioUrl && (
+                  do-this-next affordance, not status. */}
+              {!song.audioUrl && (
                 <div className="mt-1">
                   <button
                     ref={masterChipRef}
@@ -1617,13 +1581,21 @@ function TrackRow({
                   </button>
                 </div>
               )}
-            </div>
-            <span
-              className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
-              data-testid={`text-track-duration-${song.id}`}
-            >
-              {formatDuration(song.duration)}
-            </span>
+            </>
+          )}
+        </div>
+
+        {/* Right side: at rest, duration + dot meter (Apple's
+            "title … 3:30 ✓✓✓" anatomy). When expanded the row owns
+            destructive controls (Hide / Trash) instead. */}
+        {!expanded && (
+          <span
+            className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
+            data-testid={`text-track-duration-${song.id}`}
+          >
+            {formatDuration(song.duration)}
+          </span>
+        )}
             {/* Right-aligned dot meter — Preview / Lyrics / Credits.
                 Sits next to duration so the row reads "title … 3:30 ✓✓✓"
                 like Apple Music's status chips. Hidden while the row is
@@ -1684,96 +1656,73 @@ function TrackRow({
                 </div>
               );
             })()}
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {/* Rename pencil — always visible (on hover when collapsed,
-                  pinned when expanded so the affordance stays reachable
-                  while the tile grid is open). */}
-              <button
-                ref={pencilRef}
-                type="button"
-                onClick={() => setMode("rename")}
-                aria-label="Rename track"
-                title="Rename"
-                className={[
-                  "w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all focus:opacity-100",
-                  expanded
-                    ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100",
-                ].join(" ")}
-                data-testid={`button-rename-track-${song.id}`}
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              {/* Destructive cluster — only surfaced when the row is open.
-                  Hide+Delete sit behind a hairline divider so a thumb can't
-                  slide from a benign control straight into the trash. */}
-              {expanded && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      toast({
-                        title: "Hide track",
-                        description: "Hide / Park is coming soon.",
-                      })
-                    }
-                    aria-label="Hide track"
-                    title="Hide track (parks it — reversible)"
-                    className="w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center"
-                    data-testid={`button-hide-track-${song.id}`}
-                  >
-                    <EyeOff className="w-3.5 h-3.5" />
-                  </button>
-                  <span
-                    className="mx-0.5 h-4 w-px bg-slate-200"
-                    aria-hidden="true"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
-                        )
-                      ) {
-                        deleteMut.mutate();
-                      }
-                    }}
-                    disabled={deleteMut.isPending}
-                    aria-label="Delete track"
-                    title="Delete"
-                    className="w-7 h-7 rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center disabled:opacity-50"
-                    data-testid={`button-delete-track-${song.id}`}
-                  >
-                    {deleteMut.isPending ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </>
+        {/* Destructive cluster — only surfaced when the row is open.
+            Hide+Delete sit behind a hairline divider so a thumb can't
+            slide from a benign control straight into the trash. */}
+        {expanded && (
+          <div className="flex items-center flex-shrink-0">
+            <button
+              type="button"
+              onClick={() =>
+                toast({
+                  title: "Hide track",
+                  description: "Hide / Park is coming soon.",
+                })
+              }
+              aria-label="Hide track"
+              title="Hide track (parks it — reversible)"
+              className="w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 inline-flex items-center justify-center"
+              data-testid={`button-hide-track-${song.id}`}
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+            </button>
+            <span
+              className="mx-2 h-4 w-px bg-slate-200"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
+                  )
+                ) {
+                  deleteMut.mutate();
+                }
+              }}
+              disabled={deleteMut.isPending}
+              aria-label="Delete track"
+              title="Delete"
+              className="w-7 h-7 rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center disabled:opacity-50"
+              data-testid={`button-delete-track-${song.id}`}
+            >
+              {deleteMut.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
               )}
-              {/* Chevron — the canonical expand/collapse affordance. Also
-                  reachable by clicking the title. */}
-              <button
-                type="button"
-                onClick={() => setUserExpanded((v) => !v)}
-                aria-expanded={expanded}
-                aria-label={expanded ? "Collapse track" : "Expand track"}
-                title={expanded ? "Collapse" : "Expand"}
-                className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
-                data-testid={`button-expand-track-${song.id}`}
-              >
-                <ChevronDown
-                  className={[
-                    "w-4 h-4 transition-transform",
-                    expanded ? "rotate-180" : "",
-                  ].join(" ")}
-                />
-              </button>
-            </div>
-          </>
+            </button>
+          </div>
         )}
+        {/* Chevron — the canonical expand/collapse affordance. Also
+            reachable by clicking the title. */}
+        <button
+          type="button"
+          onClick={() => setUserExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse track" : "Expand track"}
+          title={expanded ? "Collapse" : "Expand"}
+          className="flex-shrink-0 w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+          data-testid={`button-expand-track-${song.id}`}
+        >
+          <ChevronDown
+            className={[
+              "w-4 h-4 transition-transform",
+              expanded ? "rotate-180" : "",
+            ].join(" ")}
+          />
+        </button>
       </div>
 
       {/* ── Expanded body: REQUIRED Master tile + 3-up OPTIONAL grid,
