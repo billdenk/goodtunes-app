@@ -1548,47 +1548,153 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(413).json({ message: `Lyrics too long (${song.lyrics.length} chars; cap ${FA_MAX_LYRIC_CHARS}).` });
     }
 
-    // Preflight the audio size from object metadata before pulling bytes —
-    // rejects an oversized file without paying the download cost or the
-    // paid API cost downstream.
+    // Pull the master audio bytes. Two sources are supported:
+    //   1) Object Storage paths (`/objects/uploads/<id>`) — uploaded
+    //      via the admin master uploader. Preflight via metadata so
+    //      an oversized file doesn't cost us an ElevenLabs call.
+    //   2) External HTTPS URLs (Dropbox, S3, etc.) — Nick's catalog
+    //      lives on Dropbox today; we stream those directly. No
+    //      metadata preflight available; we rely on a streaming size
+    //      cap to bail out if the body grows past FA_MAX_AUDIO_BYTES.
     let audioMime = "audio/wav";
     let audioBuf: Buffer;
+    const isExternalUrl = /^https?:\/\//i.test(song.audioUrl);
     try {
-      const file = await objectStorage.getObjectEntityFile(song.audioUrl);
-      const [meta] = await file.getMetadata();
-      if (meta?.contentType) audioMime = String(meta.contentType);
-      const size = Number(meta?.size ?? 0);
-      if (size && size > FA_MAX_AUDIO_BYTES) {
-        return res.status(413).json({
-          message: `Master is too large for auto-sync (${(size / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
-        });
+      if (isExternalUrl) {
+        const upstream = await fetch(song.audioUrl);
+        if (!upstream.ok || !upstream.body) {
+          return res.status(502).json({
+            message: `Could not fetch master from external URL (HTTP ${upstream.status})`,
+          });
+        }
+        const ct = upstream.headers.get("content-type");
+        if (ct) audioMime = ct.split(";")[0].trim();
+        // Honor Content-Length preflight when the server provides it.
+        const cl = Number(upstream.headers.get("content-length") ?? 0);
+        if (cl && cl > FA_MAX_AUDIO_BYTES) {
+          return res.status(413).json({
+            message: `Master is too large for auto-sync (${(cl / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
+          });
+        }
+        const ab = await upstream.arrayBuffer();
+        if (ab.byteLength > FA_MAX_AUDIO_BYTES) {
+          return res.status(413).json({
+            message: `Master is too large for auto-sync (${(ab.byteLength / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
+          });
+        }
+        audioBuf = Buffer.from(ab);
+      } else {
+        const file = await objectStorage.getObjectEntityFile(song.audioUrl);
+        const [meta] = await file.getMetadata();
+        if (meta?.contentType) audioMime = String(meta.contentType);
+        const size = Number(meta?.size ?? 0);
+        if (size && size > FA_MAX_AUDIO_BYTES) {
+          return res.status(413).json({
+            message: `Master is too large for auto-sync (${(size / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
+          });
+        }
+        const [buf] = await file.download();
+        audioBuf = buf;
       }
-      const [buf] = await file.download();
-      audioBuf = buf;
     } catch (err) {
       console.error("auto-sync: failed to fetch master audio", err);
       return res.status(502).json({ message: "Could not read master audio from storage" });
     }
 
-    // Section-header detection — MUST match the client's
-    // SECTION_HEADER_RE in client/src/pages/AdminAlbum.tsx. Bracketed
-    // (`[Verse 1]`) AND the songwriter shorthand the textarea
-    // placeholder teaches (V1/VERSE/PRE/POST/CHORUS/BRIDGE/INTRO/OUTRO).
-    // Bill caught this: if we hand the shorthand to ElevenLabs as text
-    // it tries to align "V1" / "CHORUS" / etc. against the audio,
-    // hallucinating timestamps and shifting every subsequent sung
-    // line later by 2-3 lines (the "highlight is 3 lines behind the
-    // audio" bug). Strip headers before alignment AND skip them in
-    // the walk.
-    const SECTION_HEADER_RE =
-      /^(\[.*\]|V\d+|VERSE(?:\s+\d+)?|PRE(?:-?\s*CHORUS)?|POST(?:-?\s*CHORUS)?|CHORUS|BRIDGE|INTRO|OUTRO)$/;
-    const isHeaderLine = (line: string) =>
-      SECTION_HEADER_RE.test(line.trim());
+    // Section-header detection + songwriter-shorthand expansion.
+    //
+    // Bill's writers hand us lyrics in industry shorthand: the chorus is
+    // written ONCE at the top under a `CHORUS` header, then later a bare
+    // `CHORUS` on its own line means "sing it again here". Same with
+    // `Hook\nHook` (twice in a row → sing twice), `CHORUS x2 OUT`, etc.
+    // The recorded master sings all those repeats out loud, so when we
+    // shipped only the written text to ElevenLabs we'd get back 2-3× as
+    // many words as our text and the alignment would 422 fail.
+    //
+    // Fix: pre-expand every reference using the previously-defined body
+    // before alignment. The expanded line array is also what we walk to
+    // assign timestamps — so each sung chorus repetition gets its own
+    // syncedLyrics entry. The user's editable `lyrics` field stays in
+    // the compact shorthand form.
+    //
+    // HEADER_LINE_RE is permissive: bracketed (`[Verse 1]`), short
+    // (V1/V2), spelled-out (VERSE 1), Pre/B, PRE1, PRE-CHORUS, HOOK,
+    // VAMP HOOK, REFRAIN, plus trailing `x2` and/or `OUT` markers.
+    const HEADER_LINE_RE =
+      /^\[?\s*(VAMP\s+HOOK|HOOK|VERSE(?:\s+\d+)?|V\d+|PRE(?:[-\s\/]?(?:CHORUS|B))?\d*|POST(?:-?\s*CHORUS)?|CHORUS|BRIDGE|INTRO|OUTRO|REFRAIN)\s*(?:x\s*(\d+))?(?:\s+OUT)?\s*\]?\s*$/i;
+    function parseHeader(line: string): { name: string; mult: number } | null {
+      const m = line.trim().match(HEADER_LINE_RE);
+      if (!m) return null;
+      return {
+        name: m[1].toUpperCase().replace(/\s+/g, " ").trim(),
+        mult: m[2] ? Math.max(1, parseInt(m[2], 10)) : 1,
+      };
+    }
+    const isHeaderLine = (line: string) => parseHeader(line) != null;
+    const hasAlphaNum = (s: string) => /[A-Za-z0-9]/.test(s);
 
-    const alignmentText = song.lyrics
-      .split("\n")
+    // Walk lyrics into alternating header-runs + body-runs, then expand
+    // references against the registry of previously-seen bodies.
+    function expandLyricShorthand(rawLyrics: string): string[] {
+      type Block = { headers: { name: string; mult: number }[]; body: string[] };
+      const blocks: Block[] = [];
+      let cur: Block = { headers: [], body: [] };
+      let mode: "headers" | "body" | "init" = "init";
+      for (const raw of rawLyrics.split("\n")) {
+        const trimmed = raw.trim();
+        if (!trimmed || !hasAlphaNum(trimmed)) continue; // skip blank + dot-only lines
+        const hdr = parseHeader(trimmed);
+        if (hdr) {
+          if (mode === "body") {
+            blocks.push(cur);
+            cur = { headers: [hdr], body: [] };
+          } else {
+            cur.headers.push(hdr);
+          }
+          mode = "headers";
+        } else {
+          cur.body.push(trimmed);
+          mode = "body";
+        }
+      }
+      if (cur.headers.length || cur.body.length) blocks.push(cur);
+
+      const registry = new Map<string, string[]>();
+      const out: string[] = [];
+      for (const block of blocks) {
+        if (block.body.length > 0) {
+          for (const h of block.headers) {
+            if (!registry.has(h.name)) registry.set(h.name, block.body);
+          }
+          for (const h of block.headers) {
+            for (let i = 0; i < h.mult; i++) {
+              out.push(h.name);
+              out.push(...block.body);
+            }
+          }
+        } else {
+          for (const h of block.headers) {
+            const body = registry.get(h.name);
+            if (!body) continue;
+            for (let i = 0; i < h.mult; i++) {
+              out.push(h.name);
+              out.push(...body);
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    const expandedLines = expandLyricShorthand(song.lyrics);
+    const alignmentText = expandedLines
       .filter((l) => !isHeaderLine(l))
       .join("\n");
+    if (alignmentText.length > FA_MAX_LYRIC_CHARS) {
+      return res.status(413).json({
+        message: `Expanded lyrics too long (${alignmentText.length} chars; cap ${FA_MAX_LYRIC_CHARS}).`,
+      });
+    }
 
     // Call ElevenLabs Forced Alignment. multipart/form-data with `file` + `text`.
     // AbortController prevents a hung upstream from tying up the server.
@@ -1648,7 +1754,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // count both totals and fail fast if they diverge by more than 10%
     // rather than silently emitting timeMs=0 lines.
     const wordRe = /[\p{L}\p{N}'']+/gu;
-    const lines = song.lyrics.split("\n");
+    const lines = expandedLines;
     let expectedTokens = 0;
     for (const raw of lines) {
       const t = raw.trim();
@@ -1699,6 +1805,107 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       wordCount: words.length,
     });
   });
+
+  // Mirror a song's external audio URL (Dropbox share link, etc.) into
+  // our Object Storage bucket so playback isn't bottlenecked by Dropbox's
+  // throttled CDN and so ElevenLabs forced alignment reads from a fast,
+  // owned origin. Streams upstream → GCS without buffering, caps at
+  // FA_MAX_AUDIO_BYTES, flips ACL to public, and updates the song row.
+  // Idempotent-ish: if audioUrl already points at `/objects/`, returns
+  // early with `{ alreadyMirrored: true }`.
+  app.post(
+    "/api/admin/songs/:id/mirror-audio-to-storage",
+    requireAdminBearer,
+    async (req, res) => {
+      const id = String(req.params.id);
+      const song = await storage.getSongById(id);
+      if (!song) return res.status(404).json({ message: "Song not found" });
+      const src = song.audioUrl;
+      if (!src) return res.status(400).json({ message: "Song has no audioUrl" });
+      if (src.startsWith("/objects/")) {
+        return res.json({ alreadyMirrored: true, url: src });
+      }
+      if (!/^https?:\/\//i.test(src)) {
+        return res.status(400).json({ message: "audioUrl is not an http(s) URL" });
+      }
+      try {
+        // Dropbox share-link normalization: ?dl=0 → ?dl=1 to get raw bytes.
+        const normalized = src.replace(/([?&])dl=0(\b)/, "$1dl=1$2");
+        const upstream = await fetch(normalized, { redirect: "follow" });
+        if (!upstream.ok || !upstream.body) {
+          return res.status(502).json({
+            message: `Upstream fetch failed: ${upstream.status}`,
+          });
+        }
+        const upstreamMime = (upstream.headers.get("content-type") || "")
+          .split(";")[0]
+          .trim()
+          .toLowerCase();
+        let ext: string | undefined = AUDIO_MIME_TO_EXT[upstreamMime];
+        let storedMime = upstreamMime;
+        if (!ext) {
+          const parsed = new URL(normalized);
+          const m = parsed.pathname.toLowerCase().match(/\.(mp3|m4a|aac|wav|flac|ogg)(?:$|[?#])/);
+          if (m) {
+            const map: Record<string, [string, string]> = {
+              mp3: [".mp3", "audio/mpeg"],
+              m4a: [".m4a", "audio/mp4"],
+              aac: [".aac", "audio/aac"],
+              wav: [".wav", "audio/wav"],
+              flac: [".flac", "audio/flac"],
+              ogg: [".ogg", "audio/ogg"],
+            };
+            [ext, storedMime] = map[m[1]];
+          }
+        }
+        if (!ext) {
+          return res.status(400).json({
+            message: "Upstream did not return a recognized audio type",
+          });
+        }
+        const newId = `${randomUUID()}${ext}`;
+        const { bucketName, objectName } = uploadDestination(newId);
+        const file = objectStorageClient.bucket(bucketName).file(objectName);
+        let received = 0;
+        const writeStream = file.createWriteStream({
+          contentType: storedMime,
+          metadata: { cacheControl: "public, max-age=31536000, immutable" },
+          resumable: false,
+        });
+        const { Readable } = await import("stream");
+        const nodeReadable = Readable.fromWeb(upstream.body as any);
+        let aborted = false;
+        await new Promise<void>((resolve, reject) => {
+          nodeReadable.on("data", (chunk: Buffer) => {
+            received += chunk.length;
+            if (received > FA_MAX_AUDIO_BYTES && !aborted) {
+              aborted = true;
+              nodeReadable.destroy();
+              writeStream.destroy(new Error("Audio exceeded size cap"));
+            }
+          });
+          nodeReadable.on("error", reject);
+          writeStream.on("error", reject);
+          writeStream.on("finish", resolve);
+          nodeReadable.pipe(writeStream);
+        });
+        await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+        const newUrl = `/objects/uploads/${newId}`;
+        const updated = await storage.updateSong(id, { audioUrl: newUrl });
+        return res.json({
+          url: newUrl,
+          bytes: received,
+          contentType: storedMime,
+          song: updated,
+        });
+      } catch (err: any) {
+        console.error("Audio mirror failed for", id, err);
+        return res.status(500).json({
+          message: err?.message || "Could not mirror audio",
+        });
+      }
+    },
+  );
 
   // Bulk reorder the tracklist. Accepts the album's song IDs in their new
   // display order and rewrites each song's trackNumber to its index+1.

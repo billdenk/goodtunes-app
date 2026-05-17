@@ -2524,12 +2524,15 @@ function GoodSyncPanel({
                 previewCues.map((cue, i) => {
                   const isActive = i === activeIdx;
                   const isPast = i < activeIdx;
-                  // Apple-Music-style three-dot pulse for instrumental
-                  // gaps. Shows above the *upcoming* cue when there's a
-                  // ≥3s silence between the previous line's start and
-                  // this one. Each dot lights as we cross 1/3 of the
-                  // gap (left→right fill). Intro gap counts too: prev
-                  // time is 0 for the first cue.
+                  // Apple-Music-style three-dot pulse for *real*
+                  // instrumental gaps. Threshold is 6s — normal lyric
+                  // breathing room (3–5s between lines) shouldn't
+                  // trigger dots; only genuine silences (intros,
+                  // bridges, solos) should. Bill: "they started
+                  // jumping lines and inserting themselves" — that
+                  // was the old 3s threshold catching ordinary line
+                  // breaks. Intro gap counts too: prev time is 0 for
+                  // the first cue.
                   const prevTime =
                     i === 0 ? 0 : previewCues[i - 1].timeMs / 1000;
                   const cueTime = cue.timeMs / 1000;
@@ -2537,7 +2540,7 @@ function GoodSyncPanel({
                   const inGap =
                     currentTime >= prevTime &&
                     currentTime < cueTime &&
-                    gap >= 3;
+                    gap >= 6;
                   const gapProgress = inGap
                     ? Math.max(
                         0,
