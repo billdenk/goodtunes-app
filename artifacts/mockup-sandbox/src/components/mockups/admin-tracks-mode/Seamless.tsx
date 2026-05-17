@@ -672,7 +672,14 @@ function BottomDock({
                   this column anymore — it lives at the pill's bottom
                   edge and runs UNDER everything (see below). */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-11 h-11 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
+                {/* Cover at 40px (w-10) — intentionally one notch shorter
+                    than the 44px Play button so the Play button drives
+                    the row's intrinsic height. That gives the bar 6px
+                    of clear space below the cover even with symmetric
+                    py-3 padding (without this, cover bottom would hug
+                    the bar). Stays clearly the largest visual anchor
+                    in the center cluster. */}
+                <div className="w-10 h-10 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-semibold truncate leading-tight">
                     {current.title}
