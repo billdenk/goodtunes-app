@@ -622,7 +622,7 @@ function BottomDock({
             left end of the pill. Cover corner radius bumps to rounded-lg
             (was rounded-md) so it nests inside the capsule curve rather
             than fighting it. */}
-        <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-2 pr-2 py-2">
+        <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-3 pr-2 py-2">
           <div
             className="w-9 h-9 rounded-lg flex-shrink-0"
             style={{
