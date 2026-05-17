@@ -17,6 +17,7 @@ import {
   EyeOff,
   Lock,
   LockOpen,
+  MoveHorizontal,
   Link as LinkIcon,
   Sparkles,
   Loader2,
@@ -431,28 +432,46 @@ function SnippetDetail({ onClose }: { onClose: () => void }) {
   };
   return (
     <DetailWrap title="30-sec snippet" onClose={onClose}>
-      {/* Copy explains the default behavior so the artist never feels
-          blocked. Three states: auto default · custom (unlocked) · locked. */}
-      <div className="flex items-start justify-between gap-3 -mt-1">
-        <p className="text-[11.5px] text-slate-500 flex-1">
-          {locked
-            ? `Locked in at ${startLabel}–${endLabel}. Tap the padlock to slide it again.`
-            : isCustom
-              ? `Custom hook at ${startLabel}–${endLabel}. Tap the padlock when you're satisfied.`
-              : "Using the first 30 seconds by default. Slide the yellow window to pick a different hook — or leave it as is."}
-        </p>
-        {/* Reset to default — only shows once the artist has moved the
-            window. Ghost-pill pattern, same as everywhere else. */}
-        {isCustom && !locked && (
-          <button
-            onClick={() => setLeft(0)}
-            className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
-            title="Reset the snippet to the first 30 seconds"
-          >
-            Reset to default
-          </button>
-        )}
-      </div>
+      {/* Three states: auto-default (untouched) · custom (unlocked) · locked.
+          The untouched state gets a brand-blue callout card — quietly louder
+          than a paragraph, inviting action without alarming. Once the artist
+          touches the window, the callout downgrades to a plain status line. */}
+      {!isCustom && !locked ? (
+        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
+          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+            <MoveHorizontal className="w-4 h-4" />
+          </span>
+          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+            <div className="font-semibold text-slate-900">
+              Pick your 30-second preview
+            </div>
+            <div className="text-slate-600 mt-0.5">
+              Right now we'll play the first 30 seconds. Drag the yellow window
+              anywhere on the waveform to start it from a different spot — it
+              stays locked to 30 sec wide. Or leave it as is.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start justify-between gap-3 -mt-1">
+          <p className="text-[11.5px] text-slate-500 flex-1">
+            {locked
+              ? `Locked in at ${startLabel}–${endLabel}. Tap the padlock to slide it again.`
+              : `Custom hook at ${startLabel}–${endLabel}. Tap the padlock when you're satisfied.`}
+          </p>
+          {/* Reset to default — only shows once the artist has moved the
+              window. Ghost-pill pattern, same as everywhere else. */}
+          {isCustom && !locked && (
+            <button
+              onClick={() => setLeft(0)}
+              className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+              title="Reset the snippet to the first 30 seconds"
+            >
+              Reset to default
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Trim row: play · waveform · lock — Apple iMovie pattern */}
       <div className="flex items-center gap-2">
@@ -1419,7 +1438,7 @@ function EditRow({
               ok
               icon={Scissors}
               label="30-sec snippet"
-              subtitle={t.snippet ? "Custom hook" : "Auto · first 30 sec"}
+              subtitle={t.snippet ? "Custom hook" : "Auto · tap to pick a hook"}
               severity="soft"
               active={openSection === "snippet"}
               onClick={() => toggleSection("snippet")}
