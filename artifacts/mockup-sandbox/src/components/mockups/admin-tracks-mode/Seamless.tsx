@@ -17,6 +17,7 @@ import {
   SkipForward,
   Shuffle,
   Repeat,
+  Repeat1,
   Volume,
   Volume1,
   Volume2,
@@ -515,6 +516,20 @@ function BottomDock({
   const [volumeMuted, setVolumeMuted] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(65);
 
+  // Shuffle is a binary toggle (off ↔ on). Repeat cycles through three
+  // states matching Apple Music's pattern: off → all → one → off.
+  //   • off  : plain grey icon, no background
+  //   • on / all / one : brand-blue (#319ED8) icon + soft blue bubble
+  //   • repeat-one  : same styling as "all", but the glyph swaps from
+  //     `Repeat` → `Repeat1` (the version with a small 1 tucked in)
+  // Admin surface uses #319ED8 for active states; #FF5470 stays reserved
+  // for fan-side favoriting per the design-system rules.
+  const [shuffleOn, setShuffleOn] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
+  const cycleRepeat = () =>
+    setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
+  const RepeatIcon = repeatMode === "one" ? Repeat1 : Repeat;
+
   const VolumeIcon =
     volumeMuted || volumeLevel === 0
       ? VolumeX
@@ -564,8 +579,17 @@ function BottomDock({
           {/* ── LEFT · transport ─────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
             <button
+              type="button"
               aria-label="Shuffle"
-              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              aria-pressed={shuffleOn}
+              title={shuffleOn ? "Shuffle on" : "Shuffle off"}
+              onClick={() => setShuffleOn((s) => !s)}
+              className={[
+                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                shuffleOn
+                  ? "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20"
+                  : "text-slate-300 hover:text-white hover:bg-white/10",
+              ].join(" ")}
             >
               <Shuffle className="w-4 h-4" />
             </button>
@@ -607,10 +631,30 @@ function BottomDock({
               <SkipForward className="w-[18px] h-[18px] fill-current" />
             </button>
             <button
-              aria-label="Repeat"
-              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              type="button"
+              aria-label={
+                repeatMode === "off"
+                  ? "Repeat off"
+                  : repeatMode === "all"
+                  ? "Repeat all"
+                  : "Repeat one"
+              }
+              title={
+                repeatMode === "off"
+                  ? "Repeat off"
+                  : repeatMode === "all"
+                  ? "Repeat all"
+                  : "Repeat one"
+              }
+              onClick={cycleRepeat}
+              className={[
+                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                repeatMode === "off"
+                  ? "text-slate-300 hover:text-white hover:bg-white/10"
+                  : "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20",
+              ].join(" ")}
             >
-              <Repeat className="w-4 h-4" />
+              <RepeatIcon className="w-4 h-4" />
             </button>
           </div>
 
