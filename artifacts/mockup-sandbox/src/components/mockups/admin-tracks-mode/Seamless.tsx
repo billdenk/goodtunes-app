@@ -17,9 +17,7 @@ import {
   SkipForward,
   Shuffle,
   Repeat,
-  MoreHorizontal,
   Volume2,
-  Mic2,
 } from "lucide-react";
 
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
@@ -476,7 +474,7 @@ function Row({
    Anatomy (Apple parity):
      LEFT cluster  — transport: shuffle · prev · PLAY (flat, no circle) · next · repeat
      CENTER cluster — thumb · title/subtitle · inline scrubber with elapsed / total
-     RIGHT cluster — ⋯ · lyrics (Mic2) · volume icon + thin slider
+     RIGHT cluster — lyrics glyph · volume icon + thin slider
 
    IDLE (no selection): pill collapses to just the LEFT cluster, content
    on the right hidden. Pill width auto-sizes so the dock doesn't
@@ -617,20 +615,38 @@ function BottomDock({
 
               <span className="mx-1 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
 
-              {/* ── RIGHT · utility cluster ─────────────────────── */}
+              {/* ── RIGHT · utility cluster ───────────────────────
+                  Apple's ⋯ opens a song-options menu (Download, Add to
+                  Playlist, Create Station, Share, etc.). The admin Tracks
+                  row already owns its own ⋯ on each row, so this dock
+                  doesn't need a duplicate — dropped per Bill's call.
+                  Shuffle + Repeat remain on the LEFT cluster because this
+                  dock graduates to the consumer player where both matter. */}
               <div className="flex items-center gap-0.5 flex-shrink-0">
-                <button
-                  aria-label="More"
-                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
                 <button
                   aria-label="Show lyrics"
                   title="Show lyrics — QA-preview synced lyrics while the master plays"
                   className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                 >
-                  <Mic2 className="w-4 h-4" />
+                  {/* Canonical GoodTunes lyrics glyph — kept in sync with
+                      client/src/components/ui/LyricsIcon.tsx (the primitives
+                      home). The sandbox can't reach @/components, so the
+                      same path data is inlined here. */}
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M6 3.5h12a2.5 2.5 0 0 1 2.5 2.5v8a2.5 2.5 0 0 1-2.5 2.5h-4.5l-3.5 3v-3H6A2.5 2.5 0 0 1 3.5 14V6A2.5 2.5 0 0 1 6 3.5z" />
+                    <path d="M8.3 8.2c-1.3.3-2.1 1.35-2.1 2.65V12.5h2.6V9.95h-.7c.05-.4.35-.75.8-.9z" fill="currentColor" stroke="none" />
+                    <path d="M13.8 8.2c-1.3.3-2.1 1.35-2.1 2.65V12.5h2.6V9.95h-.7c.05-.4.35-.75.8-.9z" fill="currentColor" stroke="none" />
+                  </svg>
                 </button>
                 <div className="flex items-center gap-1.5 pl-1 pr-1">
                   <Volume2 className="w-4 h-4 text-slate-300 flex-shrink-0" />

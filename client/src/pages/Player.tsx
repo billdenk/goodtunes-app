@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
+import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { track } from "@/lib/analytics";
 
@@ -411,11 +412,7 @@ export function Player() {
                 title={currentSong.lyrics ? undefined : "No lyrics available"}
                 data-testid="button-lyrics"
               >
-                {/* Apple's "quote bubble" lyrics icon */}
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v9A2.5 2.5 0 0117.5 17H13l-4 3.5V17H6.5A2.5 2.5 0 014 14.5v-9z" />
-                  <path d="M9 8.5c-1.2.4-2 1.4-2 2.6V13h2.6V10.4H8.2c0-.6.3-1.2.8-1.5l-0-.4zM15 8.5c-1.2.4-2 1.4-2 2.6V13h2.6V10.4h-1.4c0-.6.3-1.2.8-1.5l-0-.4z" fill="currentColor" stroke="none" />
-                </svg>
+                <LyricsIcon size={22} />
               </button>
               <button
                 type="button"

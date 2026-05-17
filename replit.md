@@ -31,6 +31,7 @@ Mobile-first, Apple-Music-inspired web player.
   - Touch targets: **44×44pt minimum** on mobile surfaces (already enforced in this README).
   - Corner radii, padding rhythm, hover/pressed states: match Apple Music / Apple-iOS conventions over inventing our own.
 - **Icons**: a single icon set per family (Lucide for UI chrome; `react-icons/si` for company logos). One play triangle, one trash can, one chevron, one pencil — used in every surface that needs that concept.
+  - **Lyrics glyph**: GoodTunes-canonical SVG (speech bubble + two filled quote marks) lives at `client/src/components/ui/LyricsIcon.tsx`. Used on the mobile player's Now Playing controls **and** the admin Tracks-tab BottomDock. Sandbox mockups inline the same path data since they can't reach `@/components` — keep both in sync if it ever changes. No `Mic2`, no third-party speech-bubble for this concept.
 - **Color**: only the five brand colors listed above + Tailwind slate for neutrals. New colors require a discussion, not a one-off.
 - **Destructive actions always confirm.** Any trash / delete / "remove forever" button must pop a confirmation sheet naming the thing being destroyed (e.g. "Delete *Storms*? This removes the master, snippet, lyrics, and credits.") with a rose-tinted primary action. Hide / Park / Archive are reversible and do **not** need a confirm — they just toast "Hidden — undo." Destructive buttons must also keep visual breathing room (gap + hairline divider) from any adjacent non-destructive control so a thumb can't slide between them.
 
