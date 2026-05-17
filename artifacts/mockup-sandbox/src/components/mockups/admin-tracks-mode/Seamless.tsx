@@ -708,16 +708,29 @@ function BottomDock({
         )}
       </div>
 
+    {/* Dock wrapper sizing:
+        • Wide → centered 760px pill (capped at viewport − 32).
+        • Compact + window narrow → edge-to-edge (`left-2 right-2`),
+          exactly Apple's narrow-viewport pattern.
+        • Compact FORCED via the demo toggle → constrained to a
+          simulated narrow width (~640px) and centered. Without this
+          constraint, the demo toggle just flips the `compact` flag
+          but the dock keeps spanning the full 1280px iframe, so the
+          visible result is identical to wide minus the inset scrubber.
+          Forcing a real narrow width lets the demo actually reproduce
+          the cramped narrow case Bill was hitting earlier. */}
     <div
       className={[
         "absolute bottom-4 z-20",
-        compact
+        compact && forcedCompact !== true
           ? "left-2 right-2"
           : "left-1/2 -translate-x-1/2",
       ].join(" ")}
       style={
         !compact && hasSelection
           ? { width: "min(760px, calc(100% - 32px))" }
+          : forcedCompact === true
+          ? { width: "min(640px, calc(100% - 32px))" }
           : undefined
       }
     >
