@@ -1884,33 +1884,38 @@ function TrackRow({
                   buttonRef={creditsChipRef}
                 />
               </div>
-              {/* Sync-timing entry — quiet text link under the OPTIONAL
-                  grid. Hidden for instrumentals (nothing to time) and
-                  while a master file is missing. GoodSync™ count surfaces
-                  when cues exist so the chip carries the same status
-                  signal the old Timing chip used to. */}
-              {!song.instrumental && song.audioUrl && (
-                <div className="flex justify-end pt-1.5">
-                  <button
-                    ref={syncedChipRef}
-                    type="button"
-                    onClick={() =>
-                      setMode((m) => (m === "synced" ? "view" : "synced"))
-                    }
-                    className={
-                      "inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
-                      ((song.syncedLyrics?.length ?? 0) > 0
-                        ? "text-[#319ED8] hover:bg-[#319ED8]/10"
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-100")
-                    }
-                    data-testid={`button-edit-synced-${song.id}`}
-                  >
-                    {(song.syncedLyrics?.length ?? 0) > 0
-                      ? `GoodSync™ · ${song.syncedLyrics?.length} cues`
-                      : "Add line timing…"}
-                  </button>
-                </div>
-              )}
+              {/* GoodSync™ entry — quiet trailing link, only when there
+                  ARE lyrics to sync (a master file alone isn't enough —
+                  you need words). Two visual states:
+                  – synced: brand-blue "GoodSync™ ✓" (no count noise)
+                  – not synced: low-emphasis "GoodSync™"
+                  Apple's pattern: short proper-noun label, checkmark
+                  for "done," no chore-y verbs like "Add" or ellipses. */}
+              {!song.instrumental &&
+                song.audioUrl &&
+                (song.lyrics?.trim()?.length ?? 0) > 0 && (
+                  <div className="flex justify-end pt-1.5">
+                    <button
+                      ref={syncedChipRef}
+                      type="button"
+                      onClick={() =>
+                        setMode((m) => (m === "synced" ? "view" : "synced"))
+                      }
+                      className={
+                        "inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
+                        ((song.syncedLyrics?.length ?? 0) > 0
+                          ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                          : "text-slate-400 hover:text-slate-700 hover:bg-slate-100")
+                      }
+                      data-testid={`button-edit-synced-${song.id}`}
+                    >
+                      <span>GoodSync™</span>
+                      {(song.syncedLyrics?.length ?? 0) > 0 && (
+                        <Check className="w-3 h-3" />
+                      )}
+                    </button>
+                  </div>
+                )}
             </div>
           </div>
 
@@ -3272,7 +3277,6 @@ function RichPreviewEditor({
   const [committedLeft, setCommittedLeft] = useState(initialPct);
   const [draftLeft, setDraftLeft] = useState(initialPct);
   const [locked, setLocked] = useState(true);
-  const [confirmClose, setConfirmClose] = useState(false);
 
   const wfRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startLeft: number } | null>(
@@ -3385,9 +3389,15 @@ function RichPreviewEditor({
     else setLocked((v) => !v);
   };
 
+  // Apple-style: tapping X with unsaved changes commits the edit and
+  // closes. No confirm dialog. Revert exists as an explicit undo for
+  // the rare "I dragged by accident" case. Photos/iMovie work the same
+  // way — Done means done.
   const guardedClose = () => {
-    if (isDirty) setConfirmClose(true);
-    else onClose?.();
+    if (isDirty) {
+      saveAndLock();
+    }
+    onClose?.();
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -3871,69 +3881,6 @@ function RichPreviewEditor({
         </div>
       )}
 
-      {/* Dirty-close confirm sheet */}
-      {confirmClose && (
-        <div className="absolute inset-0 z-20 flex items-end justify-center bg-slate-900/40 rounded-xl">
-          <div className="w-full bg-white rounded-b-xl rounded-t-md shadow-2xl border-t border-slate-200 p-4 space-y-3">
-            <div>
-              <div className="text-[13px] font-semibold text-slate-900">
-                Save your preview edit?
-              </div>
-              <div className="text-[11.5px] text-slate-500 mt-0.5">
-                You moved the window to{" "}
-                <span className="font-semibold tabular-nums">
-                  {draftStartLabel}–{draftEndLabel}
-                </span>
-                . If you close without saving, fans keep hearing{" "}
-                <span className="tabular-nums">
-                  {committedLeft < 0.5
-                    ? "0:00–0:30"
-                    : `${committedStartLabel}–${committedEndLabel}`}
-                </span>
-                .
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  saveAndLock();
-                  setConfirmClose(false);
-                  onClose?.();
-                }}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-[12px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90"
-                data-testid={`button-preview-confirm-save-${song.id}`}
-              >
-                <Lock className="w-3.5 h-3.5" />
-                Lock Preview &amp; close
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftLeft(committedLeft);
-                    setConfirmClose(false);
-                    onClose?.();
-                  }}
-                  className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-md text-[12px] font-semibold text-rose-600 hover:bg-rose-50"
-                  data-testid={`button-preview-confirm-discard-${song.id}`}
-                >
-                  Discard changes
-                </button>
-                <span className="w-px h-6 bg-slate-200" aria-hidden />
-                <button
-                  type="button"
-                  onClick={() => setConfirmClose(false)}
-                  className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-100"
-                  data-testid={`button-preview-confirm-cancel-${song.id}`}
-                >
-                  Keep editing
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
