@@ -721,7 +721,19 @@ function BottomDock({
           mini-player proportions, which gives the inset progress bar a
           clearly visible 10px gap below the cover instead of reading as
           flush. The bar lives in the bottom slice of that padding zone. */}
-      <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden">
+      {/* Pill corner radius drops from `rounded-full` → `rounded-3xl` in
+          compact mode. With a 76px-tall capsule, rounded-full = 38px
+          radius, which clips the top-edge hairline entirely (the curve
+          eats the full top edge). At rounded-3xl (24px radius), the
+          hairline has visible width across the middle of the pill while
+          still reading as a softly-rounded chip — matching Apple's
+          narrow-dock geometry. Wide mode keeps the capsule. */}
+      <div
+        className={[
+          "relative bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden",
+          compact ? "rounded-3xl" : "rounded-full",
+        ].join(" ")}
+      >
         {/* Compact-mode top hairline scrubber — Apple's narrow-viewport
             pattern: when the dock can't afford an inset bar between
             clusters, the progress moves to a thin strip across the very
@@ -738,7 +750,17 @@ function BottomDock({
             </div>
           </div>
         )}
-        <div className="flex items-center gap-1.5 px-3 py-4">
+        {/* Vertical padding tightens slightly in compact mode (py-3 vs
+            py-4) — the inset bottom scrubber is gone, so we don't need
+            the extra 8px of bottom padding it lived in. The Play button
+            (44px) still drives row height, and `items-center` keeps every
+            transport + right-cluster button vertically aligned regardless. */}
+        <div
+          className={[
+            "flex items-center gap-1.5 px-3",
+            compact ? "py-3" : "py-4",
+          ].join(" ")}
+        >
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
