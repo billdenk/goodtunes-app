@@ -39,6 +39,7 @@ import {
   FileText,
   Users,
   Check,
+  RotateCcw,
 } from "lucide-react";
 import {
   Popover,
@@ -3502,94 +3503,72 @@ function RichPreviewEditor({
         </button>
       </div>
 
-      {/* Five-state header banner */}
-      {locked && committedLeft < 0.5 ? (
-        <div className="-mt-1 px-1 flex items-start gap-2">
-          <Lock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
-            <div className="font-semibold text-slate-700">
-              Auto-locked at 0:00–0:30
-            </div>
-            <div className="text-slate-500 mt-0.5">
-              We've set your 30-second preview to the first 30 seconds — no
-              action needed. Want to pick a different hook? Tap the{" "}
-              <Lock className="inline w-3 h-3 -translate-y-0.5 text-emerald-600" />{" "}
-              padlock on the right, then drag the yellow window.
-            </div>
-          </div>
-        </div>
-      ) : isDirty ? (
-        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
-          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
-            <MoveHorizontal className="w-4 h-4" />
-          </span>
-          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
-            <div className="font-semibold text-slate-900">
-              Unsaved changes
-            </div>
-            <div className="text-slate-600 mt-0.5">
-              You moved the window to{" "}
-              <span className="font-semibold tabular-nums text-slate-900">
-                {draftStartLabel}–{draftEndLabel}
-              </span>
-              . Fans still hear{" "}
-              <span className="tabular-nums">
-                {committedLeft < 0.5
-                  ? "0:00–0:30"
-                  : `${committedStartLabel}–${committedEndLabel}`}
-              </span>{" "}
-              until you save.
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={saveAndLock}
-                disabled={saveMut.isPending}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90 disabled:opacity-50"
-                data-testid={`button-preview-save-${song.id}`}
-              >
-                {saveMut.isPending ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Lock className="w-3 h-3" />
-                )}
-                Lock Preview
-              </button>
-              <span className="w-px h-4 bg-slate-300/70" aria-hidden />
-              <button
-                type="button"
-                onClick={revertDraft}
-                disabled={saveMut.isPending}
-                className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-50"
-                data-testid={`button-preview-revert-${song.id}`}
-                title="Discard your changes and go back to what fans hear now"
-              >
-                Revert
-              </button>
+      {/* Stable-height status row.
+          Bill: the old approach inflated the banner with an inline Lock
+          Preview + Revert button row, pushing the waveform down whenever
+          you dragged. iMovie / Photos don't do that — the destination-state
+          visuals (amber window + amber padlock) are the unsaved-changes
+          signal, the padlock IS the save action, and Revert lives as a
+          tiny icon in the trim row that's reserved-but-invisible when
+          there's nothing to revert. The single-line copy here just
+          narrates the current state. */}
+      {(() => {
+        const auto = locked && committedLeft < 0.5;
+        const lockedCustom = locked && !auto;
+        const unlockedAuto = !locked && !isDirty && committedLeft < 0.5;
+        const unlockedCustomClean = !locked && !isDirty && committedLeft >= 0.5;
+        const fanLabel =
+          committedLeft < 0.5
+            ? "0:00–0:30"
+            : `${committedStartLabel}–${committedEndLabel}`;
+
+        const Icon = isDirty
+          ? MoveHorizontal
+          : locked
+            ? Lock
+            : MoveHorizontal;
+        const title = isDirty
+          ? `Unsaved — fans still hear ${fanLabel}`
+          : auto
+            ? "Auto-locked at 0:00–0:30"
+            : lockedCustom
+              ? `Locked at ${committedStartLabel}–${committedEndLabel}`
+              : unlockedAuto
+                ? "Pick your 30-second preview"
+                : unlockedCustomClean
+                  ? `Custom hook at ${committedStartLabel}–${committedEndLabel}`
+                  : "Pick your 30-second preview";
+        const sub = isDirty
+          ? "Tap the padlock to lock in your new preview, or revert."
+          : auto
+            ? "Default — your first 30 seconds. Tap the padlock to pick a different hook."
+            : lockedCustom
+              ? "Tap the padlock to slide it again."
+              : "Drag the yellow window or use the fine-tune row, then tap the padlock."
+        const titleColor = isDirty
+          ? "text-amber-700"
+          : locked
+            ? "text-emerald-700"
+            : "text-slate-700";
+
+        return (
+          <div className="-mt-1 px-1 flex items-start gap-2 min-h-[34px]">
+            <Icon
+              className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                isDirty
+                  ? "text-amber-500"
+                  : locked
+                    ? "text-emerald-500"
+                    : "text-slate-400"
+              }`}
+            />
+            <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+              <div className={`font-semibold ${titleColor}`}>{title}</div>
+              <div className="text-slate-500 mt-0.5">{sub}</div>
             </div>
           </div>
-        </div>
-      ) : !locked && committedLeft < 0.5 ? (
-        <div className="-mt-1 px-1 flex items-start gap-2">
-          <MoveHorizontal className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
-            <div className="font-semibold text-slate-700">
-              Pick your 30-second preview
-            </div>
-            <div className="text-slate-500 mt-0.5">
-              Drag the yellow window anywhere on the waveform to start it
-              from a different spot — it stays locked to 30 sec wide. Tap
-              the padlock again when you're satisfied.
-            </div>
-          </div>
-        </div>
-      ) : (
-        <p className="text-[11.5px] text-slate-500 -mt-1">
-          {locked
-            ? `Locked in at ${committedStartLabel}–${committedEndLabel}. Tap the padlock to slide it again.`
-            : `Custom hook at ${committedStartLabel}–${committedEndLabel}. Drag to edit, then tap the padlock to save.`}
-        </p>
-      )}
+        );
+      })()}
 
       {/* Hidden window-scoped <audio> element — same master as the player,
           but its currentTime is constrained to [draftSec, draftSec + 30]. */}
@@ -3744,6 +3723,24 @@ function RichPreviewEditor({
           </div>
 
         </div>
+
+        {/* Revert — reserved slot so layout doesn't shift when it shows.
+            Invisible + non-interactive when clean; fades in only when
+            the artist has unsaved changes. */}
+        <button
+          type="button"
+          onClick={revertDraft}
+          disabled={!isDirty || saveMut.isPending}
+          aria-label="Revert to saved preview"
+          title="Revert to what fans hear now"
+          className={[
+            "w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-opacity text-slate-500 hover:bg-slate-100",
+            isDirty ? "opacity-100" : "opacity-0 pointer-events-none",
+          ].join(" ")}
+          data-testid={`button-preview-revert-${song.id}`}
+        >
+          <RotateCcw className="w-4 h-4" />
+        </button>
 
         <button
           type="button"
