@@ -18,6 +18,7 @@ import {
   Shuffle,
   Repeat,
   Volume2,
+  Mic2,
 } from "lucide-react";
 
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
@@ -628,25 +629,11 @@ function BottomDock({
                   title="Show lyrics — QA-preview synced lyrics while the master plays"
                   className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                 >
-                  {/* Canonical GoodTunes lyrics glyph — kept in sync with
-                      client/src/components/ui/LyricsIcon.tsx (the primitives
-                      home). The sandbox can't reach @/components, so the
-                      same path data is inlined here. */}
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M6 3.5h12a2.5 2.5 0 0 1 2.5 2.5v8a2.5 2.5 0 0 1-2.5 2.5h-4.5l-3.5 3v-3H6A2.5 2.5 0 0 1 3.5 14V6A2.5 2.5 0 0 1 6 3.5z" />
-                    <path d="M8.3 8.2c-1.3.3-2.1 1.35-2.1 2.65V12.5h2.6V9.95h-.7c.05-.4.35-.75.8-.9z" fill="currentColor" stroke="none" />
-                    <path d="M13.8 8.2c-1.3.3-2.1 1.35-2.1 2.65V12.5h2.6V9.95h-.7c.05-.4.35-.75.8-.9z" fill="currentColor" stroke="none" />
-                  </svg>
+                  {/* Lyrics glyph — Lucide Mic2 (singer's mic). Matches
+                      the canonical primitive at client/src/components/ui/
+                      LyricsIcon.tsx. Sandbox can't import that primitive,
+                      so use Mic2 directly here. Keep both surfaces aligned. */}
+                  <Mic2 className="w-4 h-4" />
                 </button>
                 <div className="flex items-center gap-1.5 pl-1 pr-1">
                   <Volume2 className="w-4 h-4 text-slate-300 flex-shrink-0" />
