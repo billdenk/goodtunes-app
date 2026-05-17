@@ -212,7 +212,7 @@ function DetailWrap({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+    <div className="relative mt-2 rounded-lg border border-slate-200 bg-white p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[12.5px] font-bold text-slate-900">{title}</h3>
         {action}
@@ -486,47 +486,59 @@ function SnippetDetail({
   const WINDOW_SEC = 30;
   const width = (WINDOW_SEC / TOTAL_SEC) * 100;
 
-  // Initial state derives from the track row's saved data:
-  //   hasCustomSnippet=false → auto-locked at 0:00–0:30 (happy-path, zero
-  //     clicks — the new default after a master is uploaded).
-  //   hasCustomSnippet=true  → locked at a previously-chosen offset; here
-  //     we hard-code 33% for the demo to stand in for a saved position.
-  //     When this graduates to AdminAlbum, the real `customSnippet.startMs`
-  //     replaces the literal.
+  // Two state pairs, not one:
+  //   committedLeft → what fans actually hear (the "live" snippet position)
+  //   draftLeft     → what the artist is editing right now (autosaved locally)
+  // Locked = saved & frozen. Unlocked = editing. Drag while unlocked drifts
+  // draft away from committed → "Unsaved changes" banner appears with
+  // [Save & lock] + [Revert]. Tapping the padlock when dirty saves & locks
+  // in one move (so padlock + Save & lock = the same action). When this
+  // graduates to AdminAlbum we'll persist `draftLeft` to localStorage
+  // (key: `gt:snippet-draft:t_${trackId}`) so a browser crash or accidental
+  // tab-close restores the in-progress edit on next open.
+  const initialPos = hasCustomSnippet ? 33 : 0;
+  const [committedLeft, setCommittedLeft] = useState(initialPos);
+  const [draftLeft, setDraftLeft] = useState(initialPos);
   const [locked, setLocked] = useState(true);
-  const [left, setLeft] = useState(hasCustomSnippet ? 33 : 0);
-  const isCustom = left > 0.5; // % — anything past a hair of slop counts as moved
+  // Sheet that appears when the user tries to close while dirty —
+  // Apple action-sheet style: Save & close · Discard · Cancel.
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  const isDirty = Math.abs(draftLeft - committedLeft) > 0.5;
   const maxLeft = 100 - width;
 
   const wfRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startLeft: number } | null>(null);
 
-  const startSec = (left / 100) * TOTAL_SEC;
+  const draftSec = (draftLeft / 100) * TOTAL_SEC;
+  const committedSec = (committedLeft / 100) * TOTAL_SEC;
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-  const startLabel = fmt(startSec);
-  const endLabel = fmt(startSec + WINDOW_SEC);
+  const draftStartLabel = fmt(draftSec);
+  const draftEndLabel = fmt(draftSec + WINDOW_SEC);
+  const committedStartLabel = fmt(committedSec);
+  const committedEndLabel = fmt(committedSec + WINDOW_SEC);
 
   // Chip input — controlled, synced from drag, parsed on commit
-  const [chipDraft, setChipDraft] = useState(startLabel);
+  const [chipDraft, setChipDraft] = useState(draftStartLabel);
   useEffect(() => {
-    setChipDraft(startLabel);
-  }, [startLabel]);
+    setChipDraft(draftStartLabel);
+  }, [draftStartLabel]);
 
   const commitChip = () => {
     const m = chipDraft.match(/^(\d+):(\d{1,2})$/);
     if (!m) {
-      setChipDraft(startLabel);
+      setChipDraft(draftStartLabel);
       return;
     }
     const sec = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     const clamped = Math.max(0, Math.min(TOTAL_SEC - WINDOW_SEC, sec));
-    setLeft((clamped / TOTAL_SEC) * 100);
+    setDraftLeft((clamped / TOTAL_SEC) * 100);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (locked) return;
-    dragRef.current = { startX: e.clientX, startLeft: left };
+    dragRef.current = { startX: e.clientX, startLeft: draftLeft };
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -537,22 +549,69 @@ function SnippetDetail({
       0,
       Math.min(maxLeft, dragRef.current.startLeft + dxPct),
     );
-    setLeft(next);
+    setDraftLeft(next);
   };
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     dragRef.current = null;
     (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
   };
+
+  // Save = commit the draft as the new live position AND lock the slider.
+  // One action does two things because they're really the same intent:
+  // "I'm done; this is the version fans hear; freeze it."
+  const saveAndLock = () => {
+    setCommittedLeft(draftLeft);
+    setLocked(true);
+  };
+  // Revert = throw away the in-progress edit. Draft snaps back to live.
+  // Stays unlocked so the artist can keep editing if they want; if they
+  // wanted to exit, they'd tap the padlock or close the panel.
+  const revertDraft = () => {
+    setDraftLeft(committedLeft);
+  };
+  // Padlock: pure UI lock-toggle when clean, save+lock when dirty.
+  const onPadlockClick = () => {
+    if (isDirty) saveAndLock();
+    else setLocked((v) => !v);
+  };
+  // Close guard: dirty close pops a confirm sheet. Clean close just closes.
+  const guardedClose = () => {
+    if (isDirty) setConfirmClose(true);
+    else onClose();
+  };
   return (
-    <DetailWrap title="30-sec snippet" onClose={onClose}>
-      {/* Four-state header, one screen, no animation:
-          1. locked + auto       → blue tip pointing at the padlock
-          2. unlocked + auto     → blue MoveHorizontal tip ("drag to pick")
-          3. unlocked + custom   → "Custom hook at X–Y" + Reset link
-          4. locked + custom     → "Locked in at X–Y" plain status
+    <DetailWrap
+      title="30-sec snippet"
+      onClose={guardedClose}
+      action={
+        /* X close button — runs `guardedClose`, so a dirty close pops the
+           confirm sheet. Tapping the Snippet status badge again still
+           dismisses the panel via the parent's setOpenSection(null) (i.e.
+           bypasses the guard) — when this graduates to AdminAlbum we'll
+           intercept the parent close path too. For the mockup, the X is
+           the primary "I'm done with this panel" affordance and the
+           dirty banner above the waveform makes the save model obvious. */
+        <button
+          onClick={guardedClose}
+          aria-label="Close snippet panel"
+          title="Close"
+          className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+          data-testid="button-snippet-close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      }
+    >
+      {/* Five-state header (Bill's Option B "draft + live" model):
+          1. locked + committed=auto         → blue tip pointing at the padlock
+          2. unlocked + committed=auto + clean → blue MoveHorizontal "drag to pick" tip
+          3. unlocked + dirty (draft≠live)   → NEW "Unsaved changes" banner
+                                               with Save & lock · Revert
+          4. unlocked + clean + committed>0  → "Custom hook at X–Y" plain status
+          5. locked + committed>0            → "Locked in at X–Y" plain status
           Apple-style tip cards (not pulsing animations) — discoverable
           on first open, never nag on repeat visits. */}
-      {locked && !isCustom ? (
+      {locked && committedLeft < 0.5 ? (
         <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
           <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
             <Lock className="w-4 h-4" />
@@ -569,7 +628,54 @@ function SnippetDetail({
             </div>
           </div>
         </div>
-      ) : !locked && !isCustom ? (
+      ) : isDirty ? (
+        /* The "unsaved changes" banner — brand-blue surface, not amber:
+           amber is reserved for the editing window itself (the moving piece).
+           Two actions, gap + hairline divider keeps the safe Save action
+           away from the destructive Revert per the design system rule. */
+        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
+          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+            <MoveHorizontal className="w-4 h-4" />
+          </span>
+          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+            <div className="font-semibold text-slate-900">
+              Unsaved changes
+            </div>
+            <div className="text-slate-600 mt-0.5">
+              You moved the window to{" "}
+              <span className="font-semibold tabular-nums text-slate-900">
+                {draftStartLabel}–{draftEndLabel}
+              </span>
+              . Fans still hear{" "}
+              <span className="tabular-nums">
+                {committedLeft < 0.5
+                  ? "0:00–0:30"
+                  : `${committedStartLabel}–${committedEndLabel}`}
+              </span>{" "}
+              until you save.
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={saveAndLock}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+                data-testid="button-snippet-save"
+              >
+                <Lock className="w-3 h-3" />
+                Save &amp; lock
+              </button>
+              <span className="w-px h-4 bg-slate-300/70" aria-hidden />
+              <button
+                onClick={revertDraft}
+                className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+                data-testid="button-snippet-revert"
+                title="Discard your changes and go back to what fans hear now"
+              >
+                Revert
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : !locked && committedLeft < 0.5 ? (
         <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
           <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
             <MoveHorizontal className="w-4 h-4" />
@@ -586,24 +692,11 @@ function SnippetDetail({
           </div>
         </div>
       ) : (
-        <div className="flex items-start justify-between gap-3 -mt-1">
-          <p className="text-[11.5px] text-slate-500 flex-1">
-            {locked
-              ? `Locked in at ${startLabel}–${endLabel}. Tap the padlock to slide it again.`
-              : `Custom hook at ${startLabel}–${endLabel}. Tap the padlock when you're satisfied.`}
-          </p>
-          {/* Reset to default — only shows once the artist has moved the
-              window. Ghost-pill pattern, same as everywhere else. */}
-          {isCustom && !locked && (
-            <button
-              onClick={() => setLeft(0)}
-              className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
-              title="Reset the snippet to the first 30 seconds"
-            >
-              Reset to default
-            </button>
-          )}
-        </div>
+        <p className="text-[11.5px] text-slate-500 -mt-1">
+          {locked
+            ? `Locked in at ${committedStartLabel}–${committedEndLabel}. Tap the padlock to slide it again.`
+            : `Custom hook at ${committedStartLabel}–${committedEndLabel}. Drag to edit, then tap the padlock to save.`}
+        </p>
       )}
 
       {/* Trim row: play · waveform · lock — Apple iMovie pattern */}
@@ -638,7 +731,7 @@ function SnippetDetail({
             {!locked && (
               <div
                 className="absolute -top-1 -translate-y-full after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800 transition-[left] duration-0"
-                style={{ left: `calc(${left}% + 4px)` }}
+                style={{ left: `calc(${draftLeft}% + 4px)` }}
               >
                 <input
                   value={chipDraft}
@@ -647,7 +740,7 @@ function SnippetDetail({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                     if (e.key === "Escape") {
-                      setChipDraft(startLabel);
+                      setChipDraft(draftStartLabel);
                       (e.target as HTMLInputElement).blur();
                     }
                     // Arrow keys nudge by ±1 sec (or ±5 sec with shift). Apple inspector pattern.
@@ -657,9 +750,9 @@ function SnippetDetail({
                       const dir = e.key === "ArrowUp" ? 1 : -1;
                       const next = Math.max(
                         0,
-                        Math.min(TOTAL_SEC - WINDOW_SEC, startSec + dir * step),
+                        Math.min(TOTAL_SEC - WINDOW_SEC, draftSec + dir * step),
                       );
-                      setLeft((next / TOTAL_SEC) * 100);
+                      setDraftLeft((next / TOTAL_SEC) * 100);
                     }
                   }}
                   aria-label="Snippet start time — type to fine-tune"
@@ -667,6 +760,18 @@ function SnippetDetail({
                   className="w-[42px] px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums text-center shadow-md focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 cursor-text"
                 />
               </div>
+            )}
+
+            {/* Ghost of the committed (live) window — only visible while
+                dirty + unlocked. Helps the artist see where fans currently
+                hear the snippet vs. where they've dragged it to. */}
+            {isDirty && !locked && (
+              <div
+                aria-hidden
+                className="absolute top-1 bottom-1 rounded-md border border-emerald-500/40 bg-emerald-500/5 pointer-events-none"
+                style={{ left: `${committedLeft}%`, width: `${width}%` }}
+                title={`Fans currently hear ${committedLeft < 0.5 ? "0:00–0:30" : `${committedStartLabel}–${committedEndLabel}`}`}
+              />
             )}
 
             {/* 30-sec window — drag anywhere inside to slide.
@@ -682,7 +787,7 @@ function SnippetDetail({
                   ? "border-emerald-500/70 bg-emerald-500/20 cursor-default"
                   : "border-amber-400 bg-amber-400/25 cursor-grab active:cursor-grabbing shadow-[0_0_0_3px_rgba(251,191,36,0.15)]",
               ].join(" ")}
-              style={{ left: `${left}%`, width: `${width}%` }}
+              style={{ left: `${draftLeft}%`, width: `${width}%` }}
             />
           </div>
           {/* Timecode axis — own row, won't be covered by the window */}
@@ -696,18 +801,95 @@ function SnippetDetail({
         </div>
 
         <button
-          onClick={() => setLocked(!locked)}
-          aria-label={locked ? "Unlock snippet — allow sliding" : "Lock snippet in"}
-          title={locked ? "Unlock to slide again" : "Lock in when done"}
+          onClick={onPadlockClick}
+          aria-label={
+            locked
+              ? "Unlock snippet — allow sliding"
+              : isDirty
+                ? "Save and lock snippet"
+                : "Lock snippet in"
+          }
+          title={
+            locked
+              ? "Unlock to slide again"
+              : isDirty
+                ? "Save & lock — commits your edit"
+                : "Lock in when done"
+          }
           className={[
             "w-8 h-8 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors hover:bg-slate-100",
             locked ? "text-emerald-600" : "text-amber-600",
           ].join(" ")}
+          data-testid="button-snippet-padlock"
         >
           {locked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
         </button>
       </div>
 
+      {/* Close-while-dirty confirm — Apple action-sheet pattern. Three
+          choices, destructive (Discard) gets rose tint per design system,
+          Save is the primary brand-blue action, Cancel is ghost. */}
+      {confirmClose && (
+        <div className="absolute inset-0 z-20 flex items-end justify-center bg-slate-900/40 rounded-2xl">
+          <div className="w-full bg-white rounded-b-2xl rounded-t-xl shadow-2xl border-t border-slate-200 p-4 space-y-3">
+            <div>
+              <div className="text-[13px] font-semibold text-slate-900">
+                Save your snippet edit?
+              </div>
+              <div className="text-[11.5px] text-slate-500 mt-0.5">
+                You moved the window to{" "}
+                <span className="font-semibold tabular-nums">
+                  {draftStartLabel}–{draftEndLabel}
+                </span>
+                . If you close without saving, fans keep hearing{" "}
+                <span className="tabular-nums">
+                  {committedLeft < 0.5
+                    ? "0:00–0:30"
+                    : `${committedStartLabel}–${committedEndLabel}`}
+                </span>
+                .
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  saveAndLock();
+                  setConfirmClose(false);
+                  onClose();
+                }}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-[12px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90"
+                data-testid="button-confirm-save-close"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Save &amp; close
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setDraftLeft(committedLeft);
+                    setConfirmClose(false);
+                    onClose();
+                  }}
+                  className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-md text-[12px] font-semibold text-rose-600 hover:bg-rose-50"
+                  data-testid="button-confirm-discard"
+                >
+                  Discard changes
+                </button>
+                {/* Hairline divider — design-system rule: destructive
+                    action keeps breathing room from non-destructive ones. */}
+                <span className="w-px h-6 bg-slate-200" aria-hidden />
+                <button
+                  onClick={() => setConfirmClose(false)}
+                  className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-100"
+                  data-testid="button-confirm-cancel"
+                >
+                  Keep editing
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </DetailWrap>
   );
 }
