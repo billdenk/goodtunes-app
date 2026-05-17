@@ -3313,7 +3313,9 @@ function RichPreviewEditor({
   // ffmpeg-pipeline). 80 bars renders well at this size.
   const bars = (() => {
     const peaks = (song.waveform as number[] | null) ?? null;
-    const COUNT = 80;
+    // 120 thin bars reads as a finer-grained waveform — matches Apple
+    // Music's preview-editor density and the reference Bill pasted.
+    const COUNT = 120;
     if (!peaks || peaks.length === 0) {
       return Array.from({ length: COUNT }, (_, i) =>
         Math.round(20 + 60 * Math.abs(Math.sin(i * 0.6) * Math.cos(i * 0.13))),
@@ -3632,18 +3634,20 @@ function RichPreviewEditor({
             ref={wfRef}
             className="relative h-20 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden touch-none select-none"
           >
-            <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
+            <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-px">
               {bars.map((h, i) => (
                 <div
                   key={i}
-                  className="flex-1 bg-slate-300 rounded-full"
+                  className="flex-1 max-w-[3px] bg-slate-300 rounded-full"
                   style={{ height: `${h}%` }}
                 />
               ))}
             </div>
 
-            {/* Live editable start-time chip — tracks the dragged window */}
-            {!locked && (
+            {/* (Floating chip removed — start time now lives as a big
+                center label inside the yellow window, plus a fine-tune
+                row below the waveform. Claude note #3 + #4.) */}
+            {false && (
               <div
                 className="absolute -top-1 -translate-y-full after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800"
                 style={{ left: `calc(${draftLeft}% + 4px)` }}
@@ -3717,27 +3721,18 @@ function RichPreviewEditor({
               style={{ left: `${draftLeft}%`, width: `${widthPct}%` }}
               data-testid={`preview-window-handle-${song.id}`}
             >
+              {/* Big center start-time label — Claude's note #3: artist
+                  needs to see the start time prominently while sliding,
+                  not squint at a corner pill. End time is implied
+                  (start + 0:30) per the same note. */}
               <span
                 className={[
-                  "absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-semibold tabular-nums shadow-sm pointer-events-none",
-                  locked
-                    ? "bg-emerald-700/85 text-white"
-                    : "bg-amber-600/90 text-white",
+                  "absolute inset-0 flex items-center justify-center text-[15px] font-bold tabular-nums tracking-tight pointer-events-none drop-shadow-sm",
+                  locked ? "text-emerald-900/80" : "text-amber-900/90",
                 ].join(" ")}
                 data-testid={`label-preview-start-${song.id}`}
               >
                 {draftStartLabel}
-              </span>
-              <span
-                className={[
-                  "absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-semibold tabular-nums shadow-sm pointer-events-none",
-                  locked
-                    ? "bg-emerald-700/85 text-white"
-                    : "bg-amber-600/90 text-white",
-                ].join(" ")}
-                data-testid={`label-preview-end-${song.id}`}
-              >
-                {draftEndLabel}
               </span>
             </div>
           </div>
@@ -3747,6 +3742,81 @@ function RichPreviewEditor({
               <span key={i}>{t}</span>
             ))}
           </div>
+
+          {/* Fine-tune row — Claude note #4. Arrows nudge the start;
+              field is directly typeable as mm:ss; Enter commits.
+              Hidden when locked (window is already committed).
+              Granularity: 1 sec base, Shift = 0.1 sec for the
+              word-boundary precision Nick Carter asked for. */}
+          {!locked && (
+            <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-slate-600">
+              <span className="font-medium">Start</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  const step = e.shiftKey ? 0.1 : 1;
+                  const next = Math.max(0, draftSec - step);
+                  setDraftLeft((next / TOTAL_SEC) * 100);
+                }}
+                aria-label="Nudge start earlier (Shift = 0.1 sec)"
+                title="Earlier · Shift-click for 0.1 sec"
+                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
+                data-testid={`button-finetune-back-${song.id}`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <input
+                value={chipDraft}
+                onChange={(e) => setChipDraft(e.target.value)}
+                onBlur={commitChip}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter")
+                    (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") {
+                    setChipDraft(draftStartLabel);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                    e.preventDefault();
+                    const step = e.shiftKey ? 0.1 : 1;
+                    const dir = e.key === "ArrowUp" ? 1 : -1;
+                    const next = Math.max(
+                      0,
+                      Math.min(
+                        TOTAL_SEC - WINDOW_SEC,
+                        draftSec + dir * step,
+                      ),
+                    );
+                    setDraftLeft((next / TOTAL_SEC) * 100);
+                  }
+                }}
+                aria-label="Preview start time — type mm:ss or use arrows"
+                title="Type mm:ss or use ↑/↓ (Shift = 0.1 sec)"
+                className="w-16 px-2 py-1 rounded-md border border-slate-200 bg-white text-[12px] font-semibold tabular-nums text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 focus:border-[#319ED8]/60"
+                data-testid={`input-finetune-start-${song.id}`}
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  const step = e.shiftKey ? 0.1 : 1;
+                  const next = Math.min(
+                    TOTAL_SEC - WINDOW_SEC,
+                    draftSec + step,
+                  );
+                  setDraftLeft((next / TOTAL_SEC) * 100);
+                }}
+                aria-label="Nudge start later (Shift = 0.1 sec)"
+                title="Later · Shift-click for 0.1 sec"
+                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
+                data-testid={`button-finetune-forward-${song.id}`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <span className="text-slate-400 ml-1">
+                ends {draftEndLabel}
+              </span>
+            </div>
+          )}
         </div>
 
         <button
