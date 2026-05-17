@@ -1466,18 +1466,26 @@ function TrackRow({
             • Currently selected but paused: play in brand blue.
             Apple Music uses this exact pattern — the number IS the play
             button. Slimmer cell (w-5 / 12px glyph) to match Seamless. */}
+        {/* When the row is expanded we want the track-NUMBER to always
+            stay visible at rest, even if this row is the one currently
+            playing — the expanded editor already advertises "you're
+            editing this track", so re-using the slot as a permanent
+            pause-icon would just hide useful info. Hover still reveals
+            play/pause on top, matching every other row. */}
         <div className="w-5 h-5 -ml-1.5 flex-shrink-0 relative">
           <span
             className={[
               "absolute inset-0 inline-flex items-center justify-center text-[12px] tabular-nums font-medium transition-opacity",
               isCurrent ? "text-[#319ED8]" : "text-slate-400",
               song.audioUrl
-                ? isCurrent
-                  ? "opacity-0"
-                  : "group-hover:opacity-0"
+                ? expanded
+                  ? "group-hover:opacity-0"
+                  : isCurrent
+                    ? "opacity-0"
+                    : "group-hover:opacity-0"
                 : "",
             ].join(" ")}
-            aria-hidden={isCurrent || undefined}
+            aria-hidden={isCurrent && !expanded ? true : undefined}
           >
             {song.trackNumber}
           </span>
@@ -1495,9 +1503,11 @@ function TrackRow({
               data-testid={`button-play-track-${song.id}`}
               className={[
                 "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
-                isCurrent
-                  ? "opacity-100 text-[#319ED8]"
-                  : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]",
+                expanded
+                  ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]"
+                  : isCurrent
+                    ? "opacity-100 text-[#319ED8]"
+                    : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]",
               ].join(" ")}
             >
               {isCurrent && isPlaying ? (
