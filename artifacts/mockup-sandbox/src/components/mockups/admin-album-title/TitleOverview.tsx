@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ChevronRight,
   Check,
@@ -12,6 +13,9 @@ import {
   Disc3,
   Plus,
   AlertCircle,
+  Upload,
+  Download,
+  Trash2,
 } from "lucide-react";
 
 /**
@@ -33,7 +37,7 @@ import {
 export function TitleOverview() {
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans antialiased">
-      <div className="max-w-[720px] mx-auto space-y-3">
+      <div className="max-w-[1100px] mx-auto space-y-3">
         {/* ============================ HEADER ============================ */}
         <div className="space-y-2 pb-1">
           <div className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
@@ -57,64 +61,61 @@ export function TitleOverview() {
             </button>
           </div>
 
-          {/* tabs */}
+          {/* tabs — Artwork has been folded into Overview as its
+              right-hand panel, so it's no longer a sibling tab. */}
           <div className="flex items-center gap-4 border-b border-slate-200 pt-1">
             <Tab label="Overview" active />
             <Tab label="Tracks" badge="17" />
-            <Tab label="Artwork" />
             <Tab label="Files" />
           </div>
         </div>
 
-        {/* ============================ HERO ============================ */}
+        {/* ============================ TWO-COL BODY ============================
+            Left: metadata sections (the bulk of the editing surface).
+            Right: artwork card + release-readiness — sticky so artwork
+            stays visible as you scroll through metadata. */}
+        <div className="grid grid-cols-[1fr_320px] gap-4 items-start">
+          <div className="space-y-3 min-w-0">
+
+        {/* ============================ HERO ============================
+            Cover thumbnail removed — artwork now lives in its own card
+            on the right so we don't show two cover surfaces. */}
         <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-stretch gap-4 p-4">
-            {/* cover */}
-            <div className="w-32 h-32 rounded-lg bg-gradient-to-br from-purple-500 via-fuchsia-500 to-rose-500 flex-shrink-0 relative overflow-hidden shadow-md">
-              <div className="absolute inset-0 flex items-center justify-center text-white text-[36px] font-black tracking-tight opacity-90">
-                LLT
-              </div>
-              <button className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-md bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60">
-                <Pencil className="w-3 h-3" />
-              </button>
+          <div className="p-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+              <Field
+                label="Artist Name"
+                value="Nick Carter"
+                icon={<Music2 className="w-3 h-3" />}
+                good
+              />
+              <Field
+                label="Record Label"
+                value="BMG Rights Management (US) LLC"
+                icon={<Building2 className="w-3 h-3" />}
+                good
+              />
+              <Field
+                label="Release Date"
+                value="Oct 28, 2022"
+                icon={<Calendar className="w-3 h-3" />}
+                good
+              />
+              <Field
+                label="UPC"
+                value="—"
+                icon={<Hash className="w-3 h-3" />}
+                hint="Assign one for me"
+              />
             </div>
 
-            <div className="flex-1 min-w-0 flex flex-col">
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
-                <Field
-                  label="Artist Name"
-                  value="Nick Carter"
-                  icon={<Music2 className="w-3 h-3" />}
-                  good
-                />
-                <Field
-                  label="Record Label"
-                  value="BMG Rights Management (US) LLC"
-                  icon={<Building2 className="w-3 h-3" />}
-                  good
-                />
-                <Field
-                  label="Release Date"
-                  value="Oct 28, 2022"
-                  icon={<Calendar className="w-3 h-3" />}
-                  good
-                />
-                <Field
-                  label="UPC"
-                  value="—"
-                  icon={<Hash className="w-3 h-3" />}
-                  hint="Assign one for me"
-                />
-              </div>
-
-              <div className="mt-auto pt-3 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-emerald-700 text-[11.5px] font-semibold">
-                  <Check className="w-3.5 h-3.5" /> 6 of 8 sections complete
-                </span>
-                <button className="text-[#319ED8] text-[11.5px] font-medium hover:underline">
-                  Open release checklist
-                </button>
-              </div>
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1 text-emerald-700 text-[11.5px] font-semibold">
+                <Check className="w-3.5 h-3.5" /> 6 of 8 sections complete
+              </span>
+              <button className="text-[#319ED8] text-[11.5px] font-medium hover:underline">
+                Open release checklist
+              </button>
             </div>
           </div>
         </section>
@@ -209,6 +210,18 @@ export function TitleOverview() {
           </div>
         </SectionShell>
 
+          </div>
+
+          {/* ============================ RIGHT RAIL ============================
+              Artwork card — visible by default the moment you land on
+              Overview. Hover the cover for Replace / Download / Remove,
+              or drag a file straight onto it. Sticky so it stays in
+              view as you scroll the metadata sections. */}
+          <aside className="sticky top-3 space-y-3">
+            <ArtworkCard />
+          </aside>
+        </div>
+
         {/* ============================ ACTION BAR ============================ */}
         <div className="sticky bottom-0 -mx-1 mt-2">
           <div className="flex items-center justify-between gap-3 rounded-xl bg-white border border-slate-200 shadow-md px-3 py-2.5">
@@ -240,6 +253,101 @@ export function TitleOverview() {
 }
 
 /* =============================== bits ===================================== */
+
+/**
+ * ArtworkCard — the lone surface that owns album cover editing.
+ *
+ *   • Hover the cover → dark scrim fades in with Replace · Download · Remove
+ *   • Drag a file from Finder onto the cover → blue scrim, "Drop to replace"
+ *   • Click the cover (or "Replace") → opens system file picker
+ *
+ * One surface, two gestures (hover and drag) — replaces the old
+ * two-column "current + dropzone" pattern entirely.
+ */
+function ArtworkCard() {
+  const [hover, setHover] = useState(false);
+  const [drag, setDrag] = useState(false);
+
+  return (
+    <section className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+      <header className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between">
+        <h3 className="text-slate-900 text-[13px] font-bold">Artwork</h3>
+        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wide inline-flex items-center gap-1">
+          <Check className="w-2.5 h-2.5" /> Live
+        </span>
+      </header>
+
+      <div className="p-3">
+        <div
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDrag(true);
+          }}
+          onDragLeave={() => setDrag(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDrag(false);
+          }}
+          className={[
+            "relative w-full aspect-square rounded-xl overflow-hidden cursor-pointer transition-shadow",
+            "bg-gradient-to-br from-purple-500 via-fuchsia-500 to-rose-500",
+            drag
+              ? "ring-2 ring-[#319ED8] shadow-[0_0_0_5px_rgba(49,158,216,0.18)]"
+              : "ring-1 ring-slate-200",
+          ].join(" ")}
+        >
+          {/* The real artwork would render here. In the mockup we use
+              a brand-tinted "LLT" monogram as a stand-in. */}
+          <div className="absolute inset-0 flex items-center justify-center text-white text-[56px] font-black tracking-tight opacity-90 select-none">
+            LLT
+          </div>
+
+          {/* Hover overlay — Replace / Download / Remove.
+              Stacked vertically so each verb keeps a real touch target
+              instead of becoming a row of cramped icons. */}
+          <div
+            className={[
+              "absolute inset-0 bg-black/55 backdrop-blur-[1px] flex flex-col items-center justify-center gap-2 transition-opacity duration-150",
+              hover && !drag ? "opacity-100" : "opacity-0 pointer-events-none",
+            ].join(" ")}
+          >
+            <button className="w-[140px] px-3 py-1.5 rounded-md bg-white text-slate-900 text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-slate-100">
+              <Upload className="w-3.5 h-3.5" /> Replace
+            </button>
+            <button className="w-[140px] px-3 py-1.5 rounded-md bg-white/15 text-white text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 border border-white/30 hover:bg-white/25">
+              <Download className="w-3.5 h-3.5" /> Download
+            </button>
+            <button className="w-[140px] px-3 py-1.5 rounded-md bg-[#FF5470]/95 text-white text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-[#FF5470]">
+              <Trash2 className="w-3.5 h-3.5" /> Remove
+            </button>
+          </div>
+
+          {/* Drag-over overlay — replaces the hover overlay while a
+              file is being dragged over the cover. Brand blue so it
+              reads as "yes, drop here" the moment you're over it. */}
+          <div
+            className={[
+              "absolute inset-0 bg-[#319ED8]/90 flex flex-col items-center justify-center gap-2 text-white transition-opacity duration-150",
+              drag ? "opacity-100" : "opacity-0 pointer-events-none",
+            ].join(" ")}
+          >
+            <Upload className="w-8 h-8" />
+            <span className="text-[13px] font-bold">Drop to replace</span>
+          </div>
+        </div>
+
+        <p className="text-slate-500 text-[10.5px] mt-3 leading-snug">
+          Hover the cover for options — or drag a file straight onto it.
+        </p>
+        <p className="text-slate-400 text-[10.5px] mt-1 leading-snug">
+          Square, at least 3000×3000 px. JPG, PNG, or WebP up to 8 MB.
+        </p>
+      </div>
+    </section>
+  );
+}
 
 function Tab({
   label,
