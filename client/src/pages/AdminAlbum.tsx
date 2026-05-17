@@ -53,6 +53,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
@@ -2016,11 +2017,10 @@ function TrackRow({
                   onCollapse={closeCredits}
                   testId={`panel-credits-${song.id}`}
                 >
-                  <CreditsEditor
+                  <TrackCreditsPanel
                     songId={song.id}
                     albumId={albumId}
                     credits={credits}
-                    onClose={closeCredits}
                   />
                 </ExpandedPanel>
               ) : (
