@@ -2187,29 +2187,52 @@ function distributeLyrics(
 }
 
 /* ─── LyricsGapDots — Apple-Music-style instrumental pulse ─────────────
-   Three dots that light up left→right as the audio progresses through
-   an instrumental gap. progress is 0..1 across the whole gap. Each
-   dot fills as we cross its 1/3 of the gap (dot 1 over 0→1/3, dot 2
-   over 1/3→2/3, dot 3 over 2/3→1). Sits inline above the upcoming
-   cue so the writer (and the fan, eventually) can see "the next line
-   is coming". */
-function LyricsGapDots({ progress }: { progress: number }) {
+   Three dots that sit above the upcoming sung line whenever there's a
+   meaningful instrumental gap (≥3s of silence). They're ALWAYS rendered
+   when the gap exists — never mount/unmount — so the row scrolls with
+   the rest of the lyrics the way Apple's do. Three visual states:
+
+     • upcoming → all three small + faint (placeholder)
+     • active   → dots fill left→right as `progress` (0..1) advances
+     • past     → all three at full size + dimmed like a past lyric line
+
+   Sizing/opacity all live in inline styles with a longer, eased
+   transition so the dots glide between states instead of snapping. */
+function LyricsGapDots({
+  state,
+  progress,
+}: {
+  state: "upcoming" | "active" | "past";
+  progress: number;
+}) {
   return (
     <div
       className="flex items-center gap-1.5 py-1.5 pl-0.5"
       aria-label="Instrumental"
       data-testid="lyrics-gap-dots"
+      data-state={state}
     >
       {[0, 1, 2].map((i) => {
-        const p = Math.max(0, Math.min(1, progress * 3 - i));
+        // p (0..1) drives the *active* fill. Upcoming = 0, past = 1.
+        const p =
+          state === "past"
+            ? 1
+            : state === "upcoming"
+              ? 0
+              : Math.max(0, Math.min(1, progress * 3 - i));
+        // Past dots match the past-line color (slate-300); active +
+        // upcoming dots use the upcoming-line color (slate-500).
+        const color = state === "past" ? "rgb(203 213 225)" : "rgb(100 116 139)";
         return (
           <span
             key={i}
-            className="rounded-full bg-slate-500 transition-all duration-200"
+            className="rounded-full transition-all duration-300 ease-out"
             style={{
               width: 6 + p * 3,
               height: 6 + p * 3,
-              opacity: 0.25 + p * 0.7,
+              opacity:
+                state === "past" ? 0.55 : 0.25 + p * 0.7,
+              backgroundColor: color,
             }}
           />
         );
@@ -2537,19 +2560,31 @@ function GoodSyncPanel({
                           prevCue.timeMs / 1000 + 3,
                         );
                   const silence = cueTime - prevEnd;
-                  const inGap =
-                    currentTime >= prevEnd &&
-                    currentTime < cueTime &&
-                    silence >= 3;
-                  const gapProgress = inGap
-                    ? Math.max(
-                        0,
-                        Math.min(1, (currentTime - prevEnd) / silence),
-                      )
-                    : 0;
+                  // Show dots whenever there's a meaningful gap before
+                  // this line. They scroll with the rest of the cues
+                  // (upcoming → active → past) instead of mount/unmount.
+                  const showDots = silence >= 3;
+                  const dotState: "upcoming" | "active" | "past" =
+                    currentTime >= cueTime
+                      ? "past"
+                      : currentTime >= prevEnd
+                        ? "active"
+                        : "upcoming";
+                  const gapProgress =
+                    dotState === "active"
+                      ? Math.max(
+                          0,
+                          Math.min(1, (currentTime - prevEnd) / silence),
+                        )
+                      : 0;
                   return (
                     <div key={i}>
-                      {inGap && <LyricsGapDots progress={gapProgress} />}
+                      {showDots && (
+                        <LyricsGapDots
+                          state={dotState}
+                          progress={gapProgress}
+                        />
+                      )}
                       <div
                         data-cue-idx={i}
                         onClick={() => {
@@ -2558,13 +2593,26 @@ function GoodSyncPanel({
                             if (audio.paused) audio.play().catch(() => {});
                           }
                         }}
+                        // Apple-Music feel: keep a single font size +
+                        // weight (so the row's flow height never
+                        // changes), and animate scale + color/opacity
+                        // with a longer ease so lines glide between
+                        // states instead of snapping.
+                        style={{
+                          transform: isActive ? "scale(1.06)" : "scale(1)",
+                          transformOrigin: "left center",
+                          transitionProperty: "transform, color, opacity",
+                          transitionDuration: "400ms",
+                          transitionTimingFunction:
+                            "cubic-bezier(0.22, 1, 0.36, 1)",
+                        }}
                         className={[
-                          "transition-all cursor-pointer leading-[1.35]",
+                          "cursor-pointer leading-[1.35] text-[13px] font-semibold will-change-transform",
                           isActive
-                            ? "text-slate-900 text-[13px] font-bold scale-[1.03] origin-left"
+                            ? "text-slate-900"
                             : isPast
-                              ? "text-slate-300 text-[12px] font-semibold"
-                              : "text-slate-500 text-[12px] font-semibold",
+                              ? "text-slate-300"
+                              : "text-slate-500",
                         ].join(" ")}
                       >
                         {cue.text}
