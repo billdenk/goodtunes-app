@@ -781,14 +781,16 @@ function BottomDock({
 
         {/* ── Progress bar — Apple's mini-player anatomy ─────────────
             Bar is SCOPED to the now-playing card area: its left edge
-            aligns with the album cover's left edge, and its right edge
-            stops just before the right utility cluster. It does NOT
-            run under the transport buttons or the lyrics/volume icons.
+            sits ~12px past the repeat button's right edge, and its
+            right edge sits ~12px before the lyrics button's left edge
+            — Apple's bar has visually SYMMETRIC gaps to whichever icon
+            is nearest on either side. Bar does NOT run under the
+            transport buttons or the lyrics/volume icons.
 
-            Pixel insets (left-[228px] / right-[110px]) are tuned to the
-            current cluster widths:
-              left  = px-3 (12) + transport (196) + gap (6) + divider (17) + gap (6)
-              right = px-3 (12) + right cluster (~90) + gap (6) + divider (~8)
+            Pixel insets (left-[228px] / right-[98px]) are tuned so the
+            ~12px gap-to-nearest-icon is equal on both ends:
+              left  = px-3 (12) + transport (196) + divider zone (~17) + ~3
+              right = px-3 (12) + right cluster (~74) + ~12
             If the cluster shapes change, retune these two numbers.
 
             • At REST: 2px rounded bar, time labels collapsed to w-0.
@@ -806,7 +808,7 @@ function BottomDock({
                 bar's hover area. */}
             <div
               className={[
-                "absolute left-[228px] right-[110px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
+                "absolute left-[228px] right-[98px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
                 "transition-opacity duration-150",
                 scrubHover ? "opacity-100" : "opacity-0",
               ].join(" ")}
@@ -823,7 +825,7 @@ function BottomDock({
                 hover the cover+title behind it blur via scrubHover
                 state, and the bar itself thickens 2 → 4 → 5px. */}
             <div
-              className="group/scrub absolute left-[228px] right-[110px] bottom-1.5 h-3 flex items-center cursor-pointer"
+              className="group/scrub absolute left-[228px] right-[98px] bottom-1.5 h-3 flex items-center cursor-pointer"
               onMouseEnter={() => setScrubHover(true)}
               onMouseLeave={() => setScrubHover(false)}
             >
