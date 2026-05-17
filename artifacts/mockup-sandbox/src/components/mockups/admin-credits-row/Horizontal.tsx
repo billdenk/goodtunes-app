@@ -120,7 +120,7 @@ function PersonColumn({
       <div className="relative">
         <div
           className={[
-            "flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-[11px] font-semibold transition",
+            "flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-[13px] font-semibold transition",
             armed
               ? "ring-2 ring-rose-400"
               : "",
