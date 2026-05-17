@@ -589,9 +589,13 @@ function BottomDock({
             <>
               <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
 
-              {/* ── CENTER · track info + inline scrubber ───────── */}
+              {/* ── CENTER · track info + inline scrubber ─────────
+                  Apple proportions: the album cover ≈ the full height of
+                  the content stack to its right (title row + subtitle row
+                  + scrubber row). Thumb at 48px (w-12 h-12) matches that
+                  rhythm and stays centered alongside the column. */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
+                <div className="w-12 h-12 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-semibold truncate leading-tight">
                     {current.title}
@@ -599,26 +603,29 @@ function BottomDock({
                   <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
                     Nick Carter — Love Life Tragedy
                   </div>
-                  {/* Inline scrubber — replaces the old top-edge sliver.
-                      Elapsed on the left, total on the right, scrubber
-                      between them. Matches Apple's anatomy. */}
+                  {/* Inline scrubber — Apple's anatomy:
+                      • No draggable knob dot. End of the white fill IS
+                        the play head — flat, like Apple Music's mini-player.
+                      • Rail THICKENS on hover (rest 3px → hover 5px) and
+                        thickens more + brightens on active/click (6px).
+                        Outer h-3 row keeps adjacent labels vertically
+                        stable while the rail grows.
+                      • Right label shows REMAINING time as `−2:26`, not
+                        total `4:12`. Uses U+2212 (proper minus glyph). */}
                   <div className="mt-1.5 flex items-center gap-2">
                     <span className="text-[9.5px] tabular-nums text-slate-400 w-7 text-right">
                       {fmt(elapsedSeconds)}
                     </span>
-                    <div className="relative flex-1 h-[3px] bg-white/15 rounded-full">
-                      <div
-                        className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
-                        style={{ width: `${progress}%` }}
-                      />
-                      <div
-                        className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
-                        style={{ left: knobLeft(progress) }}
-                        aria-hidden
-                      />
+                    <div className="group/scrub relative flex-1 h-3 flex items-center cursor-pointer">
+                      <div className="relative w-full h-[3px] bg-white/15 rounded-full transition-[height,background-color] duration-100 group-hover/scrub:h-[5px] group-hover/scrub:bg-white/25 group-active/scrub:h-[6px] group-active/scrub:bg-white/35">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
                     </div>
-                    <span className="text-[9.5px] tabular-nums text-slate-400 w-7">
-                      {fmt(totalSeconds)}
+                    <span className="text-[9.5px] tabular-nums text-slate-400 w-9">
+                      −{fmt(totalSeconds - elapsedSeconds)}
                     </span>
                   </div>
                 </div>
