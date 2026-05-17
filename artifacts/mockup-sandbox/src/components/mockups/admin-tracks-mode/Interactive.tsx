@@ -1300,31 +1300,87 @@ function CreditsDetail({
   hasCredits: boolean;
   onClose: () => void;
 }) {
-  // Role-first flow:
-  //   1. Pick a role from chips (or search/create a custom one)
-  //   2. Pick a person for that role (roster chips + create-new)
-  //   3. Credit lands in the list, picker resets to phase 1 so the next
-  //      add starts from "what role?" again. Same vocab as the album-level
-  //      surface in AlbumCredits.tsx — only the data shape differs.
+  // Song · Performance · Production — three buckets, royalty-aligned,
+  // matches what fans see on liner notes + Apple Music expanded credits.
   //
-  // Roles are a flat list. James playing two roles (vocals + guitar) is
-  // two separate rows, which keeps the row meaning crisp ("this person
-  // doing this thing") and lets per-roles get distinct gear later.
+  //   Song        → who wrote it. Earns mechanical/publishing royalties.
+  //   Performance → who's on the record. Featured/neighboring-rights bucket.
+  //                 SuperCredits™ instrument-tagging lives here.
+  //   Production  → who shaped how it sounds. Mostly work-for-hire.
+  //
+  // Why three (not flat): fans on liner notes scan by tier already
+  // (writers up top, players in the middle, technical credits at the
+  // bottom). Grouping mirrors that and removes the "is Mix engineer a
+  // performer or…?" decision the admin currently has to make.
+  type BucketKey = "song" | "performance" | "production";
+  const BUCKETS: {
+    key: BucketKey;
+    label: string;
+    blurb: string;
+    roles: string[];
+  }[] = [
+    {
+      key: "song",
+      label: "Song",
+      blurb: "Who wrote it.",
+      roles: ["Composer", "Lyricist", "Arranger"],
+    },
+    {
+      key: "performance",
+      label: "Performance",
+      blurb: "Who's on the record.",
+      roles: [
+        "Lead vocals",
+        "Backing vocals",
+        "Acoustic guitar",
+        "Electric guitar",
+        "Bass",
+        "Drums",
+        "Keys",
+      ],
+    },
+    {
+      key: "production",
+      label: "Production",
+      blurb: "Who shaped how it sounds.",
+      roles: [
+        "Producer",
+        "Mix engineer",
+        "Master engineer",
+        "Recorded by",
+        "Engineer",
+      ],
+    },
+  ];
+  // Lookup table: role string → bucket. Case-insensitive. Anything not
+  // in the table falls back to Performance (the broadest bucket — covers
+  // pedal steel, strings, horns, anything the artist invents).
+  const bucketForRole = (role: string): BucketKey => {
+    const r = role.trim().toLowerCase();
+    for (const b of BUCKETS) {
+      if (b.roles.some((x) => x.toLowerCase() === r)) return b.key;
+    }
+    return "performance";
+  };
+
   type Row = {
     name: string;
     role: string;
     instrument: string;
     source?: "album" | "track";
   };
-  // Inherited from album-level credits (faded at the top of the list).
-  // In real impl these come back joined from the same /credits endpoint
-  // with source: "album". A per-track row with the same role overrides.
+  // Inherited from album-level credits (faded at the top of Production).
+  // Both Producer + Mix engineer live in Production by definition.
   const INHERITED: Row[] = [
     { name: "Sarah Lin", role: "Producer", instrument: "", source: "album" },
     { name: "Mike Torres", role: "Mix engineer", instrument: "", source: "album" },
   ];
   const SEED: Row[] = hasCredits
     ? [
+        // Song bucket — the writer credit fans see at the top of liner notes.
+        { name: "James Walsh", role: "Composer", instrument: "" },
+        { name: "James Walsh", role: "Lyricist", instrument: "" },
+        // Performance bucket — instrument-tagged for SuperCredits™.
         { name: "James Walsh", role: "Lead vocals", instrument: "" },
         { name: "James Walsh", role: "Acoustic guitar", instrument: "1973 Martin D-28" },
         { name: "Mike Torres", role: "Drums", instrument: "Ludwig Black Beauty kit" },
@@ -1332,20 +1388,6 @@ function CreditsDetail({
     : [];
   const [trackRows, setTrackRows] = useState<Row[]>(SEED);
 
-  // Common roles for performers, ordered by how often they show up on
-  // a typical rock/pop session. "Producer" is at the end because it's
-  // usually filled at the album level — track-level Producer is the
-  // override case.
-  const COMMON_ROLES = [
-    "Lead vocals",
-    "Backing vocals",
-    "Acoustic guitar",
-    "Electric guitar",
-    "Bass",
-    "Drums",
-    "Keys",
-    "Producer",
-  ];
   const ROSTER = [
     { id: "p1", name: "James Walsh" },
     { id: "p2", name: "Sarah Lin" },
@@ -1353,11 +1395,20 @@ function CreditsDetail({
     { id: "p4", name: "Ana Reyes" },
   ];
 
-  // Two-phase picker state. pickedRole === null → phase 1 (pick a role).
+  // Picker state. addingBucket = which bucket's "+ Add" was tapped (null
+  // = picker closed). pickedRole = phase 2 (we have a role, now picking a
+  // person). The bucket scopes the role-chip suggestions in phase 1.
+  const [addingBucket, setAddingBucket] = useState<BucketKey | null>(null);
   const [pickedRole, setPickedRole] = useState<string | null>(null);
   const [roleQuery, setRoleQuery] = useState("");
   const [personQuery, setPersonQuery] = useState("");
 
+  const handleOpenAdd = (bucket: BucketKey) => {
+    setAddingBucket(bucket);
+    setPickedRole(null);
+    setRoleQuery("");
+    setPersonQuery("");
+  };
   const handlePickRole = (role: string) => {
     setPickedRole(role);
     setRoleQuery("");
@@ -1369,11 +1420,19 @@ function CreditsDetail({
       ...r,
       { name: name.trim(), role: pickedRole, instrument: "" },
     ]);
+    setAddingBucket(null);
     setPickedRole(null);
     setPersonQuery("");
   };
   const handleCancelRole = () => {
+    // From phase 2 → back to phase 1 (still in the same bucket).
     setPickedRole(null);
+    setPersonQuery("");
+  };
+  const handleCloseAdd = () => {
+    setAddingBucket(null);
+    setPickedRole(null);
+    setRoleQuery("");
     setPersonQuery("");
   };
 
@@ -1386,24 +1445,6 @@ function CreditsDetail({
       .join("")
       .toUpperCase();
 
-  const roleMatches = COMMON_ROLES.filter((r) =>
-    r.toLowerCase().includes(roleQuery.trim().toLowerCase()),
-  );
-  const showCustomRole =
-    roleQuery.trim().length > 0 &&
-    !COMMON_ROLES.some(
-      (r) => r.toLowerCase() === roleQuery.trim().toLowerCase(),
-    );
-
-  const personMatches = ROSTER.filter((p) =>
-    p.name.toLowerCase().includes(personQuery.trim().toLowerCase()),
-  );
-  const showCreatePerson =
-    personQuery.trim().length > 0 &&
-    !ROSTER.some(
-      (p) => p.name.toLowerCase() === personQuery.trim().toLowerCase(),
-    );
-
   // Override rule: if a track-level row exists for the same role, the
   // album-level one is suppressed (per-track wins, like Apple Music's
   // override behavior). Keeps inherited Producer until the user adds
@@ -1414,240 +1455,331 @@ function CreditsDetail({
   const visibleInherited = INHERITED.filter(
     (r) => !overriddenRoles.has(r.role.toLowerCase()),
   );
-  const allRows = [...visibleInherited, ...trackRows];
+
+  // Group all rows by bucket. Inherited rows always come first within
+  // their bucket so the override CTA stays visible above any user-added
+  // overrides.
+  const rowsByBucket: Record<BucketKey, Row[]> = {
+    song: [],
+    performance: [],
+    production: [],
+  };
+  for (const r of visibleInherited) rowsByBucket[bucketForRole(r.role)].push(r);
+  for (const r of trackRows) rowsByBucket[bucketForRole(r.role)].push(r);
+
+  const personMatches = ROSTER.filter((p) =>
+    p.name.toLowerCase().includes(personQuery.trim().toLowerCase()),
+  );
+  const showCreatePerson =
+    personQuery.trim().length > 0 &&
+    !ROSTER.some(
+      (p) => p.name.toLowerCase() === personQuery.trim().toLowerCase(),
+    );
+
   return (
     <DetailWrap title="Credits" onClose={onClose}>
-      <div className="space-y-3">
-        {allRows.length > 0 ? (
-          <ul className="space-y-1.5">
-            {allRows.map((r, i) => {
-              const fromAlbum = r.source === "album";
-              return (
-                <li
-                  key={`${r.source ?? "track"}-${r.name}-${r.role}-${i}`}
-                  className={[
-                    "flex items-center gap-3 p-2 rounded-md",
-                    fromAlbum
-                      ? "bg-slate-50/60"
-                      : "hover:bg-slate-50",
-                  ].join(" ")}
-                >
-                  <span
-                    className={[
-                      "w-8 h-8 rounded-full text-white text-[11px] font-bold inline-flex items-center justify-center flex-shrink-0",
-                      fromAlbum
-                        ? "bg-slate-300"
-                        : "bg-gradient-to-br from-[#319ED8] to-[#7F10A7]",
-                    ].join(" ")}
-                  >
-                    {initials(r.name)}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className={[
-                        "text-[12.5px] font-semibold truncate flex items-center gap-1.5",
-                        fromAlbum ? "text-slate-500" : "text-slate-900",
-                      ].join(" ")}
-                    >
-                      {r.name}
-                      {fromAlbum && (
+      <div className="space-y-5">
+        {BUCKETS.map((bucket) => {
+          const rows = rowsByBucket[bucket.key];
+          const isAdding = addingBucket === bucket.key;
+          // Role chips for the picker are scoped to the bucket the user
+          // is adding to. Custom roles entered here land in this bucket.
+          const bucketRoleMatches = bucket.roles.filter((r) =>
+            r.toLowerCase().includes(roleQuery.trim().toLowerCase()),
+          );
+          const showCustomRole =
+            roleQuery.trim().length > 0 &&
+            !bucket.roles.some(
+              (r) => r.toLowerCase() === roleQuery.trim().toLowerCase(),
+            );
+          return (
+            <section key={bucket.key}>
+              {/* Bucket header — uppercase 10pt label + small blurb, with
+                  a hairline divider trailing off to the right. Same vocab
+                  as the REQUIRED / OPTIONAL headers on the tile grid so
+                  the surface feels consistent. */}
+              <div className="flex items-baseline gap-2 mb-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  {bucket.label}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {bucket.blurb}
+                </span>
+                <span className="h-px flex-1 bg-slate-200 self-center" aria-hidden />
+                <span className="text-[10.5px] font-semibold text-slate-400">
+                  {rows.filter((r) => r.source !== "album").length}
+                </span>
+              </div>
+
+              {rows.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {rows.map((r, i) => {
+                    const fromAlbum = r.source === "album";
+                    return (
+                      <li
+                        key={`${r.source ?? "track"}-${r.name}-${r.role}-${i}`}
+                        className={[
+                          "flex items-center gap-3 p-2 rounded-md",
+                          fromAlbum ? "bg-slate-50/60" : "hover:bg-slate-50",
+                        ].join(" ")}
+                      >
                         <span
-                          title="From album credits — override by adding the same role here."
-                          className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-white border border-slate-200 text-[9.5px] font-semibold uppercase tracking-wider text-slate-400"
+                          className={[
+                            "w-8 h-8 rounded-full text-white text-[11px] font-bold inline-flex items-center justify-center flex-shrink-0",
+                            fromAlbum
+                              ? "bg-slate-300"
+                              : "bg-gradient-to-br from-[#319ED8] to-[#7F10A7]",
+                          ].join(" ")}
                         >
-                          Album
+                          {initials(r.name)}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={[
+                              "text-[12.5px] font-semibold truncate flex items-center gap-1.5",
+                              fromAlbum ? "text-slate-500" : "text-slate-900",
+                            ].join(" ")}
+                          >
+                            {r.name}
+                            {fromAlbum && (
+                              <span
+                                title="From album credits — override by adding the same role here."
+                                className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-white border border-slate-200 text-[9.5px] font-semibold uppercase tracking-wider text-slate-400"
+                              >
+                                Album
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            className={[
+                              "text-[11px] truncate",
+                              fromAlbum ? "text-slate-400" : "text-slate-500",
+                            ].join(" ")}
+                          >
+                            {r.role}
+                            {r.instrument ? ` · ${r.instrument}` : ""}
+                          </div>
+                        </div>
+                        {/* Gear upsell is Performance-only. Song + Production
+                            credits don't carry instrument data, so the chip
+                            would just be noise there. */}
+                        {!fromAlbum &&
+                          !r.instrument &&
+                          bucket.key === "performance" && (
+                            <button
+                              className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5"
+                              title="Add gear to turn this into a SuperCredit™"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add gear
+                            </button>
+                          )}
+                        {!fromAlbum && (
+                          <button
+                            aria-label={`Edit ${r.name} — ${r.role}`}
+                            title={`Edit ${r.name} — ${r.role}`}
+                            className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                        {/* Inherited row → quick override CTA. Opens the
+                            picker in this bucket pre-filled at phase 2
+                            with the same role, so the user lands directly
+                            on "who plays this role on THIS track?" */}
+                        {fromAlbum && (
+                          <button
+                            onClick={() => {
+                              setAddingBucket(bucket.key);
+                              setPickedRole(r.role);
+                              setPersonQuery("");
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-slate-500 hover:text-[#319ED8] hover:bg-[#319ED8]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+                            title={`Replace the album-level ${r.role.toLowerCase()} for this track only`}
+                          >
+                            Override
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                !isAdding && (
+                  <p className="text-[11.5px] text-slate-400 italic px-2 py-1">
+                    {bucket.key === "song" &&
+                      "No writers yet — add the composer + lyricist."}
+                    {bucket.key === "performance" &&
+                      "No performers yet — credit who's on the recording."}
+                    {bucket.key === "production" &&
+                      "No production credits yet — album-level fills these in by default."}
+                  </p>
+                )
+              )}
+
+              {/* Picker — opens inline at the bottom of the bucket. Phase
+                  1 = role chips scoped to this bucket. Phase 2 = person
+                  chips. Closing the picker (X) collapses back to the
+                  "+ Add to {bucket}" CTA. */}
+              {isAdding ? (
+                pickedRole === null ? (
+                  <div className="mt-2 rounded-md border border-slate-200 bg-white p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
+                        Add to {bucket.label} · pick a role
+                      </div>
+                      <button
+                        onClick={handleCloseAdd}
+                        aria-label="Cancel — close the picker"
+                        title="Cancel"
+                        className="w-6 h-6 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {bucketRoleMatches.map((role) => (
+                        <button
+                          key={role}
+                          onClick={() => handlePickRole(role)}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full border border-slate-200 hover:border-[#319ED8] hover:bg-[#319ED8]/5 active:bg-[#319ED8]/10 text-[11.5px] font-medium text-slate-700"
+                        >
+                          {role}
+                        </button>
+                      ))}
+                      {showCustomRole && (
+                        <button
+                          onClick={() => handlePickRole(roleQuery.trim())}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Use “{roleQuery.trim()}”
+                        </button>
+                      )}
+                    </div>
+                    <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
+                      <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <input
+                        autoFocus
+                        value={roleQuery}
+                        onChange={(e) => setRoleQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (bucketRoleMatches.length > 0) {
+                              handlePickRole(bucketRoleMatches[0]);
+                            } else if (roleQuery.trim()) {
+                              handlePickRole(roleQuery.trim());
+                            }
+                          } else if (e.key === "Escape") {
+                            handleCloseAdd();
+                          }
+                        }}
+                        placeholder={
+                          bucket.key === "performance"
+                            ? "Search roles, or type a custom one (Pedal steel, Strings…)"
+                            : `Search ${bucket.label.toLowerCase()} roles…`
+                        }
+                        className="flex-1 min-w-0 bg-transparent text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-md border border-[#319ED8]/40 bg-[#319ED8]/5 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] uppercase tracking-wider font-semibold text-[#319ED8]">
+                          {bucket.label} · adding credit
+                        </div>
+                        <div className="text-[13px] font-semibold text-slate-900 truncate">
+                          {bucket.key === "song"
+                            ? `Who's the ${pickedRole.toLowerCase()}?`
+                            : bucket.key === "production"
+                              ? `Who's the ${pickedRole.toLowerCase()}?`
+                              : `Who played ${pickedRole.toLowerCase()}?`}
+                        </div>
+                      </div>
+                      {/* Two escapes: "Change role" (back to phase 1, same
+                          bucket) and X (close picker entirely). */}
+                      <button
+                        onClick={handleCancelRole}
+                        className="px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:bg-white"
+                      >
+                        Change role
+                      </button>
+                      <button
+                        onClick={handleCloseAdd}
+                        aria-label="Cancel — close the picker"
+                        title="Cancel"
+                        className="w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-white inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
+                      <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <input
+                        autoFocus
+                        value={personQuery}
+                        onChange={(e) => setPersonQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (personMatches.length > 0) {
+                              handleAddCredit(personMatches[0].name);
+                            } else if (personQuery.trim()) {
+                              handleAddCredit(personQuery.trim());
+                            }
+                          } else if (e.key === "Escape") {
+                            handleCancelRole();
+                          }
+                        }}
+                        placeholder="Search your roster, or type a new name…"
+                        className="flex-1 min-w-0 bg-transparent text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {personMatches.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => handleAddCredit(p.name)}
+                          className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-[#319ED8]/10 text-[11.5px] text-slate-700"
+                        >
+                          <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[9px] font-bold inline-flex items-center justify-center">
+                            {initials(p.name)}
+                          </span>
+                          {p.name}
+                        </button>
+                      ))}
+                      {showCreatePerson && (
+                        <button
+                          onClick={() => handleAddCredit(personQuery.trim())}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Create “{personQuery.trim()}”
+                        </button>
+                      )}
+                      {!showCreatePerson && personMatches.length === 0 && (
+                        <span className="text-[11.5px] text-slate-400 italic px-1 py-1">
+                          No matches — keep typing to create a new person.
                         </span>
                       )}
                     </div>
-                    <div
-                      className={[
-                        "text-[11px] truncate",
-                        fromAlbum ? "text-slate-400" : "text-slate-500",
-                      ].join(" ")}
-                    >
-                      {r.role}
-                      {r.instrument ? ` · ${r.instrument}` : ""}
-                    </div>
                   </div>
-                  {/* No gear yet → soft SuperCredits™ upsell. Skipped on
-                      inherited rows — those get gear at the album level. */}
-                  {!fromAlbum && !r.instrument && (
-                    <button
-                      className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5"
-                      title="Add gear to turn this into a SuperCredit™"
-                    >
-                      <Plus className="w-3 h-3" />
-                      Add gear
-                    </button>
-                  )}
-                  {!fromAlbum && (
-                    <button
-                      aria-label={`Edit ${r.name} — ${r.role}`}
-                      title={`Edit ${r.name} — ${r.role}`}
-                      className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  )}
-                  {/* Inherited row → quick override CTA. Pre-fills the picker
-                      with the same role so the user lands directly on phase
-                      2 (pick a person) — the per-track override case. */}
-                  {fromAlbum && (
-                    <button
-                      onClick={() => {
-                        setPickedRole(r.role);
-                        setPersonQuery("");
-                      }}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-slate-500 hover:text-[#319ED8] hover:bg-[#319ED8]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
-                      title={`Replace the album-level ${r.role.toLowerCase()} for this track only`}
-                    >
-                      Override
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-[12px] text-slate-500 italic">
-            No credits yet. Pick a role to get started.
-          </p>
-        )}
-
-        {/* Picker. Phase 1 = role chips. Phase 2 = person chips, scoped
-            to the role the user just picked. */}
-        {pickedRole === null ? (
-          <div className="rounded-md border border-slate-200 bg-white p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
-                Add a credit · pick a role
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {roleMatches.map((role) => (
+                )
+              ) : (
                 <button
-                  key={role}
-                  onClick={() => handlePickRole(role)}
-                  className="inline-flex items-center px-2.5 py-1 rounded-full border border-slate-200 hover:border-[#319ED8] hover:bg-[#319ED8]/5 active:bg-[#319ED8]/10 text-[11.5px] font-medium text-slate-700"
-                >
-                  {role}
-                </button>
-              ))}
-              {showCustomRole && (
-                <button
-                  onClick={() => handlePickRole(roleQuery.trim())}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
+                  onClick={() => handleOpenAdd(bucket.key)}
+                  className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-slate-300 text-[11.5px] font-semibold text-slate-500 hover:text-[#319ED8] hover:border-[#319ED8] hover:bg-[#319ED8]/5"
                 >
                   <Plus className="w-3 h-3" />
-                  Use “{roleQuery.trim()}”
+                  Add to {bucket.label}
                 </button>
               )}
-            </div>
-            <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
-              <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-              <input
-                value={roleQuery}
-                onChange={(e) => setRoleQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    // Prefer first matched chip; fall back to custom role.
-                    if (roleMatches.length > 0) {
-                      handlePickRole(roleMatches[0]);
-                    } else if (roleQuery.trim()) {
-                      handlePickRole(roleQuery.trim());
-                    }
-                  }
-                }}
-                placeholder="Search roles, or type a custom one (Pedal steel, Strings, etc.)"
-                className="flex-1 min-w-0 bg-transparent text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none"
-              />
-            </label>
-          </div>
-        ) : (
-          <div className="rounded-md border border-[#319ED8]/40 bg-[#319ED8]/5 p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] uppercase tracking-wider font-semibold text-[#319ED8]">
-                  Adding credit
-                </div>
-                <div className="text-[13px] font-semibold text-slate-900 truncate">
-                  Who played {pickedRole.toLowerCase()}?
-                </div>
-              </div>
-              {/* Two escapes side-by-side: "Change role" (re-pick a role,
-                  e.g. you meant Lead vocals not Backing vocals) and the X
-                  cancel button (back out entirely — used when you tapped
-                  Override on an inherited row and changed your mind).
-                  Both functionally land on phase 1, but the X reads as
-                  "abandon" while the link reads as "switch." */}
-              <button
-                onClick={handleCancelRole}
-                className="px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:bg-white"
-              >
-                Change role
-              </button>
-              <button
-                onClick={handleCancelRole}
-                aria-label="Cancel — close the picker"
-                title="Cancel"
-                className="w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-white inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
-              <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-              <input
-                autoFocus
-                value={personQuery}
-                onChange={(e) => setPersonQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (personMatches.length > 0) {
-                      handleAddCredit(personMatches[0].name);
-                    } else if (personQuery.trim()) {
-                      handleAddCredit(personQuery.trim());
-                    }
-                  } else if (e.key === "Escape") {
-                    handleCancelRole();
-                  }
-                }}
-                placeholder="Search your roster, or type a new name…"
-                className="flex-1 min-w-0 bg-transparent text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none"
-              />
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {personMatches.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handleAddCredit(p.name)}
-                  className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-[#319ED8]/10 text-[11.5px] text-slate-700"
-                >
-                  <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[9px] font-bold inline-flex items-center justify-center">
-                    {initials(p.name)}
-                  </span>
-                  {p.name}
-                </button>
-              ))}
-              {showCreatePerson && (
-                <button
-                  onClick={() => handleAddCredit(personQuery.trim())}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
-                >
-                  <Plus className="w-3 h-3" />
-                  Create “{personQuery.trim()}”
-                </button>
-              )}
-              {!showCreatePerson && personMatches.length === 0 && (
-                <span className="text-[11.5px] text-slate-400 italic px-1 py-1">
-                  No matches — keep typing to create a new person.
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+            </section>
+          );
+        })}
       </div>
     </DetailWrap>
   );

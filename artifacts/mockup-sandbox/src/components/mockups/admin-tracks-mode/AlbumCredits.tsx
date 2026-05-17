@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Plus,
-  Pencil,
   X,
   Users,
   Disc3,
@@ -9,6 +8,7 @@ import {
   Mic2,
   MapPin,
   ImageIcon,
+  PenLine,
   Search,
   ChevronRight,
 } from "lucide-react";
@@ -30,33 +30,61 @@ import {
 // the UI can dim them + show a small "Album" badge. A track-level row with
 // the same role overrides the album-level one (per-track wins).
 
+// Song · Performance · Production — same three buckets the track-level
+// credits surface uses. Mirrors the vocabulary in Interactive.tsx so
+// the album tier and the track tier speak the same language.
+//
+// At album level, Song is usually empty (writers vary per track), and
+// Performance is sparse (album-wide band, backing choir). Production
+// is where the bulk of album-wide credits live and is the bucket that
+// gets inherited onto every track by default.
+const BUCKETS = [
+  {
+    key: "song" as const,
+    label: "Song",
+    blurb: "Writers credited across the whole album.",
+  },
+  {
+    key: "performance" as const,
+    label: "Performance",
+    blurb: "Players on every track — touring band, choir, strings.",
+  },
+  {
+    key: "production" as const,
+    label: "Production",
+    blurb: "Applied to every track unless a track overrides.",
+  },
+];
+
 const ROLES = [
-  { key: "producer",   icon: Disc3,     label: "Producer",        hint: "Whose vision steered the album." },
-  { key: "mix",        icon: Sliders,   label: "Mix engineer",    hint: "Mixed every track unless overridden." },
-  { key: "master",     icon: Sliders,   label: "Master engineer", hint: "Final mastering pass." },
-  { key: "recorded",   icon: Mic2,      label: "Recorded by",     hint: "Tracking engineer." },
-  { key: "studio",     icon: MapPin,    label: "Recorded at",     hint: "Studio or location." },
-  { key: "artwork",    icon: ImageIcon, label: "Artwork",         hint: "Cover designer / photographer." },
+  // Song
+  { key: "composer",   bucket: "song" as const,        icon: PenLine,   label: "Composer",        hint: "Whoever wrote the music across the album." },
+  { key: "lyricist",   bucket: "song" as const,        icon: PenLine,   label: "Lyricist",        hint: "Whoever wrote the words across the album." },
+  // Performance
+  { key: "band",       bucket: "performance" as const, icon: Users,     label: "Band",            hint: "Players on every track on the record." },
+  // Production
+  { key: "producer",   bucket: "production" as const,  icon: Disc3,     label: "Producer",        hint: "Whose vision steered the album." },
+  { key: "mix",        bucket: "production" as const,  icon: Sliders,   label: "Mix engineer",    hint: "Mixed every track unless overridden." },
+  { key: "master",     bucket: "production" as const,  icon: Sliders,   label: "Master engineer", hint: "Final mastering pass." },
+  { key: "recorded",   bucket: "production" as const,  icon: Mic2,      label: "Recorded by",     hint: "Tracking engineer." },
+  { key: "studio",     bucket: "production" as const,  icon: MapPin,    label: "Recorded at",     hint: "Studio or location." },
+  { key: "artwork",    bucket: "production" as const,  icon: ImageIcon, label: "Artwork",         hint: "Cover designer / photographer." },
 ] as const;
 
 type RoleKey = (typeof ROLES)[number]["key"];
+type BucketKey = (typeof BUCKETS)[number]["key"];
 
 type Credit = { id: string; name: string; note?: string };
 
 const INITIAL: Record<RoleKey, Credit[]> = {
-  producer: [
-    { id: "c1", name: "Sarah Lin" },
-  ],
-  mix: [
-    { id: "c2", name: "Mike Torres" },
-  ],
+  composer: [],
+  lyricist: [],
+  band: [],
+  producer: [{ id: "c1", name: "Sarah Lin" }],
+  mix: [{ id: "c2", name: "Mike Torres" }],
   master: [],
-  recorded: [
-    { id: "c3", name: "Sarah Lin", note: "also producer" },
-  ],
-  studio: [
-    { id: "c4", name: "Sound City · Van Nuys" },
-  ],
+  recorded: [{ id: "c3", name: "Sarah Lin", note: "also producer" }],
+  studio: [{ id: "c4", name: "Sound City · Van Nuys" }],
   artwork: [],
 };
 
@@ -190,11 +218,35 @@ export default function AlbumCredits() {
             </span>
           </header>
 
-          <ul>
-            {ROLES.map((role, idx) => {
+          {BUCKETS.map((bucket, bIdx) => {
+            const bucketRoles = ROLES.filter((r) => r.bucket === bucket.key);
+            const bucketFilled = bucketRoles.reduce(
+              (n, r) => n + credits[r.key].length,
+              0,
+            );
+            const isLastBucket = bIdx === BUCKETS.length - 1;
+            return (
+              <div key={bucket.key}>
+                {/* Bucket header — matches the vocab used on the track-level
+                    credits sheet (Song · Performance · Production) so the
+                    two tiers feel like one taxonomy, not two. */}
+                <div className="px-5 pt-4 pb-2 flex items-baseline gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    {bucket.label}
+                  </span>
+                  <span className="text-[11px] text-slate-400 truncate">
+                    {bucket.blurb}
+                  </span>
+                  <span className="h-px flex-1 bg-slate-200 self-center" aria-hidden />
+                  <span className="text-[10.5px] font-semibold text-slate-400 flex-shrink-0">
+                    {bucketFilled}
+                  </span>
+                </div>
+                <ul className={isLastBucket ? "" : "border-b border-slate-100"}>
+            {bucketRoles.map((role, idx) => {
               const Icon = role.icon;
               const isOpen = activeRole === role.key;
-              const isLast = idx === ROLES.length - 1;
+              const isLast = idx === bucketRoles.length - 1;
               const items = credits[role.key];
               const matches = ROSTER.filter((p) =>
                 p.name.toLowerCase().includes(query.trim().toLowerCase()),
@@ -377,7 +429,10 @@ export default function AlbumCredits() {
                 </li>
               );
             })}
-          </ul>
+                </ul>
+              </div>
+            );
+          })}
 
           {/* Footer — tells the user the override rule + nudges them to the
               tracks list so the relationship between the two tiers is clear. */}
