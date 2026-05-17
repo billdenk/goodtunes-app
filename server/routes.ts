@@ -1445,6 +1445,74 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // ─── Waveform generation ─────────────────────────────────────────────
+  // Streams the song's master through ffmpeg → mono 8 kHz PCM → reduces
+  // to ~200 normalized peaks, then persists them on `songs.waveform`.
+  // The peaks drive the Preview Slider™ window picker and the consumer
+  // scrubber so both render the actual loudness shape of the audio.
+  // Per-song (used by the admin "Regenerate waveform" button + the
+  // master-upload finalize step) and per-album bulk (used to backfill
+  // an existing catalog like album-5).
+  app.post(
+    "/api/admin/songs/:id/waveform",
+    requireAdminBearer,
+    async (req, res) => {
+      const id = String(req.params.id);
+      const song = await storage.getSongById(id);
+      if (!song) return res.status(404).json({ message: "Song not found" });
+      if (!song.audioUrl)
+        return res.status(400).json({ message: "Song has no master file yet" });
+      try {
+        const { waveformFromAudioUrl } = await import("./waveform");
+        const peaks = await waveformFromAudioUrl(song.audioUrl);
+        const updated = await storage.updateSong(id, {
+          waveform: peaks,
+        } as any);
+        return res.json({ id, bars: peaks.length, song: updated });
+      } catch (err: any) {
+        console.error("Waveform extraction failed", id, err?.message);
+        return res
+          .status(500)
+          .json({ message: err?.message || "Waveform extraction failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/albums/:id/waveforms",
+    requireAdminBearer,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const all = await storage.getSongsByAlbumId(albumId);
+      if (!all.length)
+        return res.status(404).json({ message: "Album has no songs" });
+      const { waveformFromAudioUrl } = await import("./waveform");
+      const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+      // Sequential — ffmpeg + 24-bit/96 kHz WAV downloads are memory-heavy;
+      // parallel runs would risk OOM on Autoscale.
+      for (const s of all) {
+        if (!s.audioUrl) {
+          results.push({ id: s.id, ok: false, error: "no master" });
+          continue;
+        }
+        try {
+          const peaks = await waveformFromAudioUrl(s.audioUrl);
+          await storage.updateSong(s.id, { waveform: peaks } as any);
+          results.push({ id: s.id, ok: true });
+        } catch (err: any) {
+          console.error("Waveform failed for", s.id, err?.message);
+          results.push({ id: s.id, ok: false, error: err?.message });
+        }
+      }
+      return res.json({
+        albumId,
+        total: results.length,
+        succeeded: results.filter((r) => r.ok).length,
+        results,
+      });
+    },
+  );
+
   // Auto-sync lyrics to audio via ElevenLabs Forced Alignment.
   //
   // Flow: load song → fetch master audio bytes from object storage → POST

@@ -154,6 +154,14 @@ export const songs = pgTable("songs", {
   // master is one-to-one with the song so we colocate the fields here.
   previewStartMs: integer("preview_start_ms"),
   previewEndMs: integer("preview_end_ms"),
+  // Pre-computed waveform peaks for the master file. Generated server-side
+  // at upload (or via the admin "Regenerate waveform" action) by piping
+  // the master through ffmpeg → mono 8 kHz PCM → ~200 normalized peaks
+  // (0..1, loudest = 1). Powers the Preview Slider™ window picker and the
+  // consumer Now Playing scrubber so both render the same shape that
+  // matches the actual audio. Null until the master has been analyzed —
+  // UI falls back to decorative bars in that case.
+  waveform: jsonb("waveform").$type<number[]>(),
 });
 
 export const userAlbums = pgTable(

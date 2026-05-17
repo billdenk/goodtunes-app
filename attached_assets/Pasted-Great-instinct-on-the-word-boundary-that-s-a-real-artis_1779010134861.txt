@@ -1,0 +1,64 @@
+Great instinct on the word boundary — that's a real artist pain point. Here's the full brief for Replit/Otis:
+
+---
+
+**Paste this to Otis:**
+
+---
+
+A few refinements on the Preview slider. These are suggestions — defer to your judgment on implementation.
+
+**1. Header rename**
+"30-sec preview" → **"Preview"**. The timestamp already communicates the duration.
+
+**2. Button rename**
+"Save & lock" → **"Lock Preview"** — mirrors the padlock metaphor more naturally.
+
+**3. Start time displayed inside the draggable window**
+As the artist drags the yellow window, show the current start time **inside the window itself** — large enough to read while dragging. End time doesn't need to be shown since it's always start + 0:30. Something like:
+
+```
+┌─────────────┐
+│    1:11     │
+│  ▓▓▓▓▓▓▓▓  │
+└─────────────┘
+```
+
+Updates live as they drag. Disappears or becomes secondary once locked.
+
+**4. Fine-tune controls below the waveform**
+Once a window is set, show a small time input below for dialing it in precisely:
+
+```
+Start time:  ← [ 1:11 ] →
+```
+
+- Left/right arrows increment/decrement by a configurable amount (see #5)
+- The time field is also directly typeable (MM:SS format)
+- Hitting Enter or clicking outside commits the change and moves the yellow window to match
+
+**5. Increment granularity — open question for Bill**
+Options to consider:
+- **1 second** — coarse but simple
+- **0.5 second** — good middle ground
+- **0.1 second** — fine, needed for word-boundary precision
+- **Variable** — arrows do 1 second, shift+arrow does 0.1 second
+
+Nick Carter's specific use case — not wanting to start mid-word — suggests **0.1 second** minimum, or ideally **shift+arrow for fine control**. If GoodSync™ word-level timing data is available for the track, a future enhancement could be **snap-to-word-boundary** (the arrow jumps to the next word start automatically). That's probably Phase 2 but worth noting in the roadmap now.
+
+**6. Auto-suggest the hook**
+Since ffmpeg is already analyzing the waveform on upload, consider also flagging the loudest/most dynamic 30-second window and offering a **"Try suggested hook"** button that jumps the window there. Saves artists who don't know where their hook is.
+
+**7. Play behavior**
+Confirm: when the yellow (unsaved) window is active, the play button should preview the *yellow* window, not the locked green one. 
+
+**8. Mobile touch targets**
+The drag handles on the window edges need minimum 44px touch target for comfortable mobile use.
+
+---
+
+These are refinements, not blockers. #3 and #4 are the priority — the live start time and the fine-tune input are the ones artists will feel immediately. Everything else can follow.
+
+---
+
+Want me to also think through what snap-to-word-boundary would need from the GoodSync™ data layer to make that Phase 2 feature real?
