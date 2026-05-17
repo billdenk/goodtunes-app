@@ -1570,6 +1570,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(502).json({ message: "Could not read master audio from storage" });
     }
 
+    // Section-header detection — MUST match the client's
+    // SECTION_HEADER_RE in client/src/pages/AdminAlbum.tsx. Bracketed
+    // (`[Verse 1]`) AND the songwriter shorthand the textarea
+    // placeholder teaches (V1/VERSE/PRE/POST/CHORUS/BRIDGE/INTRO/OUTRO).
+    // Bill caught this: if we hand the shorthand to ElevenLabs as text
+    // it tries to align "V1" / "CHORUS" / etc. against the audio,
+    // hallucinating timestamps and shifting every subsequent sung
+    // line later by 2-3 lines (the "highlight is 3 lines behind the
+    // audio" bug). Strip headers before alignment AND skip them in
+    // the walk.
+    const SECTION_HEADER_RE =
+      /^(\[.*\]|V\d+|VERSE(?:\s+\d+)?|PRE(?:-?\s*CHORUS)?|POST(?:-?\s*CHORUS)?|CHORUS|BRIDGE|INTRO|OUTRO)$/;
+    const isHeaderLine = (line: string) =>
+      SECTION_HEADER_RE.test(line.trim());
+
+    const alignmentText = song.lyrics
+      .split("\n")
+      .filter((l) => !isHeaderLine(l))
+      .join("\n");
+
     // Call ElevenLabs Forced Alignment. multipart/form-data with `file` + `text`.
     // AbortController prevents a hung upstream from tying up the server.
     let alignment: { words: Array<{ text: string; start: number; end: number }> };
@@ -1579,7 +1599,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const form = new FormData();
       const ext = (song.audioUrl.match(/\.(\w+)$/)?.[1] || "wav").toLowerCase();
       form.append("file", new Blob([audioBuf], { type: audioMime }), `song-${id}.${ext}`);
-      form.append("text", song.lyrics);
+      form.append("text", alignmentText);
 
       const upstream = await fetch("https://api.elevenlabs.io/v1/forced-alignment", {
         method: "POST",
@@ -1632,7 +1652,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let expectedTokens = 0;
     for (const raw of lines) {
       const t = raw.trim();
-      if (!t || /^\[.+\]$/.test(t)) continue;
+      if (!t || isHeaderLine(t)) continue;
       expectedTokens += t.match(wordRe)?.length ?? 0;
     }
     const drift = Math.abs(expectedTokens - words.length) / Math.max(1, expectedTokens);
@@ -1650,8 +1670,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     for (const raw of lines) {
       const trimmed = raw.trim();
       if (!trimmed) continue;
-      const isHeader = /^\[.+\]$/.test(trimmed);
-      if (isHeader) {
+      if (isHeaderLine(trimmed)) {
         pendingHeaders.push({ timeMs: 0, text: trimmed }); // patched below
         continue;
       }
