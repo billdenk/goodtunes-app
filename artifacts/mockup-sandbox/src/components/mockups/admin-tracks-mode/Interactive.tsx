@@ -37,18 +37,67 @@ const TRACKS = [
   { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, credits: false, duration: "—" },
 ];
 
-function DotMeter({ t }: { t: (typeof TRACKS)[number] }) {
-  // Required to publish: master + 30-sec snippet
+// One-word status meter. Replaces the old "n/2" ratio because the bare
+// number couldn't communicate "those four chips include two optionals." Word
+// names what's missing; the dot pair shows which slot is empty. When the
+// word is actionable (Master / Snippet / Draft), the meter is a button that
+// expands the row and auto-opens the offending section so the user lands
+// on the empty drop zone in one tap. "Ready" is a status, not a CTA.
+function StatusMeter({
+  t,
+  onJumpTo,
+}: {
+  t: (typeof TRACKS)[number];
+  onJumpTo: (section: "master" | "snippet") => void;
+}) {
   const dots = [t.master, t.snippet];
-  const labels = ["Master", "30-sec snippet"];
-  const complete = dots.every(Boolean);
+  let word: string;
+  let target: "master" | "snippet" | null;
+  let tone: "ready" | "warn" | "draft";
+  let hint: string;
+  if (t.master && t.snippet) {
+    word = "Ready";
+    target = null;
+    tone = "ready";
+    hint = "Master + 30-sec snippet both in. Track is publishable.";
+  } else if (!t.master && !t.snippet) {
+    word = "Draft";
+    target = "master"; // master is the prerequisite — start there
+    tone = "draft";
+    hint = "Tap to add the master file. Snippet comes after.";
+  } else if (!t.master) {
+    word = "Master";
+    target = "master";
+    tone = "warn";
+    hint = "Tap to drop a .wav, .flac, or .aiff master.";
+  } else {
+    word = "Snippet";
+    target = "snippet";
+    tone = "warn";
+    hint = "Tap to pick a 30-second clip from your master.";
+  }
+  const isClickable = target !== null;
+  const wordColor =
+    tone === "warn" ? "text-amber-600" : "text-slate-400";
   return (
-    <div
-      className="flex items-center gap-1.5 flex-shrink-0"
-      title={dots
-        .map((ok, i) => `${labels[i]}: ${ok ? "✓" : "missing"}`)
-        .join(" · ")}
-    >
+    // min-width keeps the dots column-aligned across all 5 rows regardless
+    // of which word is showing. justify-end pins to the right edge.
+    <div className="flex items-center gap-1.5 flex-shrink-0 min-w-[110px] justify-end">
+      <button
+        type="button"
+        onClick={() => target && onJumpTo(target)}
+        disabled={!isClickable}
+        title={hint}
+        className={[
+          "text-[10.5px] font-semibold transition-colors",
+          wordColor,
+          isClickable
+            ? "hover:text-amber-700 hover:underline decoration-dotted underline-offset-2 cursor-pointer"
+            : "cursor-default",
+        ].join(" ")}
+      >
+        {word}
+      </button>
       <div className="flex items-center gap-0.5">
         {dots.map((ok, i) => (
           <span
@@ -60,14 +109,6 @@ function DotMeter({ t }: { t: (typeof TRACKS)[number] }) {
           />
         ))}
       </div>
-      <span
-        className={[
-          "text-[10.5px] font-semibold tabular-nums",
-          complete ? "text-slate-400" : "text-amber-600",
-        ].join(" ")}
-      >
-        {dots.filter(Boolean).length}/2
-      </span>
     </div>
   );
 }
@@ -1133,7 +1174,15 @@ function EditRow({
             </button>
           </div>
         ) : (
-          <DotMeter t={t} />
+          <StatusMeter
+            t={t}
+            onJumpTo={(section) => {
+              // If the row is collapsed, expand it; then open the offending
+              // section so the user lands directly on the empty drop zone.
+              if (!expanded) onToggle();
+              setOpenSection(section);
+            }}
+          />
         )}
         <button
           type="button"
