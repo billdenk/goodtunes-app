@@ -3743,80 +3743,6 @@ function RichPreviewEditor({
             ))}
           </div>
 
-          {/* Fine-tune row — Claude note #4. Arrows nudge the start;
-              field is directly typeable as mm:ss; Enter commits.
-              Hidden when locked (window is already committed).
-              Granularity: 1 sec base, Shift = 0.1 sec for the
-              word-boundary precision Nick Carter asked for. */}
-          {!locked && (
-            <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-slate-600">
-              <span className="font-medium">Start</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  const step = e.shiftKey ? 0.1 : 1;
-                  const next = Math.max(0, draftSec - step);
-                  setDraftLeft((next / TOTAL_SEC) * 100);
-                }}
-                aria-label="Nudge start earlier (Shift = 0.1 sec)"
-                title="Earlier · Shift-click for 0.1 sec"
-                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
-                data-testid={`button-finetune-back-${song.id}`}
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <input
-                value={chipDraft}
-                onChange={(e) => setChipDraft(e.target.value)}
-                onBlur={commitChip}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter")
-                    (e.target as HTMLInputElement).blur();
-                  if (e.key === "Escape") {
-                    setChipDraft(draftStartLabel);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                    e.preventDefault();
-                    const step = e.shiftKey ? 0.1 : 1;
-                    const dir = e.key === "ArrowUp" ? 1 : -1;
-                    const next = Math.max(
-                      0,
-                      Math.min(
-                        TOTAL_SEC - WINDOW_SEC,
-                        draftSec + dir * step,
-                      ),
-                    );
-                    setDraftLeft((next / TOTAL_SEC) * 100);
-                  }
-                }}
-                aria-label="Preview start time — type mm:ss or use arrows"
-                title="Type mm:ss or use ↑/↓ (Shift = 0.1 sec)"
-                className="w-16 px-2 py-1 rounded-md border border-slate-200 bg-white text-[12px] font-semibold tabular-nums text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 focus:border-[#319ED8]/60"
-                data-testid={`input-finetune-start-${song.id}`}
-              />
-              <button
-                type="button"
-                onClick={(e) => {
-                  const step = e.shiftKey ? 0.1 : 1;
-                  const next = Math.min(
-                    TOTAL_SEC - WINDOW_SEC,
-                    draftSec + step,
-                  );
-                  setDraftLeft((next / TOTAL_SEC) * 100);
-                }}
-                aria-label="Nudge start later (Shift = 0.1 sec)"
-                title="Later · Shift-click for 0.1 sec"
-                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
-                data-testid={`button-finetune-forward-${song.id}`}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              <span className="text-slate-400 ml-1">
-                ends {draftEndLabel}
-              </span>
-            </div>
-          )}
         </div>
 
         <button
@@ -3852,6 +3778,81 @@ function RichPreviewEditor({
           )}
         </button>
       </div>
+
+      {/* Fine-tune row — sits BELOW the trim row so Play and Padlock
+          keep a stable vertical position whether the window is locked
+          or being edited (Bill: "the lock and play button move upon
+          unlocking"). Granularity: 1 sec base · Shift = 0.1 sec for
+          word-boundary precision (Claude note #4 / #5). */}
+      {!locked && (
+        <div className="flex items-center justify-center gap-2 text-[11px] text-slate-600">
+          <span className="font-medium">Start</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              const step = e.shiftKey ? 0.1 : 1;
+              const next = Math.max(0, draftSec - step);
+              setDraftLeft((next / TOTAL_SEC) * 100);
+            }}
+            aria-label="Nudge start earlier (Shift = 0.1 sec)"
+            title="Earlier · Shift-click for 0.1 sec"
+            className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
+            data-testid={`button-finetune-back-${song.id}`}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <input
+            value={chipDraft}
+            onChange={(e) => setChipDraft(e.target.value)}
+            onBlur={commitChip}
+            onKeyDown={(e) => {
+              if (e.key === "Enter")
+                (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") {
+                setChipDraft(draftStartLabel);
+                (e.target as HTMLInputElement).blur();
+              }
+              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                e.preventDefault();
+                const step = e.shiftKey ? 0.1 : 1;
+                const dir = e.key === "ArrowUp" ? 1 : -1;
+                const next = Math.max(
+                  0,
+                  Math.min(
+                    TOTAL_SEC - WINDOW_SEC,
+                    draftSec + dir * step,
+                  ),
+                );
+                setDraftLeft((next / TOTAL_SEC) * 100);
+              }
+            }}
+            aria-label="Preview start time — type mm:ss or use arrows"
+            title="Type mm:ss or use ↑/↓ (Shift = 0.1 sec)"
+            className="w-16 px-2 py-1 rounded-md border border-slate-200 bg-white text-[12px] font-semibold tabular-nums text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 focus:border-[#319ED8]/60"
+            data-testid={`input-finetune-start-${song.id}`}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              const step = e.shiftKey ? 0.1 : 1;
+              const next = Math.min(
+                TOTAL_SEC - WINDOW_SEC,
+                draftSec + step,
+              );
+              setDraftLeft((next / TOTAL_SEC) * 100);
+            }}
+            aria-label="Nudge start later (Shift = 0.1 sec)"
+            title="Later · Shift-click for 0.1 sec"
+            className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
+            data-testid={`button-finetune-forward-${song.id}`}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <span className="text-slate-400 ml-1">
+            ends {draftEndLabel}
+          </span>
+        </div>
+      )}
 
       {/* Reset-to-auto link — only shown when a custom preview is saved */}
       {hasCustom && committedLeft >= 0.5 && (

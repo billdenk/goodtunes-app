@@ -137,6 +137,22 @@ Cost: ~$0.20 per song (3b + 3c in `docs/costs.md`). At a 17-song album that's ~$
 
 Word-level karaoke (per-word fill animation in `#319ED8` → `#4AFFCA`) is a follow-up driven off `requestAnimationFrame(audio.currentTime)` once per-word data exists — render code is small (~1 day).
 
+### Lyric-anchored preview seek (Bill's idea, 2026-05-17)
+
+Once per-word (or even per-line) timestamps exist, the admin Preview editor should let the artist **jump the yellow 30-sec window to a lyric**:
+
+- In the Preview tile, surface a small "Find by lyric…" affordance below the fine-tune row.
+- Tapping it opens the song's lyrics in a scrollable picker. Artist taps the line they want their preview to start on.
+- The yellow window snaps so its **start edge** = that line's timestamp (rounded down to the nearest tenth of a second so the preview begins cleanly on the word, not mid-syllable).
+- If the song has word-level data, offer a second pass: "Start on a specific word?" → tap-to-pick within the line.
+- Same affordance unlocks two adjacent features for free:
+  - **Snap-to-word-boundary** for the existing `←` / `→` nudge arrows (was already on the wishlist from Claude note #5) — the arrow jumps to the next word start instead of stepping by 0.1 sec.
+  - **"Try suggested hook"** (Claude note #6) can use the chorus line's timestamp as its default, since the chorus is almost always the right preview anchor and we'll know where it starts.
+
+Why this matters: artists think in **lyrics**, not seconds. "Start the preview at the second 'I keep going back'" is a natural sentence; "start at 1:14.3" isn't. This is also one of the more demo-able SuperCredits™-adjacent moments — it visibly shows that GoodTunes treats the song as a structured object (lyrics + audio + credits + gear), not just an mp3.
+
+Depends on the dual-pass auto-sync flow above shipping first so we actually have per-line timestamps on every song.
+
 ---
 
 ## Mobile / native strategy (handing this off to existing iOS + Android apps)
