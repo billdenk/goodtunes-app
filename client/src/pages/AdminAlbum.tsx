@@ -3777,6 +3777,136 @@ function PreviewResetAction({
   );
 }
 
+/* ─── Pinpoint Lyrics — jump-to-cue picker for the preview window ─────
+   Only shown when a track has GoodSync™ cues. Opens a popover with a
+   search field + scrollable cue list. Picking a line moves the preview
+   window so it starts at that cue (and unlocks the window so the move
+   takes effect visually). Apple-style "find the hook line" instead of
+   dragging through the waveform. */
+
+function PinpointLyricsButton({
+  cues,
+  onPick,
+  songId,
+}: {
+  cues: { timeMs: number; text: string }[];
+  onPick: (timeSec: number) => void;
+  songId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const fmt = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // Filter out section headers + empty lines from the picker, then
+  // narrow by the search query. Headers are decoration in this mode —
+  // there's nothing to "pinpoint to" on a [Chorus] marker.
+  const filtered = cues
+    .map((c, idx) => ({ ...c, idx }))
+    .filter((c) => {
+      const t = c.text.trim();
+      if (!t) return false;
+      if (/^\[.*\]$/.test(t)) return false;
+      if (!query.trim()) return true;
+      return t.toLowerCase().includes(query.trim().toLowerCase());
+    });
+
+  const q = query.trim();
+
+  return (
+    <div className="px-1">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 pl-1.5 pr-3.5 h-8 rounded-full border border-[#319ED8]/40 bg-white text-[#319ED8] text-[12px] font-semibold hover:bg-[#319ED8]/10 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+            data-testid={`button-pinpoint-lyrics-${songId}`}
+          >
+            <span className="w-5 h-5 rounded-full bg-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+              <WaveArrowGlyph className="w-3 h-3" />
+            </span>
+            Pinpoint Lyrics with GoodSync™
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="start"
+          className="w-[380px] p-0"
+        >
+          <div className="px-3 pt-3 pb-2 border-b border-slate-100">
+            <p className="text-[11.5px] text-slate-500 mb-2 leading-snug">
+              Search a word or scroll to a line — the preview window
+              jumps to that moment.
+            </p>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search lyrics…"
+              autoFocus
+              className="w-full h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+              data-testid={`input-pinpoint-search-${songId}`}
+            />
+          </div>
+          <div
+            className="max-h-[280px] overflow-y-auto py-1"
+            data-testid={`list-pinpoint-${songId}`}
+          >
+            {filtered.length === 0 ? (
+              <p className="text-center text-[11.5px] text-slate-400 px-4 py-6">
+                {q ? `No lines match "${q}".` : "No lyrics to pinpoint."}
+              </p>
+            ) : (
+              filtered.map((cue) => {
+                const sec = cue.timeMs / 1000;
+                let body: React.ReactNode = cue.text;
+                if (q) {
+                  const lower = cue.text.toLowerCase();
+                  const idx = lower.indexOf(q.toLowerCase());
+                  if (idx >= 0) {
+                    body = (
+                      <>
+                        {cue.text.slice(0, idx)}
+                        <mark className="bg-[#319ED8]/20 text-slate-900 rounded px-0.5">
+                          {cue.text.slice(idx, idx + q.length)}
+                        </mark>
+                        {cue.text.slice(idx + q.length)}
+                      </>
+                    );
+                  }
+                }
+                return (
+                  <button
+                    key={cue.idx}
+                    type="button"
+                    onClick={() => {
+                      onPick(sec);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                    className="w-full flex items-baseline gap-3 px-3 py-1.5 hover:bg-slate-50 text-left"
+                    data-testid={`button-pinpoint-cue-${songId}-${cue.idx}`}
+                  >
+                    <span className="text-[10.5px] tabular-nums text-slate-400 w-9 flex-shrink-0">
+                      {fmt(sec)}
+                    </span>
+                    <span className="text-[12.5px] text-slate-700 leading-snug">
+                      {body}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function RichPreviewEditor({
   song,
   onSaved,
@@ -4310,6 +4440,25 @@ function RichPreviewEditor({
           )}
         </button>
       </div>
+
+      {/* Pinpoint Lyrics — only when this track has GoodSync™ cues.
+          Lets Bill find the hook line by word and jump the window
+          there instead of dragging through 4 minutes of waveform. */}
+      {(song.syncedLyrics?.length ?? 0) > 0 && song.audioUrl && (
+        <PinpointLyricsButton
+          cues={song.syncedLyrics!}
+          songId={song.id}
+          onPick={(timeSec) => {
+            const startSec = Math.max(
+              0,
+              Math.min(TOTAL_SEC - WINDOW_SEC, timeSec),
+            );
+            // Unlock so the move is visible (locked = green, frozen).
+            setLocked(false);
+            setDraftLeft((startSec / TOTAL_SEC) * 100);
+          }}
+        />
+      )}
 
     </div>
   );
