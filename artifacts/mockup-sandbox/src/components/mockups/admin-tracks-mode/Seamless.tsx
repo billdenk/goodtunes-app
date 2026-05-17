@@ -15,6 +15,9 @@ import {
   EyeOff,
   SkipBack,
   SkipForward,
+  Shuffle,
+  Repeat,
+  MoreHorizontal,
 } from "lucide-react";
 
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
@@ -27,6 +30,24 @@ const TRACKS = [
 ];
 
 const MASTERED_COUNT = TRACKS.filter((t) => t.master).length;
+
+/* ── Animated 3-bar equalizer for the "now-playing" row indicator.
+   Replaces the static ⏸ icon — same shape Apple Music uses, signals
+   STATUS (this row is playing) rather than offering a control. The
+   bars are NOT the pause button; pause lives in the bottom dock. ─── */
+function WaveBars({ paused = false }: { paused?: boolean }) {
+  return (
+    <span
+      className="inline-flex items-end gap-[2px] h-3"
+      aria-hidden
+      style={paused ? { animationPlayState: "paused" } : undefined}
+    >
+      <span className="gt-eq-bar" />
+      <span className="gt-eq-bar" />
+      <span className="gt-eq-bar" />
+    </span>
+  );
+}
 
 /* ── Dot meter (collapsed row, right side) ─────────────────────────── */
 function StatusMeter({
@@ -226,49 +247,62 @@ function Row({
   isLast,
   expanded,
   playing,
-  progress,
+  isPaused,
   onExpand,
   onPlay,
 }: {
   t: (typeof TRACKS)[number];
   isLast: boolean;
   expanded: boolean;
-  playing: boolean;
-  progress: number; // 0–100, only meaningful when playing
+  playing: boolean;     // this row is the currently-selected playback target
+  isPaused: boolean;    // global paused state (only used when playing=true)
   onExpand: () => void;
   onPlay: () => void;
 }) {
   const playable = t.master;
+  // Active-row pill treatment — Apple-style elevated capsule around the
+  // playing row. Subtle blue tint so the eye reads "this is in flight"
+  // without competing with the dark bottom dock.
+  const activePill = playing && !expanded;
   return (
     <li
       className={[
         "group relative transition-colors",
         expanded
           ? "bg-slate-50/80"
-          : playing
-          ? "bg-[#319ED8]/5"
+          : activePill
+          ? ""
           : "hover:bg-slate-50/70",
-        !isLast && "border-b border-slate-100",
+        !isLast && !activePill && "border-b border-slate-100",
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="w-full px-5 py-3 flex items-center gap-4">
-        <GripVertical className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 flex-shrink-0" />
+      <div
+        className={[
+          "w-full flex items-center gap-4 transition-all",
+          activePill
+            ? "mx-3 my-1 px-3 py-2.5 rounded-xl bg-[#319ED8]/8 ring-1 ring-[#319ED8]/20"
+            : "px-5 py-3",
+        ].join(" ")}
+      >
+        {/* Grip — hover-revealed, but suppressed on the playing row so the
+            waveform bars own the left side uncontested (Apple's anatomy). */}
+        <GripVertical
+          className={[
+            "w-3.5 h-3.5 text-slate-300 flex-shrink-0 transition-opacity",
+            activePill
+              ? "opacity-0"
+              : "opacity-0 group-hover:opacity-100",
+          ].join(" ")}
+        />
 
-        {/* # at rest · ▶ on hover/focus · ⏸ when playing. One slot, three states.
-            Uses focus-within so keyboard users can Tab to the play button and
-            see it materialize, not just mouse users (architect's a11y note). */}
+        {/* # at rest · ▶ on hover/focus · animated bars when playing.
+            One slot, three states. Bars are STATUS, not a control —
+            pause lives in the bottom dock. */}
         <div className="w-5 -ml-1.5 flex-shrink-0 flex items-center justify-center">
           {playing ? (
-            <button
-              type="button"
-              onClick={onPlay}
-              aria-label={`Pause ${t.title}`}
-              className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[#319ED8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
-            >
-              <Pause className="w-3 h-3 fill-current" />
-            </button>
+            <WaveBars paused={isPaused} />
           ) : (
             <>
               <span className="text-slate-400 text-[12px] tabular-nums font-medium group-hover:hidden group-focus-within:hidden">
@@ -315,8 +349,7 @@ function Row({
           )}
         </div>
 
-        {/* Right side: track length at rest (subtle, so the row feels listen-ready),
-            destructive controls when expanded (track-scoped, sits next to chevron). */}
+        {/* Right side: track length at rest, destructive controls when expanded. */}
         {expanded ? (
           <div className="flex items-center flex-shrink-0">
             <button
@@ -358,16 +391,6 @@ function Row({
           />
         </button>
       </div>
-
-      {/* Hairline progress under playing row — same width as the row, no extra chrome. */}
-      {playing && !expanded && (
-        <div className="absolute left-0 right-0 bottom-0 h-px bg-slate-100">
-          <div
-            className="h-full bg-[#319ED8] transition-all"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      )}
 
       {expanded && (
         <div className="pl-20 pr-16 pb-5 -mt-1 space-y-4">
@@ -435,11 +458,15 @@ function Row({
   );
 }
 
-/* ── Docked mini-player. Always present in the header.
-   Plays the currently-selected row; carries the "4 of 5 loaded" counter
-   so the Listen-mode signal never goes away. ───────────────────────── */
-function MiniPlayer({
+/* ── Floating bottom dock. Apple-Music-style.
+   IDLE: transport-only, no track info — feels quiet when nothing's
+         playing. Big play button is the obvious starting point.
+   PLAYING: thin progress sliver on the top edge, plus a track-info
+         capsule (thumb · title · ⋯) slides in to the left of transport.
+   Floats above the scrolling list (rows scroll underneath, like Apple). ─ */
+function BottomDock({
   current,
+  hasSelection,
   playing,
   progress,
   onTogglePlay,
@@ -447,6 +474,7 @@ function MiniPlayer({
   onNext,
 }: {
   current: (typeof TRACKS)[number];
+  hasSelection: boolean;
   playing: boolean;
   progress: number;
   onTogglePlay: () => void;
@@ -455,53 +483,99 @@ function MiniPlayer({
 }) {
   const playable = current.master;
   return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-900 text-white shadow-sm">
-      <button
-        type="button"
-        onClick={onPrev}
-        aria-label="Previous track"
-        className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-      >
-        <SkipBack className="w-3.5 h-3.5 fill-current" />
-      </button>
-      <button
-        type="button"
-        onClick={onTogglePlay}
-        disabled={!playable}
-        aria-label={playing ? "Pause" : "Play"}
-        className={[
-          "w-9 h-9 rounded-full inline-flex items-center justify-center",
-          playable
-            ? "bg-[#319ED8] text-white hover:bg-[#2890c8]"
-            : "bg-white/10 text-slate-500 cursor-not-allowed",
-        ].join(" ")}
-      >
-        {playing ? (
-          <Pause className="w-4 h-4 fill-current" />
-        ) : (
-          <Play className="w-4 h-4 translate-x-[1.5px] fill-current" />
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={onNext}
-        aria-label="Next track"
-        className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-      >
-        <SkipForward className="w-3.5 h-3.5 fill-current" />
-      </button>
-      <div className="min-w-[180px] max-w-[220px]">
-        <div className="text-[12px] font-semibold truncate">{current.title}</div>
-        <div className="mt-1 flex items-center gap-2">
-          <div className="flex-1 h-1 rounded-full bg-white/15 overflow-hidden">
+    <div
+      className="absolute left-1/2 -translate-x-1/2 bottom-4 z-20"
+      style={{ width: "min(560px, calc(100% - 32px))" }}
+    >
+      <div className="relative rounded-2xl bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden">
+        {/* Progress sliver — only shows when playing. Sits on the very top
+            edge of the dock, matches Apple's hairline. */}
+        {hasSelection && (
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/10">
             <div
-              className="h-full bg-[#319ED8] rounded-full transition-all"
+              className="h-full bg-[#319ED8] transition-all"
               style={{ width: playing ? `${progress}%` : "0%" }}
             />
           </div>
-          <span className="text-slate-300 text-[10.5px] tabular-nums w-9 text-right">
-            {current.duration}
-          </span>
+        )}
+
+        <div className="flex items-center gap-2 px-3 py-2.5">
+          {/* Track info capsule — only when something is selected. Slides
+              in to the LEFT of transport, exactly Apple's anatomy. */}
+          {hasSelection && (
+            <div className="flex items-center gap-2.5 min-w-0 pr-2 mr-1 border-r border-white/10">
+              <div className="w-9 h-9 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-semibold truncate leading-tight">
+                  {current.title}
+                </div>
+                <div className="text-[10.5px] text-slate-400 truncate leading-tight mt-0.5">
+                  Nick Carter — Love Life Tragedy
+                </div>
+              </div>
+              <button
+                aria-label="More"
+                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 flex-shrink-0"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Transport cluster — always present, dead center when idle. */}
+          <div
+            className={[
+              "flex items-center gap-1",
+              hasSelection ? "" : "flex-1 justify-center",
+            ].join(" ")}
+          >
+            <button
+              aria-label="Shuffle"
+              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onPrev}
+              aria-label="Previous track"
+              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+            >
+              <SkipBack className="w-4 h-4 fill-current" />
+            </button>
+            <button
+              type="button"
+              onClick={onTogglePlay}
+              disabled={!playable}
+              aria-label={playing ? "Pause" : "Play"}
+              className={[
+                "w-10 h-10 rounded-full inline-flex items-center justify-center",
+                playable
+                  ? "bg-white text-slate-900 hover:bg-slate-100"
+                  : "bg-white/15 text-slate-400 cursor-not-allowed",
+              ].join(" ")}
+            >
+              {playing ? (
+                <Pause className="w-4 h-4 fill-current" />
+              ) : (
+                <Play className="w-4 h-4 translate-x-[1.5px] fill-current" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onNext}
+              aria-label="Next track"
+              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+            >
+              <SkipForward className="w-4 h-4 fill-current" />
+            </button>
+            <button
+              aria-label="Repeat"
+              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+            >
+              <Repeat className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -510,7 +584,7 @@ function MiniPlayer({
 
 /* ── Bulk-QA chip. Lives next to the "Tracks" title so the
    "how done is this album?" signal stays primary even when the
-   mini-player is busy. Filled segments = mastered, hollow ring = pending. ── */
+   bottom dock is busy. Filled segments = mastered, hollow ring = pending. ── */
 function MasteredChip() {
   return (
     <div
@@ -539,23 +613,25 @@ function MasteredChip() {
 }
 
 export function Seamless() {
-  // Playing AND expanded are independent now — you can listen to Made for Us
-  // while editing Storms' credits, or expand a row to QA without losing the
-  // mini-player. That's the whole point.
+  // Playing AND expanded are independent — you can listen to Made for Us
+  // while editing Storms' credits, or expand a row to QA without losing
+  // the dock. That's the whole point.
   const [playingId, setPlayingId] = useState<number | null>(2);
   const [expandedId, setExpandedId] = useState<number | null>(2);
   const [playing, setPlaying] = useState<boolean>(true);
   const progress = 42; // demo only
 
+  const hasSelection = playingId !== null;
   const currentId = playingId ?? 1;
   const current = TRACKS.find((t) => t.n === currentId) ?? TRACKS[0];
 
   const stepPlaying = (dir: 1 | -1) => {
-    // Skip unmastered tracks — otherwise we'd land on Lighthouse and show
-    // a "playing" row whose play button is disabled (architect's bug #1).
+    // Skip unmastered tracks — otherwise we'd land on Lighthouse and
+    // surface a disabled play state (architect's bug fix).
     const idx = TRACKS.findIndex((t) => t.n === currentId);
     for (let step = 1; step <= TRACKS.length; step++) {
-      const candidate = TRACKS[(idx + dir * step + TRACKS.length * step) % TRACKS.length];
+      const candidate =
+        TRACKS[(idx + dir * step + TRACKS.length * step) % TRACKS.length];
       if (candidate.master) {
         setPlayingId(candidate.n);
         setPlaying(true);
@@ -566,9 +642,32 @@ export function Seamless() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-10 font-[Inter,system-ui,-apple-system,sans-serif]">
+      {/* Scoped keyframes for the row-level waveform bars. Three bars,
+          three durations, organic feel. Brand blue (#319ED8) to match
+          the existing admin playing-row vocabulary; brand heart-pink
+          stays reserved for fan favoriting. */}
+      <style>{`
+        @keyframes gtEqBar {
+          0%, 100% { transform: scaleY(0.35); }
+          50%      { transform: scaleY(1);    }
+        }
+        .gt-eq-bar {
+          display: inline-block;
+          width: 2px;
+          height: 12px;
+          background: #319ED8;
+          border-radius: 1px;
+          transform-origin: center bottom;
+          animation: gtEqBar 700ms ease-in-out infinite;
+        }
+        .gt-eq-bar:nth-child(2) { animation-duration: 900ms; animation-delay: -150ms; }
+        .gt-eq-bar:nth-child(3) { animation-duration: 600ms; animation-delay: -300ms; }
+      `}</style>
+
       <div className="max-w-3xl mx-auto">
-        <div className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-          {/* Panel header — no toggle. Mini-player lives here permanently. */}
+        <div className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+          {/* Panel header — title + MasteredChip on the left, Add track
+              on the right. No player chrome up here anymore. */}
           <div className="px-5 py-4 flex items-center justify-between gap-4 border-b border-slate-100">
             <div className="min-w-0 flex items-center gap-3">
               <div className="min-w-0">
@@ -579,34 +678,26 @@ export function Seamless() {
               </div>
               <MasteredChip />
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <MiniPlayer
-                current={current}
-                playing={playing}
-                progress={progress}
-                onTogglePlay={() => setPlaying((v) => !v)}
-                onPrev={() => stepPlaying(-1)}
-                onNext={() => stepPlaying(1)}
-              />
-              <button
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5"
-                data-testid="button-add-track"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add track
-              </button>
-            </div>
+            <button
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5"
+              data-testid="button-add-track"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add track
+            </button>
           </div>
 
-          <ul>
+          {/* The list. Extra bottom padding so the floating dock can sit
+              ON TOP of the last rows when scrolled, matching Apple. */}
+          <ul className="pb-24">
             {TRACKS.map((t, i) => (
               <Row
                 key={t.n}
                 t={t}
                 isLast={i === TRACKS.length - 1}
                 expanded={expandedId === t.n}
-                playing={playing && playingId === t.n}
-                progress={progress}
+                playing={hasSelection && playingId === t.n}
+                isPaused={!playing}
                 onExpand={() =>
                   setExpandedId(expandedId === t.n ? null : t.n)
                 }
@@ -621,6 +712,16 @@ export function Seamless() {
               />
             ))}
           </ul>
+
+          <BottomDock
+            current={current}
+            hasSelection={hasSelection}
+            playing={playing}
+            progress={progress}
+            onTogglePlay={() => setPlaying((v) => !v)}
+            onPrev={() => stepPlaying(-1)}
+            onNext={() => stepPlaying(1)}
+          />
         </div>
 
         <p className="mt-4 text-[11.5px] text-slate-400 text-center">
