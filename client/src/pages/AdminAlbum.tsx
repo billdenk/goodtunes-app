@@ -1624,7 +1624,6 @@ function TrackRow({
             <input
               ref={inputRef}
               defaultValue={song.title}
-              autoFocus
               aria-label={`Track title — ${song.title}`}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -1652,7 +1651,7 @@ function TrackRow({
                 renameMut.mutate(next);
               }}
               disabled={renameMut.isPending}
-              className="w-full px-2 -mx-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:bg-white focus:border-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-60"
+              className="w-full px-2 -mx-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
               data-testid={`input-track-title-${song.id}`}
             />
           ) : (
