@@ -24,6 +24,7 @@ import {
   Mic,
   RefreshCw,
   Play as PlayIcon,
+  Search,
 } from "lucide-react";
 
 type Mode = "edit" | "listen";
@@ -787,45 +788,109 @@ function CreditsDetail({
         { name: "Mike Torres", role: "Drums", instrument: "Ludwig Black Beauty kit" },
       ]
     : [];
+  // Roster suggestions for empty-state pick-list. In real impl this is the
+  // album's recent collaborators + a "Beatles default lineup"-style template.
+  const ROSTER = [
+    { id: "p1", name: "James Walsh", lastRole: "Lead vocals · Acoustic guitar" },
+    { id: "p2", name: "Sarah Lin", lastRole: "Producer · Bass" },
+    { id: "p3", name: "Mike Torres", lastRole: "Drums" },
+    { id: "p4", name: "Ana Reyes", lastRole: "Backing vocals" },
+  ];
+  const [pickerQuery, setPickerQuery] = useState("");
+  const filtered = ROSTER.filter((p) =>
+    p.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
+  );
+  const showCreateNew =
+    pickerQuery.trim().length > 0 &&
+    !ROSTER.some((p) => p.name.toLowerCase() === pickerQuery.trim().toLowerCase());
   return (
     <DetailWrap title="Credits" onClose={onClose}>
       {rows.length > 0 ? (
-        <ul className="space-y-1.5">
-          {rows.map((r) => (
-            <li
-              key={r.name}
-              className="flex items-center gap-3 p-2 rounded-md hover:bg-slate-50"
-            >
-              <span className="w-8 h-8 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[11px] font-bold inline-flex items-center justify-center flex-shrink-0">
-                {r.name
-                  .split(" ")
-                  .map((p) => p[0])
-                  .join("")}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] font-semibold text-slate-900 truncate">
-                  {r.name}
+        <>
+          <ul className="space-y-1.5">
+            {rows.map((r) => (
+              <li
+                key={r.name}
+                className="flex items-center gap-3 p-2 rounded-md hover:bg-slate-50"
+              >
+                <span className="w-8 h-8 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[11px] font-bold inline-flex items-center justify-center flex-shrink-0">
+                  {r.name
+                    .split(" ")
+                    .map((p) => p[0])
+                    .join("")}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12.5px] font-semibold text-slate-900 truncate">
+                    {r.name}
+                  </div>
+                  <div className="text-[11px] text-slate-500 truncate">
+                    {r.role} · {r.instrument}
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-500 truncate">
-                  {r.role} · {r.instrument}
-                </div>
-              </div>
-              <button className="w-6 h-6 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center">
-                <Pencil className="w-3 h-3" />
-              </button>
-            </li>
-          ))}
-        </ul>
+                <button className="w-6 h-6 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center">
+                  <Pencil className="w-3 h-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          {/* Populated-state CTA matches the Labels family ("+ New") so all
+              "add another" entry points read the same across admin. */}
+          <button className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5">
+            <Plus className="w-3.5 h-3.5" />
+            New
+          </button>
+        </>
       ) : (
-        <p className="text-[12px] text-slate-500 italic">
-          No credits yet. SuperCredits™ work better with at least a writer and a
-          performer.
-        </p>
+        // Empty state: same picker idiom as the Labels page. Search input
+        // is the first thing a user sees; roster chips + a "Create new"
+        // affordance cover both the "pick someone you've worked with" and
+        // the "type a name" paths in a single surface.
+        <div className="space-y-3">
+          <p className="text-[12px] text-slate-500 italic">
+            No credits yet. SuperCredits™ work better with at least a writer and a performer.
+          </p>
+          <label className="flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
+            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <input
+              autoFocus
+              value={pickerQuery}
+              onChange={(e) => setPickerQuery(e.target.value)}
+              placeholder="Search your roster, or type a new name…"
+              className="flex-1 min-w-0 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none"
+            />
+          </label>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              {pickerQuery ? `Roster matches` : `Recent on this album`}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {filtered.map((p) => (
+                <button
+                  key={p.id}
+                  className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 hover:border-[#319ED8] hover:bg-[#319ED8]/5 text-[11.5px] text-slate-700"
+                  title={p.lastRole}
+                >
+                  <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[9px] font-bold inline-flex items-center justify-center">
+                    {p.name.split(" ").map((x) => x[0]).join("")}
+                  </span>
+                  {p.name}
+                </button>
+              ))}
+              {showCreateNew && (
+                <button className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5">
+                  <Plus className="w-3 h-3" />
+                  Create “{pickerQuery.trim()}”
+                </button>
+              )}
+              {!showCreateNew && filtered.length === 0 && (
+                <span className="text-[11.5px] text-slate-400 italic px-1">
+                  No matches — keep typing to create a new person.
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
       )}
-      <button className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5">
-        <Plus className="w-3.5 h-3.5" />
-        Add credit
-      </button>
     </DetailWrap>
   );
 }
