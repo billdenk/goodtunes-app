@@ -630,7 +630,7 @@ function BottomDock({
                 "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)",
             }}
             aria-label={`${current.title} — now playing`}
-            title={`${current.title} — ${current.artist}`}
+            title={`${current.title} — Nick Carter`}
           />
           <button
             type="button"
