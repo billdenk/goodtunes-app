@@ -43,6 +43,7 @@ import {
   RotateCcw,
   Info,
   MoreHorizontal,
+  Search,
 } from "lucide-react";
 import {
   Popover,
@@ -3783,26 +3784,32 @@ function PinpointLyricsButton({
 
   const q = query.trim();
 
-  return (
-    <div className="px-1">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 pl-1.5 pr-3.5 h-8 rounded-full border border-[#319ED8]/40 bg-white text-[#319ED8] text-[12px] font-semibold hover:bg-[#319ED8]/10 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
-            data-testid={`button-pinpoint-lyrics-${songId}`}
-          >
-            <span className="w-5 h-5 rounded-full bg-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
-              <WaveArrowGlyph className="w-3 h-3" />
-            </span>
-            Pinpoint Lyrics with GoodSync™
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="start"
-          className="w-[380px] p-0"
+  // Portals a small search icon into the ExpandedPanel header slot
+  // (immediately to the LEFT of the existing "Reset" link). Click opens
+  // the same Pinpoint search popover. When the panel isn't an ancestor
+  // (e.g. nested mode), `headerSlot` is null and we render nothing —
+  // the search icon only belongs in the header.
+  const headerSlot = useContext(ExpandedPanelHeaderSlotContext);
+  if (!headerSlot) return null;
+
+  return createPortal(
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          title="Search lyrics — jump the preview window to a line"
+          className="inline-flex items-center justify-center w-6 h-6 rounded-md text-slate-500 hover:text-[#319ED8] hover:bg-[#319ED8]/10 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+          data-testid={`button-pinpoint-lyrics-${songId}`}
         >
+          <Search className="w-3.5 h-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="bottom"
+        align="end"
+        className="w-[380px] p-0"
+      >
           <div className="px-3 pt-3 pb-2 border-b border-slate-100">
             <p className="text-[11.5px] text-slate-500 mb-2 leading-snug">
               Search a word or scroll to a line — the preview window
@@ -3868,9 +3875,9 @@ function PinpointLyricsButton({
               })
             )}
           </div>
-        </PopoverContent>
-      </Popover>
-    </div>
+      </PopoverContent>
+    </Popover>,
+    headerSlot,
   );
 }
 
@@ -4171,6 +4178,25 @@ function RichPreviewEditor({
       data-testid={`preview-window-${song.id}`}
       className="relative space-y-3"
     >
+      {/* Pinpoint Lyrics — portals a small search icon into the
+          ExpandedPanel header (immediately LEFT of the Reset link
+          below — portal order = DOM order). Click opens the search
+          popover that jumps the preview window to a chosen line. */}
+      {(song.syncedLyrics?.length ?? 0) > 0 && song.audioUrl && (
+        <PinpointLyricsButton
+          cues={song.syncedLyrics!}
+          songId={song.id}
+          onPick={(timeSec) => {
+            const startSec = Math.max(
+              0,
+              Math.min(TOTAL_SEC - WINDOW_SEC, timeSec),
+            );
+            setLocked(false);
+            setDraftLeft((startSec / TOTAL_SEC) * 100);
+          }}
+        />
+      )}
+
       {/* Reset action — portals into the ExpandedPanel header slot
           (just left of the collapse chevron) so it sits at a stable
           position regardless of what mounts/unmounts in the editor
@@ -4407,25 +4433,6 @@ function RichPreviewEditor({
           )}
         </button>
       </div>
-
-      {/* Pinpoint Lyrics — only when this track has GoodSync™ cues.
-          Lets Bill find the hook line by word and jump the window
-          there instead of dragging through 4 minutes of waveform. */}
-      {(song.syncedLyrics?.length ?? 0) > 0 && song.audioUrl && (
-        <PinpointLyricsButton
-          cues={song.syncedLyrics!}
-          songId={song.id}
-          onPick={(timeSec) => {
-            const startSec = Math.max(
-              0,
-              Math.min(TOTAL_SEC - WINDOW_SEC, timeSec),
-            );
-            // Unlock so the move is visible (locked = green, frozen).
-            setLocked(false);
-            setDraftLeft((startSec / TOTAL_SEC) * 100);
-          }}
-        />
-      )}
 
     </div>
   );
