@@ -3473,9 +3473,11 @@ function RichPreviewEditor({
   const [locked, setLocked] = useState(true);
 
   const wfRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ startX: number; startLeft: number } | null>(
-    null,
-  );
+  // Drag bookkeeping. `moved` distinguishes a true drag (audio scrub +
+  // commit) from a quick tap on the nudge zones at the window edges.
+  const dragRef = useRef<
+    { startX: number; startLeft: number; moved: boolean } | null
+  >(null);
 
   const isDirty = Math.abs(draftLeft - committedLeft) > 0.1;
   const draftSec = (draftLeft / 100) * TOTAL_SEC;
@@ -3491,20 +3493,15 @@ function RichPreviewEditor({
   const committedStartLabel = fmt(committedSec);
   const committedEndLabel = fmt(committedSec + WINDOW_SEC);
 
-  const [chipDraft, setChipDraft] = useState(draftStartLabel);
-  useEffect(() => {
-    setChipDraft(draftStartLabel);
-  }, [draftStartLabel]);
-
-  const commitChip = () => {
-    const m = chipDraft.match(/^(\d+):(\d{1,2})$/);
-    if (!m) {
-      setChipDraft(draftStartLabel);
-      return;
-    }
-    const sec = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-    const clamped = Math.max(0, Math.min(TOTAL_SEC - WINDOW_SEC, sec));
-    setDraftLeft((clamped / TOTAL_SEC) * 100);
+  // Nudge the window by `delta` seconds (clamped). Used by the left/right
+  // tap zones inside the yellow window. Shift-modifier gives 0.1-sec
+  // word-boundary precision.
+  const nudgeSec = (delta: number) => {
+    const next = Math.max(
+      0,
+      Math.min(TOTAL_SEC - WINDOW_SEC, draftSec + delta),
+    );
+    setDraftLeft((next / TOTAL_SEC) * 100);
   };
 
   // Real waveform peaks (200 values, 0..1). Fallback to a flat decorative
@@ -3610,25 +3607,56 @@ function RichPreviewEditor({
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (locked) return;
-    dragRef.current = { startX: e.clientX, startLeft: draftLeft };
+    dragRef.current = {
+      startX: e.clientX,
+      startLeft: draftLeft,
+      moved: false,
+    };
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current || !wfRef.current) return;
     const rect = wfRef.current.getBoundingClientRect();
     const dx = e.clientX - dragRef.current.startX;
+    if (Math.abs(dx) > 3) dragRef.current.moved = true;
     const dxPct = (dx / rect.width) * 100;
     const next = Math.max(
       0,
       Math.min(maxLeftPct, dragRef.current.startLeft + dxPct),
     );
     setDraftLeft(next);
+
+    // ── Scrubber audio ─────────────────────────────────────────────
+    // While the artist is actively dragging the window, sync the
+    // hidden <audio> element's currentTime to wherever the window's
+    // start has landed and start playback. That gives them the same
+    // "hear it as you move it" feel as Apple Music's preview editor
+    // and Logic's marquee — much easier to dial a chorus in by ear
+    // than by eye on the waveform alone.
+    const audio = audioRef.current;
+    if (audio && song.audioUrl && dragRef.current.moved) {
+      const sec = (next / 100) * TOTAL_SEC;
+      audio.currentTime = sec;
+      if (audio.paused) {
+        audio.play().then(() => setPlaying(true)).catch(() => {});
+      }
+    }
   };
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const ref = dragRef.current;
     dragRef.current = null;
     try {
       (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
     } catch {}
+    // End the scrub: pause so we don't run on past the chosen start.
+    // (A subsequent tap of the Play button replays from the new spot.)
+    if (ref?.moved) {
+      const audio = audioRef.current;
+      if (audio && !audio.paused) {
+        audio.pause();
+        setPlaying(false);
+      }
+    }
   };
 
   // ─── Window-scoped audio playback ──────────────────────────────────
@@ -3746,10 +3774,14 @@ function RichPreviewEditor({
 
       {/* Hidden window-scoped <audio> element — same master as the player,
           but its currentTime is constrained to [draftSec, draftSec + 30]. */}
+      {/* preload="auto" so the master is buffered upfront — the Play
+          button and the scrub-while-drag stay responsive instead of
+          stalling on first interaction (Bill: "make the audio more
+          responsive"). */}
       <audio
         ref={audioRef}
         src={song.audioUrl ?? undefined}
-        preload="metadata"
+        preload="auto"
         className="hidden"
         data-testid={`audio-preview-${song.id}`}
       />
@@ -3797,47 +3829,6 @@ function RichPreviewEditor({
               ))}
             </div>
 
-            {/* (Floating chip removed — start time now lives as a big
-                center label inside the yellow window, plus a fine-tune
-                row below the waveform. Claude note #3 + #4.) */}
-            {false && (
-              <div
-                className="absolute -top-1 -translate-y-full after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800"
-                style={{ left: `calc(${draftLeft}% + 4px)` }}
-              >
-                <input
-                  value={chipDraft}
-                  onChange={(e) => setChipDraft(e.target.value)}
-                  onBlur={commitChip}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter")
-                      (e.target as HTMLInputElement).blur();
-                    if (e.key === "Escape") {
-                      setChipDraft(draftStartLabel);
-                      (e.target as HTMLInputElement).blur();
-                    }
-                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                      e.preventDefault();
-                      const step = e.shiftKey ? 5 : 1;
-                      const dir = e.key === "ArrowUp" ? 1 : -1;
-                      const next = Math.max(
-                        0,
-                        Math.min(
-                          TOTAL_SEC - WINDOW_SEC,
-                          draftSec + dir * step,
-                        ),
-                      );
-                      setDraftLeft((next / TOTAL_SEC) * 100);
-                    }
-                  }}
-                  aria-label="Preview start time — type to fine-tune"
-                  title="Type mm:ss or use ↑/↓ (Shift = 5 sec)"
-                  className="w-[44px] px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums text-center shadow-md focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 cursor-text"
-                  data-testid={`input-preview-chip-${song.id}`}
-                />
-              </div>
-            )}
-
             {/* Ghost — committed (live) window while dirty */}
             {isDirty && !locked && (
               <div
@@ -3866,27 +3857,77 @@ function RichPreviewEditor({
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
               className={[
-                "absolute top-1 bottom-1 rounded-md border-2 transition-colors",
+                "absolute top-0 bottom-0 rounded-md border-2 transition-colors",
                 locked
                   ? "border-emerald-500/70 bg-emerald-500/20 cursor-default"
-                  : "border-amber-400 bg-amber-400/25 cursor-grab active:cursor-grabbing shadow-[0_0_0_3px_rgba(251,191,36,0.15)]",
+                  : "border-amber-400 bg-amber-400/30 cursor-grab active:cursor-grabbing shadow-[0_0_0_3px_rgba(251,191,36,0.18)]",
               ].join(" ")}
               style={{ left: `${draftLeft}%`, width: `${widthPct}%` }}
               data-testid={`preview-window-handle-${song.id}`}
             >
-              {/* Big center start-time label — Claude's note #3: artist
-                  needs to see the start time prominently while sliding,
-                  not squint at a corner pill. End time is implied
-                  (start + 0:30) per the same note. */}
-              <span
+              {/* Window content — big bold start time anchored toward
+                  the TOP of the window (Bill: "larger and higher up in
+                  the slider"), with the implied end time as a smaller
+                  secondary label beneath it. The full window is the
+                  drag handle; the tap zones inside it for fine-nudge
+                  are separate overlay buttons. */}
+              <div
                 className={[
-                  "absolute inset-0 flex items-center justify-center text-[15px] font-bold tabular-nums tracking-tight pointer-events-none drop-shadow-sm",
-                  locked ? "text-emerald-900/80" : "text-amber-900/90",
+                  "absolute inset-0 flex flex-col items-center justify-start pt-1.5 pointer-events-none select-none",
+                  locked ? "text-emerald-900/85" : "text-amber-900/95",
                 ].join(" ")}
                 data-testid={`label-preview-start-${song.id}`}
               >
-                {draftStartLabel}
-              </span>
+                <span className="text-[22px] leading-none font-bold tabular-nums tracking-tight drop-shadow-sm">
+                  {draftStartLabel}
+                </span>
+                <span
+                  className={[
+                    "mt-0.5 text-[10px] font-medium tabular-nums leading-none",
+                    locked ? "text-emerald-900/55" : "text-amber-900/60",
+                  ].join(" ")}
+                >
+                  → {draftEndLabel}
+                </span>
+              </div>
+
+              {/* In-window nudge tap zones — only shown when unlocked
+                  and the window has enough room (>60px) to host them
+                  without crowding the labels. Tap left chevron = -1s;
+                  Shift-tap = -0.1s. e.stopPropagation() so the parent
+                  drag handler doesn't claim the tap. */}
+              {!locked && (
+                <>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nudgeSec(e.shiftKey ? -0.1 : -1);
+                    }}
+                    aria-label="Nudge start earlier (Shift = 0.1 sec)"
+                    title="Earlier · Shift-click for 0.1 sec"
+                    className="absolute left-0 top-0 bottom-0 w-6 inline-flex items-center justify-center text-amber-900/70 hover:text-amber-900 hover:bg-amber-400/30 rounded-l-md transition-colors"
+                    data-testid={`button-nudge-back-${song.id}`}
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
+                  </button>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nudgeSec(e.shiftKey ? 0.1 : 1);
+                    }}
+                    aria-label="Nudge start later (Shift = 0.1 sec)"
+                    title="Later · Shift-click for 0.1 sec"
+                    className="absolute right-0 top-0 bottom-0 w-6 inline-flex items-center justify-center text-amber-900/70 hover:text-amber-900 hover:bg-amber-400/30 rounded-r-md transition-colors"
+                    data-testid={`button-nudge-forward-${song.id}`}
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
           {/* Time axis — derived from real duration */}
@@ -3948,81 +3989,6 @@ function RichPreviewEditor({
           )}
         </button>
       </div>
-
-      {/* Fine-tune row — sits BELOW the trim row so Play and Padlock
-          keep a stable vertical position whether the window is locked
-          or being edited (Bill: "the lock and play button move upon
-          unlocking"). Granularity: 1 sec base · Shift = 0.1 sec for
-          word-boundary precision (Claude note #4 / #5). */}
-      {!locked && (
-        <div className="flex items-center justify-center gap-2 text-[11px] text-slate-600">
-          <span className="font-medium">Start</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              const step = e.shiftKey ? 0.1 : 1;
-              const next = Math.max(0, draftSec - step);
-              setDraftLeft((next / TOTAL_SEC) * 100);
-            }}
-            aria-label="Nudge start earlier (Shift = 0.1 sec)"
-            title="Earlier · Shift-click for 0.1 sec"
-            className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
-            data-testid={`button-finetune-back-${song.id}`}
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <input
-            value={chipDraft}
-            onChange={(e) => setChipDraft(e.target.value)}
-            onBlur={commitChip}
-            onKeyDown={(e) => {
-              if (e.key === "Enter")
-                (e.target as HTMLInputElement).blur();
-              if (e.key === "Escape") {
-                setChipDraft(draftStartLabel);
-                (e.target as HTMLInputElement).blur();
-              }
-              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                e.preventDefault();
-                const step = e.shiftKey ? 0.1 : 1;
-                const dir = e.key === "ArrowUp" ? 1 : -1;
-                const next = Math.max(
-                  0,
-                  Math.min(
-                    TOTAL_SEC - WINDOW_SEC,
-                    draftSec + dir * step,
-                  ),
-                );
-                setDraftLeft((next / TOTAL_SEC) * 100);
-              }
-            }}
-            aria-label="Preview start time — type mm:ss or use arrows"
-            title="Type mm:ss or use ↑/↓ (Shift = 0.1 sec)"
-            className="w-16 px-2 py-1 rounded-md border border-slate-200 bg-white text-[12px] font-semibold tabular-nums text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 focus:border-[#319ED8]/60"
-            data-testid={`input-finetune-start-${song.id}`}
-          />
-          <button
-            type="button"
-            onClick={(e) => {
-              const step = e.shiftKey ? 0.1 : 1;
-              const next = Math.min(
-                TOTAL_SEC - WINDOW_SEC,
-                draftSec + step,
-              );
-              setDraftLeft((next / TOTAL_SEC) * 100);
-            }}
-            aria-label="Nudge start later (Shift = 0.1 sec)"
-            title="Later · Shift-click for 0.1 sec"
-            className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-600 hover:bg-slate-100"
-            data-testid={`button-finetune-forward-${song.id}`}
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <span className="text-slate-400 ml-1">
-            ends {draftEndLabel}
-          </span>
-        </div>
-      )}
 
     </div>
   );
