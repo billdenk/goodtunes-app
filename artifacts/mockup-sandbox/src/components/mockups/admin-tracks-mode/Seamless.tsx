@@ -998,7 +998,7 @@ function BottomDock({
                 bar's hover area. */}
             <div
               className={[
-                "absolute left-[228px] right-[120px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
+                "absolute left-[228px] right-[164px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
                 "transition-opacity duration-150",
                 scrubHover ? "opacity-100" : "opacity-0",
               ].join(" ")}
