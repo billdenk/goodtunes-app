@@ -179,7 +179,11 @@ function MasterDetail({
             setDragOver(false);
           }}
           className={[
-            "group relative flex items-center gap-3 p-2.5 rounded-md border-2 transition-colors",
+            // Named group scope: the outer track row also uses unnamed `group`,
+            // so unnamed `group-hover:` would fire from cursor entering the
+            // whole track row. Naming this `group/pill` keeps play/Replace
+            // dependent on this pill specifically.
+            "group/pill relative flex items-center gap-3 p-2.5 rounded-md border-2 transition-colors",
             dragOver
               ? "border-dashed border-[#319ED8] bg-[#319ED8]/5"
               : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white",
@@ -189,7 +193,7 @@ function MasterDetail({
           <button
             type="button"
             aria-label="Play storms_master_24-96.wav"
-            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 bg-slate-200/70 text-slate-500 group-hover:bg-[#319ED8] group-hover:text-white transition-colors"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 bg-slate-200/70 text-slate-500 group-hover/pill:bg-[#319ED8] group-hover/pill:text-white transition-colors"
           >
             <Play className="w-4 h-4 translate-x-[1px] fill-current" />
           </button>
@@ -209,7 +213,7 @@ function MasterDetail({
               onClick={() => setMenuOpen((v) => !v)}
               className={[
                 "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1 transition-opacity",
-                menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
+                menuOpen ? "opacity-100" : "opacity-0 group-hover/pill:opacity-100 focus:opacity-100",
               ].join(" ")}
             >
               <Upload className="w-3 h-3" />
