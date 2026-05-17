@@ -130,13 +130,17 @@ function DotMeter({ t }: { t: Track }) {
         .map((ok, i) => `${labels[i]}: ${ok ? "✓" : "missing"}`)
         .join(" · ")}
     >
-      <div className="flex items-center gap-0.5">
+      {/* Shape carries the signal so color-blind users see it: filled
+          circle = done, hollow ring = needed. */}
+      <div className="flex items-center gap-0.5" aria-hidden>
         {dots.map((ok, i) => (
           <span
             key={i}
             className={[
-              "w-1.5 h-1.5 rounded-full",
-              ok ? "bg-emerald-500" : "bg-slate-200",
+              "w-2 h-2 rounded-full",
+              ok
+                ? "bg-emerald-500"
+                : "bg-transparent border border-slate-300",
             ].join(" ")}
           />
         ))}

@@ -169,19 +169,20 @@ export default function AlbumCredits() {
                 Applied to every track unless a track sets its own.
               </p>
             </div>
-            {/* Tiny status — same dot vocab as the track-row StatusMeter so the
-                two surfaces feel related. */}
+            {/* Tiny status — same dot vocab as the track-row StatusMeter.
+                Shape carries meaning (filled = done, hollow ring = needed)
+                so the signal works for color-blind users. */}
             <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-400">
               {rolesWithAny}/{totalRoles}
-              <span className="flex items-center gap-0.5">
+              <span className="flex items-center gap-0.5" aria-hidden>
                 {ROLES.map((r) => (
                   <span
                     key={r.key}
                     className={[
-                      "w-1.5 h-1.5 rounded-full",
+                      "w-2 h-2 rounded-full",
                       credits[r.key].length > 0
                         ? "bg-emerald-500"
-                        : "bg-slate-200",
+                        : "bg-transparent border border-slate-300",
                     ].join(" ")}
                   />
                 ))}
