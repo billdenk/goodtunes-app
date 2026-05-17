@@ -12,6 +12,7 @@ import {
   FileText,
   Users,
   Trash2,
+  X,
   Check,
   Upload,
   EyeOff,
@@ -1195,11 +1196,25 @@ function CreditsDetail({
                   Who played {pickedRole.toLowerCase()}?
                 </div>
               </div>
+              {/* Two escapes side-by-side: "Change role" (re-pick a role,
+                  e.g. you meant Lead vocals not Backing vocals) and the X
+                  cancel button (back out entirely — used when you tapped
+                  Override on an inherited row and changed your mind).
+                  Both functionally land on phase 1, but the X reads as
+                  "abandon" while the link reads as "switch." */}
               <button
                 onClick={handleCancelRole}
                 className="px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:bg-white"
               >
                 Change role
+              </button>
+              <button
+                onClick={handleCancelRole}
+                aria-label="Cancel — close the picker"
+                title="Cancel"
+                className="w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-white inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+              >
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
             <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
