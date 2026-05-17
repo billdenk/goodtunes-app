@@ -26,7 +26,12 @@ const NavItem = ({
       // (w-14 h-8 centering wrapper, gap-[3px], py-1) and only relocate the
       // tinted bg from the inner icon box onto the outer column so the pill
       // grows to enclose both rows. Nothing moves; only the chip grows.
-      className="flex flex-col items-center gap-[3px] min-w-[64px] py-1 rounded-2xl transition-colors duration-200"
+      //
+      // Shape is `rounded-full` on purpose — at ~64×52 the column reads as
+      // a vertical capsule (hemispherical caps top/bottom), which is what
+      // Apple Music uses. `rounded-2xl` left visible corners and didn't
+      // match.
+      className="flex flex-col items-center gap-[3px] min-w-[64px] py-1 rounded-full transition-colors duration-200"
       style={active ? { background: "rgba(49,158,216,0.18)" } : {}}
       data-testid={testId}
     >
