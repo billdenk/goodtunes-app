@@ -25,32 +25,47 @@ import {
   VolumeX,
   Mic2,
   CheckCircle2,
-  AudioLines,
-  Sparkles,
-  Zap,
   Circle,
 } from "lucide-react";
 
+/* ── GoodSync™ glyph ───────────────────────────────────────────────────
+   Custom inline mark — five rounded vertical bars whose TOPS trace an
+   arrowhead pointing up: short, medium, tallest (center), medium, short.
+   Reads as "audio waves rising to a peak" — visually says synced /
+   highlighted moment without conflicting with Lucide icons already in
+   use elsewhere (Sparkles, Zap, AudioLines, RefreshCw all carry meaning
+   in other admin surfaces). 24×24 viewBox, bars centered on x=12 so the
+   mark sits dead-center when scaled into the small blue circle.       */
+function WaveArrowGlyph(props: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={props.className}
+      aria-hidden
+    >
+      <rect x="3"  y="10.5" width="2" height="3"  rx="1" />
+      <rect x="7"  y="8"    width="2" height="8"  rx="1" />
+      <rect x="11" y="5"    width="2" height="14" rx="1" />
+      <rect x="15" y="8"    width="2" height="8"  rx="1" />
+      <rect x="19" y="10.5" width="2" height="3"  rx="1" />
+    </svg>
+  );
+}
+
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
-// `lyricsSync` flags GoodSync™-verified lyrics — value is the glyph variant
-// to render inside the brand-blue badge. TEMPORARY: rows 1, 3, 4 each carry
-// a different glyph so Bill can compare AudioLines vs Sparkles vs Zap in
-// the same column. Once a winner is picked this collapses back to a single
-// boolean and the picked glyph becomes the hard-coded one.
+// `lyricsSync` flags GoodSync™-verified lyrics — the middle pip swaps from
+// the green "basic lyrics" check to a brand-blue badge with the custom
+// WaveArrow glyph (defined above) inside.
 // `creditsPartial` is true when the artist has filled SOME credit slots but
 // not all of them — the credits dot renders amber so the row reads as
 // "in progress" rather than "empty or done."
-type SyncGlyph = "audioLines" | "sparkles" | "zap";
-const TRACKS: {
-  n: number; title: string; master: boolean; snippet: boolean;
-  lyrics: boolean; instrumental: boolean; credits: boolean;
-  lyricsSync: false | SyncGlyph; creditsPartial: boolean; duration: string;
-}[] = [
-  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: "audioLines", creditsPartial: false, duration: "3:30" },
-  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  instrumental: false, credits: false, lyricsSync: false,        creditsPartial: true,  duration: "4:12" },
-  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: "sparkles",   creditsPartial: false, duration: "2:58" },
-  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: "zap",        creditsPartial: false, duration: "3:47" },
-  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, lyricsSync: false,        creditsPartial: false, duration: "—" },
+const TRACKS = [
+  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: false, creditsPartial: false, duration: "3:30" },
+  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  instrumental: false, credits: false, lyricsSync: false, creditsPartial: true,  duration: "4:12" },
+  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: false, instrumental: true,  credits: true,  lyricsSync: false, creditsPartial: false, duration: "2:58" },
+  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: true,  creditsPartial: false, duration: "3:47" },
+  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, lyricsSync: false, creditsPartial: false, duration: "—" },
 ];
 
 /* ── Animated 3-bar equalizer for the "now-playing" row indicator.
@@ -139,7 +154,7 @@ function StatusMeter({
   // ── Master-present branch: 3 optional-piece dots ──────────────────
   type DotState = "empty" | "done" | "synced" | "partial";
   const lyricsDone = t.lyrics || t.instrumental;
-  const dots: { state: DotState; glyph?: SyncGlyph; label: string; hint: string }[] = [
+  const dots: { state: DotState; label: string; hint: string }[] = [
     {
       state: t.snippet ? "done" : "empty",
       label: "Preview",
@@ -151,7 +166,6 @@ function StatusMeter({
         : lyricsDone
         ? "done"
         : "empty",
-      glyph: t.lyricsSync || undefined,
       label: "Lyrics",
       hint: t.lyricsSync
         ? "Lyrics synced with GoodSync™"
@@ -186,24 +200,14 @@ function StatusMeter({
   // reinforces, but a deuteranopic reader can tell the four states
   // apart from silhouette alone (check vs. sync arrows vs. plain dot
   // vs. ring).
-  const renderDot = (state: DotState, glyph?: SyncGlyph) => {
+  const renderDot = (state: DotState) => {
     if (state === "synced") {
-      const Glyph =
-        glyph === "sparkles" ? Sparkles : glyph === "zap" ? Zap : AudioLines;
-      // AudioLines is already shape-as-stroke (vertical bars), so leave it
-      // stroked. Sparkles and Zap are outlined silhouettes — filling them
-      // gives a chunkier, more legible read at 10px.
-      const filled = glyph === "sparkles" || glyph === "zap";
       return (
         <span
-          className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center"
+          className="w-4 h-4 rounded-full inline-flex items-center justify-center"
           style={{ backgroundColor: "#319ED8" }}
         >
-          <Glyph
-            className="w-2.5 h-2.5 text-white"
-            strokeWidth={filled ? 1.5 : 2.5}
-            {...(filled ? { fill: "currentColor" } : {})}
-          />
+          <WaveArrowGlyph className="w-3 h-3 text-white" />
         </span>
       );
     }
@@ -262,7 +266,7 @@ function StatusMeter({
       <span className="flex items-center gap-1" aria-hidden>
         {dots.map((d, i) => (
           <span key={i} className="inline-flex items-center justify-center">
-            {renderDot(d.state, d.glyph)}
+            {renderDot(d.state)}
           </span>
         ))}
       </span>
