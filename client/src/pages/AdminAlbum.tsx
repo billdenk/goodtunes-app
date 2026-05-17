@@ -5365,13 +5365,15 @@ function AudioEditor({
           Preview + Instrumental save themselves. The footer just
           tells the writer "we're listening" and gives a way out. */}
       <div className="flex items-center justify-between gap-2 pt-3">
+        {/* Silent unless we're actually mid-write. "Saved automatically"
+            was just chrome noise the rest of the time (Bill: "do we
+            need to say 'Save automatically'?"). The transient "Saving…"
+            still flashes when the writer can actually act on it. */}
         <p
           className="text-[10.5px] text-slate-400"
           data-testid={`text-audio-autosave-${song.id}`}
         >
-          {saveMut.isPending || uploading
-            ? "Saving…"
-            : "Saved automatically"}
+          {saveMut.isPending || uploading ? "Saving…" : "\u00A0"}
         </p>
         <button
           type="button"
