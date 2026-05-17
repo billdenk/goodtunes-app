@@ -8,6 +8,9 @@ import {
   ChevronUp,
   ChevronDown,
   Download,
+  Pencil,
+  UserPlus,
+  Check,
 } from "lucide-react";
 
 // Per-track Credits tile.
@@ -101,14 +104,17 @@ function initials(n: string) {
 function PersonColumn({
   p,
   armed,
+  editing,
   onRemove,
 }: {
   p: Person;
   armed: boolean;
+  editing: boolean;
   onRemove: (id: string) => void;
 }) {
   // Two-tap remove, mirroring AlbumCredits.tsx. First tap arms (rose ring +
   // "Remove?" label); second tap commits. Auto-disarms in 3s via parent.
+  // X is hidden outside edit mode so the panel reads calm by default.
   return (
     <div className="flex w-[96px] shrink-0 flex-col items-center text-center">
       <div className="relative">
@@ -131,24 +137,26 @@ function PersonColumn({
             initials(p.name)
           )}
         </div>
-        <button
-          onClick={() => onRemove(p.id)}
-          className={[
-            "absolute -right-1 -top-1 inline-flex items-center justify-center rounded-full shadow ring-1 transition",
-            armed
-              ? "h-5 px-1.5 gap-0.5 bg-rose-500 text-white ring-rose-500 text-[9.5px] font-semibold"
-              : "h-4 w-4 bg-white text-slate-400 ring-slate-200 hover:text-slate-700",
-          ].join(" ")}
-          aria-label={armed ? `Confirm remove ${p.name}` : `Remove ${p.name}`}
-        >
-          {armed ? (
-            <>
-              <X className="h-2.5 w-2.5" strokeWidth={2.5} /> Remove?
-            </>
-          ) : (
-            <X className="h-2.5 w-2.5" strokeWidth={2.5} />
-          )}
-        </button>
+        {editing && (
+          <button
+            onClick={() => onRemove(p.id)}
+            className={[
+              "absolute -right-1 -top-1 inline-flex items-center justify-center rounded-full shadow ring-1 transition",
+              armed
+                ? "h-5 px-1.5 gap-0.5 bg-rose-500 text-white ring-rose-500 text-[9.5px] font-semibold"
+                : "h-4 w-4 bg-white text-slate-400 ring-slate-200 hover:text-slate-700",
+            ].join(" ")}
+            aria-label={armed ? `Confirm remove ${p.name}` : `Remove ${p.name}`}
+          >
+            {armed ? (
+              <>
+                <X className="h-2.5 w-2.5" strokeWidth={2.5} /> Remove?
+              </>
+            ) : (
+              <X className="h-2.5 w-2.5" strokeWidth={2.5} />
+            )}
+          </button>
+        )}
       </div>
       <div className="mt-2 text-[12.5px] font-semibold leading-tight text-slate-900">
         {p.name}
@@ -262,9 +270,22 @@ function Section({
   setPeople: (next: Person[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const removeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const existingNames = people.map((p) => p.name);
+
+  // Click-away closes the pencil popover.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = () => setMenuOpen(false);
+    const t = setTimeout(() => window.addEventListener("click", onClick), 0);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("click", onClick);
+    };
+  }, [menuOpen]);
 
   const handleAdd = (name: string) => {
     if (existingNames.includes(name)) return;
@@ -294,30 +315,82 @@ function Section({
     };
   }, [pendingRemove]);
 
+  // The pencil trigger stays visible whenever the section is in a "loud"
+  // state (editing or its menu/picker is open) so the affordance doesn't
+  // disappear mid-interaction.
+  const triggerVisible = editing || menuOpen || adding;
+
   return (
-    // `group` lets the +Add button hover-reveal at the section level.
     <section className="group/section">
       <header className="flex items-center gap-2 mb-2">
         <h2 className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
           {title}
         </h2>
+        {editing && (
+          <span className="text-[10.5px] uppercase tracking-wider font-semibold text-[#319ED8]">
+            · Editing
+          </span>
+        )}
         <div className="flex-1" />
-        <button
-          onClick={() => setAdding((v) => !v)}
-          className={[
-            "px-2 py-0.5 rounded-md text-slate-500 text-[11px] font-medium",
-            "hover:text-[#319ED8] hover:bg-[#319ED8]/5",
-            "inline-flex items-center gap-1 flex-shrink-0 transition-opacity",
-            // Hidden by default; appears on section hover or when picker
-            // is open. Stays focus-visible for keyboard users.
-            adding
-              ? "opacity-100"
-              : "opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100",
-          ].join(" ")}
+
+        {/* Pencil menu — hover-revealed unless something's already open.
+            Tap → choose Add person (opens search picker) or Edit credits
+            (lets you remove people from this song; removals are scoped
+            to this song's credits, not the People table). */}
+        <div
+          className="relative"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Plus className="h-3 w-3" strokeWidth={2.5} />
-          Add
-        </button>
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label={`Edit ${title} credits`}
+            className={[
+              "h-7 w-7 rounded-md inline-flex items-center justify-center transition",
+              "text-slate-500 hover:text-[#319ED8] hover:bg-[#319ED8]/5",
+              "focus-visible:opacity-100 transition-opacity",
+              triggerVisible
+                ? "opacity-100"
+                : "opacity-0 group-hover/section:opacity-100",
+              editing ? "bg-[#319ED8]/10 text-[#319ED8]" : "",
+            ].join(" ")}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 z-10 w-44 rounded-md border border-slate-200 bg-white shadow-md py-1">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  setAdding(true);
+                }}
+                className="w-full text-left px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+              >
+                <UserPlus className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                <span className="flex-1">Add person</span>
+              </button>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  setEditing((v) => !v);
+                  setPendingRemove(null);
+                }}
+                className="w-full text-left px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+              >
+                {editing ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-[#319ED8] flex-shrink-0" />
+                    <span className="flex-1">Done editing</span>
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                    <span className="flex-1">Edit credits</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {adding && (
@@ -330,6 +403,12 @@ function Section({
         </div>
       )}
 
+      {editing && (
+        <p className="mb-2 text-[10.5px] text-slate-500 italic">
+          Tap a person's X to remove them from this song. They stay in your People list.
+        </p>
+      )}
+
       {/* Wrapping grid — extra people flow onto the next row instead of
           hiding behind a horizontal scroll. */}
       <div className="flex flex-wrap gap-x-3 gap-y-4 -mx-1 px-1">
@@ -338,6 +417,7 @@ function Section({
             key={p.id}
             p={p}
             armed={pendingRemove === p.id}
+            editing={editing}
             onRemove={handleRemove}
           />
         ))}
