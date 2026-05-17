@@ -127,14 +127,19 @@ function StatusBadge({
 
 function DetailWrap({
   title,
+  action,
   children,
 }: {
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="mt-2 rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-      <h3 className="text-[12.5px] font-bold text-slate-900">{title}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[12.5px] font-bold text-slate-900">{title}</h3>
+        {action}
+      </div>
       {children}
     </div>
   );
@@ -440,6 +445,7 @@ function LyricsDetail({
   const [text, setText] = useState(seed);
   const [url, setUrl] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   // 'plain' = no timing · 'syncing' = forced-alignment call in flight · 'synced' = word-level VTT stored
   const [syncState, setSyncState] = useState<"plain" | "syncing" | "synced">(
     "plain",
@@ -452,71 +458,90 @@ function LyricsDetail({
     setTimeout(() => setSyncState("synced"), 2000);
   };
 
-  return (
-    <DetailWrap title="Lyrics" onClose={onClose}>
-      {/* Three sources: drop a timed file · paste a URL · type below */}
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
-        {/* Drop zone — .vtt (WebVTT, real timing), .lrc (line-timed), .srt, or plain .txt */}
-        <label
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-          }}
-          className={[
-            "flex flex-col items-center justify-center text-center px-3 py-3 rounded-md border-2 border-dashed text-[11px] cursor-pointer transition-colors",
-            dragOver
-              ? "border-[#319ED8] bg-[#319ED8]/5 text-[#319ED8]"
-              : "border-slate-300 text-slate-500 hover:border-slate-400 hover:bg-slate-50",
-          ].join(" ")}
-        >
-          <Upload className="w-4 h-4 mb-1" />
-          <span className="font-semibold">Drop a lyrics file</span>
-          <span className="text-slate-400">.vtt · .lrc · .srt · .txt</span>
-          <input type="file" accept=".vtt,.lrc,.srt,.txt" className="sr-only" />
-        </label>
-
-        <div className="flex items-center text-[10px] uppercase tracking-wider font-semibold text-slate-400 self-center">
-          or
-        </div>
-
-        {/* URL import — for fetching from a hosted .vtt / .lrc */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
-            Import from URL
-          </label>
-          <div className="flex gap-1">
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/storms.vtt"
-              className="flex-1 min-w-0 px-2 py-1.5 rounded-md border border-slate-200 text-[12px] focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
-            />
-            <button
-              disabled={!url}
-              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Import
-            </button>
+  const importAction = (
+    <div className="relative">
+      <button
+        onClick={() => setImportOpen((v) => !v)}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+      >
+        <Upload className="w-3 h-3" />
+        Import
+      </button>
+      {importOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setImportOpen(false)} aria-hidden />
+          <div className="absolute right-0 mt-1 z-20 w-72 rounded-md border border-slate-200 bg-white shadow-lg overflow-hidden text-left">
+            <label className="w-full flex items-start gap-2 px-3 py-2 text-[12px] hover:bg-slate-50 cursor-pointer">
+              <Upload className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-slate-500" />
+              <div className="flex-1">
+                <div className="font-semibold text-slate-900">Upload a file</div>
+                <div className="text-[10.5px] text-slate-500">.vtt · .lrc · .srt · .txt</div>
+              </div>
+              <input type="file" accept=".vtt,.lrc,.srt,.txt" className="sr-only" />
+            </label>
+            <div className="border-t border-slate-100" />
+            <div className="px-3 py-2">
+              <div className="flex items-start gap-2 mb-1.5">
+                <LinkIcon className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-slate-500" />
+                <div className="font-semibold text-slate-900 text-[12px]">Paste a URL</div>
+              </div>
+              <div className="flex gap-1">
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://…/storms.vtt"
+                  className="flex-1 min-w-0 px-2 py-1.5 rounded-md border border-slate-200 text-[11.5px] focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
+                />
+                <button
+                  disabled={!url}
+                  className="px-2 py-1.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Import
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
+    </div>
+  );
 
-      <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 pt-1">
-        Or paste/type below
+  return (
+    <DetailWrap title="Lyrics" onClose={onClose} action={importAction}>
+      {/* The textarea is the primary input. It also accepts dropped .vtt/.lrc
+          files — drag-over shows a subtle overlay so the affordance is
+          discoverable without cluttering the resting state. */}
+      <div
+        className="relative"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+      >
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Paste lyrics here, or drop a .vtt/.lrc file. Use [Verse 1], [Chorus] for section headers."
+          rows={8}
+          className={[
+            "w-full px-3 py-2 rounded-md border bg-white text-[12.5px] leading-relaxed text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20 transition-colors",
+            dragOver ? "border-[#319ED8] ring-2 ring-[#319ED8]/20" : "border-slate-200 focus:border-[#319ED8]",
+          ].join(" ")}
+        />
+        {dragOver && (
+          <div className="absolute inset-0 rounded-md bg-[#319ED8]/10 flex flex-col items-center justify-center text-[#319ED8] pointer-events-none">
+            <Upload className="w-5 h-5 mb-1" />
+            <span className="text-[12px] font-semibold">Drop to import lyrics</span>
+            <span className="text-[10.5px]">.vtt · .lrc · .srt · .txt</span>
+          </div>
+        )}
       </div>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Paste lyrics here. Use [Verse 1], [Chorus] markers to group sections."
-        rows={8}
-        className="w-full px-3 py-2 rounded-md border border-slate-200 bg-white text-[12.5px] leading-relaxed text-slate-900 font-mono focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
-      />
       <div className="flex items-center justify-between gap-3">
         {/* Status pill — shows current timing fidelity */}
         <div className="flex items-center gap-2">
