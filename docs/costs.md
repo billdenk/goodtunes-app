@@ -114,14 +114,19 @@ the immutable cache header. This is the same trick Apple/Spotify use.
 - **Cost guard already in code**: 150 MB master cap, 30k char lyric cap,
   120 s timeout per call.
 
-### 3c. Lyrics transcription via ElevenLabs Scribe (deferred)
-- **What**: audio-only → STT transcript. Use to **diff** against written
-  lyrics so the artist can catch "I wrote demo lyrics but recorded
-  final mix" mismatches.
+### 3c. Lyrics transcription via ElevenLabs Scribe (planned — runs by default)
+- **What**: audio-only → STT transcript. Used to **diff** against the
+  written lyrics so the artist catches "I typed demo lyrics but
+  recorded the final mix" mismatches AND so we flag any `[Chorus]` /
+  `(2x)` annotations that shouldn't be in the sung text.
 - **Unit cost**: **(est.)** ~$0.10 per 4-min song. Same order of
   magnitude as forced alignment.
-- **When triggered**: opt-in "Verify against recording" button in the
-  Lyrics editor. Not the default path.
+- **When triggered**: runs alongside Forced Alignment on every
+  "Auto-sync lyrics" press — Bill's call (2026-05-17). Belt-and-braces:
+  STT confirms the lyrics actually match the recording, then FA gets
+  the canonical word timings from the artist's written copy.
+- **Total per "Auto-sync lyrics" press**: ~$0.20/song (3b + 3c). 17-song
+  album = ~$3.40. Acceptable for the accuracy gain.
 
 ---
 

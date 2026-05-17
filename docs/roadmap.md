@@ -121,6 +121,20 @@ GoodTunes can't license Musixmatch for **pre-release indie** material (not in th
 3. **Editor in the upload portal** — lyrics on the left, waveform on the right, drag any word/line to nudge timestamp. 60-second touch-up per song. Long-term recommended flow.
 4. **License Musixmatch / LyricFind** — only useful post-Spotify/Apple launch when tracks are in their catalog. Skip pre-launch.
 
+### Dual-pass auto-sync flow (Bill's call, 2026-05-17)
+
+When the admin clicks "Auto-sync lyrics" on a song, run **both** ElevenLabs passes by default and present the artist with one consolidated review screen:
+
+1. **Scribe (STT)** transcribes the recording cold (no lyrics input). Gives us the "what was actually sung" ground truth.
+2. **Forced Alignment** aligns the artist's **written** lyrics against the master and returns word-level timestamps.
+3. **Diff Scribe ↔ written**, surface mismatches in the editor:
+   - Missing line in written copy ("recording has a verse you didn't paste in")
+   - Extra line in written copy ("you pasted a `[Chorus]` label or a demo-only bridge that isn't on the master")
+   - Word-level swaps ("wrote *gonna*, sang *going to*")
+4. Artist accepts / edits / ignores each diff. Whatever they confirm becomes the canonical lyrics; FA re-runs against the corrected text only if the artist made structural edits.
+
+Cost: ~$0.20 per song (3b + 3c in `docs/costs.md`). At a 17-song album that's ~$3.40 — small price for catching "I shipped my demo lyrics by accident" before fans see it. See `docs/costs.md §3b/§3c` for current per-call estimates.
+
 Word-level karaoke (per-word fill animation in `#319ED8` → `#4AFFCA`) is a follow-up driven off `requestAnimationFrame(audio.currentTime)` once per-word data exists — render code is small (~1 day).
 
 ---
