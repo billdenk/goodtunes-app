@@ -1962,6 +1962,7 @@ function TrackRow({
                     song={song}
                     onClose={closeLyrics}
                     onSaved={invalidate}
+                    onUpgradeSync={() => setMode("synced")}
                   />
                 </ExpandedPanel>
               ) : mode === "synced" ? (
@@ -2062,29 +2063,6 @@ function TrackRow({
                       buttonRef={creditsChipRef}
                     />
                   </div>
-                  {!song.instrumental &&
-                    song.audioUrl &&
-                    (song.lyrics?.trim()?.length ?? 0) > 0 && (
-                      <div className="flex justify-end pt-1.5">
-                        <button
-                          ref={syncedChipRef}
-                          type="button"
-                          onClick={() => setMode("synced")}
-                          className={
-                            "inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
-                            ((song.syncedLyrics?.length ?? 0) > 0
-                              ? "text-[#319ED8] hover:bg-[#319ED8]/10"
-                              : "text-slate-400 hover:text-slate-700 hover:bg-slate-100")
-                          }
-                          data-testid={`button-edit-synced-${song.id}`}
-                        >
-                          <span>GoodSync™</span>
-                          {(song.syncedLyrics?.length ?? 0) > 0 && (
-                            <Check className="w-3 h-3" />
-                          )}
-                        </button>
-                      </div>
-                    )}
                 </>
               )}
             </div>
@@ -2175,10 +2153,15 @@ function LyricsEditor({
   song,
   onClose,
   onSaved,
+  onUpgradeSync,
 }: {
   song: SongLite;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  /** Switch the row out of "lyrics" mode and into the GoodSync™ editor
+   *  (synced lyrics + upload .vtt/.lrc/.srt). Drives both the "Upgrade
+   *  to GoodSync™" CTA and the "Import" entry inside this editor. */
+  onUpgradeSync?: () => void;
 }) {
   const { toast } = useToast();
   const [draft, setDraft] = useState<string>(song.lyrics ?? "");
@@ -2280,6 +2263,53 @@ function LyricsEditor({
             </p>
           </>
         )}
+
+        {/* GoodSync™ entry — lives INSIDE the Lyrics editor (Bill:
+            "shouldn't sit outside by itself; it should exist in the
+            Lyrics"). Two paths:
+              · "Upgrade to GoodSync™" — auto-sync flow with the same
+                blue-circle WaveArrow glyph we use for the synced-dot
+                state, so the brand mark stays consistent everywhere.
+              · "Import" — drops the user into the GoodSync editor's
+                upload UI (.vtt / .lrc / .srt / .txt or paste a URL).
+            Hidden when the track is instrumental (lyrics don't apply),
+            when there's no audio master yet, or when there are no
+            plain-lyric lines to sync against. */}
+        {!song.instrumental &&
+          song.audioUrl &&
+          (draft?.trim()?.length ?? 0) > 0 &&
+          onUpgradeSync && (
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onUpgradeSync}
+                className="inline-flex items-center gap-2 pl-1.5 pr-3 h-8 rounded-full border border-[#319ED8]/40 bg-white text-[#319ED8] text-[12px] font-semibold hover:bg-[#319ED8]/10 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                data-testid={`button-upgrade-goodsync-${song.id}`}
+              >
+                <span className="w-5 h-5 rounded-full bg-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+                  <WaveArrowGlyph className="w-3 h-3" />
+                </span>
+                <span>
+                  {(song.syncedLyrics?.length ?? 0) > 0
+                    ? "Edit GoodSync™"
+                    : "Upgrade to GoodSync™"}
+                </span>
+                {(song.syncedLyrics?.length ?? 0) > 0 && (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onUpgradeSync}
+                title="Import a synced lyric file (.vtt / .lrc / .srt / .txt) or paste a URL"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-slate-500 text-[12px] font-medium hover:text-slate-700 hover:bg-slate-100"
+                data-testid={`button-import-synced-${song.id}`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Import
+              </button>
+            </div>
+          )}
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <button
