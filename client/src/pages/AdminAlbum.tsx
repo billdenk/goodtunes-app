@@ -2388,17 +2388,17 @@ function GoodSyncPanel({
           <PopoverContent
             side="bottom"
             align="start"
-            className="w-72 text-[12px] leading-relaxed"
+            className="w-72 text-[12px] leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
           >
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 rounded-full bg-[#319ED8] inline-flex items-center justify-center">
                 <WaveArrowGlyph className="w-3.5 h-3.5" />
               </span>
-              <p className="font-semibold text-slate-800">
+              <p className="font-semibold text-slate-900">
                 What is GoodSync™?
               </p>
             </div>
-            <p className="text-slate-600">
+            <p className="text-slate-700">
               Line-timed lyrics that scroll in sync with the master —
               same feel as Apple Music's synced lyrics. We auto-align
               your typed words to the audio so you don't have to
