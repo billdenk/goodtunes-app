@@ -3389,15 +3389,13 @@ function RichPreviewEditor({
     else setLocked((v) => !v);
   };
 
-  // Apple-style: tapping X with unsaved changes commits the edit and
-  // closes. No confirm dialog. Revert exists as an explicit undo for
-  // the rare "I dragged by accident" case. Photos/iMovie work the same
-  // way — Done means done.
+  // macOS NSSavePanel-on-close pattern: dirty + X → present a
+  // small sheet with three stacked pill buttons (Save · Revert · Cancel).
+  // Lighter than Apple's dark sheet — fits our light editor surface.
+  const [confirmClose, setConfirmClose] = useState(false);
   const guardedClose = () => {
-    if (isDirty) {
-      saveAndLock();
-    }
-    onClose?.();
+    if (isDirty) setConfirmClose(true);
+    else onClose?.();
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -3881,6 +3879,62 @@ function RichPreviewEditor({
         </div>
       )}
 
+      {/* macOS-style "Do you want to save…?" sheet — light variant.
+          Stacked rounded-pill buttons exactly like NSSavePanel on
+          document close. Save is the primary; Revert Changes throws
+          the draft away and closes; Cancel returns to editing. */}
+      {confirmClose && (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/30 rounded-xl backdrop-blur-[2px] p-4"
+          data-testid={`sheet-preview-confirm-${song.id}`}
+        >
+          <div className="w-full max-w-xs bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-5 space-y-4">
+            <div className="space-y-1.5">
+              <div className="text-[15px] font-semibold text-slate-900 leading-snug">
+                Save your preview edit?
+              </div>
+              <div className="text-[12.5px] text-slate-500 leading-snug">
+                You can revert later to undo this change.
+              </div>
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  saveAndLock();
+                  setConfirmClose(false);
+                  onClose?.();
+                }}
+                disabled={saveMut.isPending}
+                className="w-full h-10 inline-flex items-center justify-center rounded-full text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90 disabled:opacity-50"
+                data-testid={`button-preview-confirm-save-${song.id}`}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftLeft(committedLeft);
+                  setConfirmClose(false);
+                  onClose?.();
+                }}
+                className="w-full h-10 inline-flex items-center justify-center rounded-full text-[13px] font-medium bg-slate-100 text-slate-800 hover:bg-slate-200"
+                data-testid={`button-preview-confirm-revert-${song.id}`}
+              >
+                Revert Changes
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmClose(false)}
+                className="w-full h-10 inline-flex items-center justify-center rounded-full text-[13px] font-medium bg-slate-100 text-slate-800 hover:bg-slate-200"
+                data-testid={`button-preview-confirm-cancel-${song.id}`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
