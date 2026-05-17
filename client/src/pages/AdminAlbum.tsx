@@ -16,6 +16,7 @@ import {
   Trash2,
   Plus,
   Play,
+  Pause,
   Film,
   Music,
   Tag as TagIcon,
@@ -48,6 +49,7 @@ import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
+import { PlayerDock } from "@/components/ui/PlayerDock";
 import {
   Dialog,
   DialogContent,
@@ -486,6 +488,129 @@ function TracksPanel({
   // can hammer through a tracklist without clicking "Add track" each time.
   const [adding, setAdding] = useState(false);
 
+  // ── Playback state for the floating PlayerDock ──────────────────────
+  // One audio element drives the entire Tracks tab. Selecting a row sets
+  // `currentSongId`; the effect below loads the master into the audio
+  // element and starts playback. The dock owns the transport UI; this
+  // panel owns the actual playback + queue stepping. Graduated from the
+  // Seamless mockup's BottomDock (mock state) into real HTMLAudioElement
+  // playback against `song.audioUrl` (Object Storage signed URLs).
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentSongId, setCurrentSongId] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const currentSong =
+    currentSongId != null
+      ? sorted.find((s) => s.id === currentSongId) ?? null
+      : null;
+
+  // Epoch guard for play() promises. When the user clicks Track A then
+  // immediately Track B, A's play() promise may still be pending —
+  // resolving it would clobber B's state. We bump the epoch on every
+  // selection and ignore stale resolutions. The audio element's own
+  // `play` / `pause` events (subscribed below) are the source of truth
+  // for the `playing` flag; the promise paths just absorb the rejection.
+  const playEpochRef = useRef(0);
+
+  // Load + play whenever the selected song changes. Browsers will reject
+  // play() if it wasn't triggered by a user gesture — that's fine here
+  // because the only path into this effect is the user clicking a row's
+  // play button or hitting prev/next on the dock (both are gestures).
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!currentSong?.audioUrl) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      setProgress(0);
+      return;
+    }
+    const epoch = ++playEpochRef.current;
+    audio.src = currentSong.audioUrl;
+    setProgress(0);
+    audio.play().catch(() => {
+      // Swallow rejection (autoplay block, abort from rapid switching).
+      // Only act on the latest epoch — a rejection from a superseded
+      // request must not flip `playing` off for the new track.
+      if (epoch === playEpochRef.current) {
+        setPlaying(false);
+      }
+    });
+  }, [currentSong?.id, currentSong?.audioUrl]);
+
+  // Keep our `playing` state in lock-step with the underlying element so
+  // anything that pauses outside our togglePlay path (browser autoplay
+  // policy, OS media keys, tab backgrounding) still flips the dock icon.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
+    return () => {
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio || !currentSong?.audioUrl) return;
+    if (audio.paused) {
+      // If we ran off the end of the track (queue-end pause path), rewind
+      // to the start so hitting Play actually restarts instead of being
+      // a no-op against `currentTime === duration`.
+      if (
+        audio.ended ||
+        (audio.duration > 0 && audio.currentTime >= audio.duration - 0.05)
+      ) {
+        audio.currentTime = 0;
+      }
+      playEpochRef.current++;
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  };
+
+  const playPrev = () => {
+    if (!currentSongId) return;
+    const idx = sorted.findIndex((s) => s.id === currentSongId);
+    // Step to the previous track that actually has a master; skipping
+    // upload-pending rows so prev/next on the dock can't strand the user
+    // on an unplayable selection.
+    for (let i = idx - 1; i >= 0; i--) {
+      if (sorted[i].audioUrl) {
+        setCurrentSongId(sorted[i].id);
+        return;
+      }
+    }
+  };
+  const playNext = () => {
+    const idx = currentSongId
+      ? sorted.findIndex((s) => s.id === currentSongId)
+      : -1;
+    for (let i = idx + 1; i < sorted.length; i++) {
+      if (sorted[i].audioUrl) {
+        setCurrentSongId(sorted[i].id);
+        return;
+      }
+    }
+    // End of queue — pause but keep the selection so the cover/title
+    // stays in the dock and the user can hit Play to restart.
+    if (audioRef.current) audioRef.current.pause();
+  };
+
+  const handleRowPlay = (songId: string) => {
+    if (songId === currentSongId) {
+      togglePlay();
+      return;
+    }
+    setCurrentSongId(songId);
+  };
+
   const invalidateAlbum = async () => {
     await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
     await qc.invalidateQueries({ queryKey: ["/api/albums"] });
@@ -593,7 +718,7 @@ function TracksPanel({
 
   return (
     <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+      className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
       data-testid="panel-tracks"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -622,7 +747,7 @@ function TracksPanel({
           {adding ? "Done" : "Add track"}
         </button>
       </div>
-      <ol>
+      <ol className={currentSong ? "pb-28" : undefined}>
         {sorted.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
           return (
@@ -639,6 +764,9 @@ function TracksPanel({
               onDragOver={handleDragOver(song.id)}
               onDrop={handleDrop(song.id)}
               onDragEnd={handleDragEnd}
+              isCurrent={currentSongId === song.id}
+              isPlaying={playing && currentSongId === song.id}
+              onPlay={handleRowPlay}
             />
           );
         })}
@@ -651,6 +779,54 @@ function TracksPanel({
           onClose={() => setAdding(false)}
         />
       )}
+      {/* Single audio element drives the entire Tracks tab. Kept hidden;
+          the PlayerDock above is the user-visible transport surface. */}
+      <audio
+        ref={audioRef}
+        preload="metadata"
+        onTimeUpdate={(e) => {
+          const el = e.currentTarget;
+          if (el.duration > 0) {
+            setProgress((el.currentTime / el.duration) * 100);
+          }
+        }}
+        onEnded={() => playNext()}
+        className="hidden"
+        data-testid="audio-tracks"
+      />
+      <PlayerDock
+        track={{
+          title: currentSong?.title ?? "",
+          subtitle: `${album.artist} — ${album.title}`,
+          playable: !!currentSong?.audioUrl,
+        }}
+        hasSelection={!!currentSong}
+        playing={playing}
+        progress={progress}
+        totalSeconds={currentSong?.duration ?? 0}
+        onTogglePlay={togglePlay}
+        onPrev={playPrev}
+        onNext={playNext}
+        onSeek={(s) => {
+          if (audioRef.current) audioRef.current.currentTime = s;
+        }}
+        onVolumeChange={(level, muted) => {
+          if (!audioRef.current) return;
+          audioRef.current.volume = muted ? 0 : level / 100;
+          audioRef.current.muted = muted;
+        }}
+        coverNode={
+          album.artwork ? (
+            <div className="w-10 h-10 rounded-md flex-shrink-0 overflow-hidden bg-slate-700">
+              <img
+                src={album.artwork}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : undefined
+        }
+      />
     </section>
   );
 }
@@ -1098,6 +1274,9 @@ function TrackRow({
   onDragOver,
   onDrop,
   onDragEnd,
+  isCurrent,
+  isPlaying,
+  onPlay,
 }: {
   song: SongLite;
   albumId: string;
@@ -1110,6 +1289,9 @@ function TrackRow({
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragEnd: () => void;
+  isCurrent: boolean;
+  isPlaying: boolean;
+  onPlay: (songId: string) => void;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
   // Seamless tile-expansion: the row collapses into the dot meter at
@@ -1272,9 +1454,56 @@ function TrackRow({
         >
           <GripVertical className="w-3.5 h-3.5" />
         </button>
-        <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
-          {song.trackNumber}
-        </span>
+        {/* Track-number cell doubles as play/pause affordance.
+            • Resting: shows the track number.
+            • Row hover (master exists): swaps in a play triangle.
+            • Currently playing: pause icon in brand blue.
+            • Currently selected but paused: play in brand blue.
+            Apple Music uses this exact pattern — the number IS the play
+            button. Tracks without a master keep their number (the inline
+            "Upload master" CTA owns the action in that state). */}
+        <div className="w-7 h-7 flex-shrink-0 relative">
+          <span
+            className={[
+              "absolute inset-0 inline-flex items-center justify-end pr-0.5 text-[12px] tabular-nums font-medium transition-opacity",
+              isCurrent ? "text-[#319ED8]" : "text-slate-400",
+              song.audioUrl
+                ? isCurrent
+                  ? "opacity-0"
+                  : "group-hover:opacity-0"
+                : "",
+            ].join(" ")}
+            aria-hidden={isCurrent || undefined}
+          >
+            {song.trackNumber}
+          </span>
+          {song.audioUrl && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlay(song.id);
+              }}
+              aria-label={
+                isCurrent && isPlaying ? "Pause track" : "Play track"
+              }
+              title={isCurrent && isPlaying ? "Pause" : "Play"}
+              data-testid={`button-play-track-${song.id}`}
+              className={[
+                "absolute inset-0 inline-flex items-center justify-center rounded-md transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+                isCurrent
+                  ? "opacity-100 text-[#319ED8]"
+                  : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700",
+              ].join(" ")}
+            >
+              {isCurrent && isPlaying ? (
+                <Pause className="w-3.5 h-3.5 fill-current" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+              )}
+            </button>
+          )}
+        </div>
 
         {mode === "rename" ? (
           <div className="flex-1 min-w-0 flex items-center gap-2">
