@@ -190,12 +190,20 @@ function StatusMeter({
     if (state === "synced") {
       const Glyph =
         glyph === "sparkles" ? Sparkles : glyph === "zap" ? Zap : AudioLines;
+      // AudioLines is already shape-as-stroke (vertical bars), so leave it
+      // stroked. Sparkles and Zap are outlined silhouettes — filling them
+      // gives a chunkier, more legible read at 10px.
+      const filled = glyph === "sparkles" || glyph === "zap";
       return (
         <span
           className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center"
           style={{ backgroundColor: "#319ED8" }}
         >
-          <Glyph className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
+          <Glyph
+            className="w-2.5 h-2.5 text-white"
+            strokeWidth={filled ? 1.5 : 2.5}
+            {...(filled ? { fill: "currentColor" } : {})}
+          />
         </span>
       );
     }
