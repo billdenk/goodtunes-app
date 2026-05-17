@@ -203,26 +203,61 @@ export function PlayerDock({
       ? Volume1
       : Volume2;
 
-  const handleVolumeRail = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
+  // Both rails support DRAG, not just click. Pointer events with
+  // setPointerCapture keep the rail receiving move events even after the
+  // cursor leaves the bar bounds — matches Apple/Spotify drag-to-scrub
+  // and drag-to-volume. Without this, click-only feels laggy when a user
+  // tries to drag and nothing happens until mouseup.
+  const applyVolumeFromPointer = (
+    el: HTMLDivElement,
+    clientX: number,
+  ) => {
+    const rect = el.getBoundingClientRect();
     const pct = Math.max(
       0,
-      Math.min(100, ((e.clientX - rect.left) / rect.width) * 100),
+      Math.min(100, ((clientX - rect.left) / rect.width) * 100),
     );
     const level = Math.round(pct);
     setVolumeLevel(level);
     if (volumeMuted) setVolumeMuted(false);
     onVolumeChange?.(level, false);
   };
+  const handleVolumePointerDown = (
+    e: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    applyVolumeFromPointer(e.currentTarget, e.clientX);
+  };
+  const handleVolumePointerMove = (
+    e: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      applyVolumeFromPointer(e.currentTarget, e.clientX);
+    }
+  };
 
-  const handleScrubClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const applyScrubFromPointer = (
+    el: HTMLDivElement,
+    clientX: number,
+  ) => {
     if (!onSeek) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(
-      0,
-      Math.min(1, (e.clientX - rect.left) / rect.width),
-    );
+    const rect = el.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     onSeek(Math.round(pct * totalSeconds));
+  };
+  const handleScrubPointerDown = (
+    e: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (!onSeek) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    applyScrubFromPointer(e.currentTarget, e.clientX);
+  };
+  const handleScrubPointerMove = (
+    e: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      applyScrubFromPointer(e.currentTarget, e.clientX);
+    }
   };
 
   // Time labels — derive elapsed from progress so the host doesn't have
@@ -516,8 +551,9 @@ export function PlayerDock({
               <div className="group/vol flex items-center pr-0.5">
                 <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">
                   <div
-                    className="relative w-16 h-[3px] bg-white/25 rounded-full cursor-pointer"
-                    onClick={handleVolumeRail}
+                    className="relative w-16 h-[3px] bg-white/40 rounded-full cursor-pointer touch-none select-none"
+                    onPointerDown={handleVolumePointerDown}
+                    onPointerMove={handleVolumePointerMove}
                     data-testid="rail-volume"
                   >
                     <div
@@ -603,18 +639,21 @@ export function PlayerDock({
             </div>
             <div
               className={[
-                "group/scrub absolute left-[237px] right-[100px] bottom-1.5 h-3 flex items-center",
+                "group/scrub absolute left-[237px] right-[100px] bottom-1.5 h-3 flex items-center touch-none select-none",
                 hasSelection ? "cursor-pointer" : "cursor-default pointer-events-none",
               ].join(" ")}
               onMouseEnter={() => setScrubHover(true)}
               onMouseLeave={() => setScrubHover(false)}
-              onClick={hasSelection ? handleScrubClick : undefined}
+              onPointerDown={hasSelection ? handleScrubPointerDown : undefined}
+              onPointerMove={hasSelection ? handleScrubPointerMove : undefined}
               data-testid="rail-scrubber"
             >
-              {/* Rail bg lifted to white/25 (was white/15) so the
-                  remainder is visible at rest. White elapsed sits on
-                  top with no transition — clicks snap instantly. */}
-              <div className="relative flex-1 h-[2px] rounded-full bg-white/25 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/30 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
+              {/* Rail bg lifted to white/40 (was /25) so the remainder
+                  reads clearly on the dark pill — matches the mock.
+                  White elapsed sits on top with no transition and the
+                  rail drives off pointer events (drag-to-scrub), so the
+                  bar tracks the cursor in real time. */}
+              <div className="relative flex-1 h-[2px] rounded-full bg-white/40 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/50 group-active/scrub:h-[5px] group-active/scrub:bg-white/60">
                 <div
                   className="absolute inset-y-0 left-0 bg-white rounded-full"
                   style={{ width: `${clampedProgress}%` }}
