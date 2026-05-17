@@ -33,8 +33,6 @@ const TRACKS = [
   { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, duration: "—" },
 ];
 
-const MASTERED_COUNT = TRACKS.filter((t) => t.master).length;
-
 /* ── Animated 3-bar equalizer for the "now-playing" row indicator.
    Replaces the static ⏸ icon — same shape Apple Music uses, signals
    STATUS (this row is playing) rather than offering a control. The
@@ -744,36 +742,6 @@ function BottomDock({
   );
 }
 
-/* ── Bulk-QA chip. Lives next to the "Tracks" title so the
-   "how done is this album?" signal stays primary even when the
-   bottom dock is busy. Filled segments = mastered, hollow ring = pending. ── */
-function MasteredChip() {
-  return (
-    <div
-      className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200"
-      title={`${MASTERED_COUNT} of ${TRACKS.length} tracks have a master uploaded`}
-    >
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-        Mastered
-      </span>
-      <span className="text-[12px] font-bold tabular-nums text-slate-900">
-        {MASTERED_COUNT}<span className="text-slate-400">/{TRACKS.length}</span>
-      </span>
-      <span className="flex items-center gap-0.5" aria-hidden>
-        {TRACKS.map((t, i) => (
-          <span
-            key={i}
-            className={[
-              "w-1.5 h-1.5 rounded-full",
-              t.master ? "bg-emerald-500" : "ring-1 ring-inset ring-slate-300",
-            ].join(" ")}
-          />
-        ))}
-      </span>
-    </div>
-  );
-}
-
 export function Seamless() {
   // Playing AND expanded are independent — you can listen to Made for Us
   // while editing Storms' credits, or expand a row to QA without losing
@@ -829,17 +797,13 @@ export function Seamless() {
 
       <div className="max-w-3xl mx-auto">
         <div className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-          {/* Panel header — title + MasteredChip on the left, Add track
-              on the right. No player chrome up here anymore. */}
+          {/* Panel header — title on the left, Add track on the right. */}
           <div className="px-5 py-4 flex items-center justify-between gap-4 border-b border-slate-100">
-            <div className="min-w-0 flex items-center gap-3">
-              <div className="min-w-0">
-                <h2 className="text-slate-900 text-[14px] font-bold">Tracks</h2>
-                <p className="text-slate-500 text-[11.5px] mt-0.5 truncate">
-                  Reorder, edit, and play right from the list.
-                </p>
-              </div>
-              <MasteredChip />
+            <div className="min-w-0">
+              <h2 className="text-slate-900 text-[14px] font-bold">Tracks</h2>
+              <p className="text-slate-500 text-[11.5px] mt-0.5 truncate">
+                Reorder, edit, and play right from the list.
+              </p>
             </div>
             <button
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5"
