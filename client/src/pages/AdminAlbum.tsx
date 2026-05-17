@@ -1890,7 +1890,10 @@ function TrackRow({
                 separate boxed editor below; the editor body lives
                 inside the same card, flush against the header. */}
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
+              {/* Matches the Optional section's `mb-3.5` below so the
+                  mini-label has the same breathing room before its
+                  tile (Bill: "these two shouldn't be touching"). */}
+              <div className="flex items-center gap-2 mb-3.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Required
                 </span>
