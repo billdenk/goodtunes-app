@@ -5,6 +5,7 @@ export const modules: ModuleMap = {
   "./components/mockups/admin-album-title/TitleOverview.tsx": () => import("../components/mockups/admin-album-title/TitleOverview.tsx"),
   "./components/mockups/admin-album-tracks/TracksList.tsx": () => import("../components/mockups/admin-album-tracks/TracksList.tsx"),
   "./components/mockups/admin-albums-list/AlbumsHome.tsx": () => import("../components/mockups/admin-albums-list/AlbumsHome.tsx"),
+  "./components/mockups/admin-credits-row/Horizontal.tsx": () => import("../components/mockups/admin-credits-row/Horizontal.tsx"),
   "./components/mockups/admin-credits-row/Progressive.tsx": () => import("../components/mockups/admin-credits-row/Progressive.tsx"),
   "./components/mockups/admin-credits-row/ProgressiveV2.tsx": () => import("../components/mockups/admin-credits-row/ProgressiveV2.tsx"),
   "./components/mockups/admin-credits-row/ProgressiveV3.tsx": () => import("../components/mockups/admin-credits-row/ProgressiveV3.tsx"),
