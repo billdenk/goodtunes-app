@@ -1313,52 +1313,126 @@ function CreditsDetail({
   // bottom). Grouping mirrors that and removes the "is Mix engineer a
   // performer or…?" decision the admin currently has to make.
   type BucketKey = "song" | "performance" | "production";
+  // `quickPicks` = chips pinned at the top of the picker (the 3–4 most
+  // common roles for this bucket). `catalog` = the full alphabetized
+  // industry-standard list, shown scrollable + filterable below the
+  // search box so an artist isn't flying blind when they can't remember
+  // the right word ("topliner? co-writer? adapter?").
+  //
+  // CATALOG SOURCE — for now this is a hand-curated industry list per
+  // bucket. Future swap: DDEX `ContributorRole` taxonomy (the label/DSP
+  // standard; ~80+ roles) or muso.ai's role list when MUSO_API_KEY is
+  // wired. ASCAP is too narrow — writers/publishers only. Whichever we
+  // pick, the picker UI doesn't change; only this array does.
   const BUCKETS: {
     key: BucketKey;
     label: string;
     blurb: string;
-    roles: string[];
+    quickPicks: string[];
+    catalog: string[];
   }[] = [
     {
       key: "song",
       label: "Song",
       blurb: "Who wrote it.",
-      roles: ["Composer", "Lyricist", "Arranger"],
+      quickPicks: ["Composer", "Lyricist", "Arranger"],
+      catalog: [
+        "Adapter",
+        "Arranger",
+        "Composer",
+        "Co-writer",
+        "Librettist",
+        "Lyricist",
+        "Sample originator",
+        "Songwriter",
+        "Topliner",
+        "Translator",
+      ],
     },
     {
       key: "performance",
       label: "Performance",
       blurb: "Who's on the record.",
-      roles: [
-        "Lead vocals",
-        "Backing vocals",
+      quickPicks: ["Lead vocals", "Backing vocals", "Acoustic guitar", "Drums"],
+      catalog: [
+        "Accordion",
         "Acoustic guitar",
-        "Electric guitar",
+        "Backing vocals",
+        "Banjo",
         "Bass",
+        "Bass guitar",
+        "Cello",
+        "Choir",
+        "Clarinet",
+        "Double bass",
         "Drums",
+        "Electric guitar",
+        "Featured artist",
+        "Fiddle",
+        "Flute",
+        "Guest vocals",
+        "Harmonica",
+        "Harp",
+        "Horns",
         "Keys",
+        "Lead vocals",
+        "Mandolin",
+        "Organ",
+        "Pedal steel",
+        "Percussion",
+        "Piano",
+        "Saxophone",
+        "Slide guitar",
+        "Strings",
+        "Synthesizer",
+        "Trombone",
+        "Trumpet",
+        "Turntables",
+        "Ukulele",
+        "Upright bass",
+        "Viola",
+        "Violin",
       ],
     },
     {
       key: "production",
       label: "Production",
       blurb: "Who shaped how it sounds.",
-      roles: [
-        "Producer",
-        "Mix engineer",
-        "Master engineer",
-        "Recorded by",
+      quickPicks: ["Producer", "Mix engineer", "Master engineer", "Recorded by"],
+      catalog: [
+        "A&R",
+        "Artwork",
+        "Assistant engineer",
+        "Conductor",
+        "Co-producer",
+        "Editor",
         "Engineer",
+        "Executive producer",
+        "Horn arranger",
+        "Liner notes",
+        "Master engineer",
+        "Mix engineer",
+        "Photography",
+        "Producer",
+        "Programmer",
+        "Recorded at",
+        "Recorded by",
+        "Recording engineer",
+        "Sound designer",
+        "String arranger",
+        "Vocal producer",
       ],
     },
   ];
-  // Lookup table: role string → bucket. Case-insensitive. Anything not
-  // in the table falls back to Performance (the broadest bucket — covers
-  // pedal steel, strings, horns, anything the artist invents).
+  // Lookup table: role string → bucket. Case-insensitive. Checks the
+  // FULL catalog (not just quickPicks), so "Pedal steel" routes to
+  // Performance even though it isn't a quick-pick chip. Anything not in
+  // any catalog falls back to Performance (the broadest bucket — covers
+  // anything the artist invents).
   const bucketForRole = (role: string): BucketKey => {
     const r = role.trim().toLowerCase();
     for (const b of BUCKETS) {
-      if (b.roles.some((x) => x.toLowerCase() === r)) return b.key;
+      if (b.catalog.some((x) => x.toLowerCase() === r)) return b.key;
     }
     return "performance";
   };
@@ -1482,16 +1556,17 @@ function CreditsDetail({
         {BUCKETS.map((bucket) => {
           const rows = rowsByBucket[bucket.key];
           const isAdding = addingBucket === bucket.key;
-          // Role chips for the picker are scoped to the bucket the user
-          // is adding to. Custom roles entered here land in this bucket.
-          const bucketRoleMatches = bucket.roles.filter((r) =>
-            r.toLowerCase().includes(roleQuery.trim().toLowerCase()),
-          );
+          // Quick-pick chips at the top of the picker are FIXED (no
+          // filter) — they're always the 3–4 most common roles for the
+          // bucket. The scrollable catalog list below the search box is
+          // what filters as the artist types.
+          const q = roleQuery.trim().toLowerCase();
+          const catalogMatches = q
+            ? bucket.catalog.filter((r) => r.toLowerCase().includes(q))
+            : bucket.catalog;
           const showCustomRole =
-            roleQuery.trim().length > 0 &&
-            !bucket.roles.some(
-              (r) => r.toLowerCase() === roleQuery.trim().toLowerCase(),
-            );
+            q.length > 0 &&
+            !bucket.catalog.some((r) => r.toLowerCase() === q);
           return (
             <section key={bucket.key}>
               {/* Bucket header — uppercase 10pt label + small blurb, with
@@ -1637,8 +1712,11 @@ function CreditsDetail({
                         <X className="w-3 h-3" />
                       </button>
                     </div>
+                    {/* Quick picks — the 3–4 most common roles for this
+                        bucket, always visible, never filtered. Lets a
+                        confident artist tap-and-go in one move. */}
                     <div className="flex flex-wrap gap-1.5">
-                      {bucketRoleMatches.map((role) => (
+                      {bucket.quickPicks.map((role) => (
                         <button
                           key={role}
                           onClick={() => handlePickRole(role)}
@@ -1647,16 +1725,11 @@ function CreditsDetail({
                           {role}
                         </button>
                       ))}
-                      {showCustomRole && (
-                        <button
-                          onClick={() => handlePickRole(roleQuery.trim())}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
-                        >
-                          <Plus className="w-3 h-3" />
-                          Use “{roleQuery.trim()}”
-                        </button>
-                      )}
                     </div>
+                    {/* Search box — drives the alphabetical catalog list
+                        below. Empty = show whole catalog; typing filters
+                        live. Enter picks the top match (or the custom
+                        value if nothing matches). */}
                     <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
                       <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                       <input
@@ -1666,8 +1739,8 @@ function CreditsDetail({
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
-                            if (bucketRoleMatches.length > 0) {
-                              handlePickRole(bucketRoleMatches[0]);
+                            if (catalogMatches.length > 0) {
+                              handlePickRole(catalogMatches[0]);
                             } else if (roleQuery.trim()) {
                               handlePickRole(roleQuery.trim());
                             }
@@ -1675,14 +1748,47 @@ function CreditsDetail({
                             handleCloseAdd();
                           }
                         }}
-                        placeholder={
-                          bucket.key === "performance"
-                            ? "Search roles, or type a custom one (Pedal steel, Strings…)"
-                            : `Search ${bucket.label.toLowerCase()} roles…`
-                        }
+                        placeholder={`Search ${bucket.label.toLowerCase()} roles… (${bucket.catalog.length})`}
                         className="flex-1 min-w-0 bg-transparent text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none"
                       />
                     </label>
+                    {/* Alphabetical catalog — scrollable list, capped at
+                        ~200px so the picker never runs off the screen.
+                        One row per role, 32px touch height. Tapping a
+                        row advances to phase 2 (person picker). */}
+                    <div className="rounded-md border border-slate-200 bg-white max-h-[200px] overflow-y-auto">
+                      {catalogMatches.length === 0 ? (
+                        <div className="px-3 py-6 text-center text-[11.5px] text-slate-400">
+                          No matches in the {bucket.label.toLowerCase()} list.
+                        </div>
+                      ) : (
+                        <ul className="divide-y divide-slate-100">
+                          {catalogMatches.map((role) => (
+                            <li key={role}>
+                              <button
+                                onClick={() => handlePickRole(role)}
+                                className="w-full text-left px-3 py-2 text-[12.5px] text-slate-700 hover:bg-[#319ED8]/5 active:bg-[#319ED8]/10 focus-visible:outline-none focus-visible:bg-[#319ED8]/5"
+                              >
+                                {role}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {/* Custom role fallback — only appears when the query
+                        doesn't match any catalog entry. Whatever the
+                        artist typed becomes a brand-new role string,
+                        scoped to this bucket. */}
+                    {showCustomRole && (
+                      <button
+                        onClick={() => handlePickRole(roleQuery.trim())}
+                        className="w-full inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-md border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Use “{roleQuery.trim()}” as a custom {bucket.label.toLowerCase()} role
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="mt-2 rounded-md border border-[#319ED8]/40 bg-[#319ED8]/5 p-3 space-y-2">
