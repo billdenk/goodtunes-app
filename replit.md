@@ -40,6 +40,9 @@ Mobile-first, Apple-Music-inspired web player.
 ### Spelling
 - Use **US English** for all user-facing strings (e.g. "color", not "colour"; "favorite", not "favourite"). Code identifiers can stay as they are; only the visible UI copy needs to read American.
 
+### Person sheet — content guardrails
+The public, fan-facing Person sheet (and any artist bio surface we ingest) must **not** include legal-issue, criminal-allegation, lawsuit, or controversy content, even when the source (Wikipedia, Roon, MusicBrainz, etc.) has those sections. When ingesting biographies, filter out sections titled along the lines of "Legal issues", "Allegations", "Controversy", "Lawsuits", or any incident/court coverage — keep early life, career, discography, charity work, family, and music-related content only. This is a product rule, not a one-off Nick decision.
+
 ### Playlist covers
 - Always show the actual artwork mosaic (gradient fallback only when truly empty).
 - Adapt the layout to the count of unique album artworks:
