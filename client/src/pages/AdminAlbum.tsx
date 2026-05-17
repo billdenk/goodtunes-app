@@ -1731,8 +1731,8 @@ function TrackRow({
           existing inline editors below — zero new editor code, just a
           tile-based entry point for each one. */}
       {expanded && (
-        <div className="px-5 sm:px-12 pb-4 -mt-1 space-y-3">
-          <div className="space-y-3">
+        <div className="pl-12 sm:pl-20 pr-8 sm:pr-16 pb-5 -mt-1 space-y-4">
+          <div className="space-y-4">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
