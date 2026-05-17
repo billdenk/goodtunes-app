@@ -3869,69 +3869,72 @@ function RichPreviewEditor({
               style={{ left: `${draftLeft}%`, width: `${widthPct}%` }}
               data-testid={`preview-window-handle-${song.id}`}
             >
-              {/* Window content — big bold start time anchored toward
-                  the TOP of the window (Bill: "larger and higher up in
-                  the slider"), with the implied end time as a smaller
-                  secondary label beneath it. The full window is the
-                  drag handle; the tap zones inside it for fine-nudge
-                  are separate overlay buttons. */}
+              {/* Window content — start time anchored to the LEFT
+                  ("that's where the window starts from"), end time
+                  smaller in the top-right corner. Each time stacks
+                  over its own nudge chevron so the gesture matches
+                  the meaning: left arrow nudges the start (= moves
+                  the whole window earlier), right arrow nudges later.
+                  All labels are pointer-events-none so the body of
+                  the window remains a single grab handle. */}
               <div
                 className={[
-                  "absolute inset-0 flex flex-col items-center justify-start pt-1.5 pointer-events-none select-none",
-                  locked ? "text-emerald-900/85" : "text-amber-900/95",
+                  "absolute inset-0 px-2 pt-1.5 pb-1 pointer-events-none select-none",
+                  locked ? "text-emerald-900/90" : "text-amber-900/95",
                 ].join(" ")}
                 data-testid={`label-preview-start-${song.id}`}
               >
-                <span className="text-[22px] leading-none font-bold tabular-nums tracking-tight drop-shadow-sm">
-                  {draftStartLabel}
-                </span>
-                <span
-                  className={[
-                    "mt-0.5 text-[10px] font-medium tabular-nums leading-none",
-                    locked ? "text-emerald-900/55" : "text-amber-900/60",
-                  ].join(" ")}
-                >
-                  → {draftEndLabel}
-                </span>
-              </div>
+                {/* Start time — big, top-left, with left nudge below */}
+                <div className="absolute left-2 top-1.5 flex flex-col items-start gap-0.5">
+                  <span className="text-[22px] leading-none font-bold tabular-nums tracking-tight drop-shadow-sm">
+                    {draftStartLabel}
+                  </span>
+                  {!locked && (
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nudgeSec(e.shiftKey ? -0.1 : -1);
+                      }}
+                      aria-label="Nudge start earlier (Shift = 0.1 sec)"
+                      title="Earlier · Shift-click for 0.1 sec"
+                      className="pointer-events-auto w-6 h-6 -ml-1 rounded-md inline-flex items-center justify-center text-amber-900/75 hover:text-amber-900 hover:bg-amber-400/30 transition-colors"
+                      data-testid={`button-nudge-back-${song.id}`}
+                    >
+                      <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  )}
+                </div>
 
-              {/* In-window nudge tap zones — only shown when unlocked
-                  and the window has enough room (>60px) to host them
-                  without crowding the labels. Tap left chevron = -1s;
-                  Shift-tap = -0.1s. e.stopPropagation() so the parent
-                  drag handler doesn't claim the tap. */}
-              {!locked && (
-                <>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      nudgeSec(e.shiftKey ? -0.1 : -1);
-                    }}
-                    aria-label="Nudge start earlier (Shift = 0.1 sec)"
-                    title="Earlier · Shift-click for 0.1 sec"
-                    className="absolute left-0 top-0 bottom-0 w-6 inline-flex items-center justify-center text-amber-900/70 hover:text-amber-900 hover:bg-amber-400/30 rounded-l-md transition-colors"
-                    data-testid={`button-nudge-back-${song.id}`}
+                {/* End time — smaller, top-right, with right nudge below */}
+                <div className="absolute right-2 top-2 flex flex-col items-end gap-0.5">
+                  <span
+                    className={[
+                      "text-[11px] font-medium tabular-nums leading-none",
+                      locked ? "text-emerald-900/55" : "text-amber-900/65",
+                    ].join(" ")}
                   >
-                    <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
-                  </button>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      nudgeSec(e.shiftKey ? 0.1 : 1);
-                    }}
-                    aria-label="Nudge start later (Shift = 0.1 sec)"
-                    title="Later · Shift-click for 0.1 sec"
-                    className="absolute right-0 top-0 bottom-0 w-6 inline-flex items-center justify-center text-amber-900/70 hover:text-amber-900 hover:bg-amber-400/30 rounded-r-md transition-colors"
-                    data-testid={`button-nudge-forward-${song.id}`}
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />
-                  </button>
-                </>
-              )}
+                    → {draftEndLabel}
+                  </span>
+                  {!locked && (
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nudgeSec(e.shiftKey ? 0.1 : 1);
+                      }}
+                      aria-label="Nudge start later (Shift = 0.1 sec)"
+                      title="Later · Shift-click for 0.1 sec"
+                      className="pointer-events-auto w-5 h-5 -mr-0.5 rounded-md inline-flex items-center justify-center text-amber-900/65 hover:text-amber-900 hover:bg-amber-400/30 transition-colors"
+                      data-testid={`button-nudge-forward-${song.id}`}
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           {/* Time axis — derived from real duration */}
