@@ -21,13 +21,16 @@ const NavItem = ({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center gap-[3px] min-w-[64px] py-1"
+      // Apple Music's tab bar wraps **icon + label** in the active pill,
+      // not just the icon. We keep the icon box + label position identical
+      // (w-14 h-8 centering wrapper, gap-[3px], py-1) and only relocate the
+      // tinted bg from the inner icon box onto the outer column so the pill
+      // grows to enclose both rows. Nothing moves; only the chip grows.
+      className="flex flex-col items-center gap-[3px] min-w-[64px] py-1 rounded-2xl transition-colors duration-200"
+      style={active ? { background: "rgba(49,158,216,0.18)" } : {}}
       data-testid={testId}
     >
-      <div
-        className="w-14 h-8 flex items-center justify-center rounded-2xl transition-all duration-200"
-        style={active ? { background: "rgba(49,158,216,0.18)" } : {}}
-      >
+      <div className="w-14 h-8 flex items-center justify-center">
         <div className={`transition-all duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}>
           {icon(active)}
         </div>
