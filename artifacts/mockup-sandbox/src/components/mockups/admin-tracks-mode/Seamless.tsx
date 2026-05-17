@@ -750,22 +750,22 @@ function BottomDock({
           than running edge-to-edge. The hairline below is bumped to 3px
           + bg-white/25 so the visible strip reads clearly. */}
       <div className="relative bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden rounded-full">
-        {/* Compact-mode top hairline scrubber — Apple's narrow-viewport
-            pattern: when the dock can't afford an inset bar between
-            clusters, the progress moves to a thin strip across the very
-            top edge of the pill. `overflow-hidden` on the pill clips the
-            hairline to the rounded shape so it tucks naturally into the
-            curve at both ends. */}
-        {compact && hasSelection && (
-          <div className="absolute top-0 left-0 right-0 h-[3px] z-10 pointer-events-none">
-            <div className="relative h-full bg-white/25">
-              <div
-                className="absolute inset-y-0 left-0 bg-white transition-all"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-        )}
+        {/* Compact mode has NO inline progress bar.
+
+            We tried a 3px top-edge hairline (bg-white/25 track + bright
+            white fill) tucked into the rounded-full capsule. At wide
+            widths the curve-clip read as "a thin scrubber across the
+            top." At narrow widths (~640px) it read as a flat horizontal
+            strip cutting awkwardly across the top of a curved pill — the
+            hard edge of the fill at 42% looked like an overlapping
+            element rather than a progress indicator. Bill flagged it
+            repeatedly.
+
+            Apple's narrow mini-player at the bottom of iPhone screens
+            does the same thing we're doing now: cover + transport +
+            title, no inline scrubber. Tap to expand for scrubbing.
+            That's the cleanest pattern at this width and removes the
+            visual ambiguity entirely. */}
         <div className="flex items-center gap-1.5 px-3 py-4">
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
