@@ -30,6 +30,12 @@ import {
   CheckCircle2,
   Ban,
   Lock,
+  ChevronDown,
+  Disc3,
+  Headphones,
+  FileText,
+  Users,
+  Check,
 } from "lucide-react";
 import {
   Popover,
@@ -945,6 +951,145 @@ function dotHint(label: string, state: DotState): string {
   return `${label} not started`;
 }
 
+/* ── Status tile (expanded row, REQUIRED + 3-up OPTIONAL) ─────────────
+   Graduated 1:1 from the Seamless mockup. Same two shapes:
+     • emphasized = full-width REQUIRED tile (Master)
+     • compact     = 3-up grid OPTIONAL tile (Preview / Lyrics / Credits)
+   ok=true ⇒ emerald check badge on the icon; ok=false ⇒ amber for
+   "required" severity and slate for "soft" severity. Hover reveals a
+   pencil glyph so the affordance reads as "tap to edit." */
+function StatusBadge({
+  ok,
+  icon: Icon,
+  label,
+  subtitle,
+  severity = "soft",
+  size = "default",
+  compact = false,
+  onClick,
+  testId,
+  buttonRef,
+}: {
+  ok: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  subtitle?: string;
+  severity?: "required" | "soft";
+  size?: "default" | "emphasized";
+  compact?: boolean;
+  onClick?: () => void;
+  testId?: string;
+  buttonRef?: React.Ref<HTMLButtonElement>;
+}) {
+  const notOkIcon =
+    severity === "required"
+      ? "bg-amber-50 text-amber-600"
+      : "bg-slate-100 text-slate-500";
+  const emphasized = size === "emphasized";
+  if (compact) {
+    return (
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onClick}
+        data-testid={testId}
+        className="group/card flex flex-col items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-center w-full transition-all relative focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+      >
+        <span
+          className={[
+            "w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0 relative",
+            ok ? "bg-emerald-50 text-emerald-600" : notOkIcon,
+          ].join(" ")}
+        >
+          <Icon className="w-4 h-4" />
+          {ok && (
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 inline-flex items-center justify-center ring-2 ring-white">
+              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3.5} />
+            </span>
+          )}
+        </span>
+        <div className="text-[11px] font-semibold text-slate-900 truncate w-full">
+          {label}
+        </div>
+        {subtitle && (
+          <div className="text-[10px] text-slate-500 truncate w-full leading-tight">
+            {subtitle}
+          </div>
+        )}
+        <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/card:opacity-100 transition-opacity absolute top-1.5 right-1.5" />
+      </button>
+    );
+  }
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className={[
+        "group/card flex items-center justify-between gap-2 rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left w-full transition-all focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
+        emphasized ? "px-4 py-3" : "px-3 py-2",
+      ].join(" ")}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span
+          className={[
+            "rounded-md inline-flex items-center justify-center flex-shrink-0",
+            emphasized ? "w-10 h-10" : "w-7 h-7",
+            ok ? "bg-emerald-50 text-emerald-600" : notOkIcon,
+          ].join(" ")}
+        >
+          <Icon className={emphasized ? "w-5 h-5" : "w-3.5 h-3.5"} />
+        </span>
+        <div className="min-w-0">
+          <div
+            className={[
+              "font-semibold text-slate-900 truncate",
+              emphasized ? "text-[14px]" : "text-[12px]",
+            ].join(" ")}
+          >
+            {label}
+          </div>
+          {subtitle && (
+            <div
+              className={[
+                "text-slate-500 truncate leading-tight",
+                emphasized ? "text-[11.5px] mt-0.5" : "text-[10px]",
+              ].join(" ")}
+            >
+              {subtitle}
+            </div>
+          )}
+        </div>
+      </div>
+      <span
+        className={[
+          "inline-flex items-center justify-center flex-shrink-0 relative",
+          emphasized ? "w-6 h-6" : "w-5 h-5",
+        ].join(" ")}
+      >
+        {ok && (
+          <Check
+            className={[
+              "text-emerald-600 group-hover/card:opacity-0 transition-opacity",
+              emphasized ? "w-4 h-4" : "w-3.5 h-3.5",
+            ].join(" ")}
+          />
+        )}
+        <Pencil
+          className={[
+            "text-slate-500 transition-opacity",
+            emphasized ? "w-4 h-4" : "w-3.5 h-3.5",
+            ok
+              ? "absolute inset-0 m-auto opacity-0 group-hover/card:opacity-100"
+              : "opacity-0 group-hover/card:opacity-100",
+          ].join(" ")}
+        />
+      </span>
+    </button>
+  );
+}
+
 function TrackRow({
   song,
   albumId,
@@ -971,6 +1116,12 @@ function TrackRow({
   onDragEnd: () => void;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
+  // Seamless tile-expansion: the row collapses into the dot meter at
+  // rest, and pops open into REQUIRED Master + 3-up OPTIONAL tiles when
+  // the artist taps the chevron (or the title). Any time an editor is
+  // open we force-expand so the tile context stays visible while editing.
+  const [userExpanded, setUserExpanded] = useState(false);
+  const expanded = userExpanded || mode !== "view";
   const [draft, setDraft] = useState(song.title);
   const inputRef = useRef<HTMLInputElement>(null);
   const pencilRef = useRef<HTMLButtonElement>(null);
@@ -1176,31 +1327,37 @@ function TrackRow({
             <div className="flex-1 min-w-0">
               <button
                 type="button"
-                onClick={onOpen}
+                onClick={() => setUserExpanded((v) => !v)}
+                aria-expanded={expanded}
                 className="block w-full text-left"
                 data-testid={`button-open-track-${song.id}`}
               >
                 <div
-                  className="text-slate-900 text-[13.5px] font-medium truncate"
+                  className={[
+                    "text-[13.5px] font-medium truncate",
+                    expanded ? "text-[#319ED8]" : "text-slate-900",
+                  ].join(" ")}
                   data-testid={`text-track-title-${song.id}`}
                 >
                   {song.title}
                 </div>
               </button>
-              {(() => {
+              {/* Collapsed-only status row. When the row is expanded the
+                  REQUIRED / OPTIONAL tile grid below carries the same
+                  signal more clearly, so the inline dots stand down. */}
+              {!expanded && (() => {
                 const hasMaster = !!song.audioUrl;
                 if (!hasMaster) {
-                  // Master is the gate — no master means there's nothing
-                  // to do for the other pieces yet, so we collapse the
-                  // status meter into a single upload CTA.
+                  // Master is the gate — single Upload CTA, no other dots.
                   return (
                     <div className="mt-1">
                       <button
                         ref={masterChipRef}
                         type="button"
-                        onClick={() =>
-                          setMode((m) => (m === "audio" ? "view" : "audio"))
-                        }
+                        onClick={() => {
+                          setUserExpanded(true);
+                          setMode("audio");
+                        }}
                         className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                         data-testid={`button-edit-master-${song.id}`}
                       >
@@ -1210,13 +1367,6 @@ function TrackRow({
                     </div>
                   );
                 }
-                // Master is uploaded — derive the three optional dots.
-                // Preview dot:
-                //   · auto-derived from master (default) → green check
-                //   · admin hand-picked a window → gold disc + ClipGlyph
-                // The server enforces an atomic window (both fields null
-                // or both finite); we key state off start only so the row
-                // dot and the in-editor pip never disagree.
                 const previewState: DotState =
                   song.previewStartMs != null ? "custom" : "done";
                 const lyricsState: DotState = song.instrumental
@@ -1240,7 +1390,6 @@ function TrackRow({
                     role="group"
                     aria-label="Track completion"
                   >
-                    {/* Preview — informational only in v1; auto from master. */}
                     <span
                       className="w-6 h-6 inline-flex items-center justify-center"
                       role="img"
@@ -1250,80 +1399,24 @@ function TrackRow({
                     >
                       {renderDot(previewState)}
                     </span>
-                    {/* Lyrics dot — click to edit. */}
-                    <button
-                      ref={lyricsChipRef}
-                      type="button"
-                      onClick={() =>
-                        setMode((m) => (m === "lyrics" ? "view" : "lyrics"))
-                      }
-                      aria-label={`Edit lyrics — ${dotHint("Lyrics", lyricsState)}`}
+                    <span
+                      className="w-6 h-6 inline-flex items-center justify-center"
+                      role="img"
+                      aria-label={dotHint("Lyrics", lyricsState)}
                       title={dotHint("Lyrics", lyricsState)}
-                      className="w-6 h-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
                       data-testid={`dot-lyrics-${song.id}`}
                     >
                       {renderDot(lyricsState)}
-                    </button>
-                    {/* Credits dot — click to edit. */}
-                    <button
-                      ref={creditsChipRef}
-                      type="button"
-                      onClick={() =>
-                        setMode((m) => (m === "credits" ? "view" : "credits"))
-                      }
-                      aria-label={`Edit credits — ${dotHint("Credits", creditsState)}`}
+                    </span>
+                    <span
+                      className="w-6 h-6 inline-flex items-center justify-center"
+                      role="img"
+                      aria-label={dotHint("Credits", creditsState)}
                       title={dotHint("Credits", creditsState)}
-                      className="w-6 h-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
                       data-testid={`dot-credits-${song.id}`}
                     >
                       {renderDot(creditsState)}
-                    </button>
-                    {/* Quiet text link to re-open the master/audio editor —
-                        the dots above are status-only for Preview, so the
-                        admin still needs a way to replace the master file. */}
-                    <button
-                      ref={masterChipRef}
-                      type="button"
-                      onClick={() =>
-                        setMode((m) => (m === "audio" ? "view" : "audio"))
-                      }
-                      aria-label="Manage master audio file"
-                      title="Master audio uploaded — click to replace or remove"
-                      className="ml-1 inline-flex items-center gap-1 px-1.5 h-5 rounded text-[10.5px] text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
-                      data-testid={`button-edit-master-${song.id}`}
-                    >
-                      <Music className="w-2.5 h-2.5" />
-                      Master
-                    </button>
-                    {/* Sync-timing link — always reachable so admins can
-                        drop a .vtt at any point. The Lyrics dot's wave
-                        glyph carries the "is sync present" signal; this
-                        link is purely an editor entry-point. Hidden if
-                        the track is marked instrumental. */}
-                    {!song.instrumental && (
-                      <button
-                        ref={syncedChipRef}
-                        type="button"
-                        onClick={() =>
-                          setMode((m) => (m === "synced" ? "view" : "synced"))
-                        }
-                        aria-label="Edit synced-lyrics timing"
-                        title={
-                          (song.syncedLyrics?.length ?? 0) > 0
-                            ? `GoodSync™ · ${song.syncedLyrics?.length ?? 0} cues`
-                            : "Add per-line timing (drag a .vtt file)"
-                        }
-                        className={
-                          "inline-flex items-center gap-1 px-1.5 h-5 rounded text-[10.5px] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
-                          ((song.syncedLyrics?.length ?? 0) > 0
-                            ? "text-[#319ED8] hover:bg-[#319ED8]/10"
-                            : "text-slate-400 hover:text-slate-700 hover:bg-slate-100")
-                        }
-                        data-testid={`button-edit-synced-${song.id}`}
-                      >
-                        Timing
-                      </button>
-                    )}
+                    </span>
                   </div>
                 );
               })()}
@@ -1335,77 +1428,270 @@ function TrackRow({
               {formatDuration(song.duration)}
             </span>
             <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Rename pencil — always visible (on hover when collapsed,
+                  pinned when expanded so the affordance stays reachable
+                  while the tile grid is open). */}
               <button
                 ref={pencilRef}
                 type="button"
                 onClick={() => setMode("rename")}
                 aria-label="Rename track"
                 title="Rename"
-                className="w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                className={[
+                  "w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all focus:opacity-100",
+                  expanded
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100",
+                ].join(" ")}
                 data-testid={`button-rename-track-${song.id}`}
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
+              {/* Destructive cluster — only surfaced when the row is open.
+                  Hide+Delete sit behind a hairline divider so a thumb can't
+                  slide from a benign control straight into the trash. */}
+              {expanded && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      toast({
+                        title: "Hide track",
+                        description: "Hide / Park is coming soon.",
+                      })
+                    }
+                    aria-label="Hide track"
+                    title="Hide track (parks it — reversible)"
+                    className="w-7 h-7 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center"
+                    data-testid={`button-hide-track-${song.id}`}
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                  </button>
+                  <span
+                    className="mx-0.5 h-4 w-px bg-slate-200"
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
+                        )
+                      ) {
+                        deleteMut.mutate();
+                      }
+                    }}
+                    disabled={deleteMut.isPending}
+                    aria-label="Delete track"
+                    title="Delete"
+                    className="w-7 h-7 rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center disabled:opacity-50"
+                    data-testid={`button-delete-track-${song.id}`}
+                  >
+                    {deleteMut.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </>
+              )}
+              {/* Chevron — the canonical expand/collapse affordance. Also
+                  reachable by clicking the title. */}
               <button
                 type="button"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
-                    )
-                  ) {
-                    deleteMut.mutate();
-                  }
-                }}
-                disabled={deleteMut.isPending}
-                aria-label="Delete track"
-                title="Delete"
-                className="w-7 h-7 rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
-                data-testid={`button-delete-track-${song.id}`}
+                onClick={() => setUserExpanded((v) => !v)}
+                aria-expanded={expanded}
+                aria-label={expanded ? "Collapse track" : "Expand track"}
+                title={expanded ? "Collapse" : "Expand"}
+                className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                data-testid={`button-expand-track-${song.id}`}
               >
-                {deleteMut.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="w-3.5 h-3.5" />
-                )}
+                <ChevronDown
+                  className={[
+                    "w-4 h-4 transition-transform",
+                    expanded ? "rotate-180" : "",
+                  ].join(" ")}
+                />
               </button>
             </div>
           </>
         )}
       </div>
 
-      {mode === "audio" && (
-        <AudioEditor
-          song={song}
-          albumId={albumId}
-          onClose={closeAudio}
-          onSaved={invalidate}
-        />
-      )}
+      {/* ── Expanded body: REQUIRED Master tile + 3-up OPTIONAL grid,
+          followed by whichever editor is open, then a Track ID footer.
+          Graduated from the Seamless mockup; tile taps reuse the
+          existing inline editors below — zero new editor code, just a
+          tile-based entry point for each one. */}
+      {expanded && (
+        <div className="px-5 sm:px-12 pb-4 -mt-1 space-y-3">
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Required
+                </span>
+                <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+              </div>
+              <StatusBadge
+                ok={!!song.audioUrl}
+                icon={Disc3}
+                label="Master"
+                subtitle={
+                  song.audioUrl
+                    ? "Uploaded · tap to replace"
+                    : "Required to publish"
+                }
+                severity="required"
+                size="emphasized"
+                onClick={() =>
+                  setMode((m) => (m === "audio" ? "view" : "audio"))
+                }
+                testId={`tile-master-${song.id}`}
+                buttonRef={masterChipRef}
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Optional
+                </span>
+                <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <StatusBadge
+                  ok={song.previewStartMs != null}
+                  icon={Headphones}
+                  label="Preview"
+                  subtitle={
+                    song.previewStartMs != null
+                      ? "Custom 30-sec clip"
+                      : "Auto · first 30 sec"
+                  }
+                  severity="soft"
+                  compact
+                  onClick={() => {
+                    if (!song.audioUrl) {
+                      toast({
+                        title: "Upload a master first",
+                        description: "The preview window comes from the master file.",
+                      });
+                      return;
+                    }
+                    setMode((m) => (m === "audio" ? "view" : "audio"));
+                  }}
+                  testId={`tile-preview-${song.id}`}
+                />
+                <StatusBadge
+                  ok={
+                    song.instrumental ||
+                    (song.syncedLyrics?.length ?? 0) > 0 ||
+                    !!(song.lyrics && song.lyrics.trim())
+                  }
+                  icon={FileText}
+                  label="Lyrics"
+                  subtitle={
+                    song.instrumental
+                      ? "Instrumental"
+                      : (song.syncedLyrics?.length ?? 0) > 0
+                        ? `GoodSync™ · ${song.syncedLyrics?.length} cues`
+                        : undefined
+                  }
+                  severity="soft"
+                  compact
+                  onClick={() =>
+                    setMode((m) => (m === "lyrics" ? "view" : "lyrics"))
+                  }
+                  testId={`tile-lyrics-${song.id}`}
+                  buttonRef={lyricsChipRef}
+                />
+                <StatusBadge
+                  ok={
+                    (credits?.writers.length ?? 0) > 0 &&
+                    (credits?.performers.length ?? 0) > 0
+                  }
+                  icon={Users}
+                  label="Credits"
+                  severity="soft"
+                  compact
+                  onClick={() =>
+                    setMode((m) => (m === "credits" ? "view" : "credits"))
+                  }
+                  testId={`tile-credits-${song.id}`}
+                  buttonRef={creditsChipRef}
+                />
+              </div>
+              {/* Sync-timing entry — quiet text link under the OPTIONAL
+                  grid. Hidden for instrumentals (nothing to time) and
+                  while a master file is missing. GoodSync™ count surfaces
+                  when cues exist so the chip carries the same status
+                  signal the old Timing chip used to. */}
+              {!song.instrumental && song.audioUrl && (
+                <div className="flex justify-end pt-1.5">
+                  <button
+                    ref={syncedChipRef}
+                    type="button"
+                    onClick={() =>
+                      setMode((m) => (m === "synced" ? "view" : "synced"))
+                    }
+                    className={
+                      "inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
+                      ((song.syncedLyrics?.length ?? 0) > 0
+                        ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-100")
+                    }
+                    data-testid={`button-edit-synced-${song.id}`}
+                  >
+                    {(song.syncedLyrics?.length ?? 0) > 0
+                      ? `GoodSync™ · ${song.syncedLyrics?.length} cues`
+                      : "Add line timing…"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
 
-      {mode === "lyrics" && (
-        <LyricsEditor
-          song={song}
-          onClose={closeLyrics}
-          onSaved={invalidate}
-        />
-      )}
+          {mode === "audio" && (
+            <AudioEditor
+              song={song}
+              albumId={albumId}
+              onClose={closeAudio}
+              onSaved={invalidate}
+            />
+          )}
 
-      {mode === "synced" && (
-        <SyncedLyricsEditor
-          song={song}
-          onClose={closeSynced}
-          onSaved={invalidate}
-        />
-      )}
+          {mode === "lyrics" && (
+            <LyricsEditor
+              song={song}
+              onClose={closeLyrics}
+              onSaved={invalidate}
+            />
+          )}
 
-      {mode === "credits" && (
-        <CreditsEditor
-          songId={song.id}
-          albumId={albumId}
-          credits={credits}
-          onClose={closeCredits}
-        />
+          {mode === "synced" && (
+            <SyncedLyricsEditor
+              song={song}
+              onClose={closeSynced}
+              onSaved={invalidate}
+            />
+          )}
+
+          {mode === "credits" && (
+            <CreditsEditor
+              songId={song.id}
+              albumId={albumId}
+              credits={credits}
+              onClose={closeCredits}
+            />
+          )}
+
+          <div className="pt-1">
+            <span className="text-[11px] text-slate-400">
+              Track ID · {song.id}
+            </span>
+          </div>
+        </div>
       )}
     </li>
   );
