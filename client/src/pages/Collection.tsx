@@ -114,15 +114,7 @@ export function Collection() {
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden">
-      <section
-        className="relative w-full max-w-[390px] h-screen text-white flex flex-col"
-        style={{
-          backgroundColor: "#00062B",
-          backgroundImage: `url(${certBgUrl})`,
-          backgroundSize: "100% 100%",
-          backgroundRepeat: "no-repeat",
-        }}
-      >
+      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
 
         <header className="relative z-10 flex items-end px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Collection</h1>
