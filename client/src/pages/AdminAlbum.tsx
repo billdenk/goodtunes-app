@@ -1458,18 +1458,22 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
           · no lyrics or singer credits
         </span>
       </div>
-      {/* Force iOS-on-white look. The shadcn Switch's unchecked state
-          falls back to `bg-input`, which our theme tunes to dark navy
-          for the player's dark surfaces — it renders black here on the
-          admin's white card. Pin both states explicitly so this toggle
-          reads correctly regardless of theme: light slate off, brand
-          blue on. */}
+      {/* Apple HIG Switch — pinned explicitly because shadcn's
+          defaults pull `bg-input` (our dark-navy player token) for the
+          track and `bg-background` (also dark navy) for the thumb,
+          which renders black-on-blue on this white admin card.
+          iOS Switch is a universal convention:
+            · OFF — #E9E9EB track, white thumb
+            · ON  — #34C759 (system green) track, white thumb
+          We use green even though our brand is blue because Apple
+          uses green for *every* switch in iOS regardless of app
+          brand — the affordance reads as "on" instantly. */}
       <Switch
         checked={checked}
         disabled={toggleMut.isPending}
         onCheckedChange={(next) => toggleMut.mutate(next)}
         aria-label="Mark this track as instrumental"
-        className="data-[state=unchecked]:bg-slate-200 data-[state=checked]:bg-[#319ED8]"
+        className="data-[state=unchecked]:bg-[#E9E9EB] data-[state=checked]:bg-[#34C759] [&>span]:!bg-white [&>span]:!shadow-sm"
       />
     </div>
   );
