@@ -569,12 +569,13 @@ function BottomDock({
       className="absolute left-1/2 -translate-x-1/2 bottom-4 z-20"
       style={hasSelection ? { width: "min(760px, calc(100% - 32px))" } : undefined}
     >
-      {/* Asymmetric vertical padding (pt-2 / pb-4) reserves a visible
-          breathing zone below the content for the inset progress bar —
-          Apple's mini-player floats the bar BELOW the cover with
-          clearance on both sides, never flush against either edge. */}
+      {/* Symmetric py-3 keeps every transport button + the album cover
+          vertically centered in the pill (their shared items-center row
+          centers on the tallest element, the 44px Play button / cover).
+          The bar lives in the bottom slice of that padding zone — see
+          the absolute-positioned bar below for its breathing math. */}
       <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
-        <div className="flex items-center gap-1.5 px-3 pt-2 pb-4">
+        <div className="flex items-center gap-1.5 px-3 py-3">
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
