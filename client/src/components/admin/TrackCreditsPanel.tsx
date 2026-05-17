@@ -698,8 +698,14 @@ export default function TrackCreditsPanel({
 
     for (const item of all) {
       const bucket = bucketFor(item._kind, item.role);
-      const key =
-        item.personId ?? `name:${item.name.trim().toLowerCase()}`;
+      // Group by (personId + name-snapshot) so that intentional dual-name
+      // credits — Elton John / Reginald Dwight, Ringo / Richard Starkey —
+      // render as two cards on the song even after aliasing collapses them
+      // to one canonical Person row.
+      const display = item.name.trim().toLowerCase();
+      const key = item.personId
+        ? `id:${item.personId}|${display}`
+        : `name:${display}`;
       let card = buckets[bucket].get(key);
       if (!card) {
         card = {
