@@ -27,11 +27,16 @@ const NavItem = ({
       // tinted bg from the inner icon box onto the outer column so the pill
       // grows to enclose both rows. Nothing moves; only the chip grows.
       //
-      // Shape is `rounded-full` on purpose — at ~64×52 the column reads as
-      // a vertical capsule (hemispherical caps top/bottom), which is what
-      // Apple Music uses. `rounded-2xl` left visible corners and didn't
-      // match.
-      className="flex flex-col items-center gap-[3px] min-w-[64px] py-1 rounded-full transition-colors duration-200"
+      // Shape per Apple HIG: the active pill's long axis must run the
+      // same direction as the bar's long axis (horizontal). At
+      // min-w-[80px] × ~57px tall the pill becomes a horizontal capsule
+      // — wider than tall, with the top and bottom reading slightly
+      // flat (because width > height with rounded-full → semicircular
+      // caps on the short sides, near-straight runs on the long sides),
+      // which matches the bar's own oval. 80px is the safe ceiling: the
+      // bar inner width is ~350px and four items at justify-around
+      // need <=~87px each to keep visual gaps between them.
+      className="flex flex-col items-center gap-[3px] min-w-[80px] py-1 rounded-full transition-colors duration-200"
       style={active ? { background: "rgba(49,158,216,0.18)" } : {}}
       data-testid={testId}
     >
