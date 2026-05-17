@@ -25,22 +25,32 @@ import {
   VolumeX,
   Mic2,
   CheckCircle2,
-  RefreshCw,
+  AudioLines,
+  Sparkles,
+  Zap,
   Circle,
 } from "lucide-react";
 
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
-// `lyricsSync` flags GoodSync™-verified lyrics (the middle dot renders brand
-// blue instead of green to signal the premium/authenticated state).
+// `lyricsSync` flags GoodSync™-verified lyrics — value is the glyph variant
+// to render inside the brand-blue badge. TEMPORARY: rows 1, 3, 4 each carry
+// a different glyph so Bill can compare AudioLines vs Sparkles vs Zap in
+// the same column. Once a winner is picked this collapses back to a single
+// boolean and the picked glyph becomes the hard-coded one.
 // `creditsPartial` is true when the artist has filled SOME credit slots but
 // not all of them — the credits dot renders amber so the row reads as
 // "in progress" rather than "empty or done."
-const TRACKS = [
-  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: false, creditsPartial: false, duration: "3:30" },
-  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  instrumental: false, credits: false, lyricsSync: false, creditsPartial: true,  duration: "4:12" },
-  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: false, instrumental: true,  credits: true,  lyricsSync: false, creditsPartial: false, duration: "2:58" },
-  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: true,  creditsPartial: false, duration: "3:47" },
-  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, lyricsSync: false, creditsPartial: false, duration: "—" },
+type SyncGlyph = "audioLines" | "sparkles" | "zap";
+const TRACKS: {
+  n: number; title: string; master: boolean; snippet: boolean;
+  lyrics: boolean; instrumental: boolean; credits: boolean;
+  lyricsSync: false | SyncGlyph; creditsPartial: boolean; duration: string;
+}[] = [
+  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: "audioLines", creditsPartial: false, duration: "3:30" },
+  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  instrumental: false, credits: false, lyricsSync: false,        creditsPartial: true,  duration: "4:12" },
+  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: "sparkles",   creditsPartial: false, duration: "2:58" },
+  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  lyricsSync: "zap",        creditsPartial: false, duration: "3:47" },
+  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, lyricsSync: false,        creditsPartial: false, duration: "—" },
 ];
 
 /* ── Animated 3-bar equalizer for the "now-playing" row indicator.
@@ -129,7 +139,7 @@ function StatusMeter({
   // ── Master-present branch: 3 optional-piece dots ──────────────────
   type DotState = "empty" | "done" | "synced" | "partial";
   const lyricsDone = t.lyrics || t.instrumental;
-  const dots: { state: DotState; label: string; hint: string }[] = [
+  const dots: { state: DotState; glyph?: SyncGlyph; label: string; hint: string }[] = [
     {
       state: t.snippet ? "done" : "empty",
       label: "Preview",
@@ -141,6 +151,7 @@ function StatusMeter({
         : lyricsDone
         ? "done"
         : "empty",
+      glyph: t.lyricsSync || undefined,
       label: "Lyrics",
       hint: t.lyricsSync
         ? "Lyrics synced with GoodSync™"
@@ -175,19 +186,19 @@ function StatusMeter({
   // reinforces, but a deuteranopic reader can tell the four states
   // apart from silhouette alone (check vs. sync arrows vs. plain dot
   // vs. ring).
-  const renderDot = (state: DotState) => {
-    if (state === "synced")
+  const renderDot = (state: DotState, glyph?: SyncGlyph) => {
+    if (state === "synced") {
+      const Glyph =
+        glyph === "sparkles" ? Sparkles : glyph === "zap" ? Zap : AudioLines;
       return (
         <span
           className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center"
           style={{ backgroundColor: "#319ED8" }}
         >
-          <RefreshCw
-            className="w-2 h-2 text-white"
-            strokeWidth={3}
-          />
+          <Glyph className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
         </span>
       );
+    }
     if (state === "done")
       return (
         <CheckCircle2
@@ -243,7 +254,7 @@ function StatusMeter({
       <span className="flex items-center gap-1" aria-hidden>
         {dots.map((d, i) => (
           <span key={i} className="inline-flex items-center justify-center">
-            {renderDot(d.state)}
+            {renderDot(d.state, d.glyph)}
           </span>
         ))}
       </span>
