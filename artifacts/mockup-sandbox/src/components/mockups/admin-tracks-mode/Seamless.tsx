@@ -67,62 +67,67 @@ function StatusMeter({
   t: (typeof TRACKS)[number];
   onExpand: () => void;
 }) {
-  const dots = [t.master, t.snippet];
-  let word: string;
-  let tone: "ready" | "warn" | "draft";
-  if (t.master) {
-    word = "Ready";
-    tone = "ready";
-  } else if (t.snippet || t.lyrics || t.credits) {
-    word = "Master";
-    tone = "warn";
-  } else {
-    word = "Draft";
-    tone = "draft";
-  }
-  const wordColor =
-    tone === "ready"
-      ? "text-emerald-600"
-      : tone === "warn"
-      ? "text-amber-600"
-      : "text-slate-500";
-  const isClickable = tone !== "ready";
+  // Completeness meter — three dots (master · lyrics · credits) + n/3 count.
+  // Replaces the old READY/MASTER/DRAFT word + 2-dot pill. Picked from
+  // EditRowOptions Option C because:
+  //   • Shape carries the signal (filled circle vs hollow ring), so a
+  //     deuteranopic reader gets the state without depending on green.
+  //   • Compact — sits flush with the duration label at the right edge.
+  //   • No new brand colors — emerald-500 (filled) + slate hairline ring
+  //     (empty) + amber-600 (count when incomplete) reuses what's already
+  //     on the page.
+  //   • Tooltip on the wrapper expands "•○•  2/3" into a plain-English
+  //     "Master: ✓ · Lyrics: missing · Credits: ✓" line.
+  //
+  // Instrumental tracks count as "lyrics complete" — the instrumental
+  // flag is the artist explicitly saying "this song has no lyrics, that's
+  // intentional," which is the same publish-state as having a lyric sheet.
+  const dots = [
+    { ok: t.master, label: "Master" },
+    { ok: t.lyrics || t.instrumental, label: t.instrumental ? "Lyrics (instrumental)" : "Lyrics" },
+    { ok: t.credits, label: "Credits" },
+  ];
+  const complete = dots.every((d) => d.ok);
+  const filled = dots.filter((d) => d.ok).length;
+  // Clickable when incomplete so a tap routes the artist to the expanded
+  // row where Master/Lyrics/Credits live. Complete rows aren't a control —
+  // nothing left to do — so we render a plain span there.
+  const Tag = complete ? "span" : "button";
   return (
-    <button
-      type="button"
-      onClick={isClickable ? onExpand : undefined}
-      disabled={!isClickable}
+    <Tag
+      {...(complete
+        ? {}
+        : { type: "button" as const, onClick: onExpand })}
+      title={dots.map((d) => `${d.label}: ${d.ok ? "✓" : "missing"}`).join(" · ")}
       className={[
-        "flex-shrink-0 inline-flex items-center gap-2 px-2 py-1 rounded-md",
-        isClickable ? "hover:bg-slate-100" : "cursor-default",
+        "flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md",
+        complete ? "cursor-default" : "hover:bg-slate-100",
       ].join(" ")}
     >
-      <span
-        className={[
-          "text-[11px] font-semibold uppercase tracking-wider",
-          wordColor,
-        ].join(" ")}
-      >
-        {word}
-      </span>
-      <span className="flex items-center gap-1">
-        {dots.map((on, i) => (
+      {/* Shape-coded row of 3 dots — filled emerald = done, hairline ring
+          = needed. Reads at a glance even when color drops out. */}
+      <span className="flex items-center gap-0.5" aria-hidden>
+        {dots.map((d, i) => (
           <span
             key={i}
             className={[
-              "w-1.5 h-1.5 rounded-full",
-              on
-                ? tone === "warn"
-                  ? "bg-amber-500"
-                  : "bg-emerald-500"
-                : tone === "warn"
-                ? "ring-1 ring-inset ring-amber-400"
-                : "ring-1 ring-inset ring-slate-300",
+              "w-2 h-2 rounded-full",
+              d.ok
+                ? "bg-emerald-500"
+                : "bg-transparent ring-1 ring-inset ring-slate-300",
             ].join(" ")}
           />
         ))}
       </span>
-    </button>
+      <span
+        className={[
+          "text-[10.5px] font-semibold tabular-nums",
+          complete ? "text-slate-400" : "text-amber-600",
+        ].join(" ")}
+      >
+        {filled}/3
+      </span>
+    </Tag>
   );
 }
 
