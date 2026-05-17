@@ -22,32 +22,34 @@ const NavItem = ({
       type="button"
       onClick={onClick}
       // Apple Music's tab bar wraps **icon + label** in the active pill,
-      // not just the icon. We keep the icon box + label position identical
-      // (w-14 h-8 centering wrapper, gap-[3px], py-1) and only relocate the
-      // tinted bg from the inner icon box onto the outer column so the pill
-      // grows to enclose both rows. Nothing moves; only the chip grows.
+      // not just the icon. Critically: the bar, the icon, and the label
+      // are all fixed — only the highlight pill grows. The bg lives on
+      // an absolute-positioned span behind the content so we can extend
+      // the pill above/below the button's content box without nudging
+      // the icon or label by a single pixel, and without forcing the
+      // bar's padding to grow.
       //
-      // Shape per Apple HIG: the active pill's long axis must run the
-      // same direction as the bar's long axis (horizontal). At
-      // min-w-[86px] × ~57px tall the pill becomes a horizontal capsule
-      // — wider than tall, with the top and bottom reading slightly
-      // flat (because width > height with rounded-full → semicircular
-      // caps on the short sides, near-straight runs on the long sides),
-      // which matches the bar's own oval. 86px is the practical ceiling:
-      // bar inner width is ~350px and four items at justify-around need
-      // to stay under ~87px each to keep a hair of gap between them.
-      // Don't push past 86 without also widening the bar.
-      className="flex flex-col items-center gap-[3px] min-w-[86px] py-1 rounded-full transition-colors duration-200"
-      style={active ? { background: "rgba(49,158,216,0.18)" } : {}}
+      // Shape per Apple HIG: the pill's long axis must run the same
+      // direction as the bar's long axis (horizontal). At 86px wide ×
+      // ~69px tall (57 content + 6 above + 6 below) it's a horizontal
+      // capsule. 86px is the practical width ceiling — bar inner width
+      // is ~350px and four items at justify-around need <=87px each to
+      // keep a hair of gap between them.
+      className="relative flex flex-col items-center gap-[3px] min-w-[86px] py-1"
       data-testid={testId}
     >
-      <div className="w-14 h-8 flex items-center justify-center">
+      <span
+        aria-hidden
+        className="absolute inset-x-0 -inset-y-1.5 rounded-full transition-colors duration-200"
+        style={{ background: active ? "rgba(49,158,216,0.18)" : "transparent" }}
+      />
+      <div className="relative w-14 h-8 flex items-center justify-center">
         <div className={`transition-all duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}>
           {icon(active)}
         </div>
       </div>
       <span
-        className={`text-[10px] font-medium transition-colors duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}
+        className={`relative text-[10px] font-medium transition-colors duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}
       >
         {label}
       </span>
@@ -155,13 +157,12 @@ export function BottomNav() {
   return (
     <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
       <nav
-        // py-4 gives the active pill ~16px breathing room top and bottom
-        // inside the bar — matching the ~16px gap that the bar's own
-        // `rounded-full` curve leaves on the left/right of the active
-        // pill. The pill now sits visually concentric inside the bar's
-        // capsule rather than crowding the top/bottom edges. (Was py-2
-        // → py-3 → py-4 across iteration.)
-        className="pointer-events-auto absolute bottom-3 left-3 right-3 flex items-center justify-around px-2 py-4 rounded-full"
+        // Bar padding is fixed at py-3 / px-2. Don't grow it to give the
+        // active pill more room — instead, the pill's own bg (an absolute
+        // span inside the NavItem button) extends past its content box
+        // top/bottom. That way icons + labels keep their absolute screen
+        // position regardless of what the highlight looks like.
+        className="pointer-events-auto absolute bottom-3 left-3 right-3 flex items-center justify-around px-2 py-3 rounded-full"
         style={{
           ...glassStyle,
           transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)",
