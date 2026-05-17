@@ -3614,15 +3614,38 @@ function RichPreviewEditor({
           chevron — visually it reads as a header-right status
           indicator without the deeper refactor of hoisting draft
           state into ExpandedPanel itself. */}
-      {isDirty && (
-        <div className="-mt-1 flex justify-end">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-medium text-amber-800">
-            <MoveHorizontal className="w-3 h-3" />
-            Unsaved — fans still hear{" "}
-            {committedLeft < 0.5
-              ? "0:00–0:30"
-              : `${committedStartLabel}–${committedEndLabel}`}
-          </span>
+      {(isDirty || (!locked && hasCustom && committedLeft >= 0.5)) && (
+        <div className="-mt-1 flex justify-end items-center gap-2">
+          {isDirty && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+              <MoveHorizontal className="w-3 h-3" />
+              Unsaved — fans still hear{" "}
+              {committedLeft < 0.5
+                ? "0:00–0:30"
+                : `${committedStartLabel}–${committedEndLabel}`}
+            </span>
+          )}
+          {/* Reset — only appears once the preview is unlocked and a custom
+              start has been saved. Wipes back to the auto-pick (first 30s).
+              Tooltip carries the full meaning so the button can stay short
+              (Bill: "should just say 'Reset'"). */}
+          {!locked && hasCustom && committedLeft >= 0.5 && (
+            <button
+              type="button"
+              onClick={() => {
+                setCommittedLeft(0);
+                setDraftLeft(0);
+                setLocked(true);
+                saveMut.mutate(null);
+              }}
+              disabled={saveMut.isPending}
+              title="Reset to auto-pick (first 30 seconds)"
+              className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
+              data-testid={`button-preview-reset-${song.id}`}
+            >
+              Reset
+            </button>
+          )}
         </div>
       )}
 
@@ -3903,26 +3926,6 @@ function RichPreviewEditor({
           <span className="text-slate-400 ml-1">
             ends {draftEndLabel}
           </span>
-        </div>
-      )}
-
-      {/* Reset-to-auto link — only shown when a custom preview is saved */}
-      {hasCustom && committedLeft >= 0.5 && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              setCommittedLeft(0);
-              setDraftLeft(0);
-              setLocked(true);
-              saveMut.mutate(null);
-            }}
-            disabled={saveMut.isPending}
-            className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
-            data-testid={`button-preview-reset-${song.id}`}
-          >
-            Reset to auto (first 30 sec)
-          </button>
         </div>
       )}
 
