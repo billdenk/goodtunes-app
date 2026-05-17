@@ -29,14 +29,15 @@ const NavItem = ({
       //
       // Shape per Apple HIG: the active pill's long axis must run the
       // same direction as the bar's long axis (horizontal). At
-      // min-w-[80px] × ~57px tall the pill becomes a horizontal capsule
+      // min-w-[86px] × ~57px tall the pill becomes a horizontal capsule
       // — wider than tall, with the top and bottom reading slightly
       // flat (because width > height with rounded-full → semicircular
       // caps on the short sides, near-straight runs on the long sides),
-      // which matches the bar's own oval. 80px is the safe ceiling: the
-      // bar inner width is ~350px and four items at justify-around
-      // need <=~87px each to keep visual gaps between them.
-      className="flex flex-col items-center gap-[3px] min-w-[80px] py-1 rounded-full transition-colors duration-200"
+      // which matches the bar's own oval. 86px is the practical ceiling:
+      // bar inner width is ~350px and four items at justify-around need
+      // to stay under ~87px each to keep a hair of gap between them.
+      // Don't push past 86 without also widening the bar.
+      className="flex flex-col items-center gap-[3px] min-w-[86px] py-1 rounded-full transition-colors duration-200"
       style={active ? { background: "rgba(49,158,216,0.18)" } : {}}
       data-testid={testId}
     >
