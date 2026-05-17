@@ -573,23 +573,36 @@ export function Player() {
                   // nicer, but the visual gradient holds up fine with raw
                   // index distance for typical lyric densities).
                   const distance = activeLineIdx < 0 ? 0 : Math.abs(i - activeLineIdx);
-                  // Blur ramp — soft, capped so the furthest lines stay just
-                  // legible. 0 → sharp, 1 → 0.8px, 2 → 1.8px, 3 → 3px, 4+ → 4.5px.
+                  // Apple-Music GoodSync™ model: every line is the SAME
+                  // large size — differentiation comes entirely from blur
+                  // depth + opacity, never from font-size or scale. The
+                  // active line is sharp + full white; neighbors get a
+                  // soft 1px blur; lines further away pick up progressively
+                  // heavier blur. The eye "snaps" to the only sharp line
+                  // on screen without a size jump distracting from it.
+                  // Blur is GPU-expensive on iOS Safari — cap the ramp at
+                  // distance 3 and drop blur entirely past that. Distant
+                  // lines are already at 0.18–0.30 opacity, so the eye
+                  // can't tell whether they're blurred or not, but the
+                  // compositor still pays the cost. Same with willChange
+                  // below — only promote the lines that are actually
+                  // animating right now.
                   const blurPx = isActive
                     ? 0
                     : distance === 1
-                      ? 0.8
+                      ? 1.2
                       : distance === 2
-                        ? 1.8
+                        ? 2.8
                         : distance === 3
-                          ? 3
-                          : 4.5;
-                  // Opacity ramp — past lines fade faster than future ones.
+                          ? 4
+                          : 0;
+                  // Opacity ramp — past lines fade faster than upcoming
+                  // ones so the eye naturally tracks down the page.
                   const opacity = isActive
                     ? 1
                     : isPast
-                      ? Math.max(0.18, 0.55 - distance * 0.12)
-                      : Math.max(0.32, 0.85 - distance * 0.1);
+                      ? Math.max(0.18, 0.50 - distance * 0.10)
+                      : Math.max(0.30, 0.72 - distance * 0.10);
                   return (
                     <div
                       key={i}
@@ -608,19 +621,21 @@ export function Player() {
                       style={{
                         color: "#FFFFFF",
                         opacity,
+                        // Uniform weight + size across every line. Active
+                        // gets a subtle weight bump only; no size change.
                         fontWeight: isActive ? 800 : 700,
-                        // Active line is meaningfully larger so it punches
-                        // out of the blurred stack — matches Apple's effect.
-                        fontSize: isActive ? "32px" : "26px",
+                        fontSize: "28px",
                         lineHeight: 1.22,
                         filter: blurPx > 0 ? `blur(${blurPx}px)` : "none",
-                        transform: isActive ? "scale(1.02)" : "scale(1)",
-                        transformOrigin: "left center",
                         transition:
-                          "opacity 400ms ease, filter 400ms ease, font-size 350ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1), text-shadow 350ms ease",
+                          "opacity 400ms ease, filter 400ms ease, text-shadow 350ms ease",
                         textShadow: isActive ? "0 1px 18px rgba(0,0,0,0.35)" : "none",
                         letterSpacing: "-0.01em",
-                        willChange: "filter, opacity, font-size",
+                        // Only promote lines that are about to animate
+                        // (active ±2) to a composited layer. Always-on
+                        // willChange on every line stresses mobile GPU
+                        // memory for no visible gain.
+                        willChange: distance <= 2 ? "filter, opacity" : undefined,
                       }}
                       data-testid={`lyric-line-${i}`}
                       data-active={isActive}

@@ -117,8 +117,19 @@ On the web, vendor sites (Reverb, Sweetwater, Shar) all send `X-Frame-Options: d
 
 When this ports to native: swap `window.open(url)` for **`SFSafariViewController`** (iOS) / **Chrome Custom Tabs** (Android). Both are real in-app browsers that bypass `X-Frame-Options`. Preview-card UX stays unchanged; only the handoff target changes.
 
-### Synced lyrics (line-level shipped today)
-The Lyrics overlay in `client/src/pages/Player.tsx` derives **round-second timestamps** from each song's `lyrics` string by evenly distributing non-header lines across `duration`, with a small lead-in (~6%) and outro (~4%). Section headers (`[Verse 1]`, `[Chorus]`, etc.) render dimmed + uppercase, are skipped during distribution, and aren't seek targets. Active line is white + bold + 1.05× scale, past lines fade to 35%, future lines sit at 55%. Auto-scrolls active line to vertical center via `scrollIntoView({ block: "center" })`. Tap any non-header line to seek to its timestamp.
+### Synced lyrics — GoodSync™ (line-level shipped today)
+The Lyrics overlay in `client/src/pages/Player.tsx` derives **round-second timestamps** from each song's `lyrics` string by evenly distributing non-header lines across `duration`, with a small lead-in (~6%) and outro (~4%). Section headers (`[Verse 1]`, `[Chorus]`, etc.) render dimmed + uppercase, are skipped during distribution, and aren't seek targets. Auto-scrolls active line to vertical center via `scrollIntoView({ block: "center" })`. Tap any non-header line to seek to its timestamp.
+
+**Type model (matches Apple Music):** every line is the **same large size** — 28px, weight 700 (active gets weight 800). There is **no font-size bump and no scale transform** on the active line; that would make the column "jump" as the song progresses. Differentiation is **blur + opacity only**:
+
+- Active line — 0 blur, opacity 1, weight 800, subtle text shadow.
+- Neighbors (±1) — 1.2px blur, opacity ~0.50–0.72.
+- Distance 2 — 2.8px blur.
+- Distance 3 — 4.5px blur.
+- Distance 4+ — 6px blur (still just legible).
+- Past lines fade faster than upcoming ones so the eye naturally tracks down the page.
+
+When changing the lyrics styling, keep the size uniform and adjust the blur/opacity ramps — never reintroduce size or scale variation between lines.
 
 Placeholder until real per-song timing arrives via the upload portal — at that point swap the auto-distribution for the stored `syncedLyrics: { time, text }[]` array; rendering stays the same. Word-level karaoke is a follow-up. Full lyrics data plan in roadmap.
 
