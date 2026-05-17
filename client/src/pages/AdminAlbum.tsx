@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -2148,34 +2148,84 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
   );
 }
 
+/* ─── Section-header detection ─────────────────────────────────────────
+   Songwriters mark structure in two ways:
+     · Bracketed:  [Verse 1], [Chorus], [Bridge] — bracketed always wins,
+                   any case.
+     · Shorthand:  V1, V2, PRE, CHORUS, BRIDGE, INTRO, OUTRO — only when
+                   written in ALL-CAPS as a standalone line. A lyric line
+                   that says "Hook" or "Bridge" (normal-cased) will NOT
+                   be caught, only the songwriter convention of an
+                   all-caps marker.
+   Either form is an authoring annotation, NOT a sung line. They must
+   be skipped when distributing timing (Bill: "V1 and PRE wouldn't be
+   in the song") and hidden from the synced-lyrics preview. */
+const SECTION_HEADER_RE =
+  /^(\[.*\]|V\d+|VERSE(?:\s+\d+)?|PRE(?:-?\s*CHORUS)?|POST(?:-?\s*CHORUS)?|CHORUS|BRIDGE|INTRO|OUTRO)$/;
+function isSectionHeaderLine(text: string): boolean {
+  return SECTION_HEADER_RE.test(text.trim());
+}
+
+/* Auto-distribute draft lyrics across the master's duration. Skips
+   section headers + empty lines. Lead-in 1.5s, tail 2s — same as the
+   player's `buildSyncedLines` fallback so admin-side preview and
+   fan-side playback line up identically. */
+function distributeLyrics(
+  draft: string,
+  durationSec: number,
+): { timeMs: number; text: string }[] {
+  const lines = draft.split("\n");
+  const timeable: number[] = [];
+  lines.forEach((line, i) => {
+    const t = line.trim();
+    if (!t || isSectionHeaderLine(t)) return;
+    timeable.push(i);
+  });
+  const dur = Math.max(30, durationSec);
+  const lead = 1.5;
+  const tail = 2;
+  const usable = Math.max(1, dur - lead - tail);
+  const denom = Math.max(1, timeable.length - 1);
+  const out: { timeMs: number; text: string }[] = [];
+  timeable.forEach((idx, k) => {
+    const t = lead + (k / denom) * usable;
+    out.push({ timeMs: Math.round(t * 1000), text: lines[idx] });
+  });
+  return out;
+}
+
 /* ─── GoodSync™ side-panel — lives inside LyricsEditor ──────────────────
-   Companion column to the plain-lyrics textarea. Three states:
-     · No-prerequisite (instrumental / no master / no draft lyrics) →
-       quiet helper text explaining what's missing.
-     · Has-prerequisites, no synced cues yet → mini value-prop card +
-       a single Generate button (auto-distributes the draft lyrics
-       across `song.duration` and saves them as `syncedLyrics`).
-     · Has synced cues → Apple-Music-style live preview: hidden audio
-       element + Play button + auto-scrolling cue list whose active
-       line bolds and scales as the master plays. Tapping a line
-       seeks to that cue. */
+   Companion column to the Words textarea. Heading-above-box matches
+   the Words pane structure. Inside the box: an Apple-Music-style cue
+   list whose active line bolds and scales as the master plays, with
+   the Play button floating bottom-center.
+
+   No manual Generate / Re-generate button — the live preview is
+   derived from the current draft in real time. The outer Save
+   button (LyricsEditor footer) persists both the lyrics text AND
+   the derived sync cues in one call. Cancel throws them away. */
 
 function GoodSyncPanel({
   song,
   draftLyrics,
-  onSaved,
-  onOpenFullEditor,
 }: {
   song: SongLite;
   draftLyrics: string;
-  onSaved: () => Promise<void>;
-  onOpenFullEditor?: () => void;
 }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const cues = song.syncedLyrics ?? [];
-  const hasSynced = cues.length > 0;
   const hasLyrics = draftLyrics.trim().length > 0;
+  const canPlay = !song.instrumental && !!song.audioUrl && hasLyrics;
+
+  // Live preview cues — always derived from the current draft so the
+  // box updates as the writer types. On Save the LyricsEditor persists
+  // this same array into `syncedLyrics`. Section headers (V1/PRE/[Verse 1]
+  // etc.) are stripped here, not just dimmed — they aren't sung lines.
+  const previewCues = useMemo(
+    () =>
+      canPlay
+        ? distributeLyrics(draftLyrics, song.duration ?? 240)
+        : [],
+    [canPlay, draftLyrics, song.duration],
+  );
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -2184,10 +2234,10 @@ function GoodSyncPanel({
 
   // Active cue = the last cue whose start time has passed.
   const activeIdx = (() => {
-    if (!cues.length) return -1;
+    if (!previewCues.length) return -1;
     let idx = -1;
-    for (let i = 0; i < cues.length; i++) {
-      if (cues[i].timeMs / 1000 <= currentTime + 0.05) idx = i;
+    for (let i = 0; i < previewCues.length; i++) {
+      if (previewCues[i].timeMs / 1000 <= currentTime + 0.05) idx = i;
       else break;
     }
     return idx;
@@ -2217,7 +2267,7 @@ function GoodSyncPanel({
       audio.removeEventListener("play", onPlayEv);
       audio.removeEventListener("pause", onPauseEv);
     };
-  }, [hasSynced]);
+  }, [canPlay]);
 
   // Stop playback on unmount so navigating away doesn't leave audio running.
   useEffect(() => {
@@ -2233,283 +2283,191 @@ function GoodSyncPanel({
     else audio.pause();
   };
 
-  // Auto-distribute the draft lyrics evenly across the master's duration.
-  // Section-header lines ([Verse 1], [Chorus]) are skipped from timing
-  // — same algorithm the mobile player's lyrics overlay uses as a
-  // fallback, so admin "Generate" produces results that play back
-  // identically once saved.
-  const generateMut = useMutation({
-    mutationFn: async () => {
-      const lines = draftLyrics.split("\n");
-      const timeable: number[] = [];
-      lines.forEach((line, i) => {
-        const t = line.trim();
-        if (!t || /^\[.*\]$/.test(t)) return;
-        timeable.push(i);
-      });
-      const dur = Math.max(30, song.duration ?? 240);
-      const lead = 1.5;
-      const tail = 2;
-      const usable = Math.max(1, dur - lead - tail);
-      const denom = Math.max(1, timeable.length - 1);
-      const cuesOut: { timeMs: number; text: string }[] = [];
-      timeable.forEach((idx, k) => {
-        const t = lead + (k / denom) * usable;
-        cuesOut.push({
-          timeMs: Math.round(t * 1000),
-          text: lines[idx],
-        });
-      });
-      return apiRequest("PUT", `/api/admin/songs/${song.id}`, {
-        syncedLyrics: cuesOut,
-      });
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
-      await onSaved();
-      toast({
-        title: "GoodSync™ ready",
-        description: "Press play to preview the synced lyrics.",
-      });
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Couldn't generate GoodSync™",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      }),
-  });
-
   const fmt = (sec: number) => {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  /* Heading rendered ABOVE the box (matches the Words pane's
+     heading-above-textarea layout per Bill's mock). The box itself
+     is rendered separately below this header row. */
+  const header = (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="w-5 h-5 rounded-full bg-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+          <WaveArrowGlyph className="w-3 h-3" />
+        </span>
+        <h4 className="text-[13px] font-semibold text-slate-800 truncate">
+          GoodSync™
+        </h4>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="What is GoodSync™?"
+              className="w-5 h-5 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+              data-testid={`button-goodsync-info-${song.id}`}
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="bottom"
+            align="start"
+            className="w-72 text-[12px] leading-relaxed"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-6 h-6 rounded-full bg-[#319ED8] inline-flex items-center justify-center">
+                <WaveArrowGlyph className="w-3.5 h-3.5" />
+              </span>
+              <p className="font-semibold text-slate-800">
+                What is GoodSync™?
+              </p>
+            </div>
+            <p className="text-slate-600">
+              Line-timed lyrics that scroll in sync with the master —
+              same feel as Apple Music's synced lyrics. We auto-align
+              your typed words to the audio so you don't have to
+              stopwatch every line.
+            </p>
+            <p className="text-slate-500 mt-2 text-[11px]">
+              The preview is live as you type. Hit Save to lock it in.
+            </p>
+          </PopoverContent>
+        </Popover>
+      </div>
+      {previewCues.length > 0 && (
+        <span
+          className="text-[10px] text-slate-400 tabular-nums flex-shrink-0"
+          data-testid={`text-cue-count-${song.id}`}
+        >
+          {previewCues.length} cues
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white px-3.5 py-3 flex flex-col gap-2.5 min-h-[280px]"
+      className="flex flex-col gap-2 min-w-0"
       data-testid={`panel-goodsync-${song.id}`}
     >
-      {/* Heading row — brand glyph + name + info popover. Cue count
-          appears once a sync exists, mirroring Apple's "Lossless" /
-          "Atmos" badge density rhythm in the lyrics chrome. */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-5 h-5 rounded-full bg-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
-            <WaveArrowGlyph className="w-3 h-3" />
-          </span>
-          <h4 className="text-[13px] font-semibold text-slate-800 truncate">
-            GoodSync™
-          </h4>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label="What is GoodSync™?"
-                className="w-5 h-5 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
-                data-testid={`button-goodsync-info-${song.id}`}
-              >
-                <Info className="w-3.5 h-3.5" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="bottom"
-              align="start"
-              className="w-72 text-[12px] leading-relaxed"
+      {header}
+
+      {/* The box. Same height + border treatment as the Words textarea
+          so the two panes read as siblings. */}
+      <div
+        className="relative rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex flex-col"
+        style={{ minHeight: 280 }}
+      >
+        {song.instrumental ? (
+          <div className="flex-1 flex items-center justify-center text-center text-[12px] text-slate-400 px-4 py-10">
+            Instrumental track — no lyrics to sync.
+          </div>
+        ) : !song.audioUrl ? (
+          <div className="flex-1 flex items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10">
+            Upload a master first — GoodSync™ needs audio to line the
+            words up against.
+          </div>
+        ) : !hasLyrics ? (
+          <div className="flex-1 flex items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10">
+            Type words on the left — we'll line them up to the audio
+            automatically. Hit Save to lock it in.
+          </div>
+        ) : (
+          <>
+            <audio
+              ref={audioRef}
+              src={song.audioUrl}
+              preload="auto"
+              className="hidden"
+              data-testid={`audio-goodsync-${song.id}`}
+            />
+
+            {/* Scrolling cue list. Bottom padding clears the floating
+                Play button so the last line stays readable. */}
+            <div
+              ref={listRef}
+              className="flex-1 overflow-y-auto px-5 pt-5 pb-20 space-y-3"
+              data-testid={`list-cues-${song.id}`}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-6 h-6 rounded-full bg-[#319ED8] inline-flex items-center justify-center">
-                  <WaveArrowGlyph className="w-3.5 h-3.5" />
+              {previewCues.length === 0 ? (
+                <div className="text-center text-[12px] text-slate-400 py-6">
+                  Add at least one lyric line on the left.
+                </div>
+              ) : (
+                previewCues.map((cue, i) => {
+                  const isActive = i === activeIdx;
+                  const isPast = i < activeIdx;
+                  return (
+                    <div
+                      key={i}
+                      data-cue-idx={i}
+                      onClick={() => {
+                        const audio = audioRef.current;
+                        if (audio) {
+                          audio.currentTime = cue.timeMs / 1000;
+                          if (audio.paused) audio.play().catch(() => {});
+                        }
+                      }}
+                      className={[
+                        "transition-all cursor-pointer leading-[1.45]",
+                        isActive
+                          ? "text-slate-900 text-[15px] font-bold scale-[1.03] origin-left"
+                          : isPast
+                            ? "text-slate-300 text-[13.5px] font-semibold"
+                            : "text-slate-500 text-[13.5px] font-semibold",
+                      ].join(" ")}
+                    >
+                      {cue.text}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Bottom-center Play button (per Bill's spec). Time labels
+                flank it on either side. Floating over the list so the
+                Apple-lyrics feel stays uninterrupted. */}
+            <div className="absolute inset-x-0 bottom-0 pointer-events-none">
+              <div className="h-12 bg-gradient-to-t from-slate-50 via-slate-50/85 to-transparent" />
+              <div className="pointer-events-auto relative bg-slate-50 px-4 py-2.5 flex items-center justify-center">
+                <span
+                  className="absolute left-4 text-[10.5px] tabular-nums text-slate-400"
+                  data-testid={`text-time-current-${song.id}`}
+                >
+                  {fmt(currentTime)}
                 </span>
-                <p className="font-semibold text-slate-800">
-                  What is GoodSync™?
-                </p>
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  disabled={previewCues.length === 0}
+                  aria-label={playing ? "Pause preview" : "Play preview"}
+                  className={[
+                    "w-11 h-11 rounded-full inline-flex items-center justify-center transition-colors shadow-md flex-shrink-0",
+                    "disabled:opacity-40 disabled:cursor-not-allowed",
+                    "bg-[#319ED8] text-white hover:bg-[#2890c8]",
+                  ].join(" ")}
+                  data-testid={`button-play-goodsync-${song.id}`}
+                >
+                  {playing ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4 translate-x-[1px] fill-current" />
+                  )}
+                </button>
+                <span
+                  className="absolute right-4 text-[10.5px] tabular-nums text-slate-400"
+                  data-testid={`text-time-total-${song.id}`}
+                >
+                  {fmt(song.duration ?? 0)}
+                </span>
               </div>
-              <p className="text-slate-600">
-                Line-timed lyrics that scroll in sync with the master —
-                same feel as Apple Music's synced lyrics. We auto-align
-                your typed lyrics to the audio so you don't have to
-                stopwatch every line.
-              </p>
-              <p className="text-slate-500 mt-2 text-[11px]">
-                Tap Generate. When it finishes, press play here to watch
-                the preview track the song in real time.
-              </p>
-            </PopoverContent>
-          </Popover>
-        </div>
-        {hasSynced && (
-          <span
-            className="text-[10px] text-slate-400 tabular-nums flex-shrink-0"
-            data-testid={`text-cue-count-${song.id}`}
-          >
-            {cues.length} cues
-          </span>
+            </div>
+          </>
         )}
       </div>
-
-      {song.instrumental ? (
-        <div className="flex-1 flex items-center justify-center text-center text-[11.5px] text-slate-400 px-4 py-8">
-          Instrumental track — no lyrics to sync.
-        </div>
-      ) : !song.audioUrl ? (
-        <div className="flex-1 flex items-center justify-center text-center text-[11.5px] text-slate-500 px-4 py-8">
-          Upload a master first — GoodSync™ needs audio to line the
-          lyrics up against.
-        </div>
-      ) : !hasLyrics ? (
-        <div className="flex-1 flex items-center justify-center text-center text-[11.5px] text-slate-500 px-4 py-8">
-          Type lyrics on the left, then we'll line them up to the audio.
-        </div>
-      ) : !hasSynced ? (
-        // Pitch + Generate
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-4 py-2">
-          <span className="w-12 h-12 rounded-full bg-[#319ED8]/10 inline-flex items-center justify-center">
-            <span className="w-9 h-9 rounded-full bg-[#319ED8] inline-flex items-center justify-center">
-              <WaveArrowGlyph className="w-5 h-5" />
-            </span>
-          </span>
-          <div>
-            <p className="text-[12.5px] font-semibold text-slate-800 leading-snug">
-              Apple-Music-style synced lyrics
-            </p>
-            <p className="text-[11.5px] text-slate-500 leading-snug mt-1">
-              We'll line up your lyrics to the master so they highlight
-              as fans listen. You can refine any line after.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => generateMut.mutate()}
-            disabled={generateMut.isPending}
-            className="inline-flex items-center gap-2 pl-1.5 pr-3.5 h-9 rounded-full bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60"
-            data-testid={`button-generate-goodsync-${song.id}`}
-          >
-            <span className="w-6 h-6 rounded-full bg-white/25 inline-flex items-center justify-center flex-shrink-0">
-              {generateMut.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <WaveArrowGlyph className="w-3.5 h-3.5" />
-              )}
-            </span>
-            {generateMut.isPending ? "Generating…" : "Generate GoodSync™"}
-          </button>
-          {onOpenFullEditor && (
-            <button
-              type="button"
-              onClick={onOpenFullEditor}
-              className="inline-flex items-center gap-1.5 text-[11.5px] text-slate-500 hover:text-slate-700"
-              data-testid={`button-import-goodsync-${song.id}`}
-            >
-              <Upload className="w-3 h-3" />
-              Or import a .vtt / .lrc / .srt file
-            </button>
-          )}
-        </div>
-      ) : (
-        // Live Apple-Music-style preview
-        <>
-          <audio
-            ref={audioRef}
-            src={song.audioUrl}
-            preload="auto"
-            className="hidden"
-            data-testid={`audio-goodsync-${song.id}`}
-          />
-
-          <div className="flex items-center gap-2.5 px-0.5">
-            <button
-              type="button"
-              onClick={togglePlay}
-              aria-label={playing ? "Pause preview" : "Play preview"}
-              className={[
-                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors flex-shrink-0",
-                playing
-                  ? "bg-[#319ED8] text-white hover:bg-[#2890c8]"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200",
-              ].join(" ")}
-              data-testid={`button-play-goodsync-${song.id}`}
-            >
-              {playing ? (
-                <Pause className="w-3.5 h-3.5" />
-              ) : (
-                <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
-              )}
-            </button>
-            <div className="flex-1 text-[10.5px] tabular-nums text-slate-400">
-              {fmt(currentTime)} / {fmt(song.duration ?? 0)}
-            </div>
-            {onOpenFullEditor && (
-              <button
-                type="button"
-                onClick={onOpenFullEditor}
-                className="text-[11px] font-medium text-slate-500 hover:text-[#319ED8] hover:underline"
-                data-testid={`button-edit-cues-${song.id}`}
-              >
-                Edit cues
-              </button>
-            )}
-          </div>
-
-          <div
-            ref={listRef}
-            className="flex-1 max-h-[260px] overflow-y-auto rounded-md bg-slate-50 border border-slate-200 py-3 px-4 space-y-1.5"
-            data-testid={`list-cues-${song.id}`}
-          >
-            {cues.map((cue, i) => {
-              const trimmed = cue.text.trim();
-              const isHeader = /^\[.*\]$/.test(trimmed);
-              const isEmpty = trimmed === "";
-              const isActive = i === activeIdx && !isHeader;
-              const isPast = i < activeIdx && !isHeader;
-              return (
-                <div
-                  key={i}
-                  data-cue-idx={i}
-                  onClick={() => {
-                    if (isHeader || isEmpty) return;
-                    const audio = audioRef.current;
-                    if (audio) {
-                      audio.currentTime = cue.timeMs / 1000;
-                      if (audio.paused) audio.play().catch(() => {});
-                    }
-                  }}
-                  className={[
-                    "transition-all leading-snug",
-                    isHeader
-                      ? "text-slate-400 uppercase text-[10px] tracking-wider font-semibold pt-1"
-                      : isEmpty
-                        ? "h-2"
-                        : isActive
-                          ? "text-slate-900 text-[14px] font-bold scale-[1.04] origin-left cursor-pointer"
-                          : isPast
-                            ? "text-slate-300 text-[12.5px] font-medium cursor-pointer"
-                            : "text-slate-500 text-[12.5px] font-medium cursor-pointer",
-                  ].join(" ")}
-                >
-                  {cue.text || "\u00a0"}
-                </div>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => generateMut.mutate()}
-            disabled={generateMut.isPending}
-            className="self-start inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-[#319ED8] disabled:opacity-60"
-            data-testid={`button-regen-goodsync-${song.id}`}
-          >
-            {generateMut.isPending ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <RotateCcw className="w-3 h-3" />
-            )}
-            {generateMut.isPending ? "Re-generating…" : "Re-generate from lyrics"}
-          </button>
-        </>
-      )}
     </div>
   );
 }
@@ -2548,11 +2506,22 @@ function LyricsEditor({
   const normalized = draft.trim() ? draft : "";
   const dirty = (normalized || null) !== (song.lyrics ?? null);
 
+  // Save persists BOTH the typed words AND the derived GoodSync™ cues
+  // in one call (Bill: "Cancel and Save can do the auto save"). Cancel
+  // discards both. Cues are auto-distributed from the draft via the
+  // same algorithm that drives the live preview — section headers are
+  // stripped, so V1 / PRE / [Chorus] never get rendered as sung lines.
   const saveMut = useMutation({
-    mutationFn: async () =>
-      apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+    mutationFn: async () => {
+      const cues =
+        !song.instrumental && song.audioUrl && normalized
+          ? distributeLyrics(normalized, song.duration ?? 240)
+          : [];
+      return apiRequest("PUT", `/api/admin/songs/${song.id}`, {
         lyrics: normalized || null,
-      }),
+        syncedLyrics: cues.length > 0 ? cues : null,
+      });
+    },
     onSuccess: async () => {
       await onSaved();
       toast({
@@ -2572,7 +2541,7 @@ function LyricsEditor({
 
   return (
     <div
-      className="px-5 pb-4"
+      className="px-5 pt-3 pb-4"
       onKeyDown={(e) => {
         // Cmd/Ctrl+Enter saves; Escape cancels. Save is suppressed
         // when the track is marked instrumental (nothing to save).
@@ -2585,19 +2554,20 @@ function LyricsEditor({
         }
       }}
     >
-      <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 space-y-2.5">
-        {/* Two-column layout: typed Lyrics on the left, GoodSync™ on
+      <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-4 space-y-2.5">
+        {/* Two-column layout: typed Words on the left, GoodSync™ on
             the right (Bill's spec). On narrow viewports they stack so
-            admin-on-mobile still works. The ExpandedPanel header above
-            already announces "Lyrics" globally, but each column gets
-            its own small heading here so the two surfaces read as
-            siblings rather than one wrapping the other. */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {/* LEFT — typed lyrics */}
+            admin-on-mobile still works. The outer ExpandedPanel header
+            already announces "Lyrics" globally — we call the left pane
+            "Words" inside so the two siblings ("Words" / "GoodSync™")
+            each have a unique label and the section title doesn't
+            duplicate itself. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* LEFT — typed words (a.k.a. the master lyric text) */}
           <div className="flex flex-col gap-2 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-[13px] font-semibold text-slate-800">
-                Lyrics
+                Words
               </h4>
               <span className="text-[10px] text-slate-400 tabular-nums">
                 {lineCount} {lineCount === 1 ? "line" : "lines"}
@@ -2625,32 +2595,29 @@ function LyricsEditor({
                   onChange={(e) => setDraft(e.target.value)}
                   rows={12}
                   placeholder={
-                    "[Verse 1]\nFirst line of the verse\nSecond line of the verse\n\n[Chorus]\nFirst line of the chorus"
+                    "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus"
                   }
                   disabled={saveMut.isPending}
-                  className="w-full flex-1 min-h-[240px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+                  className="w-full flex-1 min-h-[280px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
                   data-testid={`textarea-lyrics-${song.id}`}
                 />
 
                 <p className="text-[10.5px] text-slate-400 leading-snug">
-                  Section headers go in square brackets —{" "}
-                  <code className="font-mono">[Verse 1]</code>,{" "}
-                  <code className="font-mono">[Chorus]</code>,{" "}
-                  <code className="font-mono">[Bridge]</code> — they
-                  render dimmed in the player and are skipped when
-                  GoodSync™ distributes timing.
+                  Mark structure with shorthand —{" "}
+                  <code className="font-mono">V1</code>,{" "}
+                  <code className="font-mono">PRE</code>,{" "}
+                  <code className="font-mono">CHORUS</code>,{" "}
+                  <code className="font-mono">BRIDGE</code> — or
+                  brackets like <code className="font-mono">[Verse 1]</code>.
+                  Either way they're skipped from the GoodSync™ preview
+                  and the player.
                 </p>
               </>
             )}
           </div>
 
-          {/* RIGHT — GoodSync™ */}
-          <GoodSyncPanel
-            song={song}
-            draftLyrics={draft}
-            onSaved={onSaved}
-            onOpenFullEditor={onUpgradeSync}
-          />
+          {/* RIGHT — GoodSync™ live preview */}
+          <GoodSyncPanel song={song} draftLyrics={draft} />
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-1">
