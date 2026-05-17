@@ -477,6 +477,28 @@ The mobile fan player is shipped. The **desktop + iPad consumer player** is stil
 
 When the desktop/iPad player ships, graduate the dock as a primitive into `client/src/components/ui/PlayerDock.tsx`, fan-side features (queue, AirPlay, true volume binding, full-screen lyrics overlay) layer on top of the same skeleton. Anything we get wrong here is wrong twice — get it right once.
 
+### Desktop/iPad lyrics — right-side companion panel (spec pinned)
+
+Mobile uses a full-screen overlay (`Player.tsx` Lyrics view). **Desktop and iPad are different surfaces** — the album view is wide enough to host lyrics as a fixed companion column on the right instead of taking over the screen. Reference: Apple Music desktop on Bill's machine.
+
+Anatomy when the Mic2 button in the dock is toggled on:
+
+- **Layout**: album content shrinks to the left ~70% of the viewport; lyrics panel takes ~30% on the right, vertically full-height, edge-flush.
+- **Pager dots**: a tiny three-dot indicator (`• • •`) at the top of the panel showing which "page" of lyric block we're in. Current page is filled, others are at 30%. Visual hint — not an interactive control in v1.
+- **Line styling** (top-down):
+  - **Active line**: white, semibold, ~22pt, left-aligned.
+  - **Past lines**: slate-500, regular weight, same size — fade applied via opacity, not size.
+  - **Future lines**: slate-400, regular weight, same size, slightly brighter than past.
+  - **Section gaps**: blank vertical space (one line-height) between verse / chorus / bridge blocks — no `[Verse 1]` headers visible in this view.
+- **Scroll**: active line auto-centers vertically in the panel via `scrollIntoView({ block: "center", behavior: "smooth" })`, same pattern as the mobile overlay.
+- **Tap a line to seek**: same gesture as mobile.
+- **What we explicitly are NOT doing**: Apple's alternative "letters grow with the vocal inflection / karaoke breath emphasis" treatment. Skipping. Clean active-line weight + opacity transitions only.
+- **What the dock does while panel is open**: the Mic2 button gets the active-tint background (`bg-white/15` or brand blue at low opacity) so it reads as "on." Tapping again closes the panel and returns the album view to full width.
+
+Data source: same `syncedLyrics: { time, text }[]` array we'll have once the upload portal supports per-line timing. Until that exists, the panel borrows the same even-distribution heuristic the mobile overlay uses today.
+
+Surfaces this lives on (eventual): desktop album page, iPad album page, and the future macOS native app. Mobile keeps its full-screen overlay — there isn't horizontal room for a companion column on a phone.
+
 ## DDEX alignment — Layers 1 & 2 (pinned, deferred)
 
 Two low-cost, no-disruption steps to execute when the moment is naturally right. **Not refactors** — these slot in when the relevant code is *first* being written. After both, we can truthfully say "MEAD and PIE compliant" in any label meeting. Everything else (ERN export, schema rebuilds, DSR/RDR/MWN) is deferred until a specific distributor/label deal demands it (that's a DDEX Implementation Licence + 1–2 weeks of real engineering).
