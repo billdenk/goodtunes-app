@@ -163,12 +163,19 @@ function MasterDetail({
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Plain React hover state on the pill. Avoids any Tailwind `group`/`group/pill`
+  // ambiguity with the outer track row (which also uses `group`) and is exactly
+  // scoped to this one element — cursor on the pill = active, anywhere else = not.
+  const [pillHover, setPillHover] = useState(false);
+  const active = pillHover || menuOpen;
   return (
     <DetailWrap title="Master" onClose={onClose}>
       {hasMaster ? (
         // Single row: [▶ subdued play] [filename + meta] [Replace ▾]
         // The whole row is a drop target — drag a new .wav/.aiff/.flac to swap.
         <div
+          onMouseEnter={() => setPillHover(true)}
+          onMouseLeave={() => setPillHover(false)}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
@@ -179,21 +186,22 @@ function MasterDetail({
             setDragOver(false);
           }}
           className={[
-            // Named group scope: the outer track row also uses unnamed `group`,
-            // so unnamed `group-hover:` would fire from cursor entering the
-            // whole track row. Naming this `group/pill` keeps play/Replace
-            // dependent on this pill specifically.
-            "group/pill relative flex items-center gap-3 p-2.5 rounded-md border-2 transition-colors",
+            "relative flex items-center gap-3 p-2.5 rounded-md border-2 transition-colors",
+            // Pill stays visually quiet at all times — no bg/border change on
+            // hover. Only the play button warms up and Replace fades in.
             dragOver
               ? "border-dashed border-[#319ED8] bg-[#319ED8]/5"
-              : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white",
+              : "border-slate-200 bg-slate-50",
           ].join(" ")}
         >
-          {/* Play — subdued slate at rest, brand-blue on row hover */}
+          {/* Play — subdued slate at rest, brand-blue when the pill is active */}
           <button
             type="button"
             aria-label="Play storms_master_24-96.wav"
-            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 bg-slate-200/70 text-slate-500 group-hover/pill:bg-[#319ED8] group-hover/pill:text-white transition-colors"
+            className={[
+              "w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors",
+              active ? "bg-[#319ED8] text-white" : "bg-slate-200/70 text-slate-500",
+            ].join(" ")}
           >
             <Play className="w-4 h-4 translate-x-[1px] fill-current" />
           </button>
@@ -206,14 +214,14 @@ function MasterDetail({
             </div>
           </div>
 
-          {/* Replace — hidden at rest, fades in on row hover (Apple Music pattern).
+          {/* Replace — hidden at rest, fades in when the pill is active (Apple Music pattern).
               Stays visible whenever its menu is open so it doesn't disappear mid-click. */}
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className={[
                 "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1 transition-opacity",
-                menuOpen ? "opacity-100" : "opacity-0 group-hover/pill:opacity-100 focus:opacity-100",
+                active ? "opacity-100" : "opacity-0",
               ].join(" ")}
             >
               <Upload className="w-3 h-3" />
