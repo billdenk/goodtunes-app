@@ -470,3 +470,36 @@ Plan:
 - Pre-cache the mid rung in IndexedDB for downloaded / favorited tracks (covers the offline-on-flight case).
 
 Open: do this **after** preview clips ship — same ffmpeg pipeline, so we want to design the encoding worker once.
+
+## DDEX alignment — Layers 1 & 2 (pinned, deferred)
+
+Two low-cost, no-disruption steps to execute when the moment is naturally right. **Not refactors** — these slot in when the relevant code is *first* being written. After both, we can truthfully say "MEAD and PIE compliant" in any label meeting. Everything else (ERN export, schema rebuilds, DSR/RDR/MWN) is deferred until a specific distributor/label deal demands it (that's a DDEX Implementation Licence + 1–2 weeks of real engineering).
+
+### Layer 1 — MEAD `ContributorRole` codes as backing values for the role catalog
+
+UI labels stay whatever they are; **the string constants stored in the data layer should be DDEX MEAD `ContributorRole` codes**. Map into our three existing buckets:
+
+**SONG (compositional)** — `Composer`, `ComposerLyricist`, `Lyricist`, `Author`, `MusicArrangeur`, `LyricAdapteur`, `Translator`
+
+**PERFORMANCE (artist/recorded performance)** — `MainArtist`, `FeaturedArtist`, `Conductor`, `Soloist`, `Orchestra`, `Choir`, `Actor`, `Dancer`, `DJ`, `Narrator`, `AssociatedPerformer`
+
+**PRODUCTION (studio/technical)** — `Producer`, `Executive Producer`, `AssociatedEngineer` (Engineer), `MixingEngineer`, `MasteringEngineer`, `RecordingEngineer`, `SoundEngineer`, `StudioPersonnel`, `Programmer`, `Editor`. `AssociatedPerformer` can dual-map here for session musicians.
+
+No UI changes. No schema migration. Just swap the string constants in the role catalog/enum when the opportunity naturally arises.
+
+### Layer 2 — ISNI + IPI columns on `people` (PIE compliance)
+
+When the `people` table gets built (it's already in the data shape above), add two nullable text columns from day one — zero UI cost, no validation required at that stage:
+
+```ts
+isni: text("isni"),   // International Standard Name Identifier — 16-digit (performers)
+ipi:  text("ipi"),    // Interested Parties Information — 9 or 11-digit CAE/IPI (songwriters/publishers)
+```
+
+Lets us answer "are your artist records ISNI-linked?" with yes, and future-proofs payout de-duplication (two "James Walsh" entries resolve cleanly).
+
+### What we are NOT doing yet
+
+- **No ERN export** — deferred until a specific distributor or label deal requires it.
+- **No rebuilding the Drizzle schema around DDEX vocabulary natively** — internal types stay clean, DDEX translates at the boundary on import/export.
+- **No other DDEX standards** (DSR, RDR, MWN).
