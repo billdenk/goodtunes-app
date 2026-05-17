@@ -368,7 +368,83 @@ function MasterDetail({
   );
 }
 
-function SnippetDetail({ onClose }: { onClose: () => void }) {
+function SnippetDetail({
+  hasMaster,
+  onGoToMaster,
+  onClose,
+}: {
+  hasMaster: boolean;
+  onGoToMaster: () => void;
+  onClose: () => void;
+}) {
+  // No master = nothing to scrub. Show the same waveform skeleton (so the
+  // layout doesn't jump when a master is later uploaded) but with flat,
+  // dimmed bars and a brand-blue callout that links straight back to the
+  // Master tile. Mirrors the Apple pattern of "show the empty slot, name
+  // the unlock, point at the action."
+  if (!hasMaster) {
+    return (
+      <DetailWrap title="30-sec snippet" onClose={onClose}>
+        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
+          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+            <Upload className="w-4 h-4" />
+          </span>
+          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+            <div className="font-semibold text-slate-900">
+              Snippet picker unlocks after the master
+            </div>
+            <div className="text-slate-600 mt-0.5">
+              Once you{" "}
+              <button
+                onClick={onGoToMaster}
+                className="font-semibold text-[#319ED8] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded"
+              >
+                upload the master track
+              </button>
+              , drag the yellow window anywhere on the waveform to pick your
+              30-second preview. Or leave it auto.
+            </div>
+          </div>
+        </div>
+
+        {/* Skeleton waveform — same shape and timecode axis as the live one,
+            but bars sit at a flat 20% height and everything is non-interactive.
+            Padlock is dimmed; preview play is hidden (nothing to preview). */}
+        <div className="flex items-center gap-2 opacity-60 pointer-events-none">
+          <span
+            aria-hidden
+            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 inline-flex items-center justify-center flex-shrink-0"
+          >
+            <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="relative h-20 rounded-md bg-slate-50 border border-dashed border-slate-200 px-2 overflow-hidden">
+              <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
+                {WAVE_BARS.map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 bg-slate-200 rounded-full"
+                    style={{ height: `20%` }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-between text-[9px] tabular-nums text-slate-300 mt-1 px-2">
+              <span>0:00</span>
+              <span>—</span>
+              <span>—</span>
+              <span>—</span>
+              <span>—</span>
+            </div>
+          </div>
+          <span aria-hidden className="text-slate-300 flex-shrink-0">
+            <Lock className="w-4 h-4" />
+          </span>
+        </div>
+      </DetailWrap>
+    );
+  }
+
   /* iMovie-style trim row: play · waveform · lock.
      Total clip 4:12 = 252s · window = 30s (= 11.9% of width).
      Drag anywhere inside the yellow window to slide; the chip updates live.
@@ -1484,7 +1560,11 @@ function EditRow({
             />
           )}
           {openSection === "snippet" && (
-            <SnippetDetail onClose={() => setOpenSection(null)} />
+            <SnippetDetail
+              hasMaster={t.master}
+              onGoToMaster={() => setOpenSection("master")}
+              onClose={() => setOpenSection(null)}
+            />
           )}
           {openSection === "lyrics" && (
             <LyricsDetail
