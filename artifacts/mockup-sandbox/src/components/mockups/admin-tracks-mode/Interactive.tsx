@@ -198,11 +198,15 @@ function MasterDetail({
             </div>
           </div>
 
-          {/* Replace — opens a small menu: upload from device · paste a link */}
+          {/* Replace — hidden at rest, fades in on row hover (Apple Music pattern).
+              Stays visible whenever its menu is open so it doesn't disappear mid-click. */}
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1"
+              className={[
+                "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1 transition-opacity",
+                menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
+              ].join(" ")}
             >
               <Upload className="w-3 h-3" />
               Replace
