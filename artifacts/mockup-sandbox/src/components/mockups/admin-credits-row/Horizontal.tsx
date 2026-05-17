@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Search,
   Plus,
@@ -87,23 +87,45 @@ function initials(n: string) {
 
 function PersonColumn({
   p,
+  armed,
   onRemove,
 }: {
   p: Person;
+  armed: boolean;
   onRemove: (id: string) => void;
 }) {
+  // Two-tap remove, mirroring AlbumCredits.tsx. First tap arms (rose ring +
+  // "Remove?" label); second tap commits. Auto-disarms in 3s via parent.
   return (
     <div className="flex w-[110px] shrink-0 flex-col items-center text-center">
       <div className="relative">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-200 text-[12px] font-semibold text-slate-600">
+        <div
+          className={[
+            "flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-semibold transition",
+            armed
+              ? "bg-rose-50 text-rose-600 ring-2 ring-rose-400"
+              : "bg-slate-200 text-slate-600",
+          ].join(" ")}
+        >
           {initials(p.name)}
         </div>
         <button
           onClick={() => onRemove(p.id)}
-          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-slate-400 shadow ring-1 ring-slate-200 transition hover:text-rose-500"
-          aria-label={`Remove ${p.name}`}
+          className={[
+            "absolute -right-1 -top-1 inline-flex items-center justify-center rounded-full shadow ring-1 transition",
+            armed
+              ? "h-5 px-1.5 gap-0.5 bg-rose-500 text-white ring-rose-500 text-[9.5px] font-semibold"
+              : "h-4 w-4 bg-white text-slate-400 ring-slate-200 hover:text-slate-700",
+          ].join(" ")}
+          aria-label={armed ? `Confirm remove ${p.name}` : `Remove ${p.name}`}
         >
-          <X className="h-2.5 w-2.5" strokeWidth={2.5} />
+          {armed ? (
+            <>
+              <X className="h-2.5 w-2.5" strokeWidth={2.5} /> Remove?
+            </>
+          ) : (
+            <X className="h-2.5 w-2.5" strokeWidth={2.5} />
+          )}
         </button>
       </div>
       <div className="mt-2 text-[12.5px] font-semibold leading-tight text-slate-900">
@@ -118,16 +140,15 @@ function PersonColumn({
   );
 }
 
-function AddRow({
-  bucket,
+function AddPicker({
   onAdd,
+  onClose,
   existing,
 }: {
-  bucket: Bucket;
   onAdd: (name: string) => void;
+  onClose: () => void;
   existing: string[];
 }) {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   const matches = query
@@ -137,23 +158,11 @@ function AddRow({
       ).slice(0, 5)
     : ROSTER.filter((n) => !existing.includes(n)).slice(0, 5);
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-slate-300 text-[11.5px] font-semibold text-slate-500 hover:text-[#319ED8] hover:border-[#319ED8] hover:bg-[#319ED8]/5"
-      >
-        <Plus className="h-3 w-3" strokeWidth={2.5} />
-        Add person
-      </button>
-    );
-  }
-
   const pick = (name: string) => {
     if (!name.trim()) return;
     onAdd(name.trim());
     setQuery("");
-    setOpen(false);
+    onClose();
   };
 
   return (
@@ -167,7 +176,7 @@ function AddRow({
           onKeyDown={(e) => {
             if (e.key === "Enter") pick(query);
             if (e.key === "Escape") {
-              setOpen(false);
+              onClose();
               setQuery("");
             }
           }}
@@ -176,7 +185,7 @@ function AddRow({
         />
         <button
           onClick={() => {
-            setOpen(false);
+            onClose();
             setQuery("");
           }}
           className="w-5 h-5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center"
@@ -234,6 +243,9 @@ function Section({
   people: Person[];
   setPeople: (next: Person[]) => void;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
+  const removeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const musoCount = people.filter((p) => p.source === "muso").length;
   const existingNames = people.map((p) => p.name);
 
@@ -245,8 +257,25 @@ function Section({
       { id: `n-${Date.now()}`, name, roles: [defaultRole], source: "manual" },
     ]);
   };
-  const handleRemove = (id: string) =>
-    setPeople(people.filter((p) => p.id !== id));
+  // Two-tap remove. First tap arms, second commits. Auto-disarms after 3s
+  // so the rose state can't sit forever — same pattern as AlbumCredits.
+  const handleRemove = (id: string) => {
+    if (pendingRemove === id) {
+      setPeople(people.filter((p) => p.id !== id));
+      setPendingRemove(null);
+      if (removeTimer.current) clearTimeout(removeTimer.current);
+      return;
+    }
+    setPendingRemove(id);
+  };
+  useEffect(() => {
+    if (!pendingRemove) return;
+    if (removeTimer.current) clearTimeout(removeTimer.current);
+    removeTimer.current = setTimeout(() => setPendingRemove(null), 3000);
+    return () => {
+      if (removeTimer.current) clearTimeout(removeTimer.current);
+    };
+  }, [pendingRemove]);
 
   return (
     <section className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
@@ -256,17 +285,36 @@ function Section({
           <h2 className="text-[14px] font-semibold text-slate-900">{title}</h2>
           <p className="text-[11.5px] text-slate-500 leading-snug">{subtitle}</p>
         </div>
-        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
-          {people.length} {people.length === 1 ? "person" : "people"}
-        </span>
+        <button
+          onClick={() => setAdding((v) => !v)}
+          className="px-2.5 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] font-medium hover:bg-slate-50 hover:border-[#319ED8] hover:text-[#319ED8] inline-flex items-center gap-1 flex-shrink-0"
+        >
+          <Plus className="h-3 w-3" strokeWidth={2.5} />
+          Add person
+        </button>
       </header>
+
+      {adding && (
+        <div className="px-5 pt-4 pb-1 border-b border-slate-100 bg-slate-50/50">
+          <AddPicker
+            onAdd={handleAdd}
+            onClose={() => setAdding(false)}
+            existing={existingNames}
+          />
+        </div>
+      )}
 
       <div className="px-5 py-4">
         <div className="relative">
           <div className="-mx-1 overflow-x-auto pb-1">
             <div className="flex gap-3 px-1">
               {people.map((p) => (
-                <PersonColumn key={p.id} p={p} onRemove={handleRemove} />
+                <PersonColumn
+                  key={p.id}
+                  p={p}
+                  armed={pendingRemove === p.id}
+                  onRemove={handleRemove}
+                />
               ))}
               {people.length === 0 && (
                 <div className="text-[11.5px] italic text-slate-400 py-3 px-1">
@@ -278,11 +326,11 @@ function Section({
           <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent" />
         </div>
 
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <AddRow bucket={bucket} onAdd={handleAdd} existing={existingNames} />
+        <div className="mt-3 flex items-center gap-3 text-[10.5px] uppercase tracking-wider font-semibold text-slate-400">
+          <span>{people.length} {people.length === 1 ? "person" : "people"}</span>
           {musoCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-[10.5px] text-slate-400">
-              <Check className="h-3 w-3 text-emerald-500" />
+            <span className="inline-flex items-center gap-1 normal-case tracking-normal font-normal text-slate-400">
+              <Sparkles className="h-3 w-3 text-[#319ED8]" />
               {musoCount} from Muso
             </span>
           )}
