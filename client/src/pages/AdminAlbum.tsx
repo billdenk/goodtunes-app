@@ -5335,6 +5335,18 @@ function AudioEditor({
             {uploading && (
               <p className="text-[11px] text-slate-400">Uploading…</p>
             )}
+
+            {/* Instrumental flag — pulled INSIDE the master tile so it
+                doesn't orphan below as a single floating row (Bill:
+                "it looks kind of lost"). A hairline divider keeps it
+                visually grouped with the file but reads as a separate
+                concern. Only shows once a master exists — there's
+                nothing to be instrumental about otherwise. */}
+            {song.audioUrl && (
+              <div className="-mx-3 mt-1 pt-2.5 px-3 border-t border-slate-100">
+                <InstrumentalToggle song={song} />
+              </div>
+            )}
           </>
         )}
 
@@ -5347,17 +5359,6 @@ function AudioEditor({
           </p>
         )}
       </div>
-
-      {/* Instrumental toggle — the one setting that has no home
-          outside the Master editor. Preview used to live here too but
-          it duplicated the dedicated Preview tile next to Master in
-          the Tracks view (Bill: "I already know this under Preview").
-          A single inline row reads cleaner than a card-of-one. */}
-      {song.audioUrl && (
-        <div className="pt-3 px-1">
-          <InstrumentalToggle song={song} />
-        </div>
-      )}
 
       {/* Footer — single "Done" link on the right. There's no Save:
           file/URL changes persist via the autosave effect above, and
