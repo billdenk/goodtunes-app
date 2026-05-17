@@ -7,7 +7,7 @@ import {
   Pencil,
   ChevronDown,
   Disc3,
-  Scissors,
+  Headphones,
   FileText,
   Users,
   Trash2,
@@ -431,7 +431,7 @@ function Row({
               <div className="grid grid-cols-3 gap-2">
                 <StatusBadge
                   ok={t.snippet}
-                  icon={Scissors}
+                  icon={Headphones}
                   label="Preview"
                   subtitle={t.snippet ? undefined : "Auto · first 30 sec"}
                   severity="soft"

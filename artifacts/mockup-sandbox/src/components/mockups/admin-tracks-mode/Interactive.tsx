@@ -8,7 +8,6 @@ import {
   Pencil,
   ChevronDown,
   Disc3,
-  Scissors,
   FileText,
   Users,
   Trash2,
@@ -2174,7 +2173,7 @@ function EditRow({
               <div className="grid grid-cols-3 gap-2">
                 <StatusBadge
                   ok
-                  icon={Scissors}
+                  icon={Headphones}
                   label="Preview"
                   severity="soft"
                   compact
