@@ -134,6 +134,8 @@ function StatusBadge({
   severity = "soft",
   active,
   onClick,
+  size = "default",
+  compact = false,
 }: {
   ok: boolean;
   icon: any;
@@ -146,50 +148,113 @@ function StatusBadge({
   severity?: "required" | "soft";
   active: boolean;
   onClick: () => void;
+  // 'emphasized' → taller, larger icon, heavier label. Used for the lone
+  // REQUIRED tile (Master) sitting on top of the 1-over-3 grid.
+  size?: "default" | "emphasized";
+  // Stacked vertical layout — icon on top, label below — for the three
+  // small OPTIONAL tiles sharing one row.
+  compact?: boolean;
 }) {
   const notOkIconClasses =
     severity === "required"
       ? "bg-amber-50 text-amber-600"
       : "bg-slate-100 text-slate-500";
+  const emphasized = size === "emphasized";
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={[
+          "group/card flex flex-col items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-white border text-center w-full transition-all relative",
+          active
+            ? "border-[#319ED8] ring-2 ring-[#319ED8]/20"
+            : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0 relative",
+            ok ? "bg-emerald-50 text-emerald-600" : notOkIconClasses,
+          ].join(" ")}
+        >
+          <Icon className="w-4 h-4" />
+          {ok && (
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 inline-flex items-center justify-center ring-2 ring-white">
+              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3.5} />
+            </span>
+          )}
+        </span>
+        <div className="text-[11px] font-semibold text-slate-900 truncate w-full">
+          {label}
+        </div>
+        {/* Pencil pip floats top-right on hover; check pip already lives on the icon */}
+        <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/card:opacity-100 transition-opacity absolute top-1.5 right-1.5" />
+      </button>
+    );
+  }
   return (
     <button
       type="button"
       onClick={onClick}
       className={[
-        "group/card flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white border text-left w-full transition-all",
+        "group/card flex items-center justify-between gap-2 rounded-lg bg-white border text-left w-full transition-all",
+        emphasized ? "px-4 py-3" : "px-3 py-2",
         active
           ? "border-[#319ED8] ring-2 ring-[#319ED8]/20"
           : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
       ].join(" ")}
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0">
         <span
           className={[
-            "w-7 h-7 rounded-md inline-flex items-center justify-center flex-shrink-0",
+            "rounded-md inline-flex items-center justify-center flex-shrink-0",
+            emphasized ? "w-10 h-10" : "w-7 h-7",
             ok ? "bg-emerald-50 text-emerald-600" : notOkIconClasses,
           ].join(" ")}
         >
-          <Icon className="w-3.5 h-3.5" />
+          <Icon className={emphasized ? "w-5 h-5" : "w-3.5 h-3.5"} />
         </span>
         <div className="min-w-0">
-          <div className="text-[12px] font-semibold text-slate-900 truncate">
+          <div
+            className={[
+              "font-semibold text-slate-900 truncate",
+              emphasized ? "text-[14px]" : "text-[12px]",
+            ].join(" ")}
+          >
             {label}
           </div>
           {subtitle && (
-            <div className="text-[10px] text-slate-500 truncate leading-tight">
+            <div
+              className={[
+                "text-slate-500 truncate leading-tight",
+                emphasized ? "text-[11.5px] mt-0.5" : "text-[10px]",
+              ].join(" ")}
+            >
               {subtitle}
             </div>
           )}
         </div>
       </div>
       {/* Right slot: check (complete, at rest) → pencil (on hover) */}
-      <span className="w-5 h-5 inline-flex items-center justify-center flex-shrink-0 relative">
+      <span
+        className={[
+          "inline-flex items-center justify-center flex-shrink-0 relative",
+          emphasized ? "w-6 h-6" : "w-5 h-5",
+        ].join(" ")}
+      >
         {ok && (
-          <Check className="w-3.5 h-3.5 text-emerald-600 group-hover/card:opacity-0 transition-opacity" />
+          <Check
+            className={[
+              "text-emerald-600 group-hover/card:opacity-0 transition-opacity",
+              emphasized ? "w-4 h-4" : "w-3.5 h-3.5",
+            ].join(" ")}
+          />
         )}
         <Pencil
           className={[
-            "w-3.5 h-3.5 text-slate-500 transition-opacity",
+            "text-slate-500 transition-opacity",
+            emphasized ? "w-4 h-4" : "w-3.5 h-3.5",
             ok
               ? "absolute inset-0 m-auto opacity-0 group-hover/card:opacity-100"
               : "opacity-0 group-hover/card:opacity-100",
@@ -1746,48 +1811,76 @@ function EditRow({
 
       {expanded && (
         <div className="pl-20 pr-16 pb-5 -mt-1 space-y-4">
-          {/* Single 2×2 grid of all four facets — Required/Optional headers
-              are gone now that snippet auto-defaults. Master is the only
-              one that warns amber when missing (severity="required"); the
-              others sit quiet when not yet done (severity="soft"). The
-              snippet tile always reports ok=true because the snippet
-              always exists in some form — its subtitle says whether
-              that's an auto default or a custom hook. */}
-          <div className="grid grid-cols-2 gap-2">
-            <StatusBadge
-              ok={t.master}
-              icon={Disc3}
-              label="Master"
-              subtitle={t.master ? undefined : "Required to publish"}
-              severity="required"
-              active={openSection === "master"}
-              onClick={() => toggleSection("master")}
-            />
-            <StatusBadge
-              ok
-              icon={Scissors}
-              label="30-sec snippet"
-              subtitle={t.snippet ? "Custom hook" : "Auto · tap to pick a hook"}
-              severity="soft"
-              active={openSection === "snippet"}
-              onClick={() => toggleSection("snippet")}
-            />
-            <StatusBadge
-              ok={t.lyrics}
-              icon={FileText}
-              label="Lyrics"
-              severity="soft"
-              active={openSection === "lyrics"}
-              onClick={() => toggleSection("lyrics")}
-            />
-            <StatusBadge
-              ok={t.credits}
-              icon={Users}
-              label="Credits"
-              severity="soft"
-              active={openSection === "credits"}
-              onClick={() => toggleSection("credits")}
-            />
+          {/* 1-over-3 layout (Bill's pick):
+              REQUIRED group → Master sits on top, full-width, emphasized
+                (taller, larger icon, heavier label). It's the gate that
+                blocks publish, so it gets the loudest hierarchy.
+              OPTIONAL group → Snippet · Lyrics · Credits share one row
+                in compact form (icon on top, label below). They don't
+                block publish, so they sit smaller and quieter. The
+                snippet tile still reports ok=true because the auto
+                default is real shipped state.
+              REQUIRED / OPTIONAL headers above each group make the
+                contract explicit at a glance. */}
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Required
+                </span>
+                <span className="h-px flex-1 bg-slate-200" aria-hidden />
+              </div>
+              <StatusBadge
+                ok={t.master}
+                icon={Disc3}
+                label="Master"
+                subtitle={
+                  t.master ? "Uploaded · tap to replace" : "Required to publish"
+                }
+                severity="required"
+                size="emphasized"
+                active={openSection === "master"}
+                onClick={() => toggleSection("master")}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Optional
+                </span>
+                <span className="h-px flex-1 bg-slate-200" aria-hidden />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <StatusBadge
+                  ok
+                  icon={Scissors}
+                  label="Snippet"
+                  severity="soft"
+                  compact
+                  active={openSection === "snippet"}
+                  onClick={() => toggleSection("snippet")}
+                />
+                <StatusBadge
+                  ok={t.lyrics}
+                  icon={FileText}
+                  label="Lyrics"
+                  severity="soft"
+                  compact
+                  active={openSection === "lyrics"}
+                  onClick={() => toggleSection("lyrics")}
+                />
+                <StatusBadge
+                  ok={t.credits}
+                  icon={Users}
+                  label="Credits"
+                  severity="soft"
+                  compact
+                  active={openSection === "credits"}
+                  onClick={() => toggleSection("credits")}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Detail panel for whichever section is open */}
