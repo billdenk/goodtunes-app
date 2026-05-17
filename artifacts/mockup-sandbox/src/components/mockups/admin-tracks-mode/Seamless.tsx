@@ -231,11 +231,11 @@ function StatusMeter({
       );
     if (state === "partial")
       return (
-        <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
+        <span className="w-3.5 h-3.5 rounded-full bg-amber-500 inline-block" />
       );
     return (
       <Circle
-        className="w-3 h-3 text-slate-300"
+        className="w-3.5 h-3.5 text-slate-300"
         strokeWidth={1.5}
       />
     );
@@ -259,7 +259,7 @@ function StatusMeter({
   return (
     <Tag
       {...(allDone
-        ? {}
+        ? { role: "img" as const }
         : { type: "button" as const, onClick: onExpand })}
       aria-label={ariaLabel}
       title={dots.map((d) => `${d.label}: ${d.hint}`).join(" · ")}
