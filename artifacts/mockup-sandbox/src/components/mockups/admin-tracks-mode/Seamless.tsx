@@ -6,6 +6,7 @@ import {
   Pause,
   Pencil,
   ChevronDown,
+  ChevronUp,
   Disc3,
   Headphones,
   FileText,
@@ -536,6 +537,14 @@ function BottomDock({
   // the center column from the absolutely-positioned bar across DOM
   // levels, so we lift it to component state.
   const [scrubHover, setScrubHover] = useState(false);
+
+  // Manual hide/show — chevron-down on the dock collapses it into a small
+  // corner pill (cover thumb + play/pause + chevron-up). Mirrors the
+  // "clean canvas while editing" Bill asked for. Independent of the
+  // auto-compact responsive pattern Apple uses on narrow viewports
+  // (deferred until graduation, where admin's LIVE PREVIEW column eats
+  // horizontal room and auto-compact becomes more valuable).
+  const [dockHidden, setDockHidden] = useState(false);
   const cycleRepeat = () =>
     setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
   const RepeatIcon = repeatMode === "one" ? Repeat1 : Repeat;
@@ -573,6 +582,57 @@ function BottomDock({
   // this dock will be lifted into client/src/components/ui/PlayerDock.tsx.
   const knobLeft = (pct: number) =>
     `calc(${Math.max(0, Math.min(100, pct))}% - 5px)`;
+
+  // When minimized, render a compact corner pill instead of the full dock.
+  // Contents are intentionally minimal: cover thumb (so the user knows
+  // *what's* playing at a glance), play/pause (the one control you might
+  // actually need with the dock collapsed), and chevron-up to restore.
+  // Title/artist deliberately omitted — a tooltip on the cover or a
+  // dedicated "now playing" sheet can answer that without bloating the pill.
+  if (dockHidden && hasSelection) {
+    return (
+      <div className="absolute right-4 bottom-4 z-20">
+        <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-1.5 pr-1.5 py-1.5">
+          <div
+            className="w-9 h-9 rounded-md flex-shrink-0"
+            style={{
+              background:
+                "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)",
+            }}
+            aria-label={`${current.title} — now playing`}
+            title={`${current.title} — ${current.artist}`}
+          />
+          <button
+            type="button"
+            onClick={onTogglePlay}
+            disabled={!playable}
+            aria-label={playing ? "Pause" : "Play"}
+            className={[
+              "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+              playable
+                ? "text-white hover:bg-white/10"
+                : "text-slate-500 cursor-not-allowed",
+            ].join(" ")}
+          >
+            {playing ? (
+              <Pause className="w-[18px] h-[18px] fill-current" />
+            ) : (
+              <Play className="w-[18px] h-[18px] ml-0.5 fill-current" />
+            )}
+          </button>
+          <button
+            type="button"
+            aria-label="Show player"
+            title="Show player"
+            onClick={() => setDockHidden(false)}
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+          >
+            <ChevronUp className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -779,6 +839,21 @@ function BottomDock({
                     <VolumeIcon className="w-5 h-5" />
                   </button>
                 </div>
+
+                {/* Minimize — collapses the full dock to a corner pill.
+                    Sits at the far right of the cluster (after volume) as
+                    a "view chrome" control, the same slot Apple puts its
+                    full-screen collapse chevron. ChevronDown points toward
+                    where the mini-pill will land (bottom-right corner). */}
+                <button
+                  type="button"
+                  aria-label="Minimize player"
+                  title="Minimize player"
+                  onClick={() => setDockHidden(true)}
+                  className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </button>
               </div>
             </>
           )}
