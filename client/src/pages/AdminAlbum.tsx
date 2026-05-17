@@ -1263,6 +1263,10 @@ function StatusBadge({
     ? "border-[#319ED8] bg-[#319ED8]/5 ring-2 ring-[#319ED8]/30 hover:bg-[#319ED8]/5 hover:border-[#319ED8]"
     : "border-slate-200 hover:border-slate-300 hover:bg-slate-50";
   if (compact) {
+    // Compact tile = miniature of the ExpandedPanel header: icon on
+    // the left, label + sublabel stacked to its right. Same shape,
+    // smaller. Apple-style breathing room (px-3 py-3, gap-2.5) so the
+    // three tiles don't read as a cramped strip.
     return (
       <button
         ref={buttonRef}
@@ -1271,7 +1275,7 @@ function StatusBadge({
         data-testid={testId}
         aria-pressed={active}
         className={[
-          "group/card flex flex-col items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-white border text-center w-full transition-all relative focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
+          "group/card flex items-center gap-2.5 px-3 py-3 rounded-lg bg-white border text-left w-full transition-all relative focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
           activeCls,
         ].join(" ")}
       >
@@ -1288,15 +1292,17 @@ function StatusBadge({
             </span>
           )}
         </span>
-        <div className="text-[11px] font-semibold text-slate-900 truncate w-full">
-          {label}
-        </div>
-        {subtitle && (
-          <div className="text-[10px] text-slate-500 truncate w-full leading-tight">
-            {subtitle}
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] font-semibold text-slate-900 truncate">
+            {label}
           </div>
-        )}
-        <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/card:opacity-100 transition-opacity absolute top-1.5 right-1.5" />
+          {subtitle && (
+            <div className="text-[10.5px] text-slate-500 truncate leading-tight mt-0.5">
+              {subtitle}
+            </div>
+          )}
+        </div>
+        <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/card:opacity-100 transition-opacity flex-shrink-0" />
       </button>
     );
   }
@@ -1897,7 +1903,7 @@ function TrackRow({
                 hide. Tapping the panel header collapses back to the
                 3-up grid. */}
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-2 mb-2.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Optional
                 </span>
@@ -1976,7 +1982,7 @@ function TrackRow({
                 </ExpandedPanel>
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2.5">
                     <StatusBadge
                       ok={song.previewStartMs != null}
                       icon={Headphones}
