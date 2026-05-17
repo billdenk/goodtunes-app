@@ -1178,7 +1178,7 @@ function dotHint(label: string, state: DotState): string {
    The header is a div (not a button) so portal'd children stay valid
    HTML; an absolutely-positioned invisible button overlays the
    non-action area and carries the actual collapse click. */
-const ExpandedPanelHeaderSlotContext = createContext<HTMLSpanElement | null>(
+export const ExpandedPanelHeaderSlotContext = createContext<HTMLSpanElement | null>(
   null,
 );
 

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ExpandedPanelHeaderSlotContext } from "@/pages/AdminAlbum";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -719,9 +721,14 @@ function Section({
 
 /* ─── Import dropdown (Muso.ai placeholder, more sources later) ───── */
 
+/* Renders the Import dropdown INTO the ExpandedPanel header slot (left
+   of the chevron), matching the same portal pattern PreviewTrim's Reset
+   button uses. Falls back to nothing if rendered outside an
+   ExpandedPanel context. */
 function ImportMenu() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const headerSlot = useContext(ExpandedPanelHeaderSlotContext);
 
   useEffect(() => {
     if (!open) return;
@@ -733,11 +740,16 @@ function ImportMenu() {
     };
   }, [open]);
 
-  return (
+  if (!headerSlot) return null;
+
+  return createPortal(
     <div className="relative" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
         className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
         data-testid="button-import-credits-menu"
       >
@@ -746,7 +758,7 @@ function ImportMenu() {
         <ChevronDown className="h-3 w-3 text-slate-400" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-10 w-44 rounded-md border border-slate-200 bg-white shadow-md py-1">
+        <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-md border border-slate-200 bg-white shadow-md py-1">
           <button
             type="button"
             onClick={() => {
@@ -764,7 +776,8 @@ function ImportMenu() {
           </button>
         </div>
       )}
-    </div>
+    </div>,
+    headerSlot,
   );
 }
 
@@ -844,12 +857,9 @@ export default function TrackCreditsPanel({
   }, [credits]);
 
   return (
-    <div className="px-5 pb-4" data-testid={`panel-track-credits-${songId}`}>
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-        <div className="flex items-center justify-end mb-2">
-          <ImportMenu />
-        </div>
-
+    <div className="px-5 pt-4 pb-4" data-testid={`panel-track-credits-${songId}`}>
+      <ImportMenu />
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
         <div className="divide-y divide-slate-100">
           {(["song", "performance", "production"] as Bucket[]).map(
             (bucket, i) => (
