@@ -5348,20 +5348,14 @@ function AudioEditor({
         )}
       </div>
 
-      {/* Preview Window + Instrumental — siblings of the file tile.
-          Everything in this editor auto-saves, so they share the same
-          settings card and the master file gets the same "Saved
-          automatically" treatment via the footer below. */}
+      {/* Instrumental toggle — the one setting that has no home
+          outside the Master editor. Preview used to live here too but
+          it duplicated the dedicated Preview tile next to Master in
+          the Tracks view (Bill: "I already know this under Preview").
+          A single inline row reads cleaner than a card-of-one. */}
       {song.audioUrl && (
-        <div className="pt-4">
-          <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
-            <div className="px-3.5 py-2.5">
-              <PreviewWindowEditor song={song} onSaved={onSaved} />
-            </div>
-            <div className="px-3.5 py-2.5">
-              <InstrumentalToggle song={song} />
-            </div>
-          </div>
+        <div className="pt-3 px-1">
+          <InstrumentalToggle song={song} />
         </div>
       )}
 
