@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   EyeOff,
-  ArrowLeftRight,
   GripVertical,
   Pencil,
   Trash2,
@@ -264,14 +263,6 @@ export function AdminAlbum() {
               {album.label && <span>· {album.label.name}</span>}
             </div>
           </div>
-          <button
-            onClick={openInClassicAdmin}
-            className="px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5 flex-shrink-0"
-            data-testid="button-open-classic-admin"
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5" />
-            Open in classic admin
-          </button>
         </div>
 
         {/* TABS */}
