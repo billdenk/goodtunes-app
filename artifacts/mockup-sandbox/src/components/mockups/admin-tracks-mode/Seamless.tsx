@@ -25,7 +25,7 @@ import {
   VolumeX,
   Mic2,
   CheckCircle2,
-  BadgeCheck,
+  RefreshCw,
   Circle,
 } from "lucide-react";
 
@@ -165,22 +165,28 @@ function StatusMeter({
     },
   ];
 
-  // Per-dot glyph. Shape is now the primary signal — "done" states wear
-  // a tiny check inside their badge, "synced" wears the same check but
-  // inside a SCALLOPED verification badge (same family as Twitter/Apple
-  // verified marks), "partial" is a filled amber circle without a check
-  // (work-in-progress, not yet earned a check), and "empty" is a hollow
-  // grey ring. Color still carries meaning, but a deuteranopic reader
-  // can tell the four states apart from the silhouette alone.
+  // Per-dot glyph. Shape is now the primary signal — "done" wears a
+  // tiny check inside a green circle, "synced" wears a SYNC glyph
+  // (circular arrows) inside a brand-blue circle (we deliberately
+  // avoid the scalloped verification badge so it stays free for a
+  // future "verified artist / verified fan" identity mark), "partial"
+  // is a filled amber circle without a glyph (work-in-progress, not
+  // yet earned a check), and "empty" is a hollow grey ring. Color
+  // reinforces, but a deuteranopic reader can tell the four states
+  // apart from silhouette alone (check vs. sync arrows vs. plain dot
+  // vs. ring).
   const renderDot = (state: DotState) => {
     if (state === "synced")
       return (
-        <BadgeCheck
-          className="w-3.5 h-3.5 text-[#319ED8]"
-          strokeWidth={2.25}
-          fill="#319ED8"
-          stroke="white"
-        />
+        <span
+          className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center"
+          style={{ backgroundColor: "#319ED8" }}
+        >
+          <RefreshCw
+            className="w-2 h-2 text-white"
+            strokeWidth={3}
+          />
+        </span>
       );
     if (state === "done")
       return (
