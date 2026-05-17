@@ -33,7 +33,6 @@ import {
   Ban,
   Lock,
   LockOpen,
-  MoveHorizontal,
   ChevronDown,
   ChevronUp,
   Disc3,
@@ -4075,32 +4074,6 @@ function RichPreviewEditor({
       data-testid={`preview-window-${song.id}`}
       className="relative space-y-3"
     >
-      {/* Compact status pill — only shown when there are unsaved
-          edits (amber) so the clean state stays quiet. The expanded
-          panel's header sublabel ("Auto · first 30 sec" / "Custom
-          30-sec clip") + the padlock's amber/emerald color already
-          tell the clean story; we only narrate when the artist is
-          mid-drag and fans are still on the old window.
-          Aligned right so it hugs the same edge as the panel
-          chevron — visually it reads as a header-right status
-          indicator without the deeper refactor of hoisting draft
-          state into ExpandedPanel itself. */}
-      {/* Stable-height status slot — always reserves its row even when
-          clean so unlocking + dragging doesn't bump the waveform (and
-          Play/Lock buttons) down. The pill only appears when there are
-          unsaved edits, but the surrounding box keeps the gap. */}
-      <div className="-mt-1 flex justify-end min-h-[26px]">
-        {isDirty && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-medium text-amber-800">
-            <MoveHorizontal className="w-3 h-3" />
-            Unsaved — fans still hear{" "}
-            {committedLeft < 0.5
-              ? "0:00–0:30"
-              : `${committedStartLabel}–${committedEndLabel}`}
-          </span>
-        )}
-      </div>
-
       {/* Reset action — portals into the ExpandedPanel header slot
           (just left of the collapse chevron) so it sits at a stable
           position regardless of what mounts/unmounts in the editor
@@ -4212,27 +4185,39 @@ function RichPreviewEditor({
               style={{ left: `${draftLeft}%`, width: `${widthPct}%` }}
               data-testid={`preview-window-handle-${song.id}`}
             >
-              {/* Window content — start time anchored to the LEFT
-                  ("that's where the window starts from"), end time
-                  smaller in the top-right corner. Each time stacks
-                  over its own nudge chevron so the gesture matches
-                  the meaning: left arrow nudges the start (= moves
-                  the whole window earlier), right arrow nudges later.
-                  All labels are pointer-events-none so the body of
-                  the window remains a single grab handle. */}
+              {/* Window content — start time top-left (big), end time
+                  top-right (smaller, no leading arrow). Both nudge
+                  chevrons live in a single bottom row at the SAME y
+                  and SAME size, so they read as a matched pair rather
+                  than staggered satellites of each label. The body
+                  between them stays a clean drag handle. */}
               <div
                 className={[
-                  "absolute inset-0 px-2 pt-1.5 pb-1 pointer-events-none select-none",
+                  "absolute inset-0 pointer-events-none select-none",
                   locked ? "text-emerald-900/90" : "text-amber-900/95",
                 ].join(" ")}
                 data-testid={`label-preview-start-${song.id}`}
               >
-                {/* Start time — big, top-left, with left nudge below */}
-                <div className="absolute left-2 top-1.5 flex flex-col items-start gap-0.5">
+                {/* Top row — times */}
+                <div className="absolute left-2 right-2 top-1.5 flex items-start justify-between gap-2">
                   <span className="text-[22px] leading-none font-bold tabular-nums tracking-tight drop-shadow-sm">
                     {draftStartLabel}
                   </span>
-                  {!locked && (
+                  <span
+                    className={[
+                      "text-[11px] font-medium tabular-nums leading-[1.6]",
+                      locked ? "text-emerald-900/55" : "text-amber-900/65",
+                    ].join(" ")}
+                  >
+                    {draftEndLabel}
+                  </span>
+                </div>
+
+                {/* Bottom row — matched-pair nudge chevrons. Same size,
+                    same y. Hidden when locked since you can't drag a
+                    locked window. */}
+                {!locked && (
+                  <div className="absolute left-1 right-1 bottom-1 flex items-center justify-between">
                     <button
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
@@ -4242,25 +4227,11 @@ function RichPreviewEditor({
                       }}
                       aria-label="Nudge start earlier (Shift = 0.1 sec)"
                       title="Earlier · Shift-click for 0.1 sec"
-                      className="pointer-events-auto w-6 h-6 -ml-1 rounded-md inline-flex items-center justify-center text-amber-900/75 hover:text-amber-900 hover:bg-amber-400/30 transition-colors"
+                      className="pointer-events-auto w-6 h-6 rounded-md inline-flex items-center justify-center text-amber-900/75 hover:text-amber-900 hover:bg-amber-400/30 transition-colors"
                       data-testid={`button-nudge-back-${song.id}`}
                     >
                       <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
                     </button>
-                  )}
-                </div>
-
-                {/* End time — smaller, top-right, with right nudge below */}
-                <div className="absolute right-2 top-2 flex flex-col items-end gap-0.5">
-                  <span
-                    className={[
-                      "text-[11px] font-medium tabular-nums leading-none",
-                      locked ? "text-emerald-900/55" : "text-amber-900/65",
-                    ].join(" ")}
-                  >
-                    → {draftEndLabel}
-                  </span>
-                  {!locked && (
                     <button
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
@@ -4270,13 +4241,13 @@ function RichPreviewEditor({
                       }}
                       aria-label="Nudge start later (Shift = 0.1 sec)"
                       title="Later · Shift-click for 0.1 sec"
-                      className="pointer-events-auto w-5 h-5 -mr-0.5 rounded-md inline-flex items-center justify-center text-amber-900/65 hover:text-amber-900 hover:bg-amber-400/30 transition-colors"
+                      className="pointer-events-auto w-6 h-6 rounded-md inline-flex items-center justify-center text-amber-900/75 hover:text-amber-900 hover:bg-amber-400/30 transition-colors"
                       data-testid={`button-nudge-forward-${song.id}`}
                     >
-                      <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
