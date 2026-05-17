@@ -31,12 +31,17 @@ import {
 
 type Mode = "edit" | "listen";
 
+// `instrumental: true` means the artist has explicitly said "this track has
+// no lyrics" — counts as DONE for the Lyrics tile (green check, "Instrumental"
+// subtitle). Different from `lyrics: false + instrumental: false`, which
+// reads as "not yet decided / unfinished." Cold Night shows the instrumental
+// state out of the box so the demo has both kinds of lyric-done rows.
 const TRACKS = [
-  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  credits: true,  duration: "3:30" },
-  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  credits: false, duration: "4:12" },
-  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: false, credits: true,  duration: "2:58" },
-  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  credits: true,  duration: "3:47" },
-  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, credits: false, duration: "—" },
+  { n: 1, title: "Made for Us",      master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  duration: "3:30" },
+  { n: 2, title: "Storms",           master: true,  snippet: false, lyrics: true,  instrumental: false, credits: false, duration: "4:12" },
+  { n: 3, title: "Cold Night",       master: true,  snippet: true,  lyrics: false, instrumental: true,  credits: true,  duration: "2:58" },
+  { n: 4, title: "Hurts To Love You",master: true,  snippet: true,  lyrics: true,  instrumental: false, credits: true,  duration: "3:47" },
+  { n: 5, title: "Lighthouse",       master: false, snippet: false, lyrics: false, instrumental: false, credits: false, duration: "—" },
 ];
 
 // One-word status meter. Replaces the old "n/2" ratio because the bare
@@ -961,9 +966,15 @@ function SnippetDetail({
 
 function LyricsDetail({
   hasLyrics,
+  instrumental,
+  onToggleInstrumental,
   onClose,
 }: {
   hasLyrics: boolean;
+  // When true, the editor is hidden — the artist has explicitly said
+  // "this track has no lyrics." Same tile, same place; just no body.
+  instrumental: boolean;
+  onToggleInstrumental: () => void;
   onClose: () => void;
 }) {
   const seed = hasLyrics
@@ -1143,7 +1154,70 @@ function LyricsDetail({
 
   return (
     <DetailWrap title="Lyrics" onClose={onClose} action={titleAction}>
-      {syncState === "synced" ? (
+      {/* Instrumental toggle — always at the top of the Lyrics sheet.
+          Checkbox-style row in Apple's preferences-list pattern. When
+          checked, the lyrics editor below collapses and the Lyrics tile
+          counts as DONE (green check + "Instrumental" subtitle). One
+          tap to flip back if the artist decides to add lyrics later. */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={instrumental}
+        onClick={onToggleInstrumental}
+        className={[
+          "w-full flex items-center gap-3 px-3 py-2.5 rounded-md border text-left transition-colors mb-3",
+          instrumental
+            ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100/70"
+            : "bg-white border-slate-200 hover:bg-slate-50",
+        ].join(" ")}
+        data-testid="toggle-instrumental"
+      >
+        <span
+          className={[
+            "w-5 h-5 rounded border-2 flex-shrink-0 inline-flex items-center justify-center transition-colors",
+            instrumental
+              ? "bg-emerald-500 border-emerald-500"
+              : "bg-white border-slate-300",
+          ].join(" ")}
+          aria-hidden
+        >
+          {instrumental && (
+            <CheckIcon className="w-3 h-3 text-white" strokeWidth={3} />
+          )}
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[13px] font-semibold text-slate-900">
+            Instrumental — no lyrics on this track
+          </span>
+          <span className="block text-[11.5px] text-slate-500 mt-0.5">
+            {instrumental
+              ? "Lyrics tile shows as done. Untick to add lyrics."
+              : "Tick this for intros, interludes, or any track without sung words."}
+          </span>
+        </span>
+      </button>
+      {instrumental ? (
+        // -- Instrumental state: editor hidden entirely. The reassurance
+        // -- card explains what happens on the player side so the artist
+        // -- isn't wondering "did I forget something?"
+        <div className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3 flex items-start gap-2.5">
+          <span
+            className="w-7 h-7 rounded-md bg-emerald-500/10 text-emerald-600 inline-flex items-center justify-center flex-shrink-0"
+            aria-hidden
+          >
+            <FileText className="w-3.5 h-3.5" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[12.5px] font-semibold text-slate-900">
+              Fans see no lyrics tab on this song.
+            </div>
+            <div className="text-[11.5px] text-slate-600 mt-0.5">
+              The player skips the lyrics overlay for instrumental tracks.
+              No further setup needed here.
+            </div>
+          </div>
+        </div>
+      ) : syncState === "synced" ? (
         // -- Upgraded state: synced view is now the source of truth. Each line
         // -- shows its timestamp and is editable in place. A small ↻ on hover
         // -- re-times that single line (cheap) instead of the whole song.
@@ -1952,6 +2026,13 @@ function EditRow({
   const [openSection, setOpenSection] = useState<Section>(null);
   const toggleSection = (s: Section) =>
     setOpenSection(openSection === s ? null : s);
+  // Per-row state for the "this track is instrumental" flag. Lives on the
+  // row (not inside LyricsDetail) so the Lyrics tile's status can read it
+  // even when the lyrics panel is closed.
+  const [instrumental, setInstrumental] = useState<boolean>(t.instrumental);
+  // The Lyrics tile is "done" if there are lyrics OR the artist marked
+  // the track instrumental. Same tile, two valid ways to clear it.
+  const lyricsDone = t.lyrics || instrumental;
   return (
     <li
       className={[
@@ -2100,9 +2181,10 @@ function EditRow({
                   onClick={() => toggleSection("snippet")}
                 />
                 <StatusBadge
-                  ok={t.lyrics}
+                  ok={lyricsDone}
                   icon={FileText}
                   label="Lyrics"
+                  subtitle={instrumental ? "Instrumental" : undefined}
                   severity="soft"
                   compact
                   active={openSection === "lyrics"}
@@ -2140,6 +2222,8 @@ function EditRow({
           {openSection === "lyrics" && (
             <LyricsDetail
               hasLyrics={t.lyrics}
+              instrumental={instrumental}
+              onToggleInstrumental={() => setInstrumental((v) => !v)}
               onClose={() => setOpenSection(null)}
             />
           )}
