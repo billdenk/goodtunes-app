@@ -1,0 +1,92 @@
+Good enough — I have what I need from the DDEX docs to build the complete brief. Here's the ready-to-paste Replit message:
+
+---
+
+**Paste this directly into Replit:**
+
+---
+
+Hey — quick context note before you read the spec below. This is **not a request to refactor, rename, or restructure anything**. No mass changes. The internal model stays clean; DDEX lives at the doorstep exactly as you recommended. You already made the right calls — this just gives you the two small artifacts to execute Layers 1 and 2 when the moment is right. Defer to your own judgment on timing, naming conventions, and how these fit the schema. These are recommendations, not mandates.
+
+---
+
+## DDEX Alignment — Layers 1 & 2 Only
+
+### Layer 1 — MEAD `ContributorRole` mapping (no schema change needed)
+
+When we build or update the role catalog/enum, use these DDEX MEAD `ContributorRole` codes as the canonical backing values. The UI labels stay whatever they are — this is just what lives in the data layer so we can truthfully say "role vocabulary conforms to MEAD."
+
+Map to your three existing GoodTunes buckets:
+
+**SONG (compositional)**
+| DDEX Code | Display label |
+|---|---|
+| `Composer` | Composer |
+| `ComposerLyricist` | Composer/Lyricist |
+| `Lyricist` | Lyricist |
+| `Author` | Author |
+| `MusicArrangeur` | Arranger (Music) |
+| `LyricAdapteur` | Lyric Adapter |
+| `Translator` | Translator |
+
+**PERFORMANCE (artist/recorded performance)**
+| DDEX Code | Display label |
+|---|---|
+| `MainArtist` | Main Artist |
+| `FeaturedArtist` | Featured Artist |
+| `Conductor` | Conductor |
+| `Soloist` | Soloist |
+| `Orchestra` | Orchestra |
+| `Choir` | Choir |
+| `Actor` | Actor |
+| `Dancer` | Dancer |
+| `DJ` | DJ |
+| `Narrator` | Narrator |
+| `AssociatedPerformer` | Session / Other Performer |
+
+**PRODUCTION (studio/technical)**
+| DDEX Code | Display label |
+|---|---|
+| `Producer` | Producer |
+| `Executive Producer` | Executive Producer |
+| `AssociatedEngineer` | Engineer |
+| `MixingEngineer` | Mixing Engineer |
+| `MasteringEngineer` | Mastering Engineer |
+| `RecordingEngineer` | Recording Engineer |
+| `SoundEngineer` | Sound Engineer |
+| `StudioPersonnel` | Studio Personnel |
+| `Programmer` | Programmer |
+| `Editor` | Editor |
+| `AssociatedPerformer` | Session Musician (can dual-map) |
+
+No UI changes. No schema migration. Just swap the string constants in the role catalog when the opportunity naturally arises. After this, if anyone asks "are your credits DDEX-compatible?" the honest answer is yes for role vocabulary.
+
+---
+
+### Layer 2 — ISNI + IPI columns on the `people` table (PIE compliance)
+
+When the `people` table is built, add these two nullable text columns from day one:
+
+```ts
+// Drizzle schema addition — people table
+isni: text("isni"),   // International Standard Name Identifier — 16-digit, e.g. "0000000121707484" (performers)
+ipi:  text("ipi"),    // Interested Parties Information — 9 or 11-digit CAE/IPI number (songwriters/publishers)
+```
+
+No UI cost. No validation required at this stage (nullable is fine). This lets us answer "are your artist records ISNI-linked?" with yes, and future-proofs payout de-duplication (e.g. two "James Walsh" entries resolve cleanly).
+
+---
+
+### What we are NOT doing yet
+
+- **No ERN export** — deferred until a specific distributor or label deal requires it. That's a DDEX Implementation Licence + 1–2 weeks of real engineering. Build it once we have a name in the room.
+- **No rebuilding the Drizzle schema around DDEX vocabulary natively** — internal types stay clean, DDEX translates at the boundary on import/export, exactly as you recommended.
+- **No other DDEX standards** (DSR, RDR, MWN) — not relevant yet.
+
+---
+
+That's it. Two low-cost steps, no disruption, and we can truthfully say "MEAD and PIE compliant" in any label meeting. Everything else deferred until funded by a deal. You own the implementation decisions.
+
+---
+
+That's ready to paste as-is. Want me to also generate a two-line README/roadmap.md addition to pin these decisions for future reference?
