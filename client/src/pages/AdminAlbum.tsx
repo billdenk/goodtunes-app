@@ -5369,12 +5369,17 @@ function AudioEditor({
             was just chrome noise the rest of the time (Bill: "do we
             need to say 'Save automatically'?"). The transient "Saving…"
             still flashes when the writer can actually act on it. */}
-        <p
-          className="text-[10.5px] text-slate-400"
+        <div
+          className="flex items-center gap-1.5 text-[10.5px] text-slate-400 min-h-[14px]"
           data-testid={`text-audio-autosave-${song.id}`}
         >
-          {saveMut.isPending || uploading ? "Saving…" : "\u00A0"}
-        </p>
+          {saveMut.isPending || uploading ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+              <span>Saving…</span>
+            </>
+          ) : null}
+        </div>
         <button
           type="button"
           onClick={onClose}
