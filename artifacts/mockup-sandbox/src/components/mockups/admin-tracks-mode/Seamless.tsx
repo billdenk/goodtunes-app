@@ -911,7 +911,16 @@ function BottomDock({
                     • Click speaker: toggle mute → swap Volume2 ↔ VolumeX,
                       the filled portion of the slider collapses to 0 and
                       the knob hides. Slider rail stays visible (hover) so
-                      the user can drag to unmute. */}
+                      the user can drag to unmute.
+
+                    Hidden in compact mode — Apple drops volume from its
+                    narrow mini-player too. At constrained widths the
+                    title is more valuable than a redundant control (the
+                    OS volume keys + the expanded dock both still work).
+                    This gives the title back ~46px so "Storms" + the
+                    full artist line read cleanly instead of "St..."/
+                    "Ni...". */}
+                {!compact && (
                 <div className="group/vol flex items-center pr-0.5">
                   <div
                     className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5"
@@ -945,6 +954,7 @@ function BottomDock({
                     <VolumeIcon className="w-5 h-5" />
                   </button>
                 </div>
+                )}
 
                 {/* Minimize — collapses the full dock to a corner pill.
                     Sits at the far right of the cluster (after volume) as
