@@ -3742,8 +3742,12 @@ function RichPreviewEditor({
           chevron — visually it reads as a header-right status
           indicator without the deeper refactor of hoisting draft
           state into ExpandedPanel itself. */}
-      {isDirty && (
-        <div className="-mt-1 flex justify-end">
+      {/* Stable-height status slot — always reserves its row even when
+          clean so unlocking + dragging doesn't bump the waveform (and
+          Play/Lock buttons) down. The pill only appears when there are
+          unsaved edits, but the surrounding box keeps the gap. */}
+      <div className="-mt-1 flex justify-end min-h-[26px]">
+        {isDirty && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-medium text-amber-800">
             <MoveHorizontal className="w-3 h-3" />
             Unsaved — fans still hear{" "}
@@ -3751,8 +3755,8 @@ function RichPreviewEditor({
               ? "0:00–0:30"
               : `${committedStartLabel}–${committedEndLabel}`}
           </span>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Reset action — portals into the ExpandedPanel header slot
           (just left of the collapse chevron) so it sits at a stable
