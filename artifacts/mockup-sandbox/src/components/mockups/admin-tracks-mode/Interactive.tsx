@@ -847,7 +847,7 @@ function CreditsDetail({
         // the "type a name" paths in a single surface.
         <div className="space-y-3">
           <p className="text-[12px] text-slate-500 italic">
-            No credits yet. SuperCredits™ work better with at least a writer and a performer.
+            No credits yet. Start with a writer and a performer.
           </p>
           <label className="flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
             <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />

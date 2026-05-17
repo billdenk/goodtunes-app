@@ -33,6 +33,20 @@ Outbound instrument links are affiliate links. Revenue split: **artist gets the 
 
 Treat affiliate URL + revenue share as part of the instrument record, not a per-link afterthought.
 
+### Pitch timing — don't sell SuperCredits™ to an empty card
+The first Credits-empty state intentionally does **not** mention SuperCredits™. Once the artist has added a writer + a performer, *then* surface the upsell: "Add the gear you used and turn your credits into SuperCredits™ — fans can tap your guitar, your strings, your producer's console, and buy them. You get the lion's share." The pitch lands harder when there's already a credit on screen to point at.
+
+### Higher affiliate share for richer notes
+Personal notes (tuning, why you picked this guitar for this take, mod history) are what fans actually want and what gear brands love to be associated with. Consider a tiered revenue split: **flat instrument credit → base share. Instrument + artist note → bumped share.** Pays the artist for the storytelling work and makes every credit row genuinely worth filling in.
+
+### Sub-gear (working name)
+A performer's instrument is often a *system*, not a single product. Example: "1973 Martin D-28" is the headline instrument, but the strings, capo, pickup, case, and signal-chain pieces are all separately purchasable and individually meaningful to fans. Data shape (tentative):
+- `instruments` stays the primary record (the guitar).
+- A new `instrument_components` (or `gear_pieces`) table links to a parent instrument with its own name, category (strings / capo / pickup / case / pedal / cable / strap), vendor + affiliate URL, position, optional photo.
+- The instrument sheet renders the headline instrument at top, then a compact "Setup" list of components — each tappable, each an affiliate link.
+- Sub-gear inherits the same affiliate-share rules as the parent instrument. Notes ("D'Addario EJ16 — light bronze, restrung the morning of the take") trigger the same bumped share.
+Naming: "Sub-gear" is fine internally but probably needs a friendlier user-facing term — *Setup*, *Rig*, *Loadout*, or *Kit* are candidates. Punt until we mock the instrument sheet redesign.
+
 ## SuperCredits™ — Artist profile + streaming-service handoff
 
 The "View artist profile" link on a performer sheet is the seed of a much bigger flow. It belongs to GoodTunes' core sales pitch (see "Sell first. Then stream." strategy deck): **fans buy on GoodTunes pre-launch and listen here; once the album reaches Spotify / Apple Music / Pandora / Deezer / etc., we hand them off**.
