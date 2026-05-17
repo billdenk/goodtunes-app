@@ -132,8 +132,16 @@ function Router() {
         <Route path="/admin/labels">
           <ProtectedRoute component={AdminLabels} />
         </Route>
-        <Route path="/admin">
+        {/* Bare /admin used to render the legacy 3-column monolith. We now
+            redirect straight into the new Albums index so anyone who lands
+            on /admin sees the updated chrome. The legacy page is still
+            reachable at /admin/classic for the few editing flows that
+            haven't been ported yet. */}
+        <Route path="/admin/classic">
           <ProtectedRoute component={Admin} />
+        </Route>
+        <Route path="/admin">
+          <Redirect to="/admin/albums" />
         </Route>
         <Route path="/">
           {user ? <Redirect to="/collection" /> : <Redirect to="/login" />}

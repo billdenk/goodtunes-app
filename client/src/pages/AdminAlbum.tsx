@@ -731,7 +731,7 @@ function TracksPanel({
 
   return (
     <section
-      className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+      className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden pb-32"
       data-testid="panel-tracks"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -760,10 +760,12 @@ function TracksPanel({
           {adding ? "Done" : "Add track"}
         </button>
       </div>
-      {/* Always reserve dock clearance — the dock is now viewport-fixed and
-          visible in both idle and playing states, so the last track row
-          must always sit above its ~110px footprint. */}
-      <ol className="pb-32">
+      {/* Dock clearance lives on the OUTER section (see pb-32 below) so it
+          always sits BELOW whichever element is last — last track row OR
+          the AddTrackForm when in adding mode. Previously the padding lived
+          inside this <ol>, which left a dead gap between row #N and the
+          add-row input and let the dock cover the add-row. */}
+      <ol>
         {sorted.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
           return (

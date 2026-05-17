@@ -102,14 +102,6 @@ export function AdminFrame({
           >
             Admin
           </span>
-          <Link
-            href="/collection"
-            className="text-slate-500 hover:text-slate-900 text-[12.5px] inline-flex items-center gap-1.5"
-            data-testid="link-back-to-player"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Back to player
-          </Link>
         </div>
       </header>
 
