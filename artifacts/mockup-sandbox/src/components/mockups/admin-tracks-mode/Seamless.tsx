@@ -556,11 +556,12 @@ function BottomDock({
       className="absolute left-1/2 -translate-x-1/2 bottom-4 z-20"
       style={hasSelection ? { width: "min(760px, calc(100% - 32px))" } : undefined}
     >
-      {/* Bottom padding (pb-3 vs px-3) reserves breathing room below
-          the content for the inset progress bar — Apple's mini-player
-          puts the bar a few px above the pill's bottom edge, not flush. */}
+      {/* Asymmetric vertical padding (pt-2 / pb-4) reserves a visible
+          breathing zone below the content for the inset progress bar —
+          Apple's mini-player floats the bar BELOW the cover with
+          clearance on both sides, never flush against either edge. */}
       <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
-        <div className="flex items-center gap-1.5 px-3 pt-2 pb-3">
+        <div className="flex items-center gap-1.5 px-3 pt-2 pb-4">
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -705,23 +706,25 @@ function BottomDock({
         </div>
 
         {/* ── Progress bar — Apple's mini-player anatomy ─────────────
-            A short rounded rectangle inset from both pill ends with
-            real breathing room below — NOT a full-width hairline glued
-            to the bottom edge. Symmetric inset (left-3 / right-3) ≈
-            the pill's horizontal padding, so the bar reads as a quiet
-            secondary signal beneath the content rather than a frame.
+            Bar is SCOPED to the now-playing card area: its left edge
+            aligns with the album cover's left edge, and its right edge
+            stops just before the right utility cluster. It does NOT
+            run under the transport buttons or the lyrics/volume icons.
 
-            • At REST: 2px rounded bar, time labels collapsed to w-0
-              (invisible).
-            • On HOVER: bar thickens to 4px + brightens; the elapsed
-              (left) and remaining-time (right) labels expand in from
-              w-0 — bar's flex-1 contracts to make room, so nothing
-              jumps vertically.
-            • On CLICK / scrubbing (active): bar thickens to 5px and
-              brightens further.
+            Pixel insets (left-[228px] / right-[110px]) are tuned to the
+            current cluster widths:
+              left  = px-3 (12) + transport (196) + gap (6) + divider (17) + gap (6)
+              right = px-3 (12) + right cluster (~90) + gap (6) + divider (~8)
+            If the cluster shapes change, retune these two numbers.
+
+            • At REST: 2px rounded bar, time labels collapsed to w-0.
+            • On HOVER: bar thickens to 4px + brightens; elapsed (left)
+              and remaining-time (right) labels expand in — bar's flex-1
+              contracts to make room, so nothing jumps vertically.
+            • On CLICK / scrubbing: 5px, brighter again.
             • End of the white fill IS the play head — no knob dot. */}
         {hasSelection && (
-          <div className="group/scrub absolute left-3 right-3 bottom-1.5 h-3 flex items-center gap-2 cursor-pointer">
+          <div className="group/scrub absolute left-[228px] right-[110px] bottom-1.5 h-3 flex items-center gap-2 cursor-pointer">
             <span className="text-[9.5px] tabular-nums text-slate-300 w-0 overflow-hidden opacity-0 group-hover/scrub:w-7 group-hover/scrub:opacity-100 text-right transition-all duration-150 whitespace-nowrap">
               {fmt(elapsedSeconds)}
             </span>
