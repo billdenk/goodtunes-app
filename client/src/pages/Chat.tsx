@@ -79,7 +79,7 @@ export function Chat() {
   const [, navigate] = useLocation();
 
   return (
-    <main className="relative min-h-screen w-full max-w-[390px] mx-auto bg-[#00062B] pb-[110px]">
+    <main className="relative min-h-screen w-full max-w-[390px] mx-auto pb-[110px]">
       <header className="relative z-10 flex items-end px-5 pt-14 pb-3">
         <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Chat</h1>
       </header>
@@ -253,7 +253,7 @@ export function ChatThreadPage() {
 
   if (!thread) {
     return (
-      <main className="relative min-h-screen w-full max-w-[390px] mx-auto bg-[#00062B] flex flex-col">
+      <main className="relative min-h-screen w-full max-w-[390px] mx-auto flex flex-col">
         <header className="sticky top-0 z-30 flex items-center gap-3 px-3 py-3" style={{ background: "rgba(0,6,43,0.92)", backdropFilter: "blur(24px) saturate(180%)" }}>
           <button
             type="button"
@@ -297,7 +297,7 @@ export function ChatThreadPage() {
   };
 
   return (
-    <main className="relative h-screen w-full max-w-[390px] mx-auto bg-[#00062B] flex flex-col">
+    <main className="relative h-screen w-full max-w-[390px] mx-auto flex flex-col">
       {/* Header — back + vendor avatar + name + domain */}
       <header
         className="flex-shrink-0 flex items-center gap-3 px-3 py-2.5 border-b border-white/8"

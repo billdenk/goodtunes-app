@@ -320,8 +320,8 @@ export function Playlists() {
 
   if (selectedPlaylist) {
     return (
-      <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
-        <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
+      <main className="h-screen w-full flex justify-center overflow-hidden">
+        <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
           <header className="flex items-center justify-between px-5 pt-14 pb-3 flex-shrink-0">
             <button type="button" onClick={closeDetail} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80" style={{ background: "rgba(255,255,255,0.08)" }} data-testid="button-back-playlist">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -609,16 +609,8 @@ export function Playlists() {
   }
 
   return (
-    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen bg-[#00062B] text-white flex flex-col">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse 130% 80% at 75% -10%, rgba(127,16,167,0.30) 0%, transparent 60%), radial-gradient(ellipse 110% 70% at 20% 110%, rgba(49,158,216,0.22) 0%, transparent 65%), linear-gradient(180deg, #0a0d4a 0%, #00062B 55%, #00041f 100%)",
-          }}
-        />
-
+    <main className="h-screen w-full flex justify-center overflow-hidden">
+      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Playlists</h1>
           <button

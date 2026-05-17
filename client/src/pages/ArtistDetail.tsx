@@ -135,7 +135,7 @@ export function ArtistDetail() {
   // page with their Music available on streaming buckets + About.
   if (artistAlbums.length === 0 && streamingAll.length === 0) {
     return (
-      <main className="min-h-screen bg-[#00062B] flex items-center justify-center">
+      <main className="min-h-screen flex items-center justify-center">
         <div className="text-white text-center">
           <p>Artist not found</p>
           <button onClick={() => navigate("/collection")} className="mt-4 text-[#319ED8]">Back to Collection</button>
@@ -155,7 +155,7 @@ export function ArtistDetail() {
   // now-playing controls.
 
   return (
-    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
+    <main className="h-screen w-full flex justify-center overflow-hidden relative">
       {blurSrc && (
         <div className="absolute top-0 left-0 right-0 h-[280px] overflow-hidden pointer-events-none">
           <img src={blurSrc} alt="" className="w-full h-full object-cover" style={{ filter: "blur(40px) saturate(140%)", transform: "scale(1.2)" }} />

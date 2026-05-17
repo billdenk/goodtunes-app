@@ -113,7 +113,7 @@ export function Collection() {
   const sortLabel = sortOptions[tab].find((o) => o.value === sortBy)?.label ?? "";
 
   return (
-    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden">
+    <main className="h-screen w-full flex justify-center overflow-hidden">
       <section
         className="relative w-full max-w-[390px] h-screen text-white flex flex-col"
         style={{

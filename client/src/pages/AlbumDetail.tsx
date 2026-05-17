@@ -301,7 +301,7 @@ export function AlbumDetail() {
 
   if (!album) {
     return (
-      <main className="min-h-screen bg-[#00062B] flex items-center justify-center">
+      <main className="min-h-screen flex items-center justify-center">
         <div className="text-white text-center">
           <p>Album not found</p>
           <button onClick={() => navigate("/collection")} className="mt-4 text-[#319ED8]">Back to Collection</button>
@@ -337,7 +337,7 @@ export function AlbumDetail() {
   const hasMoreBy = moreByArtist.length > 0;
 
   return (
-    <main className="h-screen w-full bg-[#00062B] flex justify-center overflow-hidden relative">
+    <main className="h-screen w-full flex justify-center overflow-hidden relative">
       <section className="relative w-full h-screen text-white flex flex-col">
         {/* Apple-Music-style top chrome:
             • back is a stand-alone 36px circle on the left

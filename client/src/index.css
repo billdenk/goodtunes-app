@@ -192,7 +192,18 @@
 }
 
 body {
+  /* Mobile pages used to paint this gradient inside the 390px column,
+     which left black gutters on wider viewports. Promoting it to body
+     so every fan-facing page is edge-to-edge horizontally. Individual
+     pages may still overlay their own gradient div over the column,
+     but they no longer need to — the body covers the viewport. The
+     admin theme below overrides this with a flat slate bg. */
   background-color: #00062B;
+  background-image:
+    radial-gradient(ellipse 130% 80% at 75% -10%, rgba(127,16,167,0.30) 0%, transparent 60%),
+    radial-gradient(ellipse 110% 70% at 20% 110%, rgba(49,158,216,0.22) 0%, transparent 65%),
+    linear-gradient(180deg, #0a0d4a 0%, #00062B 55%, #00041f 100%);
+  background-attachment: fixed;
   color: white;
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   overscroll-behavior: none;
@@ -204,6 +215,7 @@ body {
    override only applies while /admin is rendered. */
 body.gt-admin {
   background-color: #f7f8fa;
+  background-image: none; /* drop the fan-page gradient on admin routes */
   color: #0f172a; /* slate-900 */
   color-scheme: light;
 }
