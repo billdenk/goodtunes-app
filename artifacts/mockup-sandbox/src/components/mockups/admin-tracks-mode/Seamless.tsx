@@ -526,6 +526,16 @@ function BottomDock({
   // for fan-side favoriting per the design-system rules.
   const [shuffleOn, setShuffleOn] = useState(false);
   const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
+
+  // Scrub hover state — drives Apple's hover treatment for the progress
+  // bar. Hovering the bar (a) blurs the CENTER column (cover + title)
+  // only, leaving left/right icon clusters sharp; (b) reveals the
+  // elapsed + remaining time labels at the title's vertical position,
+  // flush-aligned with the bar's left and right edges; (c) thickens
+  // the bar without changing its width. CSS group/peer can't reach
+  // the center column from the absolutely-positioned bar across DOM
+  // levels, so we lift it to component state.
+  const [scrubHover, setScrubHover] = useState(false);
   const cycleRepeat = () =>
     setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
   const RepeatIcon = repeatMode === "one" ? Repeat1 : Repeat;
@@ -673,14 +683,23 @@ function BottomDock({
                   reference shot shows. The progress scrubber is NOT in
                   this column anymore — it lives at the pill's bottom
                   edge and runs UNDER everything (see below). */}
-              <div className="flex items-center gap-3 min-w-0 flex-1">
+              {/* Center cluster blurs out while the user is hovering the
+                  progress bar — Apple's hover treatment. Left/right icon
+                  clusters stay sharp; only the now-playing card recedes
+                  so the time labels above the bar have visual breathing
+                  room. Blur is moderate (6px) + 50% opacity — still
+                  faintly readable so context isn't lost. */}
+              <div
+                className={[
+                  "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
+                  scrubHover ? "blur-[6px] opacity-50" : "",
+                ].join(" ")}
+                aria-hidden={scrubHover}
+              >
                 {/* Cover at 40px (w-10) — intentionally one notch shorter
                     than the 44px Play button so the Play button drives
-                    the row's intrinsic height. That gives the bar 6px
-                    of clear space below the cover even with symmetric
-                    py-3 padding (without this, cover bottom would hug
-                    the bar). Stays clearly the largest visual anchor
-                    in the center cluster. */}
+                    the row's intrinsic height. Stays clearly the
+                    largest visual anchor in the center cluster. */}
                 <div className="w-10 h-10 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-semibold truncate leading-tight">
@@ -779,20 +798,43 @@ function BottomDock({
             • On CLICK / scrubbing: 5px, brighter again.
             • End of the white fill IS the play head — no knob dot. */}
         {hasSelection && (
-          <div className="group/scrub absolute left-[228px] right-[110px] bottom-1.5 h-3 flex items-center gap-2 cursor-pointer">
-            <span className="text-[9.5px] tabular-nums text-slate-300 w-0 overflow-hidden opacity-0 group-hover/scrub:w-7 group-hover/scrub:opacity-100 text-right transition-all duration-150 whitespace-nowrap">
-              {fmt(elapsedSeconds)}
-            </span>
-            <div className="relative flex-1 h-[2px] rounded-full bg-white/15 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/25 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
-              <div
-                className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
-                style={{ width: `${progress}%` }}
-              />
+          <>
+            {/* Time labels — appear at the SAME vertical position as the
+                (now-blurred) title text, flush-aligned with the bar's
+                left + right edges. text-[13px] = Apple's footnote size.
+                Pointer-events disabled so they don't intercept the
+                bar's hover area. */}
+            <div
+              className={[
+                "absolute left-[228px] right-[110px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
+                "transition-opacity duration-150",
+                scrubHover ? "opacity-100" : "opacity-0",
+              ].join(" ")}
+            >
+              <span className="text-[13px] tabular-nums text-slate-300 whitespace-nowrap">
+                {fmt(elapsedSeconds)}
+              </span>
+              <span className="text-[13px] tabular-nums text-slate-300 whitespace-nowrap">
+                −{fmt(totalSeconds - elapsedSeconds)}
+              </span>
             </div>
-            <span className="text-[9.5px] tabular-nums text-slate-300 w-0 overflow-hidden opacity-0 group-hover/scrub:w-9 group-hover/scrub:opacity-100 transition-all duration-150 whitespace-nowrap">
-              −{fmt(totalSeconds - elapsedSeconds)}
-            </span>
-          </div>
+
+            {/* Bar — fixed width (no shrink-to-make-room dance). On
+                hover the cover+title behind it blur via scrubHover
+                state, and the bar itself thickens 2 → 4 → 5px. */}
+            <div
+              className="group/scrub absolute left-[228px] right-[110px] bottom-1.5 h-3 flex items-center cursor-pointer"
+              onMouseEnter={() => setScrubHover(true)}
+              onMouseLeave={() => setScrubHover(false)}
+            >
+              <div className="relative flex-1 h-[2px] rounded-full bg-white/15 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/25 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
+                <div
+                  className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>
