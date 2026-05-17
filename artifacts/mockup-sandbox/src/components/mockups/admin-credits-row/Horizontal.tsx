@@ -8,7 +8,11 @@ import {
   Mic2,
   Sliders,
   Check,
+  Disc3,
+  FileText,
+  Music2,
 } from "lucide-react";
+import nickCarterPhoto from "@/assets/people/nick-carter.jpg";
 
 // Per-track Credits tile.
 //
@@ -31,19 +35,23 @@ type Bucket = "song" | "performance" | "production";
 type Person = {
   id: string;
   name: string;
+  photoUrl?: string;
   roles: string[];
   source: "muso" | "manual";
 };
 
+// Real data from the admin People table — Nick Carter has a headshot
+// uploaded; the rest fall back to slate initial circles (same pattern as
+// the live admin shows today).
 const SONG: Person[] = [
-  { id: "p1", name: "Nick Carter", roles: ["Composer", "Lyricist"], source: "muso" },
+  { id: "p1", name: "Nick Carter", photoUrl: nickCarterPhoto, roles: ["Composer", "Lyricist"], source: "muso" },
   { id: "p2", name: "Vic Martin", roles: ["Composer"], source: "muso" },
   { id: "p3", name: "Bryan Shackle", roles: ["Composer", "Lyricist"], source: "muso" },
   { id: "p4", name: "Beck Nebel", roles: ["Composer"], source: "muso" },
 ];
 
 const PERFORMANCE: Person[] = [
-  { id: "p1", name: "Nick Carter", roles: ["Lead vocals", "Acoustic guitar"], source: "muso" },
+  { id: "p1", name: "Nick Carter", photoUrl: nickCarterPhoto, roles: ["Lead vocals", "Acoustic guitar"], source: "muso" },
   { id: "p2", name: "Vic Martin", roles: ["Background vocals", "Piano"], source: "muso" },
   { id: "p5", name: "Jenna Reid", roles: ["Background vocals"], source: "muso" },
   { id: "p6", name: "Marcus Lee", roles: ["Bass"], source: "muso" },
@@ -97,17 +105,26 @@ function PersonColumn({
   // Two-tap remove, mirroring AlbumCredits.tsx. First tap arms (rose ring +
   // "Remove?" label); second tap commits. Auto-disarms in 3s via parent.
   return (
-    <div className="flex w-[110px] shrink-0 flex-col items-center text-center">
+    <div className="flex w-[96px] shrink-0 flex-col items-center text-center">
       <div className="relative">
         <div
           className={[
-            "flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-semibold transition",
+            "flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-[11px] font-semibold transition",
             armed
-              ? "bg-rose-50 text-rose-600 ring-2 ring-rose-400"
-              : "bg-slate-200 text-slate-600",
+              ? "ring-2 ring-rose-400"
+              : "",
+            p.photoUrl ? "bg-slate-100" : "bg-slate-200 text-slate-600",
           ].join(" ")}
         >
-          {initials(p.name)}
+          {p.photoUrl ? (
+            <img
+              src={p.photoUrl}
+              alt={p.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials(p.name)
+          )}
         </div>
         <button
           onClick={() => onRemove(p.id)}
@@ -350,40 +367,42 @@ export function Horizontal() {
     .filter((p) => p.source === "muso").length;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-6 font-sans antialiased">
-      <div className="max-w-[760px] mx-auto">
-        {/* Track header — same chrome as AlbumCredits */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-[#00062B] via-[#319ED8] to-[#7F10A7] flex-shrink-0 shadow-sm flex items-center justify-center text-white font-bold text-[15px]">
-            3
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
-              Track 3 · Credits
-            </div>
-            <h1 className="text-[22px] font-bold text-slate-900 leading-tight truncate">
-              Made for Us
-            </h1>
-            <div className="text-[12.5px] text-slate-500">
-              Nick Carter · <span className="italic">Love Life Tragedy</span>
-            </div>
-          </div>
+    <div className="min-h-screen bg-slate-50 py-6 px-5 font-sans antialiased">
+      <div className="max-w-[640px] mx-auto">
+        {/* Context — this lives inside the expanded track row, in a tab
+            strip under the Master audio. The breadcrumb + row title sit
+            above; tabs below; Credits is the active tab. */}
+        <div className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5 mb-1.5">
+          <span>Love Life Tragedy</span>
+          <span className="text-slate-300">/</span>
+          <span>Track 3</span>
+        </div>
+        <h1 className="text-[18px] font-bold text-slate-900 leading-tight truncate mb-3">
+          Made for Us
+        </h1>
+
+        {/* Tab strip — Master is the sibling tab; Credits is active here. */}
+        <div className="flex items-center gap-1 border-b border-slate-200 mb-3 -mx-1 px-1">
+          <TabPill Icon={Disc3} label="Master" />
+          <TabPill Icon={Mic2} label="Credits" active />
+          <TabPill Icon={FileText} label="Lyrics" />
+          <TabPill Icon={Music2} label="Files" />
         </div>
 
-        {/* Muso reconcile banner — shows where the data came from */}
-        <div className="flex items-center justify-between gap-3 mb-3 rounded-xl border border-[#319ED8]/30 bg-[#319ED8]/5 px-4 py-2.5">
+        {/* Muso reconcile banner */}
+        <div className="flex items-center justify-between gap-3 mb-3 rounded-lg border border-[#319ED8]/30 bg-[#319ED8]/5 px-3 py-2">
           <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="h-4 w-4 text-[#319ED8] flex-shrink-0" />
+            <Sparkles className="h-3.5 w-3.5 text-[#319ED8] flex-shrink-0" />
             <div className="min-w-0">
-              <div className="text-[12.5px] font-semibold text-slate-900">
+              <div className="text-[12px] font-semibold text-slate-900 leading-tight">
                 {totalMuso} credits imported from Muso
               </div>
-              <div className="text-[11px] text-slate-500 leading-snug">
-                Review and add anyone Muso missed below.
+              <div className="text-[10.5px] text-slate-500 leading-snug">
+                Review and add anyone Muso missed.
               </div>
             </div>
           </div>
-          <button className="px-2.5 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11.5px] hover:bg-slate-50 inline-flex items-center gap-1 flex-shrink-0">
+          <button className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-600 text-[11px] hover:bg-slate-50 inline-flex items-center gap-1 flex-shrink-0">
             <Sparkles className="h-3 w-3 text-[#319ED8]" />
             Re-import
           </button>
@@ -416,12 +435,35 @@ export function Horizontal() {
           />
         </div>
 
-        <p className="mt-5 text-center text-[11px] leading-relaxed text-slate-400 italic">
-          Tap any person to add the specific instrument they played, tuning notes, or gear
-          — drill-down lives in the song view.
+        <p className="mt-4 text-center text-[10.5px] leading-relaxed text-slate-400 italic">
+          Tap any person to add the specific instrument they played, tuning notes, or gear.
         </p>
       </div>
     </div>
+  );
+}
+
+function TabPill({
+  Icon,
+  label,
+  active,
+}: {
+  Icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <button
+      className={[
+        "inline-flex items-center gap-1.5 px-3 py-2 text-[12.5px] font-medium border-b-2 -mb-px transition",
+        active
+          ? "text-slate-900 border-[#319ED8]"
+          : "text-slate-500 border-transparent hover:text-slate-700",
+      ].join(" ")}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
   );
 }
 
