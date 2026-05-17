@@ -2237,12 +2237,22 @@ function GoodSyncPanel({
   // synced song still showed the fake even-distribution timing in the
   // preview — looking "a few seconds behind" even though the saved cues
   // were accurate.
+  // True when the song has real saved cues AND the typed words still
+  // match what was synced. Drives both the preview source (real cues
+  // vs even-distribution placeholder) and the header button (play vs
+  // "Sync with audio").
+  const savedLyricsNorm = (song.lyrics ?? "").trim();
+  const draftNorm = draftLyrics.trim();
+  const savedCues = song.syncedLyrics ?? [];
+  const isSynced =
+    canPlay &&
+    savedCues.length > 0 &&
+    !!draftNorm &&
+    draftNorm === savedLyricsNorm;
+
   const previewCues = useMemo(() => {
     if (!canPlay) return [];
-    const savedLyrics = (song.lyrics ?? "").trim();
-    const draftNorm = draftLyrics.trim();
-    const savedCues = song.syncedLyrics ?? [];
-    if (savedCues.length > 0 && draftNorm && draftNorm === savedLyrics) {
+    if (isSynced) {
       // Filter section headers (bracketed or all-caps shorthand) — they
       // share a timestamp with the next sung line server-side; we hide
       // them in the preview the same way the player does.
@@ -2251,7 +2261,8 @@ function GoodSyncPanel({
       );
     }
     return distributeLyrics(draftLyrics, song.duration ?? 240);
-  }, [canPlay, draftLyrics, song.duration, song.lyrics, song.syncedLyrics]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canPlay, draftLyrics, song.duration, isSynced]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -2372,25 +2383,49 @@ function GoodSyncPanel({
             {previewCues.length} cues
           </span>
         )}
-        {/* Real ElevenLabs forced alignment. Replaces the even-distribution
-            preview with line-timed cues derived from the actual audio.
-            Only meaningful when we have audio + non-instrumental + lyrics. */}
-        {canPlay && onSyncWithAudio && (
+        {/* Header action swaps based on state:
+            • not-yet-synced → blue "Sync with audio" pill (ElevenLabs).
+            • already-synced (draft matches saved lyrics + saved cues
+              exist) → small play/pause button, gray-until-hover, same
+              chrome treatment as the Info button to its left. The big
+              bottom-of-box play button is still there for context with
+              time labels; this header copy lets the writer scrub from
+              the top without scrolling. */}
+        {canPlay && isSynced ? (
           <button
             type="button"
-            onClick={onSyncWithAudio}
-            disabled={syncing}
-            title="Sync with audio — uses ElevenLabs to time each line to the master"
-            className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid={`button-sync-audio-${song.id}`}
+            onClick={togglePlay}
+            disabled={previewCues.length === 0}
+            aria-label={playing ? "Pause preview" : "Play preview"}
+            title={playing ? "Pause preview" : "Play preview"}
+            className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid={`button-play-goodsync-header-${song.id}`}
           >
-            {syncing ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
+            {playing ? (
+              <Pause className="w-3.5 h-3.5" />
             ) : (
-              <Sparkles className="w-3 h-3" />
+              <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
             )}
-            {syncing ? "Syncing…" : "Sync with audio"}
           </button>
+        ) : (
+          canPlay &&
+          onSyncWithAudio && (
+            <button
+              type="button"
+              onClick={onSyncWithAudio}
+              disabled={syncing}
+              title="Sync with audio — uses ElevenLabs to time each line to the master"
+              className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid={`button-sync-audio-${song.id}`}
+            >
+              {syncing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              {syncing ? "Syncing…" : "Sync with audio"}
+            </button>
+          )
         )}
       </div>
     </div>
@@ -2554,28 +2589,24 @@ function LyricsEditor({
   const normalized = draft.trim() ? draft : "";
   const dirty = (normalized || null) !== (song.lyrics ?? null);
 
-  // Save persists BOTH the typed words AND the derived GoodSync™ cues
-  // in one call (Bill: "Cancel and Save can do the auto save"). Cancel
-  // discards both. Cues are auto-distributed from the draft via the
-  // same algorithm that drives the live preview — section headers are
-  // stripped, so V1 / PRE / [Chorus] never get rendered as sung lines.
+  // Silent autosave — Bill: "we auto save like the preview". Writes
+  // only the words; the GoodSync™ preview is derived from them, and
+  // real cues come from the "Sync with audio" button (ElevenLabs).
+  // We deliberately pass syncedLyrics: null while the draft drifts
+  // from what was last synced, so the player doesn't render stale
+  // cues against new words. The next "Sync with audio" repopulates.
   const saveMut = useMutation({
     mutationFn: async () => {
-      const cues =
-        !song.instrumental && song.audioUrl && normalized
-          ? distributeLyrics(normalized, song.duration ?? 240)
-          : [];
-      return apiRequest("PUT", `/api/admin/songs/${song.id}`, {
-        lyrics: normalized || null,
-        syncedLyrics: cues.length > 0 ? cues : null,
-      });
+      // If the draft still matches what's saved + already-synced, skip
+      // touching syncedLyrics (preserves real ElevenLabs cues).
+      const draftMatchesSaved = normalized === (song.lyrics ?? "");
+      const body: Record<string, unknown> = { lyrics: normalized || null };
+      if (!draftMatchesSaved) body.syncedLyrics = null;
+      return apiRequest("PUT", `/api/admin/songs/${song.id}`, body);
     },
     onSuccess: async () => {
       await onSaved();
-      toast({
-        title: normalized ? "Lyrics saved" : "Lyrics cleared",
-      });
-      onClose();
+      // No toast, no close — this is silent autosave.
     },
     onError: (e: any) =>
       toast({
@@ -2584,6 +2615,20 @@ function LyricsEditor({
         variant: "destructive",
       }),
   });
+
+  // Debounced autosave: 800ms after the writer stops typing, persist
+  // the current draft if it differs from what's on the server. No
+  // save-while-pending — react-query's mutate is fine to call back-to-
+  // back; we just gate with isPending so we don't queue a redundant
+  // round-trip on every keystroke after the debounce fires.
+  useEffect(() => {
+    if (song.instrumental) return;
+    if (!dirty) return;
+    if (saveMut.isPending) return;
+    const t = setTimeout(() => saveMut.mutate(), 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, song.instrumental, song.lyrics]);
 
   // Real ElevenLabs forced alignment. Two-step flow so the alignment
   // is always run against what the user just typed (not the previously-
@@ -2613,11 +2658,14 @@ function LyricsEditor({
     },
     onSuccess: async (data) => {
       await onSaved();
+      // Editor stays open — Bill: "After it syncs the 'sync with...'
+      // has served its purposes and is replaced with a play button."
+      // The header swap is automatic once the refetched song has the
+      // new syncedLyrics that match the typed draft.
       toast({
         title: "Synced with audio",
         description: `${data.lineCount} lines · ${data.wordCount} words aligned`,
       });
-      onClose();
     },
     onError: (e: any) =>
       toast({
@@ -2633,12 +2681,9 @@ function LyricsEditor({
     <div
       className="px-5 pt-3 pb-4"
       onKeyDown={(e) => {
-        // Cmd/Ctrl+Enter saves; Escape cancels. Save is suppressed
-        // when the track is marked instrumental (nothing to save).
-        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-          e.preventDefault();
-          if (!song.instrumental && dirty && !saveMut.isPending) saveMut.mutate();
-        } else if (e.key === "Escape" && !saveMut.isPending) {
+        // Escape closes the editor. Save shortcut is unnecessary —
+        // we autosave 800ms after typing stops.
+        if (e.key === "Escape" && !saveMut.isPending) {
           e.preventDefault();
           onClose();
         }
@@ -2678,31 +2723,17 @@ function LyricsEditor({
                 </span>
               </div>
             ) : (
-              <>
-                <textarea
-                  ref={textareaRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  rows={8}
-                  placeholder={
-                    "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus"
-                  }
-                  disabled={saveMut.isPending}
-                  className="w-full flex-1 h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
-                  data-testid={`textarea-lyrics-${song.id}`}
-                />
-
-                <p className="text-[10.5px] text-slate-400 leading-snug">
-                  Mark structure with shorthand —{" "}
-                  <code className="font-mono">V1</code>,{" "}
-                  <code className="font-mono">PRE</code>,{" "}
-                  <code className="font-mono">CHORUS</code>,{" "}
-                  <code className="font-mono">BRIDGE</code> — or
-                  brackets like <code className="font-mono">[Verse 1]</code>.
-                  Either way they're skipped from the GoodSync™ preview
-                  and the player.
-                </p>
-              </>
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={8}
+                placeholder={
+                  "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus"
+                }
+                className="w-full h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                data-testid={`textarea-lyrics-${song.id}`}
+              />
             )}
           </div>
 
@@ -2713,32 +2744,6 @@ function LyricsEditor({
             onSyncWithAudio={() => alignMut.mutate()}
             syncing={alignMut.isPending}
           />
-        </div>
-
-        <div className="flex items-center justify-end gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saveMut.isPending}
-            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
-            data-testid={`button-cancel-lyrics-${song.id}`}
-          >
-            {song.instrumental ? "Close" : "Cancel"}
-          </button>
-          {!song.instrumental && (
-            <button
-              type="button"
-              onClick={() => saveMut.mutate()}
-              disabled={!dirty || saveMut.isPending}
-              className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
-              data-testid={`button-save-lyrics-${song.id}`}
-            >
-              {saveMut.isPending && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              )}
-              Save lyrics
-            </button>
-          )}
         </div>
       </div>
     </div>
