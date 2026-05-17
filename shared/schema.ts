@@ -139,6 +139,10 @@ export const songs = pgTable("songs", {
   // Player's lyrics overlay uses these timestamps verbatim instead of
   // auto-distributing the plain-text `lyrics` field across duration.
   syncedLyrics: jsonb("synced_lyrics").$type<{ timeMs: number; text: string }[]>(),
+  // Marks a track that has no lyrics by design (instrumental / interlude /
+  // outro). The Lyrics status dot then reads "intentionally none" (grey
+  // Ban glyph) instead of "missing" (empty grey ring). Default false.
+  instrumental: boolean("instrumental").notNull().default(false),
 });
 
 export const userAlbums = pgTable(

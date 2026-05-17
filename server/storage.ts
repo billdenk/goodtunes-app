@@ -309,7 +309,13 @@ const SEED_ALBUMS: Album[] = [
   { id: "album-4", title: "California Way", artist: "TOMMYGUNN", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-3.png", year: 2024, type: "LP", description: "Sunshine, highways, and the stories only California can tell.", labelId: null, isHidden: false, isGoodTunesRelease: true, appleMusicUrl: null, spotifyUrl: null, goodTunesReleaseDate: null, streamingReleaseDate: null, primaryArtistId: null, genre: null },
 ];
 
-const SEED_SONGS: Song[] = [
+// Seed songs predate the syncedLyrics + instrumental columns, so we type
+// them loosely and supply the defaults at the insert-site below.
+type SeedSong = Omit<Song, "syncedLyrics" | "instrumental"> & {
+  syncedLyrics?: Song["syncedLyrics"];
+  instrumental?: Song["instrumental"];
+};
+const SEED_SONGS: SeedSong[] = [
   { id: "song-1-1", albumId: "album-1", title: "The Quiet Before", trackNumber: 1, duration: 214, lyrics: "In the space between the seconds\nWhere the clocks forget to breathe\nI found a version of the stillness\nThat I never thought to seek\n\nWhen the world stops, I'll be here\nWhen the world stops, I'll be near\nIn the silence that surrounds us\nIn the peace that comes to ground us\nWhen the world stops", audioUrl: null },
   { id: "song-1-2", albumId: "album-1", title: "Paper Sky", trackNumber: 2, duration: 198, lyrics: "Folded dreams on a paper sky\nWatching clouds that never ask you why\nEvery crease a memory sealed\nEvery line a wound that time has healed\n\nPaper sky, you hold my story\nPaper sky, in all your glory\nTear the edges, let the light in\nPaper sky, where do I begin", audioUrl: null },
   { id: "song-1-3", albumId: "album-1", title: "River North", trackNumber: 3, duration: 241, lyrics: "Heading north where the river bends\nWhere the old road meets its ends\nGot a map that's out of date\nAnd a heart that's running late\n\nRiver North, carry me through\nRiver North, I'm coming to you\nPast the valleys, past the stone\nRiver North, I'm almost home", audioUrl: null },

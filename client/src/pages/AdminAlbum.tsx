@@ -26,6 +26,9 @@ import {
   ImagePlus,
   Link2,
   X as XIcon,
+  Circle,
+  CheckCircle2,
+  Ban,
 } from "lucide-react";
 import {
   Popover,
@@ -37,6 +40,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -87,6 +91,7 @@ interface SongLite {
   lyrics: string | null;
   audioUrl: string | null;
   syncedLyrics?: { timeMs: number; text: string }[] | null;
+  instrumental?: boolean | null;
 }
 
 type Tab = "overview" | "tracks" | "artwork" | "masters" | "bonus";
@@ -615,9 +620,6 @@ function TracksPanel({
       <ol>
         {sorted.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
-          const creditCount =
-            (songCredits?.writers.length ?? 0) +
-            (songCredits?.performers.length ?? 0);
           return (
             <TrackRow
               key={song.id}
@@ -625,7 +627,6 @@ function TracksPanel({
               albumId={album.id}
               onOpen={onEdit}
               withBorder={i !== sorted.length - 1}
-              creditCount={creditCount}
               credits={songCredits ?? null}
               isDragging={dragId === song.id}
               isDropTarget={dropOnId === song.id && dragId !== song.id}
@@ -822,12 +823,86 @@ type TrackMode = "view" | "rename" | "audio" | "lyrics" | "synced" | "credits";
 
 type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
 
+/* ─── Track status meter ─────────────────────────────────────────────
+   Three small dots that read at a glance how complete a track is.
+   The master upload is the GATE — when there's no master, the meter
+   collapses to a single amber "Upload master" CTA (clicking it opens
+   the audio editor). Once a master is present, the three optional
+   pieces (Preview · Lyrics · Credits) each get a dot. The Preview
+   dot is informational — in v1 it's always "ready" when a master
+   exists because the 30-second preview is auto-derived from the
+   first 30s of the master. The slider + custom-clip upload land in
+   a later iteration.
+
+   Dot states use shape (not just color) so the meter remains
+   readable for deuteranopic vision:
+     · empty        — hollow grey ring (Circle)
+     · done         — green disc + white check (CheckCircle2)
+     · synced       — brand-blue disc + custom WaveArrowGlyph (GoodSync™)
+     · partial      — solid amber disc (credits: some but not all)
+     · instrumental — grey disc + Ban glyph (lyrics: none by design)
+   ──────────────────────────────────────────────────────────────── */
+
+function WaveArrowGlyph({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="18" y="40" width="10" height="20" rx="2" fill="white" />
+      <rect x="36" y="22" width="10" height="56" rx="2" fill="white" />
+      <rect x="54" y="32" width="10" height="36" rx="2" fill="white" />
+      <rect x="72" y="42" width="10" height="16" rx="2" fill="white" />
+    </svg>
+  );
+}
+
+type DotState = "empty" | "done" | "synced" | "partial" | "instrumental";
+
+function renderDot(state: DotState) {
+  if (state === "done")
+    return (
+      <CheckCircle2
+        className="w-3.5 h-3.5 text-emerald-500"
+        strokeWidth={2.25}
+        fill="currentColor"
+        stroke="white"
+      />
+    );
+  if (state === "synced")
+    return (
+      <span className="w-4 h-4 rounded-full bg-[#319ED8] inline-flex items-center justify-center">
+        <WaveArrowGlyph className="w-2.5 h-2.5" />
+      </span>
+    );
+  if (state === "partial")
+    return (
+      <span className="w-3.5 h-3.5 rounded-full bg-amber-500 inline-block" />
+    );
+  if (state === "instrumental")
+    return (
+      <span className="w-3.5 h-3.5 rounded-full bg-slate-300 inline-flex items-center justify-center">
+        <Ban className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
+      </span>
+    );
+  return <Circle className="w-3.5 h-3.5 text-slate-300" strokeWidth={1.5} />;
+}
+
+function dotHint(label: string, state: DotState): string {
+  if (state === "synced") return `${label} · GoodSync™ ready`;
+  if (state === "done") return `${label} complete`;
+  if (state === "partial") return `${label} partial — keep going`;
+  if (state === "instrumental") return "Lyrics — instrumental (none by design)";
+  return `${label} not started`;
+}
+
 function TrackRow({
   song,
   albumId,
   onOpen,
   withBorder,
-  creditCount,
   credits,
   isDragging,
   isDropTarget,
@@ -840,7 +915,6 @@ function TrackRow({
   albumId: string;
   onOpen: () => void;
   withBorder: boolean;
-  creditCount: number;
   credits: SongCreditsLite | null;
   isDragging: boolean;
   isDropTarget: boolean;
@@ -1066,88 +1140,139 @@ function TrackRow({
                   {song.title}
                 </div>
               </button>
-              <div className="flex items-center gap-2.5 mt-0.5">
-                <button
-                  ref={masterChipRef}
-                  type="button"
-                  onClick={() =>
-                    setMode((m) => (m === "audio" ? "view" : "audio"))
-                  }
-                  aria-label="Edit master audio file"
-                  title="Edit master"
-                  data-testid={`button-edit-master-${song.id}`}
-                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
-                >
-                  <TrackChip
-                    ok={!!song.audioUrl}
-                    label={song.audioUrl ? "Master" : "No master"}
-                    testId={`chip-master-${song.id}`}
-                    interactive
-                  />
-                </button>
-                <button
-                  ref={lyricsChipRef}
-                  type="button"
-                  onClick={() =>
-                    setMode((m) => (m === "lyrics" ? "view" : "lyrics"))
-                  }
-                  aria-label="Edit lyrics"
-                  title="Edit lyrics"
-                  data-testid={`button-edit-lyrics-${song.id}`}
-                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
-                >
-                  <TrackChip
-                    ok={!!song.lyrics}
-                    label={song.lyrics ? "Lyrics" : "No lyrics"}
-                    testId={`chip-lyrics-${song.id}`}
-                    interactive
-                  />
-                </button>
-                <button
-                  ref={syncedChipRef}
-                  type="button"
-                  onClick={() =>
-                    setMode((m) => (m === "synced" ? "view" : "synced"))
-                  }
-                  aria-label="Edit synced lyrics"
-                  title="Edit synced lyrics (WebVTT)"
-                  data-testid={`button-edit-synced-${song.id}`}
-                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
-                >
-                  <TrackChip
-                    ok={!!(song.syncedLyrics && song.syncedLyrics.length)}
-                    label={
-                      song.syncedLyrics && song.syncedLyrics.length
-                        ? `Synced · ${song.syncedLyrics.length}`
-                        : "No sync"
-                    }
-                    testId={`chip-synced-${song.id}`}
-                    interactive
-                  />
-                </button>
-                <button
-                  ref={creditsChipRef}
-                  type="button"
-                  onClick={() =>
-                    setMode((m) => (m === "credits" ? "view" : "credits"))
-                  }
-                  aria-label="View credits"
-                  title="View credits (writers + performers)"
-                  data-testid={`button-view-credits-${song.id}`}
-                  className="rounded focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
-                >
-                  <TrackChip
-                    ok={creditCount > 0}
-                    label={
-                      creditCount > 0
-                        ? `Credits · ${creditCount}`
-                        : "No credits"
-                    }
-                    testId={`chip-credits-${song.id}`}
-                    interactive
-                  />
-                </button>
-              </div>
+              {(() => {
+                const hasMaster = !!song.audioUrl;
+                if (!hasMaster) {
+                  // Master is the gate — no master means there's nothing
+                  // to do for the other pieces yet, so we collapse the
+                  // status meter into a single upload CTA.
+                  return (
+                    <div className="mt-1">
+                      <button
+                        ref={masterChipRef}
+                        type="button"
+                        onClick={() =>
+                          setMode((m) => (m === "audio" ? "view" : "audio"))
+                        }
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                        data-testid={`button-edit-master-${song.id}`}
+                      >
+                        <Upload className="w-3 h-3" />
+                        Upload master
+                      </button>
+                    </div>
+                  );
+                }
+                // Master is uploaded — derive the three optional dots.
+                const previewState: DotState = "done"; // v1: auto from master
+                const lyricsState: DotState = song.instrumental
+                  ? "instrumental"
+                  : (song.syncedLyrics?.length ?? 0) > 0
+                    ? "synced"
+                    : song.lyrics && song.lyrics.trim()
+                      ? "done"
+                      : "empty";
+                const writerCount = credits?.writers.length ?? 0;
+                const performerCount = credits?.performers.length ?? 0;
+                const creditsState: DotState =
+                  writerCount > 0 && performerCount > 0
+                    ? "done"
+                    : writerCount > 0 || performerCount > 0
+                      ? "partial"
+                      : "empty";
+                return (
+                  <div
+                    className="flex items-center gap-1.5 mt-1"
+                    role="group"
+                    aria-label="Track completion"
+                  >
+                    {/* Preview — informational only in v1; auto from master. */}
+                    <span
+                      className="w-6 h-6 inline-flex items-center justify-center"
+                      role="img"
+                      aria-label={dotHint("Preview", previewState)}
+                      title={dotHint("Preview", previewState)}
+                      data-testid={`dot-preview-${song.id}`}
+                    >
+                      {renderDot(previewState)}
+                    </span>
+                    {/* Lyrics dot — click to edit. */}
+                    <button
+                      ref={lyricsChipRef}
+                      type="button"
+                      onClick={() =>
+                        setMode((m) => (m === "lyrics" ? "view" : "lyrics"))
+                      }
+                      aria-label={`Edit lyrics — ${dotHint("Lyrics", lyricsState)}`}
+                      title={dotHint("Lyrics", lyricsState)}
+                      className="w-6 h-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                      data-testid={`dot-lyrics-${song.id}`}
+                    >
+                      {renderDot(lyricsState)}
+                    </button>
+                    {/* Credits dot — click to edit. */}
+                    <button
+                      ref={creditsChipRef}
+                      type="button"
+                      onClick={() =>
+                        setMode((m) => (m === "credits" ? "view" : "credits"))
+                      }
+                      aria-label={`Edit credits — ${dotHint("Credits", creditsState)}`}
+                      title={dotHint("Credits", creditsState)}
+                      className="w-6 h-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                      data-testid={`dot-credits-${song.id}`}
+                    >
+                      {renderDot(creditsState)}
+                    </button>
+                    {/* Quiet text link to re-open the master/audio editor —
+                        the dots above are status-only for Preview, so the
+                        admin still needs a way to replace the master file. */}
+                    <button
+                      ref={masterChipRef}
+                      type="button"
+                      onClick={() =>
+                        setMode((m) => (m === "audio" ? "view" : "audio"))
+                      }
+                      aria-label="Manage master audio file"
+                      title="Master audio uploaded — click to replace or remove"
+                      className="ml-1 inline-flex items-center gap-1 px-1.5 h-5 rounded text-[10.5px] text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                      data-testid={`button-edit-master-${song.id}`}
+                    >
+                      <Music className="w-2.5 h-2.5" />
+                      Master
+                    </button>
+                    {/* Sync-timing link — always reachable so admins can
+                        drop a .vtt at any point. The Lyrics dot's wave
+                        glyph carries the "is sync present" signal; this
+                        link is purely an editor entry-point. Hidden if
+                        the track is marked instrumental. */}
+                    {!song.instrumental && (
+                      <button
+                        ref={syncedChipRef}
+                        type="button"
+                        onClick={() =>
+                          setMode((m) => (m === "synced" ? "view" : "synced"))
+                        }
+                        aria-label="Edit synced-lyrics timing"
+                        title={
+                          (song.syncedLyrics?.length ?? 0) > 0
+                            ? `GoodSync™ · ${song.syncedLyrics?.length ?? 0} cues`
+                            : "Add per-line timing (drag a .vtt file)"
+                        }
+                        className={
+                          "inline-flex items-center gap-1 px-1.5 h-5 rounded text-[10.5px] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 " +
+                          ((song.syncedLyrics?.length ?? 0) > 0
+                            ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                            : "text-slate-400 hover:text-slate-700 hover:bg-slate-100")
+                        }
+                        data-testid={`button-edit-synced-${song.id}`}
+                      >
+                        Timing
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <span
               className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
@@ -1232,6 +1357,60 @@ function TrackRow({
   );
 }
 
+/* ─── Instrumental toggle (lives inside the Lyrics editor) ───────────
+   A single switch the admin flips when a track has no lyrics by
+   design — an interlude, a guitar solo, an outro. Saves immediately
+   on toggle so the row's Lyrics status dot updates without the admin
+   having to touch the textarea or click Save below. */
+
+function InstrumentalToggle({ song }: { song: SongLite }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const checked = !!song.instrumental;
+
+  const toggleMut = useMutation({
+    mutationFn: async (next: boolean) =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, { instrumental: next }),
+    onSuccess: async (_data, next) => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      toast({
+        title: next
+          ? "Marked as instrumental"
+          : "Instrumental flag removed",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update the instrumental flag",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div
+      className="flex items-center gap-3 rounded-lg bg-white border border-slate-200 px-3 py-2"
+      data-testid={`toggle-instrumental-${song.id}`}
+    >
+      <Ban className="w-4 h-4 text-slate-400 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-[12.5px] font-semibold text-slate-700 leading-tight">
+          Instrumental
+        </div>
+        <div className="text-[10.5px] text-slate-400 leading-tight mt-0.5">
+          No lyrics, no singer credits (interlude, solo, outro)
+        </div>
+      </div>
+      <Switch
+        checked={checked}
+        disabled={toggleMut.isPending}
+        onCheckedChange={(next) => toggleMut.mutate(next)}
+        aria-label="Mark this track as instrumental"
+      />
+    </div>
+  );
+}
+
 /* ─── Per-track lyrics editor ────────────────────────────────────────── */
 
 function LyricsEditor({
@@ -1287,10 +1466,11 @@ function LyricsEditor({
     <div
       className="px-5 pb-4"
       onKeyDown={(e) => {
-        // Cmd/Ctrl+Enter saves; Escape cancels.
+        // Cmd/Ctrl+Enter saves; Escape cancels. Save is suppressed
+        // when the track is marked instrumental (nothing to save).
         if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
           e.preventDefault();
-          if (dirty && !saveMut.isPending) saveMut.mutate();
+          if (!song.instrumental && dirty && !saveMut.isPending) saveMut.mutate();
         } else if (e.key === "Escape" && !saveMut.isPending) {
           e.preventDefault();
           onClose();
@@ -1308,24 +1488,41 @@ function LyricsEditor({
           </span>
         </div>
 
-        <textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={12}
-          placeholder={
-            "[Verse 1]\nFirst line of the verse\nSecond line of the verse\n\n[Chorus]\nFirst line of the chorus"
-          }
-          disabled={saveMut.isPending}
-          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
-          data-testid={`textarea-lyrics-${song.id}`}
-        />
+        {/* When the track is marked Instrumental (in the Master editor),
+            lyrics don't apply — show a quiet inline notice instead of
+            the textarea so admins know where to flip it back. */}
+        {song.instrumental ? (
+          <div
+            className="rounded-md bg-white border border-slate-200 px-3 py-3 text-[12px] text-slate-600 flex items-start gap-2"
+            data-testid={`text-lyrics-disabled-${song.id}`}
+          >
+            <Ban className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+            <span>
+              This track is marked <span className="font-semibold">Instrumental</span> in the Master editor — lyrics aren't applicable. Uncheck Instrumental on the master to add lyrics.
+            </span>
+          </div>
+        ) : (
+          <>
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={12}
+              placeholder={
+                "[Verse 1]\nFirst line of the verse\nSecond line of the verse\n\n[Chorus]\nFirst line of the chorus"
+              }
+              disabled={saveMut.isPending}
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+              data-testid={`textarea-lyrics-${song.id}`}
+            />
 
-        <p className="text-[10.5px] text-slate-400 leading-snug">
-          Section headers go in square brackets — <code className="font-mono">[Verse 1]</code>,{" "}
-          <code className="font-mono">[Chorus]</code>,{" "}
-          <code className="font-mono">[Bridge]</code> — they render dimmed in the player and are skipped when timing is auto-distributed.
-        </p>
+            <p className="text-[10.5px] text-slate-400 leading-snug">
+              Section headers go in square brackets — <code className="font-mono">[Verse 1]</code>,{" "}
+              <code className="font-mono">[Chorus]</code>,{" "}
+              <code className="font-mono">[Bridge]</code> — they render dimmed in the player and are skipped when timing is auto-distributed.
+            </p>
+          </>
+        )}
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <button
@@ -1335,20 +1532,22 @@ function LyricsEditor({
             className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
             data-testid={`button-cancel-lyrics-${song.id}`}
           >
-            Cancel
+            {song.instrumental ? "Close" : "Cancel"}
           </button>
-          <button
-            type="button"
-            onClick={() => saveMut.mutate()}
-            disabled={!dirty || saveMut.isPending}
-            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
-            data-testid={`button-save-lyrics-${song.id}`}
-          >
-            {saveMut.isPending && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            )}
-            Save lyrics
-          </button>
+          {!song.instrumental && (
+            <button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={!dirty || saveMut.isPending}
+              className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+              data-testid={`button-save-lyrics-${song.id}`}
+            >
+              {saveMut.isPending && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
+              Save lyrics
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -2566,6 +2765,11 @@ function AudioEditor({
             {localError}
           </p>
         )}
+
+        {/* Instrumental flag lives with the master — it's a property of
+            the audio itself. When on, the LyricsEditor disables its
+            textarea and the row's Lyrics dot shows the grey Ban glyph. */}
+        <InstrumentalToggle song={song} />
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <button

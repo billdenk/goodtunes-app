@@ -1374,13 +1374,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics, instrumental } = req.body ?? {};
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
     if (duration !== undefined) updates.duration = Number(duration);
     if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
     if (audioUrl !== undefined) updates.audioUrl = audioUrl ? String(audioUrl) : null;
+    if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     // Synced lyrics: an array of { timeMs, text } cues parsed client-side
     // from a .vtt file. Validate the shape defensively — anything that
     // doesn't look like a non-empty cue array is stored as null so the
