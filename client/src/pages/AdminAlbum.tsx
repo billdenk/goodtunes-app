@@ -3410,6 +3410,74 @@ function RichPreviewEditor({
     } catch {}
   };
 
+  // ─── Window-scoped audio playback ──────────────────────────────────
+  // A second, hidden <audio> element scoped to this editor. Plays the
+  // master from draftSec, auto-stops at draftSec + 30s. If the artist
+  // drags the window mid-playback, the next timeupdate snaps the
+  // playhead back to the new draftSec so what they hear matches what
+  // the window shows.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !playing) return;
+    const onTime = () => {
+      if (audio.currentTime >= draftSec + WINDOW_SEC) {
+        audio.pause();
+        audio.currentTime = draftSec;
+        setPlaying(false);
+      } else if (
+        audio.currentTime < draftSec - 0.5 ||
+        audio.currentTime > draftSec + WINDOW_SEC + 0.5
+      ) {
+        // Window was dragged out from under the playhead — snap back.
+        audio.currentTime = draftSec;
+      }
+    };
+    audio.addEventListener("timeupdate", onTime);
+    return () => audio.removeEventListener("timeupdate", onTime);
+  }, [playing, draftSec]);
+
+  // Stop playback if the song's master URL changes or the component unmounts.
+  useEffect(() => {
+    return () => {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio || !song.audioUrl) {
+      toast({
+        title: "No master uploaded yet",
+        description: "Add the audio file first, then preview-play will light up.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+    } else {
+      audio.currentTime = draftSec;
+      audio
+        .play()
+        .then(() => setPlaying(true))
+        .catch((err: any) => {
+          toast({
+            title: "Couldn't play preview",
+            description: err?.message || "Browser blocked autoplay — try again.",
+            variant: "destructive",
+          });
+        });
+    }
+  };
+
   return (
     <div
       data-testid={`preview-window-${song.id}`}
@@ -3521,8 +3589,44 @@ function RichPreviewEditor({
         </p>
       )}
 
-      {/* Trim row: waveform · padlock (no play button yet — wire to audio later) */}
+      {/* Hidden window-scoped <audio> element — same master as the player,
+          but its currentTime is constrained to [draftSec, draftSec + 30]. */}
+      <audio
+        ref={audioRef}
+        src={song.audioUrl ?? undefined}
+        preload="metadata"
+        className="hidden"
+        data-testid={`audio-preview-${song.id}`}
+      />
+
+      {/* Trim row: play · waveform · padlock — Apple iMovie pattern */}
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label={
+            playing ? "Pause preview window" : "Play preview window"
+          }
+          title={
+            playing
+              ? "Pause preview"
+              : `Play preview from ${draftStartLabel}`
+          }
+          className={[
+            "w-11 h-11 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors",
+            playing
+              ? "bg-[#319ED8] text-white hover:bg-[#319ED8]/90"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+          ].join(" ")}
+          data-testid={`button-preview-play-${song.id}`}
+        >
+          {playing ? (
+            <Pause className="w-4 h-4" />
+          ) : (
+            <Play className="w-4 h-4 translate-x-[1px] fill-current" />
+          )}
+        </button>
+
         <div className="flex-1 min-w-0">
           <div
             ref={wfRef}
@@ -3594,7 +3698,11 @@ function RichPreviewEditor({
               />
             )}
 
-            {/* 30-sec window — draggable when unlocked */}
+            {/* 30-sec window — draggable when unlocked.
+                Inline start / end labels sit in the corners and stay
+                readable against the amber/emerald tint. They update
+                live while sliding so Bill can see the exact times
+                without looking down at the axis or up at the chip. */}
             <div
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
@@ -3608,7 +3716,30 @@ function RichPreviewEditor({
               ].join(" ")}
               style={{ left: `${draftLeft}%`, width: `${widthPct}%` }}
               data-testid={`preview-window-handle-${song.id}`}
-            />
+            >
+              <span
+                className={[
+                  "absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-semibold tabular-nums shadow-sm pointer-events-none",
+                  locked
+                    ? "bg-emerald-700/85 text-white"
+                    : "bg-amber-600/90 text-white",
+                ].join(" ")}
+                data-testid={`label-preview-start-${song.id}`}
+              >
+                {draftStartLabel}
+              </span>
+              <span
+                className={[
+                  "absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-semibold tabular-nums shadow-sm pointer-events-none",
+                  locked
+                    ? "bg-emerald-700/85 text-white"
+                    : "bg-amber-600/90 text-white",
+                ].join(" ")}
+                data-testid={`label-preview-end-${song.id}`}
+              >
+                {draftEndLabel}
+              </span>
+            </div>
           </div>
           {/* Time axis — derived from real duration */}
           <div className="flex justify-between text-[9px] tabular-nums text-slate-400 mt-1 px-2">
