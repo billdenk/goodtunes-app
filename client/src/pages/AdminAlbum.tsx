@@ -43,6 +43,7 @@ import {
   Check,
   RotateCcw,
   Info,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   Popover,
@@ -4668,6 +4669,26 @@ function AudioEditor({
         }
       }}
     >
+      {/* File tile — drag-target + file picker + URL input + audio
+          preview, all in one Apple-clean block. The verbs ("Replace
+          file", "Clear", "Choose file") used to float to the right of
+          a separate label row, which left a wide empty gap between the
+          tag and its buttons. Now the only controls live next to the
+          content they act on: file ••• menu sits inline with the URL
+          field, dropzone copy lives inside the empty-state tile. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+          e.target.value = "";
+        }}
+        data-testid={`input-audio-file-${song.id}`}
+      />
+
       <div
         onDragEnter={(e) => {
           e.preventDefault();
@@ -4688,135 +4709,178 @@ function AudioEditor({
           if (f) handleFile(f);
         }}
         className={[
-          "rounded-xl border-2 border-dashed px-4 py-4 space-y-3 transition-colors",
-          dragOver
-            ? "border-[#319ED8] bg-[#319ED8]/10"
-            : "border-slate-200 bg-slate-50/60",
+          "rounded-xl px-3.5 py-3 transition-colors",
+          draftUrl
+            ? "border border-slate-200 bg-white space-y-2.5"
+            : dragOver
+              ? "border-2 border-dashed border-[#319ED8] bg-[#319ED8]/10"
+              : "border-2 border-dashed border-slate-200 bg-slate-50/60",
         ].join(" ")}
         data-testid={`dropzone-audio-${song.id}`}
       >
-        <div className="flex items-center gap-2">
-          <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 flex-1">
-            Master audio
-            {uploading && (
-              <span className="ml-1.5 text-slate-400 font-normal normal-case tracking-normal">
-                · uploading…
-              </span>
-            )}
-          </span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFile(f);
-              e.target.value = "";
-            }}
-            data-testid={`input-audio-file-${song.id}`}
-          />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading || saveMut.isPending}
-            className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-40 font-semibold"
-            data-testid={`button-choose-audio-${song.id}`}
-          >
-            {draftUrl ? "Replace file" : "Choose file"}
-          </button>
-          {draftUrl && (
-            <button
-              type="button"
-              onClick={() => {
-                setDraftUrl("");
+        {!draftUrl ? (
+          // Empty state — single centered dropzone tile. One verb
+          // ("Choose"), one secondary affordance ("paste a URL"),
+          // no floating buttons.
+          <div className="flex flex-col items-center gap-1.5 py-4 text-center">
+            <Music
+              className="w-6 h-6 text-slate-400"
+              aria-hidden="true"
+            />
+            <p className="text-[12.5px] text-slate-600">
+              Drop a master file here, or{" "}
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading || saveMut.isPending}
+                className="text-[#319ED8] font-semibold hover:underline disabled:opacity-40"
+                data-testid={`button-choose-audio-${song.id}`}
+              >
+                choose one
+              </button>
+              {uploading && (
+                <span className="text-slate-400"> · uploading…</span>
+              )}
+            </p>
+            <p className="text-[10.5px] text-slate-400">
+              MP3, M4A, AAC, WAV, FLAC, OGG
+            </p>
+            <input
+              type="text"
+              value={draftUrl}
+              onChange={(e) => {
+                setDraftUrl(e.target.value);
                 setLocalError(null);
               }}
+              placeholder="or paste a URL"
               disabled={uploading || saveMut.isPending}
-              className="text-[12px] text-slate-500 hover:text-slate-700 hover:underline disabled:opacity-40"
-              data-testid={`button-clear-audio-${song.id}`}
-            >
-              Clear
-            </button>
-          )}
-        </div>
+              className="mt-1.5 w-full max-w-sm h-8 rounded-md border border-slate-200 bg-white px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 text-center focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+              data-testid={`input-audio-url-${song.id}`}
+            />
+          </div>
+        ) : (
+          // Filled state — URL field with file actions tucked into a
+          // single ••• menu so Replace / Clear stop hogging chrome.
+          <>
+            <div className="flex items-center gap-2">
+              <Music
+                className="w-4 h-4 text-slate-400 flex-shrink-0"
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                value={draftUrl}
+                onChange={(e) => {
+                  setDraftUrl(e.target.value);
+                  setLocalError(null);
+                }}
+                disabled={uploading || saveMut.isPending}
+                className="flex-1 min-w-0 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+                data-testid={`input-audio-url-${song.id}`}
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="File actions"
+                    disabled={uploading || saveMut.isPending}
+                    className="w-8 h-8 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0 disabled:opacity-40"
+                    data-testid={`button-audio-actions-${song.id}`}
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-44 p-1">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-slate-700 hover:bg-slate-100"
+                    data-testid={`button-replace-audio-${song.id}`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Replace file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftUrl("");
+                      setLocalError(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-rose-600 hover:bg-rose-50"
+                    data-testid={`button-clear-audio-${song.id}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Clear
+                  </button>
+                </PopoverContent>
+              </Popover>
+            </div>
 
-        <input
-          type="text"
-          value={draftUrl}
-          onChange={(e) => {
-            setDraftUrl(e.target.value);
-            setLocalError(null);
-          }}
-          placeholder="Drop a file here, choose one, or paste a URL"
-          disabled={uploading || saveMut.isPending}
-          className="w-full h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
-          data-testid={`input-audio-url-${song.id}`}
-        />
+            <audio
+              controls
+              src={draftUrl}
+              preload="none"
+              onError={() =>
+                setLocalError(
+                  "Preview failed to load. If you pasted a URL, make sure it's a direct audio link (not a share page).",
+                )
+              }
+              className="w-full h-8"
+              data-testid={`audio-preview-${song.id}`}
+            />
 
-        {draftUrl && (
-          <audio
-            controls
-            src={draftUrl}
-            preload="none"
-            onError={() =>
-              setLocalError(
-                "Preview failed to load. If you pasted a URL, make sure it's a direct audio link (not a share page).",
-              )
-            }
-            className="w-full h-8"
-            data-testid={`audio-preview-${song.id}`}
-          />
+            {uploading && (
+              <p className="text-[11px] text-slate-400">Uploading…</p>
+            )}
+          </>
         )}
 
         {localError && (
           <p
-            className="text-[11px] text-rose-600"
+            className="text-[11px] text-rose-600 mt-2"
             data-testid={`text-audio-error-${song.id}`}
           >
             {localError}
           </p>
         )}
+      </div>
 
-        {/* Preview window + Instrumental flag are both properties of
-            the master — they only make sense once audio exists. Hide
-            until upload so the empty state stays clean (dropzone + URL
-            field + buttons only). Both rows live without card chrome
-            so they read as secondary controls of the audio block, not
-            as equal-weight sections. */}
-        {song.audioUrl && (
-          <div className="space-y-2 pt-1">
-            <PreviewWindowEditor song={song} onSaved={onSaved} />
-            <InstrumentalToggle song={song} />
-          </div>
-        )}
-
-        <div className="flex items-center justify-end gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={uploading || saveMut.isPending}
-            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
-            data-testid={`button-cancel-audio-${song.id}`}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => saveMut.mutate()}
-            disabled={!dirty || uploading || saveMut.isPending}
-            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
-            data-testid={`button-save-audio-${song.id}`}
-          >
-            {saveMut.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Upload className="w-3.5 h-3.5" />
-            )}
-            Save master
-          </button>
+      {/* Preview Window + Instrumental — siblings of the file tile,
+          shown only once audio exists. Both auto-save on change, so
+          the footer below only commits the URL field. */}
+      {song.audioUrl && (
+        <div className="space-y-2 pt-3 px-1">
+          <PreviewWindowEditor song={song} onSaved={onSaved} />
+          <InstrumentalToggle song={song} />
         </div>
+      )}
+
+      {/* Footer — Apple sheet pattern: Cancel as a quiet text link
+          on the left, Save as the single filled action on the right.
+          Removed the bordered Cancel button that read as equal-weight
+          to Save and was crowding the Save action. */}
+      <div className="flex items-center justify-between gap-2 pt-3">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={uploading || saveMut.isPending}
+          className="text-[12px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
+          data-testid={`button-cancel-audio-${song.id}`}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => saveMut.mutate()}
+          disabled={!dirty || uploading || saveMut.isPending}
+          className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+          data-testid={`button-save-audio-${song.id}`}
+        >
+          {saveMut.isPending && (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          )}
+          Save master
+        </button>
       </div>
     </div>
   );
