@@ -27,6 +27,11 @@ Mobile-first, Apple-Music-inspired web player.
 ### Design system (app-wide — admin + player)
 **One design system covers the entire product** — the mobile player, the admin/CMS, and every mockup. Identical concepts must look identical everywhere. No one-off colors, button sizes, hover treatments, or icon sizes outside the primitives.
 
+**Two surfaces, shared vocabulary, distinct chrome.** Mobile player and desktop admin share **icon glyphs** (Lucide for UI chrome, `react-icons/si` for company logos), **brand colors**, and **product concepts** (favorite = heart, lyrics = `Mic2`, etc.) — but they use different button treatments because they live on different backgrounds and serve different users.
+- **Mobile player (fan-facing, dark `#00062B` bg)**: follow **Apple Music**. Circular `IconButton` chips (44/48px) with the `glass` variant (white/14 scrim) for search/filter/share/back/photo-nav. Apple-Music-style segmented tabs (Albums / Songs / Artists). Rounded, generous, photo-forward.
+- **Admin desktop (operator-facing, white/slate bg)**: square h-9 buttons, slate-100 segmented controls (`ViewModeToggle`, tab underlines), tighter density. Lives on white cards over a slate page background. Apple-Mac-app-style rather than Apple-Music-style.
+When in doubt on the mobile player: Apple Music, Apple Music, Apple Music. Don't borrow admin chrome (h-9 squares, slate borders) into the player.
+
 - **Primitives home**: `client/src/components/ui/` is the canonical home. Mockups in `artifacts/mockup-sandbox/` prove a pattern first in a local `_shared.tsx`, then the primitive graduates into `client/src/components/ui/` when the pattern ships to real code.
 - **Default to Apple HIG** whenever a size/weight/spacing/radius/font isn't explicitly specified for a surface:
   - Type: SF / system font stack. Body 17pt, secondary 15pt, footnote 13pt, caption 11pt. Headings use Apple's title scale (Title 1 / 2 / 3).

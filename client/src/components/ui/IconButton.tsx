@@ -45,11 +45,15 @@ const SIZE_CLASSES: Record<IconButtonSize, string> = {
   lg: "w-12 h-12 [&>svg]:w-[22px] [&>svg]:h-[22px]",
 };
 
+// `bg-white/10` on #00062B is only a ~2.5% lightness lift and reads
+// as bare glyph rather than a circle chip. Apple Music's library
+// search/filter circles on its dark bg sit closer to 14–16% white —
+// clearly visible as a rounded surface but still subtle. Match that.
 const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
-  glass: "text-white bg-white/10 hover:bg-white/[0.14]",
+  glass: "text-white bg-white/[0.14] hover:bg-white/[0.20]",
   dimmed: "text-white bg-black/45 hover:bg-black/55 backdrop-blur-md",
   solid: "text-white bg-[#319ED8] hover:bg-[#319ED8]/90",
-  ghost: "text-white hover:bg-white/10",
+  ghost: "text-white hover:bg-white/[0.14]",
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
