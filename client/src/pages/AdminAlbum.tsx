@@ -2427,15 +2427,31 @@ function GoodSyncPanel({
             {previewCues.length} cues
           </span>
         )}
-        {/* Header action swaps based on state:
-            • not-yet-synced → blue "Sync with audio" pill (ElevenLabs).
-            • already-synced (draft matches saved lyrics + saved cues
-              exist) → small play/pause button, gray-until-hover, same
-              chrome treatment as the Info button to its left. The big
-              bottom-of-box play button is still there for context with
-              time labels; this header copy lets the writer scrub from
-              the top without scrolling. */}
-        {canPlay && isSynced ? (
+        {/* "Sync with audio" pill shows only while the song hasn't
+            been synced yet (or the words have drifted from what was
+            synced). Once isSynced, the pill disappears and the play
+            button (next to it) is the only header control. */}
+        {canPlay && !isSynced && onSyncWithAudio && (
+          <button
+            type="button"
+            onClick={onSyncWithAudio}
+            disabled={syncing}
+            title="Sync with audio — uses ElevenLabs to time each line to the master"
+            className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            data-testid={`button-sync-audio-${song.id}`}
+          >
+            {syncing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3" />
+            )}
+            {syncing ? "Syncing…" : "Sync with audio"}
+          </button>
+        )}
+        {/* Header play/pause — the ONLY play control. Drives the mini
+            progress bar at the bottom of the box. Gray-until-hover so
+            it sits quietly next to the Info button and cue count. */}
+        {canPlay && (
           <button
             type="button"
             onClick={togglePlay}
@@ -2451,25 +2467,6 @@ function GoodSyncPanel({
               <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
             )}
           </button>
-        ) : (
-          canPlay &&
-          onSyncWithAudio && (
-            <button
-              type="button"
-              onClick={onSyncWithAudio}
-              disabled={syncing}
-              title="Sync with audio — uses ElevenLabs to time each line to the master"
-              className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
-              data-testid={`button-sync-audio-${song.id}`}
-            >
-              {syncing ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Sparkles className="w-3 h-3" />
-              )}
-              {syncing ? "Syncing…" : "Sync with audio"}
-            </button>
-          )
         )}
       </div>
     </div>
@@ -2575,38 +2572,56 @@ function GoodSyncPanel({
               )}
             </div>
 
-            {/* Bottom-center Play button (per Bill's spec). Time labels
-                flank it on either side. Floating over the list so the
-                Apple-lyrics feel stays uninterrupted. */}
+            {/* Mini progress bar — sole transport indicator at the
+                bottom. Brand blue fill, slate track. Click anywhere on
+                the bar to seek. The Play button lives in the header
+                (top-right) per Bill's spec. */}
             <div className="absolute inset-x-0 bottom-0 pointer-events-none">
               <div className="h-6 bg-gradient-to-t from-slate-50 via-slate-50/85 to-transparent" />
-              <div className="pointer-events-auto relative bg-slate-50 px-3 py-1.5 flex items-center justify-center">
+              <div className="pointer-events-auto relative bg-slate-50 px-3 pb-1.5 pt-1 flex items-center gap-2">
                 <span
-                  className="absolute left-3 text-[10px] tabular-nums text-slate-400"
+                  className="text-[10px] tabular-nums text-slate-400 w-8 text-left"
                   data-testid={`text-time-current-${song.id}`}
                 >
                   {fmt(currentTime)}
                 </span>
-                <button
-                  type="button"
-                  onClick={togglePlay}
-                  disabled={previewCues.length === 0}
-                  aria-label={playing ? "Pause preview" : "Play preview"}
-                  className={[
-                    "w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors shadow-md flex-shrink-0",
-                    "disabled:opacity-40 disabled:cursor-not-allowed",
-                    "bg-[#319ED8] text-white hover:bg-[#2890c8]",
-                  ].join(" ")}
-                  data-testid={`button-play-goodsync-${song.id}`}
+                <div
+                  role="slider"
+                  aria-label="Seek"
+                  aria-valuemin={0}
+                  aria-valuemax={song.duration ?? 0}
+                  aria-valuenow={currentTime}
+                  onClick={(e) => {
+                    if (!audio || !song.duration) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const pct = Math.max(
+                      0,
+                      Math.min(1, (e.clientX - rect.left) / rect.width),
+                    );
+                    audio.currentTime = pct * song.duration;
+                  }}
+                  className="flex-1 h-1 rounded-full bg-slate-200 overflow-hidden cursor-pointer relative"
+                  data-testid={`progress-goodsync-${song.id}`}
                 >
-                  {playing ? (
-                    <Pause className="w-3.5 h-3.5" />
-                  ) : (
-                    <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
-                  )}
-                </button>
+                  <div
+                    className="absolute inset-y-0 left-0 bg-[#319ED8] rounded-full"
+                    style={{
+                      width: `${
+                        song.duration
+                          ? Math.max(
+                              0,
+                              Math.min(
+                                100,
+                                (currentTime / song.duration) * 100,
+                              ),
+                            )
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
                 <span
-                  className="absolute right-3 text-[10px] tabular-nums text-slate-400"
+                  className="text-[10px] tabular-nums text-slate-400 w-8 text-right"
                   data-testid={`text-time-total-${song.id}`}
                 >
                   {fmt(song.duration ?? 0)}
