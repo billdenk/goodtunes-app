@@ -229,9 +229,11 @@ const WAVE_BARS = Array.from({ length: 96 }, (_, i) =>
 
 function MasterDetail({
   hasMaster,
+  onGoToSnippet,
   onClose,
 }: {
   hasMaster: boolean;
+  onGoToSnippet: () => void;
   onClose: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -244,8 +246,35 @@ function MasterDetail({
   return (
     <DetailWrap title="Master" onClose={onClose}>
       {hasMaster ? (
-        // Single row: [▶ subdued play] [filename + meta] [Replace ▾]
-        // The whole row is a drop target — drag a new .wav/.aiff/.flac to swap.
+        <>
+          {/* Success banner — Apple "completed, here's the next thing"
+              pattern. Emerald check carries the success (shape + color
+              both signal it, deuteranopia-safe). The next step is a
+              real action, not a sentence: "Pick your 30-second snippet"
+              is a brand-blue link that jumps straight to that tile. */}
+          <div className="-mt-1 rounded-lg bg-emerald-500/5 border border-emerald-500/30 px-3 py-2.5 flex items-start gap-2.5">
+            <span className="w-7 h-7 rounded-md bg-emerald-500/10 text-emerald-600 inline-flex items-center justify-center flex-shrink-0">
+              <Check className="w-4 h-4" />
+            </span>
+            <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+              <div className="font-semibold text-slate-900">
+                Master uploaded
+              </div>
+              <div className="text-slate-600 mt-0.5">
+                Give it a listen below, then{" "}
+                <button
+                  onClick={onGoToSnippet}
+                  className="font-semibold text-[#319ED8] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded"
+                >
+                  pick your 30-second snippet
+                </button>
+                {" "}— or leave it auto-set to the first 30 seconds.
+              </div>
+            </div>
+          </div>
+
+        {/* Single row: [▶ subdued play] [filename + meta] [Replace ▾]
+            The whole row is a drop target — drag a new .wav/.aiff/.flac to swap. */}
         <div
           onMouseEnter={() => setPillHover(true)}
           onMouseLeave={() => setPillHover(false)}
@@ -358,6 +387,7 @@ function MasterDetail({
             </div>
           )}
         </div>
+        </>
       ) : (
         <button className="w-full px-3 py-6 rounded-md border-2 border-dashed border-slate-300 hover:border-[#319ED8] hover:bg-[#319ED8]/5 text-[12.5px] font-semibold text-slate-500 hover:text-[#319ED8]">
           <Upload className="w-4 h-4 mx-auto mb-1" />
@@ -370,10 +400,12 @@ function MasterDetail({
 
 function SnippetDetail({
   hasMaster,
+  hasCustomSnippet,
   onGoToMaster,
   onClose,
 }: {
   hasMaster: boolean;
+  hasCustomSnippet: boolean;
   onGoToMaster: () => void;
   onClose: () => void;
 }) {
@@ -454,11 +486,15 @@ function SnippetDetail({
   const WINDOW_SEC = 30;
   const width = (WINDOW_SEC / TOTAL_SEC) * 100;
 
-  const [locked, setLocked] = useState(false);
-  // Default position is 0% — the first 30 seconds. That's what plays
-  // automatically if the artist never opens this screen. Once they drag,
-  // they've "customized" their hook; a Reset link appears to put it back.
-  const [left, setLeft] = useState(0);
+  // Initial state derives from the track row's saved data:
+  //   hasCustomSnippet=false → auto-locked at 0:00–0:30 (happy-path, zero
+  //     clicks — the new default after a master is uploaded).
+  //   hasCustomSnippet=true  → locked at a previously-chosen offset; here
+  //     we hard-code 33% for the demo to stand in for a saved position.
+  //     When this graduates to AdminAlbum, the real `customSnippet.startMs`
+  //     replaces the literal.
+  const [locked, setLocked] = useState(true);
+  const [left, setLeft] = useState(hasCustomSnippet ? 33 : 0);
   const isCustom = left > 0.5; // % — anything past a hair of slop counts as moved
   const maxLeft = 100 - width;
 
@@ -509,11 +545,31 @@ function SnippetDetail({
   };
   return (
     <DetailWrap title="30-sec snippet" onClose={onClose}>
-      {/* Three states: auto-default (untouched) · custom (unlocked) · locked.
-          The untouched state gets a brand-blue callout card — quietly louder
-          than a paragraph, inviting action without alarming. Once the artist
-          touches the window, the callout downgrades to a plain status line. */}
-      {!isCustom && !locked ? (
+      {/* Four-state header, one screen, no animation:
+          1. locked + auto       → blue tip pointing at the padlock
+          2. unlocked + auto     → blue MoveHorizontal tip ("drag to pick")
+          3. unlocked + custom   → "Custom hook at X–Y" + Reset link
+          4. locked + custom     → "Locked in at X–Y" plain status
+          Apple-style tip cards (not pulsing animations) — discoverable
+          on first open, never nag on repeat visits. */}
+      {locked && !isCustom ? (
+        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
+          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+            <Lock className="w-4 h-4" />
+          </span>
+          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+            <div className="font-semibold text-slate-900">
+              Auto-locked at 0:00–0:30
+            </div>
+            <div className="text-slate-600 mt-0.5">
+              We've set your 30-second preview to the first 30 seconds — no
+              action needed. Want to pick a different hook? Tap the{" "}
+              <Lock className="inline w-3 h-3 -translate-y-0.5 text-emerald-600" />{" "}
+              padlock on the right, then drag the yellow window.
+            </div>
+          </div>
+        </div>
+      ) : !locked && !isCustom ? (
         <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
           <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
             <MoveHorizontal className="w-4 h-4" />
@@ -523,9 +579,9 @@ function SnippetDetail({
               Pick your 30-second preview
             </div>
             <div className="text-slate-600 mt-0.5">
-              Right now we'll play the first 30 seconds. Drag the yellow window
-              anywhere on the waveform to start it from a different spot — it
-              stays locked to 30 sec wide. Or leave it as is.
+              Drag the yellow window anywhere on the waveform to start it
+              from a different spot — it stays locked to 30 sec wide. Tap
+              the padlock again when you're satisfied.
             </div>
           </div>
         </div>
@@ -1556,12 +1612,14 @@ function EditRow({
           {openSection === "master" && (
             <MasterDetail
               hasMaster={t.master}
+              onGoToSnippet={() => setOpenSection("snippet")}
               onClose={() => setOpenSection(null)}
             />
           )}
           {openSection === "snippet" && (
             <SnippetDetail
               hasMaster={t.master}
+              hasCustomSnippet={t.snippet}
               onGoToMaster={() => setOpenSection("master")}
               onClose={() => setOpenSection(null)}
             />
