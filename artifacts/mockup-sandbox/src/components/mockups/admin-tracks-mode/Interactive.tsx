@@ -21,6 +21,9 @@ import {
   Sparkles,
   Loader2,
   Check as CheckIcon,
+  Mic,
+  RefreshCw,
+  Play as PlayIcon,
 } from "lucide-react";
 
 type Mode = "edit" | "listen";
@@ -450,16 +453,102 @@ function LyricsDetail({
   const [url, setUrl] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  // 'plain' = no timing · 'syncing' = forced-alignment call in flight · 'synced' = word-level VTT stored
+  // 'plain' = no timing · 'syncing' = forced-alignment call in flight · 'synced' = GoodSync™ (word-level VTT stored)
   const [syncState, setSyncState] = useState<"plain" | "syncing" | "synced">(
     "plain",
   );
-  const dirty = text !== seed;
+  // Once GoodSync™'d, the synced view becomes the source of truth — each line
+  // is editable in place, keeping its own timestamp. The plain textarea is hidden.
+  type Cue = { id: string; timeMs: number; text: string; isHeader: boolean };
+  const [cues, setCues] = useState<Cue[]>([]);
+  const [cuesBaseline, setCuesBaseline] = useState<Cue[]>([]);
+  const plainDirty = text !== seed;
+  const cuesDirty =
+    JSON.stringify(cues.map((c) => c.text)) !==
+    JSON.stringify(cuesBaseline.map((c) => c.text));
+  const dirty = syncState === "synced" ? cuesDirty : plainDirty;
   const canSync = text.trim().length > 0 && syncState !== "syncing";
+  const fmtTime = (ms: number) => {
+    const total = ms / 1000;
+    const m = Math.floor(total / 60);
+    const s = total - m * 60;
+    return `${String(m).padStart(2, "0")}:${s.toFixed(1).padStart(4, "0")}`;
+  };
   const handleAutoSync = () => {
     setSyncState("syncing");
     // mock: forced-aligner round trip ~2s. Real call goes to ElevenLabs Forced Alignment API.
-    setTimeout(() => setSyncState("synced"), 2000);
+    setTimeout(() => {
+      // Derive mocked cues from current text by distributing timestamps across
+      // the song's duration — same shape the real endpoint returns from ElevenLabs.
+      const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+      const realLines = lines.filter((l) => !/^\[.+\]$/.test(l));
+      const DURATION_S = 252; // matches the 4:12 mocked master
+      let realIdx = 0;
+      const next: Cue[] = lines.map((l, i) => {
+        const isHeader = /^\[.+\]$/.test(l);
+        const timeMs = isHeader
+          ? 0
+          : Math.round(((realIdx + 1) * DURATION_S * 1000) / (realLines.length + 1));
+        if (!isHeader) realIdx++;
+        return { id: `c${i}`, timeMs, text: l, isHeader };
+      });
+      setCues(next);
+      setCuesBaseline(next);
+      setSyncState("synced");
+    }, 2000);
+  };
+  const updateCue = (id: string, newText: string) => {
+    setCues((prev) => prev.map((c) => (c.id === id ? { ...c, text: newText } : c)));
+  };
+  // Transcribe — used when no lyrics text exists yet. ElevenLabs Scribe returns
+  // a word-level transcript; we group into lines and drop straight into the
+  // synced editor. The admin then corrects any misheard words inline —
+  // timestamps stay locked because they're tied to the audio, not the chars.
+  const hasText = text.trim().length > 0;
+  const handleTranscribe = () => {
+    setSyncState("syncing");
+    setTimeout(() => {
+      const mockText =
+        "The storms came in across the bay\nI didn't know what to say\nAnd I'd weather them all for you\nAnd I'd weather them all for you";
+      setText(mockText);
+      const lines = mockText.split("\n");
+      const DURATION_S = 252;
+      const next: Cue[] = lines.map((l, i) => ({
+        id: `t${i}`,
+        timeMs: Math.round(((i + 1) * DURATION_S * 1000) / (lines.length + 1)),
+        text: l,
+        isHeader: false,
+      }));
+      setCues(next);
+      setCuesBaseline(next);
+      setSyncState("synced");
+    }, 2500);
+  };
+  // Re-sync — re-runs forced alignment on the current cue text. Used when an
+  // admin has fixed enough lines that timing might have drifted. Cheaper than
+  // a full transcription since we already have the text — same code path as
+  // Upgrade, just from the cue list instead of the textarea.
+  const handleResync = () => {
+    const flatText = cues.map((c) => c.text).join("\n");
+    setText(flatText);
+    setSyncState("syncing");
+    setTimeout(() => {
+      const lines = flatText.split("\n").map((l) => l.trim()).filter(Boolean);
+      const realLines = lines.filter((l) => !/^\[.+\]$/.test(l));
+      const DURATION_S = 252;
+      let realIdx = 0;
+      const next: Cue[] = lines.map((l, i) => {
+        const isHeader = /^\[.+\]$/.test(l);
+        const timeMs = isHeader
+          ? 0
+          : Math.round(((realIdx + 1) * DURATION_S * 1000) / (realLines.length + 1));
+        if (!isHeader) realIdx++;
+        return { id: `r${i}`, timeMs, text: l, isHeader };
+      });
+      setCues(next);
+      setCuesBaseline(next);
+      setSyncState("synced");
+    }, 2000);
   };
 
   const importAction = (
@@ -511,96 +600,173 @@ function LyricsDetail({
     </div>
   );
 
+  // GoodSync™ badge — same chip family as Dolby Atmos / Lossless / SuperCredits™.
+  // Brand-blue solid pill, mic glyph + check, used here in the card header and
+  // intended to graduate to album covers / song rows / library filter ("Albums with GoodSync™").
+  const goodSyncBadge = (
+    <span
+      title="Word-level synced to the master audio"
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[#319ED8] text-white text-[10.5px] font-bold uppercase tracking-wider shadow-sm"
+    >
+      <Mic className="w-3 h-3" />
+      GoodSync™
+      <CheckIcon className="w-3 h-3 -ml-0.5" strokeWidth={3} />
+    </span>
+  );
+
+  const titleAction =
+    syncState === "synced" ? (
+      <div className="flex items-center gap-1.5">{goodSyncBadge}{importAction}</div>
+    ) : (
+      importAction
+    );
+
   return (
-    <DetailWrap title="Lyrics" onClose={onClose} action={importAction}>
-      {/* The textarea is the primary input. It also accepts dropped .vtt/.lrc
-          files — drag-over shows a subtle overlay so the affordance is
-          discoverable without cluttering the resting state. */}
-      <div
-        className="relative"
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-        }}
-      >
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Paste lyrics here, or drop a .vtt/.lrc file. Use [Verse 1], [Chorus] for section headers."
-          rows={8}
-          className={[
-            "w-full px-3 py-2 rounded-md border bg-white text-[12.5px] leading-relaxed text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20 transition-colors",
-            dragOver ? "border-[#319ED8] ring-2 ring-[#319ED8]/20" : "border-slate-200 focus:border-[#319ED8]",
-          ].join(" ")}
-        />
-        {dragOver && (
-          <div className="absolute inset-0 rounded-md bg-[#319ED8]/10 flex flex-col items-center justify-center text-[#319ED8] pointer-events-none">
-            <Upload className="w-5 h-5 mb-1" />
-            <span className="text-[12px] font-semibold">Drop to import lyrics</span>
-            <span className="text-[10.5px]">.vtt · .lrc · .srt · .txt</span>
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        {/* Status pill — shows current timing fidelity */}
-        <div className="flex items-center gap-2">
-          {syncState === "plain" && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              Plain text · auto-distributed
-            </span>
-          )}
-          {syncState === "syncing" && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#319ED8]/10 text-[#319ED8] text-[10.5px] font-semibold uppercase tracking-wider">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Auto-syncing to audio…
-            </span>
-          )}
-          {syncState === "synced" && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#4AFFCA]/20 text-emerald-700 text-[10.5px] font-semibold uppercase tracking-wider">
-              <CheckIcon className="w-3 h-3" />
-              Word-level synced
-            </span>
-          )}
-          {/* Auto-sync button — kicks off forced alignment (ElevenLabs API in real impl). */}
-          {syncState !== "synced" && (
+    <DetailWrap title="Lyrics" onClose={onClose} action={titleAction}>
+      {syncState === "synced" ? (
+        // -- Upgraded state: synced view is now the source of truth. Each line
+        // -- shows its timestamp and is editable in place. A small ↻ on hover
+        // -- re-times that single line (cheap) instead of the whole song.
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-0.5">
             <button
-              onClick={handleAutoSync}
-              disabled={!canSync}
-              className={
-                canSync
-                  ? "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-[#319ED8] text-[#319ED8] hover:bg-[#319ED8]/5"
-                  : "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-slate-50 border border-slate-200 text-slate-400 cursor-not-allowed"
-              }
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11.5px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/10"
+              title="Play the master with the synced lyrics highlighting"
             >
-              <Sparkles className="w-3 h-3" />
-              {syncState === "syncing" ? "Syncing…" : "Auto-sync to audio"}
+              <PlayIcon className="w-3.5 h-3.5 fill-current" />
+              Preview
+            </button>
+            <span className="text-[10.5px] uppercase tracking-wider font-semibold text-slate-400">
+              {cues.filter((c) => !c.isHeader).length} cues · word-level timing
+            </span>
+          </div>
+          <div className="rounded-md border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+            {cues.map((cue) => (
+              <div
+                key={cue.id}
+                className={[
+                  "group flex items-center gap-3 px-3 py-1.5 hover:bg-slate-50",
+                  cue.isHeader ? "bg-slate-50/60" : "",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "font-mono tabular-nums text-[10.5px] flex-shrink-0 w-14",
+                    cue.isHeader ? "text-slate-300" : "text-slate-400",
+                  ].join(" ")}
+                >
+                  {cue.isHeader ? "——:——" : fmtTime(cue.timeMs)}
+                </span>
+                <input
+                  value={cue.text}
+                  onChange={(e) => updateCue(cue.id, e.target.value)}
+                  className={[
+                    "flex-1 min-w-0 bg-transparent focus:outline-none",
+                    cue.isHeader
+                      ? "text-[10.5px] uppercase tracking-wider font-semibold text-slate-500"
+                      : "text-[12.5px] text-slate-900 font-mono",
+                  ].join(" ")}
+                />
+                {!cue.isHeader && (
+                  <button
+                    title="Re-time this line"
+                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-[#319ED8] p-1 -mr-1"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        // -- Plain / syncing state: single textarea. Drag a .vtt/.lrc over it
+        // -- to import; overlay only appears while dragging.
+        <div
+          className="relative"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+          }}
+        >
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={syncState === "syncing"}
+            placeholder="Paste lyrics here, drop a .vtt/.lrc file, or hit Transcribe & GoodSync™ to let ElevenLabs listen to the master and write the lyrics for you. Use [Verse 1], [Chorus] for section headers."
+            rows={8}
+            className={[
+              "w-full px-3 py-2 rounded-md border bg-white text-[12.5px] leading-relaxed text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20 transition-colors",
+              dragOver ? "border-[#319ED8] ring-2 ring-[#319ED8]/20" : "border-slate-200 focus:border-[#319ED8]",
+              syncState === "syncing" ? "opacity-60 cursor-not-allowed" : "",
+            ].join(" ")}
+          />
+          {dragOver && (
+            <div className="absolute inset-0 rounded-md bg-[#319ED8]/10 flex flex-col items-center justify-center text-[#319ED8] pointer-events-none">
+              <Upload className="w-5 h-5 mb-1" />
+              <span className="text-[12px] font-semibold">Drop to import lyrics</span>
+              <span className="text-[10.5px]">.vtt · .lrc · .srt · .txt</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {/* Plain idle: text-aware CTA.
+              - No text yet  → "Transcribe & GoodSync™" (ElevenLabs Scribe writes the lyrics + times them)
+              - Has text     → "Upgrade to GoodSync™" (forced alignment on the text you supplied) */}
+          {syncState === "plain" && !hasText && (
+            <button
+              onClick={handleTranscribe}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-[#319ED8] text-[#319ED8] hover:bg-[#319ED8]/5"
+            >
+              <Mic className="w-3 h-3" />
+              Transcribe &amp; GoodSync™
             </button>
           )}
+          {syncState === "plain" && hasText && (
+            <button
+              onClick={handleAutoSync}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-white border border-[#319ED8] text-[#319ED8] hover:bg-[#319ED8]/5"
+            >
+              <Sparkles className="w-3 h-3" />
+              Upgrade to GoodSync™
+            </button>
+          )}
+          {syncState === "syncing" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold bg-[#319ED8]/10 text-[#319ED8]">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {hasText ? "Upgrading to GoodSync™…" : "Transcribing & syncing…"}
+            </span>
+          )}
           {syncState === "synced" && (
             <button
-              onClick={() => setSyncState("plain")}
-              className="text-[11px] text-slate-400 hover:text-slate-600 underline underline-offset-2"
+              onClick={handleResync}
+              title="Re-run alignment using the current line text"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-slate-400 hover:text-slate-700 hover:bg-slate-100"
             >
+              <RefreshCw className="w-3 h-3" />
               Re-sync
             </button>
           )}
         </div>
 
+        {/* Save — Apple-ghost style: dimmed text at rest, brand-blue solid when dirty. No underline. */}
         <button
           disabled={!dirty}
           className={
             dirty
-              ? "inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[11.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8]"
-              : "inline-flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-semibold text-slate-400 border-b border-slate-200 cursor-not-allowed"
+              ? "inline-flex items-center px-3 py-1.5 rounded-md text-[11.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8]"
+              : "inline-flex items-center px-3 py-1.5 text-[11.5px] font-semibold text-slate-400 cursor-not-allowed"
           }
         >
-          Save lyrics
+          Save
         </button>
       </div>
     </DetailWrap>
