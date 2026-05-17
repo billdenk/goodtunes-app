@@ -721,19 +721,15 @@ function BottomDock({
           mini-player proportions, which gives the inset progress bar a
           clearly visible 10px gap below the cover instead of reading as
           flush. The bar lives in the bottom slice of that padding zone. */}
-      {/* Pill corner radius drops from `rounded-full` → `rounded-3xl` in
-          compact mode. With a 76px-tall capsule, rounded-full = 38px
-          radius, which clips the top-edge hairline entirely (the curve
-          eats the full top edge). At rounded-3xl (24px radius), the
-          hairline has visible width across the middle of the pill while
-          still reading as a softly-rounded chip — matching Apple's
-          narrow-dock geometry. Wide mode keeps the capsule. */}
-      <div
-        className={[
-          "relative bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden",
-          compact ? "rounded-3xl" : "rounded-full",
-        ].join(" ")}
-      >
+      {/* Pill keeps the full capsule (`rounded-full`) in BOTH modes — Bill
+          explicitly wants the rounded ends preserved in compact. With
+          `overflow-hidden`, the top-edge hairline naturally clips at the
+          capsule's curved ends and only shows across the flat center
+          stretch (width − pill_height). That's the same look Apple uses
+          on its narrow dock: the scrubber tucks into the curve rather
+          than running edge-to-edge. The hairline below is bumped to 3px
+          + bg-white/25 so the visible strip reads clearly. */}
+      <div className="relative bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden rounded-full">
         {/* Compact-mode top hairline scrubber — Apple's narrow-viewport
             pattern: when the dock can't afford an inset bar between
             clusters, the progress moves to a thin strip across the very
@@ -741,8 +737,8 @@ function BottomDock({
             hairline to the rounded shape so it tucks naturally into the
             curve at both ends. */}
         {compact && hasSelection && (
-          <div className="absolute top-0 left-0 right-0 h-[2px] z-10 pointer-events-none">
-            <div className="relative h-full bg-white/15">
+          <div className="absolute top-0 left-0 right-0 h-[3px] z-10 pointer-events-none">
+            <div className="relative h-full bg-white/25">
               <div
                 className="absolute inset-y-0 left-0 bg-white transition-all"
                 style={{ width: `${progress}%` }}
@@ -750,17 +746,7 @@ function BottomDock({
             </div>
           </div>
         )}
-        {/* Vertical padding tightens slightly in compact mode (py-3 vs
-            py-4) — the inset bottom scrubber is gone, so we don't need
-            the extra 8px of bottom padding it lived in. The Play button
-            (44px) still drives row height, and `items-center` keeps every
-            transport + right-cluster button vertically aligned regardless. */}
-        <div
-          className={[
-            "flex items-center gap-1.5 px-3",
-            compact ? "py-3" : "py-4",
-          ].join(" ")}
-        >
+        <div className="flex items-center gap-1.5 px-3 py-4">
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
