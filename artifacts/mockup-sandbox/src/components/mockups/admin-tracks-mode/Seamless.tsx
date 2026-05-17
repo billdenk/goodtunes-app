@@ -556,7 +556,10 @@ function BottomDock({
       className="absolute left-1/2 -translate-x-1/2 bottom-4 z-20"
       style={hasSelection ? { width: "min(760px, calc(100% - 32px))" } : undefined}
     >
-      <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
+      {/* overflow-hidden so the bottom hairline progress bar clips
+          along the rounded-full pill ends (Apple pattern: bar runs UNDER
+          the album cover + title, edge-to-edge within the pill shape). */}
+      <div className="relative overflow-hidden rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
         <div className="flex items-center gap-1.5 px-3 py-2">
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
@@ -616,13 +619,16 @@ function BottomDock({
             <>
               <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
 
-              {/* ── CENTER · track info + inline scrubber ─────────
-                  Apple proportions: the album cover ≈ the full height of
-                  the content stack to its right (title row + subtitle row
-                  + scrubber row). Thumb at 48px (w-12 h-12) matches that
-                  rhythm and stays centered alongside the column. */}
+              {/* ── CENTER · track info ────────────────────────────
+                  Apple proportions: the album cover is ≈65% of the pill's
+                  content height, not full-bleed. 44px cover (w-11 h-11)
+                  with the title/subtitle stack vertically centered beside
+                  it leaves the breathing room above + below that the
+                  reference shot shows. The progress scrubber is NOT in
+                  this column anymore — it lives at the pill's bottom
+                  edge and runs UNDER everything (see below). */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-12 h-12 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
+                <div className="w-11 h-11 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-semibold truncate leading-tight">
                     {current.title}
@@ -630,35 +636,8 @@ function BottomDock({
                   <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
                     Nick Carter — Love Life Tragedy
                   </div>
-                  {/* Inline scrubber — Apple's anatomy:
-                      • No draggable knob dot. End of the white fill IS
-                        the play head — flat, like Apple Music's mini-player.
-                      • Rail THICKENS on hover (rest 3px → hover 5px) and
-                        thickens more + brightens on active/click (6px).
-                        Outer h-3 row keeps adjacent labels vertically
-                        stable while the rail grows.
-                      • Right label shows REMAINING time as `−2:26`, not
-                        total `4:12`. Uses U+2212 (proper minus glyph). */}
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <span className="text-[9.5px] tabular-nums text-slate-400 w-7 text-right">
-                      {fmt(elapsedSeconds)}
-                    </span>
-                    <div className="group/scrub relative flex-1 h-3 flex items-center cursor-pointer">
-                      <div className="relative w-full h-[3px] bg-white/15 rounded-full transition-[height,background-color] duration-100 group-hover/scrub:h-[5px] group-hover/scrub:bg-white/25 group-active/scrub:h-[6px] group-active/scrub:bg-white/35">
-                        <div
-                          className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
-                    <span className="text-[9.5px] tabular-nums text-slate-400 w-9">
-                      −{fmt(totalSeconds - elapsedSeconds)}
-                    </span>
-                  </div>
                 </div>
               </div>
-
-              <span className="mx-1 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
 
               {/* ── RIGHT · utility cluster ───────────────────────
                   Apple's ⋯ opens a song-options menu (Download, Add to
@@ -724,6 +703,40 @@ function BottomDock({
             </>
           )}
         </div>
+
+        {/* ── Hairline progress bar — pill's bottom edge ─────────────
+            Runs UNDER the album cover, title, transport, and volume
+            (Apple's mini-player anatomy). The bar is the full pill
+            width; overflow-hidden on the pill clips its left/right
+            ends along the rounded curve, so it appears to start +
+            stop where the bottom edge flattens out.
+
+            • At REST: 2px hairline, no time labels visible.
+            • On HOVER: rail thickens to 4px + brightens; the elapsed
+              (left) and remaining (right) time labels fade in inside
+              the pill, just above the rail.
+            • On CLICK / scrubbing (active): rail thickens to 5px and
+              brightens further — Bill's "darker" state.
+            • End of the white fill IS the play head — no knob dot.
+
+            Hit zone is the bottom 12px of the pill so the bar is
+            easy to grab without obscuring content above. */}
+        {hasSelection && (
+          <div className="group/scrub absolute inset-x-0 bottom-0 h-3 flex items-end cursor-pointer">
+            <span className="absolute bottom-[6px] left-4 text-[10px] tabular-nums text-slate-300 opacity-0 group-hover/scrub:opacity-100 transition-opacity duration-150 pointer-events-none">
+              {fmt(elapsedSeconds)}
+            </span>
+            <span className="absolute bottom-[6px] right-4 text-[10px] tabular-nums text-slate-300 opacity-0 group-hover/scrub:opacity-100 transition-opacity duration-150 pointer-events-none">
+              −{fmt(totalSeconds - elapsedSeconds)}
+            </span>
+            <div className="relative w-full h-[2px] bg-white/15 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/25 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
+              <div
+                className="absolute inset-y-0 left-0 bg-white transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
