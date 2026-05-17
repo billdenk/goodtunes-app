@@ -6,6 +6,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import {
+  ViewModeToggle,
+  useViewMode,
+} from "@/components/admin/ViewModeToggle";
 
 /**
  * Admin home · People (Phase 6a).
@@ -63,6 +67,7 @@ export function AdminPeople() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [view, setView] = useViewMode("people");
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -175,6 +180,11 @@ export function AdminPeople() {
               <Search className="w-4 h-4" />
             </button>
           )}
+          <ViewModeToggle
+            value={view}
+            onChange={setView}
+            testIdPrefix="view-mode-people"
+          />
           <button
             type="button"
             onClick={() => setComposerOpen(true)}
@@ -194,13 +204,27 @@ export function AdminPeople() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
-      ) : (
+      ) : view === "grid" ? (
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6"
           data-testid="grid-people"
         >
           {filtered.map((p) => (
             <PersonCard
+              key={p.id}
+              person={p}
+              labelName={p.labelId ? labelById.get(p.labelId) ?? null : null}
+              onOpen={() => openPerson(p.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          data-testid="list-people"
+        >
+          {filtered.map((p) => (
+            <PersonRow
               key={p.id}
               person={p}
               labelName={p.labelId ? labelById.get(p.labelId) ?? null : null}
@@ -262,6 +286,52 @@ function PersonCard({
         {person.name}
       </div>
       <div className="w-full text-center text-slate-400 text-[11.5px] truncate px-1">
+        {labelName || "Independent"}
+      </div>
+    </button>
+  );
+}
+
+function PersonRow({
+  person,
+  labelName,
+  onOpen,
+}: {
+  person: PersonLite;
+  labelName: string | null;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      data-testid={`row-person-${person.id}`}
+    >
+      <div className="w-10 h-10 rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200 flex-shrink-0">
+        {person.photoUrl ? (
+          <img
+            src={person.photoUrl}
+            alt={person.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-white text-sm font-bold">
+              {initialFor(person.name)}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          data-testid={`text-person-name-${person.id}`}
+        >
+          {person.name}
+        </div>
+      </div>
+      <div className="text-slate-400 text-[11.5px] truncate flex-shrink-0">
         {labelName || "Independent"}
       </div>
     </button>

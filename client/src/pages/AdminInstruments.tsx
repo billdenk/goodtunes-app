@@ -4,6 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, X, Guitar, Store } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import {
+  ViewModeToggle,
+  useViewMode,
+} from "@/components/admin/ViewModeToggle";
 
 /**
  * Admin home · Gear (Phase 6c).
@@ -32,6 +36,10 @@ export function AdminInstruments() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Entity token stays "instruments" to match the rest of the file's
+  // testids (`grid-instruments`, `card-instrument-…`, `row-instrument-…`)
+  // even though the user-facing label is "Gear". One source of truth.
+  const [view, setView] = useViewMode("instruments");
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -146,6 +154,11 @@ export function AdminInstruments() {
               <Search className="w-4 h-4" />
             </button>
           )}
+          <ViewModeToggle
+            value={view}
+            onChange={setView}
+            testIdPrefix="view-mode-instruments"
+          />
           <button
             type="button"
             onClick={openNewInstrument}
@@ -165,13 +178,26 @@ export function AdminInstruments() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
-      ) : (
+      ) : view === "grid" ? (
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-6"
           data-testid="grid-instruments"
         >
           {filtered.map((i) => (
             <InstrumentCard
+              key={i.id}
+              instrument={i}
+              onOpen={() => openInstrument(i.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          data-testid="list-instruments"
+        >
+          {filtered.map((i) => (
+            <InstrumentRow
               key={i.id}
               instrument={i}
               onOpen={() => openInstrument(i.id)}
@@ -229,6 +255,56 @@ function InstrumentCard({
       <div className="text-slate-400 text-[11.5px] truncate">
         {instrument.shortCategory || instrument.category}
       </div>
+    </button>
+  );
+}
+
+function InstrumentRow({
+  instrument,
+  onOpen,
+}: {
+  instrument: InstrumentLite;
+  onOpen: () => void;
+}) {
+  const vendorCount = instrument.vendors?.length ?? 0;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      data-testid={`row-instrument-${instrument.id}`}
+    >
+      <div className="w-12 h-12 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+        {instrument.photoUrl ? (
+          <img
+            src={instrument.photoUrl}
+            alt={instrument.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <Guitar className="w-5 h-5 text-slate-300" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          data-testid={`text-instrument-name-${instrument.id}`}
+        >
+          {instrument.name}
+        </div>
+        <div className="text-slate-500 text-[12px] truncate">
+          {instrument.shortCategory || instrument.category}
+        </div>
+      </div>
+      {vendorCount > 0 && (
+        <div
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10.5px] font-bold flex-shrink-0"
+          data-testid={`badge-vendor-count-${instrument.id}`}
+        >
+          <Store className="w-3 h-3" />
+          {vendorCount}
+        </div>
+      )}
     </button>
   );
 }

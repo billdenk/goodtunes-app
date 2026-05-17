@@ -4,6 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, X, Tag } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import {
+  ViewModeToggle,
+  useViewMode,
+} from "@/components/admin/ViewModeToggle";
 
 /**
  * Admin home · Labels (Phase 6f).
@@ -26,6 +30,7 @@ export function AdminLabels() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [view, setView] = useViewMode("labels");
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -137,6 +142,11 @@ export function AdminLabels() {
               <Search className="w-4 h-4" />
             </button>
           )}
+          <ViewModeToggle
+            value={view}
+            onChange={setView}
+            testIdPrefix="view-mode-labels"
+          />
           <button
             type="button"
             onClick={openNewLabel}
@@ -155,13 +165,22 @@ export function AdminLabels() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
-      ) : (
+      ) : view === "grid" ? (
         <div
           className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
           data-testid="grid-labels"
         >
           {filtered.map((l) => (
             <LabelCard key={l.id} label={l} onOpen={() => openLabel(l.id)} />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          data-testid="list-labels"
+        >
+          {filtered.map((l) => (
+            <LabelRow key={l.id} label={l} onOpen={() => openLabel(l.id)} />
           ))}
         </div>
       )}
@@ -207,6 +226,48 @@ function LabelCard({
           </div>
         )}
       </div>
+    </button>
+  );
+}
+
+function LabelRow({
+  label,
+  onOpen,
+}: {
+  label: LabelLite;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      data-testid={`row-label-${label.id}`}
+    >
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+        {label.logoUrl ? (
+          <img
+            src={label.logoUrl}
+            alt={label.name}
+            className="w-full h-full object-contain p-1"
+          />
+        ) : (
+          <Tag className="w-4 h-4 text-slate-300" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          data-testid={`text-label-name-${label.id}`}
+        >
+          {label.name}
+        </div>
+      </div>
+      {label.location && (
+        <div className="text-slate-400 text-[11.5px] truncate flex-shrink-0">
+          {label.location}
+        </div>
+      )}
     </button>
   );
 }

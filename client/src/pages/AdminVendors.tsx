@@ -4,6 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, X, Store } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import {
+  ViewModeToggle,
+  useViewMode,
+} from "@/components/admin/ViewModeToggle";
 
 /**
  * Admin home · Vendors (Phase 6e).
@@ -31,6 +35,7 @@ export function AdminVendors() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [view, setView] = useViewMode("vendors");
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -143,6 +148,11 @@ export function AdminVendors() {
               <Search className="w-4 h-4" />
             </button>
           )}
+          <ViewModeToggle
+            value={view}
+            onChange={setView}
+            testIdPrefix="view-mode-vendors"
+          />
           <button
             type="button"
             onClick={openNewVendor}
@@ -161,13 +171,26 @@ export function AdminVendors() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
-      ) : (
+      ) : view === "grid" ? (
         <div
           className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
           data-testid="grid-vendors"
         >
           {filtered.map((v) => (
             <VendorCard
+              key={v.id}
+              vendor={v}
+              onOpen={() => openVendor(v.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          data-testid="list-vendors"
+        >
+          {filtered.map((v) => (
+            <VendorRow
               key={v.id}
               vendor={v}
               onOpen={() => openVendor(v.id)}
@@ -220,6 +243,51 @@ function VendorCard({
           </div>
         )}
       </div>
+    </button>
+  );
+}
+
+function VendorRow({
+  vendor,
+  onOpen,
+}: {
+  vendor: VendorLite;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      data-testid={`row-vendor-${vendor.id}`}
+    >
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+        {vendor.logoUrl ? (
+          <img
+            src={vendor.logoUrl}
+            alt={vendor.name}
+            className="w-full h-full object-contain p-1"
+          />
+        ) : (
+          <Store className="w-4 h-4 text-slate-300" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          data-testid={`text-vendor-name-${vendor.id}`}
+        >
+          {vendor.name}
+        </div>
+        <div className="text-slate-400 text-[11.5px] truncate">
+          {vendor.domain}
+        </div>
+      </div>
+      {vendor.tagline && (
+        <div className="text-slate-500 text-[12px] truncate flex-shrink-0 max-w-[40%] hidden md:block">
+          {vendor.tagline}
+        </div>
+      )}
     </button>
   );
 }

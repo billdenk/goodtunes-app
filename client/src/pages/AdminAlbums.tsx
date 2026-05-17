@@ -4,6 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, Filter, EyeOff, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import {
+  ViewModeToggle,
+  useViewMode,
+} from "@/components/admin/ViewModeToggle";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -41,6 +45,7 @@ export function AdminAlbums() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [view, setView] = useViewMode("albums");
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -194,6 +199,13 @@ export function AdminAlbums() {
             <IconBtn label="Filter" testId="button-filter">
               <Filter className="w-4 h-4" />
             </IconBtn>
+            <div className="ml-1">
+              <ViewModeToggle
+                value={view}
+                onChange={setView}
+                testIdPrefix="view-mode-albums"
+              />
+            </div>
             <IconBtn
               onClick={() => navigate("/admin")}
               label="New album"
@@ -231,13 +243,22 @@ export function AdminAlbums() {
           <div className="py-20 text-center text-slate-500 text-sm max-w-md mx-auto">
             {emptyCopy}
           </div>
-        ) : (
+        ) : view === "grid" ? (
           <div
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-7"
             data-testid="grid-admin-albums"
           >
             {filtered.map((a) => (
               <AlbumTile key={a.id} album={a} />
+            ))}
+          </div>
+        ) : (
+          <div
+            className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+            data-testid="list-admin-albums"
+          >
+            {filtered.map((a) => (
+              <AlbumRow key={a.id} album={a} />
             ))}
           </div>
         )}
@@ -294,6 +315,51 @@ function AlbumTile({ album }: { album: AlbumLite }) {
           {album.type}
           {album.year && <> · {album.year}</>}
         </div>
+      </div>
+    </Link>
+  );
+}
+
+function AlbumRow({ album }: { album: AlbumLite }) {
+  return (
+    <Link
+      href={`/admin/albums/${album.id}`}
+      className="group flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      data-testid={`row-album-${album.id}`}
+    >
+      <div className="w-12 h-12 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
+        <img
+          src={album.artwork}
+          alt={album.title}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          data-testid={`text-album-title-${album.id}`}
+        >
+          {album.title}
+        </div>
+        <div className="text-slate-500 text-[12px] truncate">
+          {album.artist}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {album.isHidden && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wide"
+            title="Pulled from sale — owners keep access"
+          >
+            <EyeOff className="w-2.5 h-2.5" />
+            Sunset
+          </span>
+        )}
+        <span className="text-slate-400 text-[11px] uppercase tracking-wide font-semibold tabular-nums">
+          {album.type}
+          {album.year && <> · {album.year}</>}
+        </span>
       </div>
     </Link>
   );
