@@ -74,8 +74,8 @@ function StatusMeter({
     target = null;
     tone = "ready";
     hint = t.snippet
-      ? "Master is in and a custom 30-sec snippet is set. Publishable."
-      : "Master is in. Snippet defaults to the first 30 seconds — tap to customize.";
+      ? "Master is in and a custom 30-sec preview is set. Publishable."
+      : "Master is in. Preview defaults to the first 30 seconds — tap to customize.";
   } else if (t.snippet || t.lyrics || t.credits) {
     word = "Master";
     target = "master";
@@ -336,7 +336,7 @@ function MasterDetail({
                   onClick={onGoToSnippet}
                   className="font-semibold text-[#319ED8] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded"
                 >
-                  pick your 30-second snippet
+                  pick your 30-second preview
                 </button>
                 {" "}— or leave it auto-set to the first 30 seconds.
               </div>
@@ -486,14 +486,14 @@ function SnippetDetail({
   // the unlock, point at the action."
   if (!hasMaster) {
     return (
-      <DetailWrap title="30-sec snippet" onClose={onClose}>
+      <DetailWrap title="30-sec preview" onClose={onClose}>
         <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
           <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
             <Upload className="w-4 h-4" />
           </span>
           <div className="text-[11.5px] leading-snug flex-1 min-w-0">
             <div className="font-semibold text-slate-900">
-              Snippet picker unlocks after the master
+              Preview picker unlocks after the master
             </div>
             <div className="text-slate-600 mt-0.5">
               Once you{" "}
@@ -651,7 +651,7 @@ function SnippetDetail({
   };
   return (
     <DetailWrap
-      title="30-sec snippet"
+      title="30-sec preview"
       onClose={guardedClose}
       action={
         /* X close button — runs `guardedClose`, so a dirty close pops the
@@ -663,7 +663,7 @@ function SnippetDetail({
            dirty banner above the waveform makes the save model obvious. */
         <button
           onClick={guardedClose}
-          aria-label="Close snippet panel"
+          aria-label="Close preview panel"
           title="Close"
           className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
           data-testid="button-snippet-close"
@@ -772,8 +772,8 @@ function SnippetDetail({
       {/* Trim row: play · waveform · lock — Apple iMovie pattern */}
       <div className="flex items-center gap-2">
         <button
-          aria-label="Preview snippet"
-          title="Preview snippet"
+          aria-label="Play preview"
+          title="Play preview"
           className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 inline-flex items-center justify-center flex-shrink-0"
         >
           <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
@@ -825,7 +825,7 @@ function SnippetDetail({
                       setDraftLeft((next / TOTAL_SEC) * 100);
                     }
                   }}
-                  aria-label="Snippet start time — type to fine-tune"
+                  aria-label="Preview start time — type to fine-tune"
                   title="Type to fine-tune (mm:ss)"
                   className="w-[42px] px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums text-center shadow-md focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 cursor-text"
                 />
@@ -874,10 +874,10 @@ function SnippetDetail({
           onClick={onPadlockClick}
           aria-label={
             locked
-              ? "Unlock snippet — allow sliding"
+              ? "Unlock preview — allow sliding"
               : isDirty
-                ? "Save and lock snippet"
-                : "Lock snippet in"
+                ? "Save and lock preview"
+                : "Lock preview in"
           }
           title={
             locked
@@ -904,7 +904,7 @@ function SnippetDetail({
           <div className="w-full bg-white rounded-b-2xl rounded-t-xl shadow-2xl border-t border-slate-200 p-4 space-y-3">
             <div>
               <div className="text-[13px] font-semibold text-slate-900">
-                Save your snippet edit?
+                Save your preview edit?
               </div>
               <div className="text-[11.5px] text-slate-500 mt-0.5">
                 You moved the window to{" "}
@@ -2174,7 +2174,7 @@ function EditRow({
                 <StatusBadge
                   ok
                   icon={Scissors}
-                  label="Snippet"
+                  label="Preview"
                   severity="soft"
                   compact
                   active={openSection === "snippet"}
@@ -2399,7 +2399,7 @@ export function Interactive() {
         </div>
 
         <p className="mt-4 text-[11.5px] text-slate-400 text-center">
-          Try tapping Master · 30-sec snippet · Lyrics · Credits on the open row
+          Try tapping Master · 30-sec preview · Lyrics · Credits on the open row
         </p>
       </div>
     </div>
