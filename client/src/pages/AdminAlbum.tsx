@@ -2229,13 +2229,29 @@ function GoodSyncPanel({
   // box updates as the writer types. On Save the LyricsEditor persists
   // this same array into `syncedLyrics`. Section headers (V1/PRE/[Verse 1]
   // etc.) are stripped here, not just dimmed — they aren't sung lines.
-  const previewCues = useMemo(
-    () =>
-      canPlay
-        ? distributeLyrics(draftLyrics, song.duration ?? 240)
-        : [],
-    [canPlay, draftLyrics, song.duration],
-  );
+  // Prefer the real ElevenLabs-aligned cues when:
+  //   1) the song has saved syncedLyrics, AND
+  //   2) the typed draft still matches what was synced (no in-progress edits).
+  // Otherwise fall back to the even-distribution placeholder so the writer
+  // sees *some* preview while typing. Without this preference, a freshly-
+  // synced song still showed the fake even-distribution timing in the
+  // preview — looking "a few seconds behind" even though the saved cues
+  // were accurate.
+  const previewCues = useMemo(() => {
+    if (!canPlay) return [];
+    const savedLyrics = (song.lyrics ?? "").trim();
+    const draftNorm = draftLyrics.trim();
+    const savedCues = song.syncedLyrics ?? [];
+    if (savedCues.length > 0 && draftNorm && draftNorm === savedLyrics) {
+      // Filter section headers (bracketed or all-caps shorthand) — they
+      // share a timestamp with the next sung line server-side; we hide
+      // them in the preview the same way the player does.
+      return savedCues.filter(
+        (c) => c.text.trim() && !isSectionHeaderLine(c.text),
+      );
+    }
+    return distributeLyrics(draftLyrics, song.duration ?? 240);
+  }, [canPlay, draftLyrics, song.duration, song.lyrics, song.syncedLyrics]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
