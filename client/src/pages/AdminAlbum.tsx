@@ -598,16 +598,12 @@ function TracksPanel({
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
         <div>
-          <h2 className="text-slate-900 text-[14px] font-bold">Tracklist</h2>
-          <p className="text-slate-400 text-[11.5px]">
+          <h2 className="text-slate-900 text-[14px] font-bold">Tracks</h2>
+          <p className="text-slate-500 text-[11.5px] mt-0.5">
             {sorted.length === 0 ? (
               <>Add your first track below. Press Enter to add and keep going.</>
             ) : (
-              <>
-                {sorted.length} {sorted.length === 1 ? "track" : "tracks"} ·
-                Hover a row to rename, delete, or drag the grip on the left to
-                reorder.
-              </>
+              <>Reorder, edit, and play right from the list.</>
             )}
           </p>
         </div>
@@ -1342,84 +1338,26 @@ function TrackRow({
                   {song.title}
                 </div>
               </button>
-              {/* Collapsed-only status row. When the row is expanded the
-                  REQUIRED / OPTIONAL tile grid below carries the same
-                  signal more clearly, so the inline dots stand down. */}
-              {!expanded && (() => {
-                const hasMaster = !!song.audioUrl;
-                if (!hasMaster) {
-                  // Master is the gate — single Upload CTA, no other dots.
-                  return (
-                    <div className="mt-1">
-                      <button
-                        ref={masterChipRef}
-                        type="button"
-                        onClick={() => {
-                          setUserExpanded(true);
-                          setMode("audio");
-                        }}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                        data-testid={`button-edit-master-${song.id}`}
-                      >
-                        <Upload className="w-3 h-3" />
-                        Upload master
-                      </button>
-                    </div>
-                  );
-                }
-                const previewState: DotState =
-                  song.previewStartMs != null ? "custom" : "done";
-                const lyricsState: DotState = song.instrumental
-                  ? "instrumental"
-                  : (song.syncedLyrics?.length ?? 0) > 0
-                    ? "synced"
-                    : song.lyrics && song.lyrics.trim()
-                      ? "done"
-                      : "empty";
-                const writerCount = credits?.writers.length ?? 0;
-                const performerCount = credits?.performers.length ?? 0;
-                const creditsState: DotState =
-                  writerCount > 0 && performerCount > 0
-                    ? "done"
-                    : writerCount > 0 || performerCount > 0
-                      ? "partial"
-                      : "empty";
-                return (
-                  <div
-                    className="flex items-center gap-1.5 mt-1"
-                    role="group"
-                    aria-label="Track completion"
+              {/* "Upload master" CTA stays inline under the title — it's a
+                  do-this-next affordance, not status. Dots have moved to
+                  the right side next to duration (Interactive pattern). */}
+              {!expanded && !song.audioUrl && (
+                <div className="mt-1">
+                  <button
+                    ref={masterChipRef}
+                    type="button"
+                    onClick={() => {
+                      setUserExpanded(true);
+                      setMode("audio");
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                    data-testid={`button-edit-master-${song.id}`}
                   >
-                    <span
-                      className="w-6 h-6 inline-flex items-center justify-center"
-                      role="img"
-                      aria-label={dotHint("Preview", previewState)}
-                      title={dotHint("Preview", previewState)}
-                      data-testid={`dot-preview-${song.id}`}
-                    >
-                      {renderDot(previewState)}
-                    </span>
-                    <span
-                      className="w-6 h-6 inline-flex items-center justify-center"
-                      role="img"
-                      aria-label={dotHint("Lyrics", lyricsState)}
-                      title={dotHint("Lyrics", lyricsState)}
-                      data-testid={`dot-lyrics-${song.id}`}
-                    >
-                      {renderDot(lyricsState)}
-                    </span>
-                    <span
-                      className="w-6 h-6 inline-flex items-center justify-center"
-                      role="img"
-                      aria-label={dotHint("Credits", creditsState)}
-                      title={dotHint("Credits", creditsState)}
-                      data-testid={`dot-credits-${song.id}`}
-                    >
-                      {renderDot(creditsState)}
-                    </span>
-                  </div>
-                );
-              })()}
+                    <Upload className="w-3 h-3" />
+                    Upload master
+                  </button>
+                </div>
+              )}
             </div>
             <span
               className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
@@ -1427,6 +1365,66 @@ function TrackRow({
             >
               {formatDuration(song.duration)}
             </span>
+            {/* Right-aligned dot meter — Preview / Lyrics / Credits.
+                Sits next to duration so the row reads "title … 3:30 ✓✓✓"
+                like Apple Music's status chips. Hidden while the row is
+                expanded (the tile grid below carries the same signal)
+                and while master is missing (the inline Upload CTA owns
+                the focus in that state). */}
+            {!expanded && !!song.audioUrl && (() => {
+              const previewState: DotState =
+                song.previewStartMs != null ? "custom" : "done";
+              const lyricsState: DotState = song.instrumental
+                ? "instrumental"
+                : (song.syncedLyrics?.length ?? 0) > 0
+                  ? "synced"
+                  : song.lyrics && song.lyrics.trim()
+                    ? "done"
+                    : "empty";
+              const writerCount = credits?.writers.length ?? 0;
+              const performerCount = credits?.performers.length ?? 0;
+              const creditsState: DotState =
+                writerCount > 0 && performerCount > 0
+                  ? "done"
+                  : writerCount > 0 || performerCount > 0
+                    ? "partial"
+                    : "empty";
+              return (
+                <div
+                  className="flex items-center gap-1 flex-shrink-0"
+                  role="group"
+                  aria-label="Track completion"
+                >
+                  <span
+                    className="w-5 h-5 inline-flex items-center justify-center"
+                    role="img"
+                    aria-label={dotHint("Preview", previewState)}
+                    title={dotHint("Preview", previewState)}
+                    data-testid={`dot-preview-${song.id}`}
+                  >
+                    {renderDot(previewState)}
+                  </span>
+                  <span
+                    className="w-5 h-5 inline-flex items-center justify-center"
+                    role="img"
+                    aria-label={dotHint("Lyrics", lyricsState)}
+                    title={dotHint("Lyrics", lyricsState)}
+                    data-testid={`dot-lyrics-${song.id}`}
+                  >
+                    {renderDot(lyricsState)}
+                  </span>
+                  <span
+                    className="w-5 h-5 inline-flex items-center justify-center"
+                    role="img"
+                    aria-label={dotHint("Credits", creditsState)}
+                    title={dotHint("Credits", creditsState)}
+                    data-testid={`dot-credits-${song.id}`}
+                  >
+                    {renderDot(creditsState)}
+                  </span>
+                </div>
+              );
+            })()}
             <div className="flex items-center gap-1 flex-shrink-0">
               {/* Rename pencil — always visible (on hover when collapsed,
                   pinned when expanded so the affordance stays reachable
