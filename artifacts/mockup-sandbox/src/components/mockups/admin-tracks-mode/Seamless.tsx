@@ -701,13 +701,16 @@ function BottomDock({
                 <button
                   aria-label="Show lyrics"
                   title="Show lyrics — QA-preview synced lyrics while the master plays"
-                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                  className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                 >
                   {/* Lyrics glyph — Lucide Mic2 (singer's mic). Matches
                       the canonical primitive at client/src/components/ui/
                       LyricsIcon.tsx. Sandbox can't import that primitive,
-                      so use Mic2 directly here. Keep both surfaces aligned. */}
-                  <Mic2 className="w-4 h-4" />
+                      so use Mic2 directly here. Keep both surfaces aligned.
+                      Icon at 18px matches the left-cluster skip arrows so
+                      the two ends of the pill read at the same weight —
+                      Apple's right cluster is visibly chunkier than 16px. */}
+                  <Mic2 className="w-[18px] h-[18px]" />
                 </button>
                 {/* Volume cluster — Apple's pattern:
                     • Default: just the speaker icon (no slider clutter).
@@ -745,9 +748,9 @@ function BottomDock({
                     aria-label={volumeMuted ? "Unmute" : "Mute"}
                     title={volumeMuted ? "Unmute" : "Mute"}
                     onClick={() => setVolumeMuted((v) => !v)}
-                    className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                   >
-                    <VolumeIcon className="w-4 h-4" />
+                    <VolumeIcon className="w-[18px] h-[18px]" />
                   </button>
                 </div>
               </div>
