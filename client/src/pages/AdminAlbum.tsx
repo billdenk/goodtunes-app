@@ -5360,36 +5360,21 @@ function AudioEditor({
         )}
       </div>
 
-      {/* Footer — single "Done" link on the right. There's no Save:
-          file/URL changes persist via the autosave effect above, and
-          Preview + Instrumental save themselves. The footer just
-          tells the writer "we're listening" and gives a way out. */}
-      <div className="flex items-center justify-between gap-2 pt-3">
-        {/* Silent unless we're actually mid-write. "Saved automatically"
-            was just chrome noise the rest of the time (Bill: "do we
-            need to say 'Save automatically'?"). The transient "Saving…"
-            still flashes when the writer can actually act on it. */}
+      {/* Footer — only renders while a write is in-flight. There's no
+          Save and no Done: autosave persists changes, and the tile
+          header already says "tap to collapse" so the writer has a
+          way out (Bill: "isn't Done redundant if it saves
+          automatically?"). The `onClose` prop still wires up via the
+          header tap upstream. */}
+      {(saveMut.isPending || uploading) && (
         <div
-          className="flex items-center gap-1.5 text-[10.5px] text-slate-400 min-h-[14px]"
+          className="flex items-center gap-1.5 pt-3 text-[10.5px] text-slate-400"
           data-testid={`text-audio-autosave-${song.id}`}
         >
-          {saveMut.isPending || uploading ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
-              <span>Saving…</span>
-            </>
-          ) : null}
+          <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+          <span>Saving…</span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={uploading || saveMut.isPending}
-          className="text-[12px] text-[#319ED8] hover:underline font-semibold disabled:opacity-40"
-          data-testid={`button-done-audio-${song.id}`}
-        >
-          Done
-        </button>
-      </div>
+      )}
     </div>
   );
 }
