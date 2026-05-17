@@ -1416,6 +1416,174 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // Auto-sync lyrics to audio via ElevenLabs Forced Alignment.
+  //
+  // Flow: load song → fetch master audio bytes from object storage → POST
+  // multipart {file, text} to https://api.elevenlabs.io/v1/forced-alignment
+  // → convert the returned word-level alignment into the per-line
+  // {timeMs, text}[] shape the Player already understands → save to
+  // songs.syncedLyrics. Player.tsx prefers this array over the round-second
+  // auto-distribution when it's present.
+  //
+  // Cost ~$0.03 / 4-min song; 95%+ accurate on clean vocals. Admin-only.
+  // Hard caps for the paid ElevenLabs call. 150MB covers a 24-bit/96kHz WAV
+  // of ~13 minutes; longer songs should be re-uploaded as compressed FLAC.
+  // 30k chars is well below ElevenLabs's 675k limit but plenty for lyrics.
+  const FA_MAX_AUDIO_BYTES = 150 * 1024 * 1024;
+  const FA_MAX_LYRIC_CHARS = 30_000;
+  const FA_TIMEOUT_MS = 120_000; // alignments rarely exceed 60s; double for headroom
+
+  app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
+    const id = String(req.params.id);
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ message: "ELEVENLABS_API_KEY not configured" });
+    }
+    const song = await storage.getSongById(id);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    if (!song.audioUrl) {
+      return res.status(400).json({ message: "Song has no master audio uploaded — upload a master first." });
+    }
+    if (!song.lyrics || !song.lyrics.trim()) {
+      return res.status(400).json({ message: "Song has no lyrics to align — add lyrics first." });
+    }
+    if (song.lyrics.length > FA_MAX_LYRIC_CHARS) {
+      return res.status(413).json({ message: `Lyrics too long (${song.lyrics.length} chars; cap ${FA_MAX_LYRIC_CHARS}).` });
+    }
+
+    // Preflight the audio size from object metadata before pulling bytes —
+    // rejects an oversized file without paying the download cost or the
+    // paid API cost downstream.
+    let audioMime = "audio/wav";
+    let audioBuf: Buffer;
+    try {
+      const file = await objectStorage.getObjectEntityFile(song.audioUrl);
+      const [meta] = await file.getMetadata();
+      if (meta?.contentType) audioMime = String(meta.contentType);
+      const size = Number(meta?.size ?? 0);
+      if (size && size > FA_MAX_AUDIO_BYTES) {
+        return res.status(413).json({
+          message: `Master is too large for auto-sync (${(size / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
+        });
+      }
+      const [buf] = await file.download();
+      audioBuf = buf;
+    } catch (err) {
+      console.error("auto-sync: failed to fetch master audio", err);
+      return res.status(502).json({ message: "Could not read master audio from storage" });
+    }
+
+    // Call ElevenLabs Forced Alignment. multipart/form-data with `file` + `text`.
+    // AbortController prevents a hung upstream from tying up the server.
+    let alignment: { words: Array<{ text: string; start: number; end: number }> };
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), FA_TIMEOUT_MS);
+    try {
+      const form = new FormData();
+      const ext = (song.audioUrl.match(/\.(\w+)$/)?.[1] || "wav").toLowerCase();
+      form.append("file", new Blob([audioBuf], { type: audioMime }), `song-${id}.${ext}`);
+      form.append("text", song.lyrics);
+
+      const upstream = await fetch("https://api.elevenlabs.io/v1/forced-alignment", {
+        method: "POST",
+        headers: { "xi-api-key": apiKey },
+        body: form,
+        signal: ctl.signal,
+      });
+      if (!upstream.ok) {
+        const errBody = await upstream.text().catch(() => "");
+        console.error("ElevenLabs forced-alignment failed", upstream.status, errBody);
+        return res.status(502).json({
+          message: `Forced alignment failed (${upstream.status})`,
+          detail: errBody.slice(0, 500),
+        });
+      }
+      alignment = (await upstream.json()) as typeof alignment;
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        console.error("auto-sync: ElevenLabs call timed out");
+        return res.status(504).json({ message: "Forced alignment timed out" });
+      }
+      console.error("auto-sync: ElevenLabs call threw", err);
+      return res.status(502).json({ message: "Forced alignment service unreachable" });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Validate the response shape before we trust it.
+    const words = Array.isArray(alignment?.words) ? alignment.words : [];
+    if (
+      words.length === 0 ||
+      !words.every(
+        (w) =>
+          typeof w?.start === "number" &&
+          typeof w?.end === "number" &&
+          typeof w?.text === "string",
+      )
+    ) {
+      return res.status(502).json({ message: "Forced alignment returned an unexpected shape" });
+    }
+
+    // Convert word-level alignment → per-line {timeMs, text}[] for Player.tsx.
+    // ElevenLabs returns words in source order, so we walk the lyric lines and
+    // consume one alignment word per non-whitespace lyric token. Drift between
+    // our local tokenizer and ElevenLabs's is the main failure mode — we
+    // count both totals and fail fast if they diverge by more than 10%
+    // rather than silently emitting timeMs=0 lines.
+    const wordRe = /[\p{L}\p{N}'']+/gu;
+    const lines = song.lyrics.split("\n");
+    let expectedTokens = 0;
+    for (const raw of lines) {
+      const t = raw.trim();
+      if (!t || /^\[.+\]$/.test(t)) continue;
+      expectedTokens += t.match(wordRe)?.length ?? 0;
+    }
+    const drift = Math.abs(expectedTokens - words.length) / Math.max(1, expectedTokens);
+    if (drift > 0.1) {
+      return res.status(422).json({
+        message: `Lyric/audio mismatch — our text has ${expectedTokens} words, ElevenLabs returned ${words.length}. Check the lyric text for typos or extra lines, then retry.`,
+        expectedTokens,
+        returnedWords: words.length,
+      });
+    }
+
+    const out: { timeMs: number; text: string }[] = [];
+    const pendingHeaders: { timeMs: number; text: string }[] = [];
+    let wi = 0;
+    for (const raw of lines) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      const isHeader = /^\[.+\]$/.test(trimmed);
+      if (isHeader) {
+        pendingHeaders.push({ timeMs: 0, text: trimmed }); // patched below
+        continue;
+      }
+      const tokens = trimmed.match(wordRe) ?? [];
+      const firstWord = words[wi];
+      // If we run out of aligned words mid-walk (shouldn't happen after the
+      // 10% drift gate above, but guard anyway), inherit the previous line's
+      // timing rather than emitting a misleading zero.
+      const timeMs = firstWord
+        ? Math.round(firstWord.start * 1000)
+        : out[out.length - 1]?.timeMs ?? 0;
+      for (const h of pendingHeaders) out.push({ ...h, timeMs });
+      pendingHeaders.length = 0;
+      out.push({ timeMs, text: trimmed });
+      wi += tokens.length;
+    }
+    if (pendingHeaders.length) {
+      const last = out[out.length - 1]?.timeMs ?? 0;
+      for (const h of pendingHeaders) out.push({ ...h, timeMs: last });
+    }
+
+    const updated = await storage.updateSong(id, { syncedLyrics: out });
+    return res.json({
+      song: updated,
+      lineCount: out.length,
+      wordCount: words.length,
+    });
+  });
+
   // Bulk reorder the tracklist. Accepts the album's song IDs in their new
   // display order and rewrites each song's trackNumber to its index+1.
   // No unique constraint on (albumId, trackNumber) so we can update in any
