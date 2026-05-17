@@ -5691,7 +5691,7 @@ function MastersPanel({ album }: { album: AlbumFull }) {
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
         <div>
           <h2 className="text-slate-900 text-[14px] font-bold">
-            Streaming masters
+            Masters
           </h2>
           <p className="text-slate-400 text-[11.5px]">
             <span
@@ -5709,8 +5709,8 @@ function MastersPanel({ album }: { album: AlbumFull }) {
       </div>
       <div className="px-5 py-2.5 bg-slate-50/60 border-b border-slate-100 text-[11.5px] text-slate-500 leading-relaxed">
         A <span className="font-semibold text-slate-700">master</span> is the
-        streaming audio file for a track. One row below = one track on this
-        album. To add a new master, first{" "}
+        audio file fans hear when they play a track. One row below = one track
+        on this album. To add a new master, first{" "}
         <span className="font-semibold text-slate-700">add a track</span> on the
         Tracks tab — its master slot will show up here.
       </div>
