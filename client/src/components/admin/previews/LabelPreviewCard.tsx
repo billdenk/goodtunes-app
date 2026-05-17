@@ -196,43 +196,23 @@ export function LabelPreviewCard({
                   data-testid="img-preview-label-cover"
                 />
               ) : (
+                // No cover image — fall back to the brand navy. We tried
+                // a blurred-logo "halo" background here and it looked
+                // muddy / off-brand. Solid #00062B (the player bg) with
+                // the logo floated dead-center reads as intentional
+                // rather than a missing-asset placeholder.
                 <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #00062B 100%)",
-                  }}
+                  className="absolute inset-0 flex items-center justify-center"
+                  style={{ background: "#00062B" }}
                 >
                   {label.logoUrl && (
-                    <>
+                    <div className="w-32 h-32 rounded-full overflow-hidden bg-white flex items-center justify-center">
                       <img
                         src={label.logoUrl}
                         alt=""
-                        aria-hidden
-                        className="absolute inset-0 w-full h-full object-cover"
-                        style={{
-                          filter: "blur(40px) saturate(160%)",
-                          transform: "scale(1.3)",
-                          opacity: 0.85,
-                        }}
+                        className="w-full h-full object-cover"
                       />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div
-                          className="w-32 h-32 rounded-full flex items-center justify-center overflow-hidden"
-                          style={{
-                            background: "rgba(255,255,255,0.55)",
-                            backdropFilter: "blur(8px)",
-                          }}
-                        >
-                          <img
-                            src={label.logoUrl}
-                            alt=""
-                            className="w-full h-full object-cover"
-                            style={{ opacity: 0.92 }}
-                          />
-                        </div>
-                      </div>
-                    </>
+                    </div>
                   )}
                 </div>
               )}
