@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   GripVertical,
   Plus,
@@ -545,6 +545,29 @@ function BottomDock({
   // (deferred until graduation, where admin's LIVE PREVIEW column eats
   // horizontal room and auto-compact becomes more valuable).
   const [dockHidden, setDockHidden] = useState(false);
+
+  // ── Responsive auto-compact (Apple's narrow-viewport dock pattern) ──
+  // At wide widths the dock is a centered 760px pill with an inset
+  // bottom scrubber + hover time labels. At narrow widths (post-
+  // graduation, when admin's LIVE PREVIEW column eats horizontal room)
+  // it stretches edge-to-edge, drops the inset scrubber, and renders
+  // a thin progress hairline at the TOP edge of the pill instead —
+  // exactly what Apple Music does at the same breakpoint.
+  //
+  // `forcedCompact` is a demo-only override so we can preview compact
+  // mode inside the canvas's fixed 1280px iframe without resizing the
+  // browser. In production (post-graduation), forcedCompact stays null
+  // and the layout is driven purely by container width.
+  const [windowWidth, setWindowWidth] = useState<number>(
+    typeof window !== "undefined" ? window.innerWidth : 1280,
+  );
+  const [forcedCompact, setForcedCompact] = useState<boolean | null>(null);
+  useEffect(() => {
+    const handler = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  const compact = forcedCompact ?? windowWidth < 1100;
   const cycleRepeat = () =>
     setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
   const RepeatIcon = repeatMode === "one" ? Repeat1 : Repeat;
@@ -635,9 +658,61 @@ function BottomDock({
   }
 
   return (
+    <>
+      {/* Demo-only viewport toggle — lets us preview compact mode inside
+          the canvas iframe (fixed 1280px). Removed when the dock graduates
+          into client/src/components/ui/PlayerDock.tsx; production behavior
+          is driven purely by container width via the resize listener. */}
+      <div className="absolute top-2 right-2 z-30 flex items-center gap-1 rounded-full bg-slate-900/80 backdrop-blur-md ring-1 ring-white/10 px-1 py-1 text-[11px] tracking-wide uppercase text-slate-300 shadow-lg">
+        <span className="px-2 text-slate-400">Demo viewport</span>
+        <button
+          type="button"
+          onClick={() => setForcedCompact(false)}
+          className={[
+            "px-2.5 py-1 rounded-full transition-colors",
+            !compact
+              ? "bg-white text-slate-900"
+              : "text-slate-300 hover:text-white",
+          ].join(" ")}
+        >
+          Wide
+        </button>
+        <button
+          type="button"
+          onClick={() => setForcedCompact(true)}
+          className={[
+            "px-2.5 py-1 rounded-full transition-colors",
+            compact
+              ? "bg-white text-slate-900"
+              : "text-slate-300 hover:text-white",
+          ].join(" ")}
+        >
+          Compact
+        </button>
+        {forcedCompact !== null && (
+          <button
+            type="button"
+            onClick={() => setForcedCompact(null)}
+            className="px-2 py-1 rounded-full text-slate-400 hover:text-white"
+            title="Clear override — follow window width"
+          >
+            Auto
+          </button>
+        )}
+      </div>
+
     <div
-      className="absolute left-1/2 -translate-x-1/2 bottom-4 z-20"
-      style={hasSelection ? { width: "min(760px, calc(100% - 32px))" } : undefined}
+      className={[
+        "absolute bottom-4 z-20",
+        compact
+          ? "left-2 right-2"
+          : "left-1/2 -translate-x-1/2",
+      ].join(" ")}
+      style={
+        !compact && hasSelection
+          ? { width: "min(760px, calc(100% - 32px))" }
+          : undefined
+      }
     >
       {/* Symmetric py-4 keeps every transport button + the album cover
           vertically centered in the pill (their shared items-center row
@@ -646,7 +721,23 @@ function BottomDock({
           mini-player proportions, which gives the inset progress bar a
           clearly visible 10px gap below the cover instead of reading as
           flush. The bar lives in the bottom slice of that padding zone. */}
-      <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
+      <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden">
+        {/* Compact-mode top hairline scrubber — Apple's narrow-viewport
+            pattern: when the dock can't afford an inset bar between
+            clusters, the progress moves to a thin strip across the very
+            top edge of the pill. `overflow-hidden` on the pill clips the
+            hairline to the rounded shape so it tucks naturally into the
+            curve at both ends. */}
+        {compact && hasSelection && (
+          <div className="absolute top-0 left-0 right-0 h-[2px] z-10 pointer-events-none">
+            <div className="relative h-full bg-white/15">
+              <div
+                className="absolute inset-y-0 left-0 bg-white transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 px-3 py-4">
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
@@ -880,8 +971,10 @@ function BottomDock({
               and remaining-time (right) labels expand in — bar's flex-1
               contracts to make room, so nothing jumps vertically.
             • On CLICK / scrubbing: 5px, brighter again.
-            • End of the white fill IS the play head — no knob dot. */}
-        {hasSelection && (
+            • End of the white fill IS the play head — no knob dot.
+            Gated on !compact: in compact mode the scrubber moves up to
+            the top hairline above and these labels + inset bar disappear. */}
+        {!compact && hasSelection && (
           <>
             {/* Time labels — appear at the SAME vertical position as the
                 (now-blurred) title text, flush-aligned with the bar's
@@ -922,6 +1015,7 @@ function BottomDock({
         )}
       </div>
     </div>
+    </>
   );
 }
 
