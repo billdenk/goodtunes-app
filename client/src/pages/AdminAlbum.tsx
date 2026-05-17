@@ -106,7 +106,7 @@ interface SongLite {
   duration: number;
   lyrics: string | null;
   audioUrl: string | null;
-  syncedLyrics?: { timeMs: number; text: string }[] | null;
+  syncedLyrics?: { timeMs: number; endMs?: number; text: string }[] | null;
   instrumental?: boolean | null;
   previewStartMs?: number | null;
   previewEndMs?: number | null;
@@ -2245,47 +2245,26 @@ function GoodSyncPanel({
    *  a spinner. */
   syncing?: boolean;
 }) {
-  const hasLyrics = draftLyrics.trim().length > 0;
-  const canPlay = !song.instrumental && !!song.audioUrl && hasLyrics;
-
-  // Live preview cues — always derived from the current draft so the
-  // box updates as the writer types. On Save the LyricsEditor persists
-  // this same array into `syncedLyrics`. Section headers (V1/PRE/[Verse 1]
-  // etc.) are stripped here, not just dimmed — they aren't sung lines.
-  // Prefer the real ElevenLabs-aligned cues when:
-  //   1) the song has saved syncedLyrics, AND
-  //   2) the typed draft still matches what was synced (no in-progress edits).
-  // Otherwise fall back to the even-distribution placeholder so the writer
-  // sees *some* preview while typing. Without this preference, a freshly-
-  // synced song still showed the fake even-distribution timing in the
-  // preview — looking "a few seconds behind" even though the saved cues
-  // were accurate.
-  // True when the song has real saved cues AND the typed words still
-  // match what was synced. Drives both the preview source (real cues
-  // vs even-distribution placeholder) and the header button (play vs
-  // "Sync with audio").
-  const savedLyricsNorm = (song.lyrics ?? "").trim();
-  const draftNorm = draftLyrics.trim();
+  // Sync-with-audio uses ElevenLabs Speech-to-Text — it transcribes the
+  // master directly, so typed lyrics are no longer required to run the
+  // sync. The Plain pane is purely a reference for the admin to spot
+  // mishears once cues come back.
+  const canSync = !song.instrumental && !!song.audioUrl;
   const savedCues = song.syncedLyrics ?? [];
-  const isSynced =
-    canPlay &&
-    savedCues.length > 0 &&
-    !!draftNorm &&
-    draftNorm === savedLyricsNorm;
+  const hasSynced = canSync && savedCues.length > 0;
+  // Keep the old `canPlay` name for the audio-element render block —
+  // play UI is gated on having real cues now, not on typed lyrics.
+  const canPlay = hasSynced;
 
   const previewCues = useMemo(() => {
-    if (!canPlay) return [];
-    if (isSynced) {
-      // Filter section headers (bracketed or all-caps shorthand) — they
-      // share a timestamp with the next sung line server-side; we hide
-      // them in the preview the same way the player does.
-      return savedCues.filter(
-        (c) => c.text.trim() && !isSectionHeaderLine(c.text),
-      );
-    }
-    return distributeLyrics(draftLyrics, song.duration ?? 240);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canPlay, draftLyrics, song.duration, isSynced]);
+    if (!hasSynced) return [];
+    // Filter section headers (bracketed or all-caps shorthand) just
+    // in case older auto-distributed data is still around — STT cues
+    // are clean already.
+    return savedCues.filter(
+      (c) => c.text.trim() && !isSectionHeaderLine(c.text),
+    );
+  }, [hasSynced, savedCues]);
 
   // Callback-ref-as-state for the hidden audio element. This is the
   // bulletproof pattern: listener wiring happens in an effect keyed on
@@ -2419,10 +2398,11 @@ function GoodSyncPanel({
           </span>
         )}
         {/* "Sync with audio" pill shows only while the song hasn't
-            been synced yet (or the words have drifted from what was
-            synced). Once isSynced, the pill disappears and the play
-            button (next to it) is the only header control. */}
-        {canPlay && !isSynced && onSyncWithAudio && (
+            been synced yet. Once cues exist, the pill disappears and
+            the play button (next to it) is the only header control.
+            STT doesn't need typed lyrics, so this no longer depends
+            on the Plain pane having text. */}
+        {canSync && !hasSynced && onSyncWithAudio && (
           <button
             type="button"
             onClick={onSyncWithAudio}
@@ -2441,8 +2421,9 @@ function GoodSyncPanel({
         )}
         {/* Header play/pause — the ONLY play control. Drives the mini
             progress bar at the bottom of the box. Gray-until-hover so
-            it sits quietly next to the Info button and cue count. */}
-        {canPlay && (
+            it sits quietly next to the Info button and cue count.
+            Only appears once we actually have cues to scroll. */}
+        {hasSynced && (
           <button
             type="button"
             onClick={togglePlay}
@@ -2485,10 +2466,30 @@ function GoodSyncPanel({
             Upload a master first — GoodSync™ needs audio to line the
             words up against.
           </div>
-        ) : !hasLyrics ? (
-          <div className="flex-1 flex items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10">
-            Type words on the left — we'll line them up to the audio
-            automatically. Hit Save to lock it in.
+        ) : syncing ? (
+          <div
+            className="flex-1 flex flex-col items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10 gap-2"
+            data-testid={`status-syncing-${song.id}`}
+          >
+            <Loader2 className="w-5 h-5 text-[#319ED8] animate-spin" />
+            <span>
+              Listening to the master and lining up every word…
+              <br />
+              <span className="text-[11px] text-slate-400">
+                Usually 20–30 seconds.
+              </span>
+            </span>
+          </div>
+        ) : !hasSynced ? (
+          <div
+            className="flex-1 flex items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10"
+            data-testid={`status-not-synced-${song.id}`}
+          >
+            Tap{" "}
+            <span className="font-semibold text-[#319ED8] mx-1">
+              Sync with audio
+            </span>{" "}
+            and we'll transcribe the master line-by-line.
           </div>
         ) : (
           <>
@@ -2509,7 +2510,7 @@ function GoodSyncPanel({
             >
               {previewCues.length === 0 ? (
                 <div className="text-center text-[12px] text-slate-400 py-6">
-                  Add at least one lyric line on the left.
+                  No cues — re-run Sync with audio.
                 </div>
               ) : (
                 previewCues.map((cue, i) => {
