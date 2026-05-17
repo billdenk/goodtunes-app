@@ -182,7 +182,7 @@ function MasterDetail({
             "group relative flex items-center gap-3 p-2.5 rounded-md border-2 transition-colors",
             dragOver
               ? "border-dashed border-[#319ED8] bg-[#319ED8]/5"
-              : "border-slate-200 bg-slate-50",
+              : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white",
           ].join(" ")}
         >
           {/* Play — subdued slate at rest, brand-blue on row hover */}
