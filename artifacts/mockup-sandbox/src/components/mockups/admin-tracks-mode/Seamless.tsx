@@ -556,11 +556,11 @@ function BottomDock({
       className="absolute left-1/2 -translate-x-1/2 bottom-4 z-20"
       style={hasSelection ? { width: "min(760px, calc(100% - 32px))" } : undefined}
     >
-      {/* overflow-hidden so the bottom hairline progress bar clips
-          along the rounded-full pill ends (Apple pattern: bar runs UNDER
-          the album cover + title, edge-to-edge within the pill shape). */}
-      <div className="relative overflow-hidden rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
-        <div className="flex items-center gap-1.5 px-3 py-2">
+      {/* Bottom padding (pb-3 vs px-3) reserves breathing room below
+          the content for the inset progress bar — Apple's mini-player
+          puts the bar a few px above the pill's bottom edge, not flush. */}
+      <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
+        <div className="flex items-center gap-1.5 px-3 pt-2 pb-3">
 
           {/* ── LEFT · transport ─────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -704,37 +704,36 @@ function BottomDock({
           )}
         </div>
 
-        {/* ── Hairline progress bar — pill's bottom edge ─────────────
-            Runs UNDER the album cover, title, transport, and volume
-            (Apple's mini-player anatomy). The bar is the full pill
-            width; overflow-hidden on the pill clips its left/right
-            ends along the rounded curve, so it appears to start +
-            stop where the bottom edge flattens out.
+        {/* ── Progress bar — Apple's mini-player anatomy ─────────────
+            A short rounded rectangle inset from both pill ends with
+            real breathing room below — NOT a full-width hairline glued
+            to the bottom edge. Symmetric inset (left-3 / right-3) ≈
+            the pill's horizontal padding, so the bar reads as a quiet
+            secondary signal beneath the content rather than a frame.
 
-            • At REST: 2px hairline, no time labels visible.
-            • On HOVER: rail thickens to 4px + brightens; the elapsed
-              (left) and remaining (right) time labels fade in inside
-              the pill, just above the rail.
-            • On CLICK / scrubbing (active): rail thickens to 5px and
-              brightens further — Bill's "darker" state.
-            • End of the white fill IS the play head — no knob dot.
-
-            Hit zone is the bottom 12px of the pill so the bar is
-            easy to grab without obscuring content above. */}
+            • At REST: 2px rounded bar, time labels collapsed to w-0
+              (invisible).
+            • On HOVER: bar thickens to 4px + brightens; the elapsed
+              (left) and remaining-time (right) labels expand in from
+              w-0 — bar's flex-1 contracts to make room, so nothing
+              jumps vertically.
+            • On CLICK / scrubbing (active): bar thickens to 5px and
+              brightens further.
+            • End of the white fill IS the play head — no knob dot. */}
         {hasSelection && (
-          <div className="group/scrub absolute inset-x-0 bottom-0 h-3 flex items-end cursor-pointer">
-            <span className="absolute bottom-[6px] left-4 text-[10px] tabular-nums text-slate-300 opacity-0 group-hover/scrub:opacity-100 transition-opacity duration-150 pointer-events-none">
+          <div className="group/scrub absolute left-3 right-3 bottom-1.5 h-3 flex items-center gap-2 cursor-pointer">
+            <span className="text-[9.5px] tabular-nums text-slate-300 w-0 overflow-hidden opacity-0 group-hover/scrub:w-7 group-hover/scrub:opacity-100 text-right transition-all duration-150 whitespace-nowrap">
               {fmt(elapsedSeconds)}
             </span>
-            <span className="absolute bottom-[6px] right-4 text-[10px] tabular-nums text-slate-300 opacity-0 group-hover/scrub:opacity-100 transition-opacity duration-150 pointer-events-none">
-              −{fmt(totalSeconds - elapsedSeconds)}
-            </span>
-            <div className="relative w-full h-[2px] bg-white/15 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/25 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
+            <div className="relative flex-1 h-[2px] rounded-full bg-white/15 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/25 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
               <div
-                className="absolute inset-y-0 left-0 bg-white transition-all"
+                className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
             </div>
+            <span className="text-[9.5px] tabular-nums text-slate-300 w-0 overflow-hidden opacity-0 group-hover/scrub:w-9 group-hover/scrub:opacity-100 transition-all duration-150 whitespace-nowrap">
+              −{fmt(totalSeconds - elapsedSeconds)}
+            </span>
           </div>
         )}
       </div>
