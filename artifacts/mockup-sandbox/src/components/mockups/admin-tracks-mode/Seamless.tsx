@@ -37,6 +37,12 @@ import {
    meaning elsewhere in the admin surfaces. Bars are vertically centered
    around y=50 so the glyph sits dead-center inside its badge.          */
 function WaveArrowGlyph(props: { className?: string }) {
+  // Bill's original 100×100 ratio packed the bars into the middle 47% of
+  // the viewBox with rx=4 — at ~14px on-screen the bars rounded into
+  // indistinct pills with big dead margins. Rebreathed: span x=14→86
+  // (72% of width), bars 10 wide (vs 8), rx=2 (vs 4) so each bar reads
+  // as a bar instead of a stadium-shape. Same peak-left-then-taper-right
+  // heights as before, just with room to read at small sizes.
   return (
     <svg
       viewBox="0 0 100 100"
@@ -44,10 +50,10 @@ function WaveArrowGlyph(props: { className?: string }) {
       className={props.className}
       aria-hidden
     >
-      <rect x="26.5" y="40" width="8" height="20" rx="4" />
-      <rect x="39.5" y="28" width="8" height="44" rx="4" />
-      <rect x="52.5" y="34" width="8" height="32" rx="4" />
-      <rect x="65.5" y="43" width="8" height="14" rx="4" />
+      <rect x="14" y="40" width="10" height="20" rx="2" />
+      <rect x="32" y="22" width="10" height="56" rx="2" />
+      <rect x="50" y="32" width="10" height="36" rx="2" />
+      <rect x="68" y="42" width="10" height="16" rx="2" />
     </svg>
   );
 }
@@ -201,12 +207,17 @@ function StatusMeter({
   // vs. ring).
   const renderDot = (state: DotState) => {
     if (state === "synced") {
+      // Synced badge is deliberately ~30% bigger than its 14px siblings —
+      // the green check vs blue badge contrast alone gets lost at small
+      // size, but a small physical lift makes the row read "this one is
+      // the premium state" at a glance. Glyph fills ~70% of the badge so
+      // the bars have edge-margin breathing room.
       return (
         <span
-          className="w-4 h-4 rounded-full inline-flex items-center justify-center"
+          className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center"
           style={{ backgroundColor: "#319ED8" }}
         >
-          <WaveArrowGlyph className="w-3 h-3 text-white" />
+          <WaveArrowGlyph className="w-[13px] h-[13px] text-white" />
         </span>
       );
     }
