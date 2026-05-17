@@ -89,6 +89,14 @@ function StatusMeter({
   ];
   const complete = dots.every((d) => d.ok);
   const filled = dots.filter((d) => d.ok).length;
+  // Spell out the state for screen readers — the visual is shape + count,
+  // but a SR user can't see "filled vs hollow" through a title-attr alone.
+  const ariaLabel = complete
+    ? `${t.title}: all required pieces complete`
+    : `${t.title}: ${filled} of 3 complete — ${dots
+        .filter((d) => !d.ok)
+        .map((d) => d.label)
+        .join(", ")} still needed`;
   // Clickable when incomplete so a tap routes the artist to the expanded
   // row where Master/Lyrics/Credits live. Complete rows aren't a control —
   // nothing left to do — so we render a plain span there.
@@ -98,6 +106,7 @@ function StatusMeter({
       {...(complete
         ? {}
         : { type: "button" as const, onClick: onExpand })}
+      aria-label={ariaLabel}
       title={dots.map((d) => `${d.label}: ${d.ok ? "✓" : "missing"}`).join(" · ")}
       className={[
         "flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md",

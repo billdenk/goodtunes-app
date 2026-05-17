@@ -12,6 +12,7 @@ Mobile-first, Apple-Music-inspired web player.
 - Wouter (routing)
 - Tailwind + shadcn/ui
 - Bearer-token admin auth (temporary; SSO plan in roadmap)
+- **Player dock primitive** lives at `client/src/components/ui/PlayerDock.tsx` — Apple-Music-style floating pill (transport · cover/title · lyrics/volume) graduated from the admin Tracks-tab Seamless mockup. The mockup sandbox keeps a parallel inline `BottomDock` copy (the sandbox alias can't reach `client/src`); mirror polish into both files until the sandbox gains a real alias.
 - Replit Object Storage for image uploads (album art, person photos, vendor logos/covers, scraped instrument images). Files live in `${PRIVATE_OBJECT_DIR}/uploads/<uuid>.<ext>` and are served via `GET /objects/uploads/<id>` (public ACL). Survives redeploys — the old local `uploads/` disk was ephemeral on Autoscale and wiped on each republish.
 
 ## Brand
