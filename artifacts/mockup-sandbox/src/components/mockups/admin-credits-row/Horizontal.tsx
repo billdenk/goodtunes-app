@@ -4,13 +4,11 @@ import {
   Plus,
   X,
   Sparkles,
-  PenLine,
-  Mic2,
-  Sliders,
   Users,
   ChevronUp,
+  ChevronDown,
+  Download,
 } from "lucide-react";
-import nickCarterPhoto from "@/assets/people/nick-carter.jpg";
 
 // Per-track Credits tile.
 //
@@ -38,35 +36,44 @@ type Person = {
   source: "muso" | "manual";
 };
 
-// Real data from the admin People table — Nick Carter has a headshot
-// uploaded; the rest fall back to slate initial circles (same pattern as
-// the live admin shows today).
+// Real credits for "Wild Heart" off Love Life Tragedy — the highest-credit
+// song on the album (20 total). Pulled from track_writers + track_performers
+// and re-bucketed Grammy-style: Lyricist + Composer → Song; Vocals + Guitar
+// → Performance; Producer + Engineer + Mixing + Mastering → Production.
+// Photos resolve from the same origin as the parent app (/objects/uploads/*).
+const NICK = "/objects/uploads/7a8089b0-59aa-4318-9996-8273b2fd576b.jpg";
+const VIC = "/objects/uploads/39807426-b4cf-494d-8502-a0ea8d654d4b.jpg";
+const ASHBA_PHOTO = "/objects/uploads/629ab8ca-c96c-4aaa-b7fc-47aacf0df202.jpg";
+const VINNY = "/objects/uploads/77cf6f4a-245d-4c20-b957-06e2cc2e5131.jpg";
+const DANIEL = "/objects/uploads/f7505947-2f40-496f-8cd9-7dfb852e2606.jpg";
+
 const SONG: Person[] = [
-  { id: "p1", name: "Nick Carter", photoUrl: nickCarterPhoto, roles: ["Composer", "Lyricist"], source: "muso" },
-  { id: "p2", name: "Vic Martin", roles: ["Composer"], source: "muso" },
-  { id: "p3", name: "Bryan Shackle", roles: ["Composer", "Lyricist"], source: "muso" },
-  { id: "p4", name: "Beck Nebel", roles: ["Composer"], source: "muso" },
+  { id: "p-nick",    name: "Nick Carter",                  photoUrl: NICK,        roles: ["Lyricist", "Composer"], source: "muso" },
+  { id: "p-vic",     name: "Vic \u201CBillboardKiller\u201D Martin", photoUrl: VIC, roles: ["Lyricist", "Composer"], source: "muso" },
+  { id: "p-ashba",   name: "ASHBA",                        photoUrl: ASHBA_PHOTO, roles: ["Lyricist", "Composer"], source: "muso" },
+  { id: "p-abraham", name: "Abraham Poythress",                                   roles: ["Lyricist"],            source: "muso" },
+  { id: "p-vinny",   name: "vinny venditto",               photoUrl: VINNY,       roles: ["Lyricist"],            source: "muso" },
+  { id: "p-daren",   name: "Daren Ashba",                                         roles: ["Lyricist"],            source: "muso" },
 ];
 
 const PERFORMANCE: Person[] = [
-  { id: "p1", name: "Nick Carter", photoUrl: nickCarterPhoto, roles: ["Lead vocals", "Acoustic guitar"], source: "muso" },
-  { id: "p2", name: "Vic Martin", roles: ["Background vocals", "Piano"], source: "muso" },
-  { id: "p5", name: "Jenna Reid", roles: ["Background vocals"], source: "muso" },
-  { id: "p6", name: "Marcus Lee", roles: ["Bass"], source: "muso" },
-  { id: "p7", name: "Tomás Diaz", roles: ["Drums"], source: "muso" },
+  { id: "p-nick-v",  name: "Nick Carter",                  photoUrl: NICK, roles: ["Vocals"],            source: "muso" },
+  { id: "p-vic-v",   name: "Vic \u201CBillboardKiller\u201D Martin", photoUrl: VIC,  roles: ["Background Vocals"], source: "muso" },
+  { id: "p-daren-g", name: "Daren Ashba",                                  roles: ["Guitar"],            source: "muso" },
 ];
 
 const PRODUCTION: Person[] = [
-  { id: "p2", name: "Vic Martin", roles: ["Producer", "Mix engineer"], source: "muso" },
-  { id: "p3", name: "Bryan Shackle", roles: ["Producer"], source: "muso" },
-  { id: "p8", name: "Sara Holm", roles: ["Tracking engineer"], source: "muso" },
-  { id: "p9", name: "Greg Calbi", roles: ["Mastering"], source: "muso" },
+  { id: "p-vic-p",   name: "Vic \u201CBillboardKiller\u201D Martin", photoUrl: VIC, roles: ["Producer", "Engineer", "Mixing Engineer"], source: "muso" },
+  { id: "p-abraham-p", name: "Abraham Poythress",                                  roles: ["Producer"],                              source: "muso" },
+  { id: "p-vinny-p", name: "vinny venditto",               photoUrl: VINNY,        roles: ["Producer", "Mixing Engineer"],           source: "muso" },
+  { id: "p-daniel",  name: "Daniel Clarke-DiCandilo",      photoUrl: DANIEL,       roles: ["Engineer"],                              source: "muso" },
+  { id: "p-cee",     name: "Cee \u201COhhMrCope\u201D Copeland",                   roles: ["Mastering Engineer"],                    source: "muso" },
 ];
 
 const ROSTER = [
-  "Nick Carter", "Vic Martin", "Bryan Shackle", "Beck Nebel", "Jenna Reid",
-  "Marcus Lee", "Tomás Diaz", "Sara Holm", "Greg Calbi", "Aisha Patel",
-  "Diego Romero", "Hana Watanabe",
+  "Nick Carter", "Vic \u201CBillboardKiller\u201D Martin", "ASHBA",
+  "Abraham Poythress", "vinny venditto", "Daren Ashba",
+  "Daniel Clarke-DiCandilo", "Cee \u201COhhMrCope\u201D Copeland",
 ];
 
 const ROLE_SUGGESTIONS: Record<Bucket, string[]> = {
@@ -246,20 +253,17 @@ function AddPicker({
 function Section({
   bucket,
   title,
-  Icon,
   people,
   setPeople,
 }: {
   bucket: Bucket;
   title: string;
-  Icon: React.ComponentType<{ className?: string }>;
   people: Person[];
   setPeople: (next: Person[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const removeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const musoCount = people.filter((p) => p.source === "muso").length;
   const existingNames = people.map((p) => p.name);
 
   const handleAdd = (name: string) => {
@@ -291,27 +295,25 @@ function Section({
   }, [pendingRemove]);
 
   return (
-    <section>
-      {/* Section header sits flush — no nested card chrome since the parent
-          "Credits" panel already provides border/background. */}
+    // `group` lets the +Add button hover-reveal at the section level.
+    <section className="group/section">
       <header className="flex items-center gap-2 mb-2">
-        <Icon className="w-3.5 h-3.5 text-slate-400" />
         <h2 className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
           {title}
         </h2>
-        <span className="text-[11px] text-slate-400">
-          · {people.length} {people.length === 1 ? "person" : "people"}
-          {musoCount > 0 && (
-            <span className="inline-flex items-center gap-0.5 ml-1.5">
-              <Sparkles className="h-2.5 w-2.5 text-[#319ED8]" />
-              {musoCount} from Muso
-            </span>
-          )}
-        </span>
         <div className="flex-1" />
         <button
           onClick={() => setAdding((v) => !v)}
-          className="px-2 py-0.5 rounded-md text-slate-500 text-[11px] font-medium hover:text-[#319ED8] hover:bg-[#319ED8]/5 inline-flex items-center gap-1 flex-shrink-0"
+          className={[
+            "px-2 py-0.5 rounded-md text-slate-500 text-[11px] font-medium",
+            "hover:text-[#319ED8] hover:bg-[#319ED8]/5",
+            "inline-flex items-center gap-1 flex-shrink-0 transition-opacity",
+            // Hidden by default; appears on section hover or when picker
+            // is open. Stays focus-visible for keyboard users.
+            adding
+              ? "opacity-100"
+              : "opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100",
+          ].join(" ")}
         >
           <Plus className="h-3 w-3" strokeWidth={2.5} />
           Add
@@ -328,26 +330,64 @@ function Section({
         </div>
       )}
 
-      <div className="relative">
-        <div className="-mx-1 overflow-x-auto pb-1">
-          <div className="flex gap-3 px-1">
-            {people.map((p) => (
-              <PersonColumn
-                key={p.id}
-                p={p}
-                armed={pendingRemove === p.id}
-                onRemove={handleRemove}
-              />
-            ))}
-            {people.length === 0 && (
-              <div className="text-[11.5px] italic text-slate-400 py-3 px-1">
-                No one credited yet.
-              </div>
-            )}
+      {/* Wrapping grid — extra people flow onto the next row instead of
+          hiding behind a horizontal scroll. */}
+      <div className="flex flex-wrap gap-x-3 gap-y-4 -mx-1 px-1">
+        {people.map((p) => (
+          <PersonColumn
+            key={p.id}
+            p={p}
+            armed={pendingRemove === p.id}
+            onRemove={handleRemove}
+          />
+        ))}
+        {people.length === 0 && (
+          <div className="text-[11.5px] italic text-slate-400 py-3 px-1">
+            No one credited yet.
           </div>
-        </div>
+        )}
       </div>
     </section>
+  );
+}
+
+function ImportMenu() {
+  const [open, setOpen] = useState(false);
+  // Click-away to close.
+  useEffect(() => {
+    if (!open) return;
+    const onClick = () => setOpen(false);
+    // Defer one tick so the same click that opens it doesn't immediately close.
+    const t = setTimeout(() => window.addEventListener("click", onClick), 0);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("click", onClick);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="px-2.5 py-1 rounded-md border border-slate-200 bg-white text-slate-700 text-[11.5px] font-medium hover:border-[#319ED8] hover:text-[#319ED8] inline-flex items-center gap-1 flex-shrink-0"
+      >
+        <Download className="h-3 w-3" strokeWidth={2.5} />
+        Import
+        <ChevronDown className="h-3 w-3" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-10 w-48 rounded-md border border-slate-200 bg-white shadow-md py-1">
+          <button
+            onClick={() => setOpen(false)}
+            className="w-full text-left px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-[#319ED8] flex-shrink-0" />
+            <span className="flex-1">From Muso.ai</span>
+          </button>
+          {/* Future: SoundExchange, AllMusic, manual CSV — same menu. */}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -356,55 +396,35 @@ export function Horizontal() {
   const [performance, setPerformance] = useState(PERFORMANCE);
   const [production, setProduction] = useState(PRODUCTION);
 
-  const totalMuso = [song, performance, production]
-    .flat()
-    .filter((p) => p.source === "muso").length;
-
   return (
     // Page wrapper just frames the panel for the sandbox preview. In the
-    // real admin, this whole content drops straight into the existing
+    // real admin, the inner card content drops straight into the existing
     // "Credits" optional panel — replacing the WRITERS / PERFORMERS lists.
     <div className="min-h-screen bg-slate-100 py-6 px-5 font-sans antialiased">
       <div className="max-w-[640px] mx-auto">
         {/* ============== START: actual Credits-panel content ============== */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          {/* Parent panel header — matches the live admin's Credits header
-              (small Users icon · "Credits" · summary · chevron). */}
+          {/* Parent panel header. Counters are gone — the people grid is
+              its own answer to "how many?". Import dropdown lives here so
+              bulk re-pull from Muso (and future SoundExchange / AllMusic)
+              is one click away without dominating the body. */}
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
             <Users className="h-4 w-4 text-[#319ED8]" />
             <span className="text-[13px] font-semibold text-slate-900">
               Credits
             </span>
             <div className="flex-1" />
-            <span className="text-[11px] text-slate-400">
-              {song.length + performance.length + production.length} credits ·{" "}
-              {totalMuso} from Muso
-            </span>
+            <ImportMenu />
             <ChevronUp className="h-4 w-4 text-slate-400" />
           </div>
 
-          {/* Panel body — three Grammy-axis sections, separated by hairlines,
-              no nested cards. */}
+          {/* Body — three Grammy-axis sections, hairline-separated. */}
           <div className="px-4 py-3">
-            {/* Slim Muso reconcile strip — same affordance as before, just
-                shrunk to one line so it doesn't dominate the panel. */}
-            <div className="flex items-center gap-2 mb-3 rounded-md border border-[#319ED8]/30 bg-[#319ED8]/5 px-2.5 py-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-[#319ED8] flex-shrink-0" />
-              <span className="text-[11.5px] text-slate-700 flex-1 min-w-0 truncate">
-                <span className="font-semibold">{totalMuso}</span> imported from
-                Muso · review and add anyone missed.
-              </span>
-              <button className="px-2 py-0.5 rounded text-[11px] text-[#319ED8] font-medium hover:bg-[#319ED8]/10 flex-shrink-0">
-                Re-import
-              </button>
-            </div>
-
             <div className="divide-y divide-slate-100">
               <div className="py-3 first:pt-0">
                 <Section
                   bucket="song"
                   title="Song"
-                  Icon={PenLine}
                   people={song}
                   setPeople={setSong}
                 />
@@ -413,7 +433,6 @@ export function Horizontal() {
                 <Section
                   bucket="performance"
                   title="Performance"
-                  Icon={Mic2}
                   people={performance}
                   setPeople={setPerformance}
                 />
@@ -422,7 +441,6 @@ export function Horizontal() {
                 <Section
                   bucket="production"
                   title="Production"
-                  Icon={Sliders}
                   people={production}
                   setPeople={setProduction}
                 />
