@@ -619,7 +619,7 @@ export function PlayerDock({
           <>
             <div
               className={[
-                "absolute left-[237px] right-[100px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
+                "absolute left-[237px] right-[156px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
                 "transition-opacity duration-150",
                 scrubHover && hasSelection ? "opacity-100" : "opacity-0",
               ].join(" ")}
@@ -639,7 +639,7 @@ export function PlayerDock({
             </div>
             <div
               className={[
-                "group/scrub absolute left-[237px] right-[100px] bottom-1.5 h-3 flex items-center touch-none select-none",
+                "group/scrub absolute left-[237px] right-[156px] bottom-1.5 h-3 flex items-center touch-none select-none",
                 hasSelection ? "cursor-pointer" : "cursor-default pointer-events-none",
               ].join(" ")}
               onMouseEnter={() => setScrubHover(true)}
