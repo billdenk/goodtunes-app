@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
+import { IconButton } from "@/components/ui/IconButton";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
@@ -204,32 +205,26 @@ export function Collection() {
               </div>
             ) : (
               <>
-                <button
-                  type="button"
+                <IconButton
                   onClick={() => setSearchOpen(true)}
-                  aria-label="Search"
-                  className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform"
-                  style={{ background: "rgba(255,255,255,0.10)" }}
+                  label="Search"
                   data-testid="button-search-toggle"
                 >
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <circle cx="11" cy="11" r="7" />
                     <path d="M20 20l-3.5-3.5" />
                   </svg>
-                </button>
+                </IconButton>
                 <div className="relative">
-                  <button
-                    type="button"
+                  <IconButton
                     onClick={() => setShowSort((s) => !s)}
-                    aria-label="Sort"
-                    className="w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform"
-                    style={{ background: "rgba(255,255,255,0.10)" }}
+                    label="Sort"
                     data-testid="button-sort"
                   >
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                       <path d="M3 6h18M6 12h12M10 18h4" />
                     </svg>
-                  </button>
+                  </IconButton>
                   {showSort && (
                     <>
                       <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
