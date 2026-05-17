@@ -1455,11 +1455,18 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
           No lyrics, no singer credits (interlude, solo, outro)
         </div>
       </div>
+      {/* Force iOS-on-white look. The shadcn Switch's unchecked state
+          falls back to `bg-input`, which our theme tunes to dark navy
+          for the player's dark surfaces — it renders black here on the
+          admin's white card. Pin both states explicitly so this toggle
+          reads correctly regardless of theme: light slate off, brand
+          blue on. */}
       <Switch
         checked={checked}
         disabled={toggleMut.isPending}
         onCheckedChange={(next) => toggleMut.mutate(next)}
         aria-label="Mark this track as instrumental"
+        className="data-[state=unchecked]:bg-slate-200 data-[state=checked]:bg-[#319ED8]"
       />
     </div>
   );
