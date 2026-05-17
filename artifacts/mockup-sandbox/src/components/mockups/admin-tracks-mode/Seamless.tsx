@@ -18,6 +18,8 @@ import {
   Shuffle,
   Repeat,
   MoreHorizontal,
+  Volume2,
+  Mic2,
 } from "lucide-react";
 
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
@@ -464,12 +466,21 @@ function Row({
   );
 }
 
-/* ── Floating bottom dock. Apple-Music-style.
-   IDLE: transport-only, no track info — feels quiet when nothing's
-         playing. Big play button is the obvious starting point.
-   PLAYING: thin progress sliver on the top edge, plus a track-info
-         capsule (thumb · title · ⋯) slides in to the left of transport.
-   Floats above the scrolling list (rows scroll underneath, like Apple). ─ */
+/* ── Floating bottom dock. Apple-Music-style PILL.
+   This dock is the canonical anatomy that will graduate to the future
+   desktop / iPad consumer player. Admin doesn't strictly need volume
+   or a lyrics overlay, but designing the shape with all of it in place
+   now means the desktop fan player can be lifted from this primitive
+   without redrawing the player vocabulary. See docs/roadmap.md.
+
+   Anatomy (Apple parity):
+     LEFT cluster  — transport: shuffle · prev · PLAY (flat, no circle) · next · repeat
+     CENTER cluster — thumb · title/subtitle · inline scrubber with elapsed / total
+     RIGHT cluster — ⋯ · lyrics (Mic2) · volume icon + thin slider
+
+   IDLE (no selection): pill collapses to just the LEFT cluster, content
+   on the right hidden. Pill width auto-sizes so the dock doesn't
+   look like a half-empty bar when nothing's playing. ─────────── */
 function BottomDock({
   current,
   hasSelection,
@@ -488,66 +499,45 @@ function BottomDock({
   onNext: () => void;
 }) {
   const playable = current.master;
+
+  // demo-only elapsed/total derived from `progress` so the scrubber
+  // labels feel real even though playback is mocked.
+  const totalSeconds = 252; // 4:12 — matches Storms
+  const elapsedSeconds = Math.floor((progress / 100) * totalSeconds);
+  const fmt = (s: number) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  // Clamp slider handle inside the rail so the knob never hangs off the
+  // end-caps at 0% / 100%. Handle is 10px wide → -5px centers it on the
+  // tick. Clamping into [0, 100] keeps it inset at the extremes. Architect
+  // flagged this as a "polish before graduation" issue — fix it here since
+  // this dock will be lifted into client/src/components/ui/PlayerDock.tsx.
+  const knobLeft = (pct: number) =>
+    `calc(${Math.max(0, Math.min(100, pct))}% - 5px)`;
+
   return (
     <div
       className="absolute left-1/2 -translate-x-1/2 bottom-4 z-20"
-      style={{ width: "min(560px, calc(100% - 32px))" }}
+      style={hasSelection ? { width: "min(760px, calc(100% - 32px))" } : undefined}
     >
-      <div className="relative rounded-2xl bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden">
-        {/* Progress sliver — only shows when playing. Sits on the very top
-            edge of the dock, matches Apple's hairline. */}
-        {hasSelection && (
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/10">
-            <div
-              className="h-full bg-[#319ED8] transition-all"
-              style={{ width: playing ? `${progress}%` : "0%" }}
-            />
-          </div>
-        )}
+      <div className="relative rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10">
+        <div className="flex items-center gap-1.5 px-3 py-2">
 
-        <div className="flex items-center gap-2 px-3 py-2.5">
-          {/* Track info capsule — only when something is selected. Slides
-              in to the LEFT of transport, exactly Apple's anatomy. */}
-          {hasSelection && (
-            <div className="flex items-center gap-2.5 min-w-0 pr-2 mr-1 border-r border-white/10">
-              <div className="w-9 h-9 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
-              <div className="min-w-0">
-                <div className="text-[12.5px] font-semibold truncate leading-tight">
-                  {current.title}
-                </div>
-                <div className="text-[10.5px] text-slate-400 truncate leading-tight mt-0.5">
-                  Nick Carter — Love Life Tragedy
-                </div>
-              </div>
-              <button
-                aria-label="More"
-                className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 flex-shrink-0"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Transport cluster — always present, dead center when idle. */}
-          <div
-            className={[
-              "flex items-center gap-1",
-              hasSelection ? "" : "flex-1 justify-center",
-            ].join(" ")}
-          >
+          {/* ── LEFT · transport ─────────────────────────────────── */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
             <button
               aria-label="Shuffle"
-              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
             >
-              <Shuffle className="w-3.5 h-3.5" />
+              <Shuffle className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={onPrev}
               aria-label="Previous track"
-              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
             >
-              <SkipBack className="w-4 h-4 fill-current" />
+              <SkipBack className="w-[18px] h-[18px] fill-current" />
             </button>
             <button
               type="button"
@@ -555,33 +545,107 @@ function BottomDock({
               disabled={!playable}
               aria-label={playing ? "Pause" : "Play"}
               className={[
-                "w-10 h-10 rounded-full inline-flex items-center justify-center",
+                "w-11 h-11 rounded-full inline-flex items-center justify-center transition-colors",
                 playable
-                  ? "bg-white text-slate-900 hover:bg-slate-100"
-                  : "bg-white/15 text-slate-400 cursor-not-allowed",
+                  ? "text-white hover:bg-white/10"
+                  : "text-slate-500 cursor-not-allowed",
               ].join(" ")}
             >
               {playing ? (
-                <Pause className="w-4 h-4 fill-current" />
+                // Pause sized down vs Play to optically balance — Lucide's
+                // pause bars are visually heavier than the Play triangle at
+                // equal size (architect's polish note). Drop to w-6 h-6.
+                <Pause className="w-6 h-6 fill-current" />
               ) : (
-                <Play className="w-4 h-4 translate-x-[1.5px] fill-current" />
+                <Play className="w-7 h-7 translate-x-[1.5px] fill-current" />
               )}
             </button>
             <button
               type="button"
               onClick={onNext}
               aria-label="Next track"
-              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
             >
-              <SkipForward className="w-4 h-4 fill-current" />
+              <SkipForward className="w-[18px] h-[18px] fill-current" />
             </button>
             <button
               aria-label="Repeat"
-              className="w-8 h-8 rounded-md inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
             >
-              <Repeat className="w-3.5 h-3.5" />
+              <Repeat className="w-4 h-4" />
             </button>
           </div>
+
+          {hasSelection && (
+            <>
+              <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
+
+              {/* ── CENTER · track info + inline scrubber ───────── */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-10 h-10 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold truncate leading-tight">
+                    {current.title}
+                  </div>
+                  <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
+                    Nick Carter — Love Life Tragedy
+                  </div>
+                  {/* Inline scrubber — replaces the old top-edge sliver.
+                      Elapsed on the left, total on the right, scrubber
+                      between them. Matches Apple's anatomy. */}
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="text-[9.5px] tabular-nums text-slate-400 w-7 text-right">
+                      {fmt(elapsedSeconds)}
+                    </span>
+                    <div className="relative flex-1 h-[3px] bg-white/15 rounded-full">
+                      <div
+                        className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
+                        style={{ width: `${progress}%` }}
+                      />
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
+                        style={{ left: knobLeft(progress) }}
+                        aria-hidden
+                      />
+                    </div>
+                    <span className="text-[9.5px] tabular-nums text-slate-400 w-7">
+                      {fmt(totalSeconds)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <span className="mx-1 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
+
+              {/* ── RIGHT · utility cluster ─────────────────────── */}
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <button
+                  aria-label="More"
+                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                <button
+                  aria-label="Show lyrics"
+                  title="Show lyrics — QA-preview synced lyrics while the master plays"
+                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                >
+                  <Mic2 className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-1.5 pl-1 pr-1">
+                  <Volume2 className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                  <div className="relative w-16 h-[3px] bg-white/15 rounded-full">
+                    <div className="absolute inset-y-0 left-0 bg-white rounded-full" style={{ width: "65%" }} />
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
+                      style={{ left: knobLeft(65) }}
+                      aria-hidden
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

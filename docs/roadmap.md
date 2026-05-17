@@ -471,6 +471,12 @@ Plan:
 
 Open: do this **after** preview clips ship — same ffmpeg pipeline, so we want to design the encoding worker once.
 
+## Desktop / iPad consumer player — anatomy lives in the admin Tracks-tab dock
+
+The mobile fan player is shipped. The **desktop + iPad consumer player** is still ahead of us. Decision: don't redraw player vocabulary for that surface — **lift it from the admin Tracks-tab bottom dock** (`artifacts/mockup-sandbox/.../admin-tracks-mode/Seamless.tsx → BottomDock`). That dock is being designed with full Apple-Music parity (transport left, thumb + title + inline scrubber center, volume + lyrics on the right, fully-rounded pill, no white circle on Play) even though admin doesn't strictly need every piece. The extra anatomy isn't waste — it's the consumer player learning to walk inside an admin tool first.
+
+When the desktop/iPad player ships, graduate the dock as a primitive into `client/src/components/ui/PlayerDock.tsx`, fan-side features (queue, AirPlay, true volume binding, full-screen lyrics overlay) layer on top of the same skeleton. Anything we get wrong here is wrong twice — get it right once.
+
 ## DDEX alignment — Layers 1 & 2 (pinned, deferred)
 
 Two low-cost, no-disruption steps to execute when the moment is naturally right. **Not refactors** — these slot in when the relevant code is *first* being written. After both, we can truthfully say "MEAD and PIE compliant" in any label meeting. Everything else (ERN export, schema rebuilds, DSR/RDR/MWN) is deferred until a specific distributor/label deal demands it (that's a DDEX Implementation Licence + 1–2 weeks of real engineering).
