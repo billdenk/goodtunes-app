@@ -1080,6 +1080,10 @@ function WaveArrowGlyph({ className = "" }: { className?: string }) {
    baseline (the master's full timeline). Reads as "a window picked
    out of a longer thing" at 10–14px. */
 function ClipGlyph({ className = "" }: { className?: string }) {
+  // Reads as a slider window: thin track behind, fat rounded "thumb"
+  // in front. Earlier two-rect version looked like an unlabelled blob
+  // at 10px; Bill flagged it as unreadable. Now the thumb dominates so
+  // the glyph is obviously "a piece picked out of a longer slider."
   return (
     <svg
       viewBox="0 0 100 100"
@@ -1087,10 +1091,10 @@ function ClipGlyph({ className = "" }: { className?: string }) {
       aria-hidden="true"
       focusable="false"
     >
-      {/* Baseline (the full master) */}
-      <rect x="10" y="64" width="80" height="6" rx="3" fill="white" opacity="0.55" />
-      {/* Chosen window (the 30s clip) */}
-      <rect x="28" y="34" width="44" height="28" rx="6" fill="white" />
+      {/* Slider track */}
+      <rect x="8" y="46" width="84" height="8" rx="4" fill="white" opacity="0.45" />
+      {/* Selected window / slider thumb — chunky rounded rect */}
+      <rect x="30" y="32" width="40" height="36" rx="10" fill="white" />
     </svg>
   );
 }
@@ -1731,39 +1735,68 @@ function TrackRow({
                   : writerCount > 0 || performerCount > 0
                     ? "partial"
                     : "empty";
+              // Each pip is now a real button: tapping it expands the
+              // row AND jumps to the matching editor. Lyrics in
+              // instrumental state stays inert (there's nothing to
+              // edit). Hover ring + focus ring give the same Apple
+              // "this is tappable" cue as our other inline pips.
+              const dotBtn =
+                "w-6 h-6 rounded-full inline-flex items-center justify-center hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 transition-colors";
               return (
                 <div
-                  className="flex items-center gap-1 flex-shrink-0"
+                  className="flex items-center gap-0.5 flex-shrink-0"
                   role="group"
                   aria-label="Track completion"
                 >
-                  <span
-                    className="w-5 h-5 inline-flex items-center justify-center"
-                    role="img"
-                    aria-label={dotHint("Preview", previewState)}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUserExpanded(true);
+                      setMode("preview");
+                    }}
+                    className={dotBtn}
+                    aria-label={`Edit preview — ${dotHint("Preview", previewState)}`}
                     title={dotHint("Preview", previewState)}
                     data-testid={`dot-preview-${song.id}`}
                   >
                     {renderDot(previewState)}
-                  </span>
-                  <span
-                    className="w-5 h-5 inline-flex items-center justify-center"
-                    role="img"
-                    aria-label={dotHint("Lyrics", lyricsState)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUserExpanded(true);
+                      setMode("lyrics");
+                    }}
+                    disabled={lyricsState === "instrumental"}
+                    className={[
+                      dotBtn,
+                      lyricsState === "instrumental" &&
+                        "cursor-default hover:bg-transparent",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    aria-label={`Edit lyrics — ${dotHint("Lyrics", lyricsState)}`}
                     title={dotHint("Lyrics", lyricsState)}
                     data-testid={`dot-lyrics-${song.id}`}
                   >
                     {renderDot(lyricsState)}
-                  </span>
-                  <span
-                    className="w-5 h-5 inline-flex items-center justify-center"
-                    role="img"
-                    aria-label={dotHint("Credits", creditsState)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUserExpanded(true);
+                      setMode("credits");
+                    }}
+                    className={dotBtn}
+                    aria-label={`Edit credits — ${dotHint("Credits", creditsState)}`}
                     title={dotHint("Credits", creditsState)}
                     data-testid={`dot-credits-${song.id}`}
                   >
                     {renderDot(creditsState)}
-                  </span>
+                  </button>
                 </div>
               );
             })()}
@@ -5350,7 +5383,7 @@ function AudioEditor({
           {saveMut.isPending && (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           )}
-          Save master
+          Save
         </button>
       </div>
     </div>
