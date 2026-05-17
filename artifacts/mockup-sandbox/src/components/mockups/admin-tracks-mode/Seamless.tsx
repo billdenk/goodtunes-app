@@ -18,6 +18,7 @@ import {
   Shuffle,
   Repeat,
   Volume2,
+  VolumeX,
   Mic2,
 } from "lucide-react";
 
@@ -499,6 +500,15 @@ function BottomDock({
 }) {
   const playable = current.master;
 
+  // Volume affordance mirrors Apple's dock anatomy: the speaker icon
+  // is the always-visible control; the slider only appears on hover
+  // (sliding out to the LEFT of the speaker), and clicking the speaker
+  // toggles mute, which swaps Volume2 → VolumeX. Demo level is fixed at
+  // 65% — when this graduates into PlayerDock the value comes from real
+  // audio state.
+  const [volumeMuted, setVolumeMuted] = useState(false);
+  const volumeLevel = 65;
+
   // demo-only elapsed/total derived from `progress` so the scrubber
   // labels feel real even though playback is mocked.
   const totalSeconds = 252; // 4:12 — matches Storms
@@ -635,16 +645,46 @@ function BottomDock({
                       so use Mic2 directly here. Keep both surfaces aligned. */}
                   <Mic2 className="w-4 h-4" />
                 </button>
-                <div className="flex items-center gap-1.5 pl-1 pr-1">
-                  <Volume2 className="w-4 h-4 text-slate-300 flex-shrink-0" />
-                  <div className="relative w-16 h-[3px] bg-white/15 rounded-full">
-                    <div className="absolute inset-y-0 left-0 bg-white rounded-full" style={{ width: "65%" }} />
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
-                      style={{ left: knobLeft(65) }}
-                      aria-hidden
-                    />
+                {/* Volume cluster — Apple's pattern:
+                    • Default: just the speaker icon (no slider clutter).
+                    • Hover: slider slides out to the LEFT of the speaker
+                      with a smooth width transition.
+                    • Click speaker: toggle mute → swap Volume2 ↔ VolumeX,
+                      the filled portion of the slider collapses to 0 and
+                      the knob hides. Slider rail stays visible (hover) so
+                      the user can drag to unmute. */}
+                <div className="group/vol flex items-center pr-0.5">
+                  <div
+                    className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5"
+                    aria-hidden={volumeMuted ? undefined : true}
+                  >
+                    <div className="relative w-16 h-[3px] bg-white/15 rounded-full">
+                      <div
+                        className="absolute inset-y-0 left-0 bg-white rounded-full transition-[width] duration-150"
+                        style={{ width: volumeMuted ? "0%" : `${volumeLevel}%` }}
+                      />
+                      {!volumeMuted && (
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
+                          style={{ left: knobLeft(volumeLevel) }}
+                          aria-hidden
+                        />
+                      )}
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    aria-label={volumeMuted ? "Unmute" : "Mute"}
+                    title={volumeMuted ? "Unmute" : "Mute"}
+                    onClick={() => setVolumeMuted((v) => !v)}
+                    className="w-8 h-8 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                  >
+                    {volumeMuted ? (
+                      <VolumeX className="w-4 h-4" />
+                    ) : (
+                      <Volume2 className="w-4 h-4" />
+                    )}
+                  </button>
                 </div>
               </div>
             </>
