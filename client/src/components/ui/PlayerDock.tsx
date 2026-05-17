@@ -551,7 +551,7 @@ export function PlayerDock({
               <div className="group/vol flex items-center pr-0.5">
                 <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">
                   <div
-                    className="relative w-16 h-[3px] bg-white/40 rounded-full cursor-pointer touch-none select-none"
+                    className="relative w-16 h-[3px] bg-slate-500 rounded-full cursor-pointer touch-none select-none"
                     onPointerDown={handleVolumePointerDown}
                     onPointerMove={handleVolumePointerMove}
                     data-testid="rail-volume"
@@ -653,7 +653,7 @@ export function PlayerDock({
                   White elapsed sits on top with no transition and the
                   rail drives off pointer events (drag-to-scrub), so the
                   bar tracks the cursor in real time. */}
-              <div className="relative flex-1 h-[2px] rounded-full bg-white/40 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/50 group-active/scrub:h-[5px] group-active/scrub:bg-white/60">
+              <div className="relative flex-1 h-[2px] rounded-full bg-slate-500 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-slate-400 group-active/scrub:h-[5px] group-active/scrub:bg-slate-300">
                 <div
                   className="absolute inset-y-0 left-0 bg-white rounded-full"
                   style={{ width: `${clampedProgress}%` }}
