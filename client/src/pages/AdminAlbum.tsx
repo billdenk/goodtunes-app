@@ -5159,7 +5159,7 @@ function AudioEditor({
 
   return (
     <div
-      className="px-5 pb-4"
+      className="px-5 pt-4 pb-4"
       onKeyDown={(e) => {
         if (e.key === "Escape" && !uploading && !saveMut.isPending) {
           e.preventDefault();
