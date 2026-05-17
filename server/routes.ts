@@ -1483,7 +1483,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     requireAdminBearer,
     async (req, res) => {
       const albumId = String(req.params.id);
-      const all = await storage.getSongsByAlbumId(albumId);
+      const all = await storage.getSongsByAlbum(albumId);
       if (!all.length)
         return res.status(404).json({ message: "Album has no songs" });
       const { waveformFromAudioUrl } = await import("./waveform");

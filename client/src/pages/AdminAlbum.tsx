@@ -3237,6 +3237,508 @@ function parseTimeStr(s: string): number | null {
   return (min * 60 + sec) * 1000;
 }
 
+function RichPreviewEditor({
+  song,
+  onSaved,
+  onClose,
+}: {
+  song: SongLite;
+  onSaved: () => Promise<void>;
+  onClose?: () => void;
+}) {
+  // Rich waveform-driven editor — graduated from the Tracks-tab Interactive
+  // mockup. Five-state header (auto-locked / dirty / drag-tip / custom /
+  // locked-custom), draggable amber window, ghost emerald box showing
+  // committed position while dirty, floating editable start-time chip,
+  // padlock = save+lock when dirty / toggle when clean, confirm sheet on
+  // dirty close. Fed by the real `song.waveform` (200 peaks 0–1) we ship
+  // server-side from ffmpeg, and the real `song.duration`.
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const TOTAL_SEC = Math.max(30, song.duration ?? 240);
+  const WINDOW_SEC = 30;
+  const widthPct = (WINDOW_SEC / TOTAL_SEC) * 100;
+  const maxLeftPct = 100 - widthPct;
+  const hasCustom = song.previewStartMs != null;
+  const initialPct = hasCustom
+    ? Math.min(
+        maxLeftPct,
+        (song.previewStartMs! / 1000 / TOTAL_SEC) * 100,
+      )
+    : 0;
+
+  const [committedLeft, setCommittedLeft] = useState(initialPct);
+  const [draftLeft, setDraftLeft] = useState(initialPct);
+  const [locked, setLocked] = useState(true);
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  const wfRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startX: number; startLeft: number } | null>(
+    null,
+  );
+
+  const isDirty = Math.abs(draftLeft - committedLeft) > 0.1;
+  const draftSec = (draftLeft / 100) * TOTAL_SEC;
+  const committedSec = (committedLeft / 100) * TOTAL_SEC;
+  const fmt = (s: number) => {
+    const total = Math.max(0, Math.round(s));
+    const m = Math.floor(total / 60);
+    const sec = total % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+  const draftStartLabel = fmt(draftSec);
+  const draftEndLabel = fmt(draftSec + WINDOW_SEC);
+  const committedStartLabel = fmt(committedSec);
+  const committedEndLabel = fmt(committedSec + WINDOW_SEC);
+
+  const [chipDraft, setChipDraft] = useState(draftStartLabel);
+  useEffect(() => {
+    setChipDraft(draftStartLabel);
+  }, [draftStartLabel]);
+
+  const commitChip = () => {
+    const m = chipDraft.match(/^(\d+):(\d{1,2})$/);
+    if (!m) {
+      setChipDraft(draftStartLabel);
+      return;
+    }
+    const sec = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    const clamped = Math.max(0, Math.min(TOTAL_SEC - WINDOW_SEC, sec));
+    setDraftLeft((clamped / TOTAL_SEC) * 100);
+  };
+
+  // Real waveform peaks (200 values, 0..1). Fallback to a flat decorative
+  // pattern for songs that haven't been generated yet (legacy rows pre-
+  // ffmpeg-pipeline). 80 bars renders well at this size.
+  const bars = (() => {
+    const peaks = (song.waveform as number[] | null) ?? null;
+    const COUNT = 80;
+    if (!peaks || peaks.length === 0) {
+      return Array.from({ length: COUNT }, (_, i) =>
+        Math.round(20 + 60 * Math.abs(Math.sin(i * 0.6) * Math.cos(i * 0.13))),
+      );
+    }
+    // Downsample 200 → 80 by averaging buckets, then scale to 12–96% height.
+    const out: number[] = [];
+    const ratio = peaks.length / COUNT;
+    for (let i = 0; i < COUNT; i++) {
+      const start = Math.floor(i * ratio);
+      const end = Math.floor((i + 1) * ratio);
+      let sum = 0;
+      let n = 0;
+      for (let j = start; j < end; j++) {
+        sum += peaks[j] ?? 0;
+        n++;
+      }
+      const avg = n > 0 ? sum / n : 0;
+      out.push(Math.round(12 + 84 * Math.min(1, avg)));
+    }
+    return out;
+  })();
+
+  // Time-axis ticks — 5 evenly spaced labels across real duration.
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => fmt(t * TOTAL_SEC));
+
+  const saveMut = useMutation({
+    mutationFn: async (next: { startMs: number; endMs: number } | null) =>
+      apiRequest(
+        "PUT",
+        `/api/admin/songs/${song.id}`,
+        next
+          ? { previewStartMs: next.startMs, previewEndMs: next.endMs }
+          : { previewStartMs: null, previewEndMs: null },
+      ),
+    onSuccess: async (_d, next) => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      await onSaved();
+      toast({
+        title: next ? "Custom preview saved" : "Preview reset to auto",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save the preview window",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const saveAndLock = () => {
+    setCommittedLeft(draftLeft);
+    setLocked(true);
+    const startMs = Math.round(draftSec * 1000);
+    if (startMs === 0) {
+      saveMut.mutate(null);
+    } else {
+      saveMut.mutate({ startMs, endMs: startMs + 30000 });
+    }
+  };
+
+  const revertDraft = () => setDraftLeft(committedLeft);
+
+  const onPadlockClick = () => {
+    if (isDirty) saveAndLock();
+    else setLocked((v) => !v);
+  };
+
+  const guardedClose = () => {
+    if (isDirty) setConfirmClose(true);
+    else onClose?.();
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (locked) return;
+    dragRef.current = { startX: e.clientX, startLeft: draftLeft };
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current || !wfRef.current) return;
+    const rect = wfRef.current.getBoundingClientRect();
+    const dx = e.clientX - dragRef.current.startX;
+    const dxPct = (dx / rect.width) * 100;
+    const next = Math.max(
+      0,
+      Math.min(maxLeftPct, dragRef.current.startLeft + dxPct),
+    );
+    setDraftLeft(next);
+  };
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragRef.current = null;
+    try {
+      (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  return (
+    <div
+      data-testid={`preview-window-${song.id}`}
+      className="relative rounded-xl border border-slate-200 bg-white p-4 space-y-3"
+    >
+      {/* Header — title + X close */}
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[12.5px] font-bold text-slate-900">
+          Preview
+        </h3>
+        <button
+          type="button"
+          onClick={guardedClose}
+          aria-label="Close preview panel"
+          title="Close"
+          className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+          data-testid={`button-preview-close-${song.id}`}
+        >
+          <XIcon className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Five-state header banner */}
+      {locked && committedLeft < 0.5 ? (
+        <div className="-mt-1 px-1 flex items-start gap-2">
+          <Lock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+            <div className="font-semibold text-slate-700">
+              Auto-locked at 0:00–0:30
+            </div>
+            <div className="text-slate-500 mt-0.5">
+              We've set your 30-second preview to the first 30 seconds — no
+              action needed. Want to pick a different hook? Tap the{" "}
+              <Lock className="inline w-3 h-3 -translate-y-0.5 text-emerald-600" />{" "}
+              padlock on the right, then drag the yellow window.
+            </div>
+          </div>
+        </div>
+      ) : isDirty ? (
+        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
+          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+            <MoveHorizontal className="w-4 h-4" />
+          </span>
+          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+            <div className="font-semibold text-slate-900">
+              Unsaved changes
+            </div>
+            <div className="text-slate-600 mt-0.5">
+              You moved the window to{" "}
+              <span className="font-semibold tabular-nums text-slate-900">
+                {draftStartLabel}–{draftEndLabel}
+              </span>
+              . Fans still hear{" "}
+              <span className="tabular-nums">
+                {committedLeft < 0.5
+                  ? "0:00–0:30"
+                  : `${committedStartLabel}–${committedEndLabel}`}
+              </span>{" "}
+              until you save.
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={saveAndLock}
+                disabled={saveMut.isPending}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90 disabled:opacity-50"
+                data-testid={`button-preview-save-${song.id}`}
+              >
+                {saveMut.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Lock className="w-3 h-3" />
+                )}
+                Lock Preview
+              </button>
+              <span className="w-px h-4 bg-slate-300/70" aria-hidden />
+              <button
+                type="button"
+                onClick={revertDraft}
+                disabled={saveMut.isPending}
+                className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-50"
+                data-testid={`button-preview-revert-${song.id}`}
+                title="Discard your changes and go back to what fans hear now"
+              >
+                Revert
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : !locked && committedLeft < 0.5 ? (
+        <div className="-mt-1 px-1 flex items-start gap-2">
+          <MoveHorizontal className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+          <div className="text-[11.5px] leading-snug flex-1 min-w-0">
+            <div className="font-semibold text-slate-700">
+              Pick your 30-second preview
+            </div>
+            <div className="text-slate-500 mt-0.5">
+              Drag the yellow window anywhere on the waveform to start it
+              from a different spot — it stays locked to 30 sec wide. Tap
+              the padlock again when you're satisfied.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-[11.5px] text-slate-500 -mt-1">
+          {locked
+            ? `Locked in at ${committedStartLabel}–${committedEndLabel}. Tap the padlock to slide it again.`
+            : `Custom hook at ${committedStartLabel}–${committedEndLabel}. Drag to edit, then tap the padlock to save.`}
+        </p>
+      )}
+
+      {/* Trim row: waveform · padlock (no play button yet — wire to audio later) */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div
+            ref={wfRef}
+            className="relative h-20 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden touch-none select-none"
+          >
+            <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-[1px]">
+              {bars.map((h, i) => (
+                <div
+                  key={i}
+                  className="flex-1 bg-slate-300 rounded-full"
+                  style={{ height: `${h}%` }}
+                />
+              ))}
+            </div>
+
+            {/* Live editable start-time chip — tracks the dragged window */}
+            {!locked && (
+              <div
+                className="absolute -top-1 -translate-y-full after:content-[''] after:absolute after:left-2 after:-bottom-1 after:border-4 after:border-transparent after:border-t-slate-800"
+                style={{ left: `calc(${draftLeft}% + 4px)` }}
+              >
+                <input
+                  value={chipDraft}
+                  onChange={(e) => setChipDraft(e.target.value)}
+                  onBlur={commitChip}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter")
+                      (e.target as HTMLInputElement).blur();
+                    if (e.key === "Escape") {
+                      setChipDraft(draftStartLabel);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                      const step = e.shiftKey ? 5 : 1;
+                      const dir = e.key === "ArrowUp" ? 1 : -1;
+                      const next = Math.max(
+                        0,
+                        Math.min(
+                          TOTAL_SEC - WINDOW_SEC,
+                          draftSec + dir * step,
+                        ),
+                      );
+                      setDraftLeft((next / TOTAL_SEC) * 100);
+                    }
+                  }}
+                  aria-label="Preview start time — type to fine-tune"
+                  title="Type mm:ss or use ↑/↓ (Shift = 5 sec)"
+                  className="w-[44px] px-1.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-semibold tabular-nums text-center shadow-md focus:outline-none focus:ring-2 focus:ring-[#319ED8]/60 cursor-text"
+                  data-testid={`input-preview-chip-${song.id}`}
+                />
+              </div>
+            )}
+
+            {/* Ghost — committed (live) window while dirty */}
+            {isDirty && !locked && (
+              <div
+                aria-hidden
+                className="absolute top-1 bottom-1 rounded-md border border-emerald-500/40 bg-emerald-500/5 pointer-events-none"
+                style={{
+                  left: `${committedLeft}%`,
+                  width: `${widthPct}%`,
+                }}
+                title={`Fans currently hear ${
+                  committedLeft < 0.5
+                    ? "0:00–0:30"
+                    : `${committedStartLabel}–${committedEndLabel}`
+                }`}
+              />
+            )}
+
+            {/* 30-sec window — draggable when unlocked */}
+            <div
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              className={[
+                "absolute top-1 bottom-1 rounded-md border-2 transition-colors",
+                locked
+                  ? "border-emerald-500/70 bg-emerald-500/20 cursor-default"
+                  : "border-amber-400 bg-amber-400/25 cursor-grab active:cursor-grabbing shadow-[0_0_0_3px_rgba(251,191,36,0.15)]",
+              ].join(" ")}
+              style={{ left: `${draftLeft}%`, width: `${widthPct}%` }}
+              data-testid={`preview-window-handle-${song.id}`}
+            />
+          </div>
+          {/* Time axis — derived from real duration */}
+          <div className="flex justify-between text-[9px] tabular-nums text-slate-400 mt-1 px-2">
+            {ticks.map((t, i) => (
+              <span key={i}>{t}</span>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onPadlockClick}
+          disabled={saveMut.isPending}
+          aria-label={
+            locked
+              ? "Unlock preview — allow sliding"
+              : isDirty
+                ? "Save and lock preview"
+                : "Lock preview in"
+          }
+          title={
+            locked
+              ? "Unlock to slide again"
+              : isDirty
+                ? "Lock Preview — commits your edit"
+                : "Lock in when done"
+          }
+          className={[
+            "w-11 h-11 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors hover:bg-slate-100 disabled:opacity-50",
+            locked ? "text-emerald-600" : "text-amber-600",
+          ].join(" ")}
+          data-testid={`button-preview-padlock-${song.id}`}
+        >
+          {saveMut.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : locked ? (
+            <Lock className="w-4 h-4" />
+          ) : (
+            <LockOpen className="w-4 h-4" />
+          )}
+        </button>
+      </div>
+
+      {/* Reset-to-auto link — only shown when a custom preview is saved */}
+      {hasCustom && committedLeft >= 0.5 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setCommittedLeft(0);
+              setDraftLeft(0);
+              setLocked(true);
+              saveMut.mutate(null);
+            }}
+            disabled={saveMut.isPending}
+            className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
+            data-testid={`button-preview-reset-${song.id}`}
+          >
+            Reset to auto (first 30 sec)
+          </button>
+        </div>
+      )}
+
+      {/* Dirty-close confirm sheet */}
+      {confirmClose && (
+        <div className="absolute inset-0 z-20 flex items-end justify-center bg-slate-900/40 rounded-xl">
+          <div className="w-full bg-white rounded-b-xl rounded-t-md shadow-2xl border-t border-slate-200 p-4 space-y-3">
+            <div>
+              <div className="text-[13px] font-semibold text-slate-900">
+                Save your preview edit?
+              </div>
+              <div className="text-[11.5px] text-slate-500 mt-0.5">
+                You moved the window to{" "}
+                <span className="font-semibold tabular-nums">
+                  {draftStartLabel}–{draftEndLabel}
+                </span>
+                . If you close without saving, fans keep hearing{" "}
+                <span className="tabular-nums">
+                  {committedLeft < 0.5
+                    ? "0:00–0:30"
+                    : `${committedStartLabel}–${committedEndLabel}`}
+                </span>
+                .
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  saveAndLock();
+                  setConfirmClose(false);
+                  onClose?.();
+                }}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-[12px] font-semibold bg-[#319ED8] text-white hover:bg-[#319ED8]/90"
+                data-testid={`button-preview-confirm-save-${song.id}`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Lock Preview &amp; close
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftLeft(committedLeft);
+                    setConfirmClose(false);
+                    onClose?.();
+                  }}
+                  className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-md text-[12px] font-semibold text-rose-600 hover:bg-rose-50"
+                  data-testid={`button-preview-confirm-discard-${song.id}`}
+                >
+                  Discard changes
+                </button>
+                <span className="w-px h-6 bg-slate-200" aria-hidden />
+                <button
+                  type="button"
+                  onClick={() => setConfirmClose(false)}
+                  className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-100"
+                  data-testid={`button-preview-confirm-cancel-${song.id}`}
+                >
+                  Keep editing
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PreviewWindowEditor({
   song,
   onSaved,
@@ -3251,13 +3753,21 @@ function PreviewWindowEditor({
    *  surface reads as a focused editor rather than a sub-row. */
   standalone?: boolean;
 }) {
+  // Standalone mode (Tracks-tab Preview tile) gets the rich waveform-driven
+  // editor — fed by real song.waveform + song.duration. The nested mode
+  // (still rendered inside the legacy AudioEditor) keeps the simple inline
+  // form below to avoid breaking that surface during the demo push.
+  if (standalone) {
+    return <RichPreviewEditor song={song} onSaved={onSaved} onClose={onClose} />;
+  }
+
   const { toast } = useToast();
   const qc = useQueryClient();
   const hasCustom = song.previewStartMs != null;
   // When opened standalone we skip the collapsed "summary row" state
   // entirely — admin tapped the tile *to* edit, so jump straight into
   // the input form.
-  const [open, setOpen] = useState(standalone);
+  const [open, setOpen] = useState<boolean>(standalone);
   const [draft, setDraft] = useState<string>(
     hasCustom ? formatTimeMs(song.previewStartMs!) : "0:00",
   );
