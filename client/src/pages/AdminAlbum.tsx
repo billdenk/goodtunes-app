@@ -3601,72 +3601,27 @@ function RichPreviewEditor({
       data-testid={`preview-window-${song.id}`}
       className="relative space-y-3"
     >
-      {/* Stable-height status row.
-          Bill: the old approach inflated the banner with an inline Lock
-          Preview + Revert button row, pushing the waveform down whenever
-          you dragged. iMovie / Photos don't do that — the destination-state
-          visuals (amber window + amber padlock) are the unsaved-changes
-          signal, the padlock IS the save action, and Revert lives as a
-          tiny icon in the trim row that's reserved-but-invisible when
-          there's nothing to revert. The single-line copy here just
-          narrates the current state. */}
-      {(() => {
-        const auto = locked && committedLeft < 0.5;
-        const lockedCustom = locked && !auto;
-        const unlockedAuto = !locked && !isDirty && committedLeft < 0.5;
-        const unlockedCustomClean = !locked && !isDirty && committedLeft >= 0.5;
-        const fanLabel =
-          committedLeft < 0.5
-            ? "0:00–0:30"
-            : `${committedStartLabel}–${committedEndLabel}`;
-
-        const Icon = isDirty
-          ? MoveHorizontal
-          : locked
-            ? Lock
-            : MoveHorizontal;
-        const title = isDirty
-          ? `Unsaved — fans still hear ${fanLabel}`
-          : auto
-            ? "Auto-locked at 0:00–0:30"
-            : lockedCustom
-              ? `Locked at ${committedStartLabel}–${committedEndLabel}`
-              : unlockedAuto
-                ? "Pick your 30-second preview"
-                : unlockedCustomClean
-                  ? `Custom hook at ${committedStartLabel}–${committedEndLabel}`
-                  : "Pick your 30-second preview";
-        const sub = isDirty
-          ? "Tap the padlock to lock in your new preview, or revert."
-          : auto
-            ? "Default — your first 30 seconds. Tap the padlock to pick a different hook."
-            : lockedCustom
-              ? "Tap the padlock to slide it again."
-              : "Drag the yellow window or use the fine-tune row, then tap the padlock."
-        const titleColor = isDirty
-          ? "text-amber-700"
-          : locked
-            ? "text-emerald-700"
-            : "text-slate-700";
-
-        return (
-          <div className="-mt-1 px-1 flex items-start gap-2 min-h-[34px]">
-            <Icon
-              className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                isDirty
-                  ? "text-amber-500"
-                  : locked
-                    ? "text-emerald-500"
-                    : "text-slate-400"
-              }`}
-            />
-            <div className="text-[11.5px] leading-snug flex-1 min-w-0">
-              <div className={`font-semibold ${titleColor}`}>{title}</div>
-              <div className="text-slate-500 mt-0.5">{sub}</div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Compact status pill — only shown when there are unsaved
+          edits (amber) so the clean state stays quiet. The expanded
+          panel's header sublabel ("Auto · first 30 sec" / "Custom
+          30-sec clip") + the padlock's amber/emerald color already
+          tell the clean story; we only narrate when the artist is
+          mid-drag and fans are still on the old window.
+          Aligned right so it hugs the same edge as the panel
+          chevron — visually it reads as a header-right status
+          indicator without the deeper refactor of hoisting draft
+          state into ExpandedPanel itself. */}
+      {isDirty && (
+        <div className="-mt-1 flex justify-end">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+            <MoveHorizontal className="w-3 h-3" />
+            Unsaved — fans still hear{" "}
+            {committedLeft < 0.5
+              ? "0:00–0:30"
+              : `${committedStartLabel}–${committedEndLabel}`}
+          </span>
+        </div>
+      )}
 
       {/* Hidden window-scoped <audio> element — same master as the player,
           but its currentTime is constrained to [draftSec, draftSec + 30]. */}
@@ -3679,7 +3634,7 @@ function RichPreviewEditor({
       />
 
       {/* Trim row: play · waveform · padlock — Apple iMovie pattern */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3 px-1">
         <button
           type="button"
           onClick={togglePlay}
@@ -3709,9 +3664,9 @@ function RichPreviewEditor({
         <div className="flex-1 min-w-0">
           <div
             ref={wfRef}
-            className="relative h-20 rounded-md bg-slate-50 border border-slate-200 px-2 overflow-hidden touch-none select-none"
+            className="relative h-20 rounded-md bg-slate-50 border border-slate-200 overflow-hidden touch-none select-none"
           >
-            <div className="absolute inset-x-2 inset-y-2 flex items-center justify-between gap-px">
+            <div className="absolute inset-1 flex items-center justify-between gap-px">
               {bars.map((h, i) => (
                 <div
                   key={i}
@@ -3814,7 +3769,7 @@ function RichPreviewEditor({
             </div>
           </div>
           {/* Time axis — derived from real duration */}
-          <div className="flex justify-between text-[9px] tabular-nums text-slate-400 mt-1 px-2">
+          <div className="flex justify-between text-[9px] tabular-nums text-slate-400 mt-2 mb-1 px-1">
             {ticks.map((t, i) => (
               <span key={i}>{t}</span>
             ))}
@@ -3822,23 +3777,22 @@ function RichPreviewEditor({
 
         </div>
 
-        {/* Revert — reserved slot so layout doesn't shift when it shows.
-            Invisible + non-interactive when clean; fades in only when
-            the artist has unsaved changes. */}
-        <button
-          type="button"
-          onClick={revertDraft}
-          disabled={!isDirty || saveMut.isPending}
-          aria-label="Revert to saved preview"
-          title="Revert to what fans hear now"
-          className={[
-            "w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-opacity text-slate-500 hover:bg-slate-100",
-            isDirty ? "opacity-100" : "opacity-0 pointer-events-none",
-          ].join(" ")}
-          data-testid={`button-preview-revert-${song.id}`}
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
+        {/* Revert — only rendered when there are unsaved changes so
+            the padlock sits flush against the waveform in the clean
+            state (Bill: "big gap with the lock and the wave"). */}
+        {isDirty && (
+          <button
+            type="button"
+            onClick={revertDraft}
+            disabled={saveMut.isPending}
+            aria-label="Revert to saved preview"
+            title="Revert to what fans hear now"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 text-slate-500 hover:bg-slate-100"
+            data-testid={`button-preview-revert-${song.id}`}
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        )}
 
         <button
           type="button"
