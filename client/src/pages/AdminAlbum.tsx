@@ -1195,7 +1195,7 @@ function ExpandedPanel({
         className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 focus:outline-none focus:bg-slate-50"
         data-testid={testId ? `${testId}-collapse` : undefined}
       >
-        <span className="w-7 h-7 rounded-full bg-[#319ED8]/10 inline-flex items-center justify-center flex-shrink-0">
+        <span className="w-8 h-8 rounded-md bg-[#319ED8]/10 inline-flex items-center justify-center flex-shrink-0">
           <Icon className="w-4 h-4 text-[#319ED8]" />
         </span>
         <span className="flex-1 min-w-0">
@@ -1281,16 +1281,11 @@ function StatusBadge({
       >
         <span
           className={[
-            "w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0 relative",
+            "w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0",
             ok ? "bg-emerald-50 text-emerald-600" : notOkIcon,
           ].join(" ")}
         >
           <Icon className="w-4 h-4" />
-          {ok && (
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 inline-flex items-center justify-center ring-2 ring-white">
-              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3.5} />
-            </span>
-          )}
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-[12px] font-semibold text-slate-900 truncate">
@@ -1302,7 +1297,7 @@ function StatusBadge({
             </div>
           )}
         </div>
-        <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/card:opacity-100 transition-opacity flex-shrink-0" />
+        <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
       </button>
     );
   }
@@ -1350,30 +1345,12 @@ function StatusBadge({
           )}
         </div>
       </div>
-      <span
+      <ChevronDown
         className={[
-          "inline-flex items-center justify-center flex-shrink-0 relative",
-          emphasized ? "w-6 h-6" : "w-5 h-5",
+          "text-slate-400 flex-shrink-0",
+          emphasized ? "w-4 h-4" : "w-3.5 h-3.5",
         ].join(" ")}
-      >
-        {ok && (
-          <Check
-            className={[
-              "text-emerald-600 group-hover/card:opacity-0 transition-opacity",
-              emphasized ? "w-4 h-4" : "w-3.5 h-3.5",
-            ].join(" ")}
-          />
-        )}
-        <Pencil
-          className={[
-            "text-slate-500 transition-opacity",
-            emphasized ? "w-4 h-4" : "w-3.5 h-3.5",
-            ok
-              ? "absolute inset-0 m-auto opacity-0 group-hover/card:opacity-100"
-              : "opacity-0 group-hover/card:opacity-100",
-          ].join(" ")}
-        />
-      </span>
+      />
     </button>
   );
 }
