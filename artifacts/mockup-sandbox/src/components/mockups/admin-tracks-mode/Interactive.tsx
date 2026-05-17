@@ -487,15 +487,15 @@ function SnippetDetail({
   if (!hasMaster) {
     return (
       <DetailWrap title="30-sec preview" onClose={onClose}>
-        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
-          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
-            <Upload className="w-4 h-4" />
-          </span>
+        {/* Note treatment (not a box): purely informational — no actions
+            live inside it, so it shouldn't read as a tappable button. */}
+        <div className="-mt-1 px-1 flex items-start gap-2">
+          <Upload className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <div className="text-[11.5px] leading-snug flex-1 min-w-0">
-            <div className="font-semibold text-slate-900">
+            <div className="font-semibold text-slate-700">
               Preview picker unlocks after the master
             </div>
-            <div className="text-slate-600 mt-0.5">
+            <div className="text-slate-500 mt-0.5">
               Once you{" "}
               <button
                 onClick={onGoToMaster}
@@ -682,15 +682,16 @@ function SnippetDetail({
           Apple-style tip cards (not pulsing animations) — discoverable
           on first open, never nag on repeat visits. */}
       {locked && committedLeft < 0.5 ? (
-        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
-          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
-            <Lock className="w-4 h-4" />
-          </span>
+        /* Note treatment (not a box): a quiet tip, not a call to action.
+           Boxy chrome was reading as a button competing with the real
+           controls below. */
+        <div className="-mt-1 px-1 flex items-start gap-2">
+          <Lock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <div className="text-[11.5px] leading-snug flex-1 min-w-0">
-            <div className="font-semibold text-slate-900">
+            <div className="font-semibold text-slate-700">
               Auto-locked at 0:00–0:30
             </div>
-            <div className="text-slate-600 mt-0.5">
+            <div className="text-slate-500 mt-0.5">
               We've set your 30-second preview to the first 30 seconds — no
               action needed. Want to pick a different hook? Tap the{" "}
               <Lock className="inline w-3 h-3 -translate-y-0.5 text-emerald-600" />{" "}
@@ -746,15 +747,15 @@ function SnippetDetail({
           </div>
         </div>
       ) : !locked && committedLeft < 0.5 ? (
-        <div className="-mt-1 rounded-lg bg-[#319ED8]/5 border border-[#319ED8]/20 px-3 py-2.5 flex items-start gap-2.5">
-          <span className="w-7 h-7 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
-            <MoveHorizontal className="w-4 h-4" />
-          </span>
+        /* Note treatment (not a box): instructions only — real action is
+           the waveform itself, not this tip. */
+        <div className="-mt-1 px-1 flex items-start gap-2">
+          <MoveHorizontal className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <div className="text-[11.5px] leading-snug flex-1 min-w-0">
-            <div className="font-semibold text-slate-900">
+            <div className="font-semibold text-slate-700">
               Pick your 30-second preview
             </div>
-            <div className="text-slate-600 mt-0.5">
+            <div className="text-slate-500 mt-0.5">
               Drag the yellow window anywhere on the waveform to start it
               from a different spot — it stays locked to 30 sec wide. Tap
               the padlock again when you're satisfied.
