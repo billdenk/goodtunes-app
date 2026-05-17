@@ -512,6 +512,14 @@ function TracksPanel({
   // for the `playing` flag; the promise paths just absorb the rejection.
   const playEpochRef = useRef(0);
 
+  // User-seek guard. `audio.currentTime = s` doesn't apply synchronously —
+  // a stale `timeupdate` can fire with the OLD position right after a
+  // manual scrub, briefly snapping the bar backward before the seek lands.
+  // We flip this ref true on scrub and clear it on the `seeked` event;
+  // while true, `onTimeUpdate` skips its setProgress so the optimistic
+  // value from onSeek stays put.
+  const userSeekingRef = useRef(false);
+
   // Load + play whenever the selected song changes. Browsers will reject
   // play() if it wasn't triggered by a user gesture — that's fine here
   // because the only path into this effect is the user clicking a row's
@@ -747,7 +755,10 @@ function TracksPanel({
           {adding ? "Done" : "Add track"}
         </button>
       </div>
-      <ol className={currentSong ? "pb-28" : undefined}>
+      {/* Always reserve dock clearance — the dock is now viewport-fixed and
+          visible in both idle and playing states, so the last track row
+          must always sit above its ~110px footprint. */}
+      <ol className="pb-32">
         {sorted.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
           return (
@@ -785,10 +796,14 @@ function TracksPanel({
         ref={audioRef}
         preload="metadata"
         onTimeUpdate={(e) => {
+          if (userSeekingRef.current) return;
           const el = e.currentTarget;
           if (el.duration > 0) {
             setProgress((el.currentTime / el.duration) * 100);
           }
+        }}
+        onSeeked={() => {
+          userSeekingRef.current = false;
         }}
         onEnded={() => playNext()}
         className="hidden"
@@ -808,7 +823,19 @@ function TracksPanel({
         onPrev={playPrev}
         onNext={playNext}
         onSeek={(s) => {
-          if (audioRef.current) audioRef.current.currentTime = s;
+          const audio = audioRef.current;
+          if (!audio) return;
+          // Mark a user-seek in flight so the next stale `timeupdate`
+          // (which may still carry the pre-seek currentTime) doesn't
+          // clobber the optimistic snap below. Cleared on `seeked`.
+          userSeekingRef.current = true;
+          audio.currentTime = s;
+          // Snap the visible bar immediately instead of waiting for the
+          // next `timeupdate` tick (~250ms). Bill felt the delay; this
+          // eliminates it without changing how playback drives progress.
+          if (audio.duration > 0) {
+            setProgress((s / audio.duration) * 100);
+          }
         }}
         onVolumeChange={(level, muted) => {
           if (!audioRef.current) return;
@@ -816,7 +843,10 @@ function TracksPanel({
           audioRef.current.muted = muted;
         }}
         coverNode={
-          album.artwork ? (
+          // Only show real artwork while a track is selected; idle state
+          // falls through to the dock's slate placeholder so the empty
+          // pill reads honestly (no art = no art shown).
+          currentSong && album.artwork ? (
             <div className="w-10 h-10 rounded-md flex-shrink-0 overflow-hidden bg-slate-700">
               <img
                 src={album.artwork}

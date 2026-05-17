@@ -37,12 +37,15 @@ import { LyricsIcon } from "@/components/ui/LyricsIcon";
  *   • Hover the scrubber → cover + title blur, elapsed + remaining time
  *     labels fade in flush with the bar's left/right edges.
  *
- * IDLE (no selection): pill collapses to just the LEFT transport cluster
- * with content on the right hidden. Pill width auto-sizes so it doesn't
- * read as a half-empty bar when nothing is playing.
+ * IDLE (no selection): same wide pill, with a slate placeholder where the
+ * cover would go and empty title/subtitle text. Apple parity: the dock
+ * doesn't resize between idle and playing states, it just lights up.
  *
- * Positioning: rendered with `absolute bottom-4` — host must mount inside
- * a `position: relative` parent (a card / panel / `Player` page).
+ * Positioning: `fixed bottom-8` — pins to the browser viewport so the dock
+ * floats above page content and stays a consistent distance from the
+ * window's bottom edge as the user resizes. Host must reserve ~110px of
+ * bottom padding so the dock doesn't cover the last row of scrollable
+ * content.
  *
  * This component was graduated from the admin-Tracks-tab Seamless mockup
  * after Bill signed off on the anatomy. The mockup keeps a parallel inline
@@ -237,14 +240,15 @@ export function PlayerDock({
     return `${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
   };
 
-  // Default cover when host doesn't supply one — brand gradient block.
+  // Default cover when host doesn't supply one — neutral slate block.
+  // Apple's idle-dock placeholder is a flat gray square, not a branded
+  // gradient (the gradient reads as "real artwork is here" and lies about
+  // the empty state). Hosts that DO have artwork pass `coverNode`.
   const cover =
     coverNode ?? (
       <div
-        className="w-10 h-10 rounded-md flex-shrink-0"
-        style={{
-          background: "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)",
-        }}
+        className="w-10 h-10 rounded-md flex-shrink-0 bg-slate-700/60"
+        aria-hidden
       />
     );
 
@@ -255,7 +259,7 @@ export function PlayerDock({
   // a dedicated Now Playing sheet can answer that without bloating the pill.
   if (dockHidden && hasSelection) {
     return (
-      <div className="absolute right-4 bottom-4 z-20" data-testid="player-dock-mini">
+      <div className="fixed right-4 bottom-8 z-40" data-testid="player-dock-mini">
         <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-3 pr-2 py-2">
           <div
             className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
@@ -304,19 +308,19 @@ export function PlayerDock({
   }
 
   // ── Full dock ──────────────────────────────────────────────────────
-  // Wrapper sizing:
-  //   • Wide          → centered 760px pill (capped at viewport − 32).
-  //   • Compact + auto narrow → edge-to-edge (`left-2 right-2`).
-  //   • Compact + forced       → constrained 640px centered (so demo
-  //     callers passing `forceCompact` reproduce the cramped layout
-  //     even inside a 1280px iframe).
+  // Wrapper sizing — pill width is CONSTANT across idle / playing so the
+  // dock doesn't visibly resize when a track is selected (Apple parity).
+  //   • Wide                   → centered 760px pill (capped at viewport − 32).
+  //   • Compact + auto narrow  → edge-to-edge (`left-2 right-2`).
+  //   • Compact + forced demo  → constrained 640px centered (so demo
+  //     callers passing `forceCompact` reproduce the cramped layout even
+  //     inside a 1280px iframe).
   const edgeToEdge = compact && forceCompact !== true;
-  const wrapperStyle =
-    !compact && hasSelection
-      ? { width: "min(760px, calc(100% - 32px))" }
-      : forceCompact === true
-      ? { width: "min(640px, calc(100% - 32px))" }
-      : undefined;
+  const wrapperStyle = !compact
+    ? { width: "min(760px, calc(100% - 32px))" }
+    : forceCompact === true
+    ? { width: "min(640px, calc(100% - 32px))" }
+    : undefined;
 
   // Clamp slider handle inside the rail so the knob never hangs off the
   // end-caps at 0% / 100%. Handle is 10px wide → -5px centers it on the
@@ -327,7 +331,7 @@ export function PlayerDock({
   return (
     <div
       className={[
-        "absolute bottom-4 z-20",
+        "fixed bottom-8 z-40",
         edgeToEdge ? "left-2 right-2" : "left-1/2 -translate-x-1/2",
       ].join(" ")}
       style={wrapperStyle}
@@ -350,7 +354,9 @@ export function PlayerDock({
               data-testid="button-shuffle"
               className={[
                 "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
-                shuffleOn
+                !hasSelection
+                  ? "text-slate-500 cursor-default"
+                  : shuffleOn
                   ? "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20"
                   : "text-slate-300 hover:text-white hover:bg-white/10",
               ].join(" ")}
@@ -362,7 +368,12 @@ export function PlayerDock({
               onClick={onPrev}
               aria-label="Previous track"
               data-testid="button-prev"
-              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              className={[
+                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                hasSelection
+                  ? "text-slate-300 hover:text-white hover:bg-white/10"
+                  : "text-slate-500 cursor-default",
+              ].join(" ")}
             >
               <SkipBack className="w-[18px] h-[18px] fill-current" />
             </button>
@@ -393,7 +404,12 @@ export function PlayerDock({
               onClick={onNext}
               aria-label="Next track"
               data-testid="button-next"
-              className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              className={[
+                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                hasSelection
+                  ? "text-slate-300 hover:text-white hover:bg-white/10"
+                  : "text-slate-500 cursor-default",
+              ].join(" ")}
             >
               <SkipForward className="w-[18px] h-[18px] fill-current" />
             </button>
@@ -417,7 +433,9 @@ export function PlayerDock({
               data-testid="button-repeat"
               className={[
                 "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
-                repeatMode === "off"
+                !hasSelection
+                  ? "text-slate-500 cursor-default"
+                  : repeatMode === "off"
                   ? "text-slate-300 hover:text-white hover:bg-white/10"
                   : "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20",
               ].join(" ")}
@@ -426,111 +444,131 @@ export function PlayerDock({
             </button>
           </div>
 
-          {hasSelection && (
-            <>
-              <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
+          <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
 
-              {/* ── CENTER · track info ──────────────────────────────
-                  Cover ~40px (one notch shorter than the 44px Play so
-                  Play drives the row height). Center cluster blurs out
-                  while the user is hovering the scrubber so the time
-                  labels above the bar read cleanly. */}
+          {/* ── CENTER · track info ──────────────────────────────
+              Cover ~40px (one notch shorter than the 44px Play so
+              Play drives the row height). Center cluster blurs out
+              while the user is hovering the scrubber so the time
+              labels above the bar read cleanly. Rendered even when
+              idle — title slot just stays empty so the pill width
+              doesn't change between idle and playing states. */}
+          <div
+            className={[
+              "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
+              scrubHover ? "blur-[6px] opacity-50" : "",
+            ].join(" ")}
+            aria-hidden={scrubHover}
+          >
+            {cover}
+            <div className="min-w-0 flex-1">
               <div
-                className={[
-                  "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
-                  scrubHover ? "blur-[6px] opacity-50" : "",
-                ].join(" ")}
-                aria-hidden={scrubHover}
+                className="text-[13px] font-semibold truncate leading-tight"
+                data-testid="text-track-title"
               >
-                {cover}
-                <div className="min-w-0 flex-1">
-                  <div
-                    className="text-[13px] font-semibold truncate leading-tight"
-                    data-testid="text-track-title"
-                  >
-                    {track.title}
-                  </div>
-                  {track.subtitle && (
-                    <div
-                      className="text-[11px] text-slate-400 truncate leading-tight mt-0.5"
-                      data-testid="text-track-subtitle"
-                    >
-                      {track.subtitle}
-                    </div>
-                  )}
-                </div>
+                {track.title}
               </div>
+              {track.subtitle && hasSelection && (
+                <div
+                  className="text-[11px] text-slate-400 truncate leading-tight mt-0.5"
+                  data-testid="text-track-subtitle"
+                >
+                  {track.subtitle}
+                </div>
+              )}
+            </div>
+          </div>
 
-              {/* ── RIGHT · utility cluster ──────────────────────────
-                  Lyrics glyph + volume cluster + minimize chevron.
-                  ⋯ song-options menu intentionally omitted: Apple
-                  surfaces it for fan-side options that the consuming
-                  surface (album/track row) already owns elsewhere. */}
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {onLyrics && (
-                  <button
-                    type="button"
-                    aria-label="Show lyrics"
-                    title="Show lyrics"
-                    onClick={onLyrics}
-                    data-testid="button-lyrics"
-                    className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+          {/* ── RIGHT · utility cluster ──────────────────────────
+              Lyrics glyph + volume cluster + minimize chevron.
+              ⋯ song-options menu intentionally omitted: Apple
+              surfaces it for fan-side options that the consuming
+              surface (album/track row) already owns elsewhere. */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Lyrics mic — rendered ALWAYS so the dock anatomy is
+                complete; if the host hasn't wired `onLyrics` yet (admin
+                today) the button is a visual-only placeholder. Same
+                slot will fire the Lyrics overlay once it's wired. */}
+            <button
+              type="button"
+              aria-label="Show lyrics"
+              title={onLyrics ? "Show lyrics" : "Lyrics (coming soon)"}
+              onClick={onLyrics}
+              disabled={!onLyrics || !hasSelection}
+              data-testid="button-lyrics"
+              className={[
+                "w-10 h-10 rounded-full inline-flex items-center justify-center transition-colors",
+                onLyrics && hasSelection
+                  ? "text-slate-300 hover:text-white hover:bg-white/10"
+                  : "text-slate-500 cursor-default",
+              ].join(" ")}
+            >
+              <LyricsIcon size={20} />
+            </button>
+            {/* Volume cluster — slider slides out left on hover.
+                Hidden in compact: Apple drops volume from its narrow
+                mini-player too. The title gets the ~46px back.
+                Rail bg lifted to white/25 so the empty (right-of-knob)
+                portion reads as a track rather than blending into
+                the dark pill. Fill transition dropped so clicks on the
+                rail snap immediately to the new level. */}
+            {!compact && (
+              <div className="group/vol flex items-center pr-0.5">
+                <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">
+                  <div
+                    className="relative w-16 h-[3px] bg-white/25 rounded-full cursor-pointer"
+                    onClick={handleVolumeRail}
+                    data-testid="rail-volume"
                   >
-                    <LyricsIcon size={20} />
-                  </button>
-                )}
-                {/* Volume cluster — slider slides out left on hover.
-                    Hidden in compact: Apple drops volume from its narrow
-                    mini-player too. The title gets the ~46px back. */}
-                {!compact && (
-                  <div className="group/vol flex items-center pr-0.5">
-                    <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-white rounded-full"
+                      style={{ width: volumeMuted ? "0%" : `${volumeLevel}%` }}
+                    />
+                    {!volumeMuted && (
                       <div
-                        className="relative w-16 h-[3px] bg-white/15 rounded-full cursor-pointer"
-                        onClick={handleVolumeRail}
-                        data-testid="rail-volume"
-                      >
-                        <div
-                          className="absolute inset-y-0 left-0 bg-white rounded-full transition-[width] duration-150"
-                          style={{ width: volumeMuted ? "0%" : `${volumeLevel}%` }}
-                        />
-                        {!volumeMuted && (
-                          <div
-                            className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
-                            style={{ left: knobLeft(volumeLevel) }}
-                            aria-hidden
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label={volumeMuted ? "Unmute" : "Mute"}
-                      title={volumeMuted ? "Unmute" : "Mute"}
-                      onClick={toggleMute}
-                      data-testid="button-mute"
-                      className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-                    >
-                      <VolumeGlyph className="w-5 h-5" />
-                    </button>
+                        className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
+                        style={{ left: knobLeft(volumeLevel) }}
+                        aria-hidden
+                      />
+                    )}
                   </div>
-                )}
-
-                {/* Minimize — collapses to the corner pill. ChevronDown
-                    points toward where the mini-pill will land. */}
+                </div>
                 <button
                   type="button"
-                  aria-label="Minimize player"
-                  title="Minimize player"
-                  onClick={() => setDockHidden(true)}
-                  data-testid="button-minimize-player"
-                  className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                  aria-label={volumeMuted ? "Unmute" : "Mute"}
+                  title={volumeMuted ? "Unmute" : "Mute"}
+                  onClick={toggleMute}
+                  data-testid="button-mute"
+                  className={[
+                    "w-10 h-10 rounded-full inline-flex items-center justify-center transition-colors",
+                    hasSelection
+                      ? "text-slate-300 hover:text-white hover:bg-white/10"
+                      : "text-slate-500",
+                  ].join(" ")}
                 >
-                  <ChevronDown className="w-5 h-5" />
+                  <VolumeGlyph className="w-5 h-5" />
                 </button>
               </div>
-            </>
-          )}
+            )}
+
+            {/* Minimize — collapses to the corner pill. ChevronDown
+                points toward where the mini-pill will land. Only
+                actionable when there's a selection; otherwise hidden
+                so the idle dock doesn't trap the user with a button
+                that minimizes nothing. */}
+            {hasSelection && (
+              <button
+                type="button"
+                aria-label="Minimize player"
+                title="Minimize player"
+                onClick={() => setDockHidden(true)}
+                data-testid="button-minimize-player"
+                className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              >
+                <ChevronDown className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Inline progress bar (wide only) ───────────────────────
@@ -541,13 +579,13 @@ export function PlayerDock({
             In compact mode the inline scrubber is dropped entirely —
             Apple's narrow mini-player does the same. Tap to expand for
             scrubbing (a separate Now Playing sheet, owned by the host). */}
-        {!compact && hasSelection && (
+        {!compact && (
           <>
             <div
               className={[
-                "absolute left-[228px] right-[164px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
+                "absolute left-[237px] right-[100px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
                 "transition-opacity duration-150",
-                scrubHover ? "opacity-100" : "opacity-0",
+                scrubHover && hasSelection ? "opacity-100" : "opacity-0",
               ].join(" ")}
             >
               <span
@@ -564,15 +602,21 @@ export function PlayerDock({
               </span>
             </div>
             <div
-              className="group/scrub absolute left-[228px] right-[164px] bottom-1.5 h-3 flex items-center cursor-pointer"
+              className={[
+                "group/scrub absolute left-[237px] right-[100px] bottom-1.5 h-3 flex items-center",
+                hasSelection ? "cursor-pointer" : "cursor-default pointer-events-none",
+              ].join(" ")}
               onMouseEnter={() => setScrubHover(true)}
               onMouseLeave={() => setScrubHover(false)}
-              onClick={handleScrubClick}
+              onClick={hasSelection ? handleScrubClick : undefined}
               data-testid="rail-scrubber"
             >
-              <div className="relative flex-1 h-[2px] rounded-full bg-white/15 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/25 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
+              {/* Rail bg lifted to white/25 (was white/15) so the
+                  remainder is visible at rest. White elapsed sits on
+                  top with no transition — clicks snap instantly. */}
+              <div className="relative flex-1 h-[2px] rounded-full bg-white/25 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-white/30 group-active/scrub:h-[5px] group-active/scrub:bg-white/40">
                 <div
-                  className="absolute inset-y-0 left-0 bg-white rounded-full transition-all"
+                  className="absolute inset-y-0 left-0 bg-white rounded-full"
                   style={{ width: `${clampedProgress}%` }}
                 />
               </div>
