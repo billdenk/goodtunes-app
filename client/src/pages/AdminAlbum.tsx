@@ -2196,6 +2196,38 @@ function distributeLyrics(
   return out;
 }
 
+/* ─── LyricsGapDots — Apple-Music-style instrumental pulse ─────────────
+   Three dots that light up left→right as the audio progresses through
+   an instrumental gap. progress is 0..1 across the whole gap. Each
+   dot fills as we cross its 1/3 of the gap (dot 1 over 0→1/3, dot 2
+   over 1/3→2/3, dot 3 over 2/3→1). Sits inline above the upcoming
+   cue so the writer (and the fan, eventually) can see "the next line
+   is coming". */
+function LyricsGapDots({ progress }: { progress: number }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 py-1.5 pl-0.5"
+      aria-label="Instrumental"
+      data-testid="lyrics-gap-dots"
+    >
+      {[0, 1, 2].map((i) => {
+        const p = Math.max(0, Math.min(1, progress * 3 - i));
+        return (
+          <span
+            key={i}
+            className="rounded-full bg-slate-500 transition-all duration-200"
+            style={{
+              width: 6 + p * 3,
+              height: 6 + p * 3,
+              opacity: 0.25 + p * 0.7,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── GoodSync™ side-panel — lives inside LyricsEditor ──────────────────
    Companion column to the Words textarea. Heading-above-box matches
    the Words pane structure. Inside the box: an Apple-Music-style cue
@@ -2264,12 +2296,20 @@ function GoodSyncPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canPlay, draftLyrics, song.duration, isSynced]);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Callback-ref-as-state for the hidden audio element. This is the
+  // bulletproof pattern: listener wiring happens in an effect keyed on
+  // the audio node itself, so any remount (HMR, conditional render,
+  // refetch-driven re-render) automatically rewires without stale
+  // refs. Previous version used a plain useRef + [canPlay] effect dep,
+  // which silently broke after song refetches — that's why Bill saw
+  // the 0:00 timer freeze even though audio was playing.
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  // Active cue = the last cue whose start time has passed.
+  // Active cue = the last cue whose start time has passed. -1 means
+  // we're in the intro before any sung lyric.
   const activeIdx = (() => {
     if (!previewCues.length) return -1;
     let idx = -1;
@@ -2280,22 +2320,27 @@ function GoodSyncPanel({
     return idx;
   })();
 
-  // Auto-scroll the active line into the middle of the panel.
+  // Auto-scroll the active line — or the upcoming first line during
+  // the intro gap — into the middle of the panel.
   useEffect(() => {
-    if (activeIdx < 0 || !listRef.current) return;
+    if (!listRef.current || previewCues.length === 0) return;
+    const target = activeIdx >= 0 ? activeIdx : 0;
     const el = listRef.current.querySelector(
-      `[data-cue-idx="${activeIdx}"]`,
+      `[data-cue-idx="${target}"]`,
     ) as HTMLElement | null;
     if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeIdx]);
+  }, [activeIdx, previewCues.length]);
 
-  // Wire the hidden audio element to local state.
+  // Wire the hidden audio element to local state. Keyed on the audio
+  // node so it re-runs whenever the element mounts/unmounts.
   useEffect(() => {
-    const audio = audioRef.current;
     if (!audio) return;
     const onTime = () => setCurrentTime(audio.currentTime);
     const onPlayEv = () => setPlaying(true);
     const onPauseEv = () => setPlaying(false);
+    // Seed initial state in case events fired before listeners were on.
+    setCurrentTime(audio.currentTime);
+    setPlaying(!audio.paused);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("play", onPlayEv);
     audio.addEventListener("pause", onPauseEv);
@@ -2304,17 +2349,16 @@ function GoodSyncPanel({
       audio.removeEventListener("play", onPlayEv);
       audio.removeEventListener("pause", onPauseEv);
     };
-  }, [canPlay]);
+  }, [audio]);
 
   // Stop playback on unmount so navigating away doesn't leave audio running.
   useEffect(() => {
     return () => {
-      audioRef.current?.pause();
+      audio?.pause();
     };
-  }, []);
+  }, [audio]);
 
   const togglePlay = () => {
-    const audio = audioRef.current;
     if (!audio || !song.audioUrl) return;
     if (audio.paused) audio.play().catch(() => {});
     else audio.pause();
@@ -2461,7 +2505,7 @@ function GoodSyncPanel({
         ) : (
           <>
             <audio
-              ref={audioRef}
+              ref={setAudio}
               src={song.audioUrl}
               preload="auto"
               className="hidden"
@@ -2483,27 +2527,48 @@ function GoodSyncPanel({
                 previewCues.map((cue, i) => {
                   const isActive = i === activeIdx;
                   const isPast = i < activeIdx;
+                  // Apple-Music-style three-dot pulse for instrumental
+                  // gaps. Shows above the *upcoming* cue when there's a
+                  // ≥3s silence between the previous line's start and
+                  // this one. Each dot lights as we cross 1/3 of the
+                  // gap (left→right fill). Intro gap counts too: prev
+                  // time is 0 for the first cue.
+                  const prevTime =
+                    i === 0 ? 0 : previewCues[i - 1].timeMs / 1000;
+                  const cueTime = cue.timeMs / 1000;
+                  const gap = cueTime - prevTime;
+                  const inGap =
+                    currentTime >= prevTime &&
+                    currentTime < cueTime &&
+                    gap >= 3;
+                  const gapProgress = inGap
+                    ? Math.max(
+                        0,
+                        Math.min(1, (currentTime - prevTime) / gap),
+                      )
+                    : 0;
                   return (
-                    <div
-                      key={i}
-                      data-cue-idx={i}
-                      onClick={() => {
-                        const audio = audioRef.current;
-                        if (audio) {
-                          audio.currentTime = cue.timeMs / 1000;
-                          if (audio.paused) audio.play().catch(() => {});
-                        }
-                      }}
-                      className={[
-                        "transition-all cursor-pointer leading-[1.35]",
-                        isActive
-                          ? "text-slate-900 text-[13px] font-bold scale-[1.03] origin-left"
-                          : isPast
-                            ? "text-slate-300 text-[12px] font-semibold"
-                            : "text-slate-500 text-[12px] font-semibold",
-                      ].join(" ")}
-                    >
-                      {cue.text}
+                    <div key={i}>
+                      {inGap && <LyricsGapDots progress={gapProgress} />}
+                      <div
+                        data-cue-idx={i}
+                        onClick={() => {
+                          if (audio) {
+                            audio.currentTime = cue.timeMs / 1000;
+                            if (audio.paused) audio.play().catch(() => {});
+                          }
+                        }}
+                        className={[
+                          "transition-all cursor-pointer leading-[1.35]",
+                          isActive
+                            ? "text-slate-900 text-[13px] font-bold scale-[1.03] origin-left"
+                            : isPast
+                              ? "text-slate-300 text-[12px] font-semibold"
+                              : "text-slate-500 text-[12px] font-semibold",
+                        ].join(" ")}
+                      >
+                        {cue.text}
+                      </div>
                     </div>
                   );
                 })
@@ -2590,20 +2655,16 @@ function LyricsEditor({
   const dirty = (normalized || null) !== (song.lyrics ?? null);
 
   // Silent autosave — Bill: "we auto save like the preview". Writes
-  // only the words; the GoodSync™ preview is derived from them, and
-  // real cues come from the "Sync with audio" button (ElevenLabs).
-  // We deliberately pass syncedLyrics: null while the draft drifts
-  // from what was last synced, so the player doesn't render stale
-  // cues against new words. The next "Sync with audio" repopulates.
+  // ONLY the words. We never touch syncedLyrics here so a typo fix or
+  // any other small edit can't accidentally wipe an expensive
+  // ElevenLabs alignment. Only the explicit "Sync with audio" button
+  // (alignMut) overwrites the saved cues. If the words drift far
+  // enough that the cues no longer fit, the writer re-runs Sync.
   const saveMut = useMutation({
-    mutationFn: async () => {
-      // If the draft still matches what's saved + already-synced, skip
-      // touching syncedLyrics (preserves real ElevenLabs cues).
-      const draftMatchesSaved = normalized === (song.lyrics ?? "");
-      const body: Record<string, unknown> = { lyrics: normalized || null };
-      if (!draftMatchesSaved) body.syncedLyrics = null;
-      return apiRequest("PUT", `/api/admin/songs/${song.id}`, body);
-    },
+    mutationFn: async () =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+        lyrics: normalized || null,
+      }),
     onSuccess: async () => {
       await onSaved();
       // No toast, no close — this is silent autosave.
