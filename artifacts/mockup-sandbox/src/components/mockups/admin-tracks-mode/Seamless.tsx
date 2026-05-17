@@ -615,9 +615,16 @@ function BottomDock({
   if (dockHidden && hasSelection) {
     return (
       <div className="absolute right-4 bottom-4 z-20">
-        <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-1.5 pr-1.5 py-1.5">
+        {/* Mini-pill padding is 8px all around (was 6px) — at 6px the
+            cover thumbnail's top-left corner sat directly inside the
+            capsule's curve and read as touching the edge. 8px gives the
+            cover visible breathing room from both the top and the curved
+            left end of the pill. Cover corner radius bumps to rounded-lg
+            (was rounded-md) so it nests inside the capsule curve rather
+            than fighting it. */}
+        <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-2 pr-2 py-2">
           <div
-            className="w-9 h-9 rounded-md flex-shrink-0"
+            className="w-9 h-9 rounded-lg flex-shrink-0"
             style={{
               background:
                 "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)",
