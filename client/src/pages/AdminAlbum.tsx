@@ -5237,7 +5237,10 @@ function AudioEditor({
                     <MoreHorizontal className="w-4 h-4" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-44 p-1">
+                <PopoverContent
+                  align="end"
+                  className="w-44 p-1 bg-white border border-slate-200 text-slate-900 shadow-lg rounded-lg"
+                >
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
@@ -5247,6 +5250,11 @@ function AudioEditor({
                     <Upload className="w-3.5 h-3.5" />
                     Replace file
                   </button>
+                  {/* Hairline + breathing room before the destructive
+                      action — design-system rule: trash/delete buttons
+                      keep gap + divider from neighbors so a thumb can't
+                      slide between them. */}
+                  <div className="my-1 h-px bg-slate-100" />
                   <button
                     type="button"
                     onClick={() => {
@@ -5292,13 +5300,29 @@ function AudioEditor({
         )}
       </div>
 
-      {/* Preview Window + Instrumental — siblings of the file tile,
-          shown only once audio exists. Both auto-save on change, so
-          the footer below only commits the URL field. */}
+      {/* Preview Window + Instrumental — siblings of the file tile.
+          Both auto-save the moment the writer flips them, so they live
+          in their own settings card with a clear "Saved automatically"
+          caption. Without this separation they appear stacked above
+          "Save master" and read as if that button commits them too. */}
       {song.audioUrl && (
-        <div className="space-y-2 pt-3 px-1">
-          <PreviewWindowEditor song={song} onSaved={onSaved} />
-          <InstrumentalToggle song={song} />
+        <div className="pt-4">
+          <div className="flex items-center justify-between px-1 pb-1.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+              Settings
+            </p>
+            <p className="text-[10.5px] text-slate-400">
+              Saved automatically
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
+            <div className="px-3.5 py-2.5">
+              <PreviewWindowEditor song={song} onSaved={onSaved} />
+            </div>
+            <div className="px-3.5 py-2.5">
+              <InstrumentalToggle song={song} />
+            </div>
+          </div>
         </div>
       )}
 
