@@ -1824,11 +1824,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // swap only the words that clearly differ — preserving STT's
     // natural sentence-casing and punctuation, and skipping stylistic
     // variants (cuz/cause, yeah/ya, till/until, etc.).
-    const refined = song.lyrics
-      ? refineCuesAgainstPlain(out, song.lyrics)
+    //
+    // If Plain is empty, back-populate it from the STT cues (one cue
+    // per line). That gives the artist a one-click first draft to
+    // correct, instead of staring at a blank Lyrics box.
+    const hasPlain = !!(song.lyrics && song.lyrics.trim());
+    const refined = hasPlain
+      ? refineCuesAgainstPlain(out, song.lyrics!)
       : out;
+    const plainDraft = hasPlain
+      ? undefined
+      : out.map((c) => c.text).join("\n");
 
-    const updated = await storage.updateSong(id, { syncedLyrics: refined });
+    const updated = await storage.updateSong(id, {
+      syncedLyrics: refined,
+      ...(plainDraft !== undefined ? { lyrics: plainDraft } : {}),
+    });
     return res.json({
       song: updated,
       lineCount: out.length,
