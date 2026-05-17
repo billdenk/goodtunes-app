@@ -1015,7 +1015,7 @@ function BottomDock({
                 hover the cover+title behind it blur via scrubHover
                 state, and the bar itself thickens 2 → 4 → 5px. */}
             <div
-              className="group/scrub absolute left-[228px] right-[120px] bottom-1.5 h-3 flex items-center cursor-pointer"
+              className="group/scrub absolute left-[228px] right-[164px] bottom-1.5 h-3 flex items-center cursor-pointer"
               onMouseEnter={() => setScrubHover(true)}
               onMouseLeave={() => setScrubHover(false)}
             >
