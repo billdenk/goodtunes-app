@@ -149,7 +149,11 @@ export function BottomNav() {
   return (
     <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
       <nav
-        className="pointer-events-auto absolute bottom-3 left-3 right-3 flex items-center justify-around px-2 py-2 rounded-full"
+        // py-3 (was py-2) gives the active pill ~12px breathing room top
+        // and bottom within the bar — same proportion as Apple's tab bar
+        // in Photos / Music, where the bar capsule is clearly visible
+        // around the highlighted item rather than hugging it.
+        className="pointer-events-auto absolute bottom-3 left-3 right-3 flex items-center justify-around px-2 py-3 rounded-full"
         style={{
           ...glassStyle,
           transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)",
