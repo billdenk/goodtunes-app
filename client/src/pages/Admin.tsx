@@ -8009,16 +8009,16 @@ function LabelPreviewCard({
                 </div>
               )}
               <div
-                className="absolute inset-x-0 bottom-0 h-1/3"
+                className="absolute inset-x-0 bottom-0 h-1/2"
                 style={{
                   background:
-                    "linear-gradient(to bottom, rgba(0,6,43,0) 0%, #00062B 100%)",
+                    "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)",
                 }}
               />
             </div>
 
             {/* Profile row */}
-            <div className="px-5 -mt-10 relative flex items-end gap-3">
+            <div className="px-5 -mt-7 relative flex items-end gap-3">
               <div
                 className="flex-shrink-0 w-[72px] h-[72px] rounded-full p-[3px]"
                 style={{
@@ -8080,27 +8080,29 @@ function LabelPreviewCard({
                       type="button"
                       key={t.key}
                       onClick={() => setTab(t.key)}
-                      className="relative pb-2 text-[14px] font-semibold active:opacity-80"
+                      className="pb-2 text-[14px] font-semibold active:opacity-80 flex items-baseline gap-1.5"
                       style={{
                         color: active ? "#fff" : "rgba(235,235,245,0.55)",
                       }}
                       data-testid={`tab-preview-label-${t.key}`}
                     >
-                      {t.label}
+                      <span className="relative inline-block">
+                        {t.label}
+                        {active && (
+                          <span
+                            aria-hidden
+                            className="absolute left-0 right-0 -bottom-[9px] h-[2px] rounded-full"
+                            style={{ background: "#319ED8" }}
+                          />
+                        )}
+                      </span>
                       {typeof t.count === "number" && (
                         <span
-                          className="ml-1.5 text-[12px] font-medium"
+                          className="text-[12px] font-medium"
                           style={{ color: "rgba(235,235,245,0.45)" }}
                         >
                           {t.count}
                         </span>
-                      )}
-                      {active && (
-                        <span
-                          aria-hidden
-                          className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
-                          style={{ background: "#319ED8" }}
-                        />
                       )}
                     </button>
                   );
