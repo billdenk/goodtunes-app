@@ -834,180 +834,316 @@ function CreditsDetail({
   hasCredits: boolean;
   onClose: () => void;
 }) {
-  type Row = { name: string; role: string; instrument: string };
+  // Role-first flow:
+  //   1. Pick a role from chips (or search/create a custom one)
+  //   2. Pick a person for that role (roster chips + create-new)
+  //   3. Credit lands in the list, picker resets to phase 1 so the next
+  //      add starts from "what role?" again. Same vocab as the album-level
+  //      surface in AlbumCredits.tsx — only the data shape differs.
+  //
+  // Roles are a flat list. James playing two roles (vocals + guitar) is
+  // two separate rows, which keeps the row meaning crisp ("this person
+  // doing this thing") and lets per-roles get distinct gear later.
+  type Row = {
+    name: string;
+    role: string;
+    instrument: string;
+    source?: "album" | "track";
+  };
+  // Inherited from album-level credits (faded at the top of the list).
+  // In real impl these come back joined from the same /credits endpoint
+  // with source: "album". A per-track row with the same role overrides.
+  const INHERITED: Row[] = [
+    { name: "Sarah Lin", role: "Producer", instrument: "", source: "album" },
+    { name: "Mike Torres", role: "Mix engineer", instrument: "", source: "album" },
+  ];
   const SEED: Row[] = hasCredits
     ? [
-        { name: "James Walsh", role: "Lead vocals · Acoustic guitar", instrument: "1973 Martin D-28" },
-        { name: "Sarah Lin", role: "Producer · Bass", instrument: "1965 Fender Precision" },
+        { name: "James Walsh", role: "Lead vocals", instrument: "" },
+        { name: "James Walsh", role: "Acoustic guitar", instrument: "1973 Martin D-28" },
         { name: "Mike Torres", role: "Drums", instrument: "Ludwig Black Beauty kit" },
       ]
     : [];
-  const [rows, setRows] = useState<Row[]>(SEED);
-  // Roster suggestions for the pick-list. In real impl this is the album's
-  // recent collaborators + a "Beatles default lineup"-style template.
-  const ROSTER = [
-    { id: "p1", name: "James Walsh", lastRole: "Lead vocals · Acoustic guitar" },
-    { id: "p2", name: "Sarah Lin", lastRole: "Producer · Bass" },
-    { id: "p3", name: "Mike Torres", lastRole: "Drums" },
-    { id: "p4", name: "Ana Reyes", lastRole: "Backing vocals" },
+  const [trackRows, setTrackRows] = useState<Row[]>(SEED);
+
+  // Common roles for performers, ordered by how often they show up on
+  // a typical rock/pop session. "Producer" is at the end because it's
+  // usually filled at the album level — track-level Producer is the
+  // override case.
+  const COMMON_ROLES = [
+    "Lead vocals",
+    "Backing vocals",
+    "Acoustic guitar",
+    "Electric guitar",
+    "Bass",
+    "Drums",
+    "Keys",
+    "Producer",
   ];
-  type Person = (typeof ROSTER)[number];
-  const [pickerQuery, setPickerQuery] = useState("");
-  // Mini-form state — when a chip is tapped, the picked person sits here
-  // and a small confirm form expands below the chip row.
-  const [pickedPerson, setPickedPerson] = useState<Person | null>(null);
-  const [draftRole, setDraftRole] = useState("");
-  const [draftInstrument, setDraftInstrument] = useState("");
-  const handlePick = (p: Person) => {
-    setPickedPerson(p);
-    setDraftRole(p.lastRole); // pre-fill — same lineup, same role is the common case
-    setDraftInstrument("");
+  const ROSTER = [
+    { id: "p1", name: "James Walsh" },
+    { id: "p2", name: "Sarah Lin" },
+    { id: "p3", name: "Mike Torres" },
+    { id: "p4", name: "Ana Reyes" },
+  ];
+
+  // Two-phase picker state. pickedRole === null → phase 1 (pick a role).
+  const [pickedRole, setPickedRole] = useState<string | null>(null);
+  const [roleQuery, setRoleQuery] = useState("");
+  const [personQuery, setPersonQuery] = useState("");
+
+  const handlePickRole = (role: string) => {
+    setPickedRole(role);
+    setRoleQuery("");
+    setPersonQuery("");
   };
-  const handleAdd = () => {
-    if (!pickedPerson || !draftRole.trim()) return;
-    setRows((r) => [
+  const handleAddCredit = (name: string) => {
+    if (!pickedRole) return;
+    setTrackRows((r) => [
       ...r,
-      { name: pickedPerson.name, role: draftRole.trim(), instrument: draftInstrument.trim() },
+      { name: name.trim(), role: pickedRole, instrument: "" },
     ]);
-    setPickedPerson(null);
-    setDraftRole("");
-    setDraftInstrument("");
-    setPickerQuery("");
+    setPickedRole(null);
+    setPersonQuery("");
   };
-  const handleCancelPick = () => {
-    setPickedPerson(null);
-    setDraftRole("");
-    setDraftInstrument("");
+  const handleCancelRole = () => {
+    setPickedRole(null);
+    setPersonQuery("");
   };
-  const initials = (n: string) => n.split(" ").map((x) => x[0]).join("");
-  const filtered = ROSTER.filter((p) =>
-    p.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
+
+  const initials = (n: string) =>
+    n
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((x) => x[0])
+      .join("")
+      .toUpperCase();
+
+  const roleMatches = COMMON_ROLES.filter((r) =>
+    r.toLowerCase().includes(roleQuery.trim().toLowerCase()),
   );
-  const showCreateNew =
-    pickerQuery.trim().length > 0 &&
-    !ROSTER.some((p) => p.name.toLowerCase() === pickerQuery.trim().toLowerCase());
+  const showCustomRole =
+    roleQuery.trim().length > 0 &&
+    !COMMON_ROLES.some(
+      (r) => r.toLowerCase() === roleQuery.trim().toLowerCase(),
+    );
+
+  const personMatches = ROSTER.filter((p) =>
+    p.name.toLowerCase().includes(personQuery.trim().toLowerCase()),
+  );
+  const showCreatePerson =
+    personQuery.trim().length > 0 &&
+    !ROSTER.some(
+      (p) => p.name.toLowerCase() === personQuery.trim().toLowerCase(),
+    );
+
+  // Override rule: if a track-level row exists for the same role, the
+  // album-level one is suppressed (per-track wins, like Apple Music's
+  // override behavior). Keeps inherited Producer until the user adds
+  // their own Producer credit on this specific track.
+  const overriddenRoles = new Set(
+    trackRows.map((r) => r.role.toLowerCase()),
+  );
+  const visibleInherited = INHERITED.filter(
+    (r) => !overriddenRoles.has(r.role.toLowerCase()),
+  );
+  const allRows = [...visibleInherited, ...trackRows];
   return (
     <DetailWrap title="Credits" onClose={onClose}>
       <div className="space-y-3">
-        {rows.length > 0 ? (
+        {allRows.length > 0 ? (
           <ul className="space-y-1.5">
-            {rows.map((r, i) => (
-              <li
-                key={`${r.name}-${i}`}
-                className="flex items-center gap-3 p-2 rounded-md hover:bg-slate-50"
-              >
-                <span className="w-8 h-8 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[11px] font-bold inline-flex items-center justify-center flex-shrink-0">
-                  {initials(r.name)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] font-semibold text-slate-900 truncate">
-                    {r.name}
-                  </div>
-                  <div className="text-[11px] text-slate-500 truncate">
-                    {r.role}
-                    {r.instrument ? ` · ${r.instrument}` : ""}
-                  </div>
-                </div>
-                {/* No gear yet → soft SuperCredits™ upsell on the row itself.
-                    Lands the pitch on a credit that already exists, exactly
-                    the timing called out in docs/roadmap.md. */}
-                {!r.instrument && (
-                  <button
-                    className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5"
-                    title="Add gear to turn this into a SuperCredit™"
+            {allRows.map((r, i) => {
+              const fromAlbum = r.source === "album";
+              return (
+                <li
+                  key={`${r.source ?? "track"}-${r.name}-${r.role}-${i}`}
+                  className={[
+                    "flex items-center gap-3 p-2 rounded-md",
+                    fromAlbum
+                      ? "bg-slate-50/60"
+                      : "hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  <span
+                    className={[
+                      "w-8 h-8 rounded-full text-white text-[11px] font-bold inline-flex items-center justify-center flex-shrink-0",
+                      fromAlbum
+                        ? "bg-slate-300"
+                        : "bg-gradient-to-br from-[#319ED8] to-[#7F10A7]",
+                    ].join(" ")}
                   >
-                    <Plus className="w-3 h-3" />
-                    Add gear
-                  </button>
-                )}
-                <button className="w-6 h-6 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center">
-                  <Pencil className="w-3 h-3" />
-                </button>
-              </li>
-            ))}
+                    {initials(r.name)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className={[
+                        "text-[12.5px] font-semibold truncate flex items-center gap-1.5",
+                        fromAlbum ? "text-slate-500" : "text-slate-900",
+                      ].join(" ")}
+                    >
+                      {r.name}
+                      {fromAlbum && (
+                        <span
+                          title="From album credits — override by adding the same role here."
+                          className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-white border border-slate-200 text-[9.5px] font-semibold uppercase tracking-wider text-slate-400"
+                        >
+                          Album
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className={[
+                        "text-[11px] truncate",
+                        fromAlbum ? "text-slate-400" : "text-slate-500",
+                      ].join(" ")}
+                    >
+                      {r.role}
+                      {r.instrument ? ` · ${r.instrument}` : ""}
+                    </div>
+                  </div>
+                  {/* No gear yet → soft SuperCredits™ upsell. Skipped on
+                      inherited rows — those get gear at the album level. */}
+                  {!fromAlbum && !r.instrument && (
+                    <button
+                      className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-[#319ED8] hover:bg-[#319ED8]/5"
+                      title="Add gear to turn this into a SuperCredit™"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add gear
+                    </button>
+                  )}
+                  {!fromAlbum && (
+                    <button
+                      aria-label={`Edit ${r.name} — ${r.role}`}
+                      title={`Edit ${r.name} — ${r.role}`}
+                      className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  )}
+                  {/* Inherited row → quick override CTA. Pre-fills the picker
+                      with the same role so the user lands directly on phase
+                      2 (pick a person) — the per-track override case. */}
+                  {fromAlbum && (
+                    <button
+                      onClick={() => {
+                        setPickedRole(r.role);
+                        setPersonQuery("");
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-slate-500 hover:text-[#319ED8] hover:bg-[#319ED8]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+                      title={`Replace the album-level ${r.role.toLowerCase()} for this track only`}
+                    >
+                      Override
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="text-[12px] text-slate-500 italic">
-            No credits yet. Start with a writer and a performer.
+            No credits yet. Pick a role to get started.
           </p>
         )}
 
-        {/* Picker is always visible — the search input doubles as the
-            "+ New" entry point, so there's no separate add button. */}
-        <label className="flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
-          <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <input
-            value={pickerQuery}
-            onChange={(e) => setPickerQuery(e.target.value)}
-            placeholder={
-              rows.length === 0
-                ? "Search your roster, or type a new name…"
-                : "Add another — search roster, or type a new name…"
-            }
-            className="flex-1 min-w-0 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none"
-          />
-        </label>
-
-        {/* When a chip is tapped, the chip row swaps for a confirm form.
-            Common-case shortcut: role pre-filled from this person's last
-            credit, so re-adding the same lineup is one tap + Add. */}
-        {pickedPerson ? (
-          <div className="rounded-md border border-[#319ED8]/40 bg-[#319ED8]/5 p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[10px] font-bold inline-flex items-center justify-center flex-shrink-0">
-                {initials(pickedPerson.name)}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] font-semibold text-slate-900 truncate">
-                  Add {pickedPerson.name} as…
-                </div>
-                <div className="text-[10.5px] text-slate-500 truncate">
-                  Last credited: {pickedPerson.lastRole}
-                </div>
+        {/* Picker. Phase 1 = role chips. Phase 2 = person chips, scoped
+            to the role the user just picked. */}
+        {pickedRole === null ? (
+          <div className="rounded-md border border-slate-200 bg-white p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
+                Add a credit · pick a role
               </div>
             </div>
-            <input
-              autoFocus
-              value={draftRole}
-              onChange={(e) => setDraftRole(e.target.value)}
-              placeholder="Role — e.g. Producer · Lead vocals · Bass"
-              className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
-            />
-            <input
-              value={draftInstrument}
-              onChange={(e) => setDraftInstrument(e.target.value)}
-              placeholder="Instrument or gear (optional — add later to make it a SuperCredit™)"
-              className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
-            />
-            <div className="flex items-center justify-end gap-1.5 pt-0.5">
-              <button
-                onClick={handleCancelPick}
-                className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={!draftRole.trim()}
-                className="px-3 py-1.5 rounded-md text-[11.5px] font-semibold text-white bg-[#319ED8] hover:bg-[#319ED8]/90 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
-              >
-                <Plus className="w-3 h-3" />
-                Add credit
-              </button>
+            <div className="flex flex-wrap gap-1.5">
+              {roleMatches.map((role) => (
+                <button
+                  key={role}
+                  onClick={() => handlePickRole(role)}
+                  className="inline-flex items-center px-2.5 py-1 rounded-full border border-slate-200 hover:border-[#319ED8] hover:bg-[#319ED8]/5 active:bg-[#319ED8]/10 text-[11.5px] font-medium text-slate-700"
+                >
+                  {role}
+                </button>
+              ))}
+              {showCustomRole && (
+                <button
+                  onClick={() => handlePickRole(roleQuery.trim())}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
+                >
+                  <Plus className="w-3 h-3" />
+                  Use “{roleQuery.trim()}”
+                </button>
+              )}
             </div>
+            <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
+              <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <input
+                value={roleQuery}
+                onChange={(e) => setRoleQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    // Prefer first matched chip; fall back to custom role.
+                    if (roleMatches.length > 0) {
+                      handlePickRole(roleMatches[0]);
+                    } else if (roleQuery.trim()) {
+                      handlePickRole(roleQuery.trim());
+                    }
+                  }
+                }}
+                placeholder="Search roles, or type a custom one (Pedal steel, Strings, etc.)"
+                className="flex-1 min-w-0 bg-transparent text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none"
+              />
+            </label>
           </div>
         ) : (
-          <div>
-            <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-              {pickerQuery ? `Roster matches` : `Recent on this album`}
+          <div className="rounded-md border border-[#319ED8]/40 bg-[#319ED8]/5 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] uppercase tracking-wider font-semibold text-[#319ED8]">
+                  Adding credit
+                </div>
+                <div className="text-[13px] font-semibold text-slate-900 truncate">
+                  Who played {pickedRole.toLowerCase()}?
+                </div>
+              </div>
+              <button
+                onClick={handleCancelRole}
+                className="px-2 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:bg-white"
+              >
+                Change role
+              </button>
             </div>
+            <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
+              <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <input
+                autoFocus
+                value={personQuery}
+                onChange={(e) => setPersonQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (personMatches.length > 0) {
+                      handleAddCredit(personMatches[0].name);
+                    } else if (personQuery.trim()) {
+                      handleAddCredit(personQuery.trim());
+                    }
+                  } else if (e.key === "Escape") {
+                    handleCancelRole();
+                  }
+                }}
+                placeholder="Search your roster, or type a new name…"
+                className="flex-1 min-w-0 bg-transparent text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none"
+              />
+            </label>
             <div className="flex flex-wrap gap-1.5">
-              {filtered.map((p) => (
+              {personMatches.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => handlePick(p)}
-                  className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 hover:border-[#319ED8] hover:bg-[#319ED8]/5 active:bg-[#319ED8]/10 text-[11.5px] text-slate-700"
-                  title={`Last: ${p.lastRole}`}
+                  onClick={() => handleAddCredit(p.name)}
+                  className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-[#319ED8]/10 text-[11.5px] text-slate-700"
                 >
                   <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#319ED8] to-[#7F10A7] text-white text-[9px] font-bold inline-flex items-center justify-center">
                     {initials(p.name)}
@@ -1015,23 +1151,17 @@ function CreditsDetail({
                   {p.name}
                 </button>
               ))}
-              {showCreateNew && (
+              {showCreatePerson && (
                 <button
-                  onClick={() =>
-                    handlePick({
-                      id: `new-${Date.now()}`,
-                      name: pickerQuery.trim(),
-                      lastRole: "",
-                    })
-                  }
+                  onClick={() => handleAddCredit(personQuery.trim())}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-[#319ED8] text-[#319ED8] text-[11.5px] font-semibold hover:bg-[#319ED8]/5"
                 >
                   <Plus className="w-3 h-3" />
-                  Create “{pickerQuery.trim()}”
+                  Create “{personQuery.trim()}”
                 </button>
               )}
-              {!showCreateNew && filtered.length === 0 && (
-                <span className="text-[11.5px] text-slate-400 italic px-1">
+              {!showCreatePerson && personMatches.length === 0 && (
+                <span className="text-[11.5px] text-slate-400 italic px-1 py-1">
                   No matches — keep typing to create a new person.
                 </span>
               )}

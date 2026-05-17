@@ -15,6 +15,7 @@ export const modules: ModuleMap = {
   "./components/mockups/admin-track-edit/TrackDetails.tsx": () => import("../components/mockups/admin-track-edit/TrackDetails.tsx"),
   "./components/mockups/admin-track-edit/TrackFiles.tsx": () => import("../components/mockups/admin-track-edit/TrackFiles.tsx"),
   "./components/mockups/admin-track-edit/TrackLyrics.tsx": () => import("../components/mockups/admin-track-edit/TrackLyrics.tsx"),
+  "./components/mockups/admin-tracks-mode/AlbumCredits.tsx": () => import("../components/mockups/admin-tracks-mode/AlbumCredits.tsx"),
   "./components/mockups/admin-tracks-mode/Edit.tsx": () => import("../components/mockups/admin-tracks-mode/Edit.tsx"),
   "./components/mockups/admin-tracks-mode/EditRowOptions.tsx": () => import("../components/mockups/admin-tracks-mode/EditRowOptions.tsx"),
   "./components/mockups/admin-tracks-mode/Interactive.tsx": () => import("../components/mockups/admin-tracks-mode/Interactive.tsx"),
