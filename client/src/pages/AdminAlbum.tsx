@@ -1030,7 +1030,7 @@ function AddTrackForm({
   );
 }
 
-type TrackMode = "view" | "audio" | "lyrics" | "synced" | "credits";
+type TrackMode = "view" | "audio" | "preview" | "lyrics" | "synced" | "credits";
 
 type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
 
@@ -1381,6 +1381,12 @@ function TrackRow({
     queueMicrotask(() => masterChipRef.current?.focus());
   };
 
+  const previewChipRef = useRef<HTMLButtonElement>(null);
+  const closePreview = () => {
+    setMode("view");
+    queueMicrotask(() => previewChipRef.current?.focus());
+  };
+
   const lyricsChipRef = useRef<HTMLButtonElement>(null);
   const closeLyrics = () => {
     setMode("view");
@@ -1706,10 +1712,19 @@ function TrackRow({
           </div>
         )}
         {/* Chevron — the canonical expand/collapse affordance. Also
-            reachable by clicking the title. */}
+            reachable by clicking the title. When the row is open we
+            collapse *fully* (mode → view AND userExpanded → false) so
+            an open inline editor can't keep the row pinned open. */}
         <button
           type="button"
-          onClick={() => setUserExpanded((v) => !v)}
+          onClick={() => {
+            if (expanded) {
+              setMode("view");
+              setUserExpanded(false);
+            } else {
+              setUserExpanded(true);
+            }
+          }}
           aria-expanded={expanded}
           aria-label={expanded ? "Collapse track" : "Expand track"}
           title={expanded ? "Collapse" : "Expand"}
@@ -1785,9 +1800,10 @@ function TrackRow({
                       });
                       return;
                     }
-                    setMode((m) => (m === "audio" ? "view" : "audio"));
+                    setMode((m) => (m === "preview" ? "view" : "preview"));
                   }}
                   testId={`tile-preview-${song.id}`}
+                  buttonRef={previewChipRef}
                 />
                 <StatusBadge
                   ok={
@@ -1864,6 +1880,15 @@ function TrackRow({
               albumId={albumId}
               onClose={closeAudio}
               onSaved={invalidate}
+            />
+          )}
+
+          {mode === "preview" && song.audioUrl && (
+            <PreviewWindowEditor
+              song={song}
+              onClose={closePreview}
+              onSaved={invalidate}
+              standalone
             />
           )}
 
@@ -3176,14 +3201,24 @@ function parseTimeStr(s: string): number | null {
 function PreviewWindowEditor({
   song,
   onSaved,
+  onClose,
+  standalone = false,
 }: {
   song: SongLite;
   onSaved: () => Promise<void>;
+  onClose?: () => void;
+  /** True when the Preview tile opens this on its own (not nested under
+   *  the Master/audio editor). Adds a header + Done button so the
+   *  surface reads as a focused editor rather than a sub-row. */
+  standalone?: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const hasCustom = song.previewStartMs != null;
-  const [open, setOpen] = useState(false);
+  // When opened standalone we skip the collapsed "summary row" state
+  // entirely — admin tapped the tile *to* edit, so jump straight into
+  // the input form.
+  const [open, setOpen] = useState(standalone);
   const [draft, setDraft] = useState<string>(
     hasCustom ? formatTimeMs(song.previewStartMs!) : "0:00",
   );
@@ -3208,7 +3243,11 @@ function PreviewWindowEditor({
       toast({
         title: next ? "Custom preview saved" : "Preview reset to auto",
       });
-      setOpen(false);
+      if (standalone) {
+        onClose?.();
+      } else {
+        setOpen(false);
+      }
     },
     onError: (e: any) =>
       toast({
@@ -3238,132 +3277,168 @@ function PreviewWindowEditor({
     saveMut.mutate({ startMs, endMs: startMs + 30000 });
   };
 
+  // Status row — dot + label/subtitle. Reused in both nested + standalone.
+  const statusRow = (
+    <div className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center flex-shrink-0"
+        style={
+          hasCustom
+            ? {
+                background:
+                  "linear-gradient(180deg, #F2C94C 0%, #D4A017 60%, #B8860B 100%)",
+                boxShadow: "inset 0 0.5px 0 rgba(255,255,255,0.55)",
+              }
+            : undefined
+        }
+      >
+        {hasCustom ? (
+          <ClipGlyph className="w-2 h-2" />
+        ) : (
+          <CheckCircle2
+            className="w-3.5 h-3.5 text-emerald-500"
+            fill="currentColor"
+            stroke="white"
+            strokeWidth={2.25}
+          />
+        )}
+      </span>
+      <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+        <span className="text-[11.5px] text-slate-600 font-medium">
+          {hasCustom ? "Custom preview" : "Auto preview"}
+        </span>
+        <span className="text-[10.5px] text-slate-400">
+          ·{" "}
+          {hasCustom
+            ? `${formatTimeMs(song.previewStartMs!)} – ${formatTimeMs(
+                song.previewEndMs ?? song.previewStartMs! + 30000,
+              )}`
+            : "first 30 sec"}
+        </span>
+      </div>
+      {!standalone && !open && (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(
+              hasCustom ? formatTimeMs(song.previewStartMs!) : "0:00",
+            );
+            setOpen(true);
+          }}
+          className="text-[11.5px] text-[#319ED8] hover:underline font-semibold"
+          data-testid={`button-edit-preview-${song.id}`}
+        >
+          {hasCustom ? "Edit" : "Pick custom"}
+        </button>
+      )}
+    </div>
+  );
+
+  // Input form — shared between nested ("open" toggles it) + standalone.
+  const inputForm = (
+    <div className="flex flex-wrap items-center gap-2">
+      <label
+        htmlFor={`input-preview-start-${song.id}`}
+        className="text-[11px] text-slate-500 font-semibold"
+      >
+        Start
+      </label>
+      <input
+        id={`input-preview-start-${song.id}`}
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="0:00"
+        autoFocus={standalone}
+        disabled={saveMut.isPending}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleSave();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            // Stop the row-level keydown handler from also catching this
+            // Escape (it has its own collapse-row behavior) so focus
+            // hand-back to the Preview tile via previewChipRef wins.
+            e.stopPropagation();
+            if (standalone) onClose?.();
+            else setOpen(false);
+          }
+        }}
+        className="w-16 h-7 rounded-md border border-slate-300 bg-white px-2 text-[12.5px] text-slate-900 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+        data-testid={`input-preview-start-${song.id}`}
+      />
+      <span className="text-[10.5px] text-slate-400">→ ends 30s later</span>
+      <div className="flex-1" />
+      {hasCustom && (
+        <button
+          type="button"
+          onClick={() => saveMut.mutate(null)}
+          disabled={saveMut.isPending}
+          className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
+          data-testid={`button-reset-preview-${song.id}`}
+        >
+          Reset to auto
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          if (standalone) onClose?.();
+          else setOpen(false);
+        }}
+        disabled={saveMut.isPending}
+        className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
+      >
+        {standalone ? "Done" : "Cancel"}
+      </button>
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={saveMut.isPending}
+        className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+        data-testid={`button-save-preview-${song.id}`}
+      >
+        {saveMut.isPending ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Lock className="w-3 h-3" />
+        )}
+        Save &amp; lock
+      </button>
+    </div>
+  );
+
+  if (standalone) {
+    // Section-styled surface that visually rhymes with the
+    // REQUIRED / OPTIONAL groups above. Header label + hairline,
+    // then the status row, then the input form.
+    return (
+      <div data-testid={`preview-window-${song.id}`}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Preview Window
+          </span>
+          <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 space-y-2.5">
+          {statusRow}
+          {inputForm}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="px-1 space-y-1.5"
       data-testid={`preview-window-${song.id}`}
     >
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center flex-shrink-0"
-          style={
-            hasCustom
-              ? {
-                  background:
-                    "linear-gradient(180deg, #F2C94C 0%, #D4A017 60%, #B8860B 100%)",
-                  boxShadow: "inset 0 0.5px 0 rgba(255,255,255,0.55)",
-                }
-              : undefined
-          }
-        >
-          {hasCustom ? (
-            <ClipGlyph className="w-2 h-2" />
-          ) : (
-            <CheckCircle2
-              className="w-3.5 h-3.5 text-emerald-500"
-              fill="currentColor"
-              stroke="white"
-              strokeWidth={2.25}
-            />
-          )}
-        </span>
-        <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
-          <span className="text-[11.5px] text-slate-600 font-medium">
-            {hasCustom ? "Custom preview" : "Auto preview"}
-          </span>
-          <span className="text-[10.5px] text-slate-400">
-            ·{" "}
-            {hasCustom
-              ? `${formatTimeMs(song.previewStartMs!)} – ${formatTimeMs(
-                  song.previewEndMs ?? song.previewStartMs! + 30000,
-                )}`
-              : "first 30 sec"}
-          </span>
-        </div>
-        {!open && (
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(
-                hasCustom ? formatTimeMs(song.previewStartMs!) : "0:00",
-              );
-              setOpen(true);
-            }}
-            className="text-[11.5px] text-[#319ED8] hover:underline font-semibold"
-            data-testid={`button-edit-preview-${song.id}`}
-          >
-            {hasCustom ? "Edit" : "Pick custom"}
-          </button>
-        )}
-      </div>
-
+      {statusRow}
       {open && (
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
-          <label
-            htmlFor={`input-preview-start-${song.id}`}
-            className="text-[11px] text-slate-500 font-semibold mt-2"
-          >
-            Start
-          </label>
-          <input
-            id={`input-preview-start-${song.id}`}
-            type="text"
-            inputMode="numeric"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="0:00"
-            disabled={saveMut.isPending}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleSave();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                setOpen(false);
-              }
-            }}
-            className="w-16 h-7 rounded-md border border-slate-300 bg-white px-2 text-[12.5px] text-slate-900 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent mt-2"
-            data-testid={`input-preview-start-${song.id}`}
-          />
-          <span className="text-[10.5px] text-slate-400 mt-2">
-            → ends 30s later
-          </span>
-          <div className="flex-1" />
-          {hasCustom && (
-            <button
-              type="button"
-              onClick={() => saveMut.mutate(null)}
-              disabled={saveMut.isPending}
-              className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40 mt-2"
-              data-testid={`button-reset-preview-${song.id}`}
-            >
-              Reset to auto
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            disabled={saveMut.isPending}
-            className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40 mt-2"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saveMut.isPending}
-            className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1 mt-2"
-            data-testid={`button-save-preview-${song.id}`}
-          >
-            {saveMut.isPending ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Lock className="w-3 h-3" />
-            )}
-            Save &amp; lock
-          </button>
-        </div>
+        <div className="pt-2 border-t border-slate-100">{inputForm}</div>
       )}
     </div>
   );
