@@ -1080,10 +1080,10 @@ function WaveArrowGlyph({ className = "" }: { className?: string }) {
    baseline (the master's full timeline). Reads as "a window picked
    out of a longer thing" at 10–14px. */
 function ClipGlyph({ className = "" }: { className?: string }) {
-  // Reads as a slider window: thin track behind, fat rounded "thumb"
-  // in front. Earlier two-rect version looked like an unlabelled blob
-  // at 10px; Bill flagged it as unreadable. Now the thumb dominates so
-  // the glyph is obviously "a piece picked out of a longer slider."
+  // Just the slider thumb — a single chunky rounded rectangle.
+  // Bill: "The Custom Preview should be a rounded rectangle like the
+  // slider." Dropped the thin track behind it; at 10px the extra line
+  // only added noise.
   return (
     <svg
       viewBox="0 0 100 100"
@@ -1091,10 +1091,7 @@ function ClipGlyph({ className = "" }: { className?: string }) {
       aria-hidden="true"
       focusable="false"
     >
-      {/* Slider track */}
-      <rect x="8" y="46" width="84" height="8" rx="4" fill="white" opacity="0.45" />
-      {/* Selected window / slider thumb — chunky rounded rect */}
-      <rect x="30" y="32" width="40" height="36" rx="10" fill="white" />
+      <rect x="22" y="34" width="56" height="32" rx="10" fill="white" />
     </svg>
   );
 }
@@ -5121,6 +5118,12 @@ function AudioEditor({
     }
   };
 
+  // Silent autosave — Bill: if Preview + Instrumental save themselves,
+  // why does the master file need a Save button? Removed the footer
+  // CTA; the URL field, file picker, drag-drop, and Clear all flow
+  // through `setDraftUrl`, and the effect below persists the change
+  // 600ms after the writer stops touching it. No toast on the happy
+  // path so the editor stays calm.
   const saveMut = useMutation({
     mutationFn: async () =>
       apiRequest("PUT", `/api/admin/songs/${song.id}`, {
@@ -5128,8 +5131,6 @@ function AudioEditor({
       }),
     onSuccess: async () => {
       await onSaved();
-      toast({ title: song.audioUrl ? "Master updated" : "Master added" });
-      onClose();
     },
     onError: (e: any) =>
       toast({
@@ -5138,6 +5139,20 @@ function AudioEditor({
         variant: "destructive",
       }),
   });
+
+  // Debounced autosave. We compare against the live `song.audioUrl`
+  // each tick so the effect goes quiet once the server matches the
+  // draft. Skip while we're mid-upload — `draftUrl` only changes
+  // after the upload resolves, but the guard makes the intent
+  // explicit.
+  useEffect(() => {
+    if (uploading) return;
+    if (!dirty) return;
+    if (saveMut.isPending) return;
+    const t = setTimeout(() => saveMut.mutate(), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftUrl, song.audioUrl, uploading]);
 
   return (
     <div
@@ -5334,20 +5349,11 @@ function AudioEditor({
       </div>
 
       {/* Preview Window + Instrumental — siblings of the file tile.
-          Both auto-save the moment the writer flips them, so they live
-          in their own settings card with a clear "Saved automatically"
-          caption. Without this separation they appear stacked above
-          "Save master" and read as if that button commits them too. */}
+          Everything in this editor auto-saves, so they share the same
+          settings card and the master file gets the same "Saved
+          automatically" treatment via the footer below. */}
       {song.audioUrl && (
         <div className="pt-4">
-          <div className="flex items-center justify-between px-1 pb-1.5">
-            <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
-              Settings
-            </p>
-            <p className="text-[10.5px] text-slate-400">
-              Saved automatically
-            </p>
-          </div>
           <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
             <div className="px-3.5 py-2.5">
               <PreviewWindowEditor song={song} onSaved={onSaved} />
@@ -5359,31 +5365,27 @@ function AudioEditor({
         </div>
       )}
 
-      {/* Footer — Apple sheet pattern: Cancel as a quiet text link
-          on the left, Save as the single filled action on the right.
-          Removed the bordered Cancel button that read as equal-weight
-          to Save and was crowding the Save action. */}
+      {/* Footer — single "Done" link on the right. There's no Save:
+          file/URL changes persist via the autosave effect above, and
+          Preview + Instrumental save themselves. The footer just
+          tells the writer "we're listening" and gives a way out. */}
       <div className="flex items-center justify-between gap-2 pt-3">
+        <p
+          className="text-[10.5px] text-slate-400"
+          data-testid={`text-audio-autosave-${song.id}`}
+        >
+          {saveMut.isPending || uploading
+            ? "Saving…"
+            : "Saved automatically"}
+        </p>
         <button
           type="button"
           onClick={onClose}
           disabled={uploading || saveMut.isPending}
-          className="text-[12px] text-slate-500 hover:text-slate-700 hover:underline font-medium disabled:opacity-40"
-          data-testid={`button-cancel-audio-${song.id}`}
+          className="text-[12px] text-[#319ED8] hover:underline font-semibold disabled:opacity-40"
+          data-testid={`button-done-audio-${song.id}`}
         >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => saveMut.mutate()}
-          disabled={!dirty || uploading || saveMut.isPending}
-          className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
-          data-testid={`button-save-audio-${song.id}`}
-        >
-          {saveMut.isPending && (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          )}
-          Save
+          Done
         </button>
       </div>
     </div>
