@@ -1494,6 +1494,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ updated, count: updated.length });
   });
 
+  // Distinct list of genres currently in use across albums. Powers the
+  // searchable Genre combobox in the album editor so the admin sees
+  // what's already in the catalogue before typing a new one (keeps
+  // "Indie Rock" from co-existing with "Indie-Rock" / "indie rock").
+  // Cheap pass — albums table is small and reads infrequent.
+  app.get("/api/admin/albums/genres", requireAdmin, async (_req, res) => {
+    try {
+      const all = await storage.getAlbums({ includeHidden: true });
+      const seen = new Map<string, string>();
+      for (const a of all) {
+        const g = (a.genre || "").trim();
+        if (!g) continue;
+        const key = g.toLowerCase();
+        if (!seen.has(key)) seen.set(key, g);
+      }
+      const genres = Array.from(seen.values()).sort((a, b) =>
+        a.localeCompare(b),
+      );
+      return res.json({ genres });
+    } catch (e: any) {
+      return res
+        .status(500)
+        .json({ message: e?.message || "Couldn't load genres." });
+    }
+  });
+
   // Seed a new album from an Apple Music album URL. Mirrors how the
   // artist scrape pulls a discography, but tighter: one URL → one album +
   // its complete tracklist (title, track #, duration) created in a single

@@ -568,7 +568,13 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             type: "number",
             placeholder: "2025",
           },
-          { key: "genre", label: "Genre", type: "text" },
+          {
+            key: "genre",
+            label: "Genre",
+            type: "combobox",
+            placeholder: "Search or add new…",
+            optionsEndpoint: "/api/admin/albums/genres",
+          },
           {
             key: "labelId",
             label: "Label",

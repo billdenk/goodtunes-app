@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Loader2, Check, X, ExternalLink } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil, Loader2, Check, X, ExternalLink, Plus } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ArtistPickerField } from "./ArtistPickerField";
@@ -23,6 +23,7 @@ export type FieldType =
   | "number"
   | "date"
   | "select"
+  | "combobox"
   | "artist-picker";
 
 export interface FieldOption {
@@ -48,6 +49,13 @@ export interface FieldConfig {
   // the FK. Both are seeded from `values` on entering edit mode and both
   // are included in the PUT diff on save.
   idKey?: string;
+  // For combobox fields: a GET endpoint that returns existing values for
+  // this field. Response can be either `{ <key>: string[] }` or a bare
+  // string[] — both are accepted. The combobox merges these into its
+  // searchable list and lets the admin pick one OR type a brand-new
+  // value that gets saved as-is (free-text behind the scenes). Used by
+  // the album Genre field today.
+  optionsEndpoint?: string;
 }
 
 /* Format a YYYY-MM-DD (or ISO) date string for read mode. Returns the
@@ -500,6 +508,21 @@ function EditInput({
     );
   }
 
+  if (field.type === "combobox") {
+    return (
+      <div>
+        {baseLabel}
+        <Combobox
+          value={value}
+          onChange={onChange}
+          optionsEndpoint={field.optionsEndpoint}
+          placeholder={field.placeholder}
+          testId={testId}
+        />
+      </div>
+    );
+  }
+
   if (field.type === "select") {
     return (
       <div>
@@ -543,6 +566,200 @@ function EditInput({
         className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
         data-testid={testId}
       />
+    </div>
+  );
+}
+
+/* ─── Combobox ─────────────────────────────────────────────────────── */
+/* Searchable picker over a list of existing string values fetched from
+ * `optionsEndpoint`. If the typed query has no exact (case-insensitive)
+ * match, a final "Add '<typed>'" row lets the admin commit a brand-new
+ * value — the value is saved as free text on the parent record, no
+ * separate taxonomy table needed. Used by the album Genre field.
+ *
+ * Keyboard: ↑/↓ moves the highlight, Enter picks the highlighted row
+ * (or commits the typed text if nothing matches), Esc closes the popup
+ * leaving the field's current value untouched.
+ */
+function Combobox({
+  value,
+  onChange,
+  optionsEndpoint,
+  placeholder,
+  testId,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  optionsEndpoint?: string;
+  placeholder?: string;
+  testId: string;
+}) {
+  const [query, setQuery] = useState(value);
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep the visible query in sync if the parent draft changes the
+  // value out from under us (e.g. Cancel-then-Edit reseed).
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  const { data } = useQuery<string[]>({
+    queryKey: [optionsEndpoint],
+    enabled: !!optionsEndpoint,
+    select: (raw: any) => {
+      if (Array.isArray(raw)) return raw as string[];
+      if (raw && typeof raw === "object") {
+        const firstArray = Object.values(raw).find((v) => Array.isArray(v));
+        return (firstArray as string[]) ?? [];
+      }
+      return [];
+    },
+  });
+
+  const all = data ?? [];
+  const q = query.trim();
+  const qLower = q.toLowerCase();
+  const filtered = useMemo(
+    () =>
+      q
+        ? all.filter((o) => o.toLowerCase().includes(qLower))
+        : all,
+    [all, q, qLower],
+  );
+  const exactMatch = all.some((o) => o.toLowerCase() === qLower);
+  const showAdd = !!q && !exactMatch;
+  const rowCount = filtered.length + (showAdd ? 1 : 0);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [query, open]);
+
+  // Click-outside closes the popup. Important: if the user typed a new
+  // value but never picked from the list, commit the typed text on
+  // blur — otherwise the value silently reverts on Save.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+        if (query !== value) onChange(query.trim());
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open, query, value, onChange]);
+
+  const commit = (next: string) => {
+    const trimmed = next.trim();
+    setQuery(trimmed);
+    onChange(trimmed);
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOpen(true);
+      setHighlight((h) => Math.min(h + 1, Math.max(0, rowCount - 1)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlight < filtered.length) {
+        commit(filtered[highlight]);
+      } else if (showAdd) {
+        commit(q);
+      } else {
+        commit(query);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      setQuery(value);
+    }
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder ?? "Search or add new…"}
+        className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+        data-testid={testId}
+        autoComplete="off"
+      />
+      {open && rowCount > 0 && (
+        <div
+          className="absolute z-20 top-[calc(100%+4px)] left-0 right-0 max-h-60 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg py-1"
+          role="listbox"
+          data-testid={`${testId}-options`}
+        >
+          {filtered.map((opt, i) => (
+            <button
+              key={opt}
+              type="button"
+              role="option"
+              aria-selected={i === highlight}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                commit(opt);
+              }}
+              onMouseEnter={() => setHighlight(i)}
+              className={[
+                "w-full text-left px-3 py-1.5 text-[13.5px] flex items-center justify-between gap-2",
+                i === highlight
+                  ? "bg-[#319ED8]/10 text-slate-900"
+                  : "text-slate-700 hover:bg-slate-50",
+              ].join(" ")}
+              data-testid={`${testId}-option-${opt
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")}`}
+            >
+              <span className="truncate">{opt}</span>
+              {opt.toLowerCase() === value.toLowerCase() && (
+                <Check className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
+              )}
+            </button>
+          ))}
+          {showAdd && (
+            <button
+              type="button"
+              role="option"
+              aria-selected={highlight === filtered.length}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                commit(q);
+              }}
+              onMouseEnter={() => setHighlight(filtered.length)}
+              className={[
+                "w-full text-left px-3 py-1.5 text-[13.5px] flex items-center gap-2 border-t border-slate-100",
+                highlight === filtered.length
+                  ? "bg-[#319ED8]/10 text-[#319ED8]"
+                  : "text-[#319ED8] hover:bg-slate-50",
+              ].join(" ")}
+              data-testid={`${testId}-option-add`}
+            >
+              <Plus className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">
+                Add <span className="font-semibold">“{q}”</span>
+              </span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
