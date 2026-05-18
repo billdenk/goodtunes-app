@@ -8,7 +8,6 @@ import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import type { PersonDiscography } from "@shared/schema";
-import { SiApplemusic, SiSpotify } from "react-icons/si";
 import appleMusicLogo from "@/assets/brand/apple-music.svg";
 import spotifyLogo from "@/assets/brand/spotify.svg";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
@@ -535,31 +534,28 @@ function HowToPlaySheet({
   const spotifyHref =
     release.spotifyUrl ??
     `https://open.spotify.com/search/${encodeURIComponent(`${artistName} ${release.name}`)}`;
-  // Official brand marks via react-icons/si. Per each service's identity
-  // guidelines we render the full-color logo on a black tile.
+  // Apple Music + Spotify identity-compliant: official app icons used
+  // as-supplied, never recolored, never re-wrapped in a brand-colored
+  // container. Rendered as plain <img> from the SVGs we host locally.
   // - Apple Music identity: marketing.services.apple/apple-music-identity-guidelines
   // - Spotify design guidelines: developer.spotify.com/documentation/design
   const services: Array<{
     key: string;
     label: string;
     href: string | null;
-    logo: JSX.Element;
+    logoSrc: string;
   }> = [
     {
       key: "apple",
       label: "Apple Music",
       href: release.appleMusicUrl,
-      // Apple Music brand pink/red gradient.
-      logo: (
-        <SiApplemusic size={52} style={{ color: "#FA243C" }} />
-      ),
+      logoSrc: appleMusicLogo,
     },
     {
       key: "spotify",
       label: "Spotify",
       href: spotifyHref,
-      // Spotify green (#1ED760 on black per their guidelines).
-      logo: <SiSpotify size={52} style={{ color: "#1ED760" }} />,
+      logoSrc: spotifyLogo,
     },
   ];
 
@@ -570,65 +566,109 @@ function HowToPlaySheet({
       data-testid="sheet-how-to-play"
     >
       <div
-        className="w-full max-w-[440px] bg-[#0E1334] rounded-t-[28px] text-white pb-10"
+        className="relative w-full max-w-[440px] bg-[#F4F5F8] text-[#0B0F2A] pb-9 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
-        style={{ boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}
+        style={{
+          borderTopLeftRadius: 38,
+          borderTopRightRadius: 38,
+          boxShadow: "0 -20px 60px rgba(0,0,0,0.6)",
+        }}
       >
-        {/* Apple-style grabber handle — no X. Tap outside or drag to dismiss. */}
-        <div className="flex justify-center pt-2.5 pb-1">
-          <div className="w-9 h-[5px] rounded-full bg-white/30" />
-        </div>
+        {/* Apple's sheet dismiss — circular glass chip inset from the
+            corner (not hugging it). On a light sheet the scrim is a
+            soft black/8% with a near-black X. */}
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          data-testid="button-how-to-play-close"
+          className="absolute flex items-center justify-center rounded-full active:scale-[0.94] transition-transform"
+          style={{
+            right: 22,
+            top: 26,
+            width: 30,
+            height: 30,
+            background: "rgba(11,15,42,0.06)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          <X size={14} strokeWidth={2.4} style={{ color: "rgba(11,15,42,0.7)" }} />
+        </button>
 
         {/* Centered hero: large rounded album art + title + meta */}
-        <div className="flex flex-col items-center text-center px-6 pt-4 pb-7">
+        <div className="flex flex-col items-center text-center px-6 pt-7 pb-6">
           {release.artworkUrl ? (
             <img
               src={release.artworkUrl}
               alt={release.name}
               className="w-44 h-44 rounded-2xl object-cover"
-              style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.55)" }}
+              style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.35)" }}
             />
           ) : (
             <div
-              className="w-44 h-44 rounded-2xl bg-white/8"
-              style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.55)" }}
+              className="w-44 h-44 rounded-2xl bg-[#0B0F2A]/5"
+              style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.25)" }}
             />
           )}
-          <h3 className="text-white text-[20px] font-bold tracking-tight mt-5 leading-tight">
+          <h3 className="text-[20px] font-bold tracking-tight mt-5 leading-tight">
             {release.name}
           </h3>
-          <p className="text-white/55 text-[13px] mt-1">
+          <p className="text-[13px] mt-1" style={{ color: "rgba(11,15,42,0.55)" }}>
             {artistName}
             {release.year ? ` · ${release.year}` : ""}
           </p>
         </div>
 
-        {/* How to Play — two big app-icon-style tap targets, centered.
-            Logo tile gets the brand color; service name sits underneath. */}
-        <div className="px-6">
-          <h4 className="text-white/55 text-[11px] font-semibold uppercase tracking-[0.14em] text-center mb-4">
+        {/* How to Play — two translucent rows, each carrying the
+            service's official app icon at 44px + name + "Listen now"
+            + a trailing chevron. Identity-compliant: no recolor,
+            no extra brand container. */}
+        <div className="px-5">
+          <h4
+            className="text-[11px] font-semibold uppercase tracking-[0.14em] text-center mb-4"
+            style={{ color: "rgba(11,15,42,0.5)" }}
+          >
             How to Play
           </h4>
-          <div className="flex items-center justify-center gap-6">
+          <div className="flex flex-col gap-2.5">
             {services.map((s) => {
               const isDisabled = !s.href;
-              const tile = (
-                <div
-                  className="flex items-center justify-center rounded-[26px] transition-transform active:scale-[0.94]"
-                  style={{
-                    width: 104,
-                    height: 104,
-                    background: "#000",
-                    opacity: isDisabled ? 0.35 : 1,
-                    boxShadow: isDisabled
-                      ? "none"
-                      : "0 10px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                  }}
-                >
-                  {s.logo}
-                </div>
+              const rowInner = (
+                <>
+                  <img
+                    src={s.logoSrc}
+                    alt=""
+                    width={44}
+                    height={44}
+                    className="flex-shrink-0 block"
+                  />
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="text-[16px] font-semibold leading-tight">
+                      {s.label}
+                    </div>
+                    <div
+                      className="text-[12px] font-normal leading-tight mt-0.5"
+                      style={{ color: "rgba(11,15,42,0.55)" }}
+                    >
+                      {isDisabled ? "Not available for this release" : "Listen now"}
+                    </div>
+                  </div>
+                  <ChevronRight
+                    size={20}
+                    style={{ color: "rgba(11,15,42,0.35)" }}
+                    className="flex-shrink-0"
+                  />
+                </>
               );
+              const rowStyle = {
+                background: "rgba(11,15,42,0.05)",
+                border: "1px solid rgba(11,15,42,0.08)",
+                borderRadius: 18,
+                opacity: isDisabled ? 0.5 : 1,
+              } as const;
               if (isDisabled) {
                 return (
                   <div
@@ -636,10 +676,11 @@ function HowToPlaySheet({
                     role="button"
                     aria-disabled="true"
                     aria-label={`${s.label} not available for this release`}
-                    className="cursor-not-allowed"
+                    className="flex items-center gap-3.5 px-4 py-3 cursor-not-allowed"
+                    style={rowStyle}
                     data-testid={`button-how-to-play-${s.key}-disabled`}
                   >
-                    {tile}
+                    {rowInner}
                   </div>
                 );
               }
@@ -649,10 +690,12 @@ function HowToPlaySheet({
                   href={s.href!}
                   target="_blank"
                   rel="noopener noreferrer"
+                  className="flex items-center gap-3.5 px-4 py-3 active:scale-[0.99] transition-transform"
+                  style={rowStyle}
                   data-testid={`button-how-to-play-${s.key}`}
                   aria-label={`Listen on ${s.label}`}
                 >
-                  {tile}
+                  {rowInner}
                 </a>
               );
             })}
