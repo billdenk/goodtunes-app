@@ -199,9 +199,44 @@ export function Player() {
   const isRepeatActive = repeat !== "none";
   const favorited = isFavorite(currentSong.id);
 
+  // iOS-sheet-style swipe-down to dismiss. Attached to the grabber strip
+  // AND the album artwork so a downward drag anywhere in the top half of
+  // the player closes Now Playing. Threshold 80px matches what feels like
+  // an intentional pull rather than a stray scroll. Paired with the
+  // outer container's `overscrollBehavior: none` which blocks Safari's
+  // pull-to-refresh from stealing the gesture.
+  const dismissOnSwipeDown = (e: React.TouchEvent) => {
+    const startY = e.touches[0].clientY;
+    const onMove = (ev: TouchEvent) => {
+      const dy = ev.touches[0].clientY - startY;
+      if (dy > 80) {
+        setShowPlayer(false);
+        cleanup();
+      }
+    };
+    const cleanup = () => {
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", cleanup);
+    };
+    window.addEventListener("touchmove", onMove);
+    window.addEventListener("touchend", cleanup);
+  };
+
   return (
     <>
-      <div className="fixed inset-0 flex justify-center bg-[#00062B]" style={{ zIndex: 50 }}>
+      <div
+        className="fixed inset-0 flex justify-center bg-[#00062B]"
+        style={{
+          zIndex: 50,
+          // Block iOS Safari's pull-to-refresh. Without this, swiping down
+          // anywhere on the player reloads the page and kills the audio —
+          // the opposite of what an Apple-Music user expects (they expect
+          // the sheet to dismiss). We handle the dismiss gesture ourselves
+          // via the grabber's onTouchStart below.
+          overscrollBehavior: "none",
+          touchAction: "pan-y",
+        }}
+      >
         {/* Full-bleed blurred artwork background */}
         <div className="absolute inset-0 overflow-hidden">
           <img
@@ -214,25 +249,16 @@ export function Player() {
         </div>
         <div className="relative w-full max-w-[390px] min-h-screen flex flex-col">
 
-          {/* Grabber — Apple-style pull-down handle. Swipe down to dismiss. */}
+          {/* Grabber + drag zone — Apple-style pull-down dismiss.
+              The drag listener (`dismissOnSwipeDown`) is attached to BOTH
+              the grabber strip AND the artwork below, so a user can grab
+              anywhere in the top half of the player and pull it down to
+              dismiss, the way an iOS sheet works. The visible grabber bar
+              is just the affordance — the gesture itself works on a much
+              larger area. */}
           <div
-            className="relative z-10 pt-3 pb-1 flex justify-center select-none cursor-grab active:cursor-grabbing"
-            onTouchStart={(e) => {
-              const startY = e.touches[0].clientY;
-              const onMove = (ev: TouchEvent) => {
-                const dy = ev.touches[0].clientY - startY;
-                if (dy > 80) {
-                  setShowPlayer(false);
-                  cleanup();
-                }
-              };
-              const cleanup = () => {
-                window.removeEventListener("touchmove", onMove);
-                window.removeEventListener("touchend", cleanup);
-              };
-              window.addEventListener("touchmove", onMove);
-              window.addEventListener("touchend", cleanup);
-            }}
+            className="relative z-10 pt-3 pb-2 flex justify-center select-none cursor-grab active:cursor-grabbing"
+            onTouchStart={dismissOnSwipeDown}
             onClick={() => setShowPlayer(false)}
             role="button"
             aria-label="Close Now Playing"
@@ -245,9 +271,11 @@ export function Player() {
               title + progress + transport breathe in the middle (taking any
               extra height on tall devices), volume + bottom row anchor low. */}
           <div className="relative z-10 flex-1 flex flex-col px-7 pt-2 pb-2 min-h-0">
-            {/* Album art */}
+            {/* Album art — also acts as a swipe-down drag handle for
+                dismissing the player (iOS sheet behavior). */}
             <div
               className="w-full aspect-square rounded-3xl overflow-hidden flex-shrink-0"
+              onTouchStart={dismissOnSwipeDown}
               style={{
                 boxShadow: "0 24px 64px rgba(0,0,0,0.65)",
                 // Apple's Now Playing shrinks the cover noticeably on
