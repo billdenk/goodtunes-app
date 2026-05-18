@@ -893,7 +893,7 @@ function TracksPanel({
                 <UserPlus className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    Add credits in bulk
+                    Import Credits
                   </div>
                   <div className="text-[11px] text-slate-500">
                     PDF, Word, or text liner notes — matched to tracks.
