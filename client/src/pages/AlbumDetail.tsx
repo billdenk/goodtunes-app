@@ -1091,7 +1091,10 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }:
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={`Provenance for ${album.title} certificate ${certNum}`}>
       <div className="absolute inset-0 bg-black/65" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
-      <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh" }}>
+      {/* Edge-to-edge bottom sheet with the Apple "View on Apple Music /
+          Spotify" pop-up curves (rounded-t-3xl = 24px). No max-width cap
+          so the sheet hugs the viewport / mobile-player frame. */}
+      <div className="relative w-full bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh", boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}>
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
         <div className="flex items-center justify-between px-5 mb-4 flex-shrink-0">
           <div>
@@ -1161,7 +1164,7 @@ function OwnershipSheet({
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="Ownership">
       <div className="absolute inset-0 bg-black/65" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
-      <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh" }}>
+      <div className="relative w-full bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh", boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}>
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
         <div className="flex items-center justify-between px-5 mb-1 flex-shrink-0">
           <div>
