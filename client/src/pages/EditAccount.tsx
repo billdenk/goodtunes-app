@@ -25,6 +25,15 @@ export function EditAccount() {
     setRealName(user.realName || "");
   }, [user?.id]);
 
+  // Dirty check — the checkmark stays dimmed until at least one editable
+  // text field differs from the canonical user record. (Photo edits go
+  // through their own `updatePhoto` / `removePhoto` calls and don't need
+  // a Save press, so we deliberately don't watch the photo here.)
+  const isDirty =
+    displayName !== (user?.displayName || "") ||
+    username !== (user?.username || "") ||
+    realName !== (user?.realName || "");
+
   const initials = user?.displayName
     ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
     : "?";
@@ -110,7 +119,7 @@ export function EditAccount() {
             label="Save"
             variant="solid"
             onClick={handleSave}
-            disabled={isUpdatePending}
+            disabled={isUpdatePending || !isDirty}
             data-testid="button-save"
           >
             <Check strokeWidth={2.8} />
