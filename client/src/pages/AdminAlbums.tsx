@@ -38,7 +38,7 @@ interface AlbumLite {
   isGoodTunesRelease: boolean;
 }
 
-type TabKey = "prepping" | "staged" | "live" | "sunset";
+type TabKey = "streaming" | "prepping" | "staged" | "live" | "sunset";
 
 export function AdminAlbums() {
   const { user, isLoading: authLoading } = useAuth();
@@ -100,9 +100,15 @@ export function AdminAlbums() {
 
   const counts = useMemo(
     () => ({
-      // "Prepping" today = imports that haven't been promoted to a GT release.
-      // Once we add a real `lifecycle` enum, switch this over.
-      prepping: albums.filter((a) => !a.isGoodTunesRelease).length,
+      // Streaming = imported catalog (not a GoodTunes release). Used to live
+      // inside Prepping, which made Prepping read as "201 things to do" when
+      // really nothing was in progress. Split into its own bucket so Prepping
+      // can mean what it says.
+      streaming: albums.filter((a) => !a.isGoodTunesRelease).length,
+      // "Prepping" = GT releases that aren't live yet. We don't model this
+      // distinct from "not isGoodTunesRelease" until the lifecycle enum
+      // lands (see docs/roadmap.md), so for now this is 0.
+      prepping: 0,
       // No schema field for staged yet — see Storefront in docs/roadmap.md.
       staged: 0,
       live: albums.filter((a) => a.isGoodTunesRelease && !a.isHidden).length,
@@ -113,8 +119,10 @@ export function AdminAlbums() {
 
   const byTab = useMemo(() => {
     switch (tab) {
-      case "prepping":
+      case "streaming":
         return albums.filter((a) => !a.isGoodTunesRelease);
+      case "prepping":
+        return [];
       case "staged":
         return [];
       case "live":
@@ -124,15 +132,19 @@ export function AdminAlbums() {
     }
   }, [albums, tab]);
 
+  // Search runs across ALL tabs when there's a query — the previous behavior
+  // gated search to the active tab, which made it look broken (typing "f" in
+  // Prepping with 201 Fernando Perdomo imports filtered nothing visible). When
+  // the field is empty we fall back to the current tab's slice.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return byTab;
-    return byTab.filter(
+    return albums.filter(
       (a) =>
         a.title.toLowerCase().includes(q) ||
         a.artist.toLowerCase().includes(q),
     );
-  }, [byTab, search]);
+  }, [albums, byTab, search]);
 
   if (authLoading) {
     return (
@@ -170,8 +182,10 @@ export function AdminAlbums() {
   const emptyCopy = (() => {
     if (search) return "No releases match that search.";
     switch (tab) {
+      case "streaming":
+        return "No streaming imports. Catalog ingested from streaming services lives here until it's promoted to a GoodTunes release.";
       case "prepping":
-        return "Nothing in prepping. Imported albums waiting to be promoted to a release show up here.";
+        return "Nothing in prepping. GoodTunes releases that are still being worked on will show up here once the lifecycle enum lands.";
       case "staged":
         return "Staged releases (ready, waiting for sunrise) will appear here when the schedule schema lands.";
       case "live":
@@ -270,6 +284,14 @@ export function AdminAlbums() {
           </TabBtn>
           <TabBtn active={tab === "sunset"} onClick={() => setTab("sunset")} count={counts.sunset} testId="tab-sunset">
             Sunset
+          </TabBtn>
+          {/* Streaming sits past a hairline divider — it's the only bucket
+              that's NOT part of the GT release lifecycle, just imported
+              catalog living in the player. Keeps Prepping/Staged/Live/Sunset
+              reading left-to-right as a real funnel. */}
+          <span className="h-5 w-px bg-slate-200 flex-shrink-0" aria-hidden="true" />
+          <TabBtn active={tab === "streaming"} onClick={() => setTab("streaming")} count={counts.streaming} testId="tab-streaming">
+            Streaming
           </TabBtn>
         </div>
 
