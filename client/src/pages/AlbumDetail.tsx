@@ -1554,14 +1554,14 @@ function ClampedDescription({ text, onExpand }: { text: string; onExpand: () => 
         </p>
         <span
           aria-hidden="true"
-          className="absolute bottom-0 right-0 text-white text-sm font-semibold pl-8 leading-relaxed"
+          className="absolute bottom-0 right-0 text-white/90 text-sm font-medium pl-10 leading-relaxed"
           style={{
             background:
-              "linear-gradient(to right, rgba(0,6,43,0) 0%, #00062B 40%, #00062B 100%)",
+              "linear-gradient(to right, rgba(0,6,43,0) 0%, #00062B 70%, #00062B 100%)",
           }}
           data-testid="button-album-description-more"
         >
-          <span className="text-white/70">…</span>more
+          more
         </span>
       </button>
     </div>
