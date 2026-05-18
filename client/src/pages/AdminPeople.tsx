@@ -530,25 +530,28 @@ function MatchSpotifySheet({
         )}
 
         <DialogFooter className="border-t border-slate-200 pt-3 mt-2 gap-2 sm:justify-between">
-          <Button
+          {/* Admin chrome: white-outline buttons on slate surface, never
+              the default shadcn Button (which inherits the brand-dark
+              background variable and looks like a navy slab here). */}
+          <button
             type="button"
-            variant="ghost"
             onClick={finish}
+            className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             data-testid="button-match-finish"
           >
             Finish
-          </Button>
+          </button>
           {current && (
-            <Button
+            <button
               type="button"
-              variant="outline"
               onClick={() => advance(false)}
               disabled={pickMut.isPending}
+              className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
               data-testid="button-match-skip"
             >
-              <SkipForward className="mr-1.5 h-3.5 w-3.5" />
+              <SkipForward className="w-3.5 h-3.5" />
               Skip
-            </Button>
+            </button>
           )}
         </DialogFooter>
       </DialogContent>
