@@ -13,7 +13,7 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Loader2, Play, Pencil } from "lucide-react";
+import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Loader2, Play, Pencil, Upload } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -530,6 +530,26 @@ function AlbumEditor({
   const { data, isLoading } = useQuery<AlbumWithSongs>({
     queryKey: ["/api/albums", albumId],
   });
+  // Per-song credit presence drives the P/L/C status chips that appear on
+  // hover in the tracklist. We fetch the album-wide credits map once and
+  // build a tiny { hasPerformers, hasWriters } record per song.
+  const { data: albumCredits } = useQuery<{
+    bySongId: Record<string, { writers: unknown[]; performers: unknown[] }>;
+  }>({
+    queryKey: ["/api/albums", albumId, "credits"],
+  });
+  const creditPresenceBySongId: Record<string, { hasPerformers: boolean; hasWriters: boolean }> =
+    useMemo(() => {
+      const out: Record<string, { hasPerformers: boolean; hasWriters: boolean }> = {};
+      const by = albumCredits?.bySongId ?? {};
+      for (const [songId, rec] of Object.entries(by)) {
+        out[songId] = {
+          hasPerformers: (rec.performers?.length ?? 0) > 0,
+          hasWriters: (rec.writers?.length ?? 0) > 0,
+        };
+      }
+      return out;
+    }, [albumCredits]);
 
   const [form, setForm] = useState<AdminAlbum | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -1015,6 +1035,7 @@ function AlbumEditor({
               <SongRow
                 key={s.id}
                 song={s}
+                creditPresence={creditPresenceBySongId[s.id]}
                 onSave={(patch) => updateSong.mutate({ id: s.id, patch })}
                 onDelete={() => {
                   if (confirm(`Delete "${s.title}"?`)) deleteSong.mutate(s.id);
@@ -2537,10 +2558,22 @@ function SongCreditsEditor({ songId }: { songId: string }) {
     queryKey: ["/api/admin/credit-roles"],
   });
 
-  const invalidate = () =>
+  const invalidate = () => {
     queryClient.invalidateQueries({
       queryKey: ["/api/songs", songId, "credits"],
     });
+    // Also refresh any album-level credits queries — the tracklist's
+    // P/L/C status chips read from `[/api/albums, albumId, "credits"]`
+    // and would otherwise stay stale (global `staleTime: Infinity`)
+    // after a writer/performer edit. We don't have `albumId` in scope
+    // here, so a predicate match keeps SongCreditsEditor decoupled
+    // while still hitting the right cache key.
+    queryClient.invalidateQueries({
+      predicate: (q) =>
+        q.queryKey[0] === "/api/albums" &&
+        q.queryKey[2] === "credits",
+    });
+  };
   const invalidatePeople = () =>
     queryClient.invalidateQueries({ queryKey: ["/api/people"] });
 
@@ -3218,8 +3251,45 @@ function useRowDraft<T extends { id: string }>(row: T) {
   return { draft, setDraft, dirty, snapshot: () => draftRef.current };
 }
 
+// Status chip used in the tracklist's hover-reveal P/L/C indicator. Matches
+// the `admin-track-status/Chips.tsx` mockup: 20×20 rounded-[5px] square with
+// a mono single-letter glyph. Three states:
+//   - "auto"      — credit/lyrics present (filled blue, white glyph)
+//   - "untouched" — empty (slate-100 bg, slate-300 glyph)
+//   - "manual"    — reserved for future provenance tracking; falls through
+//                   to a white-with-ring treatment, identical to the mockup.
+// The "manual" branch isn't reachable yet (we don't track auto-vs-hand
+// today), but it's wired so adding provenance later is a one-line change.
+type ChipState = "untouched" | "manual" | "auto";
+function StatusChip({ letter, state }: { letter: "P" | "L" | "C"; state: ChipState }) {
+  const tone =
+    state === "auto"
+      ? "bg-[#319ED8] text-white"
+      : state === "manual"
+        ? "bg-white text-slate-900 ring-1 ring-inset ring-slate-300"
+        : "bg-slate-100 text-slate-300";
+  const stateLabel =
+    state === "auto" ? "filled" : state === "manual" ? "set manually" : "empty";
+  const what =
+    letter === "P" ? "Performers" : letter === "L" ? "Lyrics" : "Composers / writers";
+  return (
+    <span
+      className={[
+        "inline-flex w-[20px] h-[20px] items-center justify-center rounded-[5px]",
+        "font-mono text-[11px] font-bold leading-none",
+        tone,
+      ].join(" ")}
+      title={`${what} · ${stateLabel}`}
+      aria-label={`${what} ${stateLabel}`}
+    >
+      {letter}
+    </span>
+  );
+}
+
 function SongRow({
   song,
+  creditPresence,
   onSave,
   onDelete,
   isDragging,
@@ -3230,6 +3300,7 @@ function SongRow({
   onDragEnd,
 }: {
   song: AdminSong;
+  creditPresence?: { hasPerformers: boolean; hasWriters: boolean };
   onSave: (p: Partial<AdminSong>) => void;
   onDelete: () => void;
   isDragging?: boolean;
@@ -3375,6 +3446,50 @@ function SongRow({
         >
           {song.title}
         </span>
+        {/* Status zone — sits between title and duration. If the master
+            audio is missing, the row "shouts" with a small Upload-master
+            badge (always visible, the only thing demanding action). When
+            audio is present, the row stays silent at rest and reveals
+            P / L / C chips on hover so the row column doesn't get noisy:
+              · P = Performers credited
+              · L = Lyrics (plain text OR synced cues)
+              · C = Composers / writers credited
+            Mirrors the chips-on-hover pattern from
+            artifacts/mockup-sandbox/src/components/mockups/admin-track-status/Chips.tsx
+            (the graduated source of truth lives in this file). */}
+        {!song.audioUrl ? (
+          <span
+            className="inline-flex items-center gap-1.5 h-[24px] px-2 rounded-md bg-amber-50 ring-1 ring-inset ring-amber-200 text-amber-700 text-[11px] font-semibold"
+            title="Master audio missing — open the row to upload."
+            data-testid={`badge-upload-master-${song.id}`}
+          >
+            <Upload className="w-3 h-3" strokeWidth={2.25} />
+            Upload master
+          </span>
+        ) : (
+          <div
+            className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-60 transition-opacity"
+            aria-hidden={true}
+            data-testid={`chips-status-${song.id}`}
+          >
+            <StatusChip
+              letter="P"
+              state={creditPresence?.hasPerformers ? "auto" : "untouched"}
+            />
+            <StatusChip
+              letter="L"
+              state={
+                (song.syncedLyrics && song.syncedLyrics.length > 0) || (song.lyrics && song.lyrics.trim().length > 0)
+                  ? "auto"
+                  : "untouched"
+              }
+            />
+            <StatusChip
+              letter="C"
+              state={creditPresence?.hasWriters ? "auto" : "untouched"}
+            />
+          </div>
+        )}
         <span className="text-slate-400 text-xs tabular-nums">
           {fmtDuration(song.duration)}
         </span>
