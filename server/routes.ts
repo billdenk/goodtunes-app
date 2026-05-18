@@ -2215,14 +2215,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/admin/albums/:id/import-lyrics-from-dropbox", requireAdminBearer, async (req, res) => {
+  // Audit-log read endpoint. Bill's "did it notify you?" workflow — when
+  // something looks wrong I can fetch the history without poking the DB
+  // directly. Filterable by album and job type.
+  app.get("/api/admin/job-runs", requireAdminBearer, async (req, res) => {
     try {
-      const albumId = String(req.params.id);
+      const albumId = req.query.albumId ? String(req.query.albumId) : undefined;
+      const jobType = req.query.jobType ? String(req.query.jobType) : undefined;
+      const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(String(req.query.limit), 10) || 50)) : 50;
+      const rows = await storage.listJobRuns({ albumId, jobType, limit });
+      return res.json(rows);
+    } catch (e: any) {
+      return res.status(500).json({ message: e?.message || "Failed to load job runs." });
+    }
+  });
+
+  app.post("/api/admin/albums/:id/import-lyrics-from-dropbox", requireAdminBearer, async (req, res) => {
+    const startedAt = new Date();
+    const albumId = String(req.params.id);
+    // Local helper so every early-exit path leaves an audit row.
+    // Without this, the most common "nothing imported" cases (empty link,
+    // empty album, no lyric files in folder) leave zero diagnostic trail.
+    const logFail = async (errorMessage: string) => {
+      try {
+        await storage.recordJobRun({
+          jobType: "import-lyrics-from-dropbox",
+          albumId,
+          songId: null,
+          status: "failed",
+          summary: null,
+          errorMessage,
+          startedAt,
+        });
+      } catch {}
+    };
+    try {
       const folderUrl = String(req.body?.folderUrl || "").trim();
-      if (!folderUrl) return res.status(400).json({ message: "Paste a Dropbox folder link." });
+      if (!folderUrl) {
+        await logFail("Missing Dropbox folder link.");
+        return res.status(400).json({ message: "Paste a Dropbox folder link." });
+      }
 
       const songs = await storage.getSongsByAlbum(albumId);
       if (songs.length === 0) {
+        await logFail("Album has no tracks to match against.");
         return res.status(400).json({ message: "Add tracks before importing lyrics." });
       }
 
@@ -2238,6 +2274,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         );
 
       if (entries.length === 0) {
+        await logFail("No PDF, Word, or text files in that folder.");
         return res.status(400).json({ message: "No PDF, Word, or text files in that folder." });
       }
 
@@ -2279,6 +2316,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // per line. Don't reformat aggressively — Bill's PDFs already
           // have intentional [Chorus]/blank-line structure.
           text = text
+            // Strip NUL + other invalid control bytes that Postgres
+            // rejects ("invalid byte sequence for encoding UTF8: 0x00").
+            // PDFs occasionally smuggle NULs through pdf-parse and
+            // a single one kills the entire row insert.
+            .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
             .split("\n")
             .map(l => l.replace(/\s+$/, ""))
             .join("\n")
@@ -2334,8 +2376,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           errors.push({ filename, error: e?.message || "Failed to extract text" });
         }
       }
+      // Audit log so the agent can see what happened later when Bill
+      // says "nothing imported" — single row per run, summary jsonb
+      // carries the matched/unmatched/errors arrays verbatim.
+      const status =
+        errors.length === 0 && unmatched.length === 0
+          ? "success"
+          : matched.length === 0
+            ? "failed"
+            : "partial";
+      try {
+        await storage.recordJobRun({
+          jobType: "import-lyrics-from-dropbox",
+          albumId,
+          songId: null,
+          status,
+          summary: { matched, unmatched, errors, fileCount: entries.length, songCount: songs.length } as any,
+          errorMessage: null,
+          startedAt,
+        });
+      } catch (logErr) {
+        console.error("import-lyrics: failed to record job run", logErr);
+      }
       return res.json({ matched, unmatched, errors });
     } catch (e: any) {
+      try {
+        await storage.recordJobRun({
+          jobType: "import-lyrics-from-dropbox",
+          albumId,
+          songId: null,
+          status: "failed",
+          summary: null,
+          errorMessage: e?.message || "Dropbox import failed.",
+          startedAt,
+        });
+      } catch {}
       return res.status(400).json({ message: e?.message || "Dropbox import failed." });
     }
   });

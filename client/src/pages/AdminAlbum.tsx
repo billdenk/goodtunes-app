@@ -1556,16 +1556,37 @@ function ImportLyricsFromDropboxDialog({
       matched: Array<{ songId: string; title: string; filename: string; charCount: number }>;
       unmatched: Array<{ filename: string; suggestedTitle: string; charCount: number; reason?: string }>;
       errors: Array<{ filename: string; error: string }>;
+      ranAt?: string;
+      songCount?: number;
     }
   >(null);
 
+  // Sticky summary: persist the last result per album so reopening the
+  // dialog shows what happened on the previous run instead of a blank
+  // form. Bill explicitly chose this over a full notifications center.
+  const storageKey = `gt:admin:job-summary:lyrics-import:${albumId}`;
   useEffect(() => {
     if (open) {
       setFolderUrl("");
       setRunning(false);
-      setSummary(null);
+      try {
+        const stored = localStorage.getItem(storageKey);
+        const parsed = stored ? JSON.parse(stored) : null;
+        // Invalidate stale summaries: if the album's track count has
+        // changed since the run, the matched/unmatched lists no longer
+        // reflect reality. Safer to clear than to show a misleading
+        // "Matched 9" against an album that now has different tracks.
+        if (parsed && typeof parsed.songCount === "number" && parsed.songCount !== songCount) {
+          localStorage.removeItem(storageKey);
+          setSummary(null);
+        } else {
+          setSummary(parsed);
+        }
+      } catch {
+        setSummary(null);
+      }
     }
-  }, [open]);
+  }, [open, storageKey, songCount]);
 
   const handleConfirm = async () => {
     if (!folderUrl.trim() || running) return;
@@ -1578,11 +1599,17 @@ function ImportLyricsFromDropboxDialog({
         { folderUrl: folderUrl.trim() },
       );
       const data = await res.json();
-      setSummary({
+      const nextSummary = {
         matched: data.matched || [],
         unmatched: data.unmatched || [],
         errors: data.errors || [],
-      });
+        ranAt: new Date().toISOString(),
+        songCount,
+      };
+      setSummary(nextSummary);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(nextSummary));
+      } catch {}
       await onSaved();
       const ok = data.matched?.length || 0;
       const miss = (data.unmatched?.length || 0) + (data.errors?.length || 0);
@@ -1687,33 +1714,61 @@ function ImportLyricsFromDropboxDialog({
         )}
 
         <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            disabled={running}
-            data-testid="button-lyrics-import-cancel"
-            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-          >
-            {summary ? "Done" : "Cancel"}
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={running || !folderUrl.trim() || songCount === 0 || !!summary}
-            data-testid="button-lyrics-import-confirm"
-            className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
-          >
-            {running ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Importing lyrics…
-              </>
-            ) : summary ? (
-              <>Imported</>
-            ) : (
-              <>Import lyrics</>
-            )}
-          </button>
+          {summary ? (
+            // After a run, the summary IS the result — no second action
+            // to commit. One clear primary "Done" to close, plus a
+            // ghost "Run again" if Bill wants to retry with a new link.
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  try { localStorage.removeItem(storageKey); } catch {}
+                  setSummary(null);
+                  setFolderUrl("");
+                }}
+                data-testid="button-lyrics-import-run-again"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Run again
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                data-testid="button-lyrics-import-done"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800"
+              >
+                Done
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                disabled={running}
+                data-testid="button-lyrics-import-cancel"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={running || !folderUrl.trim() || songCount === 0}
+                data-testid="button-lyrics-import-confirm"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {running ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Importing lyrics…
+                  </>
+                ) : (
+                  <>Import lyrics</>
+                )}
+              </button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

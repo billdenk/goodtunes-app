@@ -39,6 +39,9 @@ import {
   authTokens,
   profilePhotos,
   analyticsEvents,
+  jobRuns,
+  type InsertJobRun,
+  type JobRun,
   people,
   personDiscography,
   instruments,
@@ -297,6 +300,10 @@ export interface IStorage {
   }[]): Promise<void>;
   deleteAnalyticsForUser(userId: string): Promise<void>;
   getRecentAnalyticsForUser(userId: string, limit: number): Promise<any[]>;
+
+  // Job-run audit log (Dropbox imports, GoodSync, etc.).
+  recordJobRun(data: InsertJobRun): Promise<JobRun>;
+  listJobRuns(opts?: { limit?: number; albumId?: string; jobType?: string }): Promise<JobRun[]>;
 }
 
 // Seed catalog (albums + songs). Kept inline rather than imported from the
@@ -1424,6 +1431,19 @@ export class DbStorage implements IStorage {
       .where(eq(analyticsEvents.userId, userId))
       .orderBy(desc(analyticsEvents.receivedAt))
       .limit(limit);
+  }
+
+  async recordJobRun(data: InsertJobRun): Promise<JobRun> {
+    const [row] = await db.insert(jobRuns).values(data).returning();
+    return row;
+  }
+  async listJobRuns(opts?: { limit?: number; albumId?: string; jobType?: string }): Promise<JobRun[]> {
+    const conds: any[] = [];
+    if (opts?.albumId) conds.push(eq(jobRuns.albumId, opts.albumId));
+    if (opts?.jobType) conds.push(eq(jobRuns.jobType, opts.jobType));
+    let q = db.select().from(jobRuns).$dynamic();
+    if (conds.length) q = q.where(conds.length === 1 ? conds[0] : and(...conds));
+    return q.orderBy(desc(jobRuns.finishedAt)).limit(opts?.limit ?? 50);
   }
 }
 

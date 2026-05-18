@@ -509,6 +509,23 @@ export const analyticsEvents = pgTable("analytics_events", {
   receivedAt: timestamp("received_at").defaultNow(),
 });
 
+// Audit log for long-running admin jobs (Dropbox imports, GoodSync,
+// etc.). One row per completed run. The summary jsonb captures the
+// matched/unmatched/errors arrays so the agent can dig into what
+// actually happened when Bill says "nothing imported." Status is
+// success | partial | failed.
+export const jobRuns = pgTable("job_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobType: text("job_type").notNull(),
+  albumId: varchar("album_id"),
+  songId: varchar("song_id"),
+  status: text("status").notNull(),
+  summary: jsonb("summary").$type<Record<string, any>>(),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").notNull(),
+  finishedAt: timestamp("finished_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   email: true,
@@ -546,6 +563,10 @@ export type Vendor = typeof vendors.$inferSelect;
 export const insertLabelSchema = createInsertSchema(labels).omit({ id: true, createdAt: true });
 export type InsertLabel = z.infer<typeof insertLabelSchema>;
 export type Label = typeof labels.$inferSelect;
+
+export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true, finishedAt: true });
+export type InsertJobRun = z.infer<typeof insertJobRunSchema>;
+export type JobRun = typeof jobRuns.$inferSelect;
 
 export const insertAlbumVideoSchema = createInsertSchema(albumVideos).omit({ id: true });
 export type InsertAlbumVideo = z.infer<typeof insertAlbumVideoSchema>;
