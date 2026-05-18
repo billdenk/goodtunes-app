@@ -42,11 +42,17 @@ const NavItem = ({
     >
       <span
         aria-hidden
-        className="absolute -inset-y-[4px] rounded-full transition-colors duration-200"
+        className="absolute rounded-full transition-colors duration-200"
         style={{
           background: active ? "rgba(49,158,216,0.18)" : "transparent",
           left: pillLeft,
           right: pillRight,
+          // Pill is anchored to the bar's bottom edge (-4px) and brought
+          // 1px down from the top (-3px instead of -4px). Net effect:
+          // pill is 1px shorter overall, with all the shrinkage taken
+          // off the top — bottom alignment stays untouched.
+          top: "-3px",
+          bottom: "-4px",
         }}
       />
       <div className={`relative w-14 h-7 flex items-center justify-center ${contentShift}`}>
