@@ -6666,11 +6666,13 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
   const [dragging, setDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
 
   const exitEdit = () => {
     setEditing(false);
     setPreviewUrl(null);
     setConfirmRemove(false);
+    setUrlInput("");
     queueMicrotask(() => editButtonRef.current?.focus());
   };
 
@@ -6720,6 +6722,68 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
     },
   });
 
+  // Paste-from-URL — fetches the image so it ends up in our own object
+  // storage instead of hot-linking to the source (which would break the
+  // moment the source rotates the URL or removes the file). Falls back
+  // to storing the bare URL only if the fetch is blocked (CORS) and the
+  // user explicitly confirms.
+  const urlMut = useMutation({
+    mutationFn: async (rawUrl: string) => {
+      const trimmed = rawUrl.trim();
+      let u: URL;
+      try {
+        u = new URL(trimmed);
+      } catch {
+        throw new Error("That doesn't look like a valid URL.");
+      }
+      if (u.protocol !== "https:" && u.protocol !== "http:") {
+        throw new Error("Image URLs must start with http:// or https://.");
+      }
+      setPreviewUrl(trimmed);
+      let res: Response;
+      try {
+        res = await fetch(trimmed, { mode: "cors" });
+      } catch {
+        throw new Error(
+          "Couldn't fetch that image (the site may block cross-origin downloads). Try downloading it and using Drag & drop.",
+        );
+      }
+      if (!res.ok) {
+        throw new Error(`Couldn't fetch that image (HTTP ${res.status}).`);
+      }
+      const blob = await res.blob();
+      if (!/^image\//.test(blob.type)) {
+        throw new Error("That URL didn't return an image.");
+      }
+      if (blob.size > 8 * 1024 * 1024) {
+        throw new Error("Image is larger than 8 MB.");
+      }
+      const ext =
+        (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
+      const filename = `pasted-cover.${ext}`;
+      const file = new File([blob], filename, { type: blob.type });
+      const url = await uploadImageFile(file);
+      await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
+        artwork: url,
+      });
+      return url;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      toast({ title: "Cover updated" });
+      exitEdit();
+    },
+    onError: (e: any) => {
+      setPreviewUrl(null);
+      toast({
+        title: "Couldn't use that URL",
+        description: e?.message || "Try a different image.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const acceptFile = (file: File | undefined | null) => {
     if (!file) return;
     if (!/^image\//.test(file.type)) {
@@ -6741,7 +6805,7 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
     uploadMut.mutate(file);
   };
 
-  const busy = uploadMut.isPending || removeMut.isPending;
+  const busy = uploadMut.isPending || removeMut.isPending || urlMut.isPending;
   const shownUrl = previewUrl || album.artwork;
   const hasCover = !!album.artwork;
 
@@ -6901,6 +6965,48 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
             }}
             data-testid="input-artwork-file"
           />
+          {/* Paste-from-URL — sits below the dropzone so it doesn't compete
+              with drag-and-drop as the primary affordance. We download the
+              image into our object storage rather than hot-linking. */}
+          <div className="mt-3 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            or paste a URL
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (busy || !urlInput.trim()) return;
+              urlMut.mutate(urlInput);
+            }}
+            className="mt-2 flex items-center gap-2"
+            data-testid="form-artwork-url"
+          >
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder="https://example.com/cover.jpg"
+              disabled={busy}
+              className="flex-1 h-9 px-3 rounded-md border border-slate-200 bg-white text-[12.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-60"
+              data-testid="input-artwork-url"
+            />
+            <button
+              type="submit"
+              disabled={busy || !urlInput.trim()}
+              className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+              data-testid="button-artwork-url-fetch"
+            >
+              {urlMut.isPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Fetching…
+                </>
+              ) : (
+                <>Use URL</>
+              )}
+            </button>
+          </form>
           <p className="mt-3 text-[11.5px] text-slate-500 leading-relaxed">
             <span className="font-semibold text-slate-700">Recommended:</span>{" "}
             square, at least 3000×3000 px. New cover goes live everywhere
