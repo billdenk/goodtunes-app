@@ -59,8 +59,24 @@ export function Collection() {
   const { data: songsRaw } = useQuery<Song[]>({
     queryKey: ["/api/songs"],
   });
-  const dbAlbums = albumsRaw ?? [];
-  const dbSongs = songsRaw ?? [];
+  // The /api/albums endpoint returns BOTH GoodTunes-curated releases and
+  // the streaming-only discography rows we ingest from Apple Music (used
+  // to power the artist sheet's "How to Play" links). The main Collection
+  // is the curated catalog only — hide every row where `isGoodTunesRelease`
+  // is false. Songs + artists derive from this filtered list so the
+  // Songs tab and Artists tab also stay catalog-only.
+  const dbAlbums = useMemo(
+    () => (albumsRaw ?? []).filter((a) => a.isGoodTunesRelease),
+    [albumsRaw],
+  );
+  const dbAlbumIds = useMemo(
+    () => new Set(dbAlbums.map((a) => a.id)),
+    [dbAlbums],
+  );
+  const dbSongs = useMemo(
+    () => (songsRaw ?? []).filter((s) => dbAlbumIds.has(s.albumId)),
+    [songsRaw, dbAlbumIds],
+  );
 
   const addSongMutation = useMutation({
     mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {

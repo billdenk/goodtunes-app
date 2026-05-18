@@ -8,6 +8,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
+import { normalizeAudioUrl } from "@shared/audioUrl";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { searchArtist as searchSpotifyArtist, searchArtistCandidates, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
 
@@ -1609,7 +1610,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       trackNumber: Number(trackNumber),
       duration: duration != null ? Number(duration) : 180,
       lyrics: lyrics ? String(lyrics) : null,
-      audioUrl: audioUrl ? String(audioUrl) : null,
+      audioUrl: audioUrl ? normalizeAudioUrl(String(audioUrl)) : null,
     } as any);
     return res.status(201).json(song);
   });
@@ -1622,7 +1623,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
     if (duration !== undefined) updates.duration = Number(duration);
     if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
-    if (audioUrl !== undefined) updates.audioUrl = audioUrl ? String(audioUrl) : null;
+    if (audioUrl !== undefined) updates.audioUrl = audioUrl ? normalizeAudioUrl(String(audioUrl)) : null;
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     // Preview window is atomic: either both fields null (auto-derived
     // from the master, default) or both finite non-negative integers

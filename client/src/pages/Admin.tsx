@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { normalizeAudioUrl } from "@shared/audioUrl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
@@ -3311,7 +3312,15 @@ function SongRow({
   onDragEnd?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(song);
+  // Seed through normalizeAudioUrl so rows whose stored audioUrl is a
+  // raw Dropbox share link (`www.dropbox.com/scl/fi/…`) self-heal to
+  // the direct-stream host when the editor opens — without this the
+  // <audio> tag below shows "Preview failed to load…" in prod and
+  // only fresh typing in the URL field would trigger normalization.
+  const [draft, setDraft] = useState<AdminSong>(() => ({
+    ...song,
+    audioUrl: song.audioUrl ? normalizeAudioUrl(song.audioUrl) : null,
+  }));
   // Surface VTT-parse / audio-upload errors inline rather than via
   // window.alert so the admin can fix the file without losing context.
   // Cleared on each new file pick or when the editor reopens.
@@ -3622,9 +3631,13 @@ function SongRow({
             </div>
             <input
               value={draft.audioUrl ?? ""}
-              onChange={(e) =>
-                setDraft({ ...draft, audioUrl: e.target.value || null })
-              }
+              onChange={(e) => {
+                const v = e.target.value;
+                setDraft({
+                  ...draft,
+                  audioUrl: v ? normalizeAudioUrl(v) : null,
+                });
+              }}
               placeholder="Drop MP3/M4A/AAC/WAV/FLAC/OGG here, or paste a URL"
               className={inputCls + " text-xs"}
               data-testid={`input-audio-url-${song.id}`}

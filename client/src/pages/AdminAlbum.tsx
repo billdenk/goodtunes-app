@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeAudioUrl } from "@shared/audioUrl";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6716,40 +6717,22 @@ function AudioEditor({
   onSaved: () => Promise<void>;
 }) {
   const { toast } = useToast();
-  const [draftUrl, setDraftUrl] = useState<string>(song.audioUrl ?? "");
+
+  // Seed from `song.audioUrl` through the normalizer so editors opened
+  // against an existing track with a raw share URL (saved before this
+  // rewrite shipped, or imported from elsewhere) self-heal on open —
+  // the user sees the direct-stream URL in the field, the audio tag
+  // gets a playable src, and the debounced autosave persists the
+  // rewritten URL back to the DB. Without this, only fresh keystrokes
+  // trigger normalization and stale rows keep showing "Preview failed
+  // to load…" in prod.
+  const [draftUrl, setDraftUrl] = useState<string>(() =>
+    normalizeAudioUrl(song.audioUrl ?? ""),
+  );
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // Auto-rewrite Dropbox share links to a direct-stream URL the
-  // <audio> element can actually play. The plain `dropbox.com/scl/fi/…`
-  // host serves an HTML preview page (which is why the audio tag fires
-  // an Error: "Preview failed to load…"). Swapping the host for
-  // `dl.dropboxusercontent.com` and dropping the `dl`/`raw` params
-  // returns the raw audio bytes with the right Content-Type — same
-  // pattern this codebase already uses for the Nick Carter masters
-  // (see client/src/data/musicData.ts: NC_BASE). Anything that isn't a
-  // Dropbox share URL passes through untouched.
-  const normalizeAudioUrl = (raw: string): string => {
-    const trimmed = raw.trim();
-    if (!trimmed) return trimmed;
-    try {
-      const u = new URL(trimmed);
-      if (
-        u.hostname === "www.dropbox.com" ||
-        u.hostname === "dropbox.com"
-      ) {
-        u.hostname = "dl.dropboxusercontent.com";
-        u.searchParams.delete("dl");
-        u.searchParams.delete("raw");
-        return u.toString();
-      }
-    } catch {
-      // Not a parseable URL — leave it alone so the user can keep typing.
-    }
-    return trimmed;
-  };
 
   const dirty = (draftUrl || null) !== (song.audioUrl ?? null);
 
