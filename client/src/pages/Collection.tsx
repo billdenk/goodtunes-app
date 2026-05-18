@@ -1,15 +1,29 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { BottomNav } from "@/components/BottomNav";
 import { IconButton } from "@/components/ui/IconButton";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
+import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
+
+interface UserPlaylist {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: string;
+  artworks?: string[];
+  songCount?: number;
+}
+
+type SongWithAlbum = Song & { album: Album };
 
 type LibraryTab = "albums" | "songs" | "artists";
 
@@ -23,6 +37,35 @@ export function Collection() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const [addToPlaylistSong, setAddToPlaylistSong] = useState<SongWithAlbum | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: playlistsRaw } = useQuery<UserPlaylist[] | null>({
+    queryKey: ["/api/playlists"],
+  });
+  const userPlaylists = playlistsRaw ?? [];
+
+  const addSongMutation = useMutation({
+    mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
+      const res = await apiRequest("POST", `/api/playlists/${playlistId}/songs`, { songId });
+      return res.json();
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/playlists", vars.playlistId, "songs"] });
+      const pl = userPlaylists.find((p) => p.id === vars.playlistId);
+      toast({ title: "Added to playlist", description: pl ? pl.name : undefined });
+      setAddToPlaylistSong(null);
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Couldn't add song",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
@@ -312,38 +355,55 @@ export function Collection() {
               {filteredSongs.map((song, idx) => {
                 const isActive = currentSong?.id === song.id;
                 return (
-                  <button
+                  <div
                     key={song.id}
-                    type="button"
-                    onClick={() => playSong(song, filteredSongs)}
-                    className="flex items-center gap-3 py-2.5 active:opacity-60 transition-opacity text-left"
+                    className="flex items-center gap-3 py-2.5"
                     style={{
                       borderBottom: idx < filteredSongs.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                     }}
                     data-testid={`row-song-${song.id}`}
                   >
-                    <img src={song.album.artwork} alt={song.album.title} className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium truncate leading-tight ${isActive ? "text-[#319ED8]" : "text-white"}`}>{song.title}</p>
-                      <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
-                    </div>
-                    {isActive && (
-                      <div className="flex gap-[2px] items-end h-3.5 mr-1">
-                        {[0.6, 1, 0.75].map((h, i) => (
-                          <div
-                            key={i}
-                            className="w-[2px] rounded-full"
-                            style={{
-                              background: "#319ED8",
-                              height: `${h * 100}%`,
-                              animation: "equalizerBounce 0.8s ease-in-out infinite alternate",
-                              animationDelay: `${i * 0.2}s`,
-                            }}
-                          />
-                        ))}
+                    <button
+                      type="button"
+                      onClick={() => playSong(song, filteredSongs)}
+                      className="flex items-center gap-3 flex-1 min-w-0 active:opacity-60 transition-opacity text-left"
+                      data-testid={`button-play-song-${song.id}`}
+                    >
+                      <img src={song.album.artwork} alt={song.album.title} className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate leading-tight ${isActive ? "text-[#319ED8]" : "text-white"}`}>{song.title}</p>
+                        <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
                       </div>
-                    )}
-                  </button>
+                      {isActive && (
+                        <div className="flex gap-[2px] items-end h-3.5 mr-1">
+                          {[0.6, 1, 0.75].map((h, i) => (
+                            <div
+                              key={i}
+                              className="w-[2px] rounded-full"
+                              style={{
+                                background: "#319ED8",
+                                height: `${h * 100}%`,
+                                animation: "equalizerBounce 0.8s ease-in-out infinite alternate",
+                                animationDelay: `${i * 0.2}s`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setAddToPlaylistSong(song); }}
+                      aria-label={`Add ${song.title} to a playlist`}
+                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 active:scale-[0.94] transition-transform"
+                      style={{ background: "rgba(49,158,216,0.22)" }}
+                      data-testid={`button-add-to-playlist-${song.id}`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -406,6 +466,80 @@ export function Collection() {
 
         <MiniPlayer />
         <BottomNav />
+
+        {addToPlaylistSong && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            <div
+              className="absolute inset-0 bg-black/60"
+              style={{ backdropFilter: "blur(4px)" }}
+              onClick={() => setAddToPlaylistSong(null)}
+            />
+            <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-6 z-10 flex flex-col" style={{ maxHeight: "78vh" }}>
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
+              <div className="flex items-center justify-between px-5 mb-3 flex-shrink-0">
+                <h3 className="text-white font-semibold text-base">Add to Playlist</h3>
+                <button
+                  type="button"
+                  onClick={() => setAddToPlaylistSong(null)}
+                  className="text-[#319ED8] text-sm font-semibold"
+                  data-testid="button-close-add-to-playlist"
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="flex items-center gap-3 px-5 pb-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <img src={addToPlaylistSong.album.artwork} alt={addToPlaylistSong.album.title} className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-medium truncate leading-tight">{addToPlaylistSong.title}</p>
+                  <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{addToPlaylistSong.album.artist}</p>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
+                {userPlaylists.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <p className="text-white/45 text-sm">No playlists yet</p>
+                    <button
+                      type="button"
+                      onClick={() => { setAddToPlaylistSong(null); navigate("/playlists"); }}
+                      className="text-[#319ED8] text-sm font-semibold mt-3"
+                      data-testid="button-go-create-playlist"
+                    >
+                      Create one
+                    </button>
+                  </div>
+                ) : (
+                  userPlaylists.map((pl) => (
+                    <button
+                      key={pl.id}
+                      type="button"
+                      disabled={addSongMutation.isPending}
+                      onClick={() => addSongMutation.mutate({ playlistId: pl.id, songId: addToPlaylistSong.id })}
+                      className="w-full flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left disabled:opacity-50"
+                      style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                      data-testid={`button-pick-playlist-${pl.id}`}
+                    >
+                      <div className="w-11 h-11 rounded-md flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ background: "rgba(255,255,255,0.08)" }}>
+                        {pl.artworks && pl.artworks[0] ? (
+                          <img src={pl.artworks[0]} alt={pl.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round">
+                            <path d="M9 17V5l12-2v12M9 17a3 3 0 11-3-3 3 3 0 013 3zM21 15a3 3 0 11-3-3 3 3 0 013 3z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate leading-tight">{pl.name}</p>
+                        <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+                          {pl.songCount ?? 0} {(pl.songCount ?? 0) === 1 ? "song" : "songs"}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {certAlbum && (
           <GoodDeedCertificate
