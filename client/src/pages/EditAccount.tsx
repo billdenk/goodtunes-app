@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { Camera, Check, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { IconButton } from "@/components/ui/IconButton";
 
 export function EditAccount() {
   const { user, updateProfile, updatePhoto, removePhoto, isUpdatePending, updateError } = useAuth();
@@ -87,28 +89,32 @@ export function EditAccount() {
   return (
     <main className="relative h-screen w-full flex justify-center overflow-hidden">
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+        {/* Header — Apple iOS-photo-picker dismiss/confirm pair. Glass X on
+            the left (cancel, returns to Account without saving) and a
+            solid brand-blue checkmark on the right (save). Both come from
+            the shared IconButton primitive so size, press feedback, and
+            disabled treatment stay consistent with every other circular
+            chip across the player. Replaces the off-styleguide back caret
+            and "Save" text the page used to ship with. */}
         <header className="relative z-10 flex items-center justify-between px-4 pt-14 pb-3">
-          <button
-            type="button"
+          <IconButton
+            label="Cancel"
+            variant="glass"
             onClick={() => navigate("/account")}
-            aria-label="Back"
-            className="w-10 h-10 -ml-2 flex items-center justify-center active:opacity-70"
-            data-testid="button-back"
+            data-testid="button-cancel"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
+            <X strokeWidth={2.4} />
+          </IconButton>
           <h1 className="text-white text-[17px] font-semibold" data-testid="text-page-title">Edit Profile</h1>
-          <button
-            type="button"
+          <IconButton
+            label="Save"
+            variant="solid"
             onClick={handleSave}
             disabled={isUpdatePending}
-            className="text-[#319ED8] text-[15px] font-semibold disabled:opacity-50"
             data-testid="button-save"
           >
-            {isUpdatePending ? "Saving…" : "Save"}
-          </button>
+            <Check strokeWidth={2.8} />
+          </IconButton>
         </header>
 
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-10">
@@ -122,33 +128,37 @@ export function EditAccount() {
               onChange={handlePhotoPick}
               data-testid="input-profile-photo"
             />
+            {/* Photo well — single tappable surface. The camera glyph sits
+                CENTERED inside the circle (not as a bottom-right badge)
+                because this page already announces itself as "edit photo"
+                — the badge was redundant chrome. When a photo is present
+                the camera floats over a dark scrim so it stays legible
+                on bright images; with just initials the glyph sits over
+                the gradient and we hide the initials so the camera reads
+                as the primary affordance. */}
             <div className="relative mb-2">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="relative w-24 h-24 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-3xl font-bold text-white active:opacity-80"
+                className="relative w-24 h-24 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-3xl font-bold text-white active:scale-[0.97] transition-transform"
                 style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
                 aria-label="Change profile photo"
                 data-testid="button-profile-photo"
               >
                 {photoUrl ? (
-                  <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                  <>
+                    <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 flex items-center justify-center"
+                      style={{ background: "rgba(0,0,0,0.38)" }}
+                    >
+                      <Camera className="w-7 h-7 text-white drop-shadow" strokeWidth={2} />
+                    </span>
+                  </>
                 ) : (
-                  <span>{initials}</span>
+                  <Camera className="w-8 h-8 text-white/90" strokeWidth={1.8} aria-hidden="true" />
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Change profile photo"
-                className="absolute -bottom-0.5 -right-0.5 w-8 h-8 rounded-full flex items-center justify-center active:opacity-80"
-                style={{ background: "#319ED8", boxShadow: "0 0 0 2px #00062B" }}
-                data-testid="button-profile-photo-edit"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
               </button>
             </div>
             {photoUrl && (

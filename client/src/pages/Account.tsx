@@ -5,7 +5,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Pencil } from "lucide-react";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 
 /** Public privacy-policy URL. Lives on the marketing site, opened in the
@@ -88,28 +88,39 @@ export function Account() {
           </header>
 
           <div className="flex flex-col items-center pt-6 pb-4 px-5">
-            <div
-              className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white mb-4"
-              style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
-              aria-label="Profile photo"
-              data-testid="profile-photo"
-            >
-              {photoUrl ? (
-                <img src={photoUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span>{initials}</span>
-              )}
-            </div>
-            <p className="text-white text-xl font-bold">{user?.displayName}</p>
-            <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
+            {/* Avatar is the edit affordance now — no separate "Edit Profile"
+                button below. The brand-blue pencil badge mirrors the
+                pencil-on-thumbnail pattern used across the admin
+                (AdminPerson photo, AdminVendor logo, AdminAlbum cover) so
+                "tap the pencil to edit" reads identically everywhere. */}
             <button
               type="button"
               onClick={() => navigate("/account/edit")}
-              className="mt-3 px-5 py-2 rounded-full border border-white/20 text-white/70 text-sm font-medium active:opacity-70"
+              aria-label="Edit profile"
+              className="relative mb-4 active:scale-[0.97] transition-transform"
               data-testid="button-edit-profile"
             >
-              Edit Profile
+              <div
+                className="relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white"
+                style={{ background: photoUrl ? "transparent" : "linear-gradient(135deg, #0D2060, #1a0a5e)" }}
+                data-testid="profile-photo"
+              >
+                {photoUrl ? (
+                  <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span>{initials}</span>
+                )}
+              </div>
+              <span
+                aria-hidden="true"
+                className="absolute -bottom-0.5 -right-0.5 w-7 h-7 rounded-full flex items-center justify-center"
+                style={{ background: "#319ED8", boxShadow: "0 0 0 2px #00062B" }}
+              >
+                <Pencil className="w-3.5 h-3.5 text-white" strokeWidth={2.4} />
+              </span>
             </button>
+            <p className="text-white text-xl font-bold">{user?.displayName}</p>
+            <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
           </div>
 
           <div className="px-5">
