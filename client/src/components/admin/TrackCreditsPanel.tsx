@@ -449,8 +449,8 @@ function AddPicker({
             />
           </div>
           <p className="text-[10.5px] text-slate-400 leading-tight">
-            Both optional. Don't see the instrument? Add it from the
-            Instruments admin first, then pick it here.
+            Both optional. Don't see the gear? Add it from the
+            Gear admin first, then pick it here.
           </p>
         </div>
       )}

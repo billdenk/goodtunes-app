@@ -4643,7 +4643,7 @@ function InstrumentPicker({
                 className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[#319ED8] hover:bg-slate-50"
                 data-testid="button-create-new-instrument"
               >
-                + Create new instrument{query.trim() ? ` "${query.trim()}"` : ""}
+                + Create new gear{query.trim() ? ` "${query.trim()}"` : ""}
               </button>
             </div>
           )}
@@ -5870,7 +5870,7 @@ function InstrumentEditor({
             className="text-slate-900 text-xl font-semibold truncate"
             data-testid="text-instrument-heading"
           >
-            {form.name || "Untitled instrument"}
+            {form.name || "Untitled gear"}
           </h2>
           <p className="text-slate-400 text-xs">
             {form.category || "Uncategorised"}
@@ -5923,7 +5923,7 @@ function InstrumentEditor({
         <div role="tabpanel" id="panel-admin-instrument-vendors" aria-labelledby="tab-admin-instrument-vendors" className="space-y-3" data-testid="panel-admin-instrument-vendors">
           <div className="flex items-center justify-between">
             <p className="text-slate-500 text-[12px] leading-relaxed">
-              Affiliate links that surface in the in-app instrument sheet's
+              Affiliate links that surface in the in-app gear sheet's
               "Where to buy" list.
             </p>
             <button
@@ -5957,7 +5957,7 @@ function InstrumentEditor({
             if (artists.length === 0) {
               return (
                 <p className="text-slate-400 text-sm py-3">
-                  No artists credited on this instrument yet.
+                  No artists credited on this gear yet.
                 </p>
               );
             }
@@ -5997,10 +5997,14 @@ function InstrumentEditor({
         storageKey={`gt:admin:scrape-url:${instrumentId}`}
         onPrefill={async (r) => {
           // The admin explicitly clicked Pull — overwrite the standard
-          // "New instrument" placeholders without ceremony. Only preserve
+          // "New gear" placeholders without ceremony. Only preserve
           // values that look custom (i.e. not the new-record defaults).
+          // "New instrument" is the legacy sentinel kept here so rows
+          // created before the user-facing label flipped to "Gear" still
+          // qualify as default placeholders.
           const isDefaultName =
             !form.name ||
+            form.name === "New gear" ||
             form.name === "New instrument" ||
             form.name.toLowerCase().startsWith("untitled");
           const isDefaultCategory =
@@ -6127,7 +6131,7 @@ function InstrumentEditor({
           if (existing)
             return {
               ok: true,
-              warn: "(Vendor already on this instrument — skipped.)",
+              warn: "(Vendor already on this gear — skipped.)",
             };
 
           // Create the vendor row server-side, then splice it into local
@@ -6211,7 +6215,7 @@ function InstrumentEditor({
           data-testid="input-instrument-about"
         />
       </Field>
-      <Field label="Artist note (why this artist chose THIS instrument)">
+      <Field label="Artist note (why this artist chose THIS gear)">
         <textarea
           value={form.artistNote ?? ""}
           onChange={(e) => update({ artistNote: e.target.value || null })}
@@ -6231,7 +6235,7 @@ function InstrumentEditor({
           className="text-red-600 hover:bg-red-50 px-3 py-2 text-sm rounded"
           data-testid="button-delete-instrument"
         >
-          Delete instrument
+          Delete gear
         </button>
         <button
           type="button"
@@ -6390,14 +6394,14 @@ function VendorRow({
             e.stopPropagation();
             if (
               confirm(
-                `Remove "${draft.name || "this vendor"}" from this instrument? The vendor entity stays available for other instruments.`,
+                `Remove "${draft.name || "this vendor"}" from this gear? The vendor entity stays available for other gear.`,
               )
             )
               del.mutate();
           }}
           className="shrink-0 w-7 h-7 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-base leading-none"
-          title="Detach vendor from this instrument"
-          aria-label="Detach vendor from this instrument"
+          title="Detach vendor from this gear"
+          aria-label="Detach vendor from this gear"
           data-testid={`button-remove-vendor-${vendor.id}`}
         >
           ×
@@ -6522,7 +6526,7 @@ function VendorRow({
               onClick={() => {
                 if (
                   confirm(
-                    "Detach this vendor from this instrument? The vendor entity will remain for other instruments.",
+                    "Detach this vendor from this gear? The vendor entity will remain for other gear.",
                   )
                 )
                   del.mutate();
@@ -6713,7 +6717,7 @@ function VendorPaneEditor({
         >
           {gearCount === 0 ? (
             <p className="text-slate-400 text-sm">
-              Not attached to any instrument yet. Add a vendor row inside an instrument's editor to populate this list.
+              Not attached to any gear yet. Add a vendor row inside a gear item's editor to populate this list.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md">
@@ -6752,7 +6756,7 @@ function VendorPaneEditor({
             </ul>
           )}
           <p className="mt-3 text-[11px] text-slate-400">
-            Every instrument this vendor is attached to. Tap to open and edit the per-attachment affiliate URL or visibility.
+            Every gear item this vendor is attached to. Tap to open and edit the per-attachment affiliate URL or visibility.
           </p>
         </div>
       )}
@@ -6771,7 +6775,7 @@ function VendorPaneEditor({
             <p className="text-slate-400 text-sm">Loading…</p>
           ) : artistsCount === 0 ? (
             <p className="text-slate-400 text-sm">
-              No artists have credited this vendor's instruments on a track yet. As SuperCredits™ are filled in across the catalog, performers who played one of {draft.name || "this vendor"}'s instruments will show up here.
+              No artists have credited this vendor's gear on a track yet. As SuperCredits™ are filled in across the catalog, performers who played one of {draft.name || "this vendor"}'s gear will show up here.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md">
@@ -6796,7 +6800,7 @@ function VendorPaneEditor({
             </ul>
           )}
           <p className="mt-3 text-[11px] text-slate-400">
-            From SuperCredits™ — performers who've credited one of this vendor's instruments. Producers and lyricists won't appear because the vendor sheet is reached through gear.
+            From SuperCredits™ — performers who've credited one of this vendor's gear. Producers and lyricists won't appear because the vendor sheet is reached through gear.
           </p>
         </div>
       )}
@@ -7152,7 +7156,7 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
                 className="text-[22px] font-bold leading-tight"
                 style={{ color: "#ffffff" }}
               >
-                {data?.name || "Untitled instrument"}
+                {data?.name || "Untitled gear"}
               </h2>
             </div>
             {data?.about && (
@@ -7832,11 +7836,11 @@ function VendorPreviewCard({
                 {featuredInstrumentName && (
                   <div className="mt-4">
                     <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
-                      Featured instrument
+                      Featured gear
                     </p>
                     <p className="text-white text-[14px]">{featuredInstrumentName}</p>
                     <p className="text-[11px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>
-                      The instrument that opened this page — tap the Gear tab to see the rest.
+                      The gear that opened this page — tap the Gear tab to see the rest.
                     </p>
                   </div>
                 )}
@@ -7850,7 +7854,7 @@ function VendorPreviewCard({
                 </h3>
                 {gearCount === 0 ? (
                   <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
-                    Not attached to any instrument yet. Add a vendor row inside an instrument's editor to populate this list.
+                    Not attached to any gear yet. Add a vendor row inside a gear item's editor to populate this list.
                   </p>
                 ) : (
                   // 2-col grid of instrument tiles — same shape as the
@@ -7908,10 +7912,10 @@ function VendorPreviewCard({
                   Artists
                 </h3>
                 <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
-                  Live in the app — pulls from SuperCredits™. Any performer who's credited one of {vendor.name || "this vendor"}'s instruments on a track shows up here.
+                  Live in the app — pulls from SuperCredits™. Any performer who's credited one of {vendor.name || "this vendor"}'s gear on a track shows up here.
                 </p>
                 <p className="pt-3 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-                  Producers and lyricists won't appear here because vendors are reached through gear; only people who actually played a vendor's instrument get tagged.
+                  Producers and lyricists won't appear here because vendors are reached through gear; only people who actually played a vendor's gear get tagged.
                 </p>
               </div>
             )}
@@ -7921,7 +7925,7 @@ function VendorPreviewCard({
       <p className="text-slate-300 text-xs mt-3">
         Preview of the in-app VendorSheet (About tab) — surfaces wherever this
         vendor is attached ({gearCount}{" "}
-        {gearCount === 1 ? "instrument" : "instruments"}).
+        gear).
       </p>
     </>
   );
@@ -9714,7 +9718,7 @@ export function Admin() {
   const createInstrument = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/instruments", {
-        name: "New instrument",
+        name: "New gear",
         category: "Guitar",
       });
       return res.json() as Promise<AdminInstrument>;
@@ -9984,7 +9988,7 @@ export function Admin() {
                   aria-label={`New ${entity.slice(0, -1)}`}
                   title={
                     entity === "vendors"
-                      ? "Vendors are added via an instrument's scraper"
+                      ? "Vendors are added via a gear item's scraper"
                       : `New ${entity.slice(0, -1)}`
                   }
                   data-testid={`button-new-${entity.slice(0, -1)}`}
@@ -10131,7 +10135,7 @@ export function Admin() {
                     ? "Not attached"
                     : count === 1
                       ? `on ${v.attachments[0].instrumentName}`
-                      : `on ${count} instruments`);
+                      : `on ${count} gear`);
                 return (
                   <li key={v.id}>
                     <button
@@ -10233,15 +10237,15 @@ export function Admin() {
             {entity === "instruments" && filteredInstruments.length === 0 && (
               <li className="px-4 py-6 text-slate-400 text-sm">
                 {needle
-                  ? `No instruments match "${search}".`
-                  : "No instruments yet. Click + New."}
+                  ? `No gear matches "${search}".`
+                  : "No gear yet. Click + New."}
               </li>
             )}
             {entity === "vendors" && filteredVendors.length === 0 && (
               <li className="px-4 py-6 text-slate-400 text-sm leading-relaxed">
                 {needle
                   ? `No vendors match "${search}".`
-                  : "No vendors yet. Open an instrument and paste a Reverb / Sweetwater / Carter Vintage URL into its Vendors scraper."}
+                  : "No vendors yet. Open a gear item and paste a Reverb / Sweetwater / Carter Vintage URL into its Vendors scraper."}
               </li>
             )}
             {entity === "labels" &&

@@ -5594,7 +5594,7 @@ function InstrumentSelect({
       className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
       data-testid={testId}
     >
-      <option value="">— No instrument —</option>
+      <option value="">— No gear —</option>
       {sorted.map((i) => (
         <option key={i.id} value={i.id}>
           {i.name}
