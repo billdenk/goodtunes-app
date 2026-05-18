@@ -4,6 +4,8 @@ import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 interface PlaylistPickerSheetProps {
   songId?: string;
@@ -17,6 +19,13 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
   const [added, setAdded] = useState<string | null>(null);
   const [, navigate] = useLocation();
   const { setShowPlayer, isFavorite, toggleFavorite } = usePlayer();
+  const { toast } = useToast();
+
+  const goToPlaylist = (playlistId: string) => {
+    setShowPlayer(false);
+    if (playlistId === "__favorites__") navigate("/playlists?playlist=__favorites");
+    else navigate(`/playlists?playlist=${encodeURIComponent(playlistId)}`);
+  };
 
   const { data: playlistsRaw, isLoading } = useQuery<any[] | null>({
     queryKey: ["/api/playlists"],
@@ -29,7 +38,8 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
   const handleToggleFavorites = () => {
     // If every target is already favorited, treat the tap as "remove from Favorites".
     // Otherwise, add any that aren't already favorited.
-    if (allInFavorites) {
+    const wasAllInFavorites = allInFavorites;
+    if (wasAllInFavorites) {
       targetSongIds.forEach((id) => toggleFavorite(id));
     } else {
       targetSongIds.forEach((id) => {
@@ -37,6 +47,16 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
       });
     }
     setAdded("__favorites__");
+    if (!wasAllInFavorites) {
+      toast({
+        title: "Added to Favorites",
+        action: (
+          <ToastAction altText="Go to Favorites" onClick={() => goToPlaylist("__favorites__")}>
+            Go to Playlist
+          </ToastAction>
+        ),
+      });
+    }
     setTimeout(onClose, 700);
   };
 
@@ -56,7 +76,23 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
       setAdded(playlistId);
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", playlistId, "songs"] });
+      const pl = (playlistsRaw ?? []).find((p: any) => p.id === playlistId);
+      toast({
+        title: pl ? `Added to ${pl.name}` : "Added to Playlist",
+        action: (
+          <ToastAction altText="Go to Playlist" onClick={() => goToPlaylist(playlistId)}>
+            Go to Playlist
+          </ToastAction>
+        ),
+      });
       setTimeout(onClose, 900);
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Couldn't add to playlist",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
     },
   });
 

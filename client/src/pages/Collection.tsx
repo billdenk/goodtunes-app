@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { BottomNav } from "@/components/BottomNav";
 import { IconButton } from "@/components/ui/IconButton";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -31,7 +32,7 @@ export function Collection() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const favArtists = useFavoriteArtists();
-  const { playSong, currentSong, recentAlbums } = usePlayer();
+  const { playSong, currentSong, recentAlbums, setShowPlayer } = usePlayer();
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<LibraryTab>("albums");
   const [search, setSearch] = useState("");
@@ -55,7 +56,20 @@ export function Collection() {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", vars.playlistId, "songs"] });
       const pl = userPlaylists.find((p) => p.id === vars.playlistId);
-      toast({ title: "Added to playlist", description: pl ? pl.name : undefined });
+      toast({
+        title: pl ? `Added to ${pl.name}` : "Added to Playlist",
+        action: (
+          <ToastAction
+            altText="Go to Playlist"
+            onClick={() => {
+              setShowPlayer(false);
+              navigate(`/playlists?playlist=${encodeURIComponent(vars.playlistId)}`);
+            }}
+          >
+            Go to Playlist
+          </ToastAction>
+        ),
+      });
       setAddToPlaylistSong(null);
     },
     onError: (err: unknown) => {

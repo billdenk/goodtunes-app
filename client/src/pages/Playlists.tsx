@@ -172,9 +172,10 @@ export function Playlists() {
 
   // Auto-open create dialog when arriving with ?create=1
   useEffect(() => {
-    if (typeof window !== "undefined" && window.location.search.includes("create=1")) {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") === "1") {
       setShowCreate(true);
-      // Clean the URL so refresh doesn't re-trigger
       window.history.replaceState({}, "", "/playlists");
     }
   }, [location]);
@@ -246,6 +247,24 @@ export function Playlists() {
   const playlists: Playlist[] = favoritesPlaylist
     ? [favoritesPlaylist, ...userPlaylists]
     : userPlaylists;
+
+  // Deep-link: open a specific playlist via ?playlist=<id> (or ?playlist=__favorites).
+  // Used by the "Go to Playlist" action on the add-to-playlist toast.
+  // Depend on the joined id signature (not just length) so a same-count list
+  // swap still triggers a re-match.
+  const playlistIdsKey = playlists.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get("playlist");
+    if (!target) return;
+    const match = playlists.find((p) => p.id === target);
+    if (match) {
+      setSelectedPlaylist(match);
+      window.history.replaceState({}, "", "/playlists");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, playlistIdsKey]);
 
   const { data: playlistSongsRaw } = useQuery<PlaylistSongEntry[] | null>({
     queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"],
