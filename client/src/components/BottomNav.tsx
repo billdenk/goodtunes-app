@@ -10,31 +10,33 @@ const NavItem = ({
   active,
   onClick,
   testId,
+  align = "left",
 }: {
   label: string;
   icon: (active: boolean) => ReactNode;
   active: boolean;
   onClick: () => void;
   testId?: string;
+  // First/middle items nudge their pill + content 4px LEFT (matches the
+  // bar's left curve and feels visually centered around our asymmetric
+  // icons). The LAST item mirrors that — it nudges 4px RIGHT so the
+  // active pill sits the same distance from the bar's RIGHT curve as
+  // Collection sits from the LEFT curve. Symmetric "edge tightness".
+  align?: "left" | "right";
 }) => {
+  const dir = align === "right" ? 1 : -1;
+  const pillLeft = dir === -1 ? "-4px" : "4px";
+  const pillRight = dir === -1 ? "4px" : "-4px";
+  const contentShift = dir === -1 ? "-translate-x-[4px]" : "translate-x-[4px]";
   return (
     <button
       type="button"
       onClick={onClick}
       // Apple Music's tab bar wraps **icon + label** in the active pill,
-      // not just the icon. Critically: the bar, the icon, and the label
-      // are all fixed — only the highlight pill grows. The bg lives on
-      // an absolute-positioned span behind the content so we can extend
-      // the pill above/below the button's content box without nudging
-      // the icon or label by a single pixel, and without forcing the
-      // bar's padding to grow.
-      //
-      // Shape per Apple HIG: the pill's long axis must run the same
-      // direction as the bar's long axis (horizontal). At 86px wide ×
-      // ~69px tall (57 content + 6 above + 6 below) it's a horizontal
-      // capsule. 86px is the practical width ceiling — bar inner width
-      // is ~350px and four items at justify-around need <=87px each to
-      // keep a hair of gap between them.
+      // not just the icon. The bg lives on an absolute-positioned span
+      // behind the content so we can extend the pill above/below the
+      // button's content box without nudging the icon or label, and
+      // without forcing the bar's padding to grow.
       className="relative flex flex-col items-center gap-[2px] min-w-[86px]"
       data-testid={testId}
     >
@@ -43,21 +45,17 @@ const NavItem = ({
         className="absolute -inset-y-[4px] rounded-full transition-colors duration-200"
         style={{
           background: active ? "rgba(49,158,216,0.18)" : "transparent",
-          // Pill is nudged ~3px left of the button's center so it sits
-          // symmetrically around the icon's visual mass. The Collection
-          // icon in particular has its heavier glyph on the right, which
-          // makes a perfectly-centered pill read as right-leaning.
-          left: "-4px",
-          right: "4px",
+          left: pillLeft,
+          right: pillRight,
         }}
       />
-      <div className="relative w-14 h-7 flex items-center justify-center -translate-x-[4px]">
+      <div className={`relative w-14 h-7 flex items-center justify-center ${contentShift}`}>
         <div className={`transition-all duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}>
           {icon(active)}
         </div>
       </div>
       <span
-        className={`relative text-[10px] font-medium transition-colors duration-150 -translate-x-[4px] ${active ? "text-[#319ED8]" : "text-white/35"}`}
+        className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? "text-[#319ED8]" : "text-white/35"}`}
       >
         {label}
       </span>
@@ -179,7 +177,7 @@ export function BottomNav() {
         <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} />
         <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} />
         <NavItem label="Chat" active={isChat} onClick={() => navigate("/chat")} testId="nav-chat" icon={chatIcon} />
-        <NavItem label="Account" active={isAccount} onClick={() => navigate("/account")} testId="nav-you" icon={youIcon} />
+        <NavItem label="Account" active={isAccount} onClick={() => navigate("/account")} testId="nav-you" icon={youIcon} align="right" />
       </nav>
     </div>
   );
