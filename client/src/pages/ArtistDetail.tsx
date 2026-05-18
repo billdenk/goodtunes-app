@@ -289,20 +289,33 @@ export function ArtistDetail() {
               {streamingBuckets.map((bucket) => {
                 const preview = bucket.items.slice(0, PREVIEW_CAP);
                 const hasMore = bucket.items.length > PREVIEW_CAP;
+                // Rule: only show the chevron + make the heading tappable
+                // when the bucket has more than 5 items. With ≤5 the whole
+                // bucket already fits on screen, so there's nothing to
+                // "see all" and the chevron just adds noise.
+                const showChevron = bucket.items.length > 5;
                 return (
                   <div key={bucket.label} className="mb-7 last:mb-0">
-                    <button
-                      type="button"
-                      onClick={() => setOpenBucket(bucket)}
-                      className="w-full flex items-center justify-between px-5 mb-3 text-left active:opacity-70"
-                      data-testid={`button-bucket-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      <h2 className="text-white text-xl font-bold tracking-tight flex items-center gap-1.5">
+                    {showChevron ? (
+                      <button
+                        type="button"
+                        onClick={() => setOpenBucket(bucket)}
+                        className="flex items-center px-5 mb-3 text-left active:opacity-70"
+                        data-testid={`button-bucket-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        <h2 className="text-white text-xl font-bold tracking-tight flex items-center gap-1.5">
+                          {bucket.label}
+                          <ChevronRight className="w-5 h-5 text-white/40" />
+                        </h2>
+                      </button>
+                    ) : (
+                      <h2
+                        className="text-white text-xl font-bold tracking-tight px-5 mb-3"
+                        data-testid={`heading-bucket-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
                         {bucket.label}
-                        <ChevronRight className="w-5 h-5 text-white/40" />
                       </h2>
-                      <span className="text-white/40 text-[12px]">{bucket.items.length}</span>
-                    </button>
+                    )}
                     <div className="flex gap-4 overflow-x-auto scrollbar-hide px-5 pb-1">
                       {preview.map((release) => (
                         <button
