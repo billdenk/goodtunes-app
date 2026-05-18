@@ -602,10 +602,13 @@ function PersonRow({
             onChange({ action: "use", personId: v, name, email: email || null })
           }
         >
-          <SelectTrigger className="h-8 text-xs" data-testid={`select-person-${proposal.tag}`}>
+          <SelectTrigger
+            className="h-8 text-xs bg-white text-slate-900 border-slate-300"
+            data-testid={`select-person-${proposal.tag}`}
+          >
             <SelectValue placeholder="Pick a person" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="bg-white text-slate-900 border-slate-200">
             {match!.candidates.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.name}
@@ -623,7 +626,7 @@ function PersonRow({
             onChange={(e) =>
               onChange({ action: "create", name: e.target.value, email: email || null })
             }
-            className="h-8 text-xs"
+            className="h-8 text-xs bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
             data-testid={`input-person-name-${proposal.tag}`}
           />
           <Input
@@ -632,7 +635,7 @@ function PersonRow({
             onChange={(e) =>
               onChange({ action: "create", name, email: e.target.value || null })
             }
-            className="h-8 text-xs"
+            className="h-8 text-xs bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
             data-testid={`input-person-email-${proposal.tag}`}
           />
         </div>
