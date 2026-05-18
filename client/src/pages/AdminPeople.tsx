@@ -452,7 +452,7 @@ function MatchSpotifySheet({
             </DialogTitle>
           </div>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Everyone in the catalog without a Spotify link, one at a time. Pick the right artist or skip — we'll save the URL and photo when you pick.
+            Pick the right artist, or skip.
           </DialogDescription>
         </DialogHeader>
 
