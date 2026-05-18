@@ -186,8 +186,16 @@ export function EditablePanel({
       return body;
     },
     onSuccess: async (changed) => {
+      // Refresh any combobox option lists that just had a value added /
+      // edited from this form — otherwise the freshly-added genre /
+      // tag / category won't show up as an existing option next time.
+      const comboKeys = fields
+        .filter((f) => f.type === "combobox" && f.optionsEndpoint)
+        .map((f) => [f.optionsEndpoint] as readonly unknown[]);
       await Promise.all(
-        invalidate.map((key) => qc.invalidateQueries({ queryKey: key })),
+        [...invalidate, ...comboKeys].map((key) =>
+          qc.invalidateQueries({ queryKey: key }),
+        ),
       );
       exitEdit();
       if (changed) toast({ title: `${title} updated` });
@@ -599,6 +607,10 @@ function Combobox({
   const [highlight, setHighlight] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Stable id roots so ARIA `aria-controls`/`aria-activedescendant`
+  // can point at real elements that screen readers can resolve.
+  const listboxId = `${testId}-listbox`;
+  const optionId = (i: number) => `${testId}-opt-${i}`;
 
   // Keep the visible query in sync if the parent draft changes the
   // value out from under us (e.g. Cancel-then-Edit reseed).
@@ -684,6 +696,25 @@ function Combobox({
     }
   };
 
+  // Tab / focus-out commits typed text. Without this a keyboard user
+  // who types "Folk" then tabs to Save loses the value (the parent
+  // draft still holds whatever was there before). We guard against
+  // focus moving to a child of the wrapper (option buttons fire
+  // onMouseDown to commit, then focus moves transiently through the
+  // listbox) by checking `relatedTarget` against the wrapper.
+  const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const next = e.relatedTarget as Node | null;
+    if (next && wrapRef.current?.contains(next)) return;
+    setOpen(false);
+    const trimmed = query.trim();
+    if (trimmed !== (value ?? "")) onChange(trimmed);
+  };
+
+  const activeId =
+    open && rowCount > 0
+      ? optionId(Math.min(highlight, rowCount - 1))
+      : undefined;
+
   return (
     <div ref={wrapRef} className="relative">
       <input
@@ -695,14 +726,21 @@ function Combobox({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onBlur={onBlur}
         onKeyDown={onKeyDown}
         placeholder={placeholder ?? "Search or add new…"}
         className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
         data-testid={testId}
         autoComplete="off"
+        role="combobox"
+        aria-expanded={open && rowCount > 0}
+        aria-controls={listboxId}
+        aria-autocomplete="list"
+        aria-activedescendant={activeId}
       />
       {open && rowCount > 0 && (
         <div
+          id={listboxId}
           className="absolute z-20 top-[calc(100%+4px)] left-0 right-0 max-h-60 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg py-1"
           role="listbox"
           data-testid={`${testId}-options`}
@@ -710,6 +748,7 @@ function Combobox({
           {filtered.map((opt, i) => (
             <button
               key={opt}
+              id={optionId(i)}
               type="button"
               role="option"
               aria-selected={i === highlight}
@@ -736,6 +775,7 @@ function Combobox({
           ))}
           {showAdd && (
             <button
+              id={optionId(filtered.length)}
               type="button"
               role="option"
               aria-selected={highlight === filtered.length}
