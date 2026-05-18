@@ -47,6 +47,7 @@ import {
   ListPlus,
   UserPlus,
   Wand2,
+  Download,
 } from "lucide-react";
 import {
   Popover,
@@ -139,13 +140,17 @@ interface SongLite {
   waveform?: number[] | null;
 }
 
-type Tab = "overview" | "tracks" | "masters" | "bonus";
+type Tab = "overview" | "tracks" | "bonus";
 const TABS: { key: Tab; label: string; phase: number }[] = [
   { key: "overview", label: "Overview", phase: 2 },
   { key: "tracks", label: "Tracks", phase: 2 },
   // Artwork lives inside Overview now (between Release and Metadata) —
   // cover art is core release metadata, not a separate concern.
-  { key: "masters", label: "Masters", phase: 4 },
+  // Masters used to live as a separate tab here — it was redundant with
+  // the Tracks tab (the inline Master chip + MasterEditor own every
+  // master CRUD action). Per-row download lives on each Tracks row to
+  // the right of the duration; "Download all masters" lives in the
+  // Tracks Advanced menu. Deleted 2026-05.
   { key: "bonus", label: "Bonus", phase: 5 },
 ];
 
@@ -320,7 +325,6 @@ export function AdminAlbum() {
         {tab === "tracks" && (
           <TracksPanel album={album} onEdit={openInClassicAdmin} />
         )}
-        {tab === "masters" && <MastersPanel album={album} />}
         {tab === "bonus" && (
           <BonusPanel album={album} onEdit={openInClassicAdmin} />
         )}
@@ -923,6 +927,50 @@ function TracksPanel({
                   </div>
                   <div className="text-[11px] text-slate-500">
                     Auto-sync lyrics on every eligible track.
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              {/* Bulk-download every master on this album. We fire one
+                  anchor click per track with a small stagger so the
+                  browser doesn't dedupe / batch-block them. A real .zip
+                  bundle is server work (jszip on-the-fly) — deferred
+                  until someone asks. For now this is the same action
+                  the operator would take per-row, just looped. */}
+              <DropdownMenuItem
+                onSelect={() => {
+                  const tracksWithMaster = sorted.filter((s) => !!s.audioUrl);
+                  if (tracksWithMaster.length === 0) {
+                    toast({
+                      title: "No masters to download",
+                      description: "Upload masters on the Tracks tab first.",
+                    });
+                    return;
+                  }
+                  tracksWithMaster.forEach((s, i) => {
+                    setTimeout(() => {
+                      const a = document.createElement("a");
+                      a.href = s.audioUrl!;
+                      a.download = `${String(s.trackNumber).padStart(2, "0")} ${s.title}`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                    }, i * 250);
+                  });
+                  toast({
+                    title: `Downloading ${tracksWithMaster.length} master${tracksWithMaster.length === 1 ? "" : "s"}`,
+                    description: "Your browser will save each file.",
+                  });
+                }}
+                data-testid="menu-download-all-masters"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
+              >
+                <Download className="w-4 h-4 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    Download all masters
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Saves every uploaded master to your computer.
                   </div>
                 </div>
               </DropdownMenuItem>
@@ -3017,6 +3065,25 @@ function TrackRow({
           >
             {formatDuration(song.duration)}
           </span>
+        )}
+        {/* Per-row master download — quiet slate icon, only shown when
+            a master actually exists. Same-origin /objects/uploads link
+            with `download` attribute fires the browser save dialog
+            without opening a tab. Replaces the dead Masters tab's
+            "click to play / download" affordance with a single, focused
+            action right where the operator already lives (Tracks). */}
+        {!expanded && !!song.audioUrl && (
+          <a
+            href={song.audioUrl}
+            download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
+            aria-label={`Download master for ${song.title}`}
+            title="Download master"
+            data-testid={`button-download-master-${song.id}`}
+          >
+            <Download className="w-3.5 h-3.5" />
+          </a>
         )}
             {/* Right-aligned P/L/C status chips — Preview / Lyrics /
                 Credits. Hover-only per the chips mockup: the row stays
@@ -7438,435 +7505,6 @@ async function uploadAudioFile(file: File): Promise<string> {
   return url as string;
 }
 
-// Read duration (in seconds, rounded) from an audio file via a hidden
-// <audio> element. Falls back to the song's existing duration if the
-// browser can't decode the file — the server requires a number.
-function readAudioDurationSeconds(file: File): Promise<number | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const a = document.createElement("audio");
-    a.preload = "metadata";
-    a.src = url;
-    const cleanup = () => URL.revokeObjectURL(url);
-    a.onloadedmetadata = () => {
-      const d = a.duration;
-      cleanup();
-      resolve(Number.isFinite(d) && d > 0 ? Math.round(d) : null);
-    };
-    a.onerror = () => {
-      cleanup();
-      resolve(null);
-    };
-  });
-}
-
-function MastersPanel({ album }: { album: AlbumFull }) {
-  const sorted = [...album.songs].sort(
-    (a, b) => a.trackNumber - b.trackNumber,
-  );
-  const withMaster = sorted.filter((s) => !!s.audioUrl).length;
-
-  if (sorted.length === 0) {
-    return (
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-10 text-center"
-        data-testid="panel-masters-empty"
-      >
-        <div className="inline-flex items-center gap-2 text-slate-500 text-sm">
-          <AlertCircle className="w-4 h-4" />
-          Add tracks first, then come back here to upload their masters.
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
-      data-testid="panel-masters"
-    >
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-        <div>
-          <h2 className="text-slate-900 text-[14px] font-bold">
-            Masters
-          </h2>
-          <p className="text-slate-400 text-[11.5px]">
-            <span
-              className={
-                withMaster === sorted.length
-                  ? "text-emerald-700 font-semibold"
-                  : "text-slate-500 font-semibold"
-              }
-            >
-              {withMaster} of {sorted.length}
-            </span>{" "}
-            uploaded · MP3, M4A, WAV, or FLAC · up to 150 MB each
-          </p>
-        </div>
-      </div>
-      <div className="px-5 py-2.5 bg-slate-50/60 border-b border-slate-100 text-[11.5px] text-slate-500 leading-relaxed">
-        A <span className="font-semibold text-slate-700">master</span> is the
-        audio file fans hear when they play a track. One row below = one track
-        on this album. To add a new master, first{" "}
-        <span className="font-semibold text-slate-700">add a track</span> on the
-        Tracks tab — its master slot will show up here.
-      </div>
-      <ol>
-        {sorted.map((song, i) => (
-          <MasterRow
-            key={song.id}
-            song={song}
-            albumId={album.id}
-            isLast={i === sorted.length - 1}
-          />
-        ))}
-      </ol>
-      <div className="px-5 py-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
-        Hi-res downloadable masters + stems are deferred — see roadmap.
-      </div>
-    </section>
-  );
-}
-
-function MasterRow({
-  song,
-  albumId,
-  isLast,
-}: {
-  song: SongLite;
-  albumId: string;
-  isLast: boolean;
-}) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [urlDraft, setUrlDraft] = useState("");
-  const [dragOver, setDragOver] = useState(false);
-  const [replaceOpen, setReplaceOpen] = useState(false);
-
-  const invalidate = () =>
-    qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
-
-  const uploadMut = useMutation({
-    mutationFn: async (file: File) => {
-      const detectedDuration = await readAudioDurationSeconds(file);
-      const url = await uploadAudioFile(file);
-      const body: Record<string, unknown> = { audioUrl: url };
-      if (detectedDuration) body.duration = detectedDuration;
-      await apiRequest("PUT", `/api/admin/songs/${song.id}`, body);
-      return url;
-    },
-    onSuccess: async () => {
-      await invalidate();
-      setReplaceOpen(false);
-      toast({
-        title: song.audioUrl ? "Master replaced" : "Master uploaded",
-        description: song.title,
-      });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Upload failed",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const setUrlMut = useMutation({
-    mutationFn: async (url: string) => {
-      await apiRequest("PUT", `/api/admin/songs/${song.id}`, { audioUrl: url });
-    },
-    onSuccess: async () => {
-      await invalidate();
-      setUrlDraft("");
-      setReplaceOpen(false);
-      toast({
-        title: song.audioUrl ? "Master replaced" : "Master added",
-        description: song.title,
-      });
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Couldn't save that URL",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      }),
-  });
-
-  const removeMut = useMutation({
-    mutationFn: async () => {
-      await apiRequest("PUT", `/api/admin/songs/${song.id}`, {
-        audioUrl: null,
-      });
-    },
-    onSuccess: async () => {
-      await invalidate();
-      toast({ title: "Master removed", description: song.title });
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Couldn't remove the master",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      }),
-  });
-
-  const acceptFile = (file: File | undefined | null) => {
-    if (!file) return;
-    if (
-      !/^audio\//.test(file.type) &&
-      !/\.(mp3|m4a|aac|wav|flac|ogg)$/i.test(file.name)
-    ) {
-      toast({
-        title: "That's not an audio file",
-        description: "Masters need to be MP3, M4A, WAV, FLAC, or OGG.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (file.size > 150 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Keep masters under 150 MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-    uploadMut.mutate(file);
-  };
-
-  const submitUrl = () => {
-    const trimmed = urlDraft.trim();
-    if (!trimmed) return;
-    if (trimmed === song.audioUrl) {
-      setUrlDraft("");
-      return;
-    }
-    setUrlMut.mutate(trimmed);
-  };
-
-  const busy =
-    uploadMut.isPending || setUrlMut.isPending || removeMut.isPending;
-  const hasMaster = !!song.audioUrl;
-
-  return (
-    <li
-      className={[
-        "px-5 py-3 transition-colors",
-        !isLast && "border-b border-slate-100",
-        busy && "bg-slate-50",
-        dragOver && "bg-[#319ED8]/5",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      onDragEnter={(e) => {
-        e.preventDefault();
-        if (!busy) setDragOver(true);
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (!busy) setDragOver(true);
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-        if (busy) return;
-        acceptFile(e.dataTransfer.files?.[0]);
-      }}
-      data-testid={`row-master-${song.id}`}
-    >
-      <div className="group flex items-center gap-4">
-        <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
-          {song.trackNumber}
-        </span>
-        <div className="flex-1 min-w-0">
-          <div
-            className="text-slate-900 text-[13.5px] font-medium truncate"
-            data-testid={`text-master-title-${song.id}`}
-          >
-            {song.title}
-          </div>
-          <div className="flex items-center gap-2.5 mt-0.5">
-            <TrackChip
-              ok={hasMaster}
-              label={hasMaster ? "Master loaded" : "No master"}
-              testId={`chip-master-${song.id}`}
-            />
-            <span className="text-slate-400 text-[11px] tabular-nums">
-              {formatDuration(song.duration)}
-            </span>
-          </div>
-        </div>
-        {hasMaster && song.audioUrl && (
-          <audio
-            controls
-            src={song.audioUrl}
-            preload="none"
-            className="h-8 max-w-[220px]"
-            data-testid={`audio-preview-${song.id}`}
-          />
-        )}
-        {/* Hover-reveal actions. Touch devices keep them visible via the
-            media-hover query so phones aren't stuck without controls. */}
-        <div
-          className={[
-            "flex items-center gap-1 flex-shrink-0 transition-opacity",
-            hasMaster
-              ? "opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100"
-              : "opacity-100",
-            replaceOpen && "opacity-100",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <Popover open={replaceOpen} onOpenChange={setReplaceOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                disabled={busy}
-                className={[
-                  "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 transition-colors",
-                  hasMaster
-                    ? "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                    : "bg-[#319ED8] text-white hover:bg-[#2890c8]",
-                  busy && "opacity-60 cursor-not-allowed",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                data-testid={`button-replace-master-${song.id}`}
-              >
-                {uploadMut.isPending || setUrlMut.isPending ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    {uploadMut.isPending ? "Uploading…" : "Saving…"}
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-3 h-3" />
-                    {hasMaster ? "Replace" : "Upload master"}
-                  </>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              className="w-80 p-0"
-              data-testid={`popover-replace-master-${song.id}`}
-            >
-              <div className="p-4 space-y-3">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    {hasMaster ? "Replace master" : "Add master"}
-                  </div>
-                  <div className="text-[12px] text-slate-500 mt-0.5 truncate">
-                    {song.title}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => !busy && fileInputRef.current?.click()}
-                  disabled={busy}
-                  className="w-full h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-[#2890c8] disabled:opacity-60"
-                  data-testid={`button-popover-upload-${song.id}`}
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  Upload from this device
-                </button>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-px bg-slate-200" />
-                  <span className="text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold">
-                    or
-                  </span>
-                  <div className="flex-1 h-px bg-slate-200" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                    <Link2 className="w-3 h-3" />
-                    Paste a URL
-                  </label>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={urlDraft}
-                      onChange={(e) => setUrlDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          submitUrl();
-                        }
-                      }}
-                      placeholder="https://…"
-                      disabled={busy}
-                      autoFocus={false}
-                      className="flex-1 h-8 rounded-md border border-slate-200 bg-white px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
-                      data-testid={`input-popover-url-${song.id}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={submitUrl}
-                      disabled={busy || !urlDraft.trim()}
-                      className="h-8 px-3 rounded-md bg-slate-900 text-white text-[11.5px] font-semibold hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
-                      data-testid={`button-popover-save-url-${song.id}`}
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-                {hasMaster && (
-                  <div className="text-[11px] text-slate-400 pt-1">
-                    Tip: you can also drop an audio file directly on the row.
-                  </div>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
-          {hasMaster && (
-            <button
-              type="button"
-              onClick={() => {
-                if (busy) return;
-                if (
-                  window.confirm(
-                    `Remove the master from "${song.title}"? The track keeps its title, lyrics, and credits.`,
-                  )
-                ) {
-                  removeMut.mutate();
-                }
-              }}
-              disabled={busy}
-              className="px-2 py-1.5 rounded-md text-[11.5px] font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-              data-testid={`button-remove-master-${song.id}`}
-              aria-label="Remove master"
-              title="Remove master"
-            >
-              {removeMut.isPending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Trash2 className="w-3 h-3" />
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="audio/*,.flac"
-        className="hidden"
-        onChange={(e) => {
-          acceptFile(e.target.files?.[0]);
-          e.target.value = "";
-        }}
-        data-testid={`input-master-file-${song.id}`}
-      />
-    </li>
-  );
-}
 
 /* ─── Bonus tab (videos + photos) ──────────────────────────────────── */
 
