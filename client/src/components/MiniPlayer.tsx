@@ -66,7 +66,7 @@ export function MiniPlayer() {
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-3 pl-3 pr-3 py-2.5">
+          <div className="flex items-center gap-3 pl-3 pr-3 py-1.5">
             <img
               src={currentSong.album.artwork}
               alt={currentSong.album.title}
