@@ -3669,6 +3669,7 @@ function GoodSyncPanel({
   draftLyrics,
   onSyncWithAudio,
   syncing,
+  onSaved,
 }: {
   song: SongLite;
   draftLyrics: string;
@@ -3678,7 +3679,11 @@ function GoodSyncPanel({
   /** True while alignment is in flight — disables the button + shows
    *  a spinner. */
   syncing?: boolean;
+  /** Called after a successful cue-text edit save so the parent can
+   *  re-fetch and refresh the song record. */
+  onSaved?: () => Promise<void> | void;
 }) {
+  const { toast } = useToast();
   // Sync-with-audio uses ElevenLabs Speech-to-Text — it transcribes the
   // master directly, so typed lyrics are no longer required to run the
   // sync. The Plain pane is purely a reference for the admin to spot
@@ -3686,6 +3691,43 @@ function GoodSyncPanel({
   const canSync = !song.instrumental && !!song.audioUrl;
   const savedCues = song.syncedLyrics ?? [];
   const hasSynced = canSync && savedCues.length > 0;
+
+  // ── Inline cue-text edit mode ─────────────────────────────────────
+  // Admin clicks the pencil → cue list swaps to text inputs (timings
+  // are read-only). Save persists via PUT /api/admin/songs/:id with the
+  // updated syncedLyrics. Cancel discards the draft. Timestamps and
+  // endMs are preserved untouched — STT got the timing right, we're
+  // only fixing what it misheard.
+  const [editing, setEditing] = useState(false);
+  const [cueDraft, setCueDraft] = useState<
+    { timeMs: number; endMs?: number; text: string }[]
+  >([]);
+  const enterEdit = () => {
+    setCueDraft(savedCues.map((c) => ({ ...c })));
+    setEditing(true);
+  };
+  const cancelEdit = () => {
+    setEditing(false);
+    setCueDraft([]);
+  };
+  const saveCueEdits = useMutation({
+    mutationFn: async () =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+        syncedLyrics: cueDraft,
+      }),
+    onSuccess: async () => {
+      await onSaved?.();
+      toast({ title: "GoodSync™ cues saved" });
+      setEditing(false);
+      setCueDraft([]);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save cue edits",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
   // Keep the old `canPlay` name for the audio-element render block —
   // play UI is gated on having real cues now, not on typed lyrics.
   const canPlay = hasSynced;
@@ -3823,56 +3865,87 @@ function GoodSyncPanel({
         </Popover>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        {previewCues.length > 0 && (
-          <span
-            className="text-[10px] text-slate-400 tabular-nums"
-            data-testid={`text-cue-count-${song.id}`}
-          >
-            {previewCues.length} cues
-          </span>
-        )}
-        {/* "Sync with audio" pill shows only while the song hasn't
-            been synced yet. Once cues exist, the pill disappears and
-            the play button (next to it) is the only header control.
-            STT doesn't need typed lyrics, so this no longer depends
-            on the Plain pane having text. */}
-        {canSync && !hasSynced && onSyncWithAudio && (
-          <button
-            type="button"
-            onClick={onSyncWithAudio}
-            disabled={syncing}
-            title="Sync with audio — uses ElevenLabs to time each line to the master"
-            className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid={`button-sync-audio-${song.id}`}
-          >
-            {syncing ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Sparkles className="w-3 h-3" />
+        {/* Edit mode shows Cancel + Save and hides the play/sync
+            controls. Cue count was moved to a footer below the box. */}
+        {editing ? (
+          <>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={saveCueEdits.isPending}
+              className="h-6 px-2 rounded-md text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+              data-testid={`button-cancel-cue-edit-${song.id}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => saveCueEdits.mutate()}
+              disabled={saveCueEdits.isPending}
+              className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#319ED8]/90 disabled:opacity-50"
+              data-testid={`button-save-cue-edit-${song.id}`}
+            >
+              {saveCueEdits.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : null}
+              {saveCueEdits.isPending ? "Saving…" : "Save"}
+            </button>
+          </>
+        ) : (
+          <>
+            {/* "Sync with audio" pill shows only while the song hasn't
+                been synced yet. */}
+            {canSync && !hasSynced && onSyncWithAudio && (
+              <button
+                type="button"
+                onClick={onSyncWithAudio}
+                disabled={syncing}
+                title="Sync with audio — uses ElevenLabs to time each line to the master"
+                className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid={`button-sync-audio-${song.id}`}
+              >
+                {syncing ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3 h-3" />
+                )}
+                {syncing ? "Syncing…" : "Sync with audio"}
+              </button>
             )}
-            {syncing ? "Syncing…" : "Sync with audio"}
-          </button>
-        )}
-        {/* Header play/pause — the ONLY play control. Drives the mini
-            progress bar at the bottom of the box. Gray-until-hover so
-            it sits quietly next to the Info button and cue count.
-            Only appears once we actually have cues to scroll. */}
-        {hasSynced && (
-          <button
-            type="button"
-            onClick={togglePlay}
-            disabled={previewCues.length === 0}
-            aria-label={playing ? "Pause preview" : "Play preview"}
-            title={playing ? "Pause preview" : "Play preview"}
-            className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
-            data-testid={`button-play-goodsync-header-${song.id}`}
-          >
-            {playing ? (
-              <Pause className="w-3.5 h-3.5" />
-            ) : (
-              <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
+            {/* Pencil — enters cue-text edit mode. Sits LEFT of the
+                play button per Bill's spec. Only meaningful once cues
+                exist; we hide it pre-sync so the row doesn't get noisy. */}
+            {hasSynced && (
+              <button
+                type="button"
+                onClick={enterEdit}
+                aria-label="Edit cue text"
+                title="Edit cue text — fix words STT misheard. Timings stay put."
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center"
+                data-testid={`button-edit-cues-${song.id}`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
             )}
-          </button>
+            {/* Header play/pause — the ONLY play control. */}
+            {hasSynced && (
+              <button
+                type="button"
+                onClick={togglePlay}
+                disabled={previewCues.length === 0}
+                aria-label={playing ? "Pause preview" : "Play preview"}
+                title={playing ? "Pause preview" : "Play preview"}
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                data-testid={`button-play-goodsync-header-${song.id}`}
+              >
+                {playing ? (
+                  <Pause className="w-3.5 h-3.5" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
+                )}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -3946,6 +4019,35 @@ function GoodSyncPanel({
                 <div className="text-center text-[12px] text-slate-400 py-6">
                   No cues — re-run Sync with audio.
                 </div>
+              ) : editing ? (
+                /* Edit mode: one row per cue with a read-only timestamp
+                   chip on the left and an editable text input on the
+                   right. Timing is intentionally not editable here —
+                   admins fix words STT misheard, not the timings. */
+                cueDraft.map((cue, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2"
+                    data-testid={`row-cue-edit-${song.id}-${i}`}
+                  >
+                    <span className="text-[10px] tabular-nums text-slate-400 w-12 flex-shrink-0">
+                      {fmt(cue.timeMs / 1000)}
+                    </span>
+                    <input
+                      type="text"
+                      value={cue.text}
+                      onChange={(e) => {
+                        const next = cueDraft.slice();
+                        next[i] = { ...next[i], text: e.target.value };
+                        setCueDraft(next);
+                      }}
+                      disabled={saveCueEdits.isPending}
+                      aria-label={`Cue at ${fmt(cue.timeMs / 1000)} — edit text`}
+                      className="flex-1 min-w-0 h-7 rounded-md border border-slate-200 bg-white px-2 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+                      data-testid={`input-cue-text-${song.id}-${i}`}
+                    />
+                  </div>
+                ))
               ) : (
                 previewCues.map((cue, i) => {
                   const isActive = i === activeIdx;
@@ -4037,8 +4139,9 @@ function GoodSyncPanel({
 
             {/* Mini progress bar — sole transport indicator at the
                 bottom. Brand blue fill, slate track. Click anywhere on
-                the bar to seek. The Play button lives in the header
-                (top-right) per Bill's spec. */}
+                the bar to seek. Hidden during edit mode so the input
+                rows have room to breathe. */}
+            {!editing && (
             <div className="absolute inset-x-0 bottom-0 pointer-events-none">
               <div className="h-6 bg-gradient-to-t from-slate-50 via-slate-50/85 to-transparent" />
               <div className="pointer-events-auto relative bg-slate-50 px-3 pb-1.5 pt-1 flex items-center gap-2">
@@ -4091,7 +4194,21 @@ function GoodSyncPanel({
                 </span>
               </div>
             </div>
+            )}
           </>
+        )}
+      </div>
+
+      {/* Cue-count footer — moved out of the header so the toolbar can
+          fit the pencil + play (or Cancel + Save) without crowding. */}
+      <div className="flex items-center justify-end h-4">
+        {hasSynced && (
+          <span
+            className="text-[10px] text-slate-400 tabular-nums"
+            data-testid={`text-cue-count-${song.id}`}
+          >
+            {(editing ? cueDraft.length : previewCues.length)} cues
+          </span>
         )}
       </div>
     </div>
@@ -4339,9 +4456,6 @@ function LyricsEditor({
                     View original
                   </button>
                 )}
-                <span className="text-[10px] text-slate-400 tabular-nums">
-                  {lineCount} {lineCount === 1 ? "line" : "lines"}
-                </span>
               </div>
             </div>
 
@@ -4396,6 +4510,19 @@ function LyricsEditor({
                 data-testid={`textarea-lyrics-${song.id}`}
               />
             )}
+            {/* Line-count footer — moved out of the header so the
+                toolbar can fit "View original" without crowding. Mirrors
+                the cue-count footer on the GoodSync™ pane. */}
+            <div className="flex items-center justify-end h-4">
+              {!song.instrumental && (
+                <span
+                  className="text-[10px] text-slate-400 tabular-nums"
+                  data-testid={`text-lyrics-line-count-${song.id}`}
+                >
+                  {lineCount} {lineCount === 1 ? "line" : "lines"}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* RIGHT — GoodSync™ live preview */}
@@ -4404,6 +4531,7 @@ function LyricsEditor({
             draftLyrics={draft}
             onSyncWithAudio={() => alignMut.mutate()}
             syncing={alignMut.isPending}
+            onSaved={onSaved}
           />
         </div>
       </div>

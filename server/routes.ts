@@ -1669,10 +1669,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             typeof c.text === "string",
         )
       ) {
-        updates.syncedLyrics = syncedLyrics.map((c: any) => ({
-          timeMs: Math.round(c.timeMs),
-          text: String(c.text),
-        }));
+        updates.syncedLyrics = syncedLyrics.map((c: any) => {
+          const out: { timeMs: number; endMs?: number; text: string } = {
+            timeMs: Math.round(c.timeMs),
+            text: String(c.text),
+          };
+          // Preserve endMs when present — STT-produced cues carry it,
+          // and the Apple-Music-style gap-dot logic in GoodSyncPanel
+          // (and the consumer player) depends on it. Dropping it here
+          // would silently regress the dot timing every time admin
+          // edits cue text.
+          if (
+            typeof c.endMs === "number" &&
+            Number.isFinite(c.endMs) &&
+            c.endMs > c.timeMs
+          ) {
+            out.endMs = Math.round(c.endMs);
+          }
+          return out;
+        });
       } else {
         updates.syncedLyrics = null;
       }
