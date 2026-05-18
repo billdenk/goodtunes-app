@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { SheetShell, AlbumHero, SectionLabel, AppleMusicLogo, SpotifyLogo, pressFx } from "./_shared";
 
 // Variant B — Light sheet with brand-color tiles.
@@ -5,7 +6,7 @@ import { SheetShell, AlbumHero, SectionLabel, AppleMusicLogo, SpotifyLogo, press
 // and uses each service's brand color on the tile so the logos read as
 // app-icon shortcuts rather than dark voids.
 export function LightBrand() {
-  const tile = (bg: string): React.CSSProperties => ({
+  const tile = (bg: string): CSSProperties => ({
     width: 108,
     height: 108,
     borderRadius: 28,

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { SheetShell, AlbumHero, SectionLabel, AppleMusicLogo, SpotifyLogo, pressFx } from "./_shared";
 
 // Variant C — Apple "Listen on …" rows.
@@ -6,7 +7,7 @@ import { SheetShell, AlbumHero, SectionLabel, AppleMusicLogo, SpotifyLogo, press
 // service name + caption, and a chevron on the right. Reads as
 // app-launcher links rather than dark squares.
 export function ListenRows() {
-  const row: React.CSSProperties = {
+  const row: CSSProperties = {
     display: "flex",
     alignItems: "center",
     gap: 14,
@@ -20,7 +21,7 @@ export function ListenRows() {
     ...pressFx(),
   };
 
-  const logoTile = (bg: string): React.CSSProperties => ({
+  const logoTile = (bg: string): CSSProperties => ({
     width: 46,
     height: 46,
     borderRadius: 12,
