@@ -4004,6 +4004,19 @@ function GoodSyncPanel({
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("play", onPlayEv);
     audio.addEventListener("pause", onPauseEv);
+    // Force-start buffering. Dropbox hot-link URLs (dl.dropboxusercontent.com)
+    // often ignore preload="auto" — the element sits at readyState 0 until
+    // the first explicit load(). Without this, the first tap of the header
+    // play triangle calls audio.play() on an unbuffered element, the promise
+    // rejects silently, and the triangle "does nothing" until the admin
+    // interacts with the visible Master <audio> first.
+    if (audio.readyState < 2) {
+      try {
+        audio.load();
+      } catch {
+        /* swallow — load() can throw on detached elements */
+      }
+    }
     return () => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("play", onPlayEv);
@@ -4020,8 +4033,26 @@ function GoodSyncPanel({
 
   const togglePlay = () => {
     if (!audio || !song.audioUrl) return;
-    if (audio.paused) audio.play().catch(() => {});
-    else audio.pause();
+    if (!audio.paused) {
+      audio.pause();
+      return;
+    }
+    // Try to play immediately. If metadata hasn't arrived yet (Dropbox /
+    // slow CDN), .play() rejects with a "no supported source" / aborted
+    // error — in that case kick a load() and retry once canplay fires, so
+    // the first tap doesn't feel dead.
+    audio.play().catch(() => {
+      const onReady = () => {
+        audio.removeEventListener("canplay", onReady);
+        audio.play().catch(() => {});
+      };
+      audio.addEventListener("canplay", onReady, { once: true });
+      try {
+        audio.load();
+      } catch {
+        /* ignore */
+      }
+    });
   };
 
   const fmt = (sec: number) => {
