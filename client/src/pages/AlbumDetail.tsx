@@ -717,7 +717,9 @@ export function AlbumDetail() {
               )}
               {ownedNums.length > 0 && (
                 <span className="block mt-1">
-                  You own {ownedNums.length === 1 ? `No. ${(ownedNums[0]).toString().padStart(2, "0")}` : `${ownedNums.length} certificates`} of this {album.type === "EP" ? "EP" : album.type === "Single" ? "single" : "LP"}.
+                  {ownedNums.length === 1
+                    ? `You own No. ${(ownedNums[0]).toString().padStart(2, "0")} of this ${album.type === "EP" ? "EP" : album.type === "Single" ? "single" : "LP"}.`
+                    : `You own ${ownedNums.length} ${album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : "LPs"}.`}
                 </span>
               )}
             </p>
