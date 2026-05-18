@@ -45,15 +45,18 @@ const SIZE_CLASSES: Record<IconButtonSize, string> = {
   lg: "w-12 h-12 [&>svg]:w-[22px] [&>svg]:h-[22px]",
 };
 
-// `bg-white/10` on #00062B is only a ~2.5% lightness lift and reads
-// as bare glyph rather than a circle chip. Apple Music's library
-// search/filter circles on its dark bg sit closer to 14–16% white —
-// clearly visible as a rounded surface but still subtle. Match that.
+// Glass chip on the navy `#00062B` background. We've now tried 10%,
+// 14%, and 16% white — all of them disappear into the navy on most
+// real screens (Bill's 5K iMac in particular). Apple Music's chips
+// read at roughly 22–24% white over its near-black bg; matching that
+// makes the rounded surface clearly visible as a chip without ever
+// looking like a hard button. Tuned against the live Collection page.
+// Hover lifts another 8% for the desktop pointer affordance.
 const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
-  glass: "text-white bg-white/[0.14] hover:bg-white/[0.20]",
+  glass: "text-white bg-white/[0.22] hover:bg-white/[0.30]",
   dimmed: "text-white bg-black/45 hover:bg-black/55 backdrop-blur-md",
   solid: "text-white bg-[#319ED8] hover:bg-[#319ED8]/90",
-  ghost: "text-white hover:bg-white/[0.14]",
+  ghost: "text-white hover:bg-white/[0.22]",
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
