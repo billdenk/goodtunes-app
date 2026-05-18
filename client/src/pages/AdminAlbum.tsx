@@ -159,7 +159,10 @@ export function AdminAlbum() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/albums/:id");
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("overview");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Artwork editor lives as a modal hanging off the page header thumbnail,
   // not as a dedicated panel on Overview. Operators rarely change cover
   // art — making it a hover-pencil → modal kills a whole inline card of
@@ -178,6 +181,29 @@ export function AdminAlbum() {
   const { data: album, isLoading, error } = useQuery<AlbumFull>({
     queryKey: ["/api/albums", albumId],
     enabled: !!user?.isAdmin && !!albumId,
+  });
+
+  const deleteAlbum = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/albums/${albumId}`);
+    },
+    onSuccess: () => {
+      // Drop the stale detail cache entirely so the iframe doesn't re-show
+      // an album that no longer exists.
+      queryClient.removeQueries({ queryKey: ["/api/albums", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      toast({ title: "Album deleted." });
+      setDeleteConfirmOpen(false);
+      navigate("/admin/albums");
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't delete album",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
   });
 
   const openInClassicAdmin = () => {
@@ -259,7 +285,8 @@ export function AdminAlbum() {
         </div>
 
         {/* HEADER */}
-        <div className="flex items-start gap-5">
+        <div className="flex items-start gap-5 justify-between">
+          <div className="flex items-start gap-5 min-w-0 flex-1">
           {/* Cover thumbnail doubles as the artwork editor trigger. The
               pencil chip reveals on hover (always on for keyboard focus
               + touch via focus-visible). Clicking opens the full editor
@@ -332,6 +359,23 @@ export function AdminAlbum() {
               {album.label && <span>· {album.label.name}</span>}
             </div>
           </div>
+          </div>
+          {/* Destructive action — kept visually distant from the main
+              title cluster (its own flex column, hairline-separated by
+              the gap-5) so a thumb can't slide between Edit-artwork and
+              Delete. Opens a rose-tinted confirm sheet per replit.md. */}
+          <div className="flex-shrink-0 pl-3 border-l border-slate-100">
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={deleteAlbum.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-rose-600 hover:bg-rose-50 rounded-md disabled:opacity-50"
+              data-testid="button-delete-album"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          </div>
         </div>
 
         {/* TABS */}
@@ -370,6 +414,52 @@ export function AdminAlbum() {
           <BonusPanel album={album} onEdit={openInClassicAdmin} />
         )}
       </div>
+
+      {/* Destructive confirm sheet — names the album being destroyed
+          and lists what goes with it (per replit.md rule). Rose-tinted
+          primary button; Cancel sits on the left so the thumb defaults
+          away from destruction. */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(v) => !deleteAlbum.isPending && setDeleteConfirmOpen(v)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-delete-album"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Delete <span className="italic">{album.title}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              This removes the album, all {album.songs.length}{" "}
+              {album.songs.length === 1 ? "track" : "tracks"}, their masters,
+              snippets, lyrics, credits, and any playlist references.
+              This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deleteAlbum.isPending}
+              data-testid="button-delete-album-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => deleteAlbum.mutate()}
+              disabled={deleteAlbum.isPending}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              data-testid="button-delete-album-confirm"
+            >
+              {deleteAlbum.isPending ? "Deleting…" : "Delete album"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminFrame>
   );
 }
