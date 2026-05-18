@@ -1,4 +1,4 @@
-import { MoreHorizontal, Play, Shuffle, Disc3 } from "lucide-react";
+import { Play, Shuffle, Disc3 } from "lucide-react";
 import { PhoneBezel } from "./PhoneBezel";
 
 export interface AlbumPreviewSong {
@@ -19,6 +19,11 @@ export interface AlbumPreviewAlbum {
   isHidden: boolean;
   label?: { id: string; name: string } | null;
   songs: AlbumPreviewSong[];
+  // Ownership mirrors the real Album type so the preview's footer matches
+  // the fan-facing AlbumDetail line-for-line ("You own No. 03 of this LP."
+  // / "You own 3 LPs."). Optional — preview hides the line if absent.
+  ownedCertificates?: number[] | null;
+  certificateNumber?: number | null;
 }
 
 /**
@@ -39,6 +44,19 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
   const totalSeconds = sorted.reduce((sum, s) => sum + (s.duration || 0), 0);
   const totalMinutes = Math.round(totalSeconds / 60);
   const trackCount = sorted.length;
+
+  // Mirror AlbumDetail's `ownedNums` derivation so the preview reads the
+  // same as the fan page when admin seed data carries ownership.
+  const ownedNums =
+    album.ownedCertificates && album.ownedCertificates.length > 0
+      ? album.ownedCertificates
+      : album.certificateNumber
+        ? [album.certificateNumber]
+        : [];
+  const ownLabel =
+    album.type === "EP" ? "EP" : album.type === "Single" ? "single" : "LP";
+  const ownLabelPlural =
+    album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : "LPs";
 
   return (
     <PhoneBezel
@@ -222,16 +240,13 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
             {trackCount} {trackCount === 1 ? "song" : "songs"}
             {totalMinutes > 0 ? `, ${totalMinutes} min` : ""}
           </div>
-        </div>
-
-        <div
-          aria-hidden
-          className="mt-5 self-stretch flex items-center justify-center"
-        >
-          <MoreHorizontal
-            className="w-5 h-5"
-            style={{ color: "rgba(235,235,245,0.5)" }}
-          />
+          {ownedNums.length > 0 && (
+            <div className="mt-1" data-testid="text-preview-album-owned">
+              {ownedNums.length === 1
+                ? `You own No. ${ownedNums[0].toString().padStart(2, "0")} of this ${ownLabel}.`
+                : `You own ${ownedNums.length} ${ownLabelPlural}.`}
+            </div>
+          )}
         </div>
       </div>
     </PhoneBezel>
