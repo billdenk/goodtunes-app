@@ -18,7 +18,7 @@ export function MiniPlayer() {
     : "absolute left-0 right-0 z-30 px-4 pb-1";
   const containerStyle: React.CSSProperties = hidden
     ? { bottom: 12, left: 70, right: 12, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
-    : { bottom: 96, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
+    : { bottom: 92, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
 
   return (
     <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 pointer-events-none">
