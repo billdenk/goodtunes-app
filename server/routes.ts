@@ -9,7 +9,7 @@ import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
-import { searchArtist as searchSpotifyArtist, searchArtistCandidates, spotifyConfigured } from "./lib/spotify";
+import { searchArtist as searchSpotifyArtist, searchArtistCandidates, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
 
 const scryptAsync = promisify(scrypt);
 
@@ -2604,6 +2604,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       //    decisions[tag] = { action: "use" | "create" | "skip", ... }
       const personIdByTag = new Map<string, string>();
       const createdPeople: Array<{ tag: string; id: string; name: string }> = [];
+      // Per-person Spotify lookup result. We pass this back to the
+      // client so the import sheet can walk the admin through any
+      // ambiguous matches one-by-one. Confident matches are saved
+      // server-side here; ambiguous + none rows are NOT saved — the
+      // client decides.
+      const spotifyReport: Array<{
+        personId: string;
+        name: string;
+        status: "matched" | "ambiguous" | "none" | "error";
+        match?: SpotifyArtistCandidate;
+        candidates?: SpotifyArtistCandidate[];
+      }> = [];
       for (const p of proposal.people as Array<{ tag: string; name: string; email?: string | null }>) {
         const d = decisions[p.tag] || { action: "create", name: p.name, email: p.email ?? null };
         if (d.action === "skip") continue;
@@ -2637,15 +2649,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         //   - the lookup throws or times out.
         if (spotifyConfigured()) {
           try {
-            const match = await searchSpotifyArtist(created.name);
-            if (match && match.confident) {
+            const lookup = await searchArtistForImport(created.name, 3);
+            if (lookup.status === "matched") {
               await storage.updatePerson(created.id, {
-                spotifyUrl: match.spotifyUrl,
-                ...(match.photoUrl ? { photoUrl: match.photoUrl } : {}),
+                spotifyUrl: lookup.match.spotifyUrl,
+                ...(lookup.match.photoUrl ? { photoUrl: lookup.match.photoUrl } : {}),
               } as any);
+              spotifyReport.push({
+                personId: created.id,
+                name: created.name,
+                status: "matched",
+                match: lookup.match,
+              });
+            } else if (lookup.status === "ambiguous") {
+              spotifyReport.push({
+                personId: created.id,
+                name: created.name,
+                status: "ambiguous",
+                candidates: lookup.candidates,
+              });
+            } else {
+              spotifyReport.push({
+                personId: created.id,
+                name: created.name,
+                status: "none",
+              });
             }
           } catch (err) {
             console.warn("[credits/commit] spotify enrich failed", created.name, err);
+            spotifyReport.push({ personId: created.id, name: created.name, status: "error" });
           }
         }
       }
@@ -2783,7 +2815,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.updateAlbum(albumId, { linerNotes } as any);
       }
 
-      return res.json({ ok: true, createdPeople, writerCount, performerCount, albumCreditCount });
+      return res.json({ ok: true, createdPeople, writerCount, performerCount, albumCreditCount, spotifyReport });
     } catch (err: any) {
       console.error("[credits/commit]", err);
       return res.status(500).json({ message: err?.message || "Failed to import credits." });

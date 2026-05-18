@@ -13,7 +13,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Upload, FileText, X, ChevronRight, UserPlus, Check, AlertCircle } from "lucide-react";
+import { Loader2, Upload, FileText, X, ChevronRight, UserPlus, Check, AlertCircle, User as UserIcon, SkipForward } from "lucide-react";
+import { SiSpotify } from "react-icons/si";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 interface PersonCandidate {
@@ -60,6 +61,24 @@ type PersonDecision =
   | { action: "create"; name: string; email: string | null }
   | { action: "skip" };
 
+interface SpotifyCandidate {
+  id: string;
+  name: string;
+  spotifyUrl: string;
+  photoUrl: string | null;
+  popularity: number;
+  followers: number;
+  genres: string[];
+}
+
+interface SpotifyReportItem {
+  personId: string;
+  name: string;
+  status: "matched" | "ambiguous" | "none" | "error";
+  match?: SpotifyCandidate;
+  candidates?: SpotifyCandidate[];
+}
+
 export function CreditsImportSheet({
   albumId,
   open,
@@ -73,12 +92,20 @@ export function CreditsImportSheet({
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [step, setStep] = useState<"source" | "review">("source");
+  const [step, setStep] = useState<"source" | "review" | "spotify">("source");
   const [sourceUrl, setSourceUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<ParseResponse | null>(null);
   const [decisions, setDecisions] = useState<Record<string, PersonDecision>>({});
   const [linerNotes, setLinerNotes] = useState("");
+  // Queue of newly-created people that couldn't be auto-matched on
+  // Spotify (status "ambiguous" or "none"). Walked one at a time after
+  // commit so the admin can pick a candidate or skip for later.
+  const [spotifyQueue, setSpotifyQueue] = useState<SpotifyReportItem[]>([]);
+  const [spotifyIndex, setSpotifyIndex] = useState(0);
+  // Summary toast values stashed across the commit → spotify step so
+  // we can show one final toast when the matching flow ends.
+  const [commitSummary, setCommitSummary] = useState<string>("");
 
   const reset = () => {
     setStep("source");
@@ -87,6 +114,9 @@ export function CreditsImportSheet({
     setParsed(null);
     setDecisions({});
     setLinerNotes("");
+    setSpotifyQueue([]);
+    setSpotifyIndex(0);
+    setCommitSummary("");
   };
 
   const parseMutation = useMutation({
@@ -147,18 +177,30 @@ export function CreditsImportSheet({
       const p = body.performerCount ?? 0;
       const a = body.albumCreditCount ?? 0;
       const np = body.createdPeople?.length ?? 0;
-      toast({
-        title: "Credits imported",
-        description: `${np} new ${np === 1 ? "person" : "people"} · ${w} writer ${w === 1 ? "row" : "rows"} · ${p} performer ${p === 1 ? "row" : "rows"} · ${a} album credit ${a === 1 ? "row" : "rows"}`,
-      });
+      const summary = `${np} new ${np === 1 ? "person" : "people"} · ${w} writer ${w === 1 ? "row" : "rows"} · ${p} performer ${p === 1 ? "row" : "rows"} · ${a} album credit ${a === 1 ? "row" : "rows"}`;
       // Refresh every surface that pulls credits or the album itself.
       qc.invalidateQueries({ queryKey: ["/api/albums"] });
       qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
       qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "credits"] });
       qc.invalidateQueries({ queryKey: ["/api/people"] });
       qc.invalidateQueries({ queryKey: [`/api/admin/albums/${albumId}/credits`] });
-      reset();
-      onOpenChange(false);
+
+      const report: SpotifyReportItem[] = Array.isArray(body.spotifyReport) ? body.spotifyReport : [];
+      const matched = report.filter((r) => r.status === "matched").length;
+      const queue = report.filter((r) => r.status === "ambiguous" || r.status === "none");
+      const summaryWithSpotify = `${summary}${report.length ? ` · ${matched} auto-matched on Spotify` : ""}`;
+
+      if (queue.length === 0) {
+        toast({ title: "Credits imported", description: summaryWithSpotify });
+        reset();
+        onOpenChange(false);
+        return;
+      }
+      // Walk the admin through the unmatched people before closing.
+      setCommitSummary(summaryWithSpotify);
+      setSpotifyQueue(queue);
+      setSpotifyIndex(0);
+      setStep("spotify");
     },
     onError: (err: Error) => {
       toast({ title: "Couldn't save credits", description: err.message, variant: "destructive" });
@@ -200,9 +242,12 @@ export function CreditsImportSheet({
             Import credits
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            {step === "source"
-              ? "Paste a Dropbox link or drop a credits doc — we'll read it against this album's tracks and propose People + per-track writers + performers."
-              : "Review the proposal. Match people to existing rows, drop ones you don't want, and edit the liner notes. Nothing is saved until you confirm."}
+            {step === "source" &&
+              "Paste a Dropbox link or drop a credits doc — we'll read it against this album's tracks and propose People + per-track writers + performers."}
+            {step === "review" &&
+              "Review the proposal. Match people to existing rows, drop ones you don't want, and edit the liner notes. Nothing is saved until you confirm."}
+            {step === "spotify" &&
+              "Credits saved. A few new people couldn't be matched on Spotify automatically — pick the right artist or skip to handle later."}
           </DialogDescription>
         </DialogHeader>
 
@@ -216,7 +261,7 @@ export function CreditsImportSheet({
               fileInputRef={fileInputRef}
               busy={parseMutation.isPending}
             />
-          ) : parsed ? (
+          ) : step === "review" && parsed ? (
             <ReviewStep
               parsed={parsed}
               decisions={decisions}
@@ -224,6 +269,24 @@ export function CreditsImportSheet({
               linerNotes={linerNotes}
               setLinerNotes={setLinerNotes}
               counts={counts}
+            />
+          ) : step === "spotify" && spotifyQueue[spotifyIndex] ? (
+            <SpotifyStep
+              item={spotifyQueue[spotifyIndex]}
+              index={spotifyIndex}
+              total={spotifyQueue.length}
+              onPicked={() => {
+                // Advance past this person; finish when we walk off the end.
+                const next = spotifyIndex + 1;
+                if (next >= spotifyQueue.length) {
+                  toast({ title: "Credits imported", description: commitSummary });
+                  queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+                  reset();
+                  onOpenChange(false);
+                } else {
+                  setSpotifyIndex(next);
+                }
+              }}
             />
           ) : null}
         </div>
@@ -259,7 +322,7 @@ export function CreditsImportSheet({
                 )}
               </Button>
             </>
-          ) : (
+          ) : step === "review" ? (
             <>
               <Button
                 type="button"
@@ -289,6 +352,23 @@ export function CreditsImportSheet({
                 )}
               </Button>
             </>
+          ) : (
+            // Spotify step footer: a quiet "Finish later" so the admin
+            // can bail out at any point and resolve the rest manually
+            // from each Person page later.
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                toast({ title: "Credits imported", description: commitSummary });
+                queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+                reset();
+                onOpenChange(false);
+              }}
+              data-testid="button-spotify-finish-later"
+            >
+              Finish later
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>
@@ -683,6 +763,128 @@ function PersonRow({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── Step 3: Spotify matching (post-commit) ─────────────────────────── */
+
+function SpotifyStep({
+  item,
+  index,
+  total,
+  onPicked,
+}: {
+  item: SpotifyReportItem;
+  index: number;
+  total: number;
+  onPicked: () => void;
+}) {
+  const { toast } = useToast();
+  const candidates = item.candidates ?? [];
+
+  const pickMut = useMutation({
+    mutationFn: async (c: SpotifyCandidate) => {
+      // Saves Spotify URL + portrait. Portrait write is unconditional
+      // here because the person was just created moments ago in this
+      // same flow, so we know it has no admin-uploaded photo yet.
+      const res = await apiRequest("PUT", `/api/admin/people/${item.personId}`, {
+        spotifyUrl: c.spotifyUrl,
+        ...(c.photoUrl ? { photoUrl: c.photoUrl } : {}),
+      });
+      return res.json();
+    },
+    onSuccess: (_data, c) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Linked", description: `${item.name} → ${c.name}` });
+      onPicked();
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Couldn't save",
+        description: err?.message ?? "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
+            {index + 1} of {total}
+          </div>
+          <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-spotify-person-name">
+            {item.name}
+          </div>
+        </div>
+        <SiSpotify className="w-6 h-6 text-[#1DB954]" />
+      </div>
+
+      {candidates.length === 0 ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
+          <AlertCircle className="w-5 h-5 mx-auto text-slate-400 mb-1.5" />
+          <div className="text-[13px] font-semibold text-slate-700">
+            No Spotify artist found for "{item.name}"
+          </div>
+          <div className="text-[12px] text-slate-500 mt-0.5">
+            You can search manually on this person's Streaming tab later.
+          </div>
+        </div>
+      ) : (
+        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 overflow-hidden">
+          {candidates.map((c) => (
+            <li key={c.id}>
+              <button
+                onClick={() => pickMut.mutate(c)}
+                disabled={pickMut.isPending}
+                className="w-full flex items-center gap-3 py-3 px-3 text-left hover:bg-slate-50 disabled:opacity-60"
+                data-testid={`button-pick-spotify-${c.id}`}
+              >
+                {c.photoUrl ? (
+                  <img
+                    src={c.photoUrl}
+                    alt=""
+                    className="w-14 h-14 rounded-full object-cover bg-slate-100"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-slate-200 inline-flex items-center justify-center text-slate-500">
+                    <UserIcon className="w-6 h-6" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[14.5px] text-slate-900 truncate">
+                    {c.name}
+                  </div>
+                  <div className="text-[12px] text-slate-500 truncate">
+                    {c.followers.toLocaleString()} followers
+                    {c.genres.length > 0 && ` · ${c.genres.slice(0, 3).join(", ")}`}
+                  </div>
+                </div>
+                <SiSpotify className="w-4 h-4 text-[#1DB954] shrink-0" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex items-center justify-between pt-1">
+        <div className="text-[11.5px] text-slate-500">
+          {candidates.length > 0
+            ? "Tap a candidate to link this person, or skip."
+            : "Nothing to pick — skip to continue."}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onPicked}
+          disabled={pickMut.isPending}
+          data-testid="button-spotify-skip"
+        >
+          <SkipForward className="mr-1.5 h-3.5 w-3.5" />
+          Skip
+        </Button>
+      </div>
     </div>
   );
 }

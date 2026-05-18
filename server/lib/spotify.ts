@@ -188,6 +188,31 @@ export async function searchArtist(rawName: string): Promise<SpotifyArtistMatch 
   };
 }
 
+// Combined import-flow lookup. One Spotify API call returns both the
+// confident-match decision (when exactly one normalized name hit) AND
+// the top N candidates for the picker when ambiguous. Used by the
+// credits-commit endpoint so we don't double-call the API for every
+// new person.
+export type SpotifyImportLookup =
+  | { status: "matched"; match: SpotifyArtistCandidate; candidates: SpotifyArtistCandidate[] }
+  | { status: "ambiguous"; candidates: SpotifyArtistCandidate[] }
+  | { status: "none"; candidates: [] };
+
+export async function searchArtistForImport(
+  rawName: string,
+  candidateLimit = 3,
+): Promise<SpotifyImportLookup> {
+  const all = await searchArtistCandidates(rawName, Math.max(candidateLimit, 5));
+  if (all.length === 0) return { status: "none", candidates: [] };
+  const wanted = normalize(rawName);
+  const exact = all.filter((a) => normalize(a.name) === wanted);
+  const candidates = all.slice(0, candidateLimit);
+  if (exact.length === 1) {
+    return { status: "matched", match: exact[0], candidates };
+  }
+  return { status: "ambiguous", candidates };
+}
+
 // Return the top N Spotify artist candidates for a name so the admin
 // can pick the right one when the auto-match is ambiguous (or when
 // they want to override). Ordering: exact normalized-name hits first,
