@@ -1552,12 +1552,19 @@ function ClampedDescription({ text, onExpand }: { text: string; onExpand: () => 
         >
           {text}
         </p>
+        {/* "more" affordance — sits on the trailing edge of the
+            clamped paragraph. The gradient fully opaques about 30px
+            before the label so the underlying text never bleeds INTO
+            the word "more" (no "amore" / "ymore" collisions). Label
+            uses the brand blue — same color the artist name uses on
+            the album header. */}
         <span
           aria-hidden="true"
-          className="absolute bottom-0 right-0 text-white/90 text-sm font-medium pl-10 leading-relaxed"
+          className="absolute bottom-0 right-0 text-sm font-semibold pl-14 leading-relaxed"
           style={{
+            color: "#319ED8",
             background:
-              "linear-gradient(to right, rgba(0,6,43,0) 0%, #00062B 70%, #00062B 100%)",
+              "linear-gradient(to right, rgba(0,6,43,0) 0%, #00062B 40%, #00062B 100%)",
           }}
           data-testid="button-album-description-more"
         >
