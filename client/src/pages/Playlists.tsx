@@ -116,8 +116,10 @@ function PlaylistArtwork({
         className={`${rounded} flex-shrink-0 overflow-hidden grid grid-cols-2 grid-rows-2 relative`}
         style={wrapperStyle}
       >
-        <div className="w-full h-full row-span-2 flex items-center justify-center bg-[#00062B]">
-          <img src={unique[0]} alt="" className="w-full h-full object-contain" />
+        {/* Large left tile fills the full height of the cover — square album art
+            is cropped to fit the tall slot rather than letterboxed. */}
+        <div className="w-full h-full row-span-2 overflow-hidden bg-[#00062B]">
+          <img src={unique[0]} alt="" className="w-full h-full object-cover object-center" />
         </div>
         <div className="w-full h-full flex items-center justify-center bg-[#00062B]">
           <img src={unique[1]} alt="" className="w-full h-full object-contain" />
