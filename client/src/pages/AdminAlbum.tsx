@@ -1430,7 +1430,7 @@ function AddMultipleTracksDialog({
                 disabled={running}
                 autoFocus
                 data-testid="input-bulk-track-count"
-                className="h-10 text-[14px]"
+                className="h-10 text-[14px] bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
               />
               <p className="text-[11.5px] text-slate-400">Up to 50 at a time.</p>
             </div>
@@ -1458,7 +1458,7 @@ function AddMultipleTracksDialog({
                 disabled={running}
                 autoFocus
                 data-testid="input-bulk-dropbox-url"
-                className="h-10 text-[14px]"
+                className="h-10 text-[14px] bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
               />
               <p className="text-[11.5px] text-slate-400">
                 Downloads the whole folder once, then imports every audio file inside.
@@ -1658,7 +1658,7 @@ function ImportLyricsFromDropboxDialog({
             disabled={running || songCount === 0}
             autoFocus
             data-testid="input-lyrics-dropbox-url"
-            className="h-10 text-[14px]"
+            className="h-10 text-[14px] bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
           />
         </div>
 
