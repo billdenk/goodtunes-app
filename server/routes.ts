@@ -317,7 +317,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!acl || acl.visibility !== "public") {
         return res.status(404).json({ message: "Not found" });
       }
-      await objectStorage.downloadObject(file, res, 31536000);
+      // Honor Range requests so HTML5 <audio> can seek into multi-MB
+      // WAV/FLAC masters. Without this, Mobile Safari refuses to start
+      // playback on large audio because it can't probe metadata; even
+      // Chrome stalls when it can't fetch the WAV header range.
+      const [metadata] = await file.getMetadata();
+      const contentType = String(metadata.contentType || "application/octet-stream");
+      const totalSize = Number(metadata.size || 0);
+      const range = req.headers.range;
+      const isPublic = acl.visibility === "public";
+      const cacheTtlSec = 31536000;
+      const cacheControl = `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}, immutable`;
+      // Range header looks like "bytes=START-END" (END may be empty).
+      const rangeMatch = range ? /^bytes=(\d+)-(\d*)$/.exec(range) : null;
+      if (rangeMatch && totalSize > 0) {
+        const start = Number(rangeMatch[1]);
+        const end = rangeMatch[2] ? Number(rangeMatch[2]) : totalSize - 1;
+        if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= totalSize) {
+          res.status(416).set({
+            "Content-Range": `bytes */${totalSize}`,
+            "Accept-Ranges": "bytes",
+          });
+          return res.end();
+        }
+        res.status(206).set({
+          "Content-Type": contentType,
+          "Content-Length": String(end - start + 1),
+          "Content-Range": `bytes ${start}-${end}/${totalSize}`,
+          "Accept-Ranges": "bytes",
+          "Cache-Control": cacheControl,
+        });
+        const stream = file.createReadStream({ start, end });
+        stream.on("error", (e: unknown) => {
+          console.error("Range stream error:", e);
+          if (!res.headersSent) res.status(500).end();
+          else res.end();
+        });
+        stream.pipe(res);
+        return;
+      }
+      // No Range header — still advertise that we support it so the
+      // client's next request can seek.
+      res.status(200).set({
+        "Content-Type": contentType,
+        ...(totalSize ? { "Content-Length": String(totalSize) } : {}),
+        "Accept-Ranges": "bytes",
+        "Cache-Control": cacheControl,
+      });
+      const stream = file.createReadStream();
+      stream.on("error", (e: unknown) => {
+        console.error("Stream error:", e);
+        if (!res.headersSent) res.status(500).end();
+        else res.end();
+      });
+      stream.pipe(res);
     } catch (err) {
       if (err instanceof ObjectNotFoundError) {
         return res.status(404).json({ message: "Not found" });
@@ -331,18 +384,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // upload "evil.html" with mimetype "image/png" and have us save+serve
   // an HTML payload from a same-origin URL. SVG is excluded by design
   // because it can carry executable script.
-  const MIME_TO_EXT: Record<string, string> = {
+  // Images only — used by the multer fileFilter on image-upload routes
+  // and by the paste-from-URL sniffer. Keep audio out of this map so a
+  // photo endpoint can't be tricked into accepting a .wav payload.
+  const IMAGE_MIME_TO_EXT: Record<string, string> = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/gif": ".gif",
     "image/webp": ".webp",
     "image/avif": ".avif",
   };
+  // Combined lookup used only inside `uploadBufferToObjectStorage`,
+  // which is called from both image and audio paths. Validation of
+  // what each route accepts happens at the route level (image routes
+  // gate on `IMAGE_MIME_TO_EXT`; audio routes gate on the per-route
+  // `AUDIO_MIME_TO_EXT` map defined near `/api/admin/upload-audio`).
+  // Without the audio entries here, the Dropbox album importer was
+  // saving every track as `<uuid>.bin`, which broke playback in the
+  // browser.
+  const MIME_TO_EXT: Record<string, string> = {
+    ...IMAGE_MIME_TO_EXT,
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/flac": ".flac",
+    "audio/x-flac": ".flac",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/aac": ".aac",
+    "audio/aiff": ".aiff",
+    "audio/x-aiff": ".aiff",
+    "audio/ogg": ".ogg",
+  };
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 8 * 1024 * 1024 }, // 8MB cap — matches the photo route
     fileFilter: (_req, file, cb) => {
-      if (!(file.mimetype in MIME_TO_EXT)) {
+      if (!(file.mimetype in IMAGE_MIME_TO_EXT)) {
         return cb(new Error("Only PNG, JPEG, GIF, WebP, or AVIF images are allowed"));
       }
       cb(null, true);
@@ -510,7 +590,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Prefer the sniffed type. Fall back to the header only if we
       // couldn't sniff and the header is in our allowlist.
-      const finalCt = sniffed ?? (ctHeader in MIME_TO_EXT ? ctHeader : null);
+      const finalCt = sniffed ?? (ctHeader in IMAGE_MIME_TO_EXT ? ctHeader : null);
       if (!finalCt) {
         return res.status(415).json({
           message: `That URL didn't return a supported image (got "${ctHeader || "unknown"}"). Use JPG, PNG, WebP, GIF, or AVIF.`,
@@ -1165,7 +1245,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }).finally(() => clearTimeout(t));
     if (!r.ok) throw new Error(`image fetch ${r.status}`);
     const mime = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-    const ext = MIME_TO_EXT[mime];
+    const ext = IMAGE_MIME_TO_EXT[mime];
     if (!ext) throw new Error(`unsupported image mime: ${mime || "unknown"}`);
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.byteLength > 8 * 1024 * 1024) throw new Error("image larger than 8MB");
