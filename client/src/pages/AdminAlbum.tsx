@@ -360,22 +360,28 @@ export function AdminAlbum() {
             </div>
           </div>
           </div>
-          {/* Destructive action — kept visually distant from the main
-              title cluster (its own flex column, hairline-separated by
-              the gap-5) so a thumb can't slide between Edit-artwork and
-              Delete. Opens a rose-tinted confirm sheet per replit.md. */}
-          <div className="flex-shrink-0 pl-3 border-l border-slate-100">
-            <button
-              type="button"
-              onClick={() => setDeleteConfirmOpen(true)}
-              disabled={deleteAlbum.isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-rose-600 hover:bg-rose-50 rounded-md disabled:opacity-50"
-              data-testid="button-delete-album"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
+        </div>
+
+        {/* Destructive action — a gray trash icon parked just above the
+            tabs hairline. The label "Delete" reveals on hover/focus to
+            the LEFT of the icon (Apple-Mac toolbar pattern). Tucked
+            into its own row so a thumb can't slide from Edit-artwork
+            straight into the trash. Opens a rose-tinted confirm sheet
+            per replit.md. */}
+        <div className="flex justify-end -mb-1">
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteAlbum.isPending}
+            aria-label="Delete album"
+            className="group inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+            data-testid="button-delete-album"
+          >
+            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
               Delete
-            </button>
-          </div>
+            </span>
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* TABS */}
