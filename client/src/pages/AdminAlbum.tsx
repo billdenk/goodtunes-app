@@ -733,7 +733,7 @@ function TracksPanel({
 
   return (
     <section
-      className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden pb-32"
+      className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden mb-32"
       data-testid="panel-tracks"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -762,11 +762,13 @@ function TracksPanel({
           {adding ? "Done" : "Add track"}
         </button>
       </div>
-      {/* Dock clearance lives on the OUTER section (see pb-32 below) so it
-          always sits BELOW whichever element is last — last track row OR
-          the AddTrackForm when in adding mode. Previously the padding lived
-          inside this <ol>, which left a dead gap between row #N and the
-          add-row input and let the dock cover the add-row. */}
+      {/* Dock clearance lives as `mb-32` on the OUTER section (above) — a
+          margin BELOW the white card, not padding inside it. Earlier the
+          clearance was `pb-32` *inside* the card, which made the card
+          stretch into a half-empty rectangle whenever the track list was
+          short (Bill flagged it). Margin-below keeps the card hugging its
+          content while still reserving scroll space so the fixed dock
+          can't cover the last track or the AddTrackForm. */}
       <ol>
         {sorted.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
