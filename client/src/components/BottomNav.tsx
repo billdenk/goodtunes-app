@@ -51,13 +51,13 @@ const NavItem = ({
           right: "4px",
         }}
       />
-      <div className="relative w-14 h-7 flex items-center justify-center">
+      <div className="relative w-14 h-7 flex items-center justify-center -translate-x-[4px]">
         <div className={`transition-all duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}>
           {icon(active)}
         </div>
       </div>
       <span
-        className={`relative text-[10px] font-medium transition-colors duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}
+        className={`relative text-[10px] font-medium transition-colors duration-150 -translate-x-[4px] ${active ? "text-[#319ED8]" : "text-white/35"}`}
       >
         {label}
       </span>
