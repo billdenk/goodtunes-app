@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, X, User as UserIcon, Loader2, Sparkles, ChevronDown, SkipForward, AlertCircle } from "lucide-react";
+import { Plus, Search, X, User as UserIcon, Loader2, Sparkles, ChevronDown, SkipForward, AlertCircle, ChevronLeft } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -332,6 +332,16 @@ interface SpotifyCandidate {
   genres: string[];
 }
 
+/* Queue entry — person + the candidates we already fetched for them in
+ * the bulk scan. Cached up-front so Back/Skip navigation is instant and
+ * the queue can be sorted matched-first before the walk begins. */
+interface QueueEntry {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  candidates: SpotifyCandidate[];
+}
+
 function MatchSpotifySheet({
   open,
   onOpenChange,
@@ -343,38 +353,74 @@ function MatchSpotifySheet({
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  // Snapshot the queue when the dialog opens so that picking/skipping a
-  // person — which mutates `people` via invalidation — doesn't reshuffle
-  // our remaining list mid-walk.
-  const [queue, setQueue] = useState<PersonLite[]>([]);
+  const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [idx, setIdx] = useState(0);
-  const [resolved, setResolved] = useState(0);
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
+  const [phase, setPhase] = useState<"scanning" | "walking" | "empty">("scanning");
 
+  // Bulk scan on open: fetch candidates for every unlinked person at
+  // once, then sort matched-first so the admin breezes through the easy
+  // confirms before hitting the no-match tail. Skipped if nothing to do.
   useEffect(() => {
-    if (open) {
-      const unlinked = people.filter((p) => !p.spotifyUrl);
-      unlinked.sort((a, b) => a.name.localeCompare(b.name));
-      setQueue(unlinked);
+    if (!open) return;
+    const unlinked = people.filter((p) => !p.spotifyUrl);
+    if (unlinked.length === 0) {
+      setQueue([]);
+      setPhase("empty");
       setIdx(0);
-      setResolved(0);
+      setResolvedIds(new Set());
+      return;
     }
+    let cancelled = false;
+    setPhase("scanning");
+    setIdx(0);
+    setResolvedIds(new Set());
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/people/spotify-scan", {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Scan failed");
+        const json = (await res.json()) as {
+          scanned: { id: string; name: string; candidates: SpotifyCandidate[] }[];
+        };
+        if (cancelled) return;
+        // Merge scan results with photoUrl from the people list so
+        // post-pick photo-overwrite logic still has the existing portrait.
+        const photoById = new Map(people.map((p) => [p.id, p.photoUrl]));
+        const sorted: QueueEntry[] = json.scanned
+          .map((s) => ({
+            ...s,
+            photoUrl: photoById.get(s.id) ?? null,
+          }))
+          // Matched (candidates.length > 0) first, then alphabetical.
+          .sort((a, b) => {
+            const am = a.candidates.length > 0 ? 0 : 1;
+            const bm = b.candidates.length > 0 ? 0 : 1;
+            if (am !== bm) return am - bm;
+            return a.name.localeCompare(b.name);
+          });
+        setQueue(sorted);
+        setPhase(sorted.length === 0 ? "empty" : "walking");
+      } catch (e: any) {
+        if (cancelled) return;
+        toast({
+          title: "Couldn't scan Spotify",
+          description: e?.message ?? "Try again.",
+          variant: "destructive",
+        });
+        onOpenChange(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = queue[idx] ?? null;
-
-  const candidatesQ = useQuery<{ query: string; candidates: SpotifyCandidate[] }>({
-    queryKey: ["/api/admin/people", current?.id, "spotify-candidates"],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/admin/people/${current!.id}/spotify-candidates`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("Spotify search failed");
-      return res.json();
-    },
-    enabled: open && !!current,
-    staleTime: 5 * 60_000,
-  });
+  const resolved = resolvedIds.size;
+  const matchedCount = queue.filter((q) => q.candidates.length > 0).length;
+  const currentIsMatched = !!current && current.candidates.length > 0;
 
   const finish = () => {
     qc.invalidateQueries({ queryKey: ["/api/people"] });
@@ -387,18 +433,14 @@ function MatchSpotifySheet({
     onOpenChange(false);
   };
 
-  const advance = (didResolve: boolean) => {
+  const advance = () => {
     const next = idx + 1;
-    if (didResolve) setResolved((n) => n + 1);
     if (next >= queue.length) {
-      // Use a fresh count rather than the stale state above so the
-      // final toast reflects this last pick too.
       qc.invalidateQueries({ queryKey: ["/api/people"] });
-      const total = resolved + (didResolve ? 1 : 0);
-      if (total > 0) {
+      if (resolved > 0) {
         toast({
           title: "Linked on Spotify",
-          description: `${total} ${total === 1 ? "person" : "people"} updated.`,
+          description: `${resolved} ${resolved === 1 ? "person" : "people"} updated.`,
         });
       } else {
         toast({ title: "Done", description: "No people linked." });
@@ -409,18 +451,30 @@ function MatchSpotifySheet({
     }
   };
 
+  const goBack = () => {
+    if (idx > 0) setIdx(idx - 1);
+  };
+
   const pickMut = useMutation({
     mutationFn: async (c: SpotifyCandidate) => {
       if (!current) throw new Error("No current person");
       // Conservative photo write: only overwrite when the row has no
-      // portrait yet, mirroring SpotifyPickerDialog on AdminPerson so
-      // we don't clobber an admin-uploaded photo.
+      // portrait yet, mirroring SpotifyPickerDialog on AdminPerson.
       const updates: Record<string, string> = { spotifyUrl: c.spotifyUrl };
       if (!current.photoUrl && c.photoUrl) updates.photoUrl = c.photoUrl;
       const res = await apiRequest("PUT", `/api/admin/people/${current.id}`, updates);
       return res.json();
     },
-    onSuccess: () => advance(true),
+    onSuccess: () => {
+      if (current) {
+        setResolvedIds((prev) => {
+          const next = new Set(prev);
+          next.add(current.id);
+          return next;
+        });
+      }
+      advance();
+    },
     onError: (err: any) =>
       toast({
         title: "Couldn't save",
@@ -452,18 +506,32 @@ function MatchSpotifySheet({
             </DialogTitle>
           </div>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Pick the right artist, or skip.
+            {phase === "walking" && currentIsMatched
+              ? "Confirm the right artist, or skip."
+              : phase === "walking"
+              ? "No match — skip or go back."
+              : "Pick the right artist, or skip."}
           </DialogDescription>
         </DialogHeader>
 
-        {queue.length === 0 ? (
+        {phase === "scanning" ? (
+          <div className="py-12 text-center">
+            <Loader2 className="w-5 h-5 mx-auto animate-spin text-slate-400 mb-2" />
+            <div className="text-[13px] font-semibold text-slate-700">
+              Scanning Spotify…
+            </div>
+            <div className="text-[11.5px] text-slate-500 mt-0.5">
+              Sorting matches first, so you can confirm the easy ones.
+            </div>
+          </div>
+        ) : phase === "empty" ? (
           <div className="py-10 text-center">
             <SiSpotify className="w-8 h-8 mx-auto text-[#1DB954] mb-2" />
             <div className="text-[14px] font-semibold text-slate-900">
               Every person is already linked
             </div>
             <div className="text-[12px] text-slate-500 mt-0.5">
-              Nothing to do here — great job.
+              Nothing to do here.
             </div>
           </div>
         ) : !current ? null : (
@@ -471,31 +539,34 @@ function MatchSpotifySheet({
             <div>
               <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
                 {idx + 1} of {queue.length}
-                {resolved > 0 && <span className="text-slate-400"> · {resolved} linked</span>}
+                {matchedCount > 0 && (
+                  <span className="text-slate-400">
+                    {" · "}
+                    {idx < matchedCount ? "matched" : "no match"}
+                  </span>
+                )}
+                {resolved > 0 && (
+                  <span className="text-slate-400"> · {resolved} linked</span>
+                )}
               </div>
               <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-match-person-name">
                 {current.name}
               </div>
             </div>
 
-            {candidatesQ.isFetching ? (
-              <div className="py-10 text-center text-[12.5px] text-slate-500">
-                <Loader2 className="w-4 h-4 animate-spin inline-block mr-1.5" />
-                Searching Spotify…
-              </div>
-            ) : (candidatesQ.data?.candidates ?? []).length === 0 ? (
+            {current.candidates.length === 0 ? (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
                 <AlertCircle className="w-5 h-5 mx-auto text-slate-400 mb-1.5" />
                 <div className="text-[13px] font-semibold text-slate-700">
                   No Spotify artist found for "{current.name}"
                 </div>
                 <div className="text-[12px] text-slate-500 mt-0.5">
-                  Skip to keep moving — you can search by a different name later from the Streaming tab.
+                  Skip to keep moving — search by a different name later from the Streaming tab.
                 </div>
               </div>
             ) : (
               <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 overflow-hidden">
-                {(candidatesQ.data?.candidates ?? []).slice(0, 3).map((c) => (
+                {current.candidates.slice(0, 3).map((c) => (
                   <li key={c.id}>
                     <button
                       onClick={() => pickMut.mutate(c)}
@@ -533,28 +604,39 @@ function MatchSpotifySheet({
         )}
 
         <DialogFooter className="border-t border-slate-200 pt-3 mt-2 gap-2 sm:justify-between">
-          {/* Admin chrome: white-outline buttons on slate surface, never
-              the default shadcn Button (which inherits the brand-dark
-              background variable and looks like a navy slab here). */}
-          <button
-            type="button"
-            onClick={finish}
-            className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            data-testid="button-match-finish"
-          >
-            Finish
-          </button>
-          {current && (
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => advance(false)}
-              disabled={pickMut.isPending}
-              className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              data-testid="button-match-skip"
+              onClick={finish}
+              className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              data-testid="button-match-finish"
             >
-              <SkipForward className="w-3.5 h-3.5" />
-              Skip
+              Finish
             </button>
+          </div>
+          {phase === "walking" && current && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={idx === 0 || pickMut.isPending}
+                className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                data-testid="button-match-back"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={advance}
+                disabled={pickMut.isPending}
+                className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                data-testid="button-match-skip"
+              >
+                Skip
+                <SkipForward className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </DialogFooter>
       </DialogContent>

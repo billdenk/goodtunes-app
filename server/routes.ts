@@ -3426,6 +3426,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ query: q, candidates });
   });
 
+  // Bulk scan — used by the "Match people on Spotify" dialog to sort the
+  // walk-through queue with matched people first (the admin confirms the
+  // easy ones, then deals with no-matches). Runs all unlinked people
+  // through Spotify in parallel batches of 6 so we don't hammer Spotify
+  // or burn 20s on serial fetches with a 50-person catalog.
+  app.get("/api/admin/people/spotify-scan", requireAdmin, async (_req, res) => {
+    if (!spotifyConfigured()) {
+      return res.status(503).json({ message: "Spotify is not configured." });
+    }
+    const all = await storage.getPeople();
+    const unlinked = all.filter((p) => !p.spotifyUrl);
+    const results: Array<{ id: string; name: string; candidates: SpotifyArtistCandidate[] }> = [];
+    const batchSize = 6;
+    for (let i = 0; i < unlinked.length; i += batchSize) {
+      const slice = unlinked.slice(i, i + batchSize);
+      const batch = await Promise.all(
+        slice.map(async (p) => {
+          try {
+            const candidates = await searchArtistCandidates(p.name, 3);
+            return { id: p.id, name: p.name, candidates };
+          } catch {
+            return { id: p.id, name: p.name, candidates: [] as SpotifyArtistCandidate[] };
+          }
+        }),
+      );
+      results.push(...batch);
+    }
+    return res.json({ scanned: results });
+  });
+
   // Apple Music discography (cached iTunes Lookup result). Public reads
   // power the fan-side artist page's "Streaming" section; admin writes
   // happen automatically after a Pull in PersonEditor.
