@@ -9,7 +9,7 @@ import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
-import { searchArtist as searchSpotifyArtist, spotifyConfigured } from "./lib/spotify";
+import { searchArtist as searchSpotifyArtist, searchArtistCandidates, spotifyConfigured } from "./lib/spotify";
 
 const scryptAsync = promisify(scrypt);
 
@@ -3376,6 +3376,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(p);
   });
+  // Spotify candidate picker. The auto-enrichment on credits-commit only
+  // writes a Spotify URL when there is exactly one normalized-name hit;
+  // for ambiguous names (or for People rows the admin wants to override)
+  // this endpoint returns the top candidates so the admin can pick one
+  // from a sheet. `q` lets the admin search by something other than the
+  // current person.name when needed.
+  app.get("/api/admin/people/:id/spotify-candidates", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    if (!spotifyConfigured()) {
+      return res.status(503).json({ message: "Spotify is not configured." });
+    }
+    const person = await storage.getPersonById(id);
+    if (!person) return res.status(404).json({ message: "Person not found" });
+    const q = String(req.query.q ?? person.name).trim();
+    const candidates = await searchArtistCandidates(q, 8);
+    return res.json({ query: q, candidates });
+  });
+
   // Apple Music discography (cached iTunes Lookup result). Public reads
   // power the fan-side artist page's "Streaming" section; admin writes
   // happen automatically after a Pull in PersonEditor.

@@ -87,6 +87,19 @@ export type SpotifyArtistMatch = {
   confident: boolean;
 };
 
+// Single candidate row used by the admin "pick a Spotify artist"
+// picker. Same shape as a match but without the `confident` field — by
+// the time we surface candidates the admin is making the call.
+export type SpotifyArtistCandidate = {
+  id: string;
+  name: string;
+  spotifyUrl: string;
+  photoUrl: string | null;
+  popularity: number;
+  followers: number;
+  genres: string[];
+};
+
 function normalize(s: string): string {
   return s
     .toLowerCase()
@@ -173,4 +186,72 @@ export async function searchArtist(rawName: string): Promise<SpotifyArtistMatch 
     popularity: best.popularity ?? 0,
     confident,
   };
+}
+
+// Return the top N Spotify artist candidates for a name so the admin
+// can pick the right one when the auto-match is ambiguous (or when
+// they want to override). Ordering: exact normalized-name hits first,
+// then everything else, both sorted by popularity desc.
+export async function searchArtistCandidates(
+  rawName: string,
+  limit = 5,
+): Promise<SpotifyArtistCandidate[]> {
+  const name = rawName.trim();
+  if (!name) return [];
+  let token = await getAccessToken();
+  if (!token) return [];
+
+  const url = `${SEARCH_URL}?q=${encodeURIComponent(name)}&type=artist&limit=${Math.min(20, Math.max(1, limit))}`;
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
+  } catch (err) {
+    console.warn("[spotify] candidates errored", (err as Error)?.message, name);
+    return [];
+  }
+  if (res.status === 401) {
+    token = await getAccessToken(true);
+    if (!token) return [];
+    try {
+      res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
+    } catch {
+      return [];
+    }
+  }
+  if (!res.ok) return [];
+
+  const json = (await res.json()) as {
+    artists?: {
+      items?: Array<{
+        id: string;
+        name: string;
+        external_urls?: { spotify?: string };
+        images?: Array<{ url: string; width: number; height: number }>;
+        popularity?: number;
+        followers?: { total?: number };
+        genres?: string[];
+      }>;
+    };
+  };
+  const items = json.artists?.items ?? [];
+  const wanted = normalize(name);
+  const rows: SpotifyArtistCandidate[] = items
+    .filter((a) => !!a.external_urls?.spotify)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      spotifyUrl: a.external_urls!.spotify!,
+      photoUrl:
+        (a.images ?? []).slice().sort((x, y) => y.width - x.width)[0]?.url ?? null,
+      popularity: a.popularity ?? 0,
+      followers: a.followers?.total ?? 0,
+      genres: a.genres ?? [],
+    }));
+  rows.sort((a, b) => {
+    const ax = normalize(a.name) === wanted ? 1 : 0;
+    const bx = normalize(b.name) === wanted ? 1 : 0;
+    if (ax !== bx) return bx - ax;
+    return b.popularity - a.popularity;
+  });
+  return rows.slice(0, limit);
 }

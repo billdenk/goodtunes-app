@@ -20,8 +20,15 @@ import {
   type PersonPreviewAlbum,
 } from "@/components/admin/previews/PersonPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
-import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /**
  * Admin · Single person. Wrapped in AdminFrame so it shares the top bar +
@@ -589,9 +596,182 @@ function ImageUploadPanel({
 
 /* ─── Streaming tab ───────────────────────────────────────────────── */
 
+// Candidate row returned by GET /api/admin/people/:id/spotify-candidates.
+interface SpotifyCandidate {
+  id: string;
+  name: string;
+  spotifyUrl: string;
+  photoUrl: string | null;
+  popularity: number;
+  followers: number;
+  genres: string[];
+}
+
+// Dialog that lets the admin pick the right Spotify artist when the
+// auto-match was ambiguous. Saves spotifyUrl + photoUrl on click; the
+// photo only overwrites the existing portrait when the row currently
+// has no photo (we don't want to clobber an admin-uploaded image).
+function SpotifyPickerDialog({
+  person,
+  open,
+  onOpenChange,
+}: {
+  person: PersonFull;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [q, setQ] = useState(person.name);
+  // Reset the query each time the dialog is reopened so it always
+  // starts from the current person.name (covers the case where the
+  // admin renamed the person between opens).
+  useEffect(() => {
+    if (open) setQ(person.name);
+  }, [open, person.name]);
+
+  const { data, isFetching, refetch } = useQuery<{
+    query: string;
+    candidates: SpotifyCandidate[];
+  }>({
+    queryKey: ["/api/admin/people", person.id, "spotify-candidates", q],
+    queryFn: async () => {
+      const params = new URLSearchParams({ q });
+      const res = await fetch(
+        `/api/admin/people/${person.id}/spotify-candidates?${params}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("Spotify search failed");
+      return res.json();
+    },
+    enabled: open && !!q.trim(),
+    staleTime: 60_000,
+  });
+
+  const pickMut = useMutation({
+    mutationFn: async (c: SpotifyCandidate) => {
+      const updates: Record<string, string> = { spotifyUrl: c.spotifyUrl };
+      if (!person.photoUrl && c.photoUrl) updates.photoUrl = c.photoUrl;
+      const res = await apiRequest("PUT", `/api/admin/people/${person.id}`, updates);
+      return res.json();
+    },
+    onSuccess: (_data, c) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/people", person.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Linked", description: `Set Spotify to ${c.name}.` });
+      onOpenChange(false);
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Couldn't save",
+        description: err?.message ?? "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const candidates = data?.candidates ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-white text-slate-900 max-w-xl" data-testid="dialog-spotify-picker">
+        <DialogHeader>
+          <DialogTitle>Pick a Spotify artist</DialogTitle>
+          <DialogDescription>
+            Search Spotify by name and choose the right artist. Selecting one saves
+            the profile URL{person.photoUrl ? "" : " and portrait photo"} onto this person.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") refetch();
+              }}
+              placeholder="Artist name"
+              className="flex-1 h-9 rounded-md border border-slate-200 bg-white px-2.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+              data-testid="input-spotify-search"
+            />
+            <button
+              onClick={() => refetch()}
+              className="h-9 px-3 rounded-md bg-slate-100 hover:bg-slate-200 text-[13px] font-semibold text-slate-700 inline-flex items-center gap-1.5"
+              data-testid="button-spotify-search"
+            >
+              {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Search"}
+            </button>
+          </div>
+          <div className="max-h-[420px] overflow-y-auto -mx-1 px-1">
+            {isFetching && candidates.length === 0 && (
+              <div className="py-10 text-center text-[12.5px] text-slate-500">
+                <Loader2 className="w-4 h-4 animate-spin inline-block mr-1.5" />
+                Searching Spotify…
+              </div>
+            )}
+            {!isFetching && candidates.length === 0 && (
+              <div className="py-10 text-center text-[12.5px] text-slate-500">
+                No artists found for "{q}".
+              </div>
+            )}
+            <ul className="divide-y divide-slate-100">
+              {candidates.map((c) => (
+                <li key={c.id}>
+                  <button
+                    onClick={() => pickMut.mutate(c)}
+                    disabled={pickMut.isPending}
+                    className="w-full flex items-center gap-3 py-2.5 px-1 text-left hover:bg-slate-50 rounded-md disabled:opacity-60"
+                    data-testid={`button-pick-spotify-${c.id}`}
+                  >
+                    {c.photoUrl ? (
+                      <img
+                        src={c.photoUrl}
+                        alt=""
+                        className="w-12 h-12 rounded-full object-cover bg-slate-100"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-slate-200 inline-flex items-center justify-center text-slate-500">
+                        <UserIcon className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[14px] text-slate-900 truncate">
+                        {c.name}
+                      </div>
+                      <div className="text-[11.5px] text-slate-500 truncate">
+                        {c.followers.toLocaleString()} followers
+                        {c.genres.length > 0 && ` · ${c.genres.slice(0, 3).join(", ")}`}
+                      </div>
+                    </div>
+                    <SiSpotify className="w-4 h-4 text-[#1DB954]" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StreamingPanel({ person }: { person: PersonFull }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <div className="max-w-2xl space-y-3">
+      <div className="flex items-center justify-end">
+        <button
+          onClick={() => setPickerOpen(true)}
+          className="h-8 px-3 rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-[12px] font-semibold text-slate-700 inline-flex items-center gap-1.5"
+          data-testid="button-open-spotify-picker"
+        >
+          <SiSpotify className="w-3.5 h-3.5 text-[#1DB954]" />
+          {person.spotifyUrl ? "Change Spotify match" : "Find on Spotify"}
+        </button>
+      </div>
+      <SpotifyPickerDialog
+        person={person}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+      />
       <EditablePanel
         title="Streaming services"
         testId="panel-streaming"
