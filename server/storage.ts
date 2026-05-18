@@ -69,6 +69,7 @@ export interface IStorage {
   getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel | undefined>;
   getSongsByAlbum(albumId: string): Promise<Song[]>;
   getSongById(id: string): Promise<Song | undefined>;
+  getAllSongs(opts?: { includeHidden?: boolean }): Promise<Song[]>;
   getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]>;
 
   // CMS mutations (admin-only at the route layer).
@@ -419,6 +420,24 @@ export class DbStorage implements IStorage {
   async getSongById(id: string): Promise<Song | undefined> {
     const [s] = await db.select().from(songs).where(eq(songs.id, id));
     return s;
+  }
+  // Used by the fan-side `/api/songs` endpoint so PlayerContext can build
+  // an id→DB-song hydration map. Every entry point that builds a queue
+  // (album page, artist page, Songs tab, playlists, etc.) routes through
+  // playSong → hydrate, so the player always reads real DB fields
+  // (syncedLyrics, audioUrl, lyrics) regardless of how the queue was
+  // assembled. Lightweight enough to ship the whole catalog today; if the
+  // catalog grows past a few thousand rows we'll switch to per-album fetch.
+  // Hidden-album filter mirrors getAlbums: non-admins must not be able to
+  // enumerate songs from demo-hidden albums by hitting this endpoint.
+  async getAllSongs(opts?: { includeHidden?: boolean }): Promise<Song[]> {
+    if (opts?.includeHidden) return db.select().from(songs);
+    const rows = await db
+      .select({ song: songs })
+      .from(songs)
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .where(eq(albums.isHidden, false));
+    return rows.map((r) => r.song);
   }
   async createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album> {
     const [a] = await db.insert(albums).values(data as any).returning();

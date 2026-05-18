@@ -2934,6 +2934,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ...album, songs });
   });
 
+  // Catalog-wide song list. PlayerContext fetches this once and builds an
+  // id→DB-song map used to hydrate any song handed to playSong/playNext/
+  // playLast/addToQueue. That way entry points still built off the static
+  // `SONGS` seed (artist page, Songs tab in Collection) automatically pick
+  // up real DB fields — syncedLyrics for GoodSync, audioUrl for streaming,
+  // and the canonical lyrics text. Public read; songs are catalog content.
+  app.get("/api/songs", requireAuth, async (req, res) => {
+    const includeHidden = await isAdminUser(req);
+    const all = await storage.getAllSongs({ includeHidden });
+    return res.json(all);
+  });
+
   app.get("/api/my-albums", requireAuth, async (req, res) => {
     const userAlbums = await storage.getUserAlbums(req.session.userId!);
     return res.json(userAlbums);

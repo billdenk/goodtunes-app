@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { track } from "@/lib/analytics";
@@ -66,6 +67,62 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const favorites = favSongs.set;
   const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Catalog-wide DB song fetch. Every entry point that builds a queue
+  // (album page, artist page, Songs tab, playlists, ⋯-menu actions) hands
+  // PlayerSong objects to playSong/playNext/playLast/addToQueue. The
+  // surfaces that still derive their lists from the static seed catalog
+  // in `@/data/musicData` (artist page, Songs tab) don't include the
+  // server-side fields fans need to actually hear the song — `audioUrl`,
+  // `syncedLyrics` (GoodSync cues), and the canonical `lyrics` text. We
+  // fetch the whole catalog once on app load and hydrate any PlayerSong
+  // by id below so the player always sees real DB values regardless of
+  // how the queue was assembled. `staleTime: Infinity` matches the rest
+  // of the app's query defaults; invalidation happens via TanStack when
+  // an admin mutation updates a song row.
+  const { data: dbSongList } = useQuery<Song[]>({
+    queryKey: ["/api/songs"],
+  });
+  const dbSongById = useMemo(() => {
+    const m = new Map<string, Song>();
+    (dbSongList ?? []).forEach((s) => m.set(s.id, s));
+    return m;
+  }, [dbSongList]);
+  // Merge DB fields onto a PlayerSong without losing its joined `album`
+  // (which the static seed surfaces still supply). DB row wins for the
+  // playable fields; the album reference is preserved from the caller.
+  const hydrate = useCallback(
+    (s: PlayerSong): PlayerSong => {
+      const db = dbSongById.get(s.id);
+      if (!db) return s;
+      return { ...s, ...db, album: s.album };
+    },
+    [dbSongById],
+  );
+  // Re-hydrate the existing queue whenever the DB map changes. Covers two
+  // races the architect review flagged:
+  //   1. First-tap race — fan taps play before `/api/songs` resolves, queue
+  //      is set with unhydrated seed songs. When data arrives, this effect
+  //      back-fills GoodSync cues + audioUrl into the already-loaded queue
+  //      so the currently-playing song picks them up mid-playback.
+  //   2. Refetch staleness — when an admin updates a song row and
+  //      `/api/songs` revalidates, existing queue state would otherwise
+  //      stay stale. This patches it in place, preserving currentIndex.
+  // Guarded on dbSongList being defined (the query may be loading) so we
+  // don't replace the queue with itself on every render.
+  useEffect(() => {
+    if (!dbSongList) return;
+    setQueue((q) => {
+      if (q.length === 0) return q;
+      let changed = false;
+      const next = q.map((s) => {
+        const h = hydrate(s);
+        if (h !== s) changed = true;
+        return h;
+      });
+      return changed ? next : q;
+    });
+  }, [dbSongList, hydrate]);
 
   // Hidden HTMLAudioElement — never mounted to the DOM, so there's no UI change.
   // Used when the current song has a real audioUrl. Songs without an audioUrl
@@ -328,8 +385,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [handleNext]);
 
   const playSong = useCallback((song: PlayerSong, newQueue?: PlayerSong[]) => {
-    const q = newQueue ?? [song];
-    const idx = q.findIndex((s) => s.id === song.id);
+    // Hydrate every song in the incoming queue against the DB so GoodSync
+    // cues + real audioUrl + canonical lyrics light up regardless of which
+    // surface assembled the queue (album page, artist page, Songs tab,
+    // playlists, ⋯-menu).
+    const hydratedSong = hydrate(song);
+    const rawQueue = newQueue ?? [song];
+    const q = rawQueue.map(hydrate);
+    const idx = q.findIndex((s) => s.id === hydratedSong.id);
     setQueue(q);
     setCurrentIndex(idx >= 0 ? idx : 0);
     setCurrentTime(0);
@@ -339,17 +402,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // playing song where currentSong.id wouldn't change. For real audio the
     // 'playing' event would also try to fire play_start, but the `started`
     // flag set here keeps it idempotent.
-    beginPlayInstance(song, !song.audioUrl);
+    beginPlayInstance(hydratedSong, !hydratedSong.audioUrl);
     // Apple Music behavior: tapping a song updates the mini-player only.
     // The full Now Playing sheet opens only when the user taps the mini-player.
     setShowLyrics(false);
     setShowAddToPlaylist(false);
     setRecentAlbums((prev) => {
-      const album = song.album;
+      const album = hydratedSong.album;
       const filtered = prev.filter((a) => a.id !== album.id);
       return [album, ...filtered].slice(0, 8);
     });
-  }, []);
+  }, [hydrate, beginPlayInstance]);
 
   const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
   const seekTo = useCallback((time: number) => {
@@ -374,36 +437,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const isFavorite = useCallback((songId: string) => favSongs.has(songId), [favSongs]);
 
   const addToQueue = useCallback((song: PlayerSong) => {
-    setQueue((q) => [...q, song]);
-  }, []);
+    const h = hydrate(song);
+    setQueue((q) => [...q, h]);
+  }, [hydrate]);
 
   // Insert a song immediately after the currently-playing track (Apple's "Play Next").
   // If nothing is playing, start it now so the action isn't silently a no-op.
   const playNext = useCallback((song: PlayerSong) => {
+    const h = hydrate(song);
     setQueue((q) => {
       if (q.length === 0) {
         setCurrentIndex(0);
         setIsPlaying(true);
-        return [song];
+        return [h];
       }
       const next = q.slice();
-      next.splice(currentIndex + 1, 0, song);
+      next.splice(currentIndex + 1, 0, h);
       return next;
     });
-  }, [currentIndex]);
+  }, [currentIndex, hydrate]);
 
   // Append to the end of the queue (Apple's "Play Last" / "Play After").
   // Same fallback: start playback if there's nothing in the queue yet.
   const playLast = useCallback((song: PlayerSong) => {
+    const h = hydrate(song);
     setQueue((q) => {
       if (q.length === 0) {
         setCurrentIndex(0);
         setIsPlaying(true);
-        return [song];
+        return [h];
       }
-      return [...q, song];
+      return [...q, h];
     });
-  }, []);
+  }, [hydrate]);
 
   const toggleAutoplay = useCallback(() => setAutoplay((a) => !a), []);
 
