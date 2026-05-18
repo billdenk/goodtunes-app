@@ -188,12 +188,14 @@ export function CreditsImportSheet({
       }}
     >
       <DialogContent
-        className="max-w-3xl max-h-[88vh] overflow-hidden flex flex-col"
+        className="max-w-3xl max-h-[88vh] overflow-hidden flex flex-col bg-white text-slate-900 rounded-xl border-slate-200 shadow-xl p-6 gap-4"
         data-testid="dialog-credits-import"
       >
-        <DialogHeader>
-          <DialogTitle>Import credits</DialogTitle>
-          <DialogDescription>
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            Import credits
+          </DialogTitle>
+          <DialogDescription className="text-[13px] font-normal text-slate-500">
             {step === "source"
               ? "Paste a Dropbox link or drop a credits doc — we'll read it against this album's tracks and propose People + per-track writers + performers."
               : "Review the proposal. Match people to existing rows, drop ones you don't want, and edit the liner notes. Nothing is saved until you confirm."}
@@ -222,7 +224,7 @@ export function CreditsImportSheet({
           ) : null}
         </div>
 
-        <DialogFooter className="border-t pt-3 mt-2 gap-2">
+        <DialogFooter className="border-t border-slate-200 pt-3 mt-2 gap-2">
           {step === "source" ? (
             <>
               <Button
@@ -309,18 +311,25 @@ function SourceStep({
 }) {
   return (
     <div className="space-y-5 py-2">
-      <div>
-        <Label htmlFor="credits-url">Dropbox link</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="credits-url" className="text-[12.5px] font-medium text-slate-700">
+          Dropbox link
+        </Label>
         <Input
           id="credits-url"
           type="url"
           placeholder="https://www.dropbox.com/scl/fi/…/credits.pdf?rlkey=…&dl=0"
           value={sourceUrl}
-          onChange={(e) => setSourceUrl(e.target.value)}
-          disabled={busy || !!file}
+          onChange={(e) => {
+            setSourceUrl(e.target.value);
+            if (e.target.value && file) setFile(null);
+          }}
+          disabled={busy}
+          autoFocus
           data-testid="input-credits-url"
+          className="h-10 text-[14px] bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
         />
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-slate-500">
           Paste a Dropbox shareable link to a single PDF, Word doc, or .txt file.
         </p>
       </div>
