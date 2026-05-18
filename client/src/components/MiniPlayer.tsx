@@ -15,7 +15,7 @@ export function MiniPlayer() {
   // the nav as a full-width capsule.
   const containerClass = hidden
     ? "absolute z-30 flex"
-    : "absolute left-0 right-0 z-30 px-4 pb-1";
+    : "absolute left-0 right-0 z-30 px-3 pb-1";
   const containerStyle: React.CSSProperties = hidden
     ? { bottom: 12, left: 70, right: 12, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
     : { bottom: 79, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
