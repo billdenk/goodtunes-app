@@ -5444,16 +5444,48 @@ async function uploadImageFile(file: File): Promise<string> {
   return url as string;
 }
 
+/**
+ * ArtworkPanel — read/edit chrome that matches every other panel on
+ * AdminAlbum (Release, Metadata, etc.).
+ *
+ * Read view: single panel containing just the album cover, with a
+ *   hover-revealed pencil in the top-right header (same `group-hover`
+ *   pattern EditablePanel uses). No "Current cover" label, no dropzone,
+ *   no permanent UI competing for attention.
+ *
+ * Edit view: the *current* cover on the left (so the artist never feels
+ *   like their art vanished), a drag/drop/browse dropzone on the right,
+ *   and Cancel / Remove cover / Save controls in the panel footer.
+ *
+ *   Save behavior: dropping/picking a file uploads immediately (same as
+ *   before — that's what the artist expects from an upload control) and
+ *   on success the panel auto-exits edit mode. The Save button is shown
+ *   while idle to signal "you can also just close the editor" — clicking
+ *   it without picking a file simply exits. Cancel discards any
+ *   in-flight preview and exits.
+ *
+ *   "Remove cover" is destructive and confirms (per the destructive-
+ *   action rule in replit.md). Only rendered when a cover exists.
+ */
 function ArtworkPanel({ album }: { album: AlbumFull }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const mut = useMutation({
+  const exitEdit = () => {
+    setEditing(false);
+    setPreviewUrl(null);
+    setConfirmRemove(false);
+    queueMicrotask(() => editButtonRef.current?.focus());
+  };
+
+  const uploadMut = useMutation({
     mutationFn: async (file: File) => {
-      // Show an instant local preview so the swap feels immediate.
       setPreviewUrl(URL.createObjectURL(file));
       const url = await uploadImageFile(file);
       await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
@@ -5464,13 +5496,34 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
       await qc.invalidateQueries({ queryKey: ["/api/albums"] });
-      setPreviewUrl(null);
       toast({ title: "Cover updated" });
+      exitEdit();
     },
     onError: (e: any) => {
       setPreviewUrl(null);
       toast({
         title: "Couldn't update the cover",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const removeMut = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
+        artwork: null,
+      });
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      toast({ title: "Cover removed" });
+      exitEdit();
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't remove the cover",
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       });
@@ -5495,120 +5548,256 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
       });
       return;
     }
-    mut.mutate(file);
+    uploadMut.mutate(file);
   };
 
-  const busy = mut.isPending;
+  const busy = uploadMut.isPending || removeMut.isPending;
   const shownUrl = previewUrl || album.artwork;
+  const hasCover = !!album.artwork;
 
+  /* ─── Read view ──────────────────────────────────────────────── */
+  if (!editing) {
+    return (
+      <section
+        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-4"
+        data-testid="panel-artwork"
+        data-mode="read"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-slate-900 text-[14px] font-bold">Artwork</h2>
+          <button
+            ref={editButtonRef}
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label="Edit artwork"
+            title="Edit artwork"
+            data-testid="button-edit-artwork"
+            className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {/* Cover centered, ~half panel width so it doesn't dominate the
+            Overview column the way the old dual-pane layout did. */}
+        <div className="flex justify-center">
+          <div
+            className="relative aspect-square w-full max-w-[280px] rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200"
+            data-testid="img-artwork"
+          >
+            {album.artwork ? (
+              <img
+                src={album.artwork}
+                alt={album.title}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+                data-testid="button-add-artwork"
+              >
+                <ImagePlus className="w-9 h-9" strokeWidth={1.5} />
+                <span className="text-[12.5px] font-semibold">
+                  Add cover art
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /* ─── Edit view ──────────────────────────────────────────────── */
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      {/* Current cover (big preview) */}
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6"
-        data-testid="panel-artwork-current"
-      >
-        <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
-          Current cover
+    <section
+      className="rounded-2xl bg-white border border-[#319ED8]/40 shadow-sm p-6 space-y-5"
+      data-testid="panel-artwork"
+      data-mode="edit"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-slate-900 text-[14px] font-bold">Artwork</h2>
+        <span className="text-[11px] text-[#319ED8] font-semibold uppercase tracking-wider">
+          Editing
+        </span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Current cover — kept visible during edit so the artist sees
+            what they're replacing. Shows the in-flight preview the
+            moment a file is picked. */}
+        <div>
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-2">
+            Current cover
+          </div>
+          <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200">
+            {shownUrl ? (
+              <img
+                src={shownUrl}
+                alt={album.title}
+                className="w-full h-full object-cover"
+                data-testid="img-artwork-current"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-slate-400">
+                <ImageIcon className="w-10 h-10" />
+              </div>
+            )}
+            {uploadMut.isPending && (
+              <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+                <Loader2 className="w-6 h-6 text-[#319ED8] animate-spin" />
+                <span className="text-[12px] text-slate-700 font-semibold">
+                  Uploading…
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200">
-          {shownUrl ? (
-            <img
-              src={shownUrl}
-              alt={album.title}
-              className="w-full h-full object-cover"
-              data-testid="img-artwork-current"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-slate-400">
-              <ImageIcon className="w-10 h-10" />
-            </div>
-          )}
-          {busy && (
-            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-              <Loader2 className="w-6 h-6 text-[#319ED8] animate-spin" />
-              <span className="text-[12px] text-slate-700 font-semibold">
-                Uploading…
-              </span>
-            </div>
-          )}
-        </div>
-      </section>
 
-      {/* Replace */}
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 flex flex-col"
-        data-testid="panel-artwork-upload"
-      >
-        <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
-          Replace cover
-        </div>
-        <button
-          type="button"
-          onClick={() => !busy && fileInputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            if (!busy) setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            if (busy) return;
-            acceptFile(e.dataTransfer.files?.[0]);
-          }}
-          disabled={busy}
-          data-testid="dropzone-artwork"
-          className={[
-            "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
-            dragging
-              ? "border-[#319ED8] bg-[#319ED8]/5"
-              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
-            busy && "opacity-60 cursor-not-allowed",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <Upload
+        {/* Dropzone */}
+        <div className="flex flex-col">
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-2">
+            {hasCover ? "Replace cover" : "Upload cover"}
+          </div>
+          <button
+            type="button"
+            onClick={() => !busy && fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!busy) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (busy) return;
+              acceptFile(e.dataTransfer.files?.[0]);
+            }}
+            disabled={busy}
+            data-testid="dropzone-artwork"
             className={[
-              "w-7 h-7",
-              dragging ? "text-[#319ED8]" : "text-slate-400",
-            ].join(" ")}
+              "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
+              dragging
+                ? "border-[#319ED8] bg-[#319ED8]/5"
+                : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+              busy && "opacity-60 cursor-not-allowed",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            <Upload
+              className={[
+                "w-7 h-7",
+                dragging ? "text-[#319ED8]" : "text-slate-400",
+              ].join(" ")}
+            />
+            <div className="text-slate-700 text-[13px] font-semibold">
+              {dragging
+                ? "Drop to upload"
+                : "Drag an image here, or click to pick"}
+            </div>
+            <div className="text-slate-400 text-[11.5px]">
+              JPG, PNG, or WebP · up to 8 MB
+            </div>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              acceptFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+            data-testid="input-artwork-file"
           />
-          <div className="text-slate-700 text-[13px] font-semibold">
-            {dragging
-              ? "Drop to upload"
-              : "Drag an image here, or click to pick"}
-          </div>
-          <div className="text-slate-400 text-[11.5px]">
-            JPG, PNG, or WebP · up to 8 MB
-          </div>
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            acceptFile(e.target.files?.[0]);
-            // Reset so re-uploading the same file re-triggers onChange.
-            e.target.value = "";
-          }}
-          data-testid="input-artwork-file"
-        />
-        <div className="mt-4 space-y-2 text-[11.5px] text-slate-500 leading-relaxed">
-          <p>
+          <p className="mt-3 text-[11.5px] text-slate-500 leading-relaxed">
             <span className="font-semibold text-slate-700">Recommended:</span>{" "}
-            square, at least 3000×3000 px. Anything smaller will still work
-            but may look soft on big screens.
-          </p>
-          <p>
-            New cover goes live everywhere — store grid, player Now Playing,
-            playlist mosaics — as soon as the upload finishes.
+            square, at least 3000×3000 px. New cover goes live everywhere
+            — store grid, player Now Playing, playlist mosaics — as soon
+            as the upload finishes.
           </p>
         </div>
-      </section>
-    </div>
+      </div>
+
+      {/* Footer — Cancel + (Remove cover, if one exists) on the left,
+          Done on the right. Save is implicit (a file pick uploads
+          immediately); "Done" closes the editor when there's nothing
+          else to do. */}
+      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+        {hasCover ? (
+          confirmRemove ? (
+            <div
+              className="flex items-center gap-2 text-[12px]"
+              data-testid="confirm-remove-artwork"
+            >
+              <span className="text-slate-700">
+                Remove <span className="font-semibold">{album.title}</span>'s
+                cover?
+              </span>
+              <button
+                type="button"
+                onClick={() => setConfirmRemove(false)}
+                disabled={busy}
+                className="h-7 px-2.5 rounded-md text-slate-600 text-[12px] font-semibold hover:bg-slate-100"
+                data-testid="button-remove-artwork-cancel"
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                onClick={() => removeMut.mutate()}
+                disabled={busy}
+                className="h-7 px-2.5 rounded-md bg-[#FF5470] text-white text-[12px] font-semibold hover:bg-[#e64863] inline-flex items-center gap-1.5 disabled:opacity-60"
+                data-testid="button-remove-artwork-confirm"
+              >
+                {removeMut.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                Remove
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmRemove(true)}
+              disabled={busy}
+              className="h-8 px-3 rounded-md text-[#FF5470] text-[12px] font-semibold hover:bg-[#FF5470]/8 inline-flex items-center gap-1.5"
+              data-testid="button-remove-artwork"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Remove cover
+            </button>
+          )
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={exitEdit}
+            disabled={busy}
+            className="h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5"
+            data-testid="button-cancel-artwork"
+          >
+            <XIcon className="w-3.5 h-3.5" />
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={exitEdit}
+            disabled={busy}
+            className="h-8 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
+            data-testid="button-done-artwork"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Done
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
