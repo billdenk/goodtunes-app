@@ -2109,6 +2109,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const chunks: Uint8Array[] = [];
     let total = 0;
+    // Track the first four bytes so we can sniff for the ZIP local-file
+    // header magic (`PK\x03\x04`). Dropbox returns a real zip for folder
+    // shares but the raw file for single-file shares — without this
+    // sniff, AdmZip later barfs "No END header found" which doesn't
+    // tell the admin what they actually did wrong.
+    let magicChecked = false;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -2119,6 +2125,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           throw new Error("That folder is too large to import (over 1 GB on the wire).");
         }
         chunks.push(value);
+        if (!magicChecked && total >= 4) {
+          // Concatenate just enough bytes to peek at the header. Cheap —
+          // we abort the whole stream the moment we know it isn't a zip.
+          const head = Buffer.concat(chunks.map((c) => Buffer.from(c)), 4);
+          magicChecked = true;
+          if (!(head[0] === 0x50 && head[1] === 0x4b && (head[2] === 0x03 || head[2] === 0x05 || head[2] === 0x07))) {
+            try { await reader.cancel(); } catch { /* ignore */ }
+            throw new Error(
+              "That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).",
+            );
+          }
+        }
       }
     }
     return Buffer.concat(chunks.map((c) => Buffer.from(c)));
@@ -2920,6 +2938,159 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(500).json({ message: err?.message || "Failed to import credits." });
     }
   });
+
+  // -----------------------------------------------------------------------
+  // PER-SONG lyric upload — single .pdf / .docx / .txt for ONE track.
+  // Companion to /import-lyrics-from-dropbox (which expects a folder ZIP).
+  // Accepts EITHER a multipart `file` OR a JSON `sourceUrl` (Dropbox file
+  // share, or any public https URL). Replaces `song.lyrics` with the
+  // extracted text and clears `syncedLyrics` so the writer can re-run
+  // GoodSync against the new words.
+  // -----------------------------------------------------------------------
+  const uploadLyricFile = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 },
+  });
+
+  async function extractLyricTextFromBuffer(
+    buf: Buffer,
+    filename: string,
+  ): Promise<string> {
+    const ext = extOf(filename);
+    if (!LYRIC_EXTENSIONS.has(ext)) {
+      throw new Error(
+        "Unsupported file type. Use .pdf, .docx, or .txt.",
+      );
+    }
+    let text = "";
+    if (ext === ".pdf") {
+      // @ts-ignore — direct inner-module import (see import-lyrics handler).
+      const { PDFParse } = await import("pdf-parse");
+      const parser = new PDFParse({ data: buf });
+      const parsed = await parser.getText();
+      text = parsed.text || "";
+    } else if (ext === ".docx" || ext === ".doc") {
+      const mammoth = await import("mammoth");
+      const result = await mammoth.extractRawText({ buffer: buf });
+      text = result.value || "";
+    } else if (ext === ".txt") {
+      text = buf.toString("utf8");
+    }
+    // Same cleanup the folder-import path uses — strip control bytes
+    // Postgres rejects, trim trailing whitespace, collapse 3+ blank lines.
+    text = text
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+      .split("\n")
+      .map((l) => l.replace(/\s+$/, ""))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    return text;
+  }
+
+  app.post(
+    "/api/admin/songs/:id/import-lyric-file",
+    requireAdminBearer,
+    uploadLyricFile.single("file"),
+    async (req, res) => {
+      try {
+        const songId = String(req.params.id);
+        const song = await storage.getSongById(songId);
+        if (!song) return res.status(404).json({ message: "Song not found." });
+
+        let buf: Buffer;
+        let filename: string;
+        if (req.file?.buffer) {
+          buf = req.file.buffer;
+          filename = req.file.originalname || "lyrics";
+        } else {
+          const sourceUrl = String(
+            (req.body?.sourceUrl ?? req.body?.url ?? "").toString(),
+          ).trim();
+          if (!sourceUrl) {
+            return res
+              .status(400)
+              .json({ message: "Upload a file or paste a link." });
+          }
+          // Dropbox share links get the same SSRF-safe handling as the
+          // credits importer. For non-Dropbox URLs we fall back to
+          // safeStreamFetch which does the same private-IP / protocol
+          // gating but doesn't append `dl=1`.
+          const isDropbox = /dropbox\.com/i.test(sourceUrl);
+          if (isDropbox) {
+            const { buf: b, filename: f } = await fetchDropboxFileBytes(sourceUrl);
+            buf = b;
+            filename = f;
+          } else {
+            const handle = await safeStreamFetch(sourceUrl, {
+              totalTimeoutMs: 60_000,
+            });
+            try {
+              if (!handle.response.ok) {
+                return res.status(502).json({
+                  message: `Couldn't fetch that URL (HTTP ${handle.response.status}).`,
+                });
+              }
+              const ct = (
+                handle.response.headers.get("content-type") || ""
+              ).toLowerCase();
+              if (ct.includes("text/html")) {
+                return res.status(400).json({
+                  message:
+                    "That link returned a web page, not a file. Use a direct download link.",
+                });
+              }
+              buf = await readBodyWithCap(
+                handle.response,
+                handle.ac,
+                25 * 1024 * 1024,
+              );
+            } finally {
+              handle.done();
+            }
+            try {
+              const u = new URL(sourceUrl);
+              const last =
+                u.pathname.split("/").filter(Boolean).pop() || "lyrics";
+              filename = decodeURIComponent(last);
+            } catch {
+              filename = "lyrics";
+            }
+          }
+        }
+
+        const text = await extractLyricTextFromBuffer(buf, filename);
+        if (!text) {
+          return res
+            .status(400)
+            .json({ message: "No text found in that file." });
+        }
+        if (text.length > FA_MAX_LYRIC_CHARS) {
+          return res.status(413).json({
+            message: `Lyrics are too long (${text.length} chars; cap ${FA_MAX_LYRIC_CHARS}).`,
+          });
+        }
+
+        // Replace lyrics AND clear any existing GoodSync cues — the cues
+        // belonged to the OLD words. The writer can re-run "Sync with
+        // audio" once they've reviewed the new lyrics.
+        const updated = await storage.updateSong(songId, {
+          lyrics: text,
+          syncedLyrics: null as any,
+        });
+
+        return res.json({
+          song: updated,
+          charCount: text.length,
+          filename,
+        });
+      } catch (e: any) {
+        return res
+          .status(400)
+          .json({ message: e?.message || "Couldn't import that file." });
+      }
+    },
+  );
 
   app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
     const id = String(req.params.id);

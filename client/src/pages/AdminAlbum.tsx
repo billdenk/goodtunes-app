@@ -4101,14 +4101,22 @@ function GoodSyncPanel({
           </>
         ) : (
           <>
-            {/* "Sync with audio" pill shows only while the song hasn't
-                been synced yet. */}
-            {canSync && !hasSynced && onSyncWithAudio && (
+            {/* "Sync with audio" pill. Shows whenever a master + lyrics
+                are present — including AFTER a successful sync, so the
+                writer can re-run alignment when they've fixed the
+                lyrics (e.g. wrong file imported, typos sang differently
+                than written). The label flips to "Re-sync" in that
+                case so it's clear it'll overwrite existing cues. */}
+            {canSync && onSyncWithAudio && (
               <button
                 type="button"
                 onClick={onSyncWithAudio}
                 disabled={syncing}
-                title="Sync with audio — uses ElevenLabs to time each line to the master"
+                title={
+                  hasSynced
+                    ? "Re-sync with audio — replaces the existing GoodSync cues with a fresh alignment"
+                    : "Sync with audio — uses ElevenLabs to time each line to the master"
+                }
                 className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid={`button-sync-audio-${song.id}`}
               >
@@ -4117,7 +4125,11 @@ function GoodSyncPanel({
                 ) : (
                   <Sparkles className="w-3 h-3" />
                 )}
-                {syncing ? "Syncing…" : "Sync with audio"}
+                {syncing
+                  ? "Syncing…"
+                  : hasSynced
+                    ? "Re-sync with audio"
+                    : "Sync with audio"}
               </button>
             )}
             {/* Pencil — enters cue-text edit mode. Sits LEFT of the
@@ -4486,6 +4498,16 @@ function LyricsEditor({
   // the artist's original paste even if they made no changes.
   const userEditedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Single-file lyric upload affordances — drag/drop, click-to-pick,
+  // or paste a URL (Dropbox file share or any public https). Mirrors
+  // the per-album folder importer but for one track. Triggers a
+  // refetch so the server-stripped/cleaned text shows up in the
+  // textarea, and clears any existing GoodSync cues server-side so
+  // "Re-sync with audio" can re-run against the new words.
+  const lyricFileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [lyricUrl, setLyricUrl] = useState("");
 
   // Seed the draft + focus the textarea only on first mount.
   // Anti-clobber: a background refetch of `song.lyrics` won't wipe the
@@ -4584,6 +4606,80 @@ function LyricsEditor({
       }),
   });
 
+  // Single-file lyric import — multipart upload OR pasted URL.
+  // Server replaces `song.lyrics` AND clears `syncedLyrics`, so after a
+  // refetch the textarea shows the new text and the GoodSync pane drops
+  // back to "Sync with audio" (Re-sync if Bill wants to keep tuning).
+  const uploadLyricMut = useMutation({
+    mutationFn: async (payload: { file?: File; url?: string }) => {
+      let res: Response;
+      if (payload.file) {
+        const fd = new FormData();
+        fd.append("file", payload.file);
+        const token = getAuthToken();
+        res = await fetch(
+          `/api/admin/songs/${song.id}/import-lyric-file`,
+          {
+            method: "POST",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: fd,
+            credentials: "include",
+          },
+        );
+      } else {
+        res = await apiRequest(
+          "POST",
+          `/api/admin/songs/${song.id}/import-lyric-file`,
+          { sourceUrl: payload.url },
+        );
+      }
+      if (!res.ok) {
+        const msg = await res
+          .json()
+          .then((b: any) => b?.message)
+          .catch(() => null);
+        throw new Error(msg || `Couldn't import (HTTP ${res.status})`);
+      }
+      return (await res.json()) as { song: { lyrics: string }; charCount: number; filename: string };
+    },
+    onSuccess: async (data) => {
+      // Reset the draft to the cleaned server text and mark the editor
+      // as untouched so the autosave debounce won't immediately
+      // re-write it.
+      const next = data.song.lyrics ?? "";
+      originalRef.current = next;
+      setDraft(cleanLyricsForEditor(next));
+      userEditedRef.current = false;
+      setShowUrlInput(false);
+      setLyricUrl("");
+      await onSaved();
+      toast({
+        title: `Imported lyrics · ${data.charCount} chars`,
+        description: data.filename
+          ? `From ${data.filename}. Existing GoodSync cues cleared — re-run when ready.`
+          : "Existing GoodSync cues cleared — re-run when ready.",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't import lyrics",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const handleLyricFile = (f: File) => {
+    if (!/\.(pdf|docx?|txt)$/i.test(f.name)) {
+      toast({
+        title: "Unsupported file",
+        description: "Use a .pdf, .docx, or .txt file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    uploadLyricMut.mutate({ file: f });
+  };
+
   const lineCount = draft ? draft.split("\n").length : 0;
 
   return (
@@ -4653,7 +4749,7 @@ function LyricsEditor({
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 {originalRef.current && originalRef.current !== draft && (
                   <button
                     type="button"
@@ -4664,8 +4760,87 @@ function LyricsEditor({
                     View original
                   </button>
                 )}
+                {!song.instrumental && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => lyricFileInputRef.current?.click()}
+                      disabled={uploadLyricMut.isPending}
+                      className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
+                      title="Upload a .pdf, .docx, or .txt — replaces these lyrics"
+                      data-testid={`button-upload-lyric-file-${song.id}`}
+                    >
+                      <Upload className="w-3 h-3" />
+                      {uploadLyricMut.isPending ? "Importing…" : "Upload"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowUrlInput((v) => !v)}
+                      disabled={uploadLyricMut.isPending}
+                      className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
+                      title="Paste a Dropbox file link or any direct .pdf / .docx / .txt URL"
+                      data-testid={`button-paste-lyric-url-${song.id}`}
+                    >
+                      <Link2 className="w-3 h-3" />
+                      Paste URL
+                    </button>
+                  </>
+                )}
               </div>
             </div>
+
+            {/* Hidden file input drives the Upload button + drag-and-drop
+                wrapper below. Accepts the same extensions as the
+                folder-import path. */}
+            <input
+              ref={lyricFileInputRef}
+              type="file"
+              accept=".pdf,.docx,.doc,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleLyricFile(f);
+                e.target.value = "";
+              }}
+              data-testid={`input-lyric-file-${song.id}`}
+            />
+
+            {/* Inline URL input — only visible when the writer clicks
+                "Paste URL". Submits on Enter or the inline arrow. */}
+            {showUrlInput && !song.instrumental && (
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5">
+                <Link2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <input
+                  type="url"
+                  value={lyricUrl}
+                  onChange={(e) => setLyricUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && lyricUrl.trim() && !uploadLyricMut.isPending) {
+                      e.preventDefault();
+                      uploadLyricMut.mutate({ url: lyricUrl.trim() });
+                    } else if (e.key === "Escape") {
+                      setShowUrlInput(false);
+                    }
+                  }}
+                  placeholder="https://www.dropbox.com/scl/fi/…?dl=1"
+                  className="flex-1 min-w-0 text-[12px] bg-transparent outline-none placeholder:text-slate-400 text-slate-800"
+                  autoFocus
+                  disabled={uploadLyricMut.isPending}
+                  data-testid={`input-lyric-url-${song.id}`}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    lyricUrl.trim() && uploadLyricMut.mutate({ url: lyricUrl.trim() })
+                  }
+                  disabled={!lyricUrl.trim() || uploadLyricMut.isPending}
+                  className="text-[11px] font-semibold text-[#319ED8] hover:underline disabled:opacity-40"
+                  data-testid={`button-fetch-lyric-url-${song.id}`}
+                >
+                  {uploadLyricMut.isPending ? "Fetching…" : "Fetch"}
+                </button>
+              </div>
+            )}
 
             {/* View-original popover: read-only display of the artist's
                 raw paste (with V1 / PRE1 / CHORUS x2 / etc.) so the
@@ -4703,20 +4878,62 @@ function LyricsEditor({
                 </span>
               </div>
             ) : (
-              <textarea
-                ref={textareaRef}
-                value={draft}
-                onChange={(e) => {
-                  userEditedRef.current = true;
-                  setDraft(e.target.value);
+              <div
+                className="relative"
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
                 }}
-                rows={8}
-                placeholder={
-                  "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus"
-                }
-                className="w-full h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
-                data-testid={`textarea-lyrics-${song.id}`}
-              />
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  // Only clear when leaving the wrapper itself, not the
+                  // textarea inside it.
+                  if (e.currentTarget === e.target) setDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  const f = e.dataTransfer.files?.[0];
+                  if (f) handleLyricFile(f);
+                }}
+                data-testid={`dropzone-lyric-${song.id}`}
+              >
+                <textarea
+                  ref={textareaRef}
+                  value={draft}
+                  onChange={(e) => {
+                    userEditedRef.current = true;
+                    setDraft(e.target.value);
+                  }}
+                  rows={8}
+                  placeholder={
+                    "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus\n\n— or drop a .pdf / .docx / .txt here —"
+                  }
+                  className="w-full h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                  data-testid={`textarea-lyrics-${song.id}`}
+                />
+                {/* Drag-over overlay — only visible while a file is
+                    being dragged across the textarea. Sits above the
+                    textarea so the drop target is unambiguous. */}
+                {dragOver && (
+                  <div className="pointer-events-none absolute inset-0 rounded-md border-2 border-dashed border-[#319ED8] bg-[#319ED8]/10 flex items-center justify-center text-[12px] font-semibold text-[#319ED8]">
+                    Drop to import lyrics
+                  </div>
+                )}
+                {/* Spinner overlay while the upload/extract is in
+                    flight — gives the writer obvious feedback that
+                    something is happening. */}
+                {uploadLyricMut.isPending && (
+                  <div className="pointer-events-none absolute inset-0 rounded-md bg-white/70 flex items-center justify-center gap-2 text-[12px] text-slate-600">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#319ED8]" />
+                    Importing lyrics…
+                  </div>
+                )}
+              </div>
             )}
             {/* Line-count footer — moved out of the header so the
                 toolbar can fit "View original" without crowding. Mirrors
