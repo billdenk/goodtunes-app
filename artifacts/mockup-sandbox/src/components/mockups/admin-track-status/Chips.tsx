@@ -43,6 +43,7 @@ function TrackRow({
   p,
   l,
   c,
+  pinHover,
 }: {
   num: number;
   title: string;
@@ -51,22 +52,38 @@ function TrackRow({
   p: BoxState;
   l: BoxState;
   c: BoxState;
+  /** Pin the hover state so the mockup can show the on-hover boxes without a real mouse. */
+  pinHover?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50/60">
+    <div
+      className={[
+        "group flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0",
+        pinHover ? "bg-slate-50/60" : "hover:bg-slate-50/60",
+      ].join(" ")}
+    >
       <div className="w-5 text-right text-[12px] text-slate-400 tabular-nums">{num}</div>
       <div className="min-w-0 flex-1">
         <div className="text-[13.5px] font-semibold text-slate-900 truncate">{title}</div>
       </div>
+
       {audioMissing ? (
+        // Audio missing is ALWAYS visible — it's the only thing demanding action.
         <UploadMasterBtn />
       ) : (
-        <div className="flex items-center gap-1">
+        <div
+          className={[
+            "flex items-center gap-1 transition-opacity",
+            pinHover ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          ].join(" ")}
+          aria-hidden={!pinHover}
+        >
           <Box letter="P" state={p} />
           <Box letter="L" state={l} />
           <Box letter="C" state={c} />
         </div>
       )}
+
       <div className="w-10 text-right text-[12px] text-slate-400 tabular-nums">{duration}</div>
     </div>
   );
@@ -76,8 +93,12 @@ export function Chips() {
   return (
     <div className="min-h-screen bg-slate-50 p-6 font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','Inter',system-ui,sans-serif]">
       <div className="mx-auto max-w-[560px]">
-        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-          P · L · C letter boxes
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+          P · L · C — on hover only
+        </div>
+        <div className="mb-3 text-[11.5px] text-slate-500 leading-relaxed">
+          At rest the row is silent. Only <span className="font-semibold text-slate-900">Upload master</span> shouts.
+          Hover any row to reveal its P / L / C state.
         </div>
 
         <div className="rounded-xl bg-white ring-1 ring-slate-200 overflow-hidden shadow-sm">
@@ -89,7 +110,24 @@ export function Chips() {
           <TrackRow num={6} title="Mojave Wind"    duration="—"    audioMissing  p="untouched" l="untouched" c="untouched" />
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-slate-600">
+        <div className="mt-5 mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+          Same list — row 3 pinned in its hover state
+        </div>
+        <div className="mb-3 text-[11.5px] text-slate-500 leading-relaxed">
+          Preview of what hover reveals. Only one row's boxes are visible at a
+          time, so the blue never competes with anything else for your eye.
+        </div>
+
+        <div className="rounded-xl bg-white ring-1 ring-slate-200 overflow-hidden shadow-sm">
+          <TrackRow num={1} title="Pacific Drive"  duration="3:28" p="auto"   l="auto"      c="auto"      />
+          <TrackRow num={2} title="Venice Beach"   duration="3:15" p="manual" l="auto"      c="manual"    />
+          <TrackRow num={3} title="Canyon Road"    duration="3:51" p="manual" l="manual"    c="untouched" pinHover />
+          <TrackRow num={4} title="Sunset Strip"   duration="3:32" p="auto"   l="untouched" c="untouched" />
+          <TrackRow num={5} title="California Way" duration="4:08" p="untouched" l="untouched" c="untouched" />
+          <TrackRow num={6} title="Mojave Wind"    duration="—"    audioMissing p="untouched" l="untouched" c="untouched" />
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-slate-600">
           <div className="flex items-center gap-1.5">
             <Box letter="P" state="untouched" />
             <span>untouched</span>
@@ -101,29 +139,6 @@ export function Chips() {
           <div className="flex items-center gap-1.5">
             <Box letter="P" state="auto" />
             <span>set by tech (auto)</span>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-1.5 text-[11.5px] text-slate-600 leading-relaxed">
-          <div>
-            <span className="font-semibold text-slate-900">P</span> · Preview — chorus
-            snippet for the player. Auto = tech found a chorus. Manual = a human
-            moved or trimmed it.
-          </div>
-          <div>
-            <span className="font-semibold text-slate-900">L</span> · Lyrics — Auto =
-            <span className="font-semibold text-[#319ED8]"> GoodSync™</span> (line-level
-            timestamps). Manual = plain lyrics typed or pasted in.
-          </div>
-          <div>
-            <span className="font-semibold text-slate-900">C</span> · Credits — Auto =
-            tech matched writers/performers to a source. Manual = a human entered
-            or edited credits.
-          </div>
-          <div className="pt-1 text-slate-500">
-            Audio doesn't get a box — if the row shows{" "}
-            <span className="inline-block align-middle"><UploadMasterBtn /></span>{" "}
-            the master is still missing. No button = audio is in.
           </div>
         </div>
       </div>
