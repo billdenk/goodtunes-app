@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -45,18 +45,31 @@ const SIZE_CLASSES: Record<IconButtonSize, string> = {
   lg: "w-12 h-12 [&>svg]:w-[22px] [&>svg]:h-[22px]",
 };
 
-// Glass chip on the navy `#00062B` background. We've now tried 10%,
-// 14%, and 16% white — all of them disappear into the navy on most
-// real screens (Bill's 5K iMac in particular). Apple Music's chips
-// read at roughly 22–24% white over its near-black bg; matching that
-// makes the rounded surface clearly visible as a chip without ever
-// looking like a hard button. Tuned against the live Collection page.
-// Hover lifts another 8% for the desktop pointer affordance.
+// Glass chip on the navy `#00062B` background. We tried Tailwind's
+// arbitrary-opacity utilities (`bg-white/[0.14]`, `bg-white/[0.22]`)
+// — they either failed to JIT-emit or rendered far weaker than spec
+// on real screens. Switched the `glass` and `ghost` backgrounds to
+// inline `rgba(...)` styles applied in the component body so the
+// chip is deterministic across every build. Apple Music's chips
+// over its near-black bg sit around 22% white; we use 22% rest /
+// 30% hover. Text + size + ring still come from utility classes.
 const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
-  glass: "text-white bg-white/[0.22] hover:bg-white/[0.30]",
+  glass: "text-white",
   dimmed: "text-white bg-black/45 hover:bg-black/55 backdrop-blur-md",
   solid: "text-white bg-[#319ED8] hover:bg-[#319ED8]/90",
-  ghost: "text-white hover:bg-white/[0.22]",
+  ghost: "text-white",
+};
+
+// Inline-style backgrounds for variants that Tailwind's JIT can't be
+// fully trusted with (arbitrary white opacities). Applied via React
+// state in the component below.
+const REST_BG: Partial<Record<IconButtonVariant, string>> = {
+  glass: "rgba(255,255,255,0.22)",
+  ghost: "transparent",
+};
+const HOVER_BG: Partial<Record<IconButtonVariant, string>> = {
+  glass: "rgba(255,255,255,0.30)",
+  ghost: "rgba(255,255,255,0.22)",
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
@@ -67,11 +80,19 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       label,
       className,
       type = "button",
+      style,
       children,
+      onMouseEnter,
+      onMouseLeave,
       ...rest
     },
     ref,
   ) => {
+    const [hover, setHover] = useState(false);
+    const inlineBg =
+      variant === "glass" || variant === "ghost"
+        ? (hover ? HOVER_BG[variant] : REST_BG[variant])
+        : undefined;
     return (
       <button
         ref={ref}
@@ -85,6 +106,15 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
           VARIANT_CLASSES[variant],
           className,
         )}
+        style={inlineBg ? { backgroundColor: inlineBg, ...style } : style}
+        onMouseEnter={(e) => {
+          setHover(true);
+          onMouseEnter?.(e);
+        }}
+        onMouseLeave={(e) => {
+          setHover(false);
+          onMouseLeave?.(e);
+        }}
         {...rest}
       >
         {children}
