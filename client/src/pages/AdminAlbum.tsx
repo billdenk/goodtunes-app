@@ -283,13 +283,14 @@ export function AdminAlbum() {
                 <ImagePlus className="w-7 h-7" strokeWidth={1.5} />
               </div>
             )}
-            {/* Dim scrim + pencil chip on hover. Pencil sits centered so
-                it reads against any cover (bright or dark) thanks to the
-                semi-opaque scrim behind it. */}
-            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors" />
+            {/* Dim scrim + pencil chip on hover. Gray chip (slate-200)
+                with a slate-700 pencil — softer than the previous white
+                chip, and the deeper scrim makes the pill pop on any
+                cover (bright or dark). */}
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors" />
             <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-              <span className="w-8 h-8 rounded-full bg-white/95 text-slate-900 inline-flex items-center justify-center shadow-md">
-                <Pencil className="w-3.5 h-3.5" />
+              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                <Pencil className="w-4 h-4" />
               </span>
             </span>
           </button>
