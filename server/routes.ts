@@ -3025,16 +3025,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             const handle = await safeStreamFetch(sourceUrl, {
               totalTimeoutMs: 60_000,
             });
+            let ctHeader = "";
+            let cdHeader = "";
             try {
               if (!handle.response.ok) {
                 return res.status(502).json({
                   message: `Couldn't fetch that URL (HTTP ${handle.response.status}).`,
                 });
               }
-              const ct = (
+              ctHeader = (
                 handle.response.headers.get("content-type") || ""
               ).toLowerCase();
-              if (ct.includes("text/html")) {
+              cdHeader = handle.response.headers.get("content-disposition") || "";
+              if (ctHeader.includes("text/html")) {
                 return res.status(400).json({
                   message:
                     "That link returned a web page, not a file. Use a direct download link.",
@@ -3048,14 +3051,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             } finally {
               handle.done();
             }
-            try {
-              const u = new URL(sourceUrl);
-              const last =
-                u.pathname.split("/").filter(Boolean).pop() || "lyrics";
-              filename = decodeURIComponent(last);
-            } catch {
-              filename = "lyrics";
+            // Determine an extension in priority order so signed
+            // download URLs without a file extension in the path
+            // (S3 / CloudFront / etc.) still parse correctly:
+            //   1) Content-Disposition filename=…
+            //   2) URL pathname extension
+            //   3) Content-Type → known extension
+            let derived: string | null = null;
+            const cdMatch = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(cdHeader);
+            if (cdMatch?.[1]) {
+              try { derived = decodeURIComponent(cdMatch[1]); } catch { derived = cdMatch[1]; }
             }
+            if (!derived || !/\.(pdf|docx?|txt)$/i.test(derived)) {
+              try {
+                const u = new URL(sourceUrl);
+                const last = u.pathname.split("/").filter(Boolean).pop() || "";
+                const decoded = (() => { try { return decodeURIComponent(last); } catch { return last; } })();
+                if (/\.(pdf|docx?|txt)$/i.test(decoded)) derived = decoded;
+              } catch { /* ignore */ }
+            }
+            if (!derived || !/\.(pdf|docx?|txt)$/i.test(derived)) {
+              // Fall back to Content-Type sniffing.
+              if (ctHeader.includes("application/pdf")) derived = "lyrics.pdf";
+              else if (ctHeader.includes("openxmlformats-officedocument.wordprocessingml") || ctHeader.includes("application/msword")) derived = "lyrics.docx";
+              else if (ctHeader.includes("text/plain")) derived = "lyrics.txt";
+            }
+            if (!derived) {
+              return res.status(400).json({
+                message:
+                  "Couldn't tell what kind of file that URL points to. Use a direct .pdf, .docx, or .txt link.",
+              });
+            }
+            filename = derived;
           }
         }
 

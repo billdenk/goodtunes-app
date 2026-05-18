@@ -4570,11 +4570,13 @@ function LyricsEditor({
     mutationFn: async () => {
       if (!normalized) throw new Error("Add lyric lines first.");
       // Step 1 — persist the current draft so the server route can read
-      // it. We pass syncedLyrics: null because the alignment endpoint
-      // will overwrite it with real cues a moment later.
+      // it. We deliberately do NOT clear syncedLyrics here: if step 2
+      // fails (network/ElevenLabs/audio fetch), we'd otherwise leave the
+      // song with new words and zero cues. The alignment endpoint
+      // replaces syncedLyrics on success, so the old cues only get
+      // overwritten when there's something better to put in their place.
       await apiRequest("PUT", `/api/admin/songs/${song.id}`, {
         lyrics: normalized,
-        syncedLyrics: null,
       });
       // Step 2 — real ElevenLabs forced alignment. Saves syncedLyrics
       // server-side and returns the updated song + line/word counts.
