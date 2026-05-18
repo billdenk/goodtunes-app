@@ -362,19 +362,40 @@ export function AdminAlbum() {
           </div>
         </div>
 
-        {/* Destructive action — a gray trash icon parked just above the
-            tabs hairline. The label "Delete" reveals on hover/focus to
-            the LEFT of the icon (Apple-Mac toolbar pattern). Tucked
-            into its own row so a thumb can't slide from Edit-artwork
-            straight into the trash. Opens a rose-tinted confirm sheet
-            per replit.md. */}
-        <div className="flex justify-end -mb-1">
+        {/* TABS — Overview/Tracks/Bonus on the LEFT, gray trash icon
+            on the RIGHT, both riding the same hairline. The trash hover
+            reveals a "Delete" label on its left (Apple-Mac toolbar
+            pattern). Opens a rose-tinted confirm sheet per replit.md. */}
+        <div
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
+          data-testid="tabs-admin-album"
+        >
+          <div className="flex items-center gap-5 overflow-x-auto">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => setDeleteConfirmOpen(true)}
             disabled={deleteAlbum.isPending}
             aria-label="Delete album"
-            className="group inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
             data-testid="button-delete-album"
           >
             <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
@@ -382,31 +403,6 @@ export function AdminAlbum() {
             </span>
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-        </div>
-
-        {/* TABS */}
-        <div
-          className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto"
-          data-testid="tabs-admin-album"
-        >
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={[
-                "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                tab === t.key
-                  ? "text-slate-900"
-                  : "text-slate-400 hover:text-slate-700",
-              ].join(" ")}
-              data-testid={`tab-${t.key}`}
-            >
-              {t.label}
-              {tab === t.key && (
-                <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
-              )}
-            </button>
-          ))}
         </div>
 
         {/* TAB CONTENT */}
