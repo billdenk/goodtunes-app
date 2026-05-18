@@ -405,40 +405,46 @@ export function ArtistPickerField({
                         })}
                       </CommandGroup>
                     )}
-                    <CommandSeparator />
-                    <CommandGroup heading="Add new">
-                      {showCreate && (
-                        <CommandItem
-                          value={`__create__${trimmed}`}
-                          onSelect={handleCreateFromName}
-                          data-testid="button-create-artist-name"
-                          className="flex items-center gap-2"
-                        >
-                          {busy ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400 flex-shrink-0" />
-                          ) : (
-                            <Plus className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
-                          )}
-                          <span className="flex-1 truncate">
-                            Create "{trimmed}"
-                          </span>
-                        </CommandItem>
-                      )}
-                      <CommandItem
-                        value="__paste_url__"
-                        onSelect={() => setUrlMode(true)}
-                        data-testid="button-create-artist-url"
-                        className="flex items-center gap-2"
-                      >
-                        <Link2 className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
-                        <span className="flex-1 truncate">
-                          Paste Apple Music or Spotify URL…
-                        </span>
-                      </CommandItem>
-                    </CommandGroup>
+                    {showCreate && (
+                      <>
+                        <CommandSeparator />
+                        <CommandGroup heading="Add new">
+                          <CommandItem
+                            value={`__create__${trimmed}`}
+                            onSelect={handleCreateFromName}
+                            data-testid="button-create-artist-name"
+                            className="flex items-center gap-2"
+                          >
+                            {busy ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400 flex-shrink-0" />
+                            ) : (
+                              <Plus className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
+                            )}
+                            <span className="flex-1 truncate">
+                              Create "{trimmed}" (name only)
+                            </span>
+                          </CommandItem>
+                        </CommandGroup>
+                      </>
+                    )}
                   </>
                 )}
               </CommandList>
+              {/* Sticky footer — not inside CommandList so cmdk's search
+                  filter can't hide it. Always available. */}
+              <div className="border-t border-slate-200 p-1">
+                <button
+                  type="button"
+                  onClick={() => setUrlMode(true)}
+                  data-testid="button-create-artist-url"
+                  className="w-full rounded-sm px-2 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-100 inline-flex items-center gap-2"
+                >
+                  <Link2 className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
+                  <span className="flex-1 truncate font-medium">
+                    Add artist from Apple Music or Spotify URL…
+                  </span>
+                </button>
+              </div>
             </Command>
           )}
         </PopoverContent>
