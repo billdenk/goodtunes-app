@@ -977,6 +977,85 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     throw new Error("Too many redirects");
   }
 
+  // Streaming variant of `safeFetch` for big upstream pulls (audio masters,
+  // video, anything where we want to enforce a hard wall-clock budget AND
+  // a byte cap on the body, not just on the redirect chain). Returns the
+  // open Response plus a `done()` cleanup the caller MUST invoke once the
+  // body is fully read (or abandoned) so the deadline timer doesn't leak.
+  //
+  // SSRF posture matches `safeFetch`: DNS-resolves every hop's host and
+  // rejects any IP `isPrivateIp` flags. Adds:
+  //   • One shared AbortController spanning the redirect chain AND body
+  //     stream — slow first hop + slow body can't escape the budget.
+  //   • Manual redirect (max 5 hops), https/http only.
+  async function safeStreamFetch(
+    initialUrl: string,
+    opts: { totalTimeoutMs: number; maxHops?: number; init?: RequestInit },
+  ): Promise<{ response: globalThis.Response; ac: AbortController; done: () => void }> {
+    const maxHops = opts.maxHops ?? 5;
+    const ac = new AbortController();
+    const deadlineTimer = setTimeout(() => ac.abort(), opts.totalTimeoutMs);
+    const done = () => clearTimeout(deadlineTimer);
+    try {
+      let current = initialUrl;
+      for (let i = 0; i <= maxHops; i++) {
+        await assertPublic(new URL(current));
+        const res = await fetch(current, {
+          ...(opts.init || {}),
+          redirect: "manual",
+          signal: ac.signal,
+        });
+        if (res.status >= 300 && res.status < 400) {
+          const loc = res.headers.get("location");
+          if (!loc) throw new Error("Redirect with no Location header");
+          current = new URL(loc, current).toString();
+          // Discard the redirect body WITHOUT buffering it — a malicious
+          // upstream can return 3xx with a gigabyte payload, and a plain
+          // `arrayBuffer()` would happily read it all into RAM before
+          // hopping. `cancel()` tears the stream down at the source.
+          try { await res.body?.cancel(); } catch { /* ignore */ }
+          continue;
+        }
+        return { response: res, ac, done };
+      }
+      throw new Error("Too many redirects");
+    } catch (err) {
+      done();
+      throw err;
+    }
+  }
+
+  // Stream a Response body into a Buffer with a size cap, honoring the
+  // abort signal so a stalled body trips the shared deadline.
+  async function readBodyWithCap(
+    response: globalThis.Response,
+    ac: AbortController,
+    maxBytes: number,
+  ): Promise<Buffer> {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Empty response body");
+    const chunks: Buffer[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done: rDone, value } = await reader.read();
+        if (rDone) break;
+        if (value) {
+          total += value.byteLength;
+          if (total > maxBytes) {
+            try { await reader.cancel(); } catch { /* ignore */ }
+            throw new Error(`Body exceeded ${maxBytes} bytes`);
+          }
+          chunks.push(Buffer.from(value));
+        }
+      }
+    } catch (e: any) {
+      if (ac.signal.aborted) throw new Error("Upstream took too long");
+      throw e;
+    }
+    return Buffer.concat(chunks);
+  }
+
   const KNOWN_VENDORS: Record<string, string> = {
     "cartervintage.com": "Carter Vintage Guitars",
     "normansrareguitars.com": "Norman's Rare Guitars",
@@ -1881,17 +1960,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function fetchDropboxFolderZip(folderUrl: string): Promise<Buffer> {
     let url = normalizeDropboxFolderUrl(folderUrl);
     const maxHops = 5;
-    const startMs = Date.now();
+    // Single shared deadline across the entire fetch — redirect chain
+    // AND body stream. The old per-hop `AbortSignal.timeout` reset on
+    // every hop, so a five-hop chain could quietly burn 5 × 60s before
+    // the body started streaming.
     const timeoutMs = 60_000;
+    const ac = new AbortController();
+    const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
     let response: Awaited<ReturnType<typeof fetch>> | null = null;
 
+    try {
     for (let hop = 0; hop <= maxHops; hop++) {
-      if (Date.now() - startMs > timeoutMs) {
-        throw new Error("Dropbox took too long to respond.");
-      }
       const r = await fetch(url.toString(), {
         redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: ac.signal,
       });
       if (r.status >= 300 && r.status < 400) {
         const loc = r.headers.get("location");
@@ -1900,8 +1982,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         try { next = new URL(loc, url); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
         assertDropboxHost(next);
         url = next;
-        // Drain the redirect body so the socket can be reused.
-        try { await r.arrayBuffer(); } catch { /* ignore */ }
+        // Discard the redirect body WITHOUT buffering — a hostile 3xx
+        // with a gigabyte payload would otherwise be fully read into
+        // memory before we hop. `cancel()` tears the stream down at
+        // the source.
+        try { await r.body?.cancel(); } catch { /* ignore */ }
         continue;
       }
       response = r;
@@ -1937,6 +2022,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
     return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+    } catch (err: any) {
+      if (ac.signal.aborted) throw new Error("Dropbox took too long to respond.");
+      throw err;
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
   }
 
   // ZIP-bomb guard: walk entries' uncompressed sizes BEFORE inflating
@@ -2205,28 +2296,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const isExternalUrl = /^https?:\/\//i.test(song.audioUrl);
     try {
       if (isExternalUrl) {
-        const upstream = await fetch(song.audioUrl);
-        if (!upstream.ok || !upstream.body) {
-          return res.status(502).json({
-            message: `Could not fetch master from external URL (HTTP ${upstream.status})`,
-          });
+        // 4-minute deadline covers the redirect chain AND the body
+        // stream. SSRF/protocol/private-IP checks run on every hop
+        // inside `safeStreamFetch`; the streaming reader enforces the
+        // size cap so a chunked-transfer source (no Content-Length)
+        // still can't blow past `FA_MAX_AUDIO_BYTES`.
+        const handle = await safeStreamFetch(song.audioUrl, {
+          totalTimeoutMs: 4 * 60_000,
+        });
+        try {
+          const upstream = handle.response;
+          if (!upstream.ok || !upstream.body) {
+            return res.status(502).json({
+              message: `Could not fetch master from external URL (HTTP ${upstream.status})`,
+            });
+          }
+          const ct = upstream.headers.get("content-type");
+          if (ct) audioMime = ct.split(";")[0].trim();
+          // Honor Content-Length preflight when the server provides it.
+          const cl = Number(upstream.headers.get("content-length") ?? 0);
+          if (cl && cl > FA_MAX_AUDIO_BYTES) {
+            return res.status(413).json({
+              message: `Master is too large for auto-sync (${(cl / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
+            });
+          }
+          try {
+            audioBuf = await readBodyWithCap(upstream, handle.ac, FA_MAX_AUDIO_BYTES);
+          } catch (e: any) {
+            if (/exceeded/.test(String(e?.message))) {
+              return res.status(413).json({
+                message: `Master is too large for auto-sync (cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
+              });
+            }
+            throw e;
+          }
+        } finally {
+          handle.done();
         }
-        const ct = upstream.headers.get("content-type");
-        if (ct) audioMime = ct.split(";")[0].trim();
-        // Honor Content-Length preflight when the server provides it.
-        const cl = Number(upstream.headers.get("content-length") ?? 0);
-        if (cl && cl > FA_MAX_AUDIO_BYTES) {
-          return res.status(413).json({
-            message: `Master is too large for auto-sync (${(cl / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
-          });
-        }
-        const ab = await upstream.arrayBuffer();
-        if (ab.byteLength > FA_MAX_AUDIO_BYTES) {
-          return res.status(413).json({
-            message: `Master is too large for auto-sync (${(ab.byteLength / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
-          });
-        }
-        audioBuf = Buffer.from(ab);
       } else {
         const file = await objectStorage.getObjectEntityFile(song.audioUrl);
         const [meta] = await file.getMetadata();
@@ -2408,11 +2514,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!/^https?:\/\//i.test(src)) {
         return res.status(400).json({ message: "audioUrl is not an http(s) URL" });
       }
+      // Hard wall-clock budget across redirect chain + body stream. Big
+      // FLAC masters can run a minute or two on a slow link, so we give
+      // mirroring a generous 5-minute deadline; SSRF/protocol checks run
+      // on every hop inside `safeStreamFetch` so a redirect to internal
+      // infra still gets rejected.
+      const AUDIO_MIRROR_DEADLINE_MS = 5 * 60_000;
+      let upstreamHandle: { response: globalThis.Response; ac: AbortController; done: () => void } | null = null;
       try {
         // Dropbox share-link normalization: ?dl=0 → ?dl=1 to get raw bytes.
         const normalized = src.replace(/([?&])dl=0(\b)/, "$1dl=1$2");
-        const upstream = await fetch(normalized, { redirect: "follow" });
+        upstreamHandle = await safeStreamFetch(normalized, {
+          totalTimeoutMs: AUDIO_MIRROR_DEADLINE_MS,
+        });
+        const upstream = upstreamHandle.response;
         if (!upstream.ok || !upstream.body) {
+          upstreamHandle.done();
           return res.status(502).json({
             message: `Upstream fetch failed: ${upstream.status}`,
           });
@@ -2455,20 +2572,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const { Readable } = await import("stream");
         const nodeReadable = Readable.fromWeb(upstream.body as any);
         let aborted = false;
-        await new Promise<void>((resolve, reject) => {
-          nodeReadable.on("data", (chunk: Buffer) => {
-            received += chunk.length;
-            if (received > FA_MAX_AUDIO_BYTES && !aborted) {
-              aborted = true;
-              nodeReadable.destroy();
-              writeStream.destroy(new Error("Audio exceeded size cap"));
-            }
+        // If the shared deadline fires (or any per-hop SSRF check tripped
+        // after a redirect), tear the body stream down so the GCS write
+        // can't keep draining bytes off a dead connection.
+        const onAbort = () => {
+          if (aborted) return;
+          aborted = true;
+          try { nodeReadable.destroy(new Error("Upstream took too long")); } catch { /* ignore */ }
+          try { writeStream.destroy(new Error("Upstream took too long")); } catch { /* ignore */ }
+        };
+        upstreamHandle.ac.signal.addEventListener("abort", onAbort);
+        try {
+          await new Promise<void>((resolve, reject) => {
+            nodeReadable.on("data", (chunk: Buffer) => {
+              received += chunk.length;
+              if (received > FA_MAX_AUDIO_BYTES && !aborted) {
+                aborted = true;
+                nodeReadable.destroy(new Error("Audio exceeded size cap"));
+                writeStream.destroy(new Error("Audio exceeded size cap"));
+              }
+            });
+            nodeReadable.on("error", reject);
+            writeStream.on("error", reject);
+            writeStream.on("finish", resolve);
+            nodeReadable.pipe(writeStream);
           });
-          nodeReadable.on("error", reject);
-          writeStream.on("error", reject);
-          writeStream.on("finish", resolve);
-          nodeReadable.pipe(writeStream);
-        });
+        } finally {
+          upstreamHandle.ac.signal.removeEventListener("abort", onAbort);
+        }
         await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
         const newUrl = `/objects/uploads/${newId}`;
         const updated = await storage.updateSong(id, { audioUrl: newUrl });
@@ -2483,6 +2614,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(500).json({
           message: err?.message || "Could not mirror audio",
         });
+      } finally {
+        upstreamHandle?.done();
       }
     },
   );
