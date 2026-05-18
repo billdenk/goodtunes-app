@@ -1,4 +1,4 @@
-import { Heart, MoreHorizontal, Play, Shuffle, Disc3 } from "lucide-react";
+import { MoreHorizontal, Play, Shuffle, Disc3 } from "lucide-react";
 import { PhoneBezel } from "./PhoneBezel";
 
 export interface AlbumPreviewSong {
@@ -39,8 +39,6 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
   const totalSeconds = sorted.reduce((sum, s) => sum + (s.duration || 0), 0);
   const totalMinutes = Math.round(totalSeconds / 60);
   const trackCount = sorted.length;
-  const fmt = (s: number) =>
-    `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
   return (
     <PhoneBezel
@@ -143,48 +141,93 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
               No tracks yet. Add them from the Tracks tab.
             </p>
           ) : (
-            <ol className="divide-y divide-white/5">
-              {sorted.slice(0, 8).map((s) => (
+            // Mirror the real fan AlbumDetail track row exactly:
+            // 15px number/title, white/0.32 numerals, hairline separators
+            // at white/0.07, plus the same right-side download circle and
+            // ⋯ glyph. No truncation — show every track; the PhoneBezel
+            // scrolls. No more "+ N more". No heart inline (heart lives
+            // inside the ⋯ sheet on the real surface).
+            <ol>
+              {sorted.map((s, i) => (
                 <li
                   key={s.id}
-                  className="flex items-center gap-3 py-2.5"
+                  className="relative flex items-center gap-3 h-14"
                   data-testid={`row-preview-track-${s.id}`}
                 >
+                  {i > 0 && (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 right-0 top-0 h-px pointer-events-none"
+                      style={{ background: "rgba(255,255,255,0.07)" }}
+                    />
+                  )}
                   <span
-                    className="text-[12px] tabular-nums w-5 text-right flex-shrink-0"
-                    style={{ color: "rgba(235,235,245,0.5)" }}
+                    className="text-[15px] tabular-nums w-6 text-right flex-shrink-0"
+                    style={{ color: "rgba(255,255,255,0.32)" }}
                   >
                     {s.trackNumber}
                   </span>
-                  <span className="flex-1 min-w-0 text-white text-[13.5px] truncate">
+                  <span className="flex-1 min-w-0 text-white text-[15px] font-medium truncate">
                     {s.title}
                   </span>
-                  <span
-                    className="text-[11.5px] tabular-nums flex-shrink-0"
-                    style={{ color: "rgba(235,235,245,0.45)" }}
+                  {/* Download circle — outlined, matches fan surface */}
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="rgba(255,255,255,0.45)"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="flex-shrink-0"
+                    aria-hidden
                   >
-                    {fmt(s.duration || 0)}
-                  </span>
-                  <Heart
-                    className="w-3.5 h-3.5 flex-shrink-0"
-                    style={{ color: "rgba(235,235,245,0.3)" }}
-                  />
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 7v8" />
+                    <path d="M8.5 11.5L12 15l3.5-3.5" />
+                  </svg>
+                  {/* ⋯ glyph */}
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="rgba(255,255,255,0.4)"
+                    className="flex-shrink-0"
+                    aria-hidden
+                  >
+                    <circle cx="5" cy="12" r="1.6" />
+                    <circle cx="12" cy="12" r="1.6" />
+                    <circle cx="19" cy="12" r="1.6" />
+                  </svg>
                 </li>
               ))}
-              {sorted.length > 8 && (
-                <li
-                  className="py-2.5 text-center text-[12px]"
-                  style={{ color: "rgba(235,235,245,0.5)" }}
-                >
-                  + {sorted.length - 8} more
-                </li>
-              )}
+              <li
+                aria-hidden
+                className="h-px"
+                style={{ background: "rgba(255,255,255,0.08)" }}
+              />
             </ol>
           )}
         </div>
 
-        {/* ⋯ bottom action — visual only */}
-        <div className="mt-5 self-stretch flex items-center justify-center">
+        {/* Footer metadata — matches the fan AlbumDetail's footer block
+            below the tracklist: year on its own line, then count + runtime. */}
+        <div
+          className="mt-6 self-stretch text-[11px] leading-relaxed"
+          style={{ color: "rgba(255,255,255,0.32)" }}
+        >
+          {album.year && <div>{album.year}</div>}
+          <div className="mt-0.5">
+            {trackCount} {trackCount === 1 ? "song" : "songs"}
+            {totalMinutes > 0 ? `, ${totalMinutes} min` : ""}
+          </div>
+        </div>
+
+        <div
+          aria-hidden
+          className="mt-5 self-stretch flex items-center justify-center"
+        >
           <MoreHorizontal
             className="w-5 h-5"
             style={{ color: "rgba(235,235,245,0.5)" }}
