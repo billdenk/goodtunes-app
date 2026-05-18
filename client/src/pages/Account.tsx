@@ -6,6 +6,12 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
 import { INSTRUMENTS } from "@/data/musicData";
+import { ChevronLeft } from "lucide-react";
+
+/** Public privacy-policy URL. Lives on the marketing site, opened in the
+ *  system browser (will become SFSafariViewController / Chrome Custom Tabs
+ *  in the native port — see in-app browser note in replit.md). */
+const PRIVACY_POLICY_URL = "https://goodtunes.music/privacy";
 
 /** Profile photo is stored client-side as a data URL in localStorage (same
  *  pattern as favorites + chat). When the GT backend lands, swap for an
@@ -18,6 +24,7 @@ export function Account() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearedToast, setClearedToast] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const handleClearHistory = async () => {
     setClearing(true);
@@ -145,63 +152,23 @@ export function Account() {
             </>
           )}
 
-          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
-          <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
-            <p className="px-4 pt-3 pb-2 text-white/55 text-[12px] leading-snug">
-              We record what you listen to so artists can see which songs resonate. You can wipe your history any time.
-            </p>
-            {!confirmClear ? (
-              <button
-                type="button"
-                onClick={() => setConfirmClear(true)}
-                className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t"
-                style={{ borderColor: "rgba(255,255,255,0.07)" }}
-                data-testid="button-clear-history"
-              >
-                Delete My Listening History
-              </button>
-            ) : (
-              <div className="px-4 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-                <p className="text-white text-[14px] mb-3">Permanently delete every play, skip, and favorite event tied to this account?</p>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmClear(false)}
-                    className="flex-1 py-3 rounded-2xl border border-white/20 text-white/60 text-sm font-medium"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearHistory}
-                    disabled={clearing}
-                    className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white disabled:opacity-50"
-                    style={{ background: "#FF5470" }}
-                    data-testid="button-confirm-clear-history"
-                  >
-                    {clearing ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          {clearedToast && (
-            <div className="mb-3 flex items-center gap-2 text-[#4AFFCA] text-sm px-1">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M20 6L9 17l-5-5" strokeLinecap="round" />
-              </svg>
-              Listening history deleted
-            </div>
-          )}
-
           {/* Settings rows — moved here from EditAccount so they sit on the
-              Account page itself, not inside the Edit Profile flow. */}
+              Account page itself, not inside the Edit Profile flow.
+              Listening History used to live as its own top-level group; it
+              now lives INSIDE Privacy (Apple-style: tap Privacy → push a
+              sub-screen that groups everything privacy-related — listening
+              history + the public Privacy Policy link). */}
           <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
-            {["Notifications", "Privacy", "About GoodTunes®"].map((label, i, arr) => (
+            {([
+              { label: "Notifications", onClick: undefined },
+              { label: "Privacy", onClick: () => setShowPrivacy(true) },
+              { label: "About GoodTunes®", onClick: undefined },
+            ] as const).map(({ label, onClick }, i, arr) => (
               <button
                 key={label}
                 type="button"
+                onClick={onClick}
                 className={`w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
                 style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
                 data-testid={`row-${label.toLowerCase().replace(/[^a-z]/g, "-")}`}
@@ -264,7 +231,145 @@ export function Account() {
 
         <MiniPlayer />
         <BottomNav />
+
+        {showPrivacy && (
+          <PrivacySheet
+            onClose={() => setShowPrivacy(false)}
+            confirmClear={confirmClear}
+            setConfirmClear={setConfirmClear}
+            clearing={clearing}
+            clearedToast={clearedToast}
+            onClearHistory={handleClearHistory}
+          />
+        )}
       </section>
     </main>
+  );
+}
+
+/* ─────────────────────────── PrivacySheet ───────────────────────────
+ * Apple-Settings-style sub-screen. Pushed in from the right when the
+ * user taps Settings › Privacy. Contains everything privacy-related:
+ *   • Listening History (record + delete) — moved here from the main
+ *     Account page so unrelated content doesn't bloat the top-level
+ *     list.
+ *   • Privacy Policy — link to the public goodtunes.music/privacy page.
+ *     Opens in a new tab on web; will route through the in-app browser
+ *     (SFSafariViewController / Chrome Custom Tabs) in the native port.
+ * Header mirrors AlbumDetail's pushed sub-views: back chevron on the
+ * left, centered title, no right-side chrome.
+ * ──────────────────────────────────────────────────────────────────── */
+function PrivacySheet({
+  onClose,
+  confirmClear,
+  setConfirmClear,
+  clearing,
+  clearedToast,
+  onClearHistory,
+}: {
+  onClose: () => void;
+  confirmClear: boolean;
+  setConfirmClear: (v: boolean) => void;
+  clearing: boolean;
+  clearedToast: boolean;
+  onClearHistory: () => void;
+}) {
+  return (
+    <div
+      className="absolute inset-0 z-[60] flex flex-col"
+      style={{ background: "#00062B" }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Privacy"
+      data-testid="sheet-privacy"
+    >
+      <div className="relative flex items-center justify-center pt-12 pb-3 px-4">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Back"
+          className="absolute left-3 top-11 w-11 h-11 rounded-full flex items-center justify-center active:scale-[0.94] transition-transform"
+          style={{ background: "rgba(255,255,255,0.10)" }}
+          data-testid="button-privacy-back"
+        >
+          <ChevronLeft className="w-[22px] h-[22px] text-white" style={{ transform: "translateX(-1px)" }} strokeWidth={2.2} />
+        </button>
+        <h1 className="text-white text-[17px] font-semibold">Privacy</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-10">
+        <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
+        <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+          <p className="px-4 pt-3 pb-2 text-white/55 text-[12px] leading-snug">
+            We record what you listen to so artists can see which songs resonate. You can wipe your history any time.
+          </p>
+          {!confirmClear ? (
+            <button
+              type="button"
+              onClick={() => setConfirmClear(true)}
+              className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t"
+              style={{ borderColor: "rgba(255,255,255,0.07)" }}
+              data-testid="button-clear-history"
+            >
+              Delete My Listening History
+            </button>
+          ) : (
+            <div className="px-4 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+              <p className="text-white text-[14px] mb-3">Permanently delete every play, skip, and favorite event tied to this account?</p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="flex-1 py-3 rounded-2xl border border-white/20 text-white/60 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onClearHistory}
+                  disabled={clearing}
+                  className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white disabled:opacity-50"
+                  style={{ background: "#FF5470" }}
+                  data-testid="button-confirm-clear-history"
+                >
+                  {clearing ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {clearedToast && (
+          <div className="mb-3 flex items-center gap-2 text-[#4AFFCA] text-sm px-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M20 6L9 17l-5-5" strokeLinecap="round" />
+            </svg>
+            Listening history deleted
+          </div>
+        )}
+
+        <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Policy</p>
+        <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+          <a
+            href={PRIVACY_POLICY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06]"
+            data-testid="link-privacy-policy"
+          >
+            <span className="text-white text-[15px]">Privacy Policy</span>
+            {/* Apple's external-link glyph (top-right arrow out of box) —
+                signals this leaves the app, not just a deeper screen. */}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.45" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 4h6v6" />
+              <path d="M20 4L10 14" />
+              <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" />
+            </svg>
+          </a>
+        </div>
+        <p className="text-white/35 text-[11px] leading-relaxed px-1">
+          Opens goodtunes.music/privacy in your browser.
+        </p>
+      </div>
+    </div>
   );
 }
