@@ -2630,13 +2630,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // 2) Write trackWriters + trackPerformers. Positions continue from
       //    the song's existing credits so a re-run appends rather than
-      //    collides with what's already there.
+      //    collides with what's already there. We also build a dedup key
+      //    set per song so re-running the importer on the same document
+      //    doesn't pile up duplicate rows.
       const writersBySong = new Map<string, number>();
       const performersBySong = new Map<string, number>();
+      const writerKeysBySong = new Map<string, Set<string>>();
+      const performerKeysBySong = new Map<string, Set<string>>();
+      const dedupKey = (personId: string, role: string) =>
+        `${personId}::${role.trim().toLowerCase()}`;
       for (const s of songs) {
         const existing = await storage.getSongCredits(s.id);
         writersBySong.set(s.id, existing.writers.length);
         performersBySong.set(s.id, existing.performers.length);
+        writerKeysBySong.set(
+          s.id,
+          new Set(
+            existing.writers
+              .filter((w) => w.personId)
+              .map((w) => dedupKey(w.personId as string, w.role)),
+          ),
+        );
+        performerKeysBySong.set(
+          s.id,
+          new Set(
+            existing.performers
+              .filter((p) => p.personId)
+              .map((p) => dedupKey(p.personId as string, p.role)),
+          ),
+        );
+      }
+
+      // Names must be snapshotted on every track credit row (the columns
+      // are NOT NULL in the schema and the snapshot is what keeps the
+      // credit readable after the Person row is later deleted).
+      const personNameById = new Map<string, string>();
+      for (const [, id] of personIdByTag) {
+        if (personNameById.has(id)) continue;
+        const row = await storage.getPersonById(id);
+        if (row) personNameById.set(id, row.name);
       }
 
       let writerCount = 0;
@@ -2647,14 +2679,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!personId) continue;
         const song = songByTitle.get(w.songTitle);
         if (!song) continue;
+        const keys = writerKeysBySong.get(song.id)!;
+        const key = dedupKey(personId, w.role);
+        if (keys.has(key)) continue;
         const pos = writersBySong.get(song.id) ?? 0;
         await storage.createTrackWriter({
           songId: song.id,
           personId,
-          name: null,
+          name: personNameById.get(personId) ?? w.personTag,
           role: w.role,
           position: pos,
         } as any);
+        keys.add(key);
         writersBySong.set(song.id, pos + 1);
         writerCount++;
       }
@@ -2664,31 +2700,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!personId) continue;
         const song = songByTitle.get(pf.songTitle);
         if (!song) continue;
-        const pos = performersBySong.get(song.id) ?? 0;
         // Fold instrument hint into the role string so the credits surface
         // reads naturally ("Guitar — 1973 Martin D-28"). Real Instrument FK
         // creation stays a separate, manual step in the admin.
         const role = pf.instrumentHint ? `${pf.role} — ${pf.instrumentHint}` : pf.role;
+        const keys = performerKeysBySong.get(song.id)!;
+        const key = dedupKey(personId, role);
+        if (keys.has(key)) continue;
+        const pos = performersBySong.get(song.id) ?? 0;
         await storage.createTrackPerformer({
           songId: song.id,
           personId,
           instrumentId: null,
-          name: null,
+          name: personNameById.get(personId) ?? pf.personTag,
           role,
           tuningNotes: null,
           position: pos,
         } as any);
+        keys.add(key);
         performersBySong.set(song.id, pos + 1);
         performerCount++;
       }
 
-      // 3) Save the original prose verbatim on the album. This is the
-      //    "back of the record" copy the fan-side page can render.
+      // 3) Write album-wide production credits (Produced by / Mixed by /
+      //    Mastered by / engineering / A&R). Positions continue from the
+      //    album's existing album_credits rows so a re-run appends, and
+      //    we skip rows whose (personId, role) is already present so
+      //    re-importing the same document is idempotent.
+      const existingAlbumCredits = await storage.listAlbumProductionCredits(albumId);
+      const existingAlbumCreditKeys = new Set(
+        existingAlbumCredits
+          .filter((r) => r.personId)
+          .map((r) => dedupKey(r.personId as string, r.role)),
+      );
+      let albumCreditPos = existingAlbumCredits.length;
+      let albumCreditCount = 0;
+      const albumCreditsList: Array<{ personTag: string; role: string }> = Array.isArray(proposal.albumCredits)
+        ? proposal.albumCredits
+        : [];
+      for (const ac of albumCreditsList) {
+        const personId = personIdByTag.get(ac.personTag);
+        if (!personId) continue;
+        const key = dedupKey(personId, ac.role);
+        if (existingAlbumCreditKeys.has(key)) continue;
+        await storage.createAlbumProductionCredit({
+          albumId,
+          personId,
+          name: personNameById.get(personId) ?? ac.personTag,
+          role: ac.role,
+          position: albumCreditPos,
+        } as any);
+        existingAlbumCreditKeys.add(key);
+        albumCreditPos++;
+        albumCreditCount++;
+      }
+
+      // 4) Save the original prose verbatim on the album. This is the
+      //    "back of the record" copy preserved for admin reference.
       if (linerNotes) {
         await storage.updateAlbum(albumId, { linerNotes } as any);
       }
 
-      return res.json({ ok: true, createdPeople, writerCount, performerCount });
+      return res.json({ ok: true, createdPeople, writerCount, performerCount, albumCreditCount });
     } catch (err: any) {
       console.error("[credits/commit]", err);
       return res.status(500).json({ message: err?.message || "Failed to import credits." });

@@ -394,6 +394,24 @@ export const trackPerformers = pgTable("track_performers", {
   position: integer("position").notNull().default(0),
 });
 
+// Album-wide production credits — Producer / Mixed by / Mastered by /
+// Recording Engineer / Executive Producer / A&R / Arranged by. These
+// apply to the album as a whole (or "all tracks except…") rather than a
+// single song, which trackWriters/trackPerformers don't model cleanly.
+// Same delete policy as track credits: album CASCADE, person SET NULL
+// with a name snapshot so deleting a Person row doesn't blank historical
+// credits. Rendered at the bottom of the album credits sheet on the fan
+// side and also reused as the "Album credits" review section in the
+// credits importer.
+export const albumCredits = pgTable("album_credits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  personId: varchar("person_id").references(() => people.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  role: text("role").notNull(),
+  position: integer("position").notNull().default(0),
+});
+
 // ----- Organizations (labels-publishers as legal entities) --------------
 // A muso-style "Organizations" credit (Record Label, Publisher, PRO, etc.)
 // is a *legal entity*, not a person. We already have a richer `labels` table
@@ -629,6 +647,10 @@ export type TrackWriter = typeof trackWriters.$inferSelect;
 export const insertTrackPerformerSchema = createInsertSchema(trackPerformers).omit({ id: true });
 export type InsertTrackPerformer = z.infer<typeof insertTrackPerformerSchema>;
 export type TrackPerformer = typeof trackPerformers.$inferSelect;
+
+export const insertAlbumCreditSchema = createInsertSchema(albumCredits).omit({ id: true });
+export type InsertAlbumCredit = z.infer<typeof insertAlbumCreditSchema>;
+export type AlbumCredit = typeof albumCredits.$inferSelect;
 
 export const insertPersonAliasSchema = createInsertSchema(personAliases).omit({ id: true });
 export type InsertPersonAlias = z.infer<typeof insertPersonAliasSchema>;

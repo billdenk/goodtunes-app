@@ -48,6 +48,7 @@ interface ParseResponse {
       role: string;
       instrumentHint?: string | null;
     }>;
+    albumCredits: Array<{ personTag: string; role: string }>;
     linerNotes: string;
   };
   matches: Record<string, { status: "exact" | "ambiguous" | "new"; candidates: PersonCandidate[] }>;
@@ -144,10 +145,11 @@ export function CreditsImportSheet({
       const body = await resp.json().catch(() => ({}));
       const w = body.writerCount ?? 0;
       const p = body.performerCount ?? 0;
+      const a = body.albumCreditCount ?? 0;
       const np = body.createdPeople?.length ?? 0;
       toast({
         title: "Credits imported",
-        description: `${np} new ${np === 1 ? "person" : "people"} · ${w} writer ${w === 1 ? "row" : "rows"} · ${p} performer ${p === 1 ? "row" : "rows"}`,
+        description: `${np} new ${np === 1 ? "person" : "people"} · ${w} writer ${w === 1 ? "row" : "rows"} · ${p} performer ${p === 1 ? "row" : "rows"} · ${a} album credit ${a === 1 ? "row" : "rows"}`,
       });
       // Refresh every surface that pulls credits or the album itself.
       qc.invalidateQueries({ queryKey: ["/api/albums"] });
@@ -164,16 +166,18 @@ export function CreditsImportSheet({
   });
 
   const counts = useMemo(() => {
-    if (!parsed) return { activePeople: 0, writers: 0, performers: 0 };
+    if (!parsed) return { activePeople: 0, writers: 0, performers: 0, albumCredits: 0 };
     const skipped = new Set(
       Object.entries(decisions)
         .filter(([, d]) => d.action === "skip")
         .map(([tag]) => tag),
     );
+    const ac = parsed.proposal.albumCredits ?? [];
     return {
       activePeople: parsed.proposal.people.length - skipped.size,
       writers: parsed.proposal.writers.filter((w) => !skipped.has(w.personTag)).length,
       performers: parsed.proposal.performers.filter((p) => !skipped.has(p.personTag)).length,
+      albumCredits: ac.filter((a) => !skipped.has(a.personTag)).length,
     };
   }, [parsed, decisions]);
 
@@ -424,33 +428,40 @@ function ReviewStep({
   setDecisions: React.Dispatch<React.SetStateAction<Record<string, PersonDecision>>>;
   linerNotes: string;
   setLinerNotes: (v: string) => void;
-  counts: { activePeople: number; writers: number; performers: number };
+  counts: { activePeople: number; writers: number; performers: number; albumCredits: number };
 }) {
   // Per-person row counters so the operator can see how much each row
   // contributes before they decide to skip it.
   const perPersonStats = useMemo(() => {
-    const m = new Map<string, { writers: number; performers: number }>();
-    for (const w of parsed.proposal.writers) {
-      const s = m.get(w.personTag) || { writers: 0, performers: 0 };
-      s.writers++;
-      m.set(w.personTag, s);
-    }
-    for (const p of parsed.proposal.performers) {
-      const s = m.get(p.personTag) || { writers: 0, performers: 0 };
-      s.performers++;
-      m.set(p.personTag, s);
-    }
+    const m = new Map<string, { writers: number; performers: number; albumCredits: number }>();
+    const ensure = (tag: string) => {
+      const s = m.get(tag) || { writers: 0, performers: 0, albumCredits: 0 };
+      m.set(tag, s);
+      return s;
+    };
+    for (const w of parsed.proposal.writers) ensure(w.personTag).writers++;
+    for (const p of parsed.proposal.performers) ensure(p.personTag).performers++;
+    for (const a of parsed.proposal.albumCredits ?? []) ensure(a.personTag).albumCredits++;
     return m;
   }, [parsed]);
 
+  // Resolve each albumCredit tag to its proposed name for the review list.
+  const peopleByTag = useMemo(
+    () => new Map(parsed.proposal.people.map((p) => [p.tag, p])),
+    [parsed],
+  );
+  const albumCreditsRows = parsed.proposal.albumCredits ?? [];
+
   return (
     <div className="space-y-5 py-2">
-      <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm flex items-center gap-4">
+      <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
         <span className="font-medium text-slate-700">{counts.activePeople} people</span>
         <span className="text-slate-300">·</span>
         <span className="text-slate-600">{counts.writers} writer rows</span>
         <span className="text-slate-300">·</span>
         <span className="text-slate-600">{counts.performers} performer rows</span>
+        <span className="text-slate-300">·</span>
+        <span className="text-slate-600">{counts.albumCredits} album credit rows</span>
       </div>
 
       <section>
@@ -462,12 +473,43 @@ function ReviewStep({
               proposal={p}
               match={parsed.matches[p.tag]}
               decision={decisions[p.tag]}
-              stats={perPersonStats.get(p.tag) || { writers: 0, performers: 0 }}
+              stats={perPersonStats.get(p.tag) || { writers: 0, performers: 0, albumCredits: 0 }}
               onChange={(d) => setDecisions((prev) => ({ ...prev, [p.tag]: d }))}
             />
           ))}
         </div>
       </section>
+
+      {albumCreditsRows.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-slate-700 mb-2">Album credits</h3>
+          <p className="text-xs text-slate-500 mb-2">
+            Produced by / Mixed by / Mastered by / engineering — applied to the whole album.
+            Skipping a person above also drops their album credits.
+          </p>
+          <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
+            {albumCreditsRows.map((row, i) => {
+              const person = peopleByTag.get(row.personTag);
+              const skipped = decisions[row.personTag]?.action === "skip";
+              return (
+                <div
+                  key={`${row.personTag}-${row.role}-${i}`}
+                  className={cn(
+                    "flex items-center justify-between gap-3 px-3 py-2 text-sm",
+                    skipped && "opacity-40 line-through",
+                  )}
+                  data-testid={`row-album-credit-${i}`}
+                >
+                  <span className="font-medium text-slate-700 truncate">
+                    {person?.name ?? row.personTag}
+                  </span>
+                  <span className="text-xs text-slate-500">{row.role}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section>
         <h3 className="text-sm font-semibold text-slate-700 mb-2">Liner notes</h3>
@@ -496,7 +538,7 @@ function PersonRow({
   proposal: { tag: string; name: string; email?: string | null };
   match?: { status: "exact" | "ambiguous" | "new"; candidates: PersonCandidate[] };
   decision: PersonDecision | undefined;
-  stats: { writers: number; performers: number };
+  stats: { writers: number; performers: number; albumCredits: number };
   onChange: (d: PersonDecision) => void;
 }) {
   const action = decision?.action ?? "create";
@@ -540,6 +582,7 @@ function PersonRow({
           </div>
           <div className="text-xs text-slate-500 mt-0.5">
             {stats.writers} writer · {stats.performers} performer
+            {stats.albumCredits > 0 ? ` · ${stats.albumCredits} album credit` : ""}
             {proposal.email ? ` · ${proposal.email}` : ""}
           </div>
         </div>

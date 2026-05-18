@@ -28,6 +28,9 @@ import {
   type InsertTrackWriter,
   type TrackPerformer,
   type InsertTrackPerformer,
+  albumCredits,
+  type AlbumCredit,
+  type InsertAlbumCredit,
   type CreditRole,
   type InsertCreditRole,
   users,
@@ -259,6 +262,7 @@ export interface IStorage {
         instrument: (Instrument & { vendors: EnrichedInstrumentVendor[] }) | null;
       })[];
     }>;
+    production: (AlbumCredit & { person: Person | null })[];
   }>;
   createTrackWriter(data: InsertTrackWriter & { id?: string }): Promise<TrackWriter>;
   updateTrackWriter(id: string, data: Partial<TrackWriter>): Promise<TrackWriter | undefined>;
@@ -266,6 +270,12 @@ export interface IStorage {
   createTrackPerformer(data: InsertTrackPerformer & { id?: string }): Promise<TrackPerformer>;
   updateTrackPerformer(id: string, data: Partial<TrackPerformer>): Promise<TrackPerformer | undefined>;
   deleteTrackPerformer(id: string): Promise<void>;
+
+  // Album-wide production credits (Producer / Mixed by / Mastered by /
+  // engineering / A&R). Same person-snapshot pattern as track credits.
+  listAlbumProductionCredits(albumId: string): Promise<(AlbumCredit & { person: Person | null })[]>;
+  createAlbumProductionCredit(data: InsertAlbumCredit & { id?: string }): Promise<AlbumCredit>;
+  deleteAlbumProductionCredit(id: string): Promise<void>;
 
   listCreditRoles(): Promise<CreditRole[]>;
   findOrCreateCreditRole(data: InsertCreditRole): Promise<CreditRole>;
@@ -1119,7 +1129,11 @@ export class DbStorage implements IStorage {
     // 1) Resolve song ids for this album. Cheap single query.
     const songRows = await db.select({ id: songs.id }).from(songs).where(eq(songs.albumId, albumId));
     const songIds = songRows.map((r) => r.id);
-    if (songIds.length === 0) return { bySongId: {} };
+    // Album-wide production credits are independent of songs — fetch even
+    // when the album has no tracks yet so a freshly-created album still
+    // exposes its Produced by / Mixed by rows.
+    const production = await this.listAlbumProductionCredits(albumId);
+    if (songIds.length === 0) return { bySongId: {}, production };
 
     // 2) All writers + performers for those songs in two queries.
     const [writerRows, performerRows] = await Promise.all([
@@ -1168,7 +1182,7 @@ export class DbStorage implements IStorage {
         instrument: p.instrumentId ? instrumentsById.get(p.instrumentId) ?? null : null,
       });
     }
-    return { bySongId };
+    return { bySongId, production };
   }
   async createTrackWriter(data: InsertTrackWriter & { id?: string }): Promise<TrackWriter> {
     const [w] = await db.insert(trackWriters).values(data as any).returning();
@@ -1201,6 +1215,27 @@ export class DbStorage implements IStorage {
   }
   async deleteTrackPerformer(id: string): Promise<void> {
     await db.delete(trackPerformers).where(eq(trackPerformers.id, id));
+  }
+
+  async listAlbumProductionCredits(albumId: string): Promise<(AlbumCredit & { person: Person | null })[]> {
+    const rows = await db
+      .select()
+      .from(albumCredits)
+      .where(eq(albumCredits.albumId, albumId))
+      .orderBy(asc(albumCredits.position));
+    const personIds = Array.from(new Set(rows.map((r) => r.personId).filter((v): v is string => !!v)));
+    const peopleRows = personIds.length
+      ? await db.select().from(people).where(inArray(people.id, personIds))
+      : ([] as Person[]);
+    const byId = new Map(peopleRows.map((p) => [p.id, p]));
+    return rows.map((r) => ({ ...r, person: r.personId ? byId.get(r.personId) ?? null : null }));
+  }
+  async createAlbumProductionCredit(data: InsertAlbumCredit & { id?: string }): Promise<AlbumCredit> {
+    const [r] = await db.insert(albumCredits).values(data as any).returning();
+    return r;
+  }
+  async deleteAlbumProductionCredit(id: string): Promise<void> {
+    await db.delete(albumCredits).where(eq(albumCredits.id, id));
   }
 
   async listCreditRoles(): Promise<CreditRole[]> {

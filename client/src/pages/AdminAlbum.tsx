@@ -478,6 +478,17 @@ type AlbumCreditsMap = {
       }[];
     }
   >;
+  // Album-wide production credits (Produced by / Mixed by / Mastered by /
+  // engineering / A&R). Populated by the credits importer.
+  production?: {
+    id: string;
+    albumId: string;
+    personId: string | null;
+    name: string;
+    role: string;
+    position: number;
+    person: { id: string; name: string; photoUrl?: string | null } | null;
+  }[];
 };
 
 type AdminPersonLite = {
@@ -919,6 +930,9 @@ function TracksPanel({
           </DropdownMenu>
         </div>
       </div>
+      {albumCredits?.production && albumCredits.production.length > 0 && (
+        <AlbumProductionCreditsPanel rows={albumCredits.production} />
+      )}
       {/* Dock clearance lives as `mb-32` on the OUTER section (above) — a
           margin BELOW the white card, not padding inside it. Earlier the
           clearance was `pb-32` *inside* the card, which made the card
@@ -1058,6 +1072,54 @@ function TracksPanel({
         onOpenChange={setCreditsImportOpen}
       />
     </section>
+  );
+}
+
+/* ─── Album-wide production credits (read-only display) ─────────────── */
+
+// Tiny panel that lists "Produced by / Mixed by / Mastered by / etc."
+// credits at the top of the Tracks tab. Pure display today — populated
+// by the Credits Importer; manual editing happens on the People page
+// (or via a future inline editor). Hidden when there are no rows.
+function AlbumProductionCreditsPanel({
+  rows,
+}: {
+  rows: NonNullable<AlbumCreditsMap["production"]>;
+}) {
+  // Group by role so duplicate roles ("Producer · Producer · Producer")
+  // collapse into a single "Producer — A, B, C" row.
+  const byRole = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const r of rows) {
+      const name = r.person?.name ?? r.name;
+      const list = m.get(r.role) ?? [];
+      list.push(name);
+      m.set(r.role, list);
+    }
+    return Array.from(m.entries());
+  }, [rows]);
+
+  return (
+    <div
+      className="px-5 py-3 border-b border-slate-100 bg-slate-50/60"
+      data-testid="panel-album-production-credits"
+    >
+      <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 mb-1.5">
+        Album credits
+      </div>
+      <div className="grid gap-1">
+        {byRole.map(([role, names]) => (
+          <div
+            key={role}
+            className="flex items-baseline gap-2 text-[13px]"
+            data-testid={`row-album-credit-role-${role.replace(/\s+/g, "-").toLowerCase()}`}
+          >
+            <span className="text-slate-500 min-w-[140px]">{role}</span>
+            <span className="text-slate-800 font-medium">{names.join(", ")}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

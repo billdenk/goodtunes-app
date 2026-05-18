@@ -72,6 +72,22 @@ export async function extractCreditsText(
 export const WRITER_ROLES = ["Composer", "Lyricist", "Producer"] as const;
 export type WriterRole = (typeof WRITER_ROLES)[number];
 
+// Album-wide production credits ("Produced by", "Mixed by", "Mastered by",
+// "A&R", "Engineered by", "Arranged by"). Distinct from per-track writer
+// or performer roles — these apply to the whole album (or "all tracks
+// except…") and live in their own `album_credits` table.
+export const ALBUM_CREDIT_ROLES = [
+  "Producer",
+  "Executive Producer",
+  "Mixed by",
+  "Mastered by",
+  "Recording Engineer",
+  "Engineer",
+  "A&R",
+  "Arranged by",
+] as const;
+export type AlbumCreditRole = (typeof ALBUM_CREDIT_ROLES)[number];
+
 export const PERFORMER_ROLES = [
   "Guitar",
   "Bass",
@@ -123,10 +139,18 @@ export interface ProposalPerformer {
   instrumentHint?: string | null;
 }
 
+export interface ProposalAlbumCredit {
+  personTag: string;
+  role: AlbumCreditRole;
+}
+
 export interface CreditsProposal {
   people: ProposalPerson[];
   writers: ProposalWriter[];
   performers: ProposalPerformer[];
+  // Album-wide production credits (Produced by / Mixed by / Mastered by /
+  // engineering / A&R). One row per person+role at the album level.
+  albumCredits: ProposalAlbumCredit[];
   // Original full prose preserved verbatim, dropped into albums.linerNotes
   // on commit so anything the AI didn't slot into a row stays readable.
   linerNotes: string;
@@ -149,21 +173,30 @@ Output STRICT JSON with this exact shape:
 {
   "people": [{ "tag": "P1", "name": "Full Name", "email": "name@example.com or null" }],
   "writers": [{ "personTag": "P1", "songTitle": "exact track title", "role": "Composer" | "Lyricist" | "Producer" }],
-  "performers": [{ "personTag": "P1", "songTitle": "exact track title", "role": <PERFORMER_ROLE>, "instrumentHint": "free text or null" }]
+  "performers": [{ "personTag": "P1", "songTitle": "exact track title", "role": <PERFORMER_ROLE>, "instrumentHint": "free text or null" }],
+  "albumCredits": [{ "personTag": "P1", "role": <ALBUM_CREDIT_ROLE> }]
 }
 
-PERFORMER_ROLE must be one of: Guitar, Bass, Drums, Keys, Synth, Piano, Violin, Cello, Strings, Horns, Saxophone, Trumpet, Lead Vocals, Background Vocals, Programming, Engineer, Mix Engineer, Mastering Engineer, Recording Engineer, Other.
+PERFORMER_ROLE must be one of: Guitar, Bass, Drums, Keys, Synth, Piano, Violin, Cello, Strings, Horns, Saxophone, Trumpet, Lead Vocals, Background Vocals, Programming, Other.
+
+ALBUM_CREDIT_ROLE must be one of: Producer, Executive Producer, Mixed by, Mastered by, Recording Engineer, Engineer, A&R, Arranged by.
 
 Rules:
 1. Use ONLY the exact track titles I give you. If the doc says "(except 'Storms')" expand that to per-track rows for every OTHER track on the album.
-2. If the doc says "all tracks" or doesn't qualify per-track, emit a row for EVERY track on the album.
-3. One person per "tag" — reuse the same tag in writers/performers for the same human. Tag format: "P1", "P2", "P3"...
+2. If the doc says "all tracks" or doesn't qualify per-track, emit a row for EVERY track on the album for performer/writer credits.
+3. One person per "tag" — reuse the same tag in writers/performers/albumCredits for the same human. Tag format: "P1", "P2", "P3"... Every personTag used MUST appear in the "people" array.
 4. If the doc lists an email next to a person, capture it on the person row.
-5. Producer / Mixed by / Mastered by / Engineered by → performers with role "Producer" (writer) AND/OR the engineer roles above as appropriate. "Produced by X" → BOTH a writer row with role "Producer" AND a performer row with role "Other". Pick whichever is most natural; if unsure, prefer the writer row for Producer specifically.
-6. "Guitars/bass/synth/programming performed by X" → emit one performer row per instrument (Guitar, Bass, Synth, Programming) for X.
-7. Background vocals listed for specific tracks → emit a Background Vocals performer row for each of those tracks per person.
-8. Do NOT invent people who aren't in the doc. Do NOT invent tracks.
-9. Output ONLY the JSON object, no prose, no markdown fences.`;
+5. Album-wide production credits — "Produced by", "Mixed by", "Mastered by", "Recorded by", "Engineered by", "Executive Producer", "A&R", "Arranged by", "Strings arranged by" — go in "albumCredits", NOT in performers. Emit one albumCredits row per person+role. Examples:
+   - "Produced by John Doe" → albumCredits row { personTag: "P1", role: "Producer" }
+   - "Mixed by Jane Smith at Studio X" → albumCredits row { personTag: "P2", role: "Mixed by" }
+   - "Mastered by Bob Ludwig" → albumCredits row { personTag: "P3", role: "Mastered by" }
+   - "Recorded by Alex Lee" → albumCredits row { personTag: "P4", role: "Recording Engineer" }
+   - "Arranged by Sarah" → albumCredits row { personTag: "P5", role: "Arranged by" }
+6. If a producer is also credited on a SPECIFIC track ("Track 3 produced by X"), emit a writer row with role "Producer" for that song instead of an album-wide credit.
+7. "Guitars/bass/synth/programming performed by X" → emit one performer row per instrument (Guitar, Bass, Synth, Programming) for X.
+8. Background vocals listed for specific tracks → emit a Background Vocals performer row for each of those tracks per person.
+9. Do NOT invent people who aren't in the doc. Do NOT invent tracks.
+10. Output ONLY the JSON object, no prose, no markdown fences.`;
 
 export async function proposeCreditsFromText(
   input: ParseInput,
@@ -249,10 +282,25 @@ export async function proposeCreditsFromText(
         }))
     : [];
 
+  const albumCredits: ProposalAlbumCredit[] = Array.isArray(parsed.albumCredits)
+    ? parsed.albumCredits
+        .filter(
+          (a: any) =>
+            a &&
+            typeof a.personTag === "string" &&
+            (ALBUM_CREDIT_ROLES as readonly string[]).includes(a.role),
+        )
+        .map((a: any) => ({
+          personTag: String(a.personTag),
+          role: a.role as AlbumCreditRole,
+        }))
+    : [];
+
   return {
     people,
     writers,
     performers,
+    albumCredits,
     linerNotes: input.text,
   };
 }
