@@ -729,6 +729,7 @@ function TracksPanel({
 
   if (sorted.length === 0 && !adding) {
     return (
+      <>
       <section
         className="rounded-2xl bg-white border border-slate-200 shadow-sm p-8"
         data-testid="panel-tracks-empty"
@@ -785,6 +786,24 @@ function TracksPanel({
           </button>
         </div>
       </section>
+      {/* Dialogs need to mount in the empty state too — without this the
+          "Upload multiple tracks" / "Import lyrics" cards would flip state
+          with nothing to open. */}
+      <AddMultipleTracksDialog
+        open={bulkAddOpen}
+        onOpenChange={setBulkAddOpen}
+        albumId={album.id}
+        nextTrackNumber={1}
+        onSaved={invalidateAlbum}
+      />
+      <ImportLyricsFromDropboxDialog
+        open={lyricsImportOpen}
+        onOpenChange={setLyricsImportOpen}
+        albumId={album.id}
+        songCount={0}
+        onSaved={invalidateAlbum}
+      />
+      </>
     );
   }
 
