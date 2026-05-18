@@ -44,12 +44,23 @@ import {
   MoreHorizontal,
   Search,
   Sparkles,
+  ListPlus,
+  Wand2,
 } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
@@ -494,6 +505,11 @@ function TracksPanel({
   // Inline composer for new tracks. Stays open across saves so the user
   // can hammer through a tracklist without clicking "Add track" each time.
   const [adding, setAdding] = useState(false);
+  // Tracks-tab "Advanced" menu — bulk-create N rows + album-wide GoodSync.
+  // State lives here (not in the menu) so the dialogs survive the menu
+  // close-on-select behavior and so `invalidateAlbum` can be passed in.
+  const [bulkAddOpen, setBulkAddOpen] = useState(false);
+  const [albumSyncOpen, setAlbumSyncOpen] = useState(false);
 
   // ── Playback state for the floating PlayerDock ──────────────────────
   // One audio element drives the entire Tracks tab. Selecting a row sets
@@ -747,20 +763,72 @@ function TracksPanel({
             )}
           </p>
         </div>
-        <button
-          onClick={() => setAdding((v) => !v)}
-          className={
-            "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 " +
-            (adding
-              ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50")
-          }
-          data-testid="button-toggle-add-track"
-          aria-expanded={adding}
-        >
-          <Plus className={"w-3 h-3 " + (adding ? "rotate-45" : "")} />
-          {adding ? "Done" : "Add track"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setAdding((v) => !v)}
+            className={
+              "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 " +
+              (adding
+                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50")
+            }
+            data-testid="button-toggle-add-track"
+            aria-expanded={adding}
+          >
+            <Plus className={"w-3 h-3 " + (adding ? "rotate-45" : "")} />
+            {adding ? "Done" : "Add track"}
+          </button>
+          {/* Advanced menu — bulk-add N rows + album-wide GoodSync.
+              Square h-9-style trigger keeps the admin chrome density;
+              Sparkles signals the AI-assisted nature of the items. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100"
+              data-testid="button-tracks-advanced"
+              aria-label="Advanced track actions"
+            >
+              <Sparkles className="w-3 h-3" />
+              Advanced
+              <ChevronDown className="w-3 h-3 -mr-0.5 text-slate-400" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={6}
+              className="min-w-[240px] p-1"
+            >
+              <DropdownMenuItem
+                onSelect={() => setBulkAddOpen(true)}
+                data-testid="menu-add-multiple-tracks"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer"
+              >
+                <ListPlus className="w-4 h-4 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    Add multiple tracks
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Stamp out a batch of empty rows at once.
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setAlbumSyncOpen(true)}
+                data-testid="menu-goodsync-album"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer"
+              >
+                <Wand2 className="w-4 h-4 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    GoodSync™ the album
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Auto-sync lyrics on every eligible track.
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       {/* Dock clearance lives as `mb-32` on the OUTER section (above) — a
           margin BELOW the white card, not padding inside it. Earlier the
@@ -867,6 +935,26 @@ function TracksPanel({
             </div>
           ) : undefined
         }
+      />
+      <AddMultipleTracksDialog
+        open={bulkAddOpen}
+        onOpenChange={setBulkAddOpen}
+        albumId={album.id}
+        // Use max(trackNumber)+1 rather than sorted.length+1 so deletes
+        // that leave gaps don't cause new rows to collide with the
+        // tail of an existing tracklist.
+        nextTrackNumber={
+          sorted.length === 0
+            ? 1
+            : Math.max(...sorted.map((s) => s.trackNumber ?? 0)) + 1
+        }
+        onSaved={invalidateAlbum}
+      />
+      <GoodSyncAlbumDialog
+        open={albumSyncOpen}
+        onOpenChange={setAlbumSyncOpen}
+        songs={sorted}
+        onSaved={invalidateAlbum}
       />
     </section>
   );
@@ -1065,6 +1153,617 @@ type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
      · partial      — solid amber disc (credits: some but not all)
      · instrumental — grey disc + Ban glyph (lyrics: none by design)
    ──────────────────────────────────────────────────────────────── */
+
+/* ─── Bulk-create empty track rows ────────────────────────────────────
+   Reached via the Tracks-tab "Advanced" menu. Bill wanted the option
+   to stamp out N empty tracks at once for a brand-new album instead
+   of clicking "Add track" N times. We POST sequentially (not in
+   parallel) so trackNumber can't collide. Placeholder titles read
+   "Track 4 (untitled)" — same column the manual flow uses, just
+   suffixed to make it obvious they still need editing. */
+function AddMultipleTracksDialog({
+  open,
+  onOpenChange,
+  albumId,
+  nextTrackNumber,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  albumId: string;
+  nextTrackNumber: number;
+  onSaved: () => Promise<void> | void;
+}) {
+  const { toast } = useToast();
+  const [countText, setCountText] = useState("5");
+  const [running, setRunning] = useState(false);
+  const [created, setCreated] = useState(0);
+
+  useEffect(() => {
+    if (open) {
+      setCountText("5");
+      setRunning(false);
+      setCreated(0);
+    }
+  }, [open]);
+
+  const n = (() => {
+    const parsed = Math.floor(Number(countText));
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.min(50, parsed));
+  })();
+
+  const handleConfirm = async () => {
+    if (n <= 0 || running) return;
+    setRunning(true);
+    setCreated(0);
+    let ok = 0;
+    let firstError: string | null = null;
+    for (let i = 0; i < n; i++) {
+      try {
+        await apiRequest("POST", "/api/admin/songs", {
+          albumId,
+          title: `Track ${nextTrackNumber + i} (untitled)`,
+          trackNumber: nextTrackNumber + i,
+          duration: 180,
+        });
+        ok++;
+        setCreated(ok);
+      } catch (e: any) {
+        if (!firstError) firstError = e?.message || "Couldn't add a track";
+      }
+    }
+    await onSaved();
+    if (firstError && ok === 0) {
+      toast({
+        title: "Couldn't add tracks",
+        description: firstError,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: `Added ${ok} ${ok === 1 ? "track" : "tracks"}`,
+        description: firstError ? `One or more failed: ${firstError}` : undefined,
+      });
+    }
+    setRunning(false);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
+      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            Add multiple tracks
+          </DialogTitle>
+          <DialogDescription className="text-[13px] font-normal text-slate-500">
+            Stamp out a batch of empty tracks. You can rename and set
+            durations inline once they appear in the list.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+          <p className="text-[12.5px] leading-snug text-slate-600">
+            I'll number them {nextTrackNumber}–{nextTrackNumber + Math.max(0, n - 1)} so
+            they slot in right after your existing tracks. No audio or
+            lyrics are added — that's still on you.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="bulk-track-count"
+            className="text-[12.5px] font-medium text-slate-700"
+          >
+            How many tracks?
+          </Label>
+          <Input
+            id="bulk-track-count"
+            type="number"
+            min={1}
+            max={50}
+            value={countText}
+            onChange={(e) => setCountText(e.target.value)}
+            disabled={running}
+            autoFocus
+            data-testid="input-bulk-track-count"
+            className="h-10 text-[14px]"
+          />
+          <p className="text-[11.5px] text-slate-400">Up to 50 at a time.</p>
+        </div>
+        <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            disabled={running}
+            data-testid="button-bulk-cancel"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={running || n <= 0}
+            data-testid="button-bulk-confirm"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+          >
+            {running ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Creating {created}/{n}…
+              </>
+            ) : (
+              <>Create {n} {n === 1 ? "track" : "tracks"}</>
+            )}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── GoodSync™ the whole album ───────────────────────────────────────
+   Two-step Apple-style wizard that runs ElevenLabs auto-sync against
+   every eligible track on the album.
+     Step 1 (intro):  Friendly framing ("we love this — saves you
+                      time"). If any tracks already have hand-tuned
+                      cues, a Skip/Re-sync radio appears inline so
+                      the conflict question doesn't need its own
+                      step. Otherwise the intro is a single Continue.
+     Step 2 (chorus): "Want me to set the preview to start at the
+                      chorus?" Yes/Just sync.
+     Running:        Live per-track progress list.
+     Done:           Summary card.
+   Eligibility mirrors the per-track GoodSync rules: needs a master
+   uploaded, lyrics typed in (so chorus markers can be found), and
+   the track must not be flagged as instrumental. Anything that
+   doesn't qualify is shown as Skipped in the summary, not as an
+   error — Bill explicitly asked us to bypass tracks without a
+   master rather than fail loudly. */
+type GoodSyncStep = "intro" | "chorus" | "running" | "done";
+type TrackRunState = "pending" | "syncing" | "synced" | "skipped" | "failed";
+function GoodSyncAlbumDialog({
+  open,
+  onOpenChange,
+  songs,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  songs: SongLite[];
+  onSaved: () => Promise<void> | void;
+}) {
+  const { toast } = useToast();
+  const [step, setStep] = useState<GoodSyncStep>("intro");
+  const [conflictMode, setConflictMode] = useState<"skip" | "resync">("skip");
+  const [findChorus, setFindChorus] = useState(true);
+  const [states, setStates] = useState<Record<string, TrackRunState>>({});
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [chorusSetIds, setChorusSetIds] = useState<Set<string>>(new Set());
+
+  const eligible = useMemo(
+    () =>
+      songs.filter(
+        (s) =>
+          !s.instrumental &&
+          !!s.audioUrl &&
+          !!s.lyrics &&
+          !!s.lyrics.trim(),
+      ),
+    [songs],
+  );
+  const alreadySynced = useMemo(
+    () => eligible.filter((s) => (s.syncedLyrics?.length ?? 0) > 0),
+    [eligible],
+  );
+  const ineligible = songs.length - eligible.length;
+  const hasConflict = alreadySynced.length > 0;
+
+  useEffect(() => {
+    if (open) {
+      setStep("intro");
+      setConflictMode("skip");
+      setFindChorus(true);
+      setStates({});
+      setCurrentId(null);
+      setChorusSetIds(new Set());
+    }
+  }, [open]);
+
+  // Note: takes `wantsChorus` as an arg rather than reading from state.
+  // The chorus-step buttons fire `setFindChorus(...); runSync()` back
+  // to back — React batches the state update, so a `runSync` that
+  // reads `findChorus` from its closure sees the stale value. Passing
+  // the choice explicitly is the only safe pattern here.
+  const runSync = async (wantsChorus: boolean) => {
+    setFindChorus(wantsChorus);
+    const queue =
+      conflictMode === "skip"
+        ? eligible.filter((s) => (s.syncedLyrics?.length ?? 0) === 0)
+        : eligible;
+    const initialStates: Record<string, TrackRunState> = {};
+    for (const s of eligible) {
+      initialStates[s.id] =
+        conflictMode === "skip" && (s.syncedLyrics?.length ?? 0) > 0
+          ? "skipped"
+          : "pending";
+    }
+    setStates(initialStates);
+    setStep("running");
+    const chorusSet = new Set<string>();
+    for (const song of queue) {
+      setCurrentId(song.id);
+      setStates((prev) => ({ ...prev, [song.id]: "syncing" }));
+      try {
+        const res = await apiRequest(
+          "POST",
+          `/api/admin/songs/${song.id}/auto-sync-lyrics`,
+          {},
+        );
+        const payload = await res.json().catch(() => ({}));
+        const updated = payload?.song;
+        const cues: { timeMs: number; text: string }[] =
+          updated?.syncedLyrics ?? [];
+        setStates((prev) => ({ ...prev, [song.id]: "synced" }));
+        if (wantsChorus && cues.length > 0) {
+          const startMs = findChorusStartMs(
+            updated?.lyrics ?? song.lyrics,
+            cues,
+          );
+          if (startMs != null) {
+            const durMs = (song.duration || 0) * 1000;
+            const endMs = Math.min(
+              startMs + 30_000,
+              durMs > 0 ? durMs - 1 : startMs + 30_000,
+            );
+            if (endMs > startMs) {
+              try {
+                await apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+                  previewStartMs: startMs,
+                  previewEndMs: endMs,
+                });
+                chorusSet.add(song.id);
+              } catch {
+                /* preview update failure is non-fatal */
+              }
+            }
+          }
+        }
+      } catch {
+        setStates((prev) => ({ ...prev, [song.id]: "failed" }));
+      }
+    }
+    setCurrentId(null);
+    setChorusSetIds(chorusSet);
+    await onSaved();
+    setStep("done");
+  };
+
+  const closeable = step !== "running";
+  const trackById = useMemo(() => {
+    const m = new Map<string, SongLite>();
+    for (const s of songs) m.set(s.id, s);
+    return m;
+  }, [songs]);
+
+  // Counts for the done summary.
+  const syncedCount = Object.values(states).filter((v) => v === "synced").length;
+  const skippedCount =
+    Object.values(states).filter((v) => v === "skipped").length + ineligible;
+  const failedCount = Object.values(states).filter((v) => v === "failed").length;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => closeable && onOpenChange(v)}>
+      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
+        {step === "intro" && (
+          <>
+            <DialogHeader className="text-left space-y-1">
+              <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-slate-700" />
+                GoodSync™ the whole album?
+              </DialogTitle>
+              <DialogDescription className="text-[13px] font-normal text-slate-500">
+                Sit back — I'll line up the lyrics with the audio on
+                every track. We love this one because it saves you a
+                ton of time.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+              <p className="text-[12.5px] leading-snug text-slate-600">
+                <span className="font-medium text-slate-700">
+                  {eligible.length}
+                </span>{" "}
+                {eligible.length === 1 ? "track is" : "tracks are"} ready to
+                sync.
+                {ineligible > 0 && (
+                  <>
+                    {" "}
+                    <span className="text-slate-500">
+                      {ineligible} will be skipped (no master or no
+                      lyrics yet).
+                    </span>
+                  </>
+                )}
+              </p>
+            </div>
+            {hasConflict && (
+              <div className="space-y-2 pt-1">
+                <p className="text-[12.5px] text-slate-700">
+                  A few tracks are already in sync. What should I do
+                  with the cues you've tuned?
+                </p>
+                <RadioGroup
+                  value={conflictMode}
+                  onValueChange={(v) =>
+                    setConflictMode(v as "skip" | "resync")
+                  }
+                  className="space-y-1.5"
+                >
+                  <label
+                    htmlFor="conflict-skip"
+                    className="flex items-start gap-2.5 rounded-md border border-slate-200 hover:border-slate-300 px-3 py-2 cursor-pointer transition-colors has-[:checked]:border-slate-900 has-[:checked]:bg-slate-50"
+                  >
+                    <RadioGroupItem
+                      id="conflict-skip"
+                      value="skip"
+                      data-testid="radio-conflict-skip"
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12.5px] font-medium text-slate-900">
+                        Skip them (keep my work)
+                      </div>
+                      <div className="text-[11.5px] text-slate-500">
+                        Only sync tracks that have no cues yet.
+                      </div>
+                    </div>
+                  </label>
+                  <label
+                    htmlFor="conflict-resync"
+                    className="flex items-start gap-2.5 rounded-md border border-slate-200 hover:border-slate-300 px-3 py-2 cursor-pointer transition-colors has-[:checked]:border-slate-900 has-[:checked]:bg-slate-50"
+                  >
+                    <RadioGroupItem
+                      id="conflict-resync"
+                      value="resync"
+                      data-testid="radio-conflict-resync"
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12.5px] font-medium text-slate-900">
+                        Re-sync everything
+                      </div>
+                      <div className="text-[11.5px] text-slate-500">
+                        Overwrite existing cues with a fresh pass.
+                      </div>
+                    </div>
+                  </label>
+                </RadioGroup>
+              </div>
+            )}
+            <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                data-testid="button-goodsync-cancel"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep("chorus")}
+                disabled={eligible.length === 0}
+                data-testid="button-goodsync-continue"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                Continue
+              </button>
+            </DialogFooter>
+          </>
+        )}
+
+        {step === "chorus" && (
+          <>
+            <DialogHeader className="text-left space-y-1">
+              <DialogTitle className="text-[17px] font-semibold text-slate-900">
+                One last question
+              </DialogTitle>
+              <DialogDescription className="text-[13px] font-normal text-slate-500">
+                Want me to set each track's 30-second preview to start
+                at the chorus? I'll do my best — for tracks where I
+                can't find one I'll leave the preview alone so you can
+                drag the slider yourself.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+              <p className="text-[12.5px] leading-snug text-slate-600">
+                Works best when your lyrics have a{" "}
+                <code className="px-1 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-slate-700">
+                  [Chorus]
+                </code>{" "}
+                marker. Tracks without one will keep their current
+                preview.
+              </p>
+            </div>
+            <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => runSync(false)}
+                data-testid="button-goodsync-just-sync"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Just sync the lyrics
+              </button>
+              <button
+                type="button"
+                onClick={() => runSync(true)}
+                data-testid="button-goodsync-find-chorus"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-2"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Yes, find the chorus
+              </button>
+            </DialogFooter>
+          </>
+        )}
+
+        {step === "running" && (
+          <>
+            <DialogHeader className="text-left space-y-1">
+              <DialogTitle className="text-[17px] font-semibold text-slate-900">
+                Syncing your album…
+              </DialogTitle>
+              <DialogDescription className="text-[13px] font-normal text-slate-500">
+                Hang tight — this can take a minute per track. You
+                can keep this open and watch.
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+              {eligible.map((s) => {
+                const state = states[s.id] ?? "pending";
+                return (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 px-3 py-2 text-[12.5px]"
+                    data-testid={`goodsync-row-${s.id}`}
+                  >
+                    <span className="truncate text-slate-700">
+                      <span className="text-slate-400 mr-2">
+                        {s.trackNumber}
+                      </span>
+                      {s.title}
+                    </span>
+                    <TrackRunBadge state={state} />
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
+        {step === "done" && (
+          <>
+            <DialogHeader className="text-left space-y-1">
+              <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                All done
+              </DialogTitle>
+              <DialogDescription className="text-[13px] font-normal text-slate-500">
+                Here's how the album turned out. You can fine-tune any
+                track from its row.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-3 gap-2">
+              <SummaryStat label="Synced" value={syncedCount} tone="ok" />
+              <SummaryStat label="Skipped" value={skippedCount} tone="muted" />
+              <SummaryStat label="Failed" value={failedCount} tone={failedCount > 0 ? "warn" : "muted"} />
+            </div>
+            {findChorus && (
+              <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <Sparkles className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                <p className="text-[12.5px] leading-snug text-slate-600">
+                  Chorus preview set on{" "}
+                  <span className="font-medium text-slate-700">
+                    {chorusSetIds.size}
+                  </span>{" "}
+                  {chorusSetIds.size === 1 ? "track" : "tracks"}.
+                  {failedCount === 0 &&
+                    syncedCount > 0 &&
+                    chorusSetIds.size < syncedCount && (
+                      <>
+                        {" "}
+                        Tracks without a{" "}
+                        <code className="px-1 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-slate-700">
+                          [Chorus]
+                        </code>{" "}
+                        marker kept their existing preview.
+                      </>
+                    )}
+                </p>
+              </div>
+            )}
+            <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                data-testid="button-goodsync-done"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800"
+              >
+                Done
+              </button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TrackRunBadge({ state }: { state: TrackRunState }) {
+  if (state === "syncing") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-slate-700">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Syncing…
+      </span>
+    );
+  }
+  if (state === "synced") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-700">
+        <CheckCircle2 className="w-3 h-3" />
+        Synced
+      </span>
+    );
+  }
+  if (state === "skipped") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400">
+        <Ban className="w-3 h-3" />
+        Skipped
+      </span>
+    );
+  }
+  if (state === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-rose-600">
+        <AlertCircle className="w-3 h-3" />
+        Failed
+      </span>
+    );
+  }
+  return (
+    <span className="text-[11.5px] text-slate-400">Queued</span>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "ok" | "muted" | "warn";
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "text-emerald-700"
+      : tone === "warn"
+        ? "text-rose-600"
+        : "text-slate-700";
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-center">
+      <div className={`text-[20px] font-semibold ${toneClass}`}>{value}</div>
+      <div className="text-[11px] uppercase tracking-wide text-slate-400 mt-0.5">
+        {label}
+      </div>
+    </div>
+  );
+}
 
 function WaveArrowGlyph({ className = "" }: { className?: string }) {
   return (
@@ -2195,6 +2894,76 @@ const SECTION_HEADER_RE =
   /^(\[.*\]|V\d+|VERSE(?:\s+\d+)?|PRE(?:-?\s*CHORUS)?|POST(?:-?\s*CHORUS)?|CHORUS|BRIDGE|INTRO|OUTRO)$/;
 function isSectionHeaderLine(text: string): boolean {
   return SECTION_HEADER_RE.test(text.trim());
+}
+
+/* Find the millisecond timestamp of the first sung line inside a
+   [Chorus] / CHORUS section. Used by the album-wide GoodSync wizard
+   to auto-set `previewStartMs` to the chorus. Two-strategy match so
+   it survives Scribe occasionally rewording a line:
+     1) Exact text match (case-insensitive trim) — preferred.
+     2) Positional fallback — count sung lines up to the chorus and
+        return the cue at that index.
+   Returns `null` if there's no [Chorus] marker, no sung line after
+   it, or no cue we can confidently map to. The caller must treat
+   null as "leave preview alone." */
+function findChorusStartMs(
+  lyricsText: string | null | undefined,
+  cues: { timeMs: number; text: string }[] | null | undefined,
+): number | null {
+  if (!lyricsText || !cues || cues.length === 0) return null;
+  // Match "Chorus" but NOT "Pre-Chorus" / "Post-Chorus" / "Prechorus".
+  // We strip wrapping brackets/parens then require chorus to start the
+  // section name (allowing things like "Chorus 2", "Chorus (final)").
+  const isChorusHeader = (line: string) => {
+    if (!isSectionHeaderLine(line)) return false;
+    const inner = line
+      .trim()
+      .replace(/^[\[\(]/, "")
+      .replace(/[\]\)]$/, "")
+      .trim();
+    return /^chorus\b/i.test(inner);
+  };
+  const lines = lyricsText.split("\n");
+  let chorusIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    if (isChorusHeader(t)) {
+      chorusIdx = i;
+      break;
+    }
+  }
+  if (chorusIdx === -1) return null;
+  let firstSungText: string | null = null;
+  let firstSungIdx = -1;
+  for (let i = chorusIdx + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t || isSectionHeaderLine(t)) continue;
+    firstSungText = t;
+    firstSungIdx = i;
+    break;
+  }
+  if (firstSungText === null || firstSungIdx === -1) return null;
+  // Positional index = how many sung lines appear BEFORE the chorus's
+  // first sung line. Used both as the direct-match starting point
+  // (so a repeated lyric earlier in the song doesn't steal the cue)
+  // and as the positional fallback if no text match lands.
+  let sungCount = 0;
+  for (let i = 0; i < firstSungIdx; i++) {
+    const t = lines[i].trim();
+    if (t && !isSectionHeaderLine(t)) sungCount++;
+  }
+  const norm = (s: string) => s.trim().toLowerCase();
+  const target = norm(firstSungText);
+  // Search a small window starting at the positional index — allow ±2
+  // cues of drift since Scribe occasionally splits/merges a long line.
+  const lo = Math.max(0, sungCount - 2);
+  const hi = Math.min(cues.length - 1, sungCount + 2);
+  for (let i = lo; i <= hi; i++) {
+    if (norm(cues[i].text) === target) return cues[i].timeMs;
+  }
+  if (sungCount < cues.length) return cues[sungCount].timeMs;
+  return null;
 }
 
 /* Auto-distribute draft lyrics across the master's duration. Skips
