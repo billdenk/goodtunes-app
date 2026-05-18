@@ -1679,32 +1679,32 @@ function TrackRow({
                   {song.title}
                 </div>
               </button>
-              {/* "Upload master" CTA stays inline under the title — it's a
-                  do-this-next affordance, not status. */}
-              {!song.audioUrl && (
-                <div className="mt-1">
-                  <button
-                    ref={masterChipRef}
-                    type="button"
-                    onClick={() => {
-                      setUserExpanded(true);
-                      setMode("audio");
-                    }}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                    data-testid={`button-edit-master-${song.id}`}
-                  >
-                    <Upload className="w-3 h-3" />
-                    Upload master
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>
 
-        {/* Right side: at rest, duration + dot meter (Apple's
-            "title … 3:30 ✓✓✓" anatomy). When expanded the row owns
-            destructive controls (Hide / Trash) instead. */}
+        {/* Right side: at rest, [Upload master?] + duration + dot meter
+            (Apple's "title … 3:30 ✓✓✓" anatomy). The Upload master CTA
+            lives inline on the right so the title row stays single-line
+            and the track number doesn't end up vertically misaligned
+            against a two-line title block. If a ⋯ menu lands here later,
+            it slots to the right of these — Upload master stays inline
+            with the title, just to its left. */}
+        {!expanded && !song.audioUrl && (
+          <button
+            ref={masterChipRef}
+            type="button"
+            onClick={() => {
+              setUserExpanded(true);
+              setMode("audio");
+            }}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40 flex-shrink-0"
+            data-testid={`button-edit-master-${song.id}`}
+          >
+            <Upload className="w-3 h-3" />
+            Upload master
+          </button>
+        )}
         {!expanded && (
           <span
             className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
