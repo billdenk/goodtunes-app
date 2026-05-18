@@ -2264,8 +2264,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             // @ts-ignore — no types for the inner module path; we import
             // it directly so the package's index.js doesn't try to load
             // its bundled test PDF at module-init time.
-            const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as (b: Buffer) => Promise<{ text: string }>;
-            const parsed = await pdfParse(buf);
+            const { PDFParse } = await import("pdf-parse");
+            const parser = new PDFParse({ data: buf });
+            const parsed = await parser.getText();
             text = parsed.text || "";
           } else if (ext === ".docx" || ext === ".doc") {
             const mammoth = await import("mammoth");
