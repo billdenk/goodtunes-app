@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, X, User as UserIcon, Loader2, Sparkles, ChevronDown, SkipForward, AlertCircle, ChevronLeft } from "lucide-react";
+import { Plus, Search, X, User as UserIcon, Loader2, Sparkles, ChevronDown, SkipForward, ChevronLeft } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +50,10 @@ interface PersonLite {
   labelId: string | null;
   itunesArtistId: string | null;
   spotifyUrl: string | null;
+  // null = never scanned, true = scan found candidates (still needs admin
+  // pick), false = scan returned zero results. Drives the small badge on
+  // the People grid card so admins know who's been searched already.
+  spotifyHasMatch: boolean | null;
 }
 
 interface LabelLite {
@@ -385,21 +389,20 @@ function MatchSpotifySheet({
           scanned: { id: string; name: string; candidates: SpotifyCandidate[] }[];
         };
         if (cancelled) return;
-        // Merge scan results with photoUrl from the people list so
-        // post-pick photo-overwrite logic still has the existing portrait.
+        // Only walk people who actually have candidates — no-match rows
+        // are surfaced on the People grid with a small badge instead, so
+        // the dialog doesn't waste the admin's time clicking Skip 20×.
         const photoById = new Map(people.map((p) => [p.id, p.photoUrl]));
         const sorted: QueueEntry[] = json.scanned
+          .filter((s) => s.candidates.length > 0)
           .map((s) => ({
             ...s,
             photoUrl: photoById.get(s.id) ?? null,
           }))
-          // Matched (candidates.length > 0) first, then alphabetical.
-          .sort((a, b) => {
-            const am = a.candidates.length > 0 ? 0 : 1;
-            const bm = b.candidates.length > 0 ? 0 : 1;
-            if (am !== bm) return am - bm;
-            return a.name.localeCompare(b.name);
-          });
+          .sort((a, b) => a.name.localeCompare(b.name));
+        // Refresh the People list so the new spotifyHasMatch badges
+        // appear immediately on the grid behind the dialog.
+        qc.invalidateQueries({ queryKey: ["/api/people"] });
         setQueue(sorted);
         setPhase(sorted.length === 0 ? "empty" : "walking");
       } catch (e: any) {
@@ -419,8 +422,6 @@ function MatchSpotifySheet({
 
   const current = queue[idx] ?? null;
   const resolved = resolvedIds.size;
-  const matchedCount = queue.filter((q) => q.candidates.length > 0).length;
-  const currentIsMatched = !!current && current.candidates.length > 0;
 
   const finish = () => {
     qc.invalidateQueries({ queryKey: ["/api/people"] });
@@ -506,11 +507,7 @@ function MatchSpotifySheet({
             </DialogTitle>
           </div>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            {phase === "walking" && currentIsMatched
-              ? "Confirm the right artist, or skip."
-              : phase === "walking"
-              ? "No match — skip or go back."
-              : "Pick the right artist, or skip."}
+            Confirm the right artist, or skip.
           </DialogDescription>
         </DialogHeader>
 
@@ -521,17 +518,18 @@ function MatchSpotifySheet({
               Scanning Spotify…
             </div>
             <div className="text-[11.5px] text-slate-500 mt-0.5">
-              Sorting matches first, so you can confirm the easy ones.
+              Pulling candidates for everyone not yet linked.
             </div>
           </div>
         ) : phase === "empty" ? (
           <div className="py-10 text-center">
             <SiSpotify className="w-8 h-8 mx-auto text-[#1DB954] mb-2" />
             <div className="text-[14px] font-semibold text-slate-900">
-              Every person is already linked
+              Nothing to confirm
             </div>
             <div className="text-[12px] text-slate-500 mt-0.5">
-              Nothing to do here.
+              Everyone is either linked or has no Spotify match. Check the
+              grid for any "searched, no match" badges.
             </div>
           </div>
         ) : !current ? null : (
@@ -539,12 +537,6 @@ function MatchSpotifySheet({
             <div>
               <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
                 {idx + 1} of {queue.length}
-                {matchedCount > 0 && (
-                  <span className="text-slate-400">
-                    {" · "}
-                    {idx < matchedCount ? "matched" : "no match"}
-                  </span>
-                )}
                 {resolved > 0 && (
                   <span className="text-slate-400"> · {resolved} linked</span>
                 )}
@@ -554,18 +546,7 @@ function MatchSpotifySheet({
               </div>
             </div>
 
-            {current.candidates.length === 0 ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
-                <AlertCircle className="w-5 h-5 mx-auto text-slate-400 mb-1.5" />
-                <div className="text-[13px] font-semibold text-slate-700">
-                  No Spotify artist found for "{current.name}"
-                </div>
-                <div className="text-[12px] text-slate-500 mt-0.5">
-                  Skip to keep moving — search by a different name later from the Streaming tab.
-                </div>
-              </div>
-            ) : (
-              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 overflow-hidden">
+            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 overflow-hidden">
                 {current.candidates.slice(0, 3).map((c) => (
                   <li key={c.id}>
                     <button
@@ -597,9 +578,8 @@ function MatchSpotifySheet({
                       <SiSpotify className="w-4 h-4 text-[#1DB954] shrink-0" />
                     </button>
                   </li>
-                ))}
-              </ul>
-            )}
+              ))}
+            </ul>
           </div>
         )}
 
@@ -644,6 +624,52 @@ function MatchSpotifySheet({
   );
 }
 
+/**
+ * SpotifyMatchBadge — small overlay glyph on a person's avatar tile
+ * indicating where they stand in the Spotify-match flow:
+ *
+ *   - spotifyUrl set → no badge (already linked, the row is "done")
+ *   - spotifyHasMatch === true → green Spotify glyph (scan found candidates,
+ *     admin still needs to confirm one via Advanced → Match on Spotify)
+ *   - spotifyHasMatch === false → grey glyph with a slash (we searched but
+ *     found nothing — admin can edit the person's name and rescan)
+ *   - spotifyHasMatch === null → no badge (never scanned)
+ *
+ * Lives in AdminPeople.tsx for now because the Spotify-match flow is the
+ * only consumer; promote to client/src/components/admin/ if a second
+ * surface needs it.
+ */
+function SpotifyMatchBadge({
+  person,
+  size,
+}: {
+  person: PersonLite;
+  size: "sm" | "md";
+}) {
+  if (person.spotifyUrl) return null;
+  if (person.spotifyHasMatch === null || person.spotifyHasMatch === undefined) {
+    return null;
+  }
+  const dim = size === "md" ? "w-6 h-6" : "w-4 h-4";
+  const icon = size === "md" ? "w-3.5 h-3.5" : "w-2.5 h-2.5";
+  const hasMatch = person.spotifyHasMatch === true;
+  return (
+    <div
+      className={`absolute -bottom-0.5 -right-0.5 ${dim} rounded-full bg-white ring-1 ring-slate-200 shadow-sm flex items-center justify-center`}
+      title={
+        hasMatch
+          ? "Spotify match found — confirm in Advanced › Match on Spotify"
+          : "Searched Spotify — no match found"
+      }
+      data-testid={`badge-spotify-${hasMatch ? "match" : "nomatch"}-${person.id}`}
+    >
+      <SiSpotify
+        className={`${icon} ${hasMatch ? "text-[#1DB954]" : "text-slate-400"}`}
+      />
+    </div>
+  );
+}
+
 function PersonCard({
   person,
   labelName,
@@ -660,20 +686,23 @@ function PersonCard({
       className="group text-left flex flex-col items-center"
       data-testid={`card-person-${person.id}`}
     >
-      <div className="relative w-full aspect-square rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[#319ED8]/30 transition-all">
-        {person.photoUrl ? (
-          <img
-            src={person.photoUrl}
-            alt={person.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-white text-3xl font-bold">
-              {initialFor(person.name)}
-            </span>
-          </div>
-        )}
+      <div className="relative w-full aspect-square">
+        <div className="w-full h-full rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[#319ED8]/30 transition-all">
+          {person.photoUrl ? (
+            <img
+              src={person.photoUrl}
+              alt={person.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="text-white text-3xl font-bold">
+                {initialFor(person.name)}
+              </span>
+            </div>
+          )}
+        </div>
+        <SpotifyMatchBadge person={person} size="md" />
       </div>
       <div
         className="mt-3 w-full text-center text-slate-900 text-[13px] font-semibold truncate px-1"
@@ -704,20 +733,23 @@ function PersonRow({
       className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
       data-testid={`row-person-${person.id}`}
     >
-      <div className="w-10 h-10 rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200 flex-shrink-0">
-        {person.photoUrl ? (
-          <img
-            src={person.photoUrl}
-            alt={person.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-white text-sm font-bold">
-              {initialFor(person.name)}
-            </span>
-          </div>
-        )}
+      <div className="relative w-10 h-10 flex-shrink-0">
+        <div className="w-full h-full rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200">
+          {person.photoUrl ? (
+            <img
+              src={person.photoUrl}
+              alt={person.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="text-white text-sm font-bold">
+                {initialFor(person.name)}
+              </span>
+            </div>
+          )}
+        </div>
+        <SpotifyMatchBadge person={person} size="sm" />
       </div>
       <div className="min-w-0 flex-1">
         <div

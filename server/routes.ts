@@ -3395,7 +3395,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.coverUrl !== undefined) updates.coverUrl = opt(b.coverUrl);
     if (b.bio !== undefined) updates.bio = opt(b.bio);
     if (b.appleMusicUrl !== undefined) updates.appleMusicUrl = opt(b.appleMusicUrl);
-    if (b.spotifyUrl !== undefined) updates.spotifyUrl = opt(b.spotifyUrl);
+    if (b.spotifyUrl !== undefined) {
+      updates.spotifyUrl = opt(b.spotifyUrl);
+      // Clear the tri-state badge flag whenever the URL changes — once a
+      // person is linked the badge is hidden anyway, and if the admin
+      // removes the URL we want a fresh scan to set the flag again
+      // rather than carrying a stale "match"/"no match" decision.
+      updates.spotifyHasMatch = null;
+    }
+    if (b.spotifyHasMatch !== undefined) {
+      updates.spotifyHasMatch =
+        b.spotifyHasMatch === null ? null : Boolean(b.spotifyHasMatch);
+    }
     if (b.itunesArtistId !== undefined) updates.itunesArtistId = opt(b.itunesArtistId);
     if (b.instagramUrl !== undefined) updates.instagramUrl = opt(b.instagramUrl);
     if (b.tiktokUrl !== undefined) updates.tiktokUrl = opt(b.tiktokUrl);
@@ -3453,6 +3464,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
       results.push(...batch);
     }
+    // Persist the tri-state outcome so the People grid can badge each
+    // row (searched-with-matches vs searched-no-match) without needing
+    // to re-scan on every page load. Fire-and-forget per person — a
+    // single write failure mustn't fail the whole scan response.
+    await Promise.all(
+      results.map((r) =>
+        storage
+          .updatePerson(r.id, { spotifyHasMatch: r.candidates.length > 0 })
+          .catch(() => undefined),
+      ),
+    );
     return res.json({ scanned: results });
   });
 

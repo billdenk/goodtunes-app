@@ -236,6 +236,13 @@ export const people = pgTable("people", {
   // source for name/photo/bio on first import.
   appleMusicUrl: text("apple_music_url"),
   spotifyUrl: text("spotify_url"),
+  // Tri-state Spotify scan outcome, written by the bulk "Match people on
+  // Spotify" walk. Lets the People grid badge people who've been searched
+  // (true = candidates exist & still need admin pick; false = Spotify
+  // returned zero results) versus never-scanned (null). When the admin
+  // picks a candidate via the dialog the row gets a real spotifyUrl —
+  // the flag stops mattering at that point.
+  spotifyHasMatch: boolean("spotify_has_match"),
   // iTunes Lookup needs the numeric artist id (last path segment of an Apple
   // Music artist URL). Cached so the discography panel can refresh without
   // re-parsing the URL.
