@@ -644,3 +644,92 @@ A new **Manufacturing tab** on the album page. An album can have multiple physic
 - **Format-specific checklists** — a 12" vinyl needs different art than a CD; the tab should hide/show file slots based on `format` so the operator isn't asked for a CD tray inlay on a vinyl run.
 - **GoodDeed print integration** — when the package includes a printed-and-signed GoodDeed, the Manufacturing tab is also where the print template + signing notes live.
 
+
+---
+
+## Multi-tenant accounts — GoodTunes.music + /admin (planned)
+
+The current temporary bearer-token admin login is a single-user placeholder. The real product needs **five kinds of principals** sharing one auth system, one user table, and one permission model. Plain language first, then schema.
+
+### The five principals
+
+1. **Customer (fan)** — buys music, plays it, sees their own purchase + playback history. Self-serve signup at `goodtunes.music`. Auth providers: Apple, Google, email. Already covered by the Auth plan above.
+2. **Internal staff (us — GoodTunes operators)** — full read/write across the product. The current `/admin` surface. Invitation-only.
+3. **Artist** — read-only view of their own album(s), the people credited on them, sales/streaming reports for those albums. Same `/admin` shell as us but scoped to their albums; edit permissions deferred ("we'll do the work" for now). Invitation-only.
+4. **Label** — read-only view of every artist they own, **plus** rolled-up reporting across that roster. Same shell, broader scope. A label can have many artists; an artist can belong to at most one label. Invitation-only.
+5. **Manufacturer** — read-only view of the manufacturing runs assigned to them (the "Build manufacturer package" output from the Manufacturing pipeline section above): file list, download links, contact details, status. They never see anything outside their assigned runs. Invitation-only.
+
+All five live behind the same auth flow. Customers self-serve; the other four are invitation-only and the invitation seeds the org membership.
+
+### One shell, scoped data
+
+`/admin` is the same React app for principals 2–5. The shell asks the server "who is this person, what orgs do they belong to, what can they see?" on every request. The sidebar, the album list, the report queries — every query is filtered by org membership server-side. Same code, different data.
+
+Customers never hit `/admin` — they live on the consumer player at `goodtunes.music/*`.
+
+### Multiple people per org
+
+Labels, artists, and manufacturers often have multiple humans who need access (a label's A&R + their finance person; an artist's manager + the artist themselves; a manufacturer's plant manager + their shipping coordinator). The model treats orgs as first-class and humans as members of one or more orgs with a role.
+
+### Data model
+
+```
+users           — one row per human. Email/Apple/Google sub. The same row whether
+                  they're a fan, an artist, a label exec, or a manufacturer rep.
+                  (Extends the Auth plan's existing `users` table — adds nothing
+                  fan-specific; the fields above stay the same.)
+
+organizations   — one row per company/entity. Fields:
+                  id, name, type ∈ { internal, artist, label, manufacturer },
+                  parentOrgId (nullable — used when an artist belongs to a label).
+                  Customers do NOT get an org row — a fan is just a user.
+
+memberships     — the join. (userId, orgId, role) where
+                  role ∈ { owner, admin, viewer }.
+                  One user can have many memberships across many orgs.
+                  Owner can invite/remove members; admin can act on org data;
+                  viewer is read-only.
+
+invitations     — pending memberships. (email, orgId, role, token, expiresAt).
+                  Sent by the org's owner (or by GoodTunes internal staff for
+                  artists/labels/manufacturers we onboard manually).
+```
+
+### Permission resolution (server-side, every request)
+
+1. Authenticate the user (Apple/Google/email session).
+2. Load all their memberships.
+3. For each request, compute the set of org ids the user has access to.
+4. Filter every query by that set:
+   - Internal staff → no filter (sees everything).
+   - Artist → albums where `album.artistOrgId ∈ user's artist orgs`.
+   - Label → albums where `album.artistOrgId.parentOrgId ∈ user's label orgs`, **plus** the artist orgs underneath.
+   - Manufacturer → runs where `run.manufacturerOrgId ∈ user's manufacturer orgs`.
+5. If the resolved set is empty for an `/admin` request, 404 — don't leak the existence of other orgs.
+
+### Routing
+
+- `goodtunes.music/` → consumer player (fans).
+- `goodtunes.music/admin` → the shared shell for internal/artist/label/manufacturer. The shell auto-routes the user to the right landing page based on their highest-privileged membership (internal > label > artist > manufacturer).
+- `goodtunes.music/login` → unified login page; same flow regardless of which principal they'll resolve to.
+
+### Auth provider choice
+
+Stick with the Apple/Google/email plan already in the Auth plan section above — it works identically for all principals. The only difference between a fan and a label exec is whether a `memberships` row exists for them. Invitation-only orgs get a magic-link email that creates the membership when the invitee signs in for the first time.
+
+For implementation, evaluate the **Replit Auth integration** first (Apple, Google, email, magic-link, sessions all out of the box). Fall back to a self-hosted approach (Lucia or NextAuth-equivalent for Express) only if Replit Auth can't cover invitation flows or custom claims.
+
+### Custom domain (`goodtunes.music`)
+
+Replit Deployments supports custom domains directly — add the domain in the deployment settings, point the DNS CNAME at the Replit deployment, TLS is automatic. No code changes needed. Do this once the auth model above ships so the public domain doesn't go live with the bearer-token placeholder still in place.
+
+### Build order (smallest viable first)
+
+1. **Phase 1 — Replace bearer-token admin auth** with real sessions for internal staff only. One org (`type: internal`), one membership per operator. Apple/Google/email + sessions. Everything else (artist/label/manufacturer orgs) stays disabled.
+2. **Phase 2 — Customer (fan) auth** for the consumer player. Same providers, no org rows. Unlocks the purchase pipeline (the Purchase / fulfillment section above depends on this).
+3. **Phase 3 — Artist orgs + invitation flow.** Internal staff can create an artist org, assign albums to it, invite the artist. Artist sees their album(s) in read-only mode.
+4. **Phase 4 — Label orgs** with parent-child to artist orgs + rolled-up reports.
+5. **Phase 5 — Manufacturer orgs** scoped to runs.
+6. **Phase 6 — Permissions polish** (custom roles beyond owner/admin/viewer, audit log, session revocation, SSO for labels that want it).
+
+Each phase is shippable on its own; nothing in phase N blocks phase N-1 from going live.
