@@ -599,13 +599,17 @@ export function Player() {
                   // soft 1px blur; lines further away pick up progressively
                   // heavier blur. The eye "snaps" to the only sharp line
                   // on screen without a size jump distracting from it.
-                  // Blur is GPU-expensive on iOS Safari — cap the ramp at
-                  // distance 3 and drop blur entirely past that. Distant
-                  // lines are already at 0.18–0.30 opacity, so the eye
-                  // can't tell whether they're blurred or not, but the
-                  // compositor still pays the cost. Same with willChange
-                  // below — only promote the lines that are actually
-                  // animating right now.
+                  // Blur ramp MUST be monotonic — once a line gets blurry,
+                  // it stays at least that blurry the further it sits from
+                  // active. The previous version dropped blur to 0 past
+                  // distance 3 (as a GPU optimization), but that produced
+                  // an obvious "sharp → blurry → sharp again" stripe down
+                  // the lyric column (Bill caught this on iPhone). Apple
+                  // Music keeps the blur monotone all the way down. We cap
+                  // the ramp at 6px (matches replit.md spec) so distant
+                  // lines don't keep getting heavier indefinitely. Opacity
+                  // already drops them to 0.18–0.30 so the GPU cost is
+                  // small. willChange below still only promotes near lines.
                   const blurPx = isActive
                     ? 0
                     : distance === 1
@@ -613,8 +617,8 @@ export function Player() {
                       : distance === 2
                         ? 2.8
                         : distance === 3
-                          ? 4
-                          : 0;
+                          ? 4.5
+                          : 6;
                   // Opacity ramp — past lines fade faster than upcoming
                   // ones so the eye naturally tracks down the page.
                   const opacity = isActive
