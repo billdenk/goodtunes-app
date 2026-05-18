@@ -40,8 +40,16 @@ const NavItem = ({
     >
       <span
         aria-hidden
-        className="absolute inset-x-0 -inset-y-[4px] rounded-full transition-colors duration-200"
-        style={{ background: active ? "rgba(49,158,216,0.18)" : "transparent" }}
+        className="absolute -inset-y-[4px] rounded-full transition-colors duration-200"
+        style={{
+          background: active ? "rgba(49,158,216,0.18)" : "transparent",
+          // Pill is nudged ~3px left of the button's center so it sits
+          // symmetrically around the icon's visual mass. The Collection
+          // icon in particular has its heavier glyph on the right, which
+          // makes a perfectly-centered pill read as right-leaning.
+          left: "-3px",
+          right: "3px",
+        }}
       />
       <div className="relative w-14 h-7 flex items-center justify-center">
         <div className={`transition-all duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}>
