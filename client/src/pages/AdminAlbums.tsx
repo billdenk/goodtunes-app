@@ -302,13 +302,6 @@ export function AdminAlbums() {
           </div>
         )}
 
-        {/* FOOTER NOTE */}
-        <p className="text-slate-400 text-[11px] leading-relaxed px-1 pt-4">
-          <span className="font-semibold text-slate-500">Scope:</span> the
-          admin only manages what the player needs — cover art, metadata,
-          credits, lyrics, files. No distribution, no royalty collection, no
-          DSP delivery.
-        </p>
       </div>
     </AdminFrame>
   );
