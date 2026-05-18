@@ -373,6 +373,106 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return `/objects/uploads/${id}`;
   }
 
+  // Paste-from-URL — admin pastes an image URL (Dropbox, Cloudinary,
+  // Imgur, any public host) into the artwork editor; we fetch it
+  // server-side so cross-origin CORS doesn't block the browser, and so
+  // the bytes land in our own object storage instead of being hot-linked
+  // to a third party that could rotate the URL.
+  //
+  // SSRF guard: https-only, manual redirect-following (5 hops), every
+  // hop re-validated against `isPrivateIp` so a redirect can't trick us
+  // into hitting 127.0.0.1 / 169.254.169.254 / RFC1918 / ULA. We don't
+  // DNS-resolve here (matches the rest of the codebase's posture) — the
+  // hostname check catches bare-IP URLs.
+  app.post("/api/admin/fetch-image-from-url", requireAdmin, async (req, res) => {
+    try {
+      const raw = String(req.body?.url || "").trim();
+      if (!raw) return res.status(400).json({ message: "Paste a URL." });
+
+      let url: URL;
+      try { url = new URL(raw); }
+      catch { return res.status(400).json({ message: "That doesn't look like a valid URL." }); }
+
+      // Dropbox share links default to dl=0 (HTML preview page). Flip to
+      // dl=1 so we get the actual image bytes back instead of a web page.
+      const isDropbox =
+        url.hostname === "www.dropbox.com" ||
+        url.hostname === "dropbox.com" ||
+        url.hostname === "dl.dropboxusercontent.com" ||
+        /\.dl\.dropboxusercontent\.com$/i.test(url.hostname);
+      if (isDropbox) url.searchParams.set("dl", "1");
+
+      const MAX_BYTES = 8 * 1024 * 1024; // matches dropzone cap
+      const timeoutMs = 30_000;
+      const startMs = Date.now();
+      let response: Awaited<ReturnType<typeof fetch>> | null = null;
+
+      for (let hop = 0; hop <= 5; hop++) {
+        if (Date.now() - startMs > timeoutMs) {
+          return res.status(504).json({ message: "Fetching that image took too long." });
+        }
+        if (url.protocol !== "https:" && url.protocol !== "http:") {
+          return res.status(400).json({ message: "Image URLs must use http:// or https://." });
+        }
+        if (isPrivateIp(url.hostname)) {
+          return res.status(400).json({ message: "Refusing to fetch from a private/internal address." });
+        }
+        const r = await fetch(url.toString(), {
+          redirect: "manual",
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: { "User-Agent": "GoodTunesBot/1.0" },
+        });
+        if (r.status >= 300 && r.status < 400) {
+          const loc = r.headers.get("location");
+          if (!loc) return res.status(502).json({ message: "Redirect with no target." });
+          try { url = new URL(loc, url); }
+          catch { return res.status(502).json({ message: "Invalid redirect URL." }); }
+          try { await r.arrayBuffer(); } catch { /* drain */ }
+          continue;
+        }
+        response = r;
+        break;
+      }
+      if (!response) return res.status(502).json({ message: "Too many redirects." });
+      if (!response.ok) {
+        return res.status(502).json({ message: `Couldn't fetch (HTTP ${response.status}). Make sure the link is public.` });
+      }
+
+      const ct = (response.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+      if (!(ct in MIME_TO_EXT)) {
+        return res.status(415).json({
+          message: ct.includes("text/html")
+            ? "That link returned a web page, not an image. For Dropbox, use the file's direct image URL."
+            : `That URL didn't return a supported image (got "${ct || "unknown"}"). Use JPG, PNG, WebP, GIF, or AVIF.`,
+        });
+      }
+
+      // Stream the body, abort the moment we exceed the cap.
+      const reader = response.body?.getReader();
+      if (!reader) return res.status(502).json({ message: "Empty response." });
+      const chunks: Buffer[] = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          total += value.byteLength;
+          if (total > MAX_BYTES) {
+            try { await reader.cancel(); } catch { /* ignore */ }
+            return res.status(413).json({ message: "Image is larger than 8 MB." });
+          }
+          chunks.push(Buffer.from(value));
+        }
+      }
+      const buf = Buffer.concat(chunks);
+      const storedUrl = await uploadBufferToObjectStorage(buf, ct);
+      return res.json({ url: storedUrl });
+    } catch (err: any) {
+      console.error("fetch-image-from-url failed", err);
+      return res.status(500).json({ message: err?.message || "Couldn't fetch that image." });
+    }
+  });
+
   // Video upload — separate route + multer instance because videos need
   // a much larger size cap and a different MIME whitelist than artwork.
   // We still derive extension from validated mimetype (never from

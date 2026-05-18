@@ -6741,47 +6741,18 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
     },
   });
 
-  // Paste-from-URL — fetches the image so it ends up in our own object
-  // storage instead of hot-linking to the source (which would break the
-  // moment the source rotates the URL or removes the file). Falls back
-  // to storing the bare URL only if the fetch is blocked (CORS) and the
-  // user explicitly confirms.
+  // Paste-from-URL — proxies the fetch through our server so cross-origin
+  // CORS (which blocks Dropbox / Cloudinary / Imgur in the browser) is a
+  // non-issue, and the image ends up in our own object storage instead of
+  // being hot-linked to a source that could rotate the URL.
   const urlMut = useMutation({
     mutationFn: async (rawUrl: string) => {
       const trimmed = rawUrl.trim();
-      let u: URL;
-      try {
-        u = new URL(trimmed);
-      } catch {
-        throw new Error("That doesn't look like a valid URL.");
-      }
-      if (u.protocol !== "https:" && u.protocol !== "http:") {
-        throw new Error("Image URLs must start with http:// or https://.");
-      }
       setPreviewUrl(trimmed);
-      let res: Response;
-      try {
-        res = await fetch(trimmed, { mode: "cors" });
-      } catch {
-        throw new Error(
-          "Couldn't fetch that image (the site may block cross-origin downloads). Try downloading it and using Drag & drop.",
-        );
-      }
-      if (!res.ok) {
-        throw new Error(`Couldn't fetch that image (HTTP ${res.status}).`);
-      }
-      const blob = await res.blob();
-      if (!/^image\//.test(blob.type)) {
-        throw new Error("That URL didn't return an image.");
-      }
-      if (blob.size > 8 * 1024 * 1024) {
-        throw new Error("Image is larger than 8 MB.");
-      }
-      const ext =
-        (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
-      const filename = `pasted-cover.${ext}`;
-      const file = new File([blob], filename, { type: blob.type });
-      const url = await uploadImageFile(file);
+      const res = await apiRequest("POST", "/api/admin/fetch-image-from-url", {
+        url: trimmed,
+      });
+      const { url } = (await res.json()) as { url: string };
       await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
         artwork: url,
       });
