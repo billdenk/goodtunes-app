@@ -76,7 +76,7 @@ export function BottomNav() {
     : "?";
 
   const collectionIcon = (active: boolean) => (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor">
       <rect x="3" y="3" width="4" height="18" rx="1" opacity={active ? 1 : 0.7} />
       <rect x="9" y="3" width="3" height="18" rx="1" opacity={active ? 1 : 0.7} />
       <rect x="14" y="3" width="7" height="11" rx="1" opacity={active ? 1 : 0.7} />
@@ -85,7 +85,7 @@ export function BottomNav() {
   );
 
   const playlistsIcon = (active: boolean) => (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none">
       <path d="M3 6h18M3 10h14M3 14h8" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" />
       <path d="M17 14v6M14 17h6" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" />
     </svg>
@@ -93,7 +93,7 @@ export function BottomNav() {
 
   const chatIcon = (active: boolean) => (
     <div className="relative">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? "0" : "1.8"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? "0" : "1.8"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
       {unread > 0 && (
