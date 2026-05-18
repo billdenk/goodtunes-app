@@ -24,39 +24,7 @@ import {
   Volume2,
   VolumeX,
   Mic2,
-  CheckCircle2,
-  Circle,
 } from "lucide-react";
-
-/* ── GoodSync™ glyph ───────────────────────────────────────────────────
-   Custom inline mark — four rounded vertical bars that peak just LEFT
-   of center and taper down to the right, like a waveform decaying. Reads
-   as "audio with forward motion" rather than a symmetric mountain. Bar
-   coordinates were authored by Bill in a 100×100 grid and ported in 1:1.
-   No Lucide collision: Sparkles, Zap, AudioLines, RefreshCw all carry
-   meaning elsewhere in the admin surfaces. Bars are vertically centered
-   around y=50 so the glyph sits dead-center inside its badge.          */
-function WaveArrowGlyph(props: { className?: string }) {
-  // Bill's original 100×100 ratio packed the bars into the middle 47% of
-  // the viewBox with rx=4 — at ~14px on-screen the bars rounded into
-  // indistinct pills with big dead margins. Rebreathed: span x=14→86
-  // (72% of width), bars 10 wide (vs 8), rx=2 (vs 4) so each bar reads
-  // as a bar instead of a stadium-shape. Same peak-left-then-taper-right
-  // heights as before, just with room to read at small sizes.
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      fill="currentColor"
-      className={props.className}
-      aria-hidden
-    >
-      <rect x="18" y="40" width="10" height="20" rx="2" />
-      <rect x="36" y="22" width="10" height="56" rx="2" />
-      <rect x="54" y="32" width="10" height="36" rx="2" />
-      <rect x="72" y="42" width="10" height="16" rx="2" />
-    </svg>
-  );
-}
 
 // Same shape as Interactive.tsx so the two mockups are direct siblings.
 // `lyricsSync` flags GoodSync™-verified lyrics — the middle pip swaps from
@@ -195,51 +163,39 @@ function StatusMeter({
     },
   ];
 
-  // Per-dot glyph. Shape is now the primary signal — "done" wears a
-  // tiny check inside a green circle, "synced" wears a SYNC glyph
-  // (circular arrows) inside a brand-blue circle (we deliberately
-  // avoid the scalloped verification badge so it stays free for a
-  // future "verified artist / verified fan" identity mark), "partial"
-  // is a filled amber circle without a glyph (work-in-progress, not
-  // yet earned a check), and "empty" is a hollow grey ring. Color
-  // reinforces, but a deuteranopic reader can tell the four states
-  // apart from silhouette alone (check vs. sync arrows vs. plain dot
-  // vs. ring).
-  const renderDot = (state: DotState) => {
-    if (state === "synced") {
-      // Synced badge sits a hair larger than its 14px siblings (16px vs
-      // 14) — just enough lift to read as "the premium state" without
-      // shouting over the row's name/duration. Glyph fills ~62% of the
-      // badge so the bars keep edge-margin breathing room.
-      return (
-        <span
-          className="w-4 h-4 rounded-full inline-flex items-center justify-center"
-          style={{ backgroundColor: "#319ED8" }}
-        >
-          <WaveArrowGlyph className="w-2.5 h-2.5 text-white" />
-        </span>
-      );
-    }
-    if (state === "done")
-      return (
-        <CheckCircle2
-          className="w-3.5 h-3.5 text-emerald-500"
-          strokeWidth={2.25}
-          fill="currentColor"
-          stroke="white"
-        />
-      );
-    if (state === "partial")
-      return (
-        <span className="w-3.5 h-3.5 rounded-full bg-amber-500 inline-block" />
-      );
-    return (
-      <Circle
-        className="w-3.5 h-3.5 text-slate-300"
-        strokeWidth={1.5}
-      />
-    );
+  // Letter-box system (Bill, 2026-05-18): the row stays silent at rest;
+  // only "Upload master" shouts. On hover, three tiny letter boxes (P /
+  // L / C for Preview / Lyrics / Credits) fade in. Three states:
+  //   - untouched  → slate-100 fill, ghosted letter (nobody set this)
+  //   - manual     → white box, slate hairline outline, black letter
+  //                  (a human typed, picked, or edited this)
+  //   - auto       → brand-blue fill, white letter (tech did it — auto
+  //                  chorus preview, GoodSync timestamps, matched
+  //                  credits). Blue is reserved for "tech did the work"
+  //                  so it actually means something when you see it.
+  //
+  // We keep the existing DotState API ("synced" maps to auto, "done"
+  // and "partial" both map to manual, "empty" maps to untouched) so the
+  // mock data shape doesn't move. When the real schema gains a
+  // `source: 'manual' | 'auto'` flag, "done" can split into manual vs
+  // auto without touching this renderer.
+  const stateToTone: Record<DotState, string> = {
+    synced: "bg-[#319ED8] text-white",
+    done: "bg-white text-slate-900 ring-1 ring-inset ring-slate-300",
+    partial: "bg-white text-slate-900 ring-1 ring-inset ring-slate-300",
+    empty: "bg-slate-100 text-slate-300",
   };
+  const renderLetter = (state: DotState, letter: string) => (
+    <span
+      className={[
+        "inline-flex w-[20px] h-[20px] items-center justify-center rounded-[5px]",
+        "font-mono text-[11px] font-bold leading-none",
+        stateToTone[state],
+      ].join(" ")}
+    >
+      {letter}
+    </span>
+  );
 
   // Spell the state out for screen readers — color and fill don't carry
   // through a `title` attribute alone.
@@ -264,18 +220,19 @@ function StatusMeter({
       aria-label={ariaLabel}
       title={dots.map((d) => `${d.label}: ${d.hint}`).join(" · ")}
       className={[
-        "flex-shrink-0 inline-flex items-center gap-0.5 px-2 py-1 rounded-md",
-        allDone
-          ? "cursor-default"
-          : allEmpty
-          ? "hover:bg-slate-100"
-          : "hover:bg-slate-100",
+        "flex-shrink-0 inline-flex items-center gap-1 px-1 py-0.5 rounded-md",
+        // At rest the chip is invisible — the row is calm and only
+        // "Upload master" shouts (when present). Hover anywhere on the
+        // row reveals the three letter boxes.
+        "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+        allDone ? "cursor-default" : "hover:bg-slate-100",
       ].join(" ")}
     >
       <span className="flex items-center gap-1" aria-hidden>
         {dots.map((d, i) => (
           <span key={i} className="inline-flex items-center justify-center">
-            {renderDot(d.state)}
+            {renderLetter(d.state, d.label[0])}
           </span>
         ))}
       </span>

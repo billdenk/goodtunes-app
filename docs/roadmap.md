@@ -561,3 +561,86 @@ Lets us answer "are your artist records ISNI-linked?" with yes, and future-proof
 - **No ERN export** — deferred until a specific distributor or label deal requires it.
 - **No rebuilding the Drizzle schema around DDEX vocabulary natively** — internal types stay clean, DDEX translates at the boundary on import/export.
 - **No other DDEX standards** (DSR, RDR, MWN).
+
+---
+
+## Pricing, purchase & fulfillment pipeline (Phase — connects everything)
+
+The artist-to-fan loop that ties the rest of the platform together. Built **after** the basic infrastructure (Tracks tab, SuperCredits, Manufacturing tab) lands. Uses our existing Stripe key, an OrderDesk account (API key pending), and our own reporting surface.
+
+### End-to-end flow (Bill, 2026-05-18)
+1. Artist sets **package pricing** on the album (digital-only / digital + vinyl / digital + vinyl + printed-and-signed GoodDeed / etc.).
+2. GoodTunes generates a **public preview + purchase page** per album (e.g. `/album/:slug`). This is the link the artist shares with fans.
+3. Fan lands → 30-sec preview per track (the same Snippet we already model) → clicks **Buy**.
+4. **First-buy creates the account** (email + password or magic link — decided in the Auth phase). The auth wall is the Buy click, not a separate landing.
+5. **Stripe Checkout** for the chosen package using the existing key. On `payment_succeeded`:
+   - Instant digital access to the full album (full-length playback + bonus content if it exists).
+   - **GoodDeed certificate** minted for the fan immediately, shareable as an image and printable as a PDF.
+   - If the fan paid for a printed-and-signed GoodDeed, an internal print + sign + ship order is queued for us.
+   - If the package includes vinyl/CD/cassette, **OrderDesk receives the fulfillment order** with the manufacturing run's SKU, the fan's shipping info, and the GoodDeed (when applicable). Order status pings back to GoodTunes (`queued` → `printing` → `shipped` → `delivered`).
+6. **Reporting** to artist + label dashboards: gross + net sales, fan contact info (where opted in), per-order status, GoodDeed claim count, share/conversion funnel.
+
+### Data shape (sketch — not built)
+- `packages` — `{ id, albumId, kind, priceCents, currency, manufacturingRunId? }`
+- `orders` — `{ id, fanUserId, albumId, packageId, stripePaymentIntentId, orderDeskOrderId?, status, shippingAddress?, createdAt }`
+- `goodDeeds` — `{ id, fanUserId, albumId, orderId, claimedAt, isPrintedAndSigned, printedAt?, signedBy?, shippedAt? }`
+
+### Open decisions
+- **Splits** (artist / label / GoodTunes / featured collaborators). Bill wants this eventually, not in v1. Likely Stripe Connect with per-album split rules.
+- **Reporting surface** — own `/artist` dashboard vs. fold into existing admin. Probably separate (different audience + chrome).
+- **Sales tax / VAT** — Stripe Tax recommended over manual jurisdiction handling.
+- **Refunds / chargebacks** — what happens to digital access + an already-minted GoodDeed?
+- **Email infra** — receipts, order-status updates, manufacturer handoffs all need a transactional sender (likely SES; integration TBD).
+
+---
+
+## Lifecycle derived from dates — no dropdown (Bill, 2026-05-18)
+
+Album lifecycle is **never picked manually**. It's a function of two date fields plus track completeness:
+
+- **Prepping** — any of: a track is missing its master, `launchAt` not set, or required `packages` not defined.
+- **Staged** — fully ready, `launchAt` is in the future.
+- **Live** — `launchAt` has passed AND `sunsetAt` has not.
+- **Sunset** — `sunsetAt` has passed. Owners keep access; the album leaves the store.
+
+### Schema move
+- Add `albums.launchAt TIMESTAMP NULL` and `albums.sunsetAt TIMESTAMP NULL`.
+- Retire the current derive-from-booleans hack (`isGoodTunesRelease` + `isHidden`). Lifecycle becomes a single computed selector reading the two timestamps plus readiness.
+
+### UI implications
+- Keep the **four tabs** on the Albums index (Prepping / Staged / Live / Sunset) with live counts. They're the operator's queue, not a filter — Prepping reads like a to-do list, Live reads like a catalog, Sunset is archival.
+- Inside the **Prepping** tab, add a small filter strip — `Missing master · Missing lyrics · Missing credits · No launch date · No packages` — mapping one-to-one onto the P/L/C row vocabulary so the language stays consistent top to bottom.
+- The lifecycle pill on the album page becomes **read-only** (we already display it; just stop pretending it's clickable).
+
+---
+
+## Manufacturing pipeline — physical SKUs (Bill, 2026-05-18)
+
+A new **Manufacturing tab** on the album page. An album can have multiple physical runs (e.g. a 7" and a 12" of the same record). Each run produces a zip → Dropbox link → manufacturer email.
+
+### Entities
+- **`manufacturers`** — new first-class entity, same admin grid/list/sheet treatment as Vendors and Labels.
+  - `{ id, name, contactName, email, phone, address, defaultTurnaroundDays, notes }`
+- **`manufacturingRuns`** — one per physical SKU per album.
+  - `{ id, albumId, manufacturerId, format: '7in'|'12in'|'cd'|'cassette'|'gooddeed_print_only', variant (e.g. "translucent purple, 180g"), quantity, dueAt, status: 'draft'|'files_ready'|'sent'|'in_production'|'received', dropboxShareUrl?, sentAt? }`
+- **Files attached to a run:**
+  - Per-track **manufacturing master** (often a different file than the streaming master — uncompressed WAV/AIFF, specific sample rate + bit depth required for the cut).
+  - Label art (the disc / CD face).
+  - Outer cover — front, back, spine (three files).
+  - Inner cover (with a "blank / white" flag if there is no insert).
+  - Hype sticker (optional).
+  - Mastering notes PDF (optional).
+  - GoodDeed print spec (when applicable).
+- **Per-file specs auto-detected when possible:** audio → format, sample rate, bit depth, bit rate, channel count; art → format, dimensions, DPI. So at a glance you can see "track 3 master is 16-bit / 44.1 — needs 24-bit / 96 for vinyl cut" without opening the file.
+
+### Action: "Build manufacturer package"
+1. Server zips everything (named track files + named art files + a `manifest.txt` with SKU, variant, quantity, manufacturer contact, special-instructions notes).
+2. Pushes the zip to Dropbox via API (needs `DROPBOX_API_KEY` / OAuth) and returns a shareable link.
+3. Pre-fills an email draft to the manufacturer's contact email with the link and run summary. v1 = `mailto:` opens the operator's mail client. Later = send via SES + log the message on the run record.
+
+### Dependencies / decisions
+- **Dropbox API access** — need an API key or OAuth flow. Fallback if not wired: Replit Object Storage signed URL (no signup, same UX, different host). Default to Object Storage until Bill confirms Dropbox.
+- **Manufacturing master vs. streaming master** — separate upload slot per track inside the Manufacturing tab. The Tracks tab continues to own the streaming master.
+- **Format-specific checklists** — a 12" vinyl needs different art than a CD; the tab should hide/show file slots based on `format` so the operator isn't asked for a CD tray inlay on a vinyl run.
+- **GoodDeed print integration** — when the package includes a printed-and-signed GoodDeed, the Manufacturing tab is also where the print template + signing notes live.
+
