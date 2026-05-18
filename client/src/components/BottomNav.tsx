@@ -35,7 +35,7 @@ const NavItem = ({
       // capsule. 86px is the practical width ceiling — bar inner width
       // is ~350px and four items at justify-around need <=87px each to
       // keep a hair of gap between them.
-      className="relative flex flex-col items-center gap-[3px] min-w-[86px] py-1"
+      className="relative flex flex-col items-center gap-[2px] min-w-[86px]"
       data-testid={testId}
     >
       <span
@@ -43,7 +43,7 @@ const NavItem = ({
         className="absolute inset-x-0 -inset-y-[5px] rounded-full transition-colors duration-200"
         style={{ background: active ? "rgba(49,158,216,0.18)" : "transparent" }}
       />
-      <div className="relative w-14 h-8 flex items-center justify-center">
+      <div className="relative w-14 h-7 flex items-center justify-center">
         <div className={`transition-all duration-150 ${active ? "text-[#319ED8]" : "text-white/35"}`}>
           {icon(active)}
         </div>
@@ -162,7 +162,7 @@ export function BottomNav() {
         // span inside the NavItem button) extends past its content box
         // top/bottom. That way icons + labels keep their absolute screen
         // position regardless of what the highlight looks like.
-        className="pointer-events-auto absolute bottom-3 left-3 right-3 flex items-center justify-around px-2 py-3 rounded-full"
+        className="pointer-events-auto absolute bottom-3 left-3 right-3 flex items-center justify-around px-2 py-2 rounded-full"
         style={{
           ...glassStyle,
           transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)",
