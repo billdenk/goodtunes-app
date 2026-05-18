@@ -5,8 +5,8 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
-import { INSTRUMENTS } from "@/data/musicData";
 import { ChevronLeft } from "lucide-react";
+import { useFavoriteArtists } from "@/hooks/useFavorites";
 
 /** Public privacy-policy URL. Lives on the marketing site, opened in the
  *  system browser (will become SFSafariViewController / Chrome Custom Tabs
@@ -51,16 +51,20 @@ export function Account() {
   // the dedicated /account/edit page.
   const photoUrl = user?.photoUrl ?? null;
 
-  // Bookmarked instruments (synced with the same localStorage key used by
-  // InstrumentSheet in AlbumDetail). Re-read on focus so newly-bookmarked
-  // items show up when the user returns to this tab.
-  const [bookmarkIds, setBookmarkIds] = useState<string[]>([]);
+  // Counts for the two "Your Collections" rows. Both surfaces below get
+  // their own full-page list view (FavoriteArtists / Bookmarks) — Account
+  // just shows the count and pushes a child screen, Apple-Settings-style,
+  // so this page stays scannable as we add more collection types.
+  const favArtists = useFavoriteArtists();
+  const favoriteArtistCount = favArtists.ordered.length;
+  const [bookmarkCount, setBookmarkCount] = useState<number>(0);
   useEffect(() => {
     const load = () => {
       try {
         const raw = localStorage.getItem("gt:bookmarked-instruments");
-        setBookmarkIds(raw ? JSON.parse(raw) : []);
-      } catch { setBookmarkIds([]); }
+        const arr = raw ? JSON.parse(raw) : [];
+        setBookmarkCount(Array.isArray(arr) ? arr.length : 0);
+      } catch { setBookmarkCount(0); }
     };
     load();
     window.addEventListener("focus", load);
@@ -70,12 +74,6 @@ export function Account() {
       window.removeEventListener("storage", load);
     };
   }, []);
-  const removeBookmark = (id: string) => {
-    const next = bookmarkIds.filter((x) => x !== id);
-    setBookmarkIds(next);
-    try { localStorage.setItem("gt:bookmarked-instruments", JSON.stringify(next)); } catch {}
-  };
-  const bookmarks = bookmarkIds.map((id) => INSTRUMENTS[id]).filter(Boolean);
 
   return (
     <main className="relative h-screen w-full flex justify-center overflow-hidden">
@@ -115,49 +113,53 @@ export function Account() {
           </div>
 
           <div className="px-5">
-          {bookmarks.length > 0 && (
-            <>
-              <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Bookmarks</p>
-              <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
-                {bookmarks.map((inst, i) => (
-                  <div
-                    key={inst.id}
-                    className={`w-full flex items-center ${i < bookmarks.length - 1 ? "border-b" : ""}`}
-                    style={i < bookmarks.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/instrument/${inst.id}`)}
-                      className="flex-1 min-w-0 flex items-center gap-3 px-3 py-3 text-left active:bg-white/[0.04]"
-                      data-testid={`bookmark-instrument-${inst.id}`}
-                      aria-label={`Open ${inst.name}`}
-                    >
-                      {inst.photoUrl ? (
-                        <img src={inst.photoUrl} alt="" className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
-                      ) : (
-                        <div className="w-11 h-11 rounded-lg flex-shrink-0" style={{ background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)" }} />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-[14px] font-medium truncate">{inst.name}</p>
-                        <p className="text-white/50 text-[12px] truncate">{inst.category}</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); removeBookmark(inst.id); }}
-                      aria-label={`Remove bookmark for ${inst.name}`}
-                      className="flex-shrink-0 p-2 mr-2 active:opacity-70"
-                      data-testid={`button-remove-bookmark-${inst.id}`}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#4AFFCA" stroke="#4AFFCA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          {/* Your Collections — two rows that push to dedicated list pages.
+              Keeps Account a hub instead of a feed; new collection types
+              (Followed Labels, Saved Gear, Stations…) slot in here without
+              bloating the top-level Account screen. */}
+          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Your Collections</p>
+          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
+            {([
+              {
+                label: "Favorite Artists",
+                count: favoriteArtistCount,
+                onClick: () => navigate("/account/favorite-artists"),
+                icon: (
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="#319ED8" aria-hidden="true">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                ),
+                testId: "row-favorite-artists",
+              },
+              {
+                label: "Bookmarks",
+                count: bookmarkCount,
+                onClick: () => navigate("/account/bookmarks"),
+                icon: (
+                  <svg width="15" height="17" viewBox="0 0 24 24" fill="#4AFFCA" stroke="#4AFFCA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  </svg>
+                ),
+                testId: "row-bookmarks",
+              },
+            ] as const).map(({ label, count, onClick, icon, testId }, i, arr) => (
+              <button
+                key={label}
+                type="button"
+                onClick={onClick}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
+                style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
+                data-testid={testId}
+              >
+                <span className="w-5 flex items-center justify-center flex-shrink-0">{icon}</span>
+                <span className="flex-1 text-white text-[15px]">{label}</span>
+                <span className="text-white/40 text-[13px] tabular-nums" data-testid={`${testId}-count`}>{count}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            ))}
+          </div>
 
           {/* Settings rows — moved here from EditAccount so they sit on the
               Account page itself, not inside the Edit Profile flow.
