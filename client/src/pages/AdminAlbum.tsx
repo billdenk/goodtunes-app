@@ -440,12 +440,19 @@ export function AdminAlbum() {
               This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-2">
+          {/* Cancel uses an explicit white/slate secondary because the
+              global `outline` shadcn variant resolves to `bg-background`,
+              which is the brand navy in this dark-mode-default theme —
+              so without the override Cancel renders as a dark pill on
+              the admin's white dialog. Breathing-room gap before the
+              destructive button per the destructive-actions rule, so a
+              thumb can't slide from Cancel into Delete. */}
+          <DialogFooter className="gap-3 sm:gap-3">
             <Button
               type="button"
-              variant="outline"
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={deleteAlbum.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
               data-testid="button-delete-album-cancel"
             >
               Cancel
@@ -454,7 +461,7 @@ export function AdminAlbum() {
               type="button"
               onClick={() => deleteAlbum.mutate()}
               disabled={deleteAlbum.isPending}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
               data-testid="button-delete-album-confirm"
             >
               {deleteAlbum.isPending ? "Deleting…" : "Delete album"}
