@@ -109,8 +109,12 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
         style={{ backdropFilter: "blur(6px)" }}
         onClick={onClose}
       />
+      {/* Bottom sheet — edge-to-edge with the Apple "View on Apple Music /
+          Spotify" pop-up curves (rounded-t-3xl = 24px). No max-width cap
+          so the sheet hugs the viewport / mobile-player frame and there
+          are no side gutters under the curve. */}
       <div
-        className="relative w-full max-w-[390px] rounded-t-3xl p-5 pb-10"
+        className="relative w-full rounded-t-3xl p-5 pb-10"
         style={{ background: "#0D1B4B", zIndex: 81, boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}
         onClick={(e) => e.stopPropagation()}
       >

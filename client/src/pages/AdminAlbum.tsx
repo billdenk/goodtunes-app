@@ -4107,22 +4107,17 @@ function GoodSyncPanel({
           </>
         ) : (
           <>
-            {/* "Sync with audio" pill. Shows whenever a master + lyrics
-                are present — including AFTER a successful sync, so the
-                writer can re-run alignment when they've fixed the
-                lyrics (e.g. wrong file imported, typos sang differently
-                than written). The label flips to "Re-sync" in that
-                case so it's clear it'll overwrite existing cues. */}
-            {canSync && onSyncWithAudio && (
+            {/* First-time sync: labeled pill on the left so the action
+                is obvious before any cues exist. Once we have cues,
+                this pill collapses into a compact circular icon that
+                sits to the LEFT of the pencil — same visual rhythm as
+                pencil + play. */}
+            {canSync && onSyncWithAudio && !hasSynced && (
               <button
                 type="button"
                 onClick={onSyncWithAudio}
                 disabled={syncing}
-                title={
-                  hasSynced
-                    ? "Re-sync with audio — replaces the existing GoodSync cues with a fresh alignment"
-                    : "Sync with audio — uses ElevenLabs to time each line to the master"
-                }
+                title="Sync with audio — uses ElevenLabs to time each line to the master"
                 className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid={`button-sync-audio-${song.id}`}
               >
@@ -4131,11 +4126,28 @@ function GoodSyncPanel({
                 ) : (
                   <Sparkles className="w-3 h-3" />
                 )}
-                {syncing
-                  ? "Syncing…"
-                  : hasSynced
-                    ? "Re-sync with audio"
-                    : "Sync with audio"}
+                {syncing ? "Syncing…" : "Sync with audio"}
+              </button>
+            )}
+            {/* Re-sync icon — only shown once cues already exist.
+                Compact circular button matching the pencil + play
+                rhythm. Replaces the existing cues with a fresh
+                alignment (use after fixing wrong lyrics, typos, etc.). */}
+            {canSync && onSyncWithAudio && hasSynced && (
+              <button
+                type="button"
+                onClick={onSyncWithAudio}
+                disabled={syncing}
+                aria-label="Re-sync with audio"
+                title="Re-sync with audio — replaces the existing GoodSync cues with a fresh alignment"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid={`button-sync-audio-${song.id}`}
+              >
+                {syncing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-3.5 h-3.5" />
+                )}
               </button>
             )}
             {/* Pencil — enters cue-text edit mode. Sits LEFT of the
@@ -4575,14 +4587,16 @@ function LyricsEditor({
   const alignMut = useMutation({
     mutationFn: async () => {
       if (!normalized) throw new Error("Add lyric lines first.");
-      // Step 1 — persist the current draft so the server route can read
-      // it. We deliberately do NOT clear syncedLyrics here: if step 2
-      // fails (network/ElevenLabs/audio fetch), we'd otherwise leave the
-      // song with new words and zero cues. The alignment endpoint
-      // replaces syncedLyrics on success, so the old cues only get
-      // overwritten when there's something better to put in their place.
+      // Step 1 — persist the current draft and trash the existing cues.
+      // Re-sync is intentionally a clean redo: per Bill, when the writer
+      // hits Re-sync they want to throw the old cues away and let
+      // ElevenLabs paint a fresh alignment. If step 2 fails the song is
+      // left with words + no cues — that's the same starting state as
+      // a brand-new track, and the Sync button stays on screen to
+      // recover.
       await apiRequest("PUT", `/api/admin/songs/${song.id}`, {
         lyrics: normalized,
+        syncedLyrics: null,
       });
       // Step 2 — real ElevenLabs forced alignment. Saves syncedLyrics
       // server-side and returns the updated song + line/word counts.
