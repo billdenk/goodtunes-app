@@ -65,13 +65,11 @@ export function SheetShell({
   bg,
   textColor,
   children,
-  grabberColor = "rgba(255,255,255,0.32)",
   closeTone = "onDark",
 }: {
   bg: string;
   textColor: string;
   children: ReactNode;
-  grabberColor?: string;
   closeTone?: "onDark" | "onLight";
 }) {
   return (
@@ -94,36 +92,17 @@ export function SheetShell({
           color: textColor,
           borderTopLeftRadius: 38,
           borderTopRightRadius: 38,
+          paddingTop: 16,
           paddingBottom: 36,
           boxShadow: "0 -20px 60px rgba(0,0,0,0.6)",
           position: "relative",
           overflow: "hidden",
         }}
       >
-        {/* Header band: grabber centered, close-X pinned right. */}
-        <div
-          style={{
-            position: "relative",
-            paddingTop: 10,
-            paddingBottom: 6,
-            paddingLeft: 16,
-            paddingRight: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 5,
-              borderRadius: 999,
-              background: grabberColor,
-            }}
-          />
-          <div style={{ position: "absolute", right: 16, top: 12 }}>
-            <CloseX tone={closeTone} />
-          </div>
+        {/* Apple uses EITHER a grabber OR a close-X, never both.
+            We use the X, so no grabber pill. */}
+        <div style={{ position: "absolute", right: 16, top: 16 }}>
+          <CloseX tone={closeTone} />
         </div>
         {children}
       </div>
@@ -141,7 +120,7 @@ export function AlbumHero({ textPrimary, textSecondary }: { textPrimary: string;
         textAlign: "center",
         paddingLeft: 24,
         paddingRight: 24,
-        paddingTop: 8,
+        paddingTop: 28,
         paddingBottom: 24,
       }}
     >
