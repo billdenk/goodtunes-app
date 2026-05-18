@@ -475,7 +475,7 @@ function ReviewStep({
           value={linerNotes}
           onChange={(e) => setLinerNotes(e.target.value)}
           rows={6}
-          className="font-mono text-xs"
+          className="font-mono text-xs bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
           data-testid="textarea-credits-liner-notes"
         />
         <p className="text-xs text-slate-500 mt-1">
