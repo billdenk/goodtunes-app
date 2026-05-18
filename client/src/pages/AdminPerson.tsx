@@ -294,35 +294,33 @@ function OverviewPanel({
       .map((l) => ({ value: l.id, label: l.name })),
   ];
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-      <div className="md:col-span-2">
-        <EditablePanel
-          title="Identity"
-          testId="panel-overview-identity"
-          endpoint={endpoint}
-          values={{
-            name: person.name,
-            bio: person.bio,
-            labelId: person.labelId ?? "",
-          }}
-          invalidate={invalidate}
-          fields={[
-            { key: "name", label: "Name", type: "text", required: true },
-            {
-              key: "labelId",
-              label: "Label",
-              type: "select",
-              options: labelOptions,
-            },
-            {
-              key: "bio",
-              label: "Bio",
-              type: "textarea",
-              placeholder: "A short paragraph about the artist.",
-            },
-          ]}
-        />
-      </div>
+    <div className="space-y-5">
+      <EditablePanel
+        title="Identity"
+        testId="panel-overview-identity"
+        endpoint={endpoint}
+        values={{
+          name: person.name,
+          bio: person.bio,
+          labelId: person.labelId ?? "",
+        }}
+        invalidate={invalidate}
+        fields={[
+          { key: "name", label: "Name", type: "text", required: true },
+          {
+            key: "labelId",
+            label: "Label",
+            type: "select",
+            options: labelOptions,
+          },
+          {
+            key: "bio",
+            label: "Bio",
+            type: "textarea",
+            placeholder: "A short paragraph about the artist.",
+          },
+        ]}
+      />
       <EditablePanel
         title="Socials"
         testId="panel-overview-socials"
