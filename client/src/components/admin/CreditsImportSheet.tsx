@@ -187,7 +187,11 @@ export function CreditsImportSheet({
 
       const report: SpotifyReportItem[] = Array.isArray(body.spotifyReport) ? body.spotifyReport : [];
       const matched = report.filter((r) => r.status === "matched").length;
-      const queue = report.filter((r) => r.status === "ambiguous" || r.status === "none");
+      // Only walk the admin through people Spotify gave us real candidates
+      // for. `"none"` rows can't be resolved here anyway — the admin
+      // searches manually from each Person's Streaming tab later — so
+      // they don't belong in this queue.
+      const queue = report.filter((r) => r.status === "ambiguous");
       const summaryWithSpotify = `${summary}${report.length ? ` · ${matched} auto-matched on Spotify` : ""}`;
 
       if (queue.length === 0) {
@@ -238,7 +242,10 @@ export function CreditsImportSheet({
         data-testid="dialog-credits-import"
       >
         <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-[17px] font-semibold text-slate-900">
+          <DialogTitle className="text-[17px] font-semibold text-slate-900 flex items-center gap-2">
+            {step === "spotify" && (
+              <SiSpotify className="w-5 h-5 text-[#1DB954] shrink-0" aria-hidden />
+            )}
             Import credits
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
@@ -809,16 +816,13 @@ function SpotifyStep({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
-            {index + 1} of {total}
-          </div>
-          <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-spotify-person-name">
-            {item.name}
-          </div>
+      <div>
+        <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
+          {index + 1} of {total}
         </div>
-        <SiSpotify className="w-6 h-6 text-[#1DB954]" />
+        <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-spotify-person-name">
+          {item.name}
+        </div>
       </div>
 
       {candidates.length === 0 ? (
