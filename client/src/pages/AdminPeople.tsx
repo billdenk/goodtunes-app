@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, X, User as UserIcon, Loader2 } from "lucide-react";
+import { Plus, Search, X, User as UserIcon, Loader2, Sparkles, ChevronDown, SkipForward, AlertCircle } from "lucide-react";
+import { SiSpotify } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,6 +11,21 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 /**
  * Admin home · People (Phase 6a).
@@ -33,6 +49,7 @@ interface PersonLite {
   bio: string | null;
   labelId: string | null;
   itunesArtistId: string | null;
+  spotifyUrl: string | null;
 }
 
 interface LabelLite {
@@ -67,6 +84,7 @@ export function AdminPeople() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [matchSpotifyOpen, setMatchSpotifyOpen] = useState(false);
   const [view, setView] = useViewMode("people");
 
   useEffect(() => {
@@ -194,6 +212,42 @@ export function AdminPeople() {
             <Plus className="w-4 h-4" />
             New person
           </button>
+          {/* Advanced — bulk operations across the whole People catalog.
+              Today only ships "Match on Spotify"; future bulk operations
+              (pull Apple discography for everyone missing one, etc.)
+              would slot in here as additional menu items. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="h-9 px-2.5 rounded-md text-[12.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100"
+              data-testid="button-people-advanced"
+              aria-label="Advanced people actions"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Advanced
+              <ChevronDown className="w-3 h-3 -mr-0.5 text-slate-400" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={6}
+              className="min-w-[280px] p-1 bg-white text-slate-900 border border-slate-200 shadow-lg"
+            >
+              <DropdownMenuItem
+                onSelect={() => setMatchSpotifyOpen(true)}
+                data-testid="menu-match-spotify"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
+              >
+                <SiSpotify className="w-4 h-4 text-[#1DB954]" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    Match people on Spotify
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Walk through everyone missing a Spotify link and pick the right artist.
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -244,7 +298,258 @@ export function AdminPeople() {
           }}
         />
       )}
+
+      <MatchSpotifySheet
+        open={matchSpotifyOpen}
+        onOpenChange={setMatchSpotifyOpen}
+        people={people}
+      />
     </AdminFrame>
+  );
+}
+
+/* ─── Bulk Spotify matcher ──────────────────────────────────────────────
+ * Walks through every Person who's still missing a Spotify URL and
+ * fetches their top 3 candidates on demand via the existing
+ * /api/admin/people/:id/spotify-candidates endpoint. Identical visual
+ * vocabulary to the post-import Spotify step in CreditsImportSheet,
+ * just sourced from the catalog rather than from a fresh commit.
+ *
+ * Per-person candidates fetched lazily (one Spotify API call at a
+ * time) so opening the dialog with a 200-person catalog doesn't fan
+ * out 200 requests up front.
+ */
+interface SpotifyCandidate {
+  id: string;
+  name: string;
+  spotifyUrl: string;
+  photoUrl: string | null;
+  popularity: number;
+  followers: number;
+  genres: string[];
+}
+
+function MatchSpotifySheet({
+  open,
+  onOpenChange,
+  people,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  people: PersonLite[];
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  // Snapshot the queue when the dialog opens so that picking/skipping a
+  // person — which mutates `people` via invalidation — doesn't reshuffle
+  // our remaining list mid-walk.
+  const [queue, setQueue] = useState<PersonLite[]>([]);
+  const [idx, setIdx] = useState(0);
+  const [resolved, setResolved] = useState(0);
+
+  useEffect(() => {
+    if (open) {
+      const unlinked = people.filter((p) => !p.spotifyUrl);
+      unlinked.sort((a, b) => a.name.localeCompare(b.name));
+      setQueue(unlinked);
+      setIdx(0);
+      setResolved(0);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const current = queue[idx] ?? null;
+
+  const candidatesQ = useQuery<{ query: string; candidates: SpotifyCandidate[] }>({
+    queryKey: ["/api/admin/people", current?.id, "spotify-candidates"],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/admin/people/${current!.id}/spotify-candidates`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("Spotify search failed");
+      return res.json();
+    },
+    enabled: open && !!current,
+    staleTime: 5 * 60_000,
+  });
+
+  const finish = () => {
+    qc.invalidateQueries({ queryKey: ["/api/people"] });
+    if (resolved > 0) {
+      toast({
+        title: "Linked on Spotify",
+        description: `${resolved} ${resolved === 1 ? "person" : "people"} updated.`,
+      });
+    }
+    onOpenChange(false);
+  };
+
+  const advance = (didResolve: boolean) => {
+    const next = idx + 1;
+    if (didResolve) setResolved((n) => n + 1);
+    if (next >= queue.length) {
+      // Use a fresh count rather than the stale state above so the
+      // final toast reflects this last pick too.
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      const total = resolved + (didResolve ? 1 : 0);
+      if (total > 0) {
+        toast({
+          title: "Linked on Spotify",
+          description: `${total} ${total === 1 ? "person" : "people"} updated.`,
+        });
+      } else {
+        toast({ title: "Done", description: "No people linked." });
+      }
+      onOpenChange(false);
+    } else {
+      setIdx(next);
+    }
+  };
+
+  const pickMut = useMutation({
+    mutationFn: async (c: SpotifyCandidate) => {
+      if (!current) throw new Error("No current person");
+      // Conservative photo write: only overwrite when the row has no
+      // portrait yet, mirroring SpotifyPickerDialog on AdminPerson so
+      // we don't clobber an admin-uploaded photo.
+      const updates: Record<string, string> = { spotifyUrl: c.spotifyUrl };
+      if (!current.photoUrl && c.photoUrl) updates.photoUrl = c.photoUrl;
+      const res = await apiRequest("PUT", `/api/admin/people/${current.id}`, updates);
+      return res.json();
+    },
+    onSuccess: () => advance(true),
+    onError: (err: any) =>
+      toast({
+        title: "Couldn't save",
+        description: err?.message ?? "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) finish();
+        else onOpenChange(v);
+      }}
+    >
+      <DialogContent
+        className="max-w-2xl bg-white text-slate-900 rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+        data-testid="dialog-match-spotify"
+      >
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            Match people on Spotify
+          </DialogTitle>
+          <DialogDescription className="text-[13px] font-normal text-slate-500">
+            Everyone in the catalog without a Spotify link, one at a time. Pick the right artist or skip — we'll save the URL and photo when you pick.
+          </DialogDescription>
+        </DialogHeader>
+
+        {queue.length === 0 ? (
+          <div className="py-10 text-center">
+            <SiSpotify className="w-8 h-8 mx-auto text-[#1DB954] mb-2" />
+            <div className="text-[14px] font-semibold text-slate-900">
+              Every person is already linked
+            </div>
+            <div className="text-[12px] text-slate-500 mt-0.5">
+              Nothing to do here — great job.
+            </div>
+          </div>
+        ) : !current ? null : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
+                  {idx + 1} of {queue.length}
+                  {resolved > 0 && <span className="text-slate-400"> · {resolved} linked</span>}
+                </div>
+                <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-match-person-name">
+                  {current.name}
+                </div>
+              </div>
+              <SiSpotify className="w-6 h-6 text-[#1DB954]" />
+            </div>
+
+            {candidatesQ.isFetching ? (
+              <div className="py-10 text-center text-[12.5px] text-slate-500">
+                <Loader2 className="w-4 h-4 animate-spin inline-block mr-1.5" />
+                Searching Spotify…
+              </div>
+            ) : (candidatesQ.data?.candidates ?? []).length === 0 ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
+                <AlertCircle className="w-5 h-5 mx-auto text-slate-400 mb-1.5" />
+                <div className="text-[13px] font-semibold text-slate-700">
+                  No Spotify artist found for "{current.name}"
+                </div>
+                <div className="text-[12px] text-slate-500 mt-0.5">
+                  Skip to keep moving — you can search by a different name later from the Streaming tab.
+                </div>
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 overflow-hidden">
+                {(candidatesQ.data?.candidates ?? []).slice(0, 3).map((c) => (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => pickMut.mutate(c)}
+                      disabled={pickMut.isPending}
+                      className="w-full flex items-center gap-3 py-3 px-3 text-left hover:bg-slate-50 disabled:opacity-60"
+                      data-testid={`button-pick-spotify-${c.id}`}
+                    >
+                      {c.photoUrl ? (
+                        <img
+                          src={c.photoUrl}
+                          alt=""
+                          className="w-14 h-14 rounded-full object-cover bg-slate-100"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-full bg-slate-200 inline-flex items-center justify-center text-slate-500">
+                          <UserIcon className="w-6 h-6" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-[14.5px] text-slate-900 truncate">
+                          {c.name}
+                        </div>
+                        <div className="text-[12px] text-slate-500 truncate">
+                          {c.followers.toLocaleString()} followers
+                          {c.genres.length > 0 && ` · ${c.genres.slice(0, 3).join(", ")}`}
+                        </div>
+                      </div>
+                      <SiSpotify className="w-4 h-4 text-[#1DB954] shrink-0" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="border-t border-slate-200 pt-3 mt-2 gap-2 sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={finish}
+            data-testid="button-match-finish"
+          >
+            Finish
+          </Button>
+          {current && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => advance(false)}
+              disabled={pickMut.isPending}
+              data-testid="button-match-skip"
+            >
+              <SkipForward className="mr-1.5 h-3.5 w-3.5" />
+              Skip
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
