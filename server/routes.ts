@@ -2415,6 +2415,286 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // -----------------------------------------------------------------------
+  // Credits importer — paste a Dropbox link or upload a PDF / .docx / .txt
+  // of liner notes; the AI reads it against this album's track list and
+  // proposes structured People + per-track writers + per-track performers.
+  // Admin reviews + confirms in the client, then `/commit` writes the rows.
+  // Original prose is preserved verbatim on `albums.linerNotes`.
+  // Parsing + extraction live in `server/lib/credits.ts`.
+  // -----------------------------------------------------------------------
+  const uploadCreditsDoc = multer({
+    storage: multer.memoryStorage(),
+    // Liner-notes docs are tiny by nature — 25 MB is already 5x typical.
+    limits: { fileSize: 25 * 1024 * 1024 },
+  });
+
+  // Single-file variant of `normalizeDropboxFolderUrl` above. Same SSRF
+  // guards; `dl=1` on a single-file share returns the raw file (no zip
+  // wrapper) which is what we want for PDFs / docx.
+  function normalizeDropboxFileUrl(raw: string): URL {
+    let u: URL;
+    try { u = new URL(raw); } catch { throw new Error("That doesn't look like a URL."); }
+    assertDropboxHost(u);
+    u.searchParams.set("dl", "1");
+    return u;
+  }
+
+  async function fetchDropboxFileBytes(rawUrl: string): Promise<{ buf: Buffer; filename: string }> {
+    let url = normalizeDropboxFileUrl(rawUrl);
+    // Best-effort filename guess from the URL's last path segment — used
+    // only to sniff the extension, not stored anywhere.
+    const filenameGuess = (() => {
+      const last = url.pathname.split("/").filter(Boolean).pop() || "credits";
+      try { return decodeURIComponent(last); } catch { return last; }
+    })();
+    const maxHops = 5;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 60_000);
+    let response: Awaited<ReturnType<typeof fetch>> | null = null;
+    try {
+      for (let hop = 0; hop <= maxHops; hop++) {
+        const r = await fetch(url.toString(), { redirect: "manual", signal: ac.signal });
+        if (r.status >= 300 && r.status < 400) {
+          const loc = r.headers.get("location");
+          if (!loc) throw new Error("Dropbox redirect with no target.");
+          let next: URL;
+          try { next = new URL(loc, url); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
+          assertDropboxHost(next);
+          url = next;
+          try { await r.body?.cancel(); } catch {}
+          continue;
+        }
+        response = r;
+        break;
+      }
+      if (!response) throw new Error("Too many Dropbox redirects.");
+      if (!response.ok) throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}).`);
+      const ct = (response.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("text/html")) {
+        throw new Error("Dropbox returned a web page instead of the file. Make sure the link is set to 'Anyone with the link'.");
+      }
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Dropbox sent an empty response.");
+      const MAX = 25 * 1024 * 1024;
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          total += value.byteLength;
+          if (total > MAX) {
+            try { await reader.cancel(); } catch {}
+            throw new Error("That credits file is too large (over 25 MB).");
+          }
+          chunks.push(value);
+        }
+      }
+      return { buf: Buffer.concat(chunks.map((c) => Buffer.from(c))), filename: filenameGuess };
+    } catch (err: any) {
+      if (ac.signal.aborted) throw new Error("Dropbox took too long to respond.");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Lazy-init OpenAI client. Uses the Replit AI Integrations env vars set
+  // by the integration blueprint — never read the underlying secret name.
+  let openaiClient: import("openai").default | null = null;
+  async function getOpenAI(): Promise<import("openai").default> {
+    if (openaiClient) return openaiClient;
+    const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+    const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+    if (!apiKey || !baseURL) {
+      throw new Error("AI isn't configured on this environment yet. Set up the OpenAI integration first.");
+    }
+    const OpenAI = (await import("openai")).default;
+    openaiClient = new OpenAI({ apiKey, baseURL });
+    return openaiClient;
+  }
+
+  app.post(
+    "/api/admin/albums/:id/import-credits/parse",
+    requireAdminBearer,
+    uploadCreditsDoc.single("file"),
+    async (req, res) => {
+      try {
+        const albumId = String(req.params.id);
+        const album = await storage.getAlbumById(albumId, { includeHidden: true });
+        if (!album) return res.status(404).json({ message: "Album not found." });
+        const songs = await storage.getSongsByAlbum(albumId);
+        if (songs.length === 0) {
+          return res.status(400).json({ message: "Add tracks before importing credits." });
+        }
+
+        // Accept EITHER a multipart file (`file` field) OR a JSON / form
+        // `sourceUrl` field pointing at a Dropbox share. Multer parses the
+        // multipart body so `req.body.sourceUrl` is still readable in that
+        // path too — handy when the admin both pastes a link AND drops a
+        // file (file wins).
+        let buf: Buffer;
+        let filename: string;
+        if (req.file?.buffer) {
+          buf = req.file.buffer;
+          filename = req.file.originalname || "credits";
+        } else {
+          const sourceUrl = String(req.body?.sourceUrl || "").trim();
+          if (!sourceUrl) return res.status(400).json({ message: "Paste a Dropbox link or upload a file." });
+          const got = await fetchDropboxFileBytes(sourceUrl);
+          buf = got.buf;
+          filename = got.filename;
+        }
+
+        const credits = await import("./lib/credits");
+        const format = credits.detectCreditsFormat(filename);
+        if (!format) {
+          return res.status(400).json({ message: "Unsupported file type. Use PDF, Word (.docx), or .txt." });
+        }
+        const text = await credits.extractCreditsText(buf, format);
+        if (!text || text.length < 20) {
+          return res.status(400).json({ message: "Couldn't read any text from that file." });
+        }
+
+        const openai = await getOpenAI();
+        const proposal = await credits.proposeCreditsFromText(
+          { text, albumTitle: album.title, trackTitles: songs.map((s) => s.title) },
+          openai,
+        );
+
+        const allPeople = await storage.getPeople();
+        const candidates = allPeople.map((p) => ({ id: p.id, name: p.name, photoUrl: p.photoUrl }));
+        const matches: Record<string, ReturnType<typeof credits.matchPersonByName>> = {};
+        for (const p of proposal.people) {
+          matches[p.tag] = credits.matchPersonByName(p.name, candidates);
+        }
+
+        return res.json({
+          proposal,
+          matches,
+          songs: songs.map((s) => ({ id: s.id, title: s.title, trackNumber: s.trackNumber })),
+        });
+      } catch (err: any) {
+        console.error("[credits/parse]", err);
+        return res.status(400).json({ message: err?.message || "Couldn't parse credits." });
+      }
+    },
+  );
+
+  app.post("/api/admin/albums/:id/import-credits/commit", requireAdminBearer, async (req, res) => {
+    try {
+      const albumId = String(req.params.id);
+      const album = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found." });
+
+      const body = req.body ?? {};
+      const proposal = body.proposal;
+      const decisions: Record<string, { action: "use" | "create" | "skip"; personId?: string; name?: string; email?: string | null }> = body.personDecisions ?? {};
+      const linerNotes = typeof body.linerNotes === "string" ? body.linerNotes : "";
+      if (!proposal || !Array.isArray(proposal.writers) || !Array.isArray(proposal.performers) || !Array.isArray(proposal.people)) {
+        return res.status(400).json({ message: "Missing proposal." });
+      }
+
+      const songs = await storage.getSongsByAlbum(albumId);
+      const songByTitle = new Map(songs.map((s) => [s.title, s] as const));
+
+      // 1) Resolve each proposed personTag to a real Person id.
+      //    decisions[tag] = { action: "use" | "create" | "skip", ... }
+      const personIdByTag = new Map<string, string>();
+      const createdPeople: Array<{ tag: string; id: string; name: string }> = [];
+      for (const p of proposal.people as Array<{ tag: string; name: string; email?: string | null }>) {
+        const d = decisions[p.tag] || { action: "create", name: p.name, email: p.email ?? null };
+        if (d.action === "skip") continue;
+        if (d.action === "use" && d.personId) {
+          personIdByTag.set(p.tag, d.personId);
+          // Backfill contactEmail if absent on the existing person.
+          const email = (d.email ?? p.email) || null;
+          if (email) {
+            try {
+              const existing = await storage.getPersonById(d.personId);
+              if (existing && !(existing as any).contactEmail) {
+                await storage.updatePerson(d.personId, { contactEmail: email } as any);
+              }
+            } catch {}
+          }
+          continue;
+        }
+        const created = await storage.createPerson({
+          name: String(d.name || p.name).trim(),
+          contactEmail: (d.email ?? p.email) || null,
+        } as any);
+        personIdByTag.set(p.tag, created.id);
+        createdPeople.push({ tag: p.tag, id: created.id, name: created.name });
+      }
+
+      // 2) Write trackWriters + trackPerformers. Positions continue from
+      //    the song's existing credits so a re-run appends rather than
+      //    collides with what's already there.
+      const writersBySong = new Map<string, number>();
+      const performersBySong = new Map<string, number>();
+      for (const s of songs) {
+        const existing = await storage.getSongCredits(s.id);
+        writersBySong.set(s.id, existing.writers.length);
+        performersBySong.set(s.id, existing.performers.length);
+      }
+
+      let writerCount = 0;
+      let performerCount = 0;
+
+      for (const w of proposal.writers as Array<{ personTag: string; songTitle: string; role: string }>) {
+        const personId = personIdByTag.get(w.personTag);
+        if (!personId) continue;
+        const song = songByTitle.get(w.songTitle);
+        if (!song) continue;
+        const pos = writersBySong.get(song.id) ?? 0;
+        await storage.createTrackWriter({
+          songId: song.id,
+          personId,
+          name: null,
+          role: w.role,
+          position: pos,
+        } as any);
+        writersBySong.set(song.id, pos + 1);
+        writerCount++;
+      }
+
+      for (const pf of proposal.performers as Array<{ personTag: string; songTitle: string; role: string; instrumentHint?: string | null }>) {
+        const personId = personIdByTag.get(pf.personTag);
+        if (!personId) continue;
+        const song = songByTitle.get(pf.songTitle);
+        if (!song) continue;
+        const pos = performersBySong.get(song.id) ?? 0;
+        // Fold instrument hint into the role string so the credits surface
+        // reads naturally ("Guitar — 1973 Martin D-28"). Real Instrument FK
+        // creation stays a separate, manual step in the admin.
+        const role = pf.instrumentHint ? `${pf.role} — ${pf.instrumentHint}` : pf.role;
+        await storage.createTrackPerformer({
+          songId: song.id,
+          personId,
+          instrumentId: null,
+          name: null,
+          role,
+          tuningNotes: null,
+          position: pos,
+        } as any);
+        performersBySong.set(song.id, pos + 1);
+        performerCount++;
+      }
+
+      // 3) Save the original prose verbatim on the album. This is the
+      //    "back of the record" copy the fan-side page can render.
+      if (linerNotes) {
+        await storage.updateAlbum(albumId, { linerNotes } as any);
+      }
+
+      return res.json({ ok: true, createdPeople, writerCount, performerCount });
+    } catch (err: any) {
+      console.error("[credits/commit]", err);
+      return res.status(500).json({ message: err?.message || "Failed to import credits." });
+    }
+  });
+
   app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
     const id = String(req.params.id);
     const startedAt = new Date();

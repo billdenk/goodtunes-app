@@ -89,6 +89,13 @@ export const albums = pgTable("albums", {
   // without a genre stay null and the "Genre · Year" line collapses to
   // just the year on the fan side.
   genre: text("genre"),
+  // Liner notes — the full original prose from the album's credits doc
+  // (PDF/Word/text) preserved verbatim after a credits-importer run.
+  // Structured per-track writers + performers go into trackWriters /
+  // trackPerformers, but this field is the human-readable "back of the
+  // record" version: anything the AI couldn't slot into a structured row
+  // is still readable here. Surfaced on the album detail page when set.
+  linerNotes: text("liner_notes"),
 });
 
 // Bonus content attached to an album. Both tables are intentionally
@@ -251,6 +258,11 @@ export const people = pgTable("people", {
   // (us) Carter", "Nickolas G Carter") — only ONE of those gets pinned here;
   // the rest live as rows in `person_aliases` below. Not unique on purpose.
   musoId: text("muso_id"),
+  // Admin-only contact email. Captured when a credits doc lists an email
+  // next to a person ("connorhansonmusic@gmail.com") so we have an outreach
+  // roster for verified-artist invites + label-side follow-ups. NEVER
+  // surfaced on the public Person page — only readable on admin endpoints.
+  contactEmail: text("contact_email"),
 });
 
 // Alias rows for a Person — extra names + extra source IDs that all point

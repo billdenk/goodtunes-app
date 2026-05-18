@@ -66,6 +66,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
+import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -111,6 +112,10 @@ interface AlbumFull {
   streamingReleaseDate?: string | null;
   appleMusicUrl?: string | null;
   spotifyUrl?: string | null;
+  // Original credits-doc prose, captured verbatim by the credits importer
+  // and saved here so a re-open of the album shows "saved from a previous
+  // import" — no fan-side rendering yet.
+  linerNotes?: string | null;
   songs: SongLite[];
 }
 
@@ -325,6 +330,7 @@ export function AdminAlbum() {
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
 function OverviewPanel({ album }: { album: AlbumFull }) {
+  const [creditsImportOpen, setCreditsImportOpen] = useState(false);
   const invalidate: (readonly unknown[])[] = [
     ["/api/albums", album.id],
     ["/api/albums"],
@@ -437,6 +443,43 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             placeholder: "Liner-notes-style blurb shown on the album page.",
           },
         ]}
+      />
+
+      {/* Credits importer — paste a Dropbox link or drop a doc; the AI
+          extracts per-track writers + performers + a People roster and
+          opens a review sheet. */}
+      <section
+        className="rounded-2xl border border-slate-200 bg-white p-4"
+        data-testid="panel-overview-import-credits"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">Import credits</h3>
+            <p className="text-xs text-slate-500 mt-0.5 max-w-md">
+              Paste a Dropbox link or upload a PDF / Word / .txt of liner notes. We'll
+              read it against this album's tracks and propose People + per-track
+              writers + performers for your review.
+            </p>
+            {album.linerNotes ? (
+              <p className="text-[11px] text-emerald-700 mt-1.5">
+                Liner notes saved from a previous import.
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            onClick={() => setCreditsImportOpen(true)}
+            data-testid="button-open-credits-import"
+          >
+            Import credits…
+          </Button>
+        </div>
+      </section>
+
+      <CreditsImportSheet
+        albumId={album.id}
+        open={creditsImportOpen}
+        onOpenChange={setCreditsImportOpen}
       />
     </div>
   );
