@@ -203,14 +203,17 @@ export function AdminPeople() {
             onChange={setView}
             testIdPrefix="view-mode-people"
           />
+          {/* Matches the Tracks card header on AdminAlbum: denser px-2.5/py-1.5
+              chrome, white-outline buttons, so the People index reads as the
+              same admin surface family rather than a louder blue CTA. */}
           <button
             type="button"
             onClick={() => setComposerOpen(true)}
-            className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
             data-testid="button-new-person"
           >
-            <Plus className="w-4 h-4" />
-            New person
+            <Plus className="w-3 h-3" />
+            Add Person
           </button>
           {/* Advanced — bulk operations across the whole People catalog.
               Today only ships "Match on Spotify"; future bulk operations
@@ -218,11 +221,11 @@ export function AdminPeople() {
               would slot in here as additional menu items. */}
           <DropdownMenu>
             <DropdownMenuTrigger
-              className="h-9 px-2.5 rounded-md text-[12.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100"
+              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100"
               data-testid="button-people-advanced"
               aria-label="Advanced people actions"
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3 h-3" />
               Advanced
               <ChevronDown className="w-3 h-3 -mr-0.5 text-slate-400" />
             </DropdownMenuTrigger>
