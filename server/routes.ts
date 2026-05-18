@@ -140,11 +140,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })
   );
 
-  // Photo uploads are data URLs up to ~5MB image + base64 overhead. Default
-  // express.json() limit (~100KB) would reject them; mount a wider parser
-  // just for the photo route so other endpoints stay locked down.
-  const photoJson = (await import("express")).default.json({ limit: "8mb" });
-
   app.post("/api/register", async (req, res) => {
     const { username, email, displayName, realName, password } = req.body;
     if (!username || !email || !displayName || !password) {
@@ -4599,7 +4594,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ----- Profile photo ----------------------------------------------------
   // Stored inline as a data URL (5MB hard cap). Swap for object-storage URL
   // once GT's AWS bucket lands.
-  app.put("/api/me/photo", photoJson, requireAuth, async (req, res) => {
+  app.put("/api/me/photo", requireAuth, async (req, res) => {
     const { dataUrl } = req.body as { dataUrl?: string };
     if (!dataUrl || typeof dataUrl !== "string") {
       return res.status(400).json({ message: "dataUrl is required" });

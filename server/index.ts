@@ -16,6 +16,11 @@ declare module "http" {
 
 app.use(
   express.json({
+    // 10MB ceiling so profile-photo and other small image data-URLs
+    // (≤5MB raw → ~7MB base64) make it past the body parser. Real
+    // file uploads (audio/video/album art) go through multer, not
+    // JSON, so this isn't the limit for anything large.
+    limit: "10mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
