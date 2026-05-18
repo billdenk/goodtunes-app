@@ -47,8 +47,8 @@ const NavItem = ({
           // symmetrically around the icon's visual mass. The Collection
           // icon in particular has its heavier glyph on the right, which
           // makes a perfectly-centered pill read as right-leaning.
-          left: "-3px",
-          right: "3px",
+          left: "-4px",
+          right: "4px",
         }}
       />
       <div className="relative w-14 h-7 flex items-center justify-center">
