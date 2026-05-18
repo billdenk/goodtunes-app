@@ -1636,6 +1636,382 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   }
 
+  // ── Dropbox folder import ─────────────────────────────────────────────
+  // Bill drops his whole-album masters into a Dropbox folder; this lets
+  // him paste the share URL once and we fan-out per-track. Same idea
+  // for lyrics PDFs/DOCXs. No Dropbox OAuth needed — appending `?dl=1`
+  // to a public folder share URL returns a ZIP of every file inside.
+  // We cap downloads at 1 GB to keep memory sane; for a typical album
+  // (10×30 MB WAVs) we're nowhere near that.
+  const AUDIO_MIME_BY_EXT: Record<string, string> = {
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".flac": "audio/flac",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".aiff": "audio/aiff",
+    ".aif": "audio/aiff",
+    ".ogg": "audio/ogg",
+  };
+  const LYRIC_EXTENSIONS = new Set([".pdf", ".docx", ".doc", ".txt"]);
+  // Compressed-stream cap and total-inflated cap. Compressed is what we
+  // pull off the wire (streamed, aborted the moment we exceed it).
+  // Uncompressed bounds defend against ZIP-bomb behavior where a tiny
+  // file inflates into a multi-gigabyte payload that fits in RAM only
+  // briefly before OOM-killing the process.
+  const MAX_DROPBOX_COMPRESSED_BYTES = 1024 * 1024 * 1024; // 1 GB on the wire
+  const MAX_DROPBOX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB total inflated
+  const MAX_DROPBOX_ENTRY_BYTES = 500 * 1024 * 1024; // 500 MB per file
+  // Hosts Dropbox uses for share-link content. dl.dropboxusercontent.com
+  // is the actual CDN host that `?dl=1` redirects to. Anything else
+  // (corporate Dropbox shortcuts, attacker-controlled subdomains like
+  // evil-dropbox.com) must be rejected. Suffix matching is unsafe;
+  // require an exact hostname match.
+  const DROPBOX_ALLOWED_HOSTS = new Set([
+    "www.dropbox.com",
+    "dropbox.com",
+    "dl.dropboxusercontent.com",
+    "ucb01a3.dl.dropboxusercontent.com", // some accounts hit a per-bucket subdomain — see note below
+  ]);
+  // We reuse the file-level `isPrivateIp` declared higher up (it also
+  // covers IPv6 + IPv4-mapped-IPv6, which a fresh dotted-quad regex
+  // would miss). For non-IP hostnames it returns false, so calling it
+  // on something like "www.dropbox.com" is a no-op.
+  function assertDropboxHost(u: URL): void {
+    if (u.protocol !== "https:") {
+      throw new Error("Dropbox links must use https://.");
+    }
+    const host = u.hostname.toLowerCase();
+    if (isPrivateIp(host)) {
+      throw new Error("Refusing to fetch from a private/internal address.");
+    }
+    // Allow the literal allowlist OR any `<sub>.dl.dropboxusercontent.com`
+    // bucket subdomain (Dropbox shards downloads across these). We DON'T
+    // use generic suffix matching — that's exactly the SSRF hole the
+    // architect flagged. The bucket-subdomain pattern is narrow enough
+    // that `evil-dropboxusercontent.com` still gets rejected.
+    if (DROPBOX_ALLOWED_HOSTS.has(host)) return;
+    if (/^[a-z0-9-]+\.dl\.dropboxusercontent\.com$/i.test(host)) return;
+    throw new Error("That host isn't a Dropbox download URL.");
+  }
+
+  function extOf(name: string): string {
+    const i = name.lastIndexOf(".");
+    return i === -1 ? "" : name.slice(i).toLowerCase();
+  }
+  function basenameOf(p: string): string {
+    const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+    return i === -1 ? p : p.slice(i + 1);
+  }
+  function normalizeDropboxFolderUrl(raw: string): URL {
+    let u: URL;
+    try { u = new URL(raw); } catch { throw new Error("That doesn't look like a URL."); }
+    assertDropboxHost(u);
+    // Force dl=1; on a folder link this returns a ZIP of the whole folder.
+    u.searchParams.set("dl", "1");
+    return u;
+  }
+
+  // Follow redirects manually so we can re-validate the host at every
+  // hop. Native fetch's `redirect: "follow"` will happily send the
+  // request to whatever Location the response specifies, which is
+  // exactly the SSRF vector we have to close.
+  async function fetchDropboxFolderZip(folderUrl: string): Promise<Buffer> {
+    let url = normalizeDropboxFolderUrl(folderUrl);
+    const maxHops = 5;
+    const startMs = Date.now();
+    const timeoutMs = 60_000;
+    let response: Awaited<ReturnType<typeof fetch>> | null = null;
+
+    for (let hop = 0; hop <= maxHops; hop++) {
+      if (Date.now() - startMs > timeoutMs) {
+        throw new Error("Dropbox took too long to respond.");
+      }
+      const r = await fetch(url.toString(), {
+        redirect: "manual",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (r.status >= 300 && r.status < 400) {
+        const loc = r.headers.get("location");
+        if (!loc) throw new Error("Dropbox redirect with no target.");
+        let next: URL;
+        try { next = new URL(loc, url); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
+        assertDropboxHost(next);
+        url = next;
+        // Drain the redirect body so the socket can be reused.
+        try { await r.arrayBuffer(); } catch { /* ignore */ }
+        continue;
+      }
+      response = r;
+      break;
+    }
+    if (!response) throw new Error("Too many Dropbox redirects.");
+    if (!response.ok) {
+      throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}). Make sure the link is shareable.`);
+    }
+    const ct = (response.headers.get("content-type") || "").toLowerCase();
+    if (ct.includes("text/html")) {
+      throw new Error("Dropbox returned a web page instead of files. Check that the link is set to 'Anyone with the link'.");
+    }
+    // Stream the body and stop the moment we exceed our compressed cap.
+    // We don't trust Content-Length because Dropbox doesn't always send
+    // one for chunked transfers.
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Dropbox sent an empty response.");
+    }
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > MAX_DROPBOX_COMPRESSED_BYTES) {
+          try { await reader.cancel(); } catch { /* ignore */ }
+          throw new Error("That folder is too large to import (over 1 GB on the wire).");
+        }
+        chunks.push(value);
+      }
+    }
+    return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  }
+
+  // ZIP-bomb guard: walk entries' uncompressed sizes BEFORE inflating
+  // any of them. Reject the whole import if any single entry, or the
+  // sum across entries, exceeds our bounds.
+  function assertZipWithinBounds(zip: any): void {
+    let total = 0;
+    for (const e of zip.getEntries()) {
+      if (e.isDirectory) continue;
+      const size = Number(e.header?.size) || 0;
+      if (size > MAX_DROPBOX_ENTRY_BYTES) {
+        throw new Error(`One file in that folder is too large (${Math.round(size / (1024 * 1024))} MB).`);
+      }
+      total += size;
+      if (total > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
+        throw new Error("That folder's contents are too large to import once unzipped (over 2 GB).");
+      }
+    }
+  }
+  // Strip leading track-number prefixes ("01 - ", "01. ", "01_") and
+  // the file extension. Falls back to the bare basename if the strip
+  // leaves us with nothing.
+  function deriveTitleFromFilename(name: string): string {
+    const base = name.replace(/\.[^.]+$/, "");
+    const stripped = base.replace(/^\s*\d{1,3}\s*[-_.\s]+\s*/, "").trim();
+    return stripped || base.trim() || "Untitled";
+  }
+  function fuzzy(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  app.post("/api/admin/albums/:id/import-tracks-from-dropbox", requireAdminBearer, async (req, res) => {
+    try {
+      const albumId = String(req.params.id);
+      const folderUrl = String(req.body?.folderUrl || "").trim();
+      if (!folderUrl) return res.status(400).json({ message: "Paste a Dropbox folder link." });
+
+      const album = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found." });
+
+      // Derive trackNumber server-side. Don't trust a client-supplied
+      // start — a stale dialog could otherwise create rows that collide
+      // with the tail of the existing tracklist.
+      const existingSongs = await storage.getSongsByAlbum(albumId);
+      let trackNumber = existingSongs.length === 0
+        ? 1
+        : Math.max(...existingSongs.map(s => s.trackNumber ?? 0)) + 1;
+
+      const zipBuf = await fetchDropboxFolderZip(folderUrl);
+      const AdmZip = (await import("adm-zip")).default;
+      const zip = new AdmZip(zipBuf);
+      assertZipWithinBounds(zip);
+
+      // Sort with numeric+base awareness so "Track 2" comes before
+      // "Track 10" — matches Finder / Dropbox web ordering, which is
+      // how Bill thinks about track sequence.
+      const entries = zip.getEntries()
+        .filter((e: any) => !e.isDirectory && (extOf(e.entryName) in AUDIO_MIME_BY_EXT))
+        .sort((a: any, b: any) =>
+          basenameOf(a.entryName).localeCompare(basenameOf(b.entryName), undefined, { numeric: true, sensitivity: "base" })
+        );
+
+      if (entries.length === 0) {
+        return res.status(400).json({ message: "No audio files in that folder. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg." });
+      }
+
+      const created: Array<{ id: string; trackNumber: number; title: string; filename: string; duration: number }> = [];
+      const errors: Array<{ filename: string; error: string }> = [];
+      // `trackNumber` already initialized above from existing max+1.
+
+      for (const entry of entries) {
+        const filename = basenameOf(entry.entryName);
+        try {
+          const ext = extOf(filename);
+          const mime = AUDIO_MIME_BY_EXT[ext];
+          const buf: Buffer = entry.getData();
+
+          const audioUrl = await uploadBufferToObjectStorage(buf, mime);
+
+          // Duration is best-effort — non-fatal. ElevenLabs auto-sync
+          // doesn't need it, but the player UI and lyrics distributor do.
+          let duration = 0;
+          try {
+            const mm = await import("music-metadata");
+            const meta = await mm.parseBuffer(buf, mime);
+            duration = Math.round(meta.format.duration || 0);
+          } catch { /* leave at 0; admin can set it manually */ }
+
+          const song = await storage.createSong({
+            albumId,
+            title: deriveTitleFromFilename(filename),
+            trackNumber,
+            duration,
+            audioUrl,
+            lyrics: "",
+            instrumental: false,
+            syncedLyrics: null as any,
+            previewStartMs: null as any,
+            previewEndMs: null as any,
+            waveform: null as any,
+          } as any);
+          created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
+          trackNumber++;
+        } catch (e: any) {
+          errors.push({ filename, error: e?.message || "Failed to import" });
+        }
+      }
+      return res.json({ created, errors });
+    } catch (e: any) {
+      return res.status(400).json({ message: e?.message || "Dropbox import failed." });
+    }
+  });
+
+  app.post("/api/admin/albums/:id/import-lyrics-from-dropbox", requireAdminBearer, async (req, res) => {
+    try {
+      const albumId = String(req.params.id);
+      const folderUrl = String(req.body?.folderUrl || "").trim();
+      if (!folderUrl) return res.status(400).json({ message: "Paste a Dropbox folder link." });
+
+      const songs = await storage.getSongsByAlbum(albumId);
+      if (songs.length === 0) {
+        return res.status(400).json({ message: "Add tracks before importing lyrics." });
+      }
+
+      const zipBuf = await fetchDropboxFolderZip(folderUrl);
+      const AdmZip = (await import("adm-zip")).default;
+      const zip = new AdmZip(zipBuf);
+      assertZipWithinBounds(zip);
+
+      const entries = zip.getEntries()
+        .filter((e: any) => !e.isDirectory && LYRIC_EXTENSIONS.has(extOf(e.entryName)))
+        .sort((a: any, b: any) =>
+          basenameOf(a.entryName).localeCompare(basenameOf(b.entryName), undefined, { numeric: true, sensitivity: "base" })
+        );
+
+      if (entries.length === 0) {
+        return res.status(400).json({ message: "No PDF, Word, or text files in that folder." });
+      }
+
+      const matched: Array<{ songId: string; title: string; filename: string; charCount: number }> = [];
+      const unmatched: Array<{ filename: string; suggestedTitle: string; charCount: number; reason: string }> = [];
+      const errors: Array<{ filename: string; error: string }> = [];
+
+      // Precompute fuzzy keys for every song once.
+      const songKeys = songs.map(s => ({ song: s, key: fuzzy(s.title) }));
+      // Track which songs have already been claimed in this run so two
+      // lyric files don't silently overwrite the same track's lyrics.
+      const claimed = new Set<string>();
+
+      for (const entry of entries) {
+        const filename = basenameOf(entry.entryName);
+        const ext = extOf(filename);
+        try {
+          const buf: Buffer = entry.getData();
+          let text = "";
+          if (ext === ".pdf") {
+            // Import the inner module directly — the package's default
+            // index.js tries to load a bundled test PDF when imported
+            // without explicit data, which blows up in production builds.
+            // @ts-ignore — no types for the inner module path; we import
+            // it directly so the package's index.js doesn't try to load
+            // its bundled test PDF at module-init time.
+            const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as (b: Buffer) => Promise<{ text: string }>;
+            const parsed = await pdfParse(buf);
+            text = parsed.text || "";
+          } else if (ext === ".docx" || ext === ".doc") {
+            const mammoth = await import("mammoth");
+            const result = await mammoth.extractRawText({ buffer: buf });
+            text = result.value || "";
+          } else if (ext === ".txt") {
+            text = buf.toString("utf8");
+          }
+          // Light cleanup: collapse 3+ blank lines, trim trailing whitespace
+          // per line. Don't reformat aggressively — Bill's PDFs already
+          // have intentional [Chorus]/blank-line structure.
+          text = text
+            .split("\n")
+            .map(l => l.replace(/\s+$/, ""))
+            .join("\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+          if (!text) {
+            errors.push({ filename, error: "No text found in file." });
+            continue;
+          }
+
+          const fkey = fuzzy(deriveTitleFromFilename(filename));
+          // Tier 1: exact fuzzy match (always wins, no ambiguity check
+          // because a perfect match is unambiguous by definition).
+          let hit = songKeys.find(sk => sk.key === fkey);
+          // Tier 2: substring either direction. Collect ALL candidates;
+          // if more than one song could plausibly match, refuse rather
+          // than guess — silently picking the first match is exactly
+          // how the wrong song's lyrics get overwritten.
+          if (!hit && fkey) {
+            const candidates = songKeys.filter(sk => sk.key && (sk.key.includes(fkey) || fkey.includes(sk.key)));
+            if (candidates.length === 1) {
+              hit = candidates[0];
+            } else if (candidates.length > 1) {
+              unmatched.push({
+                filename,
+                suggestedTitle: deriveTitleFromFilename(filename),
+                charCount: text.length,
+                reason: `Ambiguous — could be ${candidates.map(c => `"${c.song.title}"`).join(" or ")}.`,
+              });
+              continue;
+            }
+          }
+          if (!hit) {
+            unmatched.push({ filename, suggestedTitle: deriveTitleFromFilename(filename), charCount: text.length, reason: "No matching track." });
+            continue;
+          }
+          // Don't let a second file silently clobber lyrics we set
+          // earlier in this same run. Bill can rename and re-run if
+          // he actually wanted the later file.
+          if (claimed.has(hit.song.id)) {
+            unmatched.push({
+              filename,
+              suggestedTitle: deriveTitleFromFilename(filename),
+              charCount: text.length,
+              reason: `Another file already matched "${hit.song.title}".`,
+            });
+            continue;
+          }
+          claimed.add(hit.song.id);
+          await storage.updateSong(hit.song.id, { lyrics: text });
+          matched.push({ songId: hit.song.id, title: hit.song.title, filename, charCount: text.length });
+        } catch (e: any) {
+          errors.push({ filename, error: e?.message || "Failed to extract text" });
+        }
+      }
+      return res.json({ matched, unmatched, errors });
+    } catch (e: any) {
+      return res.status(400).json({ message: e?.message || "Dropbox import failed." });
+    }
+  });
+
   app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
     const id = String(req.params.id);
     const apiKey = process.env.ELEVENLABS_API_KEY;

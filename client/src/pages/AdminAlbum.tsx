@@ -67,6 +67,7 @@ import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { PlayerDock } from "@/components/ui/PlayerDock";
@@ -510,6 +511,7 @@ function TracksPanel({
   // close-on-select behavior and so `invalidateAlbum` can be passed in.
   const [bulkAddOpen, setBulkAddOpen] = useState(false);
   const [albumSyncOpen, setAlbumSyncOpen] = useState(false);
+  const [lyricsImportOpen, setLyricsImportOpen] = useState(false);
 
   // ── Playback state for the floating PlayerDock ──────────────────────
   // One audio element drives the entire Tracks tab. Selecting a row sets
@@ -794,32 +796,51 @@ function TracksPanel({
             <DropdownMenuContent
               align="end"
               sideOffset={6}
-              className="min-w-[240px] p-1"
+              // The shared `--popover` CSS var is the dark brand bg
+              // (#00062B) because the mobile player needs it. Admin
+              // chrome lives on white, so override here at the call
+              // site rather than fork the primitive globally.
+              className="min-w-[260px] p-1 bg-white text-slate-900 border border-slate-200 shadow-lg"
             >
               <DropdownMenuItem
                 onSelect={() => setBulkAddOpen(true)}
-                data-testid="menu-add-multiple-tracks"
-                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer"
+                data-testid="menu-upload-multiple-tracks"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
               >
                 <ListPlus className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    Add multiple tracks
+                    Upload multiple tracks
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Stamp out a batch of empty rows at once.
+                    Empty rows or a Dropbox folder of audio files.
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setLyricsImportOpen(true)}
+                data-testid="menu-import-lyrics"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
+              >
+                <FileText className="w-4 h-4 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    Import lyrics from Dropbox
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    PDF, Word, or text files — matched to tracks.
                   </div>
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setAlbumSyncOpen(true)}
                 data-testid="menu-goodsync-album"
-                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
               >
                 <Wand2 className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    GoodSync™ the album
+                    GoodSync™ your Album
                   </div>
                   <div className="text-[11px] text-slate-500">
                     Auto-sync lyrics on every eligible track.
@@ -954,6 +975,13 @@ function TracksPanel({
         open={albumSyncOpen}
         onOpenChange={setAlbumSyncOpen}
         songs={sorted}
+        onSaved={invalidateAlbum}
+      />
+      <ImportLyricsFromDropboxDialog
+        open={lyricsImportOpen}
+        onOpenChange={setLyricsImportOpen}
+        albumId={album.id}
+        songCount={sorted.length}
         onSaved={invalidateAlbum}
       />
     </section>
@@ -1161,6 +1189,18 @@ type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
    parallel) so trackNumber can't collide. Placeholder titles read
    "Track 4 (untitled)" — same column the manual flow uses, just
    suffixed to make it obvious they still need editing. */
+/* ─── Upload multiple tracks ─────────────────────────────────────────
+   Two modes share one dialog so the menu copy ("Upload multiple
+   tracks") covers both Bill workflows:
+     • Empty rows — stamps out N placeholder rows he'll fill later.
+     • From Dropbox folder — paste a share URL, server downloads the
+       folder as a ZIP, uploads every audio file into Object Storage
+       and creates a Song row per file with title derived from the
+       filename and duration parsed from the audio metadata.
+   Same numbering rule as the empty-rows path: we keep `nextTrackNumber`
+   off the parent state (max(trackNumber)+1) so deletions that leave
+   gaps don't collide with the tail of the existing tracklist. */
+type UploadMode = "empty" | "dropbox";
 function AddMultipleTracksDialog({
   open,
   onOpenChange,
@@ -1175,15 +1215,23 @@ function AddMultipleTracksDialog({
   onSaved: () => Promise<void> | void;
 }) {
   const { toast } = useToast();
+  const [mode, setMode] = useState<UploadMode>("empty");
   const [countText, setCountText] = useState("5");
+  const [folderUrl, setFolderUrl] = useState("");
   const [running, setRunning] = useState(false);
   const [created, setCreated] = useState(0);
+  const [importSummary, setImportSummary] = useState<
+    null | { created: Array<{ trackNumber: number; title: string; filename: string }>; errors: Array<{ filename: string; error: string }> }
+  >(null);
 
   useEffect(() => {
     if (open) {
+      setMode("empty");
       setCountText("5");
+      setFolderUrl("");
       setRunning(false);
       setCreated(0);
+      setImportSummary(null);
     }
   }, [open]);
 
@@ -1193,7 +1241,7 @@ function AddMultipleTracksDialog({
     return Math.max(0, Math.min(50, parsed));
   })();
 
-  const handleConfirm = async () => {
+  const handleConfirmEmpty = async () => {
     if (n <= 0 || running) return;
     setRunning(true);
     setCreated(0);
@@ -1215,11 +1263,7 @@ function AddMultipleTracksDialog({
     }
     await onSaved();
     if (firstError && ok === 0) {
-      toast({
-        title: "Couldn't add tracks",
-        description: firstError,
-        variant: "destructive",
-      });
+      toast({ title: "Couldn't add tracks", description: firstError, variant: "destructive" });
     } else {
       toast({
         title: `Added ${ok} ${ok === 1 ? "track" : "tracks"}`,
@@ -1230,47 +1274,170 @@ function AddMultipleTracksDialog({
     onOpenChange(false);
   };
 
+  const handleConfirmDropbox = async () => {
+    if (!folderUrl.trim() || running) return;
+    setRunning(true);
+    setImportSummary(null);
+    try {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/import-tracks-from-dropbox`,
+        { folderUrl: folderUrl.trim() },
+      );
+      const data = await res.json();
+      setImportSummary({ created: data.created || [], errors: data.errors || [] });
+      await onSaved();
+      const ok = data.created?.length || 0;
+      const failed = data.errors?.length || 0;
+      if (ok === 0 && failed === 0) {
+        toast({ title: "No tracks created", variant: "destructive" });
+      } else {
+        toast({
+          title: `Imported ${ok} ${ok === 1 ? "track" : "tracks"}`,
+          description: failed > 0 ? `${failed} file${failed === 1 ? "" : "s"} couldn't be imported.` : undefined,
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Dropbox import failed",
+        description: e?.message || "Check the link and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900">
-            Add multiple tracks
+            Upload multiple tracks
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Stamp out a batch of empty tracks. You can rename and set
-            durations inline once they appear in the list.
+            Stamp out a batch of empty rows, or pull every audio file
+            from a Dropbox folder in one go.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-          <p className="text-[12.5px] leading-snug text-slate-600">
-            I'll number them {nextTrackNumber}–{nextTrackNumber + Math.max(0, n - 1)} so
-            they slot in right after your existing tracks. No audio or
-            lyrics are added — that's still on you.
-          </p>
+
+        {/* Mode segmented control — Apple-Mac-app density (slate-100 bg,
+            slate-900 active pill) to match the rest of admin chrome. */}
+        <div className="inline-flex bg-slate-100 rounded-lg p-0.5 self-start" role="tablist">
+          {([
+            { id: "empty", label: "Empty rows" },
+            { id: "dropbox", label: "From Dropbox folder" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              role="tab"
+              aria-selected={mode === opt.id}
+              disabled={running}
+              onClick={() => setMode(opt.id)}
+              data-testid={`tab-upload-mode-${opt.id}`}
+              className={cn(
+                "h-7 px-3 rounded-md text-[12px] font-medium transition-colors",
+                mode === opt.id
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="bulk-track-count"
-            className="text-[12.5px] font-medium text-slate-700"
-          >
-            How many tracks?
-          </Label>
-          <Input
-            id="bulk-track-count"
-            type="number"
-            min={1}
-            max={50}
-            value={countText}
-            onChange={(e) => setCountText(e.target.value)}
-            disabled={running}
-            autoFocus
-            data-testid="input-bulk-track-count"
-            className="h-10 text-[14px]"
-          />
-          <p className="text-[11.5px] text-slate-400">Up to 50 at a time.</p>
-        </div>
+
+        {mode === "empty" ? (
+          <>
+            <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+              <p className="text-[12.5px] leading-snug text-slate-600">
+                I'll number them {nextTrackNumber}–{nextTrackNumber + Math.max(0, n - 1)} so
+                they slot in right after your existing tracks. No audio or
+                lyrics are added — that's still on you.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bulk-track-count" className="text-[12.5px] font-medium text-slate-700">
+                How many tracks?
+              </Label>
+              <Input
+                id="bulk-track-count"
+                type="number"
+                min={1}
+                max={50}
+                value={countText}
+                onChange={(e) => setCountText(e.target.value)}
+                disabled={running}
+                autoFocus
+                data-testid="input-bulk-track-count"
+                className="h-10 text-[14px]"
+              />
+              <p className="text-[11.5px] text-slate-400">Up to 50 at a time.</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+              <p className="text-[12.5px] leading-snug text-slate-600">
+                In Dropbox, share the folder as <span className="font-medium text-slate-700">Anyone with the link</span> and
+                paste the URL below. I'll number them starting at {nextTrackNumber} in
+                alphabetical order. Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bulk-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
+                Dropbox folder link
+              </Label>
+              <Input
+                id="bulk-dropbox-url"
+                type="url"
+                placeholder="https://www.dropbox.com/scl/fo/…"
+                value={folderUrl}
+                onChange={(e) => setFolderUrl(e.target.value)}
+                disabled={running}
+                autoFocus
+                data-testid="input-bulk-dropbox-url"
+                className="h-10 text-[14px]"
+              />
+              <p className="text-[11.5px] text-slate-400">
+                Downloads the whole folder once, then imports every audio file inside.
+              </p>
+            </div>
+            {importSummary && (
+              <div className="space-y-2 max-h-[200px] overflow-auto rounded-lg border border-slate-200 p-2.5">
+                {importSummary.created.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-[11.5px] font-medium text-emerald-700">
+                      Imported {importSummary.created.length}:
+                    </div>
+                    {importSummary.created.map((c) => (
+                      <div key={c.filename} className="text-[11.5px] text-slate-600 truncate" data-testid={`row-imported-${c.trackNumber}`}>
+                        <span className="text-slate-400 tabular-nums">{c.trackNumber}.</span> {c.title}{" "}
+                        <span className="text-slate-400">· {c.filename}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {importSummary.errors.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <div className="text-[11.5px] font-medium text-rose-700">
+                      Couldn't import {importSummary.errors.length}:
+                    </div>
+                    {importSummary.errors.map((e) => (
+                      <div key={e.filename} className="text-[11.5px] text-slate-600 truncate">
+                        {e.filename} <span className="text-slate-400">— {e.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
         <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
           <button
             type="button"
@@ -1279,22 +1446,235 @@ function AddMultipleTracksDialog({
             data-testid="button-bulk-cancel"
             className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
           >
-            Cancel
+            {importSummary ? "Done" : "Cancel"}
+          </button>
+          {mode === "empty" ? (
+            <button
+              type="button"
+              onClick={handleConfirmEmpty}
+              disabled={running || n <= 0}
+              data-testid="button-bulk-confirm"
+              className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {running ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Creating {created}/{n}…
+                </>
+              ) : (
+                <>Create {n} {n === 1 ? "track" : "tracks"}</>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleConfirmDropbox}
+              disabled={running || !folderUrl.trim() || !!importSummary}
+              data-testid="button-bulk-dropbox-confirm"
+              className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {running ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Importing from Dropbox…
+                </>
+              ) : importSummary ? (
+                <>Imported</>
+              ) : (
+                <>Import from Dropbox</>
+              )}
+            </button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── Import lyrics from Dropbox ──────────────────────────────────────
+   Paste a Dropbox folder URL full of .pdf / .docx / .txt files; the
+   server downloads the folder as a ZIP, extracts text from each
+   document, and matches the filename to an existing track title (case-
+   insensitive, punctuation-ignored, with a substring fallback). On
+   match we set song.lyrics; on miss we surface the filename so Bill
+   can rename and retry. */
+function ImportLyricsFromDropboxDialog({
+  open,
+  onOpenChange,
+  albumId,
+  songCount,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  albumId: string;
+  songCount: number;
+  onSaved: () => Promise<void> | void;
+}) {
+  const { toast } = useToast();
+  const [folderUrl, setFolderUrl] = useState("");
+  const [running, setRunning] = useState(false);
+  const [summary, setSummary] = useState<
+    null | {
+      matched: Array<{ songId: string; title: string; filename: string; charCount: number }>;
+      unmatched: Array<{ filename: string; suggestedTitle: string; charCount: number; reason?: string }>;
+      errors: Array<{ filename: string; error: string }>;
+    }
+  >(null);
+
+  useEffect(() => {
+    if (open) {
+      setFolderUrl("");
+      setRunning(false);
+      setSummary(null);
+    }
+  }, [open]);
+
+  const handleConfirm = async () => {
+    if (!folderUrl.trim() || running) return;
+    setRunning(true);
+    setSummary(null);
+    try {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/import-lyrics-from-dropbox`,
+        { folderUrl: folderUrl.trim() },
+      );
+      const data = await res.json();
+      setSummary({
+        matched: data.matched || [],
+        unmatched: data.unmatched || [],
+        errors: data.errors || [],
+      });
+      await onSaved();
+      const ok = data.matched?.length || 0;
+      const miss = (data.unmatched?.length || 0) + (data.errors?.length || 0);
+      toast({
+        title: `Matched ${ok} ${ok === 1 ? "song" : "songs"}`,
+        description: miss > 0 ? `${miss} file${miss === 1 ? "" : "s"} didn't match a track.` : undefined,
+      });
+    } catch (e: any) {
+      toast({
+        title: "Couldn't import lyrics",
+        description: e?.message || "Check the link and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
+      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            Import lyrics from Dropbox
+          </DialogTitle>
+          <DialogDescription className="text-[13px] font-normal text-slate-500">
+            Paste a Dropbox folder of lyric documents — I'll match each
+            file to a track by filename and fill in the lyrics.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+          <p className="text-[12.5px] leading-snug text-slate-600">
+            Share the folder as <span className="font-medium text-slate-700">Anyone with the link</span>. Supported
+            formats: .pdf, .docx, .txt. Name each file after the track
+            (e.g. <span className="font-medium">Storms.pdf</span>) and I'll
+            do the rest. {songCount > 0 ? `This album has ${songCount} track${songCount === 1 ? "" : "s"} to match against.` : "Add tracks first, then come back here."}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="lyrics-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
+            Dropbox folder link
+          </Label>
+          <Input
+            id="lyrics-dropbox-url"
+            type="url"
+            placeholder="https://www.dropbox.com/scl/fo/…"
+            value={folderUrl}
+            onChange={(e) => setFolderUrl(e.target.value)}
+            disabled={running || songCount === 0}
+            autoFocus
+            data-testid="input-lyrics-dropbox-url"
+            className="h-10 text-[14px]"
+          />
+        </div>
+
+        {summary && (
+          <div className="space-y-2 max-h-[220px] overflow-auto rounded-lg border border-slate-200 p-2.5">
+            {summary.matched.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[11.5px] font-medium text-emerald-700">
+                  Matched {summary.matched.length}:
+                </div>
+                {summary.matched.map((m) => (
+                  <div key={m.songId} className="text-[11.5px] text-slate-600 truncate" data-testid={`row-lyrics-matched-${m.songId}`}>
+                    <span className="font-medium text-slate-700">{m.title}</span>{" "}
+                    <span className="text-slate-400">← {m.filename} · {m.charCount} chars</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {summary.unmatched.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <div className="text-[11.5px] font-medium text-amber-700">
+                  No track match for {summary.unmatched.length}:
+                </div>
+                {summary.unmatched.map((u) => (
+                  <div key={u.filename} className="text-[11.5px] text-slate-600 truncate">
+                    {u.filename}{" "}
+                    <span className="text-slate-400">
+                      — {u.reason || `would set title to "${u.suggestedTitle}"`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {summary.errors.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <div className="text-[11.5px] font-medium text-rose-700">
+                  Couldn't read {summary.errors.length}:
+                </div>
+                {summary.errors.map((e) => (
+                  <div key={e.filename} className="text-[11.5px] text-slate-600 truncate">
+                    {e.filename} <span className="text-slate-400">— {e.error}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            disabled={running}
+            data-testid="button-lyrics-import-cancel"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+          >
+            {summary ? "Done" : "Cancel"}
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={running || n <= 0}
-            data-testid="button-bulk-confirm"
+            disabled={running || !folderUrl.trim() || songCount === 0 || !!summary}
+            data-testid="button-lyrics-import-confirm"
             className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
           >
             {running ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Creating {created}/{n}…
+                Importing lyrics…
               </>
+            ) : summary ? (
+              <>Imported</>
             ) : (
-              <>Create {n} {n === 1 ? "track" : "tracks"}</>
+              <>Import lyrics</>
             )}
           </button>
         </DialogFooter>
@@ -1461,7 +1841,7 @@ function GoodSyncAlbumDialog({
             <DialogHeader className="text-left space-y-1">
               <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-slate-700" />
-                GoodSync™ the whole album?
+                GoodSync™ your Album?
               </DialogTitle>
               <DialogDescription className="text-[13px] font-normal text-slate-500">
                 Sit back — I'll line up the lyrics with the audio on
