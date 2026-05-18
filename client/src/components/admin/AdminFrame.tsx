@@ -63,10 +63,14 @@ export function AdminFrame({
     } catch {}
   }, [previewOpen]);
 
-  const { data: albums = [] } = useQuery<unknown[]>({
+  // The sidebar count mirrors what the Albums index actually shows —
+  // imported streaming catalog (`!isGoodTunesRelease`) is hidden from
+  // the admin, so it would be misleading to include it in the total.
+  const { data: albums = [] } = useQuery<{ isGoodTunesRelease: boolean }[]>({
     queryKey: ["/api/albums"],
     enabled: !!user?.isAdmin,
   });
+  const albumCount = albums.filter((a) => a.isGoodTunesRelease).length;
   const { data: people = [] } = useQuery<unknown[]>({
     queryKey: ["/api/people"],
     enabled: !!user?.isAdmin,
@@ -112,7 +116,7 @@ export function AdminFrame({
             <SidebarLink
               icon={Disc3}
               label="Albums"
-              count={albums.length}
+              count={albumCount}
               active={active === "albums"}
               onClick={() => navigate("/admin/albums")}
               testId="nav-albums"
