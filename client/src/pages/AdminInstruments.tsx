@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Plus, Search, X, Guitar, Store } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -74,12 +75,24 @@ export function AdminInstruments() {
     navigate(`/admin/instruments/${id}`);
   };
 
+  const queryClient = useQueryClient();
+  const createInstrument = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/instruments", {
+        name: "New gear",
+        category: "Guitar",
+      });
+      return res.json() as Promise<{ id: string }>;
+    },
+    onSuccess: (i) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
+      navigate(`/admin/instruments/${i.id}`);
+    },
+  });
+
   const openNewInstrument = () => {
-    try {
-      localStorage.setItem("gt:admin:entity", "gear");
-      localStorage.setItem("gt:admin:new", "instrument");
-    } catch {}
-    navigate("/admin");
+    if (createInstrument.isPending) return;
+    createInstrument.mutate();
   };
 
   if (authLoading) {
@@ -159,14 +172,18 @@ export function AdminInstruments() {
             onChange={setView}
             testIdPrefix="view-mode-instruments"
           />
+          {/* Matches AdminPeople's "Add Person": denser px-2.5/py-1.5 chrome,
+              white-outline button so the Gear index reads as the same admin
+              surface family rather than a louder blue CTA. */}
           <button
             type="button"
             onClick={openNewInstrument}
-            className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+            disabled={createInstrument.isPending}
+            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-new-instrument"
           >
-            <Plus className="w-4 h-4" />
-            New gear
+            <Plus className="w-3 h-3" />
+            Add Gear
           </button>
         </div>
       </div>
