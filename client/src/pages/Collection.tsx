@@ -12,7 +12,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
+import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 interface UserPlaylist {
@@ -46,6 +46,21 @@ export function Collection() {
     queryKey: ["/api/playlists"],
   });
   const userPlaylists = playlistsRaw ?? [];
+
+  // Catalog albums + songs come from the DB so anything added through
+  // the admin CMS (e.g. Visionary Apothecary) shows up immediately. The
+  // shared queryClient default has staleTime: Infinity, so this fetches
+  // once per session and is reused by every other surface that calls the
+  // same queryKey (AlbumDetail's /api/albums/:id, PlayerContext's
+  // /api/songs hydrate map, etc.).
+  const { data: albumsRaw } = useQuery<Album[]>({
+    queryKey: ["/api/albums"],
+  });
+  const { data: songsRaw } = useQuery<Song[]>({
+    queryKey: ["/api/songs"],
+  });
+  const dbAlbums = albumsRaw ?? [];
+  const dbSongs = songsRaw ?? [];
 
   const addSongMutation = useMutation({
     mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
@@ -121,32 +136,32 @@ export function Collection() {
 
   const allSongsWithAlbum = useMemo(
     () =>
-      SONGS.map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! })).filter(
+      dbSongs.map((s) => ({ ...s, album: dbAlbums.find((a) => a.id === s.albumId)! })).filter(
         (s) => s.album,
       ),
-    [],
+    [dbAlbums, dbSongs],
   );
 
   const artists = useMemo(() => {
     const map = new Map<string, { name: string; albums: Album[] }>();
-    ALBUMS.forEach((a) => {
+    dbAlbums.forEach((a) => {
       const cur = map.get(a.artist) ?? { name: a.artist, albums: [] };
       cur.albums.push(a);
       map.set(a.artist, cur);
     });
     return Array.from(map.values());
-  }, []);
+  }, [dbAlbums]);
 
   const q = search.trim().toLowerCase();
 
   const filteredAlbums = useMemo(() => {
     const list = q
-      ? ALBUMS.filter((a) => a.title.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q))
-      : [...ALBUMS];
+      ? dbAlbums.filter((a) => a.title.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q))
+      : [...dbAlbums];
     return list.sort((a, b) =>
       sortBy === "artist" ? a.artist.localeCompare(b.artist) : a.title.localeCompare(b.title),
     );
-  }, [q, sortBy]);
+  }, [q, sortBy, dbAlbums]);
 
   const filteredSongs = useMemo(() => {
     const list = q
