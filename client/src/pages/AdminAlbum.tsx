@@ -6477,6 +6477,35 @@ function AudioEditor({
   const [localError, setLocalError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Auto-rewrite Dropbox share links to a direct-stream URL the
+  // <audio> element can actually play. The plain `dropbox.com/scl/fi/…`
+  // host serves an HTML preview page (which is why the audio tag fires
+  // an Error: "Preview failed to load…"). Swapping the host for
+  // `dl.dropboxusercontent.com` and dropping the `dl`/`raw` params
+  // returns the raw audio bytes with the right Content-Type — same
+  // pattern this codebase already uses for the Nick Carter masters
+  // (see client/src/data/musicData.ts: NC_BASE). Anything that isn't a
+  // Dropbox share URL passes through untouched.
+  const normalizeAudioUrl = (raw: string): string => {
+    const trimmed = raw.trim();
+    if (!trimmed) return trimmed;
+    try {
+      const u = new URL(trimmed);
+      if (
+        u.hostname === "www.dropbox.com" ||
+        u.hostname === "dropbox.com"
+      ) {
+        u.hostname = "dl.dropboxusercontent.com";
+        u.searchParams.delete("dl");
+        u.searchParams.delete("raw");
+        return u.toString();
+      }
+    } catch {
+      // Not a parseable URL — leave it alone so the user can keep typing.
+    }
+    return trimmed;
+  };
+
   const dirty = (draftUrl || null) !== (song.audioUrl ?? null);
 
   const handleFile = async (f: File) => {
@@ -6626,7 +6655,7 @@ function AudioEditor({
               type="text"
               value={draftUrl}
               onChange={(e) => {
-                setDraftUrl(e.target.value);
+                setDraftUrl(normalizeAudioUrl(e.target.value));
                 setLocalError(null);
               }}
               placeholder="or paste a URL"
@@ -6648,7 +6677,7 @@ function AudioEditor({
                 type="text"
                 value={draftUrl}
                 onChange={(e) => {
-                  setDraftUrl(e.target.value);
+                  setDraftUrl(normalizeAudioUrl(e.target.value));
                   setLocalError(null);
                 }}
                 disabled={uploading || saveMut.isPending}
