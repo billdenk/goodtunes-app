@@ -2047,13 +2047,96 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
   }
-  // Strip leading track-number prefixes ("01 - ", "01. ", "01_") and
-  // the file extension. Falls back to the bare basename if the strip
-  // leaves us with nothing.
+  // Turn an artist-supplied filename into a clean track title.
+  //
+  // Real-world filenames from Bill's catalog look like:
+  //   "01 - Storms.wav"                          → "Storms"
+  //   "When We_re Together_W3_mstr 09-02-22_48k.wav" → "When We're Together"
+  //   "07_Some-Song_Final_v2.flac"               → "Some Song"
+  //   "OUT TAKES (Bonus Track) 03_KDIUCL_mstr 04-08-22.wav" → "Out Takes (Bonus Track)"
+  //
+  // Rules, in order:
+  //   1. Strip the file extension.
+  //   2. Strip a leading track-number prefix ("01 - ", "01. ", "01_", "1) ").
+  //   3. Strip trailing engineering-noise tokens (mstr/master/final/W#/v#/
+  //      mix/edit/alt/demo/rough/stems/takes/sample-rate/bit-depth/date),
+  //      looped to a fixed point so chains like "_W3_mstr_48k" all peel.
+  //   4. Restore apostrophe contractions where an underscore stood in for
+  //      an apostrophe (filesystems-with-attitude habit). Only short suffix
+  //      tokens that look like real contractions — re/s/ll/t/d/m/ve/em.
+  //   5. Collapse remaining underscores to spaces; collapse whitespace runs.
+  //   6. De-shout: ALL-CAPS titles become Title Case.
+  //
+  // This is intentionally conservative — we never touch the inside of a
+  // word, we only strip suffix tokens that are word-boundary anchored
+  // engineering markers. Lyrics-side fuzzy matching still uses `fuzzy()`
+  // which strips ALL non-alphanumerics, so improving title cleanliness
+  // here makes the stored title prettier WITHOUT hurting match recall.
   function deriveTitleFromFilename(name: string): string {
-    const base = name.replace(/\.[^.]+$/, "");
-    const stripped = base.replace(/^\s*\d{1,3}\s*[-_.\s]+\s*/, "").trim();
-    return stripped || base.trim() || "Untitled";
+    const original = name;
+    // 1. extension
+    let s = name.replace(/\.[^.]+$/, "");
+    // 2. leading track number prefix
+    s = s.replace(/^\s*\d{1,3}\s*[-_.\s)]+\s*/, "");
+    // 3. trailing engineering noise — looped to a fixed point.
+    //    Note the studio-code rule requires an UNDERSCORE prefix
+    //    (not just whitespace), so legit titles like "OUT OF TIME"
+    //    don't get their last word stripped.
+    const suffixPatterns: RegExp[] = [
+      /[\s_\-]+w\d+\b/i,                       // _W3
+      /[\s_\-]+mstr\b/i,                       // _mstr
+      /[\s_\-]+master(ed|ing)?\b/i,            // _master / _mastered
+      /[\s_\-]+final\b/i,
+      /[\s_\-]+rough\b/i,
+      /[\s_\-]+demo\b/i,
+      /[\s_\-]+(mix|edit|alt|stems?|takes?)\b/i,
+      /[\s_\-]+v\d+\b/i,                       // _v1, _v2
+      /[\s_\-]+\d{2,3}k\b/i,                   // _48k, _96k, _192k
+      /[\s_\-]+\d{1,2}bit\b/i,                 // _24bit
+      /[\s_\-]+\d{1,2}-\d{1,2}-\d{2,4}\b/,     // _09-02-22 / _09-02-2022
+      /[\s_\-]+\d{8}\b/,                        // _20220902
+      /_[A-Z]{4,}\b/,                          // _KDIUCL studio codes — underscore-anchored
+    ];
+    let prev = "";
+    let strippedAnyNoiseToken = false;
+    while (prev !== s) {
+      prev = s;
+      for (const p of suffixPatterns) {
+        const before = s;
+        s = s.replace(new RegExp(p.source + "\\s*$", p.flags), "");
+        if (before !== s) strippedAnyNoiseToken = true;
+      }
+    }
+    // 3b. If any engineering token was peeled, an orphan track-number
+    //     token (1–3 digits) may now sit at the tail — e.g. "(Bonus
+    //     Track) 03_KDIUCL_mstr 04-08-22" → "(Bonus Track) 03" after
+    //     the three real tokens peel. Guarded by the flag so a real
+    //     title like "Track 3.wav" or "Blink 182.wav" is preserved.
+    if (strippedAnyNoiseToken) {
+      s = s.replace(/[\s_\-]+\d{1,3}\s*$/, "");
+    }
+    // 4. underscore-as-apostrophe restoration
+    s = s.replace(/\b([A-Za-z]+)_(re|s|ll|t|d|m|ve|em)\b/g, "$1'$2");
+    // 5. underscores AND in-word hyphens → spaces, collapse whitespace.
+    //    Bill's catalog uses both as word separators, so "Some-Song"
+    //    becomes "Some Song". Real hyphen-genuine titles (e.g. a film
+    //    name "Spider-Man") become "Spider Man" — acceptable trade-off
+    //    given how often artist filenames hyphenate words.
+    s = s.replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
+    // 6. de-shout.
+    //    (a) Whole-string ALL-CAPS → Title Case.
+    //    (b) Runs of 2+ consecutive ALL-CAPS words (2+ letters each)
+    //        also title-case, so "OUT TAKES (Bonus Track)" becomes
+    //        "Out Takes (Bonus Track)". A standalone all-caps token
+    //        (e.g. an acronym like "USA" or "DNA") is preserved.
+    if (s && s === s.toUpperCase() && /[A-Za-z]/.test(s)) {
+      s = s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
+    } else {
+      s = s.replace(/\b[A-Z]{2,}(?:\s+[A-Z]{2,})+\b/g, (run) =>
+        run.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase())
+      );
+    }
+    return s || original.replace(/\.[^.]+$/, "").trim() || "Untitled";
   }
   function fuzzy(s: string): string {
     return s.toLowerCase().replace(/[^a-z0-9]/g, "");

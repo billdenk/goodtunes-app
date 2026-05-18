@@ -769,38 +769,17 @@ function TracksPanel({
               Empty rows or a Dropbox folder of audio files.
             </div>
           </button>
-          <button
-            onClick={() => setLyricsImportOpen(true)}
-            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
-            data-testid="button-import-lyrics-empty"
-          >
-            <div className="w-8 h-8 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </div>
-            <div className="mt-2.5 text-[13px] font-semibold text-slate-900">
-              Import lyrics
-            </div>
-            <div className="text-[11.5px] text-slate-500 mt-0.5">
-              PDF, Word, or text — matched by filename.
-            </div>
-          </button>
         </div>
       </section>
-      {/* Dialogs need to mount in the empty state too — without this the
-          "Upload multiple tracks" / "Import lyrics" cards would flip state
-          with nothing to open. */}
+      {/* No lyrics-import dialog mount in the empty state — lyrics
+          matching needs existing tracks to match against, so the
+          entry point only lives on the Advanced menu once tracks
+          exist. */}
       <AddMultipleTracksDialog
         open={bulkAddOpen}
         onOpenChange={setBulkAddOpen}
         albumId={album.id}
         nextTrackNumber={1}
-        onSaved={invalidateAlbum}
-      />
-      <ImportLyricsFromDropboxDialog
-        open={lyricsImportOpen}
-        onOpenChange={setLyricsImportOpen}
-        albumId={album.id}
-        songCount={0}
         onSaved={invalidateAlbum}
       />
       </>
