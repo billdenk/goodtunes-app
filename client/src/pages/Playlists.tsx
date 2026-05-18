@@ -458,7 +458,7 @@ export function Playlists() {
             )}
           </div>
 
-          <div ref={detailScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-5">
+          <div ref={detailScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-[170px]">
             {playlistSongs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
