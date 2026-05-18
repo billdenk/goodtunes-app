@@ -950,7 +950,10 @@ function TracksPanel({
                     setTimeout(() => {
                       const a = document.createElement("a");
                       a.href = s.audioUrl!;
-                      a.download = `${String(s.trackNumber).padStart(2, "0")} ${s.title}`;
+                      // Preserve original extension (.mp3/.wav/.flac/.m4a/.ogg)
+                      // so each saved file opens in the user's audio app.
+                      const ext = s.audioUrl!.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
+                      a.download = `${String(s.trackNumber).padStart(2, "0")} ${s.title}${ext}`;
                       document.body.appendChild(a);
                       a.click();
                       a.remove();
@@ -3075,7 +3078,11 @@ function TrackRow({
         {!expanded && !!song.audioUrl && (
           <a
             href={song.audioUrl}
-            download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}`}
+            // Preserve the original audio extension so the saved file
+            // opens correctly. Server stores `/objects/uploads/<uuid>.<ext>`
+            // (mp3 / wav / flac / m4a / ogg) — fall back to .mp3 only
+            // if the URL is malformed (defensive; shouldn't happen).
+            download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${song.audioUrl.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3"}`}
             onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
             aria-label={`Download master for ${song.title}`}
