@@ -45,6 +45,7 @@ import {
   Search,
   Sparkles,
   ListPlus,
+  UserPlus,
   Wand2,
 } from "lucide-react";
 import {
@@ -331,7 +332,6 @@ export function AdminAlbum() {
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
 function OverviewPanel({ album }: { album: AlbumFull }) {
-  const [creditsImportOpen, setCreditsImportOpen] = useState(false);
   const invalidate: (readonly unknown[])[] = [
     ["/api/albums", album.id],
     ["/api/albums"],
@@ -445,43 +445,6 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           },
         ]}
       />
-
-      {/* Credits importer — paste a Dropbox link or drop a doc; the AI
-          extracts per-track writers + performers + a People roster and
-          opens a review sheet. */}
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-4"
-        data-testid="panel-overview-import-credits"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800">Import credits</h3>
-            <p className="text-xs text-slate-500 mt-0.5 max-w-md">
-              Paste a Dropbox link or upload a PDF / Word / .txt of liner notes. We'll
-              read it against this album's tracks and propose People + per-track
-              writers + performers for your review.
-            </p>
-            {album.linerNotes ? (
-              <p className="text-[11px] text-emerald-700 mt-1.5">
-                Liner notes saved from a previous import.
-              </p>
-            ) : null}
-          </div>
-          <Button
-            type="button"
-            onClick={() => setCreditsImportOpen(true)}
-            data-testid="button-open-credits-import"
-          >
-            Import credits…
-          </Button>
-        </div>
-      </section>
-
-      <CreditsImportSheet
-        albumId={album.id}
-        open={creditsImportOpen}
-        onOpenChange={setCreditsImportOpen}
-      />
     </div>
   );
 }
@@ -564,6 +527,7 @@ function TracksPanel({
   const [bulkAddOpen, setBulkAddOpen] = useState(false);
   const [albumSyncOpen, setAlbumSyncOpen] = useState(false);
   const [lyricsImportOpen, setLyricsImportOpen] = useState(false);
+  const [creditsImportOpen, setCreditsImportOpen] = useState(false);
 
   // ── Playback state for the floating PlayerDock ──────────────────────
   // One audio element drives the entire Tracks tab. Selecting a row sets
@@ -922,6 +886,21 @@ function TracksPanel({
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem
+                onSelect={() => setCreditsImportOpen(true)}
+                data-testid="menu-import-credits"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
+              >
+                <UserPlus className="w-4 h-4 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    Add credits in bulk
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    PDF, Word, or text liner notes — matched to tracks.
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onSelect={() => setAlbumSyncOpen(true)}
                 data-testid="menu-goodsync-album"
                 className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
@@ -1072,6 +1051,11 @@ function TracksPanel({
         albumId={album.id}
         songCount={sorted.length}
         onSaved={invalidateAlbum}
+      />
+      <CreditsImportSheet
+        albumId={album.id}
+        open={creditsImportOpen}
+        onOpenChange={setCreditsImportOpen}
       />
     </section>
   );
