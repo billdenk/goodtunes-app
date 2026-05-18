@@ -7614,6 +7614,9 @@ function ArtworkPanel({
         data-testid="panel-artwork"
         data-mode="edit"
       >
+      {/* Header — just the title. The dialog primitive already renders
+          the canonical close X (top-right, slate, hover-darken) so no
+          need for a duplicate "EDITING" eyebrow next to it. */}
       <DialogHeader className="flex-row items-center justify-between space-y-0">
         <DialogTitle className="text-slate-900 text-[14px] font-bold">
           Artwork
@@ -7621,12 +7624,6 @@ function ArtworkPanel({
         <DialogDescription className="sr-only">
           Replace, paste, or remove the cover art for {album.title}.
         </DialogDescription>
-        <span
-          aria-hidden
-          className="text-[11px] text-[#319ED8] font-semibold uppercase tracking-wider"
-        >
-          Editing
-        </span>
       </DialogHeader>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Current cover — kept visible during edit so the artist sees
