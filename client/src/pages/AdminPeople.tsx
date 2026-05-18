@@ -245,7 +245,7 @@ export function AdminPeople() {
                     Match people on Spotify
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Walk through everyone missing a Spotify link and pick the right artist.
+                    Link everyone missing a profile.
                   </div>
                 </div>
               </DropdownMenuItem>
