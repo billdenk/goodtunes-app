@@ -9,6 +9,7 @@ import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
+import { searchArtist as searchSpotifyArtist, spotifyConfigured } from "./lib/spotify";
 
 const scryptAsync = promisify(scrypt);
 
@@ -2626,6 +2627,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         } as any);
         personIdByTag.set(p.tag, created.id);
         createdPeople.push({ tag: p.tag, id: created.id, name: created.name });
+
+        // Best-effort Spotify enrichment for newly-created people. Saves
+        // the canonical Spotify profile URL + portrait photo so the
+        // People admin row lands populated. Skipped silently when:
+        //   - Spotify isn't configured (no client id/secret),
+        //   - the name didn't return an exact match (avoids saving a
+        //     wrong artist for someone like a session engineer),
+        //   - the lookup throws or times out.
+        if (spotifyConfigured()) {
+          try {
+            const match = await searchSpotifyArtist(created.name);
+            if (match && match.confident) {
+              await storage.updatePerson(created.id, {
+                spotifyUrl: match.spotifyUrl,
+                ...(match.photoUrl ? { photoUrl: match.photoUrl } : {}),
+              } as any);
+            }
+          } catch (err) {
+            console.warn("[credits/commit] spotify enrich failed", created.name, err);
+          }
+        }
       }
 
       // 2) Write trackWriters + trackPerformers. Positions continue from
