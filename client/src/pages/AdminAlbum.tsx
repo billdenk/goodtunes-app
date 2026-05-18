@@ -2409,51 +2409,6 @@ type DotState =
   | "partial"
   | "instrumental";
 
-function renderDot(state: DotState) {
-  if (state === "done")
-    return (
-      <CheckCircle2
-        className="w-3.5 h-3.5 text-emerald-500"
-        strokeWidth={2.25}
-        fill="currentColor"
-        stroke="white"
-      />
-    );
-  if (state === "synced")
-    return (
-      <span className="w-4 h-4 rounded-full bg-[#319ED8] inline-flex items-center justify-center">
-        <WaveArrowGlyph className="w-2.5 h-2.5" />
-      </span>
-    );
-  if (state === "custom")
-    return (
-      <span
-        className="w-4 h-4 rounded-full inline-flex items-center justify-center"
-        // Gold with a subtle inner highlight so it reads metallic, not
-        // mustard. Differentiated from amber "partial" (flat color) and
-        // from blue "synced" so each pip carries a distinct meaning.
-        style={{
-          background:
-            "linear-gradient(180deg, #F2C94C 0%, #D4A017 60%, #B8860B 100%)",
-          boxShadow: "inset 0 0.5px 0 rgba(255,255,255,0.55)",
-        }}
-      >
-        <ClipGlyph className="w-2.5 h-2.5" />
-      </span>
-    );
-  if (state === "partial")
-    return (
-      <span className="w-3.5 h-3.5 rounded-full bg-amber-500 inline-block" />
-    );
-  if (state === "instrumental")
-    return (
-      <span className="w-3.5 h-3.5 rounded-full bg-slate-300 inline-flex items-center justify-center">
-        <Ban className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
-      </span>
-    );
-  return <Circle className="w-3.5 h-3.5 text-slate-300" strokeWidth={1.5} />;
-}
-
 function dotHint(label: string, state: DotState): string {
   if (state === "synced") return `${label} · GoodSync™ ready`;
   if (state === "custom") return `${label} — custom 30-sec clip picked`;
@@ -2461,6 +2416,56 @@ function dotHint(label: string, state: DotState): string {
   if (state === "partial") return `${label} partial — keep going`;
   if (state === "instrumental") return "Lyrics — instrumental (none by design)";
   return `${label} not started`;
+}
+
+/* ── StatusChip — P / L / C hover-only status pill ───────────────────
+   Graduated from artifacts/mockup-sandbox/src/components/mockups/admin-track-status/Chips.tsx
+   per Bill's pick. Replaces the always-on coloured dot meter (renderDot)
+   in the tracklist row. Three states map cleanly from our existing
+   DotState:
+     · "auto"      — filled blue (done / synced / custom)
+     · "manual"    — white with slate ring (partial — half-done)
+     · "untouched" — slate-100, dim glyph (empty / instrumental)
+   The row stays silent at rest; chips reveal on hover. Each chip is
+   still a real button — click expands the row AND jumps to the editor,
+   identical to the old dot meter. */
+type ChipState = "untouched" | "manual" | "auto";
+function dotToChip(state: DotState): ChipState {
+  // "auto" = system-set / system-derived (default first-30s preview,
+  //          GoodSync-ready lyrics, fully populated credits).
+  // "manual" = user-set (custom 30-sec clip picked) or half-done
+  //            (partial credits — keep going).
+  // "untouched" = nothing there yet (empty), or "by design empty"
+  //               (instrumental lyrics).
+  if (state === "custom" || state === "partial") return "manual";
+  if (state === "done" || state === "synced") return "auto";
+  return "untouched";
+}
+function StatusChip({
+  letter,
+  state,
+}: {
+  letter: "P" | "L" | "C";
+  state: ChipState;
+}) {
+  const tone =
+    state === "auto"
+      ? "bg-[#319ED8] text-white"
+      : state === "manual"
+        ? "bg-white text-slate-900 ring-1 ring-inset ring-slate-300"
+        : "bg-slate-100 text-slate-300";
+  return (
+    <span
+      className={[
+        "inline-flex w-[20px] h-[20px] items-center justify-center rounded-[5px]",
+        "font-mono text-[11px] font-bold leading-none",
+        tone,
+      ].join(" ")}
+      aria-hidden="true"
+    >
+      {letter}
+    </span>
+  );
 }
 
 /* ── ExpandedPanel ────────────────────────────────────────────────────
@@ -3013,12 +3018,16 @@ function TrackRow({
             {formatDuration(song.duration)}
           </span>
         )}
-            {/* Right-aligned dot meter — Preview / Lyrics / Credits.
-                Sits next to duration so the row reads "title … 3:30 ✓✓✓"
-                like Apple Music's status chips. Hidden while the row is
-                expanded (the tile grid below carries the same signal)
-                and while master is missing (the inline Upload CTA owns
-                the focus in that state). */}
+            {/* Right-aligned P/L/C status chips — Preview / Lyrics /
+                Credits. Hover-only per the chips mockup: the row stays
+                silent at rest so the eye reads "title · 3:30" cleanly,
+                and chips reveal on hover (or always-faded on touch
+                devices that can't hover, so the affordance is still
+                discoverable). Each chip is still a real button — click
+                expands the row AND jumps to that editor, identical to
+                the old dot meter. Hidden while the row is expanded (the
+                tile grid below carries the same signal) and while
+                master is missing (the inline Upload CTA owns focus). */}
             {!expanded && !!song.audioUrl && (() => {
               const previewState: DotState =
                 song.previewStartMs != null ? "custom" : "done";
@@ -3037,18 +3046,14 @@ function TrackRow({
                   : writerCount > 0 || performerCount > 0
                     ? "partial"
                     : "empty";
-              // Each pip is now a real button: tapping it expands the
-              // row AND jumps to the matching editor. Lyrics in
-              // instrumental state stays inert (there's nothing to
-              // edit). Hover ring + focus ring give the same Apple
-              // "this is tappable" cue as our other inline pips.
-              const dotBtn =
-                "w-6 h-6 rounded-full inline-flex items-center justify-center hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 transition-colors";
+              const chipBtn =
+                "inline-flex items-center justify-center rounded-[5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 transition-transform active:scale-[0.94]";
               return (
                 <div
-                  className="flex items-center gap-0.5 flex-shrink-0"
+                  className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-60 transition-opacity"
                   role="group"
-                  aria-label="Track completion"
+                  aria-label="Track completion (Preview · Lyrics · Credits)"
+                  data-testid={`chips-status-${song.id}`}
                 >
                   <button
                     type="button"
@@ -3057,12 +3062,12 @@ function TrackRow({
                       setUserExpanded(true);
                       setMode("preview");
                     }}
-                    className={dotBtn}
+                    className={chipBtn}
                     aria-label={`Edit preview — ${dotHint("Preview", previewState)}`}
                     title={dotHint("Preview", previewState)}
                     data-testid={`dot-preview-${song.id}`}
                   >
-                    {renderDot(previewState)}
+                    <StatusChip letter="P" state={dotToChip(previewState)} />
                   </button>
                   <button
                     type="button"
@@ -3073,9 +3078,9 @@ function TrackRow({
                     }}
                     disabled={lyricsState === "instrumental"}
                     className={[
-                      dotBtn,
+                      chipBtn,
                       lyricsState === "instrumental" &&
-                        "cursor-default hover:bg-transparent",
+                        "cursor-default opacity-60",
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -3083,7 +3088,7 @@ function TrackRow({
                     title={dotHint("Lyrics", lyricsState)}
                     data-testid={`dot-lyrics-${song.id}`}
                   >
-                    {renderDot(lyricsState)}
+                    <StatusChip letter="L" state={dotToChip(lyricsState)} />
                   </button>
                   <button
                     type="button"
@@ -3092,12 +3097,12 @@ function TrackRow({
                       setUserExpanded(true);
                       setMode("credits");
                     }}
-                    className={dotBtn}
+                    className={chipBtn}
                     aria-label={`Edit credits — ${dotHint("Credits", creditsState)}`}
                     title={dotHint("Credits", creditsState)}
                     data-testid={`dot-credits-${song.id}`}
                   >
-                    {renderDot(creditsState)}
+                    <StatusChip letter="C" state={dotToChip(creditsState)} />
                   </button>
                 </div>
               );
