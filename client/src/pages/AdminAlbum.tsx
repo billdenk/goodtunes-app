@@ -119,11 +119,12 @@ interface SongLite {
   waveform?: number[] | null;
 }
 
-type Tab = "overview" | "tracks" | "artwork" | "masters" | "bonus";
+type Tab = "overview" | "tracks" | "masters" | "bonus";
 const TABS: { key: Tab; label: string; phase: number }[] = [
   { key: "overview", label: "Overview", phase: 2 },
   { key: "tracks", label: "Tracks", phase: 2 },
-  { key: "artwork", label: "Artwork", phase: 3 },
+  // Artwork lives inside Overview now (between Release and Metadata) —
+  // cover art is core release metadata, not a separate concern.
   { key: "masters", label: "Masters", phase: 4 },
   { key: "bonus", label: "Bonus", phase: 5 },
 ];
@@ -299,7 +300,6 @@ export function AdminAlbum() {
         {tab === "tracks" && (
           <TracksPanel album={album} onEdit={openInClassicAdmin} />
         )}
-        {tab === "artwork" && <ArtworkPanel album={album} />}
         {tab === "masters" && <MastersPanel album={album} />}
         {tab === "bonus" && (
           <BonusPanel album={album} onEdit={openInClassicAdmin} />
@@ -367,6 +367,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           },
         ]}
       />
+      <ArtworkPanel album={album} />
       <EditablePanel
         title="Metadata"
         testId="panel-overview-metadata"
