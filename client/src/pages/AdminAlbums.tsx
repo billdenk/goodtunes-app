@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, Search, Filter, EyeOff, X } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import {
@@ -46,6 +48,39 @@ export function AdminAlbums() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("albums");
+  const { toast } = useToast();
+
+  // "+" in the header — create a blank GoodTunes release and jump straight
+  // into its editor. Mirrors the legacy /admin createAlbum mutation; we
+  // optimistically push the new row into the cache so the editor's loader
+  // doesn't briefly 404 before the refetch lands.
+  const createAlbum = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/albums", {
+        title: "New album",
+        artist: "Unknown artist",
+        artwork: "/album-placeholder.svg",
+        type: "LP",
+        isGoodTunesRelease: true,
+      });
+      return res.json() as Promise<AlbumLite>;
+    },
+    onSuccess: (a) => {
+      queryClient.setQueryData<AlbumLite[]>(["/api/albums"], (old) =>
+        old ? (old.some((x) => x.id === a.id) ? old : [...old, a]) : [a],
+      );
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
+      navigate(`/admin/albums/${a.id}`);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't create album",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -207,10 +242,14 @@ export function AdminAlbums() {
               />
             </div>
             <IconBtn
-              onClick={() => navigate("/admin")}
+              onClick={() => {
+                if (createAlbum.isPending) return;
+                createAlbum.mutate();
+              }}
               label="New album"
               testId="button-new-album"
               tone="primary"
+              disabled={createAlbum.isPending}
             >
               <Plus className="w-4 h-4" />
             </IconBtn>
@@ -410,12 +449,14 @@ function IconBtn({
   label,
   testId,
   tone,
+  disabled,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   label: string;
   testId?: string;
   tone?: "primary";
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -424,11 +465,13 @@ function IconBtn({
       aria-label={label}
       title={label}
       data-testid={testId}
+      disabled={disabled}
       className={[
         "w-9 h-9 inline-flex items-center justify-center rounded-md transition-colors",
         tone === "primary"
           ? "bg-transparent border border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
           : "text-slate-500 hover:text-slate-900 hover:bg-slate-100",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
       ].join(" ")}
     >
       {children}
