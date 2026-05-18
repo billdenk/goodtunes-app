@@ -6166,12 +6166,15 @@ function friendlyVideoError(raw: string): string {
 
 type VideoSheetMode =
   | { kind: "closed" }
-  | { kind: "new" }
+  // `initialFile` / `initialUrl` let the empty-state inline dropzone
+  // open the sheet with the drag/drop file (or pasted URL) already
+  // primed — Bill just confirms the title and clicks Add.
+  | { kind: "new"; initialFile?: File; initialUrl?: string }
   | { kind: "edit"; video: AlbumVideo };
 
 type PhotoSheetMode =
   | { kind: "closed" }
-  | { kind: "new" }
+  | { kind: "new"; initialFile?: File }
   | { kind: "edit"; photo: AlbumPhoto };
 
 function BonusPanel({
@@ -6249,6 +6252,15 @@ function BonusVideos({
           <div className="py-10 flex items-center justify-center">
             <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
+        ) : videos.length === 0 ? (
+          // Empty state — full-width rich dropzone with drag/drop, click-to-
+          // browse, and URL ingest. Dropping a file (or pasting a URL) opens
+          // the sheet primed with the file/URL so the user just confirms
+          // the title and clicks Add.
+          <BonusVideoDropzone
+            onPickFile={(f) => setSheet({ kind: "new", initialFile: f })}
+            onPickUrl={(u) => setSheet({ kind: "new", initialUrl: u })}
+          />
         ) : (
           <div
             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
@@ -6361,6 +6373,13 @@ function BonusPhotos({
           <div className="py-10 flex items-center justify-center">
             <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
+        ) : photos.length === 0 ? (
+          // Empty state — full-width rich dropzone (drag/drop + browse).
+          // Dropping a file opens the sheet with the upload already in
+          // flight; the user just adds an optional caption and saves.
+          <BonusPhotoDropzone
+            onPickFile={(f) => setSheet({ kind: "new", initialFile: f })}
+          />
         ) : (
           <div
             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"
@@ -6535,6 +6554,182 @@ function TileActions({
   );
 }
 
+/**
+ * Rich empty-state dropzone for the Bonus → Videos panel.
+ *
+ * Three ingest paths, all flowing into the same sheet (which already
+ * handles upload progress, URL ingest, title/poster/description):
+ *   1. Drag and drop a video file onto the zone.
+ *   2. Click anywhere on the zone to open the OS file picker.
+ *   3. Paste a video URL (Dropbox/Drive share link or direct MP4/MOV/WebM).
+ *
+ * The selected file or URL is handed to BonusVideos which opens the
+ * sheet with that value pre-primed — Bill just confirms the title and
+ * clicks Add.
+ */
+function BonusVideoDropzone({
+  onPickFile,
+  onPickUrl,
+}: {
+  onPickFile: (f: File) => void;
+  onPickUrl: (u: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [url, setUrl] = useState("");
+  return (
+    <div data-testid="bonus-video-empty">
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragActive(false);
+          if (e.dataTransfer.files?.[0]) onPickFile(e.dataTransfer.files[0]);
+        }}
+        className={[
+          "w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center px-6 py-12 transition-colors",
+          dragActive
+            ? "border-[#319ED8] bg-[#319ED8]/5"
+            : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300",
+        ].join(" ")}
+        data-testid="dropzone-bonus-video"
+      >
+        <Film
+          className={[
+            "w-9 h-9 mb-3 transition-colors",
+            dragActive ? "text-[#319ED8]" : "text-slate-400",
+          ].join(" ")}
+          strokeWidth={1.5}
+        />
+        <p className="text-slate-700 text-[13.5px] font-semibold">
+          Drop a video here, or click to browse
+        </p>
+        <p className="text-slate-500 text-[11.5px] mt-1">
+          MP4 / MOV / WebM · up to 500 MB
+        </p>
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,video/webm"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.[0]) onPickFile(e.target.files[0]);
+          e.target.value = "";
+        }}
+      />
+      {/* Or paste a URL — Dropbox, Drive, direct MP4, etc. */}
+      <div className="mt-3 flex items-center gap-2">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
+          or paste a link
+        </span>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
+      <form
+        className="mt-3 flex items-stretch gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const trimmed = url.trim();
+          if (trimmed) onPickUrl(trimmed);
+        }}
+      >
+        <div className="relative flex-1">
+          <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://www.dropbox.com/scl/… or https://…/video.mp4"
+            className="w-full h-9 pl-9 pr-3 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+            data-testid="input-bonus-video-url"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={!url.trim()}
+          className="h-9 px-4 rounded-lg bg-[#319ED8] text-white text-[13px] font-semibold hover:bg-[#2a8ac0] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+          data-testid="button-bonus-video-import"
+        >
+          Import
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Rich empty-state dropzone for the Bonus → Photos panel.
+ *
+ * Two ingest paths (no URL ingest for photos — the photo sheet is
+ * file-only today):
+ *   1. Drag and drop an image onto the zone.
+ *   2. Click anywhere on the zone to open the OS file picker.
+ */
+function BonusPhotoDropzone({
+  onPickFile,
+}: {
+  onPickFile: (f: File) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+  return (
+    <div data-testid="bonus-photo-empty">
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragActive(false);
+          if (e.dataTransfer.files?.[0]) onPickFile(e.dataTransfer.files[0]);
+        }}
+        className={[
+          "w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center px-6 py-12 transition-colors",
+          dragActive
+            ? "border-[#319ED8] bg-[#319ED8]/5"
+            : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300",
+        ].join(" ")}
+        data-testid="dropzone-bonus-photo"
+      >
+        <ImagePlus
+          className={[
+            "w-9 h-9 mb-3 transition-colors",
+            dragActive ? "text-[#319ED8]" : "text-slate-400",
+          ].join(" ")}
+          strokeWidth={1.5}
+        />
+        <p className="text-slate-700 text-[13.5px] font-semibold">
+          Drop a photo here, or click to browse
+        </p>
+        <p className="text-slate-500 text-[11.5px] mt-1">
+          JPG / PNG / WebP · up to 8 MB
+        </p>
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.[0]) onPickFile(e.target.files[0]);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
 function AddTile({
   busy,
   label,
@@ -6657,6 +6852,20 @@ function AlbumVideoSheet({
     setPickedFilePreview(URL.createObjectURL(file));
     if (!title) setTitle(file.name.replace(/\.[^.]+$/, "") || "Untitled video");
   }
+
+  // Pick up a file or URL primed by the inline empty-state dropzone, so
+  // dragging a video onto the panel flows straight into the sheet with
+  // the file already attached.
+  useEffect(() => {
+    if (mode.kind !== "new") return;
+    if (mode.initialFile) {
+      handlePickFile(mode.initialFile);
+    } else if (mode.initialUrl) {
+      setSource("url");
+      setImportUrl(mode.initialUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handlePickPoster(file: File) {
     try {
@@ -7142,6 +7351,15 @@ function AlbumPhotoSheet({
       setUploadingImage(false);
     }
   }
+
+  // Mirror the video sheet: if the empty-state dropzone primed us with
+  // a file, kick off the upload immediately on mount.
+  useEffect(() => {
+    if (mode.kind === "new" && mode.initialFile) {
+      handlePickFile(mode.initialFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const canSubmit = !!photoUrl && !uploadingImage && !busy;
 
