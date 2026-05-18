@@ -9,7 +9,9 @@ import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import type { PersonDiscography } from "@shared/schema";
 import { SiApplemusic, SiSpotify } from "react-icons/si";
-import { ChevronRight, ChevronLeft } from "lucide-react";
+import appleMusicLogo from "@/assets/brand/apple-music.svg";
+import spotifyLogo from "@/assets/brand/spotify.svg";
+import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 
 export function ArtistDetail() {

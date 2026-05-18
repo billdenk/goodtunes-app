@@ -31,5 +31,6 @@ export const modules: ModuleMap = {
   "./components/mockups/admin-videos-box/GallerySheet.tsx": () => import("../components/mockups/admin-videos-box/GallerySheet.tsx"),
   "./components/mockups/how-to-play/Glass.tsx": () => import("../components/mockups/how-to-play/Glass.tsx"),
   "./components/mockups/how-to-play/LightBrand.tsx": () => import("../components/mockups/how-to-play/LightBrand.tsx"),
-  "./components/mockups/how-to-play/ListenRows.tsx": () => import("../components/mockups/how-to-play/ListenRows.tsx")
+  "./components/mockups/how-to-play/ListenRows.tsx": () => import("../components/mockups/how-to-play/ListenRows.tsx"),
+  "./components/mockups/how-to-play/ListenRowsLight.tsx": () => import("../components/mockups/how-to-play/ListenRowsLight.tsx")
 };

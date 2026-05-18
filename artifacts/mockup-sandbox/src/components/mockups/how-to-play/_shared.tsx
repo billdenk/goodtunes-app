@@ -25,36 +25,40 @@ export function AlbumArt({ size = 176 }: { size?: number }) {
   );
 }
 
-// Dismiss control — clean chevron-down glyph, no background chip.
-// This matches how Apple dismisses full sheets on iOS (Now Playing,
-// Music app detail sheets) and reads quieter than a circle-X.
-// 44×44 hit target with a 20px glyph centered inside.
+// Apple-style circular dismiss — matches our IconButton "glass" variant:
+// white/10 scrim with backdrop blur on dark surfaces (white/14 felt muddy
+// against #0E1334; dropping to /10 + blur reads as actual glass), or a
+// soft black/8 on light surfaces. X glyph is pure white (or near-black)
+// at full opacity so it doesn't smudge into the chip.
 export function CloseX({ tone = "onDark" }: { tone?: "onDark" | "onLight" }) {
-  const stroke = tone === "onDark" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.55)";
+  const bg = tone === "onDark" ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)";
+  const stroke = tone === "onDark" ? "#ffffff" : "rgba(0,0,0,0.65)";
   return (
     <button
       type="button"
       aria-label="Close"
       style={{
-        width: 44,
-        height: 44,
-        background: "transparent",
+        width: 30,
+        height: 30,
+        borderRadius: 999,
+        background: bg,
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         border: "none",
         cursor: "pointer",
+        flexShrink: 0,
         padding: 0,
-        margin: 0,
       }}
     >
-      <svg width={20} height={20} viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <svg width={12} height={12} viewBox="0 0 12 12" aria-hidden="true">
         <path
-          d="M6 9 L12 15 L18 9"
+          d="M1.5 1.5 L10.5 10.5 M10.5 1.5 L1.5 10.5"
           stroke={stroke}
           strokeWidth={2.2}
           strokeLinecap="round"
-          strokeLinejoin="round"
         />
       </svg>
     </button>
@@ -102,9 +106,9 @@ export function SheetShell({
           overflow: "hidden",
         }}
       >
-        {/* Apple uses EITHER a grabber OR a close glyph, never both.
-            We use a chevron-down glyph, top-right, no chip. */}
-        <div style={{ position: "absolute", right: 8, top: 4 }}>
+        {/* Apple's sheet close sits noticeably inset from the corner —
+            more to the left and further down than a hugging corner chip. */}
+        <div style={{ position: "absolute", right: 22, top: 26 }}>
           <CloseX tone={closeTone} />
         </div>
         {children}
