@@ -1436,7 +1436,7 @@ function SongActionPopover({
         />
         <Divider />
         <Row
-          label="View SuperCredits™"
+          label="View Credits"
           testId="row-popover-credits"
           disabled={!hasCredits}
           onClick={close(onViewCredits)}
@@ -1690,7 +1690,7 @@ function CreditsSheet({
   return (
     <SheetShell ariaLabel={`Credits for ${song.title}`} testId="sheet-credits" onClose={onClose}>
       <SheetHeader
-        eyebrow="SuperCredits™"
+        eyebrow="Credits"
         title={song.title}
         subtitle={`${album.artist} · ${album.title}`}
         onClose={onClose}
@@ -2430,7 +2430,7 @@ function InstrumentSheet({
 
   const handleShare = async () => {
     const shareUrl = typeof window !== "undefined" ? window.location.href : "";
-    const shareText = `${instrument.name} — featured on GoodTunes SuperCredits™`;
+    const shareText = `${instrument.name} — featured on GoodTunes Credits`;
     try {
       if (typeof navigator !== "undefined" && (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share) {
         await (navigator as Navigator & { share: (data: ShareData) => Promise<void> }).share({
@@ -2702,7 +2702,7 @@ function InstrumentSheet({
           </div>
 
           <p className="px-5 pt-4 pb-3 text-[11px] text-center leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-            Outbound links support the artist via SuperCredits™ Micro-Sponsorships. Artist receives the lion's share; GoodTunes receives a small connection fee.
+            Outbound links support the artist via Credits Micro-Sponsorships. Artist receives the lion's share; GoodTunes receives a small connection fee.
           </p>
         </section>
       )}
@@ -2722,7 +2722,7 @@ function InstrumentSheet({
             ))}
           </div>
           <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-            From SuperCredits™ — artists credited with playing this gear on a track.
+            From Credits — artists credited with playing this gear on a track.
           </p>
         </section>
       )}
@@ -2807,7 +2807,7 @@ function VendorSheet({
         .filter(Boolean) as Person[]);
 
   const bio = vendor.bio
-    ?? `${vendor.name} is one of the trusted shops we link out to from SuperCredits™. Tap the globe icon to visit their full catalog, or start a chat to ask about availability, condition, and shipping.`;
+    ?? `${vendor.name} is one of the trusted shops we link out to from GoodTunes Credits. Tap the globe icon to visit their full catalog, or start a chat to ask about availability, condition, and shipping.`;
   const tagline = vendor.tagline ?? domain;
   const websiteUrl = vendor.aboutUrl ?? vendor.homeUrl ?? vendor.affiliateUrl;
 
@@ -3180,7 +3180,7 @@ function VendorSheet({
               </div>
             )}
             <p className="pt-5 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-              From SuperCredits™ — artists who've credited one of {vendor.name}'s instruments on a track. Official sponsorships will badge here once that admin field lands.
+              From Credits — artists who've credited one of {vendor.name}'s instruments on a track. Official sponsorships will badge here once that admin field lands.
             </p>
           </section>
         )}

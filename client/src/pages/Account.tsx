@@ -122,24 +122,31 @@ export function Account() {
                 {bookmarks.map((inst, i) => (
                   <div
                     key={inst.id}
-                    className={`w-full flex items-center gap-3 px-3 py-3 ${i < bookmarks.length - 1 ? "border-b" : ""}`}
+                    className={`w-full flex items-center ${i < bookmarks.length - 1 ? "border-b" : ""}`}
                     style={i < bookmarks.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
-                    data-testid={`bookmark-instrument-${inst.id}`}
                   >
-                    {inst.photoUrl ? (
-                      <img src={inst.photoUrl} alt="" className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
-                    ) : (
-                      <div className="w-11 h-11 rounded-lg flex-shrink-0" style={{ background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)" }} />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-[14px] font-medium truncate">{inst.name}</p>
-                      <p className="text-white/50 text-[12px] truncate">{inst.category}</p>
-                    </div>
                     <button
                       type="button"
-                      onClick={() => removeBookmark(inst.id)}
+                      onClick={() => navigate(`/instrument/${inst.id}`)}
+                      className="flex-1 min-w-0 flex items-center gap-3 px-3 py-3 text-left active:bg-white/[0.04]"
+                      data-testid={`bookmark-instrument-${inst.id}`}
+                      aria-label={`Open ${inst.name}`}
+                    >
+                      {inst.photoUrl ? (
+                        <img src={inst.photoUrl} alt="" className="w-11 h-11 rounded-lg object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-11 h-11 rounded-lg flex-shrink-0" style={{ background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)" }} />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-[14px] font-medium truncate">{inst.name}</p>
+                        <p className="text-white/50 text-[12px] truncate">{inst.category}</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeBookmark(inst.id); }}
                       aria-label={`Remove bookmark for ${inst.name}`}
-                      className="flex-shrink-0 p-2 -mr-1 active:opacity-70"
+                      className="flex-shrink-0 p-2 mr-2 active:opacity-70"
                       data-testid={`button-remove-bookmark-${inst.id}`}
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="#4AFFCA" stroke="#4AFFCA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

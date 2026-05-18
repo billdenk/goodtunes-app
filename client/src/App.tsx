@@ -10,6 +10,7 @@ import { Player } from "@/pages/Player";
 import { Login } from "@/pages/Login";
 import { Collection } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
+import { InstrumentDetail } from "@/pages/InstrumentDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
 import { EditAccount } from "@/pages/EditAccount";
@@ -79,6 +80,9 @@ function Router() {
         </Route>
         <Route path="/album/:id">
           <ProtectedRoute component={AlbumDetail} />
+        </Route>
+        <Route path="/instrument/:id">
+          <ProtectedRoute component={InstrumentDetail} />
         </Route>
         <Route path="/artist/:slug">
           <ProtectedRoute component={ArtistDetail} />
