@@ -292,41 +292,49 @@ export function PlayerDock({
   // play/pause (the one control that might still matter while minimized),
   // and chevron-up to restore. Title omitted — a tooltip on the cover or
   // a dedicated Now Playing sheet can answer that without bloating the pill.
-  if (dockHidden && hasSelection) {
+  if (dockHidden) {
+    // Idle (no selection): a minimal chevron-up pill so Bill can tuck
+    // the empty dock away while editing and bring it back the moment he
+    // wants to audition a track. Playing state keeps the cover +
+    // play/pause + restore chevron.
     return (
       <div className="fixed right-4 bottom-8 z-40" data-testid="player-dock-mini">
         <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-3 pr-2 py-2">
-          <div
-            className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
-            aria-label={`${track.title} — now playing`}
-            title={track.subtitle ? `${track.title} — ${track.subtitle}` : track.title}
-            style={
-              coverNode
-                ? undefined
-                : { background: "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)" }
-            }
-          >
-            {coverNode}
-          </div>
-          <button
-            type="button"
-            onClick={onTogglePlay}
-            disabled={!playable}
-            aria-label={playing ? "Pause" : "Play"}
-            data-testid="button-play-mini"
-            className={[
-              "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
-              playable
-                ? "text-white hover:bg-white/10"
-                : "text-slate-500 cursor-not-allowed",
-            ].join(" ")}
-          >
-            {playing ? (
-              <Pause className="w-[18px] h-[18px] fill-current" />
-            ) : (
-              <Play className="w-[18px] h-[18px] ml-0.5 fill-current" />
-            )}
-          </button>
+          {hasSelection && (
+            <>
+              <div
+                className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
+                aria-label={`${track.title} — now playing`}
+                title={track.subtitle ? `${track.title} — ${track.subtitle}` : track.title}
+                style={
+                  coverNode
+                    ? undefined
+                    : { background: "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)" }
+                }
+              >
+                {coverNode}
+              </div>
+              <button
+                type="button"
+                onClick={onTogglePlay}
+                disabled={!playable}
+                aria-label={playing ? "Pause" : "Play"}
+                data-testid="button-play-mini"
+                className={[
+                  "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                  playable
+                    ? "text-white hover:bg-white/10"
+                    : "text-slate-500 cursor-not-allowed",
+                ].join(" ")}
+              >
+                {playing ? (
+                  <Pause className="w-[18px] h-[18px] fill-current" />
+                ) : (
+                  <Play className="w-[18px] h-[18px] ml-0.5 fill-current" />
+                )}
+              </button>
+            </>
+          )}
           <button
             type="button"
             aria-label="Show player"
@@ -588,22 +596,20 @@ export function PlayerDock({
             )}
 
             {/* Minimize — collapses to the corner pill. ChevronDown
-                points toward where the mini-pill will land. Only
-                actionable when there's a selection; otherwise hidden
-                so the idle dock doesn't trap the user with a button
-                that minimizes nothing. */}
-            {hasSelection && (
-              <button
-                type="button"
-                aria-label="Minimize player"
-                title="Minimize player"
-                onClick={() => setDockHidden(true)}
-                data-testid="button-minimize-player"
-                className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-              >
-                <ChevronDown className="w-5 h-5" />
-              </button>
-            )}
+                points toward where the mini-pill will land. Available
+                in both idle AND playing states so a host like the
+                admin Tracks tab can tuck the dock away while editing
+                without first having to pick a track. */}
+            <button
+              type="button"
+              aria-label="Minimize player"
+              title="Minimize player"
+              onClick={() => setDockHidden(true)}
+              data-testid="button-minimize-player"
+              className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+            >
+              <ChevronDown className="w-5 h-5" />
+            </button>
           </div>
         </div>
 

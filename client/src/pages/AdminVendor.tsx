@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -133,7 +134,12 @@ export function AdminVendor() {
   const { vendor, instruments } = profile;
 
   return (
-    <AdminFrame active="vendors">
+    <AdminFrame
+      active="vendors"
+      preview={
+        <VendorPreviewCard vendor={vendor} instruments={instruments} />
+      }
+    >
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">

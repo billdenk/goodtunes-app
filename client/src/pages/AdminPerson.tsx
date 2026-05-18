@@ -15,6 +15,10 @@ import {
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import {
+  PersonPreviewCard,
+  type PersonPreviewAlbum,
+} from "@/components/admin/previews/PersonPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -82,6 +86,13 @@ export function AdminPerson() {
     queryKey: ["/api/labels"],
     enabled: !!user?.isAdmin,
   });
+  // Albums feed for the right-pane preview card. Cheap and already
+  // cached by the admin sidebar's count query — TanStack dedupes the
+  // request so this is effectively free.
+  const { data: allAlbums = [] } = useQuery<PersonPreviewAlbum[]>({
+    queryKey: ["/api/albums"],
+    enabled: !!user?.isAdmin,
+  });
 
   const labelName =
     person?.labelId
@@ -127,7 +138,16 @@ export function AdminPerson() {
   }
 
   return (
-    <AdminFrame active="people">
+    <AdminFrame
+      active="people"
+      preview={
+        <PersonPreviewCard
+          person={person}
+          albums={allAlbums}
+          labelName={labelName}
+        />
+      }
+    >
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">

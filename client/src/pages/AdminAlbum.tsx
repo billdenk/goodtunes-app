@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/popover";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
@@ -207,7 +208,7 @@ export function AdminAlbum() {
       : { label: "Live", tone: "mint" as const };
 
   return (
-    <AdminFrame active="albums">
+    <AdminFrame active="albums" preview={<AlbumPreviewCard album={album} />}>
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">

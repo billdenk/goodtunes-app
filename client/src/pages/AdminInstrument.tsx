@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -145,7 +146,10 @@ export function AdminInstrument() {
   const vendorCount = instrument.vendors?.length ?? 0;
 
   return (
-    <AdminFrame active="gear">
+    <AdminFrame
+      active="gear"
+      preview={<InstrumentPreviewCard instrument={instrument} />}
+    >
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
