@@ -209,6 +209,13 @@ export function Player() {
     const startY = e.touches[0].clientY;
     const onMove = (ev: TouchEvent) => {
       const dy = ev.touches[0].clientY - startY;
+      // CRITICAL: preventDefault on any downward drag blocks iOS Safari's
+      // pull-to-refresh from stealing the gesture and reloading the page
+      // (which kills audio). Must be a non-passive listener — see the
+      // { passive: false } below — otherwise preventDefault is a no-op.
+      if (dy > 0) {
+        ev.preventDefault();
+      }
       if (dy > 80) {
         setShowPlayer(false);
         cleanup();
@@ -218,7 +225,7 @@ export function Player() {
       window.removeEventListener("touchmove", onMove);
       window.removeEventListener("touchend", cleanup);
     };
-    window.addEventListener("touchmove", onMove);
+    window.addEventListener("touchmove", onMove, { passive: false });
     window.addEventListener("touchend", cleanup);
   };
 
