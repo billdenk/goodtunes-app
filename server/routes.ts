@@ -3319,6 +3319,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Keep only real word events (drop spacing/audio_event entries) and
     // require usable timestamps. Scribe occasionally returns words without
     // an end time on the very last token — synthesize one from start.
+    //
+    // Hardening against Whisper-style failure modes (Scribe shares the
+    // same family):
+    //  1) Special tokens like `<|startoftranscript|>`, `<|startofprev|>`,
+    //     `<|notimestamps|>`, `<|nospeech|>` sometimes leak into the
+    //     word text instead of being consumed by the decoder. Strip
+    //     them, and drop any word that's purely a special token.
+    //  2) On silent / instrumental / vocal-effected stretches the model
+    //     hallucinates well-known training-set text (the infamous
+    //     "subscribe to our newsletter / meal plan / weight-loss"
+    //     YouTube boilerplate). We can't perfectly detect that here,
+    //     but if the admin typed Plain lyrics, the post-pass below
+    //     drops cues with near-zero overlap as hallucinations.
+    const SPECIAL_TOKEN_RE = /<\|[^|>]*\|>/g;
     const rawWords = Array.isArray(stt?.words) ? stt.words : [];
     const words = rawWords
       .filter(
@@ -3330,10 +3344,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           typeof w.start === "number",
       )
       .map((w) => ({
-        text: w.text!.trim(),
+        text: w.text!.replace(SPECIAL_TOKEN_RE, "").trim(),
         start: w.start as number,
         end: typeof w.end === "number" ? w.end : (w.start as number) + 0.2,
-      }));
+      }))
+      .filter((w) => w.text.length > 0);
     if (words.length === 0) {
       return res.status(502).json({ message: "Transcription returned no words" });
     }
@@ -3395,23 +3410,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const refined = hasPlain
       ? refineCuesAgainstPlain(out, song.lyrics!)
       : out;
+
+    // Hallucination filter — drop cues that don't belong to the song.
+    // Only runs when the admin has typed Plain lyrics (we need that as
+    // ground truth). Builds a set of normalized word stems from Plain,
+    // then for each cue measures the fraction of its content words that
+    // appear anywhere in Plain. A cue with <25% overlap is almost
+    // certainly Whisper-style hallucinated boilerplate ("subscribe to
+    // our email list", "Jessica Stover", "meal plans") and gets cut.
+    // Tiny cues (<3 content words) are left alone — too easy to misjudge.
+    const filtered = (() => {
+      if (!hasPlain) return refined;
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const STOP = new Set([
+        "a","an","the","and","or","but","of","to","in","on","at","for","with",
+        "is","are","was","were","be","been","being","i","you","he","she","it",
+        "we","they","me","him","her","us","them","my","your","his","its","our",
+        "their","this","that","these","those","so","if","as","by","from","up",
+        "out","do","does","did","not","no","yes","oh","ah","yeah","just","got",
+      ]);
+      const plainSet = new Set<string>();
+      for (const t of song.lyrics!.split(/\s+/)) {
+        const n = norm(t);
+        if (n.length >= 2) plainSet.add(n);
+      }
+      if (plainSet.size === 0) return refined;
+      return refined.filter((cue) => {
+        const tokens = cue.text.split(/\s+/).map(norm).filter((t) => t.length >= 2);
+        const content = tokens.filter((t) => !STOP.has(t));
+        if (content.length < 3) return true; // too short to judge
+        let hit = 0;
+        for (const w of content) if (plainSet.has(w)) hit++;
+        const overlap = hit / content.length;
+        return overlap >= 0.25;
+      });
+    })();
+
     const plainDraft = hasPlain
       ? undefined
-      : out.map((c) => c.text).join("\n");
+      : refined.map((c) => c.text).join("\n");
 
     const updated = await storage.updateSong(id, {
-      syncedLyrics: refined,
+      syncedLyrics: filtered,
       ...(plainDraft !== undefined ? { lyrics: plainDraft } : {}),
     });
+    const droppedCount = refined.length - filtered.length;
     runSummary = {
-      lineCount: out.length,
+      lineCount: filtered.length,
       wordCount: words.length,
       backfilledPlainLyrics: plainDraft !== undefined,
+      hallucinatedCuesDropped: droppedCount,
     };
     return res.json({
       song: updated,
-      lineCount: out.length,
+      lineCount: filtered.length,
       wordCount: words.length,
+      hallucinatedCuesDropped: droppedCount,
       transcript: stt.text ?? "",
     });
   });
