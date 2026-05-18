@@ -64,12 +64,12 @@ const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
 // fully trusted with (arbitrary white opacities). Applied via React
 // state in the component below.
 const REST_BG: Partial<Record<IconButtonVariant, string>> = {
-  glass: "rgba(255,255,255,0.22)",
+  glass: "rgba(255,255,255,0.17)",
   ghost: "transparent",
 };
 const HOVER_BG: Partial<Record<IconButtonVariant, string>> = {
-  glass: "rgba(255,255,255,0.30)",
-  ghost: "rgba(255,255,255,0.22)",
+  glass: "rgba(255,255,255,0.26)",
+  ghost: "rgba(255,255,255,0.17)",
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
