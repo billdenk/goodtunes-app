@@ -203,6 +203,133 @@ function PersonColumn({
   );
 }
 
+/* ─── Inline "Add gear from a URL" mini-form ─────────────────────── */
+
+/**
+ * Tiny URL-ingest row that mirrors the Gear admin's product-URL scraper
+ * (Carter Vintage, Reverb, Sweetwater, Martin, Gibson…). Lets the admin
+ * create a brand new instrument without leaving the credits picker.
+ *
+ * Flow: POST /api/admin/instruments/scrape (reads OG + JSON-LD, rehosts
+ * hero image) → POST /api/admin/instruments (creates the row with the
+ * prefilled fields) → invalidate /api/instruments → auto-select the new
+ * id back in the parent.
+ */
+function AddInstrumentFromUrl({
+  onCreated,
+}: {
+  onCreated: (id: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function go() {
+    const u = url.trim();
+    if (!u) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const scrapeRes = await apiRequest(
+        "POST",
+        "/api/admin/instruments/scrape",
+        { url: u },
+      );
+      const data = await scrapeRes.json();
+      const name = (data?.name || "").toString().trim();
+      if (!name) {
+        throw new Error(
+          "Couldn't read a product name from that page. Try a different URL.",
+        );
+      }
+      // Server requires `category` — fall back to a generic when the
+      // page didn't expose one. Admin can refine it later in the Gear
+      // editor; the credit row itself only stores instrumentId.
+      const category =
+        (data?.category && String(data.category).trim()) || "Instrument";
+      const createRes = await apiRequest("POST", "/api/admin/instruments", {
+        name,
+        category,
+        photoUrl: data?.photoUrl || null,
+        about: data?.description || null,
+      });
+      const created = (await createRes.json()) as { id: string; name: string };
+      await queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
+      onCreated(created.id);
+      setUrl("");
+      toast({
+        title: "Added to gear",
+        description: `${created.name} — selected on this credit.`,
+      });
+    } catch (e: any) {
+      // apiRequest throws "<status>: <body>" — pull a clean `message`
+      // out of the JSON body when present so the admin doesn't see raw
+      // JSON ("400: {\"message\":\"…\"}") in the error row.
+      const raw = e?.message || "";
+      let msg = raw || "Couldn't read that page.";
+      const m = raw.match(/^\d+:\s*(.+)$/s);
+      if (m) {
+        try {
+          const parsed = JSON.parse(m[1]);
+          if (parsed?.message) msg = String(parsed.message);
+        } catch {
+          msg = m[1];
+        }
+      }
+      setErr(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-dashed border-slate-200 bg-[#f7fbff] px-2 py-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-slate-500 flex-shrink-0">
+          Add from URL
+        </span>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              go();
+            }
+          }}
+          placeholder="Paste a product URL…"
+          className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+          disabled={busy}
+          aria-label="Product URL to scrape into gear"
+          data-testid="input-add-gear-url"
+        />
+        <button
+          type="button"
+          onClick={go}
+          disabled={busy || !url.trim()}
+          className="rounded-md bg-[#319ED8] px-2 py-1 text-[12px] font-semibold text-white shadow-sm hover:bg-[#2789bd] disabled:opacity-40 inline-flex items-center gap-1"
+          data-testid="button-add-gear-url"
+        >
+          <Plus className="h-3 w-3" strokeWidth={2.5} />
+          {busy ? "Reading…" : "Add"}
+        </button>
+      </div>
+      {err && (
+        <p
+          className="mt-1 text-[11px] text-red-600"
+          role="alert"
+          aria-live="polite"
+          data-testid="text-add-gear-error"
+        >
+          {err}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ─── Searchable Add picker (person + role) ──────────────────────── */
 
 function AddPicker({
@@ -448,9 +575,16 @@ function AddPicker({
               data-testid="input-credit-tuning"
             />
           </div>
+          {/* Inline "Add gear from a URL" — same flow the Gear admin uses
+              (POST /api/admin/instruments/scrape → POST /api/admin/instruments)
+              so the admin can stay in the credits picker instead of
+              context-switching to /admin/instruments to create a row and
+              come back. The newly created row is auto-selected. */}
+          <AddInstrumentFromUrl onCreated={(id) => setInstrumentId(id)} />
           <p className="text-[10.5px] text-slate-400 leading-tight">
-            Both optional. Don't see the gear? Add it from the
-            Gear admin first, then pick it here.
+            Both optional. Don't see the gear? Paste a product URL above
+            (Carter Vintage, Reverb, Sweetwater, Martin, Gibson…) and
+            we'll add it for you.
           </p>
         </div>
       )}
