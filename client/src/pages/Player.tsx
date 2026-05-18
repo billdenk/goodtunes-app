@@ -53,28 +53,47 @@ function buildSyncedLines(
     }));
   }
   const raw = lyrics.split("\n");
-  const timeable: number[] = [];
-  raw.forEach((line, i) => {
+  // Classify each line and assign it a "weight" representing roughly how
+  // long it occupies in the song:
+  //   • sung line  → weight 1
+  //   • blank line → weight 0.6 (represents a brief musical gap between
+  //                  stanzas; gives the verse below it a realistic delay
+  //                  instead of being mashed up against the previous one)
+  //   • header     → weight 0 (rendered dimmed, not timed)
+  // Previously blank lines were stripped entirely, so all the time that
+  // should have fallen on stanza gaps got re-spread back onto the sung
+  // lines — making every verse creep ahead of where it actually lands.
+  type Slot = { idx: number; weight: number; timeable: boolean };
+  const slots: Slot[] = raw.map((line, idx) => {
     const t = line.trim();
-    if (!t) return;
-    if (/^\[.*\]$/.test(t)) return;
-    timeable.push(i);
+    if (!t) return { idx, weight: 0.6, timeable: false };
+    if (/^\[.*\]$/.test(t)) return { idx, weight: 0, timeable: false };
+    return { idx, weight: 1, timeable: true };
   });
-  // Small fixed lead-in / outro so the first line doesn't fire at t=0 and
-  // the last line doesn't fire right at the end. Previously these scaled
-  // with duration (6% / 4%), which on a 3:30 song delayed the first line
-  // by ~13s — way past where vocals actually start. With no VTT we can't
-  // know the true intro length, so keep the lead tight (~1.5s) and trust
-  // that a real .vtt upload will override this entirely.
-  const lead = 1.5;
-  const tail = 2;
+  // Lead-in scales with song length so longer songs (which usually have
+  // longer instrumental intros) don't fire line 1 at 1.5s while the singer
+  // is still 15s away. ~4% of duration, clamped to [1.5s, 8s]. Tail stays
+  // tight so the last line still lands before the fade-out. A real .vtt
+  // upload overrides all of this — this is only the no-timing fallback.
+  const lead = Math.max(1.5, Math.min(8, duration * 0.04));
+  const tail = Math.max(2, duration * 0.02);
   const usable = Math.max(1, duration - lead - tail);
-  const denom = Math.max(1, timeable.length - 1);
+  const totalWeight = slots.reduce((s, sl) => s + sl.weight, 0) || 1;
+  // Walk slots cumulatively; each sung line's timestamp is the cumulative
+  // weight *up to and including* the previous slot, scaled into usable.
+  // That way the line lands at the START of its own slot, not the middle,
+  // and the blank-line weight pushes the next verse later. Float seconds
+  // (no Math.round) — adjacent lines no longer collide on the same second
+  // and the active-line transition feels continuous.
   const timeMap: Record<number, number> = {};
-  timeable.forEach((idx, k) => {
-    const t = lead + Math.round((k / denom) * usable);
-    timeMap[idx] = Math.min(Math.max(0, duration - 1), t);
-  });
+  let cumulative = 0;
+  for (const slot of slots) {
+    if (slot.timeable) {
+      const t = lead + (cumulative / totalWeight) * usable;
+      timeMap[slot.idx] = Math.min(Math.max(0, duration - 0.5), t);
+    }
+    cumulative += slot.weight;
+  }
   return raw.map((line, i) => ({
     text: line,
     isHeader: /^\s*\[.*\]\s*$/.test(line),
