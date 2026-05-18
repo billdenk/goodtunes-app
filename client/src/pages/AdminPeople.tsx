@@ -441,10 +441,16 @@ function MatchSpotifySheet({
         className="max-w-2xl bg-white text-slate-900 rounded-xl border-slate-200 shadow-xl p-6 gap-4"
         data-testid="dialog-match-spotify"
       >
-        <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-[17px] font-semibold text-slate-900">
-            Match people on Spotify
-          </DialogTitle>
+        <DialogHeader className="text-left space-y-1 pr-8">
+          {/* Spotify glyph sits inline with the title — same vertical
+              rhythm as the X close button (top-4 right-4) so the header
+              reads as a balanced row across the top of the dialog. */}
+          <div className="flex items-center gap-2">
+            <SiSpotify className="w-5 h-5 text-[#1DB954] shrink-0" />
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Match people on Spotify
+            </DialogTitle>
+          </div>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
             Everyone in the catalog without a Spotify link, one at a time. Pick the right artist or skip — we'll save the URL and photo when you pick.
           </DialogDescription>
@@ -462,17 +468,14 @@ function MatchSpotifySheet({
           </div>
         ) : !current ? null : (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
-                  {idx + 1} of {queue.length}
-                  {resolved > 0 && <span className="text-slate-400"> · {resolved} linked</span>}
-                </div>
-                <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-match-person-name">
-                  {current.name}
-                </div>
+            <div>
+              <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
+                {idx + 1} of {queue.length}
+                {resolved > 0 && <span className="text-slate-400"> · {resolved} linked</span>}
               </div>
-              <SiSpotify className="w-6 h-6 text-[#1DB954]" />
+              <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-match-person-name">
+                {current.name}
+              </div>
             </div>
 
             {candidatesQ.isFetching ? (
