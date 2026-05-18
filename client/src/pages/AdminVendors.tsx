@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, X, Store } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
   useViewMode,
@@ -99,20 +100,11 @@ export function AdminVendors() {
 
   return (
     <AdminFrame active="vendors">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1
-            className="text-slate-900 text-2xl font-bold tracking-tight"
-            data-testid="text-page-title"
-          >
-            Vendors
-          </h1>
-          <p className="text-slate-500 text-[13px] mt-0.5">
-            One row per real-world shop. Edit here once and it
-            propagates everywhere that vendor is attached.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="space-y-5">
+      <AdminPageHeader
+        title="Vendors"
+        subtitle="One row per real-world shop. Edit here once and it propagates everywhere that vendor is attached."
+        actions={(<>
           {searchOpen ? (
             <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
               <Search className="w-4 h-4 text-slate-400" />
@@ -162,8 +154,8 @@ export function AdminVendors() {
             <Plus className="w-4 h-4" />
             New vendor
           </button>
-        </div>
-      </div>
+        </>)}
+      />
 
       {isLoading ? (
         <div className="py-20 flex items-center justify-center">
@@ -198,6 +190,7 @@ export function AdminVendors() {
           ))}
         </div>
       )}
+      </div>
     </AdminFrame>
   );
 }

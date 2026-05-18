@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
   useViewMode,
@@ -198,20 +199,15 @@ export function AdminAlbums() {
   return (
     <AdminFrame active="albums">
       <div className="space-y-5">
-        {/* HEADER */}
-        <div className="flex items-end justify-between gap-3 pb-1">
-          <div className="min-w-0">
-            <h1
-              className="text-slate-900 text-[26px] font-bold tracking-tight"
-              data-testid="heading-admin-albums"
-            >
-              Albums
-            </h1>
-            <p className="text-slate-500 text-[12.5px]">
-              Manage everything that shows up in the GoodTunes® player.
-            </p>
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Header + tabs — driven by the shared AdminPageHeader primitive
+            so title size / subtitle / spacing match every other admin
+            index page. Tabs row is passed as `belowHeader` so its own
+            `border-b` provides the hairline (no double border). */}
+        <AdminPageHeader
+          title="Albums"
+          subtitle="Manage everything that shows up in the GoodTunes® player."
+          testId="heading-admin-albums"
+          actions={(<>
             {searchOpen ? (
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
                 <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
@@ -267,33 +263,32 @@ export function AdminAlbums() {
             >
               <Plus className="w-4 h-4" />
             </IconBtn>
-          </div>
-        </div>
-
-        {/* TABS — 4-state release lifecycle. Prepping/Staged are intentionally
-            count=0 or count=imports today; full schema in roadmap. */}
-        <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto">
-          <TabBtn active={tab === "prepping"} onClick={() => setTab("prepping")} count={counts.prepping} testId="tab-prepping">
-            Prepping
-          </TabBtn>
-          <TabBtn active={tab === "staged"} onClick={() => setTab("staged")} count={counts.staged} testId="tab-staged">
-            Staged
-          </TabBtn>
-          <TabBtn active={tab === "live"} onClick={() => setTab("live")} count={counts.live} testId="tab-live">
-            Live
-          </TabBtn>
-          <TabBtn active={tab === "sunset"} onClick={() => setTab("sunset")} count={counts.sunset} testId="tab-sunset">
-            Sunset
-          </TabBtn>
-          {/* Streaming sits past a hairline divider — it's the only bucket
-              that's NOT part of the GT release lifecycle, just imported
-              catalog living in the player. Keeps Prepping/Staged/Live/Sunset
-              reading left-to-right as a real funnel. */}
-          <span className="h-5 w-px bg-slate-200 flex-shrink-0" aria-hidden="true" />
-          <TabBtn active={tab === "streaming"} onClick={() => setTab("streaming")} count={counts.streaming} testId="tab-streaming">
-            Streaming
-          </TabBtn>
-        </div>
+          </>)}
+          belowHeader={(
+            <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
+              <TabBtn active={tab === "prepping"} onClick={() => setTab("prepping")} count={counts.prepping} testId="tab-prepping">
+                Prepping
+              </TabBtn>
+              <TabBtn active={tab === "staged"} onClick={() => setTab("staged")} count={counts.staged} testId="tab-staged">
+                Staged
+              </TabBtn>
+              <TabBtn active={tab === "live"} onClick={() => setTab("live")} count={counts.live} testId="tab-live">
+                Live
+              </TabBtn>
+              <TabBtn active={tab === "sunset"} onClick={() => setTab("sunset")} count={counts.sunset} testId="tab-sunset">
+                Sunset
+              </TabBtn>
+              {/* Streaming sits past a hairline divider — it's the only bucket
+                  that's NOT part of the GT release lifecycle, just imported
+                  catalog living in the player. Keeps Prepping/Staged/Live/Sunset
+                  reading left-to-right as a real funnel. */}
+              <span className="h-5 w-px bg-slate-200 flex-shrink-0" aria-hidden="true" />
+              <TabBtn active={tab === "streaming"} onClick={() => setTab("streaming")} count={counts.streaming} testId="tab-streaming">
+                Streaming
+              </TabBtn>
+            </div>
+          )}
+        />
 
         {/* GRID */}
         {isLoading ? (

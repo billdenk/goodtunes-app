@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
   useViewMode,
@@ -152,21 +153,14 @@ export function AdminPeople() {
 
   return (
     <AdminFrame active="people">
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1
-            className="text-slate-900 text-2xl font-bold tracking-tight"
-            data-testid="text-page-title"
-          >
-            People
-          </h1>
-          <p className="text-slate-500 text-[13px] mt-0.5">
-            Artists, performers, writers, and producers — the SuperCredits™
-            catalog.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      {/* Header — uses the shared AdminPageHeader primitive so title /
+          subtitle / hairline match Albums and the rest of the admin
+          family. Action cluster stays per-page. */}
+      <div className="space-y-5">
+      <AdminPageHeader
+        title="People"
+        subtitle="Artists, performers, writers, and producers — the SuperCredits™ catalog."
+        actions={(<>
           {searchOpen ? (
             <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
               <Search className="w-4 h-4 text-slate-400" />
@@ -255,8 +249,8 @@ export function AdminPeople() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
+        </>)}
+      />
 
       {/* Grid */}
       {isLoading ? (
@@ -311,6 +305,7 @@ export function AdminPeople() {
         onOpenChange={setMatchSpotifyOpen}
         people={people}
       />
+      </div>
     </AdminFrame>
   );
 }

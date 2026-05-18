@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Plus, Search, X, Guitar, Store } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
   useViewMode,
@@ -117,21 +118,11 @@ export function AdminInstruments() {
 
   return (
     <AdminFrame active="gear">
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1
-            className="text-slate-900 text-2xl font-bold tracking-tight"
-            data-testid="text-page-title"
-          >
-            Gear
-          </h1>
-          <p className="text-slate-500 text-[13px] mt-0.5">
-            Gear + per-gear vendor links — the SuperCredits™
-            Micro-Sponsorship surface.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="space-y-5">
+      <AdminPageHeader
+        title="Gear"
+        subtitle="Gear + per-gear vendor links — the SuperCredits™ Micro-Sponsorship surface."
+        actions={(<>
           {searchOpen ? (
             <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
               <Search className="w-4 h-4 text-slate-400" />
@@ -185,8 +176,8 @@ export function AdminInstruments() {
             <Plus className="w-3 h-3" />
             Add Gear
           </button>
-        </div>
-      </div>
+        </>)}
+      />
 
       {/* Grid */}
       {isLoading ? (
@@ -222,6 +213,7 @@ export function AdminInstruments() {
           ))}
         </div>
       )}
+      </div>
     </AdminFrame>
   );
 }
