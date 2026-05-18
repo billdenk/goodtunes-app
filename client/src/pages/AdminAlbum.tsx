@@ -159,6 +159,12 @@ export function AdminAlbum() {
   const [, params] = useRoute<{ id: string }>("/admin/albums/:id");
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
+  // Artwork editor lives as a modal hanging off the page header thumbnail,
+  // not as a dedicated panel on Overview. Operators rarely change cover
+  // art — making it a hover-pencil → modal kills a whole inline card of
+  // mostly-empty whitespace and removes the centered-then-flush-left
+  // layout jump we had when toggling Edit on the old ArtworkPanel.
+  const [artworkEditorOpen, setArtworkEditorOpen] = useState(false);
   const albumId = params?.id ?? "";
 
   useEffect(() => {
@@ -253,11 +259,44 @@ export function AdminAlbum() {
 
         {/* HEADER */}
         <div className="flex items-start gap-5">
-          <img
-            src={album.artwork}
-            alt=""
-            className="w-24 h-24 rounded-xl object-cover bg-slate-100 flex-shrink-0 border border-slate-200 shadow-sm"
-            data-testid="img-album-cover"
+          {/* Cover thumbnail doubles as the artwork editor trigger. The
+              pencil chip reveals on hover (always on for keyboard focus
+              + touch via focus-visible). Clicking opens the full editor
+              modal — the same drop zone + paste-URL + remove flow we
+              used to render inline as a dedicated panel. */}
+          <button
+            type="button"
+            onClick={() => setArtworkEditorOpen(true)}
+            className="group relative w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8] focus-visible:ring-offset-2"
+            aria-label="Edit album artwork"
+            data-testid="button-edit-album-cover"
+          >
+            {album.artwork ? (
+              <img
+                src={album.artwork}
+                alt=""
+                className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
+                data-testid="img-album-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-slate-400">
+                <ImagePlus className="w-7 h-7" strokeWidth={1.5} />
+              </div>
+            )}
+            {/* Dim scrim + pencil chip on hover. Pencil sits centered so
+                it reads against any cover (bright or dark) thanks to the
+                semi-opaque scrim behind it. */}
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors" />
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              <span className="w-8 h-8 rounded-full bg-white/95 text-slate-900 inline-flex items-center justify-center shadow-md">
+                <Pencil className="w-3.5 h-3.5" />
+              </span>
+            </span>
+          </button>
+          <ArtworkPanel
+            album={album}
+            open={artworkEditorOpen}
+            onOpenChange={setArtworkEditorOpen}
           />
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider flex items-center gap-2 flex-wrap">
@@ -391,7 +430,10 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           },
         ]}
       />
-      <ArtworkPanel album={album} />
+      {/* Artwork editor is no longer a dedicated panel here — it lives
+          as a modal hanging off the page-header cover thumbnail (hover
+          → pencil). Killed the inline card so Overview is just the
+          text-editing surfaces (Release + Metadata + Description). */}
       <EditablePanel
         title="Metadata"
         testId="panel-overview-metadata"
@@ -7073,23 +7115,33 @@ async function uploadImageFile(file: File): Promise<string> {
  *   "Remove cover" is destructive and confirms (per the destructive-
  *   action rule in replit.md). Only rendered when a cover exists.
  */
-function ArtworkPanel({ album }: { album: AlbumFull }) {
+function ArtworkPanel({
+  album,
+  open,
+  onOpenChange,
+}: {
+  album: AlbumFull;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const editButtonRef = useRef<HTMLButtonElement>(null);
-  const [editing, setEditing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [urlInput, setUrlInput] = useState("");
 
+  // Used to be a self-contained inline panel with a read view + edit
+  // view. Now it's purely the editor — the page header thumbnail owns
+  // the trigger affordance, and this component renders inside a Dialog
+  // when `open` is true. Reset local state every time the modal closes
+  // so the next open starts clean.
   const exitEdit = () => {
-    setEditing(false);
+    onOpenChange(false);
     setPreviewUrl(null);
     setConfirmRemove(false);
     setUrlInput("");
-    queueMicrotask(() => editButtonRef.current?.focus());
   };
 
   const uploadMut = useMutation({
@@ -7201,73 +7253,28 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
   const shownUrl = previewUrl || album.artwork;
   const hasCover = !!album.artwork;
 
-  /* ─── Read view ──────────────────────────────────────────────── */
-  if (!editing) {
-    return (
-      <section
-        className="group rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-4"
-        data-testid="panel-artwork"
-        data-mode="read"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-slate-900 text-[14px] font-bold">Artwork</h2>
-          <button
-            ref={editButtonRef}
-            type="button"
-            onClick={() => setEditing(true)}
-            aria-label="Edit artwork"
-            title="Edit artwork"
-            data-testid="button-edit-artwork"
-            className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        {/* Cover centered, ~half panel width so it doesn't dominate the
-            Overview column the way the old dual-pane layout did. */}
-        <div className="flex justify-center">
-          <div
-            className="relative aspect-square w-full max-w-[280px] rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200"
-            data-testid="img-artwork"
-          >
-            {album.artwork ? (
-              <img
-                src={album.artwork}
-                alt={album.title}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
-                data-testid="button-add-artwork"
-              >
-                <ImagePlus className="w-9 h-9" strokeWidth={1.5} />
-                <span className="text-[12.5px] font-semibold">
-                  Add cover art
-                </span>
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  /* ─── Edit view ──────────────────────────────────────────────── */
+  /* ─── Editor modal ───────────────────────────────────────────── */
   return (
-    <section
-      className="rounded-2xl bg-white border border-[#319ED8]/40 shadow-sm p-6 space-y-5"
-      data-testid="panel-artwork"
-      data-mode="edit"
-    >
-      <div className="flex items-center justify-between">
-        <h2 className="text-slate-900 text-[14px] font-bold">Artwork</h2>
-        <span className="text-[11px] text-[#319ED8] font-semibold uppercase tracking-wider">
+    <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : exitEdit())}>
+      <DialogContent
+        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        data-testid="panel-artwork"
+        data-mode="edit"
+      >
+      <DialogHeader className="flex-row items-center justify-between space-y-0">
+        <DialogTitle className="text-slate-900 text-[14px] font-bold">
+          Artwork
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Replace, paste, or remove the cover art for {album.title}.
+        </DialogDescription>
+        <span
+          aria-hidden
+          className="text-[11px] text-[#319ED8] font-semibold uppercase tracking-wider"
+        >
           Editing
         </span>
-      </div>
+      </DialogHeader>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Current cover — kept visible during edit so the artist sees
             what they're replacing. Shows the in-flight preview the
@@ -7485,7 +7492,8 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
           </button>
         </div>
       </div>
-    </section>
+      </DialogContent>
+    </Dialog>
   );
 }
 
