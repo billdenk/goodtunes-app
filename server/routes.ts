@@ -2417,12 +2417,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
     const id = String(req.params.id);
+    const startedAt = new Date();
+    // Logging context written to by the handler as it walks through
+    // the route; flushed exactly once on response finish below. Saves
+    // having to wrap all ~14 return points individually.
+    let runErrorMessage: string | null = null;
+    let runSummary: any = null;
+    let runAlbumId: string | null = null;
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) {
+      runErrorMessage = "ELEVENLABS_API_KEY secret is not set on the server.";
       return res.status(500).json({ message: "ELEVENLABS_API_KEY not configured" });
     }
     const song = await storage.getSongById(id);
-    if (!song) return res.status(404).json({ message: "Song not found" });
+    if (!song) {
+      runErrorMessage = "Song not found.";
+      return res.status(404).json({ message: "Song not found" });
+    }
+    runAlbumId = song.albumId ?? null;
+    // Single audit-row writer for the entire route. Fires whether the
+    // response was 200, 4xx, or 5xx — so a 401 from ElevenLabs (most
+    // common real-world failure: expired API key) leaves the same kind
+    // of trail as the lyrics-import endpoint.
+    res.on("finish", () => {
+      const ok = res.statusCode >= 200 && res.statusCode < 300;
+      storage.recordJobRun({
+        jobType: "auto-sync-lyrics",
+        albumId: runAlbumId,
+        songId: id,
+        status: ok ? "success" : "failed",
+        summary: runSummary,
+        errorMessage: ok ? null : (runErrorMessage || `HTTP ${res.statusCode}`),
+        startedAt,
+      }).catch(() => {});
+    });
     if (!song.audioUrl) {
       return res.status(400).json({ message: "Song has no master audio uploaded — upload a master first." });
     }
@@ -2530,8 +2558,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!upstream.ok) {
         const errBody = await upstream.text().catch(() => "");
         console.error("ElevenLabs STT failed", upstream.status, errBody);
-        return res.status(502).json({
-          message: `Transcription failed (${upstream.status})`,
+        // Detect the common "your key is bad/expired" case so the
+        // dialog can tell the admin to refresh the secret, instead
+        // of showing a generic red "Failed" badge.
+        const isAuth =
+          upstream.status === 401 ||
+          /invalid_api_key|unauthor/i.test(errBody);
+        const friendly = isAuth
+          ? "ElevenLabs sign-in is invalid — refresh the ELEVENLABS_API_KEY secret."
+          : `Transcription failed (${upstream.status})`;
+        runErrorMessage = friendly;
+        return res.status(isAuth ? 401 : 502).json({
+          message: friendly,
+          code: isAuth ? "invalid_api_key" : undefined,
           detail: errBody.slice(0, 500),
         });
       }
@@ -2634,6 +2673,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       syncedLyrics: refined,
       ...(plainDraft !== undefined ? { lyrics: plainDraft } : {}),
     });
+    runSummary = {
+      lineCount: out.length,
+      wordCount: words.length,
+      backfilledPlainLyrics: plainDraft !== undefined,
+    };
     return res.json({
       song: updated,
       lineCount: out.length,

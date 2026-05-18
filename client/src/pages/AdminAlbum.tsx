@@ -1811,6 +1811,10 @@ function GoodSyncAlbumDialog({
   const [conflictMode, setConflictMode] = useState<"skip" | "resync">("skip");
   const [findChorus, setFindChorus] = useState(true);
   const [states, setStates] = useState<Record<string, TrackRunState>>({});
+  // Per-track failure reason so the row can show a useful label
+  // ("Sign-in invalid") instead of a generic "Failed", and the summary
+  // can roll up a single banner when every track hit the same auth wall.
+  const [failReasons, setFailReasons] = useState<Record<string, { code?: string; message?: string }>>({});
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [chorusSetIds, setChorusSetIds] = useState<Set<string>>(new Set());
 
@@ -1838,6 +1842,7 @@ function GoodSyncAlbumDialog({
       setConflictMode("skip");
       setFindChorus(true);
       setStates({});
+      setFailReasons({});
       setCurrentId(null);
       setChorusSetIds(new Set());
     }
@@ -1902,8 +1907,22 @@ function GoodSyncAlbumDialog({
             }
           }
         }
-      } catch {
+      } catch (err: any) {
+        // apiRequest throws "<status>: <body>" on non-2xx — try to
+        // tease the JSON back out so we can show a precise label.
+        let code: string | undefined;
+        let message: string | undefined;
+        const raw = String(err?.message ?? "");
+        const jsonStart = raw.indexOf("{");
+        if (jsonStart >= 0) {
+          try {
+            const parsed = JSON.parse(raw.slice(jsonStart));
+            code = parsed?.code;
+            message = parsed?.message;
+          } catch {}
+        }
         setStates((prev) => ({ ...prev, [song.id]: "failed" }));
+        setFailReasons((prev) => ({ ...prev, [song.id]: { code, message } }));
       }
     }
     setCurrentId(null);
@@ -2108,7 +2127,7 @@ function GoodSyncAlbumDialog({
                       </span>
                       {s.title}
                     </span>
-                    <TrackRunBadge state={state} />
+                    <TrackRunBadge state={state} reason={failReasons[s.id]} />
                   </li>
                 );
               })}
@@ -2174,7 +2193,13 @@ function GoodSyncAlbumDialog({
   );
 }
 
-function TrackRunBadge({ state }: { state: TrackRunState }) {
+function TrackRunBadge({
+  state,
+  reason,
+}: {
+  state: TrackRunState;
+  reason?: { code?: string; message?: string };
+}) {
   if (state === "syncing") {
     return (
       <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-slate-700">
@@ -2200,10 +2225,14 @@ function TrackRunBadge({ state }: { state: TrackRunState }) {
     );
   }
   if (state === "failed") {
+    const isAuth = reason?.code === "invalid_api_key";
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-rose-600">
+      <span
+        className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-rose-600"
+        title={reason?.message ?? undefined}
+      >
         <AlertCircle className="w-3 h-3" />
-        Failed
+        {isAuth ? "Sign-in invalid" : "Failed"}
       </span>
     );
   }
