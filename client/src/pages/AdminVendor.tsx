@@ -18,13 +18,26 @@ import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /**
  * Admin · Single vendor (Phase 6e).
  *
- * Tabs: Overview · Logo · Cover · Instruments
+ * Tabs: Overview · Cover · Instruments
  *
- * Logo + Cover are real drag-drop uploads that PUT photoUrl/coverUrl on
+ * Logo is edited from a modal that hangs off the header logo's pencil
+ * chip — same pattern as AdminAlbum's Artwork editor and AdminPerson's
+ * photo editor. Cover stays a tab because the wide background banner
+ * needs the full canvas (and a different art-direction story we're
+ * still working out).
+ *
+ * Logo + Cover are real drag-drop uploads that PUT logoUrl/coverUrl on
  * /api/admin/vendors/:id. Identity + bio still defer to the classic
  * admin (hover-reveal pencil) for now — single-source-of-truth edits.
  * Instruments tab is a live read of /api/vendors/:id/profile → each row
@@ -58,10 +71,9 @@ interface VendorProfile {
   artists: Array<{ id: string; name: string; trackCount: number }>;
 }
 
-type Tab = "overview" | "logo" | "cover" | "instruments";
+type Tab = "overview" | "cover" | "instruments";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
-  { key: "logo", label: "Logo" },
   { key: "cover", label: "Cover" },
   { key: "instruments", label: "Instruments" },
 ];
@@ -71,6 +83,12 @@ export function AdminVendor() {
   const [, params] = useRoute<{ id: string }>("/admin/vendors/:id");
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
+  // Logo editor lives as a modal hanging off the header logo thumbnail
+  // (same pencil-on-thumbnail pattern as AdminAlbum's Artwork editor).
+  // The dedicated Logo tab was removed; Cover stays a tab because the
+  // wide background banner needs more real estate (and a different art
+  // direction story we're still figuring out).
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
   const vendorId = params?.id ?? "";
 
   useEffect(() => {
@@ -158,18 +176,38 @@ export function AdminVendor() {
 
         {/* HEADER */}
         <div className="flex items-start gap-5">
-          <div className="w-24 h-24 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center">
+          {/* Logo thumbnail doubles as the logo editor trigger — same
+              hover-scrim + pencil-chip pattern as AdminAlbum's cover
+              thumbnail. */}
+          <button
+            type="button"
+            onClick={() => setLogoEditorOpen(true)}
+            className="group relative w-24 h-24 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8] focus-visible:ring-offset-2"
+            aria-label="Edit vendor logo"
+            data-testid="button-edit-vendor-logo"
+          >
             {vendor.logoUrl ? (
               <img
                 src={vendor.logoUrl}
                 alt={vendor.name}
-                className="w-full h-full object-contain p-2"
+                className="w-full h-full object-contain p-2 transition-transform group-hover:scale-[1.03]"
                 data-testid="img-vendor-logo"
               />
             ) : (
               <Store className="w-10 h-10 text-slate-300" />
             )}
-          </div>
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors" />
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                <Pencil className="w-4 h-4" />
+              </span>
+            </span>
+          </button>
+          <LogoEditorDialog
+            vendor={vendor}
+            open={logoEditorOpen}
+            onOpenChange={setLogoEditorOpen}
+          />
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
               {vendor.domain}
@@ -235,7 +273,6 @@ export function AdminVendor() {
 
         {/* CONTENT */}
         {tab === "overview" && <OverviewPanel vendor={vendor} />}
-        {tab === "logo" && <LogoPanel vendor={vendor} />}
         {tab === "cover" && <CoverPanel vendor={vendor} />}
         {tab === "instruments" && (
           <InstrumentsPanel instruments={instruments} />
@@ -541,6 +578,41 @@ function LogoPanel({ vendor }: { vendor: Vendor }) {
       emptyIcon={Store}
       description="Square works best — used in the SuperCredits™ vendor row and every instrument that links to this vendor."
     />
+  );
+}
+
+/**
+ * LogoEditorDialog — wraps the LogoPanel drop-zone in a modal, triggered
+ * by the pencil-on-logo in the page header. Mirrors AdminAlbum's
+ * ArtworkPanel and AdminPerson's PhotoEditorDialog so the three surfaces
+ * read as the same product.
+ */
+function LogoEditorDialog({
+  vendor,
+  open,
+  onOpenChange,
+}: {
+  vendor: Vendor;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        data-testid="dialog-edit-vendor-logo"
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0">
+          <DialogTitle className="text-slate-900 text-[14px] font-bold">
+            Logo
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Replace the logo for {vendor.name}.
+          </DialogDescription>
+        </DialogHeader>
+        <LogoPanel vendor={vendor} />
+      </DialogContent>
+    </Dialog>
   );
 }
 

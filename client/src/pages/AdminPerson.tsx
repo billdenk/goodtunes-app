@@ -11,6 +11,7 @@ import {
   Globe,
   Music as MusicIcon,
   RefreshCw,
+  Pencil,
 } from "lucide-react";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
@@ -35,7 +36,11 @@ import {
  * left entity sidebar with /admin/people.
  *
  * Tabs:
- *   Overview · Photo · Cover · Streaming — real read + drag-drop image upload
+ *   Overview · Cover · Streaming · Discography
+ *   The artist photo (avatar) is now edited from a modal that hangs off
+ *   the header avatar's pencil chip — same pattern as AdminAlbum's
+ *   Artwork editor. Cover stays a tab because the wide hero banner
+ *   needs the full canvas.
  *   Discography — inline "Pull from Apple Music" using the artist's
  *     Apple Music URL on the Streaming tab. One click → iTunes Lookup
  *     scrape → full replace of the cached release list.
@@ -63,10 +68,9 @@ interface LabelLite {
   name: string;
 }
 
-type Tab = "overview" | "photo" | "cover" | "streaming" | "discography";
+type Tab = "overview" | "cover" | "streaming" | "discography";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
-  { key: "photo", label: "Photo" },
   { key: "cover", label: "Cover" },
   { key: "streaming", label: "Streaming" },
   { key: "discography", label: "Discography" },
@@ -76,6 +80,11 @@ export function AdminPerson() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/people/:id");
   const [tab, setTab] = useState<Tab>("overview");
+  // Photo editor lives as a modal hanging off the header avatar (same
+  // pencil-on-thumbnail pattern as AdminAlbum's Artwork editor). The
+  // dedicated Photo tab was removed; Cover is still its own tab because
+  // the wide background banner needs more real estate.
+  const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const personId = params?.id ?? "";
 
   useEffect(() => {
@@ -173,10 +182,32 @@ export function AdminPerson() {
 
         {/* HEADER */}
         <div className="flex items-start gap-5">
-          <PersonAvatar
-            name={person.name}
-            photoUrl={person.photoUrl}
-            size={96}
+          {/* Avatar doubles as the photo editor trigger — same hover-scrim
+              + pencil-chip pattern as AdminAlbum's cover thumbnail. */}
+          <button
+            type="button"
+            onClick={() => setPhotoEditorOpen(true)}
+            className="group relative rounded-full overflow-hidden flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8] focus-visible:ring-offset-2"
+            style={{ width: 96, height: 96 }}
+            aria-label="Edit artist photo"
+            data-testid="button-edit-person-photo"
+          >
+            <PersonAvatar
+              name={person.name}
+              photoUrl={person.photoUrl}
+              size={96}
+            />
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors" />
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                <Pencil className="w-4 h-4" />
+              </span>
+            </span>
+          </button>
+          <PhotoEditorDialog
+            person={person}
+            open={photoEditorOpen}
+            onOpenChange={setPhotoEditorOpen}
           />
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
@@ -225,7 +256,6 @@ export function AdminPerson() {
         {tab === "overview" && (
           <OverviewPanel person={person} labels={labels} />
         )}
-        {tab === "photo" && <ImageUploadPanel person={person} field="photo" />}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
         {tab === "streaming" && (
           <StreamingPanel person={person} />
@@ -404,6 +434,41 @@ async function uploadImageFile(file: File): Promise<string> {
   }
   const { url } = await res.json();
   return url as string;
+}
+
+/**
+ * PhotoEditorDialog — wraps the same drop-zone upload UI used by the
+ * Cover tab in a modal, triggered by the pencil-on-avatar in the page
+ * header. Mirrors AdminAlbum's ArtworkPanel pattern so the two surfaces
+ * read as the same product.
+ */
+function PhotoEditorDialog({
+  person,
+  open,
+  onOpenChange,
+}: {
+  person: PersonFull;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        data-testid="dialog-edit-person-photo"
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0">
+          <DialogTitle className="text-slate-900 text-[14px] font-bold">
+            Photo
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Replace the avatar photo for {person.name}.
+          </DialogDescription>
+        </DialogHeader>
+        <ImageUploadPanel person={person} field="photo" />
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function ImageUploadPanel({
