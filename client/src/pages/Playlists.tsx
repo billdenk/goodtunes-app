@@ -6,6 +6,8 @@ import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { SONGS, ALBUMS, type Song, type Album } from "@/data/musicData";
+import type { Song as DbSong, Album as DbAlbum } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 import { useFavoriteSongs, useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 
@@ -182,9 +184,29 @@ export function Playlists() {
   });
   const userPlaylists = playlistsRaw ?? [];
 
+  // DB-backed catalog for the Add Songs sheet — the local SONGS demo data has
+  // hardcoded IDs that don't exist in the songs table, so POST /api/playlists/:id/songs
+  // would fail the FK on song_id. Fetching the real catalog keeps adds reliable.
+  const { data: dbSongs } = useQuery<DbSong[]>({ queryKey: ["/api/songs"] });
+  const { data: dbAlbums } = useQuery<DbAlbum[]>({ queryKey: ["/api/albums"] });
+
+  const dbAddCandidates = (() => {
+    if (!dbSongs || !dbAlbums) return [] as Array<{ id: string; title: string; artist: string; artwork: string }>;
+    const albumById = new Map(dbAlbums.map((a) => [a.id, a] as const));
+    return dbSongs
+      .map((s) => {
+        const a = albumById.get(s.albumId);
+        if (!a) return null;
+        return { id: s.id, title: s.title, artist: a.artist, artwork: a.artwork };
+      })
+      .filter((x): x is { id: string; title: string; artist: string; artwork: string } => x !== null);
+  })();
+
   const allSongsWithAlbumAll = SONGS
     .map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! }))
     .filter((s) => s.album);
+
+  const { toast } = useToast();
 
   const favSongEntries: PlaylistSongEntry[] = (() => {
     const byId = new Map(allSongsWithAlbumAll.map((s) => [s.id, s] as const));
@@ -287,14 +309,21 @@ export function Playlists() {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
     },
+    onError: (err: unknown) => {
+      toast({
+        title: "Couldn't add song",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const allSongsWithAlbum = allSongsWithAlbumAll;
 
   const addedSongIds = new Set(playlistSongs.map((ps) => ps.song.id));
   const addQuery = addSearch.trim().toLowerCase();
-  const addCandidates = allSongsWithAlbum.filter((s) =>
-    !addQuery || s.title.toLowerCase().includes(addQuery) || s.album.artist.toLowerCase().includes(addQuery),
+  const addCandidates = dbAddCandidates.filter((s) =>
+    !addQuery || s.title.toLowerCase().includes(addQuery) || s.artist.toLowerCase().includes(addQuery),
   );
 
   const handlePlayPlaylist = () => {
@@ -536,10 +565,10 @@ export function Playlists() {
                       const already = addedSongIds.has(song.id);
                       return (
                         <div key={song.id} className="flex items-center gap-3 py-2.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                          <img src={song.album.artwork} alt={song.album.title} className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
+                          <img src={song.artwork} alt={song.title} className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-sm font-medium truncate leading-tight">{song.title}</p>
-                            <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
+                            <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.artist}</p>
                           </div>
                           <button
                             type="button"
