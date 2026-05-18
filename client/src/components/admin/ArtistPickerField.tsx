@@ -1,6 +1,15 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, Plus, X, Link2 } from "lucide-react";
+import { Link } from "wouter";
+import {
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  Plus,
+  X,
+  Link2,
+  Pencil,
+} from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -198,12 +207,24 @@ export function ArtistPickerField({
 
   return (
     <div>
-      <label className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1">
-        {label}
-        {required && (
-          <span className="ml-1 text-[#FF5470] normal-case">·  required</span>
+      <div className="flex items-baseline justify-between mb-1">
+        <label className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
+          {label}
+          {required && (
+            <span className="ml-1 text-[#FF5470] normal-case">·  required</span>
+          )}
+        </label>
+        {idValue && (
+          <Link
+            href={`/admin/people/${idValue}`}
+            className="text-[10.5px] font-semibold text-[#319ED8] hover:underline inline-flex items-center gap-1"
+            data-testid="link-edit-artist"
+          >
+            <Pencil className="w-3 h-3" />
+            Edit artist
+          </Link>
         )}
-      </label>
+      </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
@@ -239,7 +260,7 @@ export function ArtistPickerField({
         <PopoverContent
           align="start"
           sideOffset={4}
-          className="p-0 w-[min(360px,calc(100vw-2rem))]"
+          className="p-0 w-[min(360px,calc(100vw-2rem))] bg-white border border-slate-200 text-slate-900 shadow-lg"
         >
           {urlMode ? (
             <div className="p-3 space-y-3">
@@ -321,11 +342,22 @@ export function ArtistPickerField({
               </p>
             </div>
           ) : (
-            <Command shouldFilter={true}>
+            <Command
+              shouldFilter={true}
+              className={[
+                "bg-white text-slate-900",
+                "[&_[cmdk-input-wrapper]]:border-slate-200",
+                "[&_[cmdk-group-heading]]:text-slate-400",
+                "[&_[cmdk-item]]:text-slate-700",
+                "[&_[cmdk-item][data-selected=true]]:bg-slate-100",
+                "[&_[cmdk-item][data-selected=true]]:text-slate-900",
+              ].join(" ")}
+            >
               <CommandInput
                 placeholder="Search artists…"
                 value={query}
                 onValueChange={setQuery}
+                className="text-slate-900 placeholder:text-slate-400"
                 data-testid="input-artist-search"
               />
               <CommandList>
