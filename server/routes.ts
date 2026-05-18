@@ -2060,8 +2060,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Single shared deadline across the entire fetch — redirect chain
     // AND body stream. The old per-hop `AbortSignal.timeout` reset on
     // every hop, so a five-hop chain could quietly burn 5 × 60s before
-    // the body started streaming.
-    const timeoutMs = 60_000;
+    // the body started streaming. 10 minutes is generous enough for a
+    // ~1 GB music master ZIP on a decent connection — the cap is the
+    // wire-size limit (`MAX_DROPBOX_COMPRESSED_BYTES`, currently 1 GB),
+    // not the clock.
+    const timeoutMs = 10 * 60_000;
     const ac = new AbortController();
     const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
     let response: Awaited<ReturnType<typeof fetch>> | null = null;
