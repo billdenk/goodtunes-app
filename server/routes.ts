@@ -2090,30 +2090,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /[\s_\-]+rough\b/i,
       /[\s_\-]+demo\b/i,
       /[\s_\-]+(mix|edit|alt|stems?|takes?)\b/i,
+      /[\s_\-]+lyrics?\b/i,                    // "01 When We're Together LYRICS.pdf"
       /[\s_\-]+v\d+\b/i,                       // _v1, _v2
       /[\s_\-]+\d{2,3}k\b/i,                   // _48k, _96k, _192k
       /[\s_\-]+\d{1,2}bit\b/i,                 // _24bit
       /[\s_\-]+\d{1,2}-\d{1,2}-\d{2,4}\b/,     // _09-02-22 / _09-02-2022
       /[\s_\-]+\d{8}\b/,                        // _20220902
-      /_[A-Z]{4,}\b/,                          // _KDIUCL studio codes — underscore-anchored
+      /[\s_\-]+\d{1,3}_[A-Z]{4,}\b/,           // " 03_KDIUCL" — track-index + studio code as one token
+      /_[A-Z]{4,}\b/,                          // "_KDIUCL" — bare studio code
     ];
     let prev = "";
-    let strippedAnyNoiseToken = false;
     while (prev !== s) {
       prev = s;
       for (const p of suffixPatterns) {
-        const before = s;
         s = s.replace(new RegExp(p.source + "\\s*$", p.flags), "");
-        if (before !== s) strippedAnyNoiseToken = true;
       }
-    }
-    // 3b. If any engineering token was peeled, an orphan track-number
-    //     token (1–3 digits) may now sit at the tail — e.g. "(Bonus
-    //     Track) 03_KDIUCL_mstr 04-08-22" → "(Bonus Track) 03" after
-    //     the three real tokens peel. Guarded by the flag so a real
-    //     title like "Track 3.wav" or "Blink 182.wav" is preserved.
-    if (strippedAnyNoiseToken) {
-      s = s.replace(/[\s_\-]+\d{1,3}\s*$/, "");
     }
     // 4. underscore-as-apostrophe restoration
     s = s.replace(/\b([A-Za-z]+)_(re|s|ll|t|d|m|ve|em)\b/g, "$1'$2");
