@@ -36,13 +36,14 @@ import {
  * left entity sidebar with /admin/people.
  *
  * Tabs:
- *   Overview · Cover · Streaming · Discography
+ *   Overview · Cover · Discography
  *   The artist photo (avatar) is now edited from a modal that hangs off
  *   the header avatar's pencil chip — same pattern as AdminAlbum's
  *   Artwork editor. Cover stays a tab because the wide hero banner
- *   needs the full canvas.
+ *   needs the full canvas. Streaming-service URLs + the Spotify picker
+ *   live inline at the bottom of Overview now.
  *   Discography — inline "Pull from Apple Music" using the artist's
- *     Apple Music URL on the Streaming tab. One click → iTunes Lookup
+ *     Apple Music URL set on Overview. One click → iTunes Lookup
  *     scrape → full replace of the cached release list.
  */
 interface PersonFull {
@@ -68,11 +69,10 @@ interface LabelLite {
   name: string;
 }
 
-type Tab = "overview" | "cover" | "streaming" | "discography";
+type Tab = "overview" | "cover" | "discography";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
-  { key: "streaming", label: "Streaming" },
   { key: "discography", label: "Discography" },
 ];
 
@@ -257,9 +257,6 @@ export function AdminPerson() {
           <OverviewPanel person={person} labels={labels} />
         )}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
-        {tab === "streaming" && (
-          <StreamingPanel person={person} />
-        )}
         {tab === "discography" && <DiscographyPanel person={person} />}
       </div>
     </AdminFrame>
@@ -312,6 +309,11 @@ function OverviewPanel({
   person: PersonFull;
   labels: LabelLite[];
 }) {
+  // Streaming services (Apple Music / Spotify) now live inline at the
+  // bottom of the Overview tab — they used to be their own tab, but
+  // there are only two fields + a Find-on-Spotify shortcut, which
+  // didn't justify a separate tab.
+  const [pickerOpen, setPickerOpen] = useState(false);
   const invalidate: (readonly unknown[])[] = [
     ["/api/people", person.id],
     ["/api/people"],
@@ -409,6 +411,57 @@ function OverviewPanel({
           },
         ]}
       />
+      {/* Streaming services — Apple Music + Spotify, plus the Spotify
+          picker shortcut. Lives at the bottom of Overview so the more
+          frequently edited Identity/Socials sit on top. */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="h-8 px-3 rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-[12px] font-semibold text-slate-700 inline-flex items-center gap-1.5"
+            data-testid="button-open-spotify-picker"
+          >
+            <SiSpotify className="w-3.5 h-3.5 text-[#1DB954]" />
+            {person.spotifyUrl ? "Change Spotify match" : "Find on Spotify"}
+          </button>
+        </div>
+        <SpotifyPickerDialog
+          person={person}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+        />
+        <EditablePanel
+          title="Streaming services"
+          testId="panel-streaming"
+          endpoint={endpoint}
+          values={{
+            appleMusicUrl: person.appleMusicUrl,
+            spotifyUrl: person.spotifyUrl,
+          }}
+          invalidate={invalidate}
+          fields={[
+            {
+              key: "appleMusicUrl",
+              label: "Apple Music",
+              type: "url",
+              readIcon: SiApplemusic,
+              placeholder: "https://music.apple.com/…",
+            },
+            {
+              key: "spotifyUrl",
+              label: "Spotify",
+              type: "url",
+              readIcon: SiSpotify,
+              placeholder: "https://open.spotify.com/artist/…",
+            },
+          ]}
+        />
+        <p className="text-slate-400 text-[11.5px] leading-relaxed px-1">
+          Per replit.md: GoodTunes hosts a song in-app for the first ~2 weeks,
+          then routes fans to these URLs. The Apple Music URL also feeds the
+          iTunes Lookup pull used by the Discography tab.
+        </p>
+      </div>
     </div>
   );
 }
@@ -657,7 +710,7 @@ function ImageUploadPanel({
   );
 }
 
-/* ─── Streaming tab ───────────────────────────────────────────────── */
+/* ─── Spotify picker (used inline on the Overview tab) ────────────── */
 
 // Candidate row returned by GET /api/admin/people/:id/spotify-candidates.
 interface SpotifyCandidate {
@@ -698,12 +751,22 @@ function SpotifyPickerDialog({
   }>({
     queryKey: ["/api/admin/people", person.id, "spotify-candidates", q],
     queryFn: async () => {
+      // Admin endpoint — must include the bearer token alongside the
+      // session cookie, otherwise requireAdmin 401s on browsers where
+      // the cookie is the only auth path.
+      const token = getAuthToken();
       const params = new URLSearchParams({ q });
       const res = await fetch(
         `/api/admin/people/${person.id}/spotify-candidates?${params}`,
-        { credentials: "include" },
+        {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
       );
-      if (!res.ok) throw new Error("Spotify search failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `Spotify search failed (${res.status})`);
+      }
       return res.json();
     },
     enabled: open && !!q.trim(),
@@ -816,60 +879,6 @@ function SpotifyPickerDialog({
   );
 }
 
-function StreamingPanel({ person }: { person: PersonFull }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  return (
-    <div className="max-w-2xl space-y-3">
-      <div className="flex items-center justify-end">
-        <button
-          onClick={() => setPickerOpen(true)}
-          className="h-8 px-3 rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-[12px] font-semibold text-slate-700 inline-flex items-center gap-1.5"
-          data-testid="button-open-spotify-picker"
-        >
-          <SiSpotify className="w-3.5 h-3.5 text-[#1DB954]" />
-          {person.spotifyUrl ? "Change Spotify match" : "Find on Spotify"}
-        </button>
-      </div>
-      <SpotifyPickerDialog
-        person={person}
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-      />
-      <EditablePanel
-        title="Streaming services"
-        testId="panel-streaming"
-        endpoint={`/api/admin/people/${person.id}`}
-        values={{
-          appleMusicUrl: person.appleMusicUrl,
-          spotifyUrl: person.spotifyUrl,
-        }}
-        invalidate={[["/api/people", person.id], ["/api/people"]]}
-        fields={[
-          {
-            key: "appleMusicUrl",
-            label: "Apple Music",
-            type: "url",
-            readIcon: SiApplemusic,
-            placeholder: "https://music.apple.com/…",
-          },
-          {
-            key: "spotifyUrl",
-            label: "Spotify",
-            type: "url",
-            readIcon: SiSpotify,
-            placeholder: "https://open.spotify.com/artist/…",
-          },
-        ]}
-      />
-      <p className="text-slate-400 text-[11.5px] leading-relaxed px-1">
-        Per replit.md: GoodTunes hosts a song in-app for the first ~2 weeks,
-        then routes fans to these URLs. The Apple Music URL also feeds the
-        iTunes Lookup pull used by the Discography tab.
-      </p>
-    </div>
-  );
-}
-
 /* ─── Discography tab (placeholder for now) ───────────────────────── */
 
 interface DiscographyRow {
@@ -914,7 +923,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
   const pullMut = useMutation({
     mutationFn: async () => {
       if (!person.appleMusicUrl) {
-        throw new Error("Set the Apple Music URL on the Streaming tab first.");
+        throw new Error("Set the Apple Music URL on the Overview tab first.");
       }
       const scrape = await apiRequest("POST", "/api/admin/people/scrape", {
         url: person.appleMusicUrl,
@@ -963,7 +972,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
 
   const subline = hasAppleUrl
     ? `${rows.length} ${rows.length === 1 ? "release" : "releases"} cached from Apple Music · click Pull to refresh`
-    : "Set the Apple Music URL on the Streaming tab to enable the pull";
+    : "Set the Apple Music URL on the Overview tab to enable the pull";
 
   return (
     <section
@@ -984,7 +993,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
           title={
             hasAppleUrl
               ? "Pull the latest discography from Apple Music"
-              : "Set the Apple Music URL on the Streaming tab first"
+              : "Set the Apple Music URL on the Overview tab first"
           }
           className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 disabled:hover:bg-[#319ED8] inline-flex items-center gap-1.5"
           data-testid="button-pull-discography"
@@ -1010,7 +1019,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
           <div className="py-10 text-center text-slate-500 text-[12.5px] max-w-sm mx-auto">
             {hasAppleUrl
               ? 'No discography pulled yet. Click "Pull from Apple Music" above to import this artist\'s full release list.'
-              : "Paste this artist's Apple Music URL on the Streaming tab, then come back to pull their discography."}
+              : "Paste this artist's Apple Music URL on the Overview tab, then come back to pull their discography."}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
