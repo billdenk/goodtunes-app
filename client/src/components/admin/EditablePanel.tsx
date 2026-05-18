@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Loader2, Check, X, ExternalLink } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ArtistPickerField } from "./ArtistPickerField";
 
 /**
  * Shared in-place edit panel used across the new admin detail pages
@@ -21,7 +22,8 @@ export type FieldType =
   | "textarea"
   | "number"
   | "date"
-  | "select";
+  | "select"
+  | "artist-picker";
 
 export interface FieldOption {
   value: string;
@@ -40,6 +42,12 @@ export interface FieldConfig {
   // For select fields: the choices. value goes on the wire, label is
   // shown in both the dropdown and the read-mode value cell.
   options?: FieldOption[];
+  // For artist-picker fields: the sibling draft key that receives the
+  // selected person's id (e.g. "primaryArtistId"). The picker drives two
+  // keys at once — this field's `key` gets the display name, `idKey` gets
+  // the FK. Both are seeded from `values` on entering edit mode and both
+  // are included in the PUT diff on save.
+  idKey?: string;
 }
 
 /* Format a YYYY-MM-DD (or ISO) date string for read mode. Returns the
@@ -114,7 +122,10 @@ export function EditablePanel({
   useEffect(() => {
     if (editing) {
       const next: Record<string, string> = {};
-      for (const f of fields) next[f.key] = values[f.key] ?? "";
+      for (const f of fields) {
+        next[f.key] = values[f.key] ?? "";
+        if (f.idKey) next[f.idKey] = values[f.idKey] ?? "";
+      }
       setDraft(next);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,12 +162,16 @@ export function EditablePanel({
       // Only send fields whose draft differs from current. Empty strings
       // are sent as null so blanking a field actually clears it.
       const body: Record<string, string | null> = {};
-      for (const f of fields) {
-        const before = values[f.key] ?? "";
-        const after = draft[f.key] ?? "";
+      const diffKey = (k: string) => {
+        const before = values[k] ?? "";
+        const after = draft[k] ?? "";
         if (before !== after) {
-          body[f.key] = after.trim() === "" ? null : after;
+          body[k] = after.trim() === "" ? null : after;
         }
+      };
+      for (const f of fields) {
+        diffKey(f.key);
+        if (f.idKey) diffKey(f.idKey);
       }
       if (Object.keys(body).length === 0) return null;
       await apiRequest("PUT", endpoint, body);
@@ -233,9 +248,11 @@ export function EditablePanel({
                 key={f.key}
                 field={f}
                 value={draft[f.key] ?? ""}
+                idValue={f.idKey ? (draft[f.idKey] ?? "") : ""}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, [f.key]: v }))
                 }
+                patch={(kv) => setDraft((d) => ({ ...d, ...kv }))}
                 inputRef={
                   i === 0 && shortFields.length > 0
                     ? (firstInputRef as React.RefObject<HTMLInputElement>)
@@ -250,7 +267,9 @@ export function EditablePanel({
             key={f.key}
             field={f}
             value={draft[f.key] ?? ""}
+            idValue=""
             onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+            patch={(kv) => setDraft((d) => ({ ...d, ...kv }))}
             inputRef={
               shortFields.length === 0 && i === 0
                 ? (firstInputRef as React.RefObject<HTMLTextAreaElement>)
@@ -422,16 +441,35 @@ function ReadField({
 function EditInput({
   field,
   value,
+  idValue,
   onChange,
+  patch,
   inputRef,
 }: {
   field: FieldConfig;
   value: string;
+  idValue: string;
   onChange: (next: string) => void;
+  patch: (kv: Record<string, string>) => void;
   inputRef?:
     | React.RefObject<HTMLInputElement>
     | React.RefObject<HTMLTextAreaElement>;
 }) {
+  if (field.type === "artist-picker") {
+    return (
+      <ArtistPickerField
+        label={field.label}
+        required={field.required}
+        nameValue={value}
+        idValue={idValue}
+        onChange={({ name, id }) => {
+          const next: Record<string, string> = { [field.key]: name };
+          if (field.idKey) next[field.idKey] = id;
+          patch(next);
+        }}
+      />
+    );
+  }
   const slug = field.key
     .replace(/([A-Z])/g, "-$1")
     .toLowerCase();

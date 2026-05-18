@@ -96,6 +96,7 @@ interface AlbumFull {
   id: string;
   title: string;
   artist: string;
+  primaryArtistId?: string | null;
   artwork: string;
   year: number | null;
   type: "Single" | "EP" | "LP";
@@ -388,6 +389,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         values={{
           title: album.title,
           artist: album.artist,
+          primaryArtistId: album.primaryArtistId ?? "",
           type: album.type,
           year: album.year ? String(album.year) : "",
           genre: album.genre,
@@ -397,7 +399,13 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         invalidate={invalidate}
         fields={[
           { key: "title", label: "Title", type: "text", required: true },
-          { key: "artist", label: "Artist", type: "text", required: true },
+          {
+            key: "artist",
+            label: "Artist",
+            type: "artist-picker",
+            required: true,
+            idKey: "primaryArtistId",
+          },
           {
             key: "type",
             label: "Type",
