@@ -9,6 +9,8 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
+import { IconButton } from "@/components/ui/IconButton";
+import { ChevronLeft, Share, MoreHorizontal, X as XIcon } from "lucide-react";
 import { startVendorChatAboutInstrument } from "@/lib/chatStore";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
@@ -340,28 +342,33 @@ export function AlbumDetail() {
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
       <section className="relative w-full h-screen text-white flex flex-col">
         {/* Apple-Music-style top chrome:
-            • back is a stand-alone 36px circle on the left
-            • share + ⋯ share a single connected pill on the right (one rounded
-              background, thin divider between glyphs) instead of two
-              separate circles
+            • back is a stand-alone 44px IconButton on the left (glass — same
+              primitive Collection's search/filter use, same opacity, same
+              size, same press feedback)
+            • share + ⋯ live on the right inside a connected pill (one
+              rounded glass background, thin divider between glyphs). The
+              pill is a deliberate variation we kept — Apple Music does the
+              same on its Now Playing chrome. Both halves are 44px tall so
+              the touch target matches the rest of the surface.
             • both groups sit at top-14 (~56px) so they clear the status bar
-              / Dynamic Island cleanly, not floating up at top-11 */}
-        <button
-          type="button"
+              / Dynamic Island cleanly. */}
+        <IconButton
+          variant="glass"
+          label="Back to collection"
           onClick={() => navigate("/collection")}
-          aria-label="Back to collection"
-          className="absolute top-14 left-4 z-50 w-9 h-9 rounded-full backdrop-blur flex items-center justify-center text-white active:opacity-70"
-          style={{ background: "rgba(0,0,0,0.45)" }}
+          className="absolute top-14 left-4 z-50"
           data-testid="button-back-album"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
+          {/* Nudge 1px left — Lucide's ChevronLeft glyph sits in the
+              right two-thirds of its viewbox, so geometric centering
+              looks visually off-center. Same trick Apple uses for
+              its back chevron. */}
+          <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
+        </IconButton>
 
         <div
-          className="absolute top-14 right-4 z-50 flex items-center rounded-full backdrop-blur"
-          style={{ background: "rgba(0,0,0,0.45)" }}
+          className="absolute top-14 right-4 z-50 flex items-center rounded-full backdrop-blur-md"
+          style={{ background: "rgba(255,255,255,0.17)" }}
         >
           <button
             type="button"
@@ -378,17 +385,12 @@ export function AlbumDetail() {
               } catch {}
             }}
             aria-label="Share album"
-            className="w-9 h-9 flex items-center justify-center text-white active:opacity-70"
+            className="w-11 h-11 flex items-center justify-center text-white active:scale-[0.94] transition-transform"
             data-testid="button-share-album"
           >
-            {/* iOS share glyph — square + up arrow */}
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 16V4" />
-              <path d="M8 8l4-4 4 4" />
-              <path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-            </svg>
+            <Share className="w-[19px] h-[19px]" strokeWidth={2} />
           </button>
-          <div className="w-px h-4 bg-white/15" aria-hidden />
+          <div className="w-px h-4 bg-white/25" aria-hidden />
           <div className="relative">
             <button
               type="button"
@@ -396,14 +398,10 @@ export function AlbumDetail() {
               aria-label="Album options"
               aria-haspopup="menu"
               aria-expanded={showMenu}
-              className="w-9 h-9 flex items-center justify-center text-white active:opacity-70"
+              className="w-11 h-11 flex items-center justify-center text-white active:scale-[0.94] transition-transform"
               data-testid="button-album-menu"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="5" cy="12" r="1.8" />
-                <circle cx="12" cy="12" r="1.8" />
-                <circle cx="19" cy="12" r="1.8" />
-              </svg>
+              <MoreHorizontal className="w-[19px] h-[19px]" strokeWidth={2} />
             </button>
           </div>
           {showMenu && (
@@ -1042,18 +1040,14 @@ export function AlbumDetail() {
             <div className="relative w-full max-w-[390px] z-10 px-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-white text-sm font-semibold truncate pr-3">{activeVideo.title}</p>
-                <button
-                  type="button"
+                <IconButton
+                  variant="dimmed"
+                  label="Close video"
                   onClick={() => setActiveVideo(null)}
-                  aria-label="Close video"
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0"
-                  style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(20px)" }}
                   data-testid="button-close-video"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
+                  <XIcon strokeWidth={2.5} />
+                </IconButton>
               </div>
               <video
                 src={activeVideo.url}
@@ -1975,18 +1969,15 @@ function PerformerSheet({
     <SheetShell ariaLabel={`${person.name} on ${song.title}`} testId="sheet-performer" onClose={onClose}>
       {/* Apple-style header: close button floats top-right, hero is a centered large avatar + name */}
       <div className="relative">
-        <button
-          type="button"
+        <IconButton
+          variant="glass"
+          label="Close"
           onClick={onClose}
-          aria-label="Close"
-          className="absolute top-0 right-4 w-8 h-8 rounded-full flex items-center justify-center text-white/70 active:opacity-70"
-          style={{ background: "rgba(255,255,255,0.08)" }}
+          className="absolute top-0 right-4"
           data-testid="button-performer-close"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
+          <XIcon strokeWidth={2.5} />
+        </IconButton>
         <div className="flex flex-col items-center text-center px-5 pt-2 pb-5">
           <PersonAvatar person={person} size={112} />
           <h2 className="text-white text-[24px] font-bold leading-tight mt-3">{person.name}</h2>
