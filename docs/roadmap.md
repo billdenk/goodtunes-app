@@ -65,6 +65,23 @@ This is post-launch work. For now the link is a toast placeholder, but the row i
 
 (MUSO_API_KEY is already listed in expected env vars.)
 
+## Search in the nav bar (Apple-Music pattern, parked)
+
+Apple Music doesn't give Search its own tab — it lives **inside the nav bar** as a tappable field that pushes a full search screen on tap. When the mini-player is active, the whole bar collapses into a single pill that contains:
+- the active tab's icon (Home / Library / etc.) on the left,
+- the mini-player in the middle (artwork + title + transport),
+- a circular **🔍** chip on the right.
+
+When nothing is playing, the bar still shows tabs + a search field as the rightmost element — search is always one tap away without burning a tab slot. See `attached_assets/IMG_3685_*` through `IMG_3689_*` for the reference screenshots.
+
+Why we're saving this:
+- We currently have 4 tabs (Collection, Playlists, Chat, Account). When we add search post-launch we could either (a) push to 5 tabs (cramped), or (b) adopt this Apple pattern — search is a chip, not a tab.
+- The collapsed-pill behavior is already half-built in our `MiniPlayer` (`hidden` state shrinks to a small capsule). Extending it to the Apple layout is a natural next step the day we ship search.
+
+Out of scope right now — keep on file until search is on the roadmap proper.
+
+---
+
 ## Chat — out of scope for the demo
 
 Planned for the real build:
