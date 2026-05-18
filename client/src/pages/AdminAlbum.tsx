@@ -6747,7 +6747,12 @@ function ArtworkPanel({ album }: { album: AlbumFull }) {
   // being hot-linked to a source that could rotate the URL.
   const urlMut = useMutation({
     mutationFn: async (rawUrl: string) => {
-      const trimmed = rawUrl.trim();
+      let trimmed = rawUrl.trim();
+      if (!trimmed) throw new Error("Paste a URL first.");
+      // Friendly autofix: if they forgot the scheme, assume https.
+      // Stops Safari's cryptic "The string did not match the expected
+      // pattern" from ever surfacing.
+      if (!/^https?:\/\//i.test(trimmed)) trimmed = `https://${trimmed}`;
       setPreviewUrl(trimmed);
       const res = await apiRequest("POST", "/api/admin/fetch-image-from-url", {
         url: trimmed,

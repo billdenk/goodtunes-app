@@ -384,7 +384,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // into hitting 127.0.0.1 / 169.254.169.254 / RFC1918 / ULA. We don't
   // DNS-resolve here (matches the rest of the codebase's posture) — the
   // hostname check catches bare-IP URLs.
-  app.post("/api/admin/fetch-image-from-url", requireAdmin, async (req, res) => {
+  app.post("/api/admin/fetch-image-from-url", requireAdminBearer, async (req, res) => {
     try {
       const raw = String(req.body?.url || "").trim();
       if (!raw) return res.status(400).json({ message: "Paste a URL." });
@@ -405,67 +405,117 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const MAX_BYTES = 8 * 1024 * 1024; // matches dropzone cap
       const timeoutMs = 30_000;
       const startMs = Date.now();
+      // One shared AbortController enforces the deadline across BOTH
+      // the redirect chain AND the body stream below — so a slow
+      // first hop or a slow body read can't push us past 30s total.
+      const ac = new AbortController();
+      const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
+      const remaining = () => Math.max(0, timeoutMs - (Date.now() - startMs));
       let response: Awaited<ReturnType<typeof fetch>> | null = null;
 
-      for (let hop = 0; hop <= 5; hop++) {
-        if (Date.now() - startMs > timeoutMs) {
-          return res.status(504).json({ message: "Fetching that image took too long." });
+      try {
+        for (let hop = 0; hop <= 5; hop++) {
+          if (remaining() === 0) {
+            return res.status(504).json({ message: "Fetching that image took too long." });
+          }
+          if (url.protocol !== "https:" && url.protocol !== "http:") {
+            return res.status(400).json({ message: "Image URLs must use http:// or https://." });
+          }
+          if (isPrivateIp(url.hostname)) {
+            return res.status(400).json({ message: "Refusing to fetch from a private/internal address." });
+          }
+          const r = await fetch(url.toString(), {
+            redirect: "manual",
+            signal: ac.signal,
+            headers: { "User-Agent": "GoodTunesBot/1.0" },
+          });
+          if (r.status >= 300 && r.status < 400) {
+            const loc = r.headers.get("location");
+            if (!loc) return res.status(502).json({ message: "Redirect with no target." });
+            try { url = new URL(loc, url); }
+            catch { return res.status(502).json({ message: "Invalid redirect URL." }); }
+            try { await r.arrayBuffer(); } catch { /* drain */ }
+            continue;
+          }
+          response = r;
+          break;
         }
-        if (url.protocol !== "https:" && url.protocol !== "http:") {
-          return res.status(400).json({ message: "Image URLs must use http:// or https://." });
-        }
-        if (isPrivateIp(url.hostname)) {
-          return res.status(400).json({ message: "Refusing to fetch from a private/internal address." });
-        }
-        const r = await fetch(url.toString(), {
-          redirect: "manual",
-          signal: AbortSignal.timeout(timeoutMs),
-          headers: { "User-Agent": "GoodTunesBot/1.0" },
-        });
-        if (r.status >= 300 && r.status < 400) {
-          const loc = r.headers.get("location");
-          if (!loc) return res.status(502).json({ message: "Redirect with no target." });
-          try { url = new URL(loc, url); }
-          catch { return res.status(502).json({ message: "Invalid redirect URL." }); }
-          try { await r.arrayBuffer(); } catch { /* drain */ }
-          continue;
-        }
-        response = r;
-        break;
+      } finally {
+        // We hand the controller to the body stream below, so the timer
+        // keeps running; only the body's finally clears it.
       }
       if (!response) return res.status(502).json({ message: "Too many redirects." });
       if (!response.ok) {
         return res.status(502).json({ message: `Couldn't fetch (HTTP ${response.status}). Make sure the link is public.` });
       }
 
-      const ct = (response.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
-      if (!(ct in MIME_TO_EXT)) {
+      const ctHeader = (response.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+      // We don't trust the content-type header alone — Dropbox, S3, and
+      // many shared-link hosts hand back generic labels like
+      // "application/binary" or "application/octet-stream" even when the
+      // bytes are a real JPEG. Reject obvious HTML up front, otherwise
+      // we'll sniff the magic bytes below.
+      if (ctHeader.includes("text/html")) {
         return res.status(415).json({
-          message: ct.includes("text/html")
-            ? "That link returned a web page, not an image. For Dropbox, use the file's direct image URL."
-            : `That URL didn't return a supported image (got "${ct || "unknown"}"). Use JPG, PNG, WebP, GIF, or AVIF.`,
+          message: "That link returned a web page, not an image. For Dropbox, use the file's direct image URL.",
         });
       }
 
-      // Stream the body, abort the moment we exceed the cap.
+      // Stream the body, abort the moment we exceed the cap OR the
+      // shared deadline fires (the AbortController above will reject
+      // reader.read() with an AbortError).
       const reader = response.body?.getReader();
-      if (!reader) return res.status(502).json({ message: "Empty response." });
+      if (!reader) {
+        clearTimeout(deadlineTimer);
+        return res.status(502).json({ message: "Empty response." });
+      }
       const chunks: Buffer[] = [];
       let total = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          total += value.byteLength;
-          if (total > MAX_BYTES) {
-            try { await reader.cancel(); } catch { /* ignore */ }
-            return res.status(413).json({ message: "Image is larger than 8 MB." });
+      let buf: Buffer;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            total += value.byteLength;
+            if (total > MAX_BYTES) {
+              try { await reader.cancel(); } catch { /* ignore */ }
+              clearTimeout(deadlineTimer);
+              return res.status(413).json({ message: "Image is larger than 8 MB." });
+            }
+            chunks.push(Buffer.from(value));
           }
-          chunks.push(Buffer.from(value));
         }
+        buf = Buffer.concat(chunks);
+      } catch (e: any) {
+        if (ac.signal.aborted) {
+          return res.status(504).json({ message: "Fetching that image took too long." });
+        }
+        throw e;
+      } finally {
+        clearTimeout(deadlineTimer);
       }
-      const buf = Buffer.concat(chunks);
-      const storedUrl = await uploadBufferToObjectStorage(buf, ct);
+
+      // Magic-byte sniff (overrides whatever the server claimed).
+      // JPEG: FF D8 FF · PNG: 89 50 4E 47 · GIF: 47 49 46 38
+      // WebP: "RIFF...WEBP" · AVIF: "...ftypavif"
+      let sniffed: string | null = null;
+      if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) sniffed = "image/jpeg";
+      else if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) sniffed = "image/png";
+      else if (buf.length >= 6 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) sniffed = "image/gif";
+      else if (buf.length >= 12 && buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP") sniffed = "image/webp";
+      else if (buf.length >= 12 && buf.slice(4, 8).toString("ascii") === "ftyp" && buf.slice(8, 12).toString("ascii") === "avif") sniffed = "image/avif";
+
+      // Prefer the sniffed type. Fall back to the header only if we
+      // couldn't sniff and the header is in our allowlist.
+      const finalCt = sniffed ?? (ctHeader in MIME_TO_EXT ? ctHeader : null);
+      if (!finalCt) {
+        return res.status(415).json({
+          message: `That URL didn't return a supported image (got "${ctHeader || "unknown"}"). Use JPG, PNG, WebP, GIF, or AVIF.`,
+        });
+      }
+
+      const storedUrl = await uploadBufferToObjectStorage(buf, finalCt);
       return res.json({ url: storedUrl });
     } catch (err: any) {
       console.error("fetch-image-from-url failed", err);
@@ -879,8 +929,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (lower === "::1" || lower === "::") return true;
       if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
       if (lower.startsWith("fe80:")) return true;
-      const m = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-      if (m) return isPrivateIp(m[1]);
+      // IPv4-mapped IPv6, dotted form (::ffff:127.0.0.1)
+      const dot = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+      if (dot) return isPrivateIp(dot[1]);
+      // IPv4-mapped IPv6, canonical hex form (::ffff:7f00:1, ::ffff:a9fe:a9fe).
+      // Node normalizes some loopback variants to this shape — the dotted
+      // regex above misses it, so reconstruct the dotted quad from the
+      // last two 16-bit hextets and recurse.
+      const hex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+      if (hex) {
+        const hi = parseInt(hex[1], 16);
+        const lo = parseInt(hex[2], 16);
+        const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+        return isPrivateIp(dotted);
+      }
       return false;
     }
     return false;
