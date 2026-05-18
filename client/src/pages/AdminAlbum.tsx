@@ -730,21 +730,60 @@ function TracksPanel({
   if (sorted.length === 0 && !adding) {
     return (
       <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-10 text-center"
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-8"
         data-testid="panel-tracks-empty"
       >
-        <div className="inline-flex items-center gap-2 text-slate-500 text-sm">
+        <div className="flex items-center gap-2 text-slate-500 text-[13px]">
           <AlertCircle className="w-4 h-4" />
-          This album has no tracks yet.
+          This album has no tracks yet. Pick a way to get started:
         </div>
-        <button
-          onClick={() => setAdding(true)}
-          className="mt-4 px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
-          data-testid="button-add-first-track"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add the first track
-        </button>
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+          <button
+            onClick={() => setAdding(true)}
+            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+            data-testid="button-add-first-track"
+          >
+            <div className="w-8 h-8 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div className="mt-2.5 text-[13px] font-semibold text-slate-900">
+              Add one track
+            </div>
+            <div className="text-[11.5px] text-slate-500 mt-0.5">
+              Type a title and keep going row-by-row.
+            </div>
+          </button>
+          <button
+            onClick={() => setBulkAddOpen(true)}
+            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+            data-testid="button-bulk-add-tracks-empty"
+          >
+            <div className="w-8 h-8 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center">
+              <ListPlus className="w-4 h-4" />
+            </div>
+            <div className="mt-2.5 text-[13px] font-semibold text-slate-900">
+              Upload multiple tracks
+            </div>
+            <div className="text-[11.5px] text-slate-500 mt-0.5">
+              Empty rows or a Dropbox folder of audio files.
+            </div>
+          </button>
+          <button
+            onClick={() => setLyricsImportOpen(true)}
+            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+            data-testid="button-import-lyrics-empty"
+          >
+            <div className="w-8 h-8 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div className="mt-2.5 text-[13px] font-semibold text-slate-900">
+              Import lyrics
+            </div>
+            <div className="text-[11.5px] text-slate-500 mt-0.5">
+              PDF, Word, or text — matched by filename.
+            </div>
+          </button>
+        </div>
       </section>
     );
   }
