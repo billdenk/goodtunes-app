@@ -14,6 +14,8 @@ import { InstrumentDetail } from "@/pages/InstrumentDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
 import { EditAccount } from "@/pages/EditAccount";
+import { FavoriteArtists } from "@/pages/FavoriteArtists";
+import { Bookmarks } from "@/pages/Bookmarks";
 import { ArtistDetail } from "@/pages/ArtistDetail";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
@@ -98,6 +100,12 @@ function Router() {
         </Route>
         <Route path="/account/edit">
           <ProtectedRoute component={EditAccount} />
+        </Route>
+        <Route path="/account/favorite-artists">
+          <ProtectedRoute component={FavoriteArtists} />
+        </Route>
+        <Route path="/account/bookmarks">
+          <ProtectedRoute component={Bookmarks} />
         </Route>
         <Route path="/account">
           <ProtectedRoute component={Account} />
