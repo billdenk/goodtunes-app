@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Loader2, Search, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2 } from "lucide-react";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
   Dialog,
@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -219,9 +219,13 @@ export function NewAlbumArtistDialog({
     setSpotifyError(null);
     setSpotifyCandidates([]);
     try {
+      const token = getAuthToken();
       const res = await fetch(
         `/api/admin/spotify/artist-search?q=${encodeURIComponent(trimmed)}`,
-        { credentials: "include" },
+        {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
       );
       if (res.status === 503) {
         setSpotifyError("configured");
@@ -296,9 +300,13 @@ export function NewAlbumArtistDialog({
     setAppleErrored(false);
     setAppleCandidate(null);
     try {
+      const token = getAuthToken();
       const res = await fetch(
         `/api/admin/apple/artist-search?q=${encodeURIComponent(c.name)}`,
-        { credentials: "include" },
+        {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
       );
       // Stale guard: bail if the admin has since picked a different
       // candidate or navigated away from this pick.
@@ -388,7 +396,7 @@ export function NewAlbumArtistDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
       <DialogContent
-        className="sm:max-w-[480px] p-0 gap-0 bg-white min-h-[460px] flex flex-col"
+        className="sm:max-w-[480px] p-0 gap-0 bg-white h-[560px] max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
         data-testid="dialog-new-album-artist"
         aria-describedby={undefined}
       >
@@ -411,7 +419,7 @@ export function NewAlbumArtistDialog({
             )}
             <DialogTitle className="text-[17px] font-semibold text-slate-900">
               {stage === "intro" && "Who's the artist?"}
-              {stage === "streaming" && "Search on streaming"}
+              {stage === "streaming" && "Search Spotify"}
               {stage === "confirm" && "Confirm artist"}
             </DialogTitle>
           </div>
@@ -419,87 +427,93 @@ export function NewAlbumArtistDialog({
 
         {/* ------------ INTRO ------------ */}
         {stage === "intro" && (
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1">
-                Name
-              </label>
-              <input
-                ref={inputRef}
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && localMatches[0] && hasExactLocal) {
-                    e.preventDefault();
-                    pickLocal(localMatches[0]);
-                  } else if (e.key === "Enter" && trimmed) {
-                    e.preventDefault();
-                    handleSearchStreaming();
-                  }
-                }}
-                placeholder="Start typing an artist…"
-                className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
-                data-testid="input-artist-name"
-              />
-              <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
-                We'll match against people already in your catalog as you type.
-              </p>
+          <div className="flex-1 flex flex-col p-5 overflow-hidden">
+            <div className="flex-1 overflow-y-auto space-y-4">
+              <div>
+                <label
+                  htmlFor="new-album-artist-name"
+                  className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1"
+                >
+                  Name
+                </label>
+                <input
+                  id="new-album-artist-name"
+                  ref={inputRef}
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && localMatches[0] && hasExactLocal) {
+                      e.preventDefault();
+                      pickLocal(localMatches[0]);
+                    } else if (e.key === "Enter" && trimmed && localMatches.length === 0) {
+                      e.preventDefault();
+                      handleSearchStreaming();
+                    }
+                  }}
+                  placeholder="Start typing an artist…"
+                  className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                  data-testid="input-artist-name"
+                />
+                <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
+                  We'll match against people already in your catalog as you type.
+                </p>
+              </div>
+
+              {trimmed && localMatches.length > 0 && (
+                <div>
+                  <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                    In your catalog
+                  </div>
+                  <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white overflow-hidden">
+                    {localMatches.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => pickLocal(p)}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left"
+                        data-testid={`option-local-${p.id}`}
+                      >
+                        <Avatar name={p.name} photoUrl={p.photoUrl ?? null} size={36} />
+                        <span className="flex-1 text-[13.5px] font-medium text-slate-900 truncate">
+                          {p.name}
+                        </span>
+                        <Check className="w-3.5 h-3.5 text-slate-300" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {trimmed && localMatches.length === 0 && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleManual}
+                    disabled={busy}
+                    className="h-9 rounded-md border border-slate-300 bg-white text-slate-700 text-[12.5px] font-semibold hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    data-testid="button-enter-manually"
+                  >
+                    {createPersonMut.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : null}
+                    Enter manually
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSearchStreaming}
+                    disabled={busy}
+                    className="h-9 rounded-md bg-[#1DB954] text-black text-[12.5px] font-semibold hover:bg-[#19a449] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    data-testid="button-search-streaming"
+                  >
+                    <SiSpotify className="w-3.5 h-3.5" />
+                    Search Spotify
+                  </button>
+                </div>
+              )}
             </div>
 
-            {trimmed && localMatches.length > 0 && (
-              <div>
-                <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  In your catalog
-                </div>
-                <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white overflow-hidden">
-                  {localMatches.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => pickLocal(p)}
-                      className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left"
-                      data-testid={`option-local-${p.id}`}
-                    >
-                      <Avatar name={p.name} photoUrl={p.photoUrl ?? null} size={36} />
-                      <span className="flex-1 text-[13.5px] font-medium text-slate-900 truncate">
-                        {p.name}
-                      </span>
-                      <Check className="w-3.5 h-3.5 text-slate-300" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {trimmed && !hasExactLocal && (
-              <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleSearchStreaming}
-                  disabled={busy}
-                  className="w-full h-9 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  data-testid="button-search-streaming"
-                >
-                  <Search className="w-3.5 h-3.5" />
-                  Search on streaming
-                </button>
-                <button
-                  type="button"
-                  onClick={handleManual}
-                  disabled={busy}
-                  className="w-full h-9 rounded-md border border-slate-300 bg-white text-slate-700 text-[12.5px] font-semibold hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  data-testid="button-enter-manually"
-                >
-                  {createPersonMut.isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : null}
-                  Enter manually
-                </button>
-              </div>
-            )}
-
-            <div className="border-t border-slate-200 -mx-5 px-5 pt-3 flex items-center justify-between">
+            <div className="border-t border-slate-200 -mx-5 px-5 pt-3 mt-3 flex items-center">
               <button
                 type="button"
                 onClick={onSkip}
@@ -509,22 +523,13 @@ export function NewAlbumArtistDialog({
               >
                 I'll set the artist later
               </button>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                disabled={busy}
-                className="text-[11.5px] font-medium text-slate-500 hover:text-slate-900 disabled:opacity-60"
-                data-testid="button-cancel-artist"
-              >
-                Cancel
-              </button>
             </div>
           </div>
         )}
 
         {/* ------------ STREAMING ------------ */}
         {stage === "streaming" && (
-          <div className="p-5 space-y-3">
+          <div className="flex-1 overflow-y-auto p-5 space-y-3">
             <div className="flex items-center gap-2 text-[12.5px] text-slate-500">
               <SiSpotify className="w-3.5 h-3.5 text-[#1DB954]" />
               Searching Spotify for <span className="font-semibold text-slate-700">"{trimmed}"</span>
@@ -614,7 +619,7 @@ export function NewAlbumArtistDialog({
 
         {/* ------------ CONFIRM ------------ */}
         {stage === "confirm" && picked && (
-          <div className="p-5 space-y-4">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50">
               <Avatar name={picked.name} photoUrl={picked.photoUrl} size={56} />
               <div className="flex-1 min-w-0">
