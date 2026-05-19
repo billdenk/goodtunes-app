@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { pool } from "./db";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { scrypt, randomBytes, timingSafeEqual, randomUUID } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
@@ -2884,83 +2884,103 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const album = await storage.getAlbumById(albumId, { includeHidden: true });
       if (!album) return res.status(404).json({ message: "Album not found." });
 
-      // Derive trackNumber server-side. Don't trust a client-supplied
-      // start — a stale dialog could otherwise create rows that collide
-      // with the tail of the existing tracklist.
-      const existingSongs = await storage.getSongsByAlbum(albumId);
-      let trackNumber = existingSongs.length === 0
-        ? 1
-        : Math.max(...existingSongs.map(s => s.trackNumber ?? 0)) + 1;
+      // Cheap precondition checks (album exists, link non-empty) run
+      // synchronously above so a bad link 400s immediately. Anything
+      // that could touch the network / large files runs inside the
+      // background job below — the response returns a `jobId` in
+      // milliseconds and the dialog polls /api/admin/imports/:jobId.
+      const jobId = startImportJob({
+        jobType: "import-tracks-from-dropbox",
+        albumId,
+        work: async ({ setProgress }) => {
+          // Derive trackNumber server-side. Don't trust a client-supplied
+          // start — a stale dialog could otherwise create rows that collide
+          // with the tail of the existing tracklist.
+          const existingSongs = await storage.getSongsByAlbum(albumId);
+          let trackNumber = existingSongs.length === 0
+            ? 1
+            : Math.max(...existingSongs.map(s => s.trackNumber ?? 0)) + 1;
 
-      // Stream the zip → tempfiles (or a single file, for a `/scl/fi/`
-      // share link). We only keep audio entries; every other file in
-      // the folder (readme.txt, .DS_Store, cover art, etc.) is
-      // autodrained inside the streamer so it never touches disk.
-      const { entries: tmpEntries, skipped, cleanup } = await streamDropboxEntries(
-        folderUrl,
-        (filename) => extOf(filename) in AUDIO_MIME_BY_EXT,
-      );
-      try {
-        if (tmpEntries.length === 0) {
-          const hint = skipped.length > 0
-            ? ` Found ${skipped.length} non-audio file${skipped.length === 1 ? "" : "s"}: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? "…" : ""}.`
-            : "";
-          return res.status(400).json({ message: `No audio files in that link. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.${hint}`, skipped });
-        }
-
-        // Sort with numeric+base awareness so "Track 2" comes before
-        // "Track 10" — matches Finder / Dropbox web ordering, which is
-        // how Bill thinks about track sequence.
-        tmpEntries.sort((a, b) =>
-          a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: "base" })
-        );
-
-        const created: Array<{ id: string; trackNumber: number; title: string; filename: string; duration: number }> = [];
-        const errors: Array<{ filename: string; error: string }> = [];
-        // `trackNumber` already initialized above from existing max+1.
-
-        for (const entry of tmpEntries) {
-          const filename = entry.filename;
+          // Stream the zip → tempfiles (or a single file, for a `/scl/fi/`
+          // share link). We only keep audio entries; every other file in
+          // the folder (readme.txt, .DS_Store, cover art, etc.) is
+          // autodrained inside the streamer so it never touches disk.
+          const { entries: tmpEntries, skipped, cleanup } = await streamDropboxEntries(
+            folderUrl,
+            (filename) => extOf(filename) in AUDIO_MIME_BY_EXT,
+          );
           try {
-            const ext = extOf(filename);
-            const mime = AUDIO_MIME_BY_EXT[ext];
+            if (tmpEntries.length === 0) {
+              const hint = skipped.length > 0
+                ? ` Found ${skipped.length} non-audio file${skipped.length === 1 ? "" : "s"}: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? "…" : ""}.`
+                : "";
+              return {
+                status: "failed" as const,
+                summary: { created: [], errors: [], skipped },
+                errorMessage: `No audio files in that link. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.${hint}`,
+              };
+            }
 
-            // Stream the tempfile straight to Object Storage — never
-            // pulls the full audio into a single Buffer.
-            const audioUrl = await uploadFileToObjectStorage(entry.tmpPath, mime);
+            // Sort with numeric+base awareness so "Track 2" comes before
+            // "Track 10" — matches Finder / Dropbox web ordering, which is
+            // how Bill thinks about track sequence.
+            tmpEntries.sort((a, b) =>
+              a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: "base" })
+            );
 
-            // Duration is best-effort — non-fatal. parseFile streams the
-            // tempfile too, so a 500 MB WAV stays bounded.
-            let duration = 0;
-            try {
-              const mm = await import("music-metadata");
-              const meta = await mm.parseFile(entry.tmpPath);
-              duration = Math.round(meta.format.duration || 0);
-            } catch { /* leave at 0; admin can set it manually */ }
+            const created: Array<{ id: string; trackNumber: number; title: string; filename: string; duration: number }> = [];
+            const errors: Array<{ filename: string; error: string }> = [];
+            setProgress({ processed: 0, total: tmpEntries.length });
 
-            const song = await storage.createSong({
-              albumId,
-              title: deriveTitleFromFilename(filename),
-              trackNumber,
-              duration,
-              audioUrl,
-              lyrics: "",
-              instrumental: false,
-              syncedLyrics: null as any,
-              previewStartMs: null as any,
-              previewEndMs: null as any,
-              waveform: null as any,
-            } as any);
-            created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
-            trackNumber++;
-          } catch (e: any) {
-            errors.push({ filename, error: e?.message || "Failed to import" });
+            for (const entry of tmpEntries) {
+              const filename = entry.filename;
+              try {
+                const ext = extOf(filename);
+                const mime = AUDIO_MIME_BY_EXT[ext];
+
+                // Stream the tempfile straight to Object Storage — never
+                // pulls the full audio into a single Buffer.
+                const audioUrl = await uploadFileToObjectStorage(entry.tmpPath, mime);
+
+                // Duration is best-effort — non-fatal. parseFile streams the
+                // tempfile too, so a 500 MB WAV stays bounded.
+                let duration = 0;
+                try {
+                  const mm = await import("music-metadata");
+                  const meta = await mm.parseFile(entry.tmpPath);
+                  duration = Math.round(meta.format.duration || 0);
+                } catch { /* leave at 0; admin can set it manually */ }
+
+                const song = await storage.createSong({
+                  albumId,
+                  title: deriveTitleFromFilename(filename),
+                  trackNumber,
+                  duration,
+                  audioUrl,
+                  lyrics: "",
+                  instrumental: false,
+                  syncedLyrics: null as any,
+                  previewStartMs: null as any,
+                  previewEndMs: null as any,
+                  waveform: null as any,
+                } as any);
+                created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
+                trackNumber++;
+              } catch (e: any) {
+                errors.push({ filename, error: e?.message || "Failed to import" });
+              }
+              setProgress({ processed: created.length + errors.length, total: tmpEntries.length });
+            }
+            const status: "success" | "partial" | "failed" =
+              created.length === 0 ? "failed" : errors.length === 0 ? "success" : "partial";
+            return { status, summary: { created, errors, skipped } };
+          } finally {
+            await cleanup();
           }
-        }
-        return res.json({ created, errors, skipped });
-      } finally {
-        await cleanup();
-      }
+        },
+      });
+
+      return res.status(202).json({ jobId });
     } catch (e: any) {
       return res.status(400).json({ message: e?.message || "Dropbox import failed." });
     }
@@ -3099,6 +3119,105 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           position,
         } as any),
     });
+  });
+
+  // ── Live import-job tracker ───────────────────────────────────────────
+  // Long-running imports (Dropbox folder pulls, lyrics scans, etc.) used
+  // to block the POST until they finished — minutes of wall time on a
+  // big album, and the dialog spinner had no way to tell "still working"
+  // from "the request died." Now those endpoints kick off work in the
+  // background and return a `jobId`; the dialog polls
+  // GET /api/admin/imports/:jobId until status flips to a terminal value.
+  //
+  // The DB `jobRuns` row is still written on completion (audit log). This
+  // in-memory map is the *live* status while the job is still running,
+  // plus a 10-minute grace window after completion so a slow poll catches
+  // the result. After that the entry is GC'd; clients past that window
+  // see 404 and should treat it as "job no longer in flight."
+  type ImportJobState = {
+    jobId: string;
+    jobType: string;
+    albumId: string | null;
+    status: "running" | "success" | "partial" | "failed";
+    startedAt: number;
+    finishedAt: number | null;
+    progress: { processed: number; total: number } | null;
+    summary: any;
+    errorMessage: string | null;
+  };
+  const importJobs = new Map<string, ImportJobState>();
+  const IMPORT_JOB_TTL_MS = 10 * 60 * 1000;
+
+  function startImportJob(opts: {
+    jobType: string;
+    albumId: string | null;
+    work: (ctx: {
+      setProgress: (p: { processed: number; total: number }) => void;
+    }) => Promise<{
+      status: "success" | "partial" | "failed";
+      summary: any;
+      errorMessage?: string | null;
+    }>;
+  }): string {
+    const jobId = randomUUID();
+    const state: ImportJobState = {
+      jobId,
+      jobType: opts.jobType,
+      albumId: opts.albumId,
+      status: "running",
+      startedAt: Date.now(),
+      finishedAt: null,
+      progress: null,
+      summary: null,
+      errorMessage: null,
+    };
+    importJobs.set(jobId, state);
+    const startedAt = new Date();
+    void (async () => {
+      try {
+        const result = await opts.work({
+          setProgress: (p) => {
+            state.progress = p;
+          },
+        });
+        state.status = result.status;
+        state.summary = result.summary ?? null;
+        state.errorMessage = result.errorMessage ?? null;
+      } catch (e: any) {
+        state.status = "failed";
+        state.errorMessage = e?.message || "Import failed.";
+      } finally {
+        state.finishedAt = Date.now();
+        try {
+          await storage.recordJobRun({
+            jobType: opts.jobType,
+            albumId: opts.albumId,
+            songId: null,
+            status: state.status,
+            summary: state.summary,
+            errorMessage: state.errorMessage,
+            startedAt,
+          });
+        } catch {
+          /* audit failure shouldn't break the job */
+        }
+        const t = setTimeout(() => importJobs.delete(jobId), IMPORT_JOB_TTL_MS);
+        t.unref?.();
+      }
+    })();
+    return jobId;
+  }
+
+  // Polling endpoint — the import dialog hits this every ~1.5s. Returns
+  // the live state; clients should stop polling once `status !== "running"`.
+  app.get("/api/admin/imports/:jobId", requireAdminBearer, async (req, res) => {
+    const state = importJobs.get(String(req.params.jobId));
+    if (!state) {
+      return res
+        .status(404)
+        .json({ message: "Job not found or expired. It may have finished — refresh to see the result." });
+    }
+    return res.json(state);
   });
 
   // Audit-log read endpoint. Bill's "did it notify you?" workflow — when
