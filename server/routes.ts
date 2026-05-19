@@ -3890,6 +3890,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // this endpoint returns the top candidates so the admin can pick one
   // from a sheet. `q` lets the admin search by something other than the
   // current person.name when needed.
+  // Free-form Spotify artist search keyed by a query string (no Person
+  // required). Powers the "Who's the artist?" dialog on the +New Album
+  // flow: admin types a name → we show the top N Spotify candidates with
+  // photos so they can pick the right one before any DB write happens.
+  app.get("/api/admin/spotify/artist-search", requireAdmin, async (req, res) => {
+    if (!spotifyConfigured()) {
+      return res.status(503).json({ message: "Spotify is not configured." });
+    }
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return res.json({ query: "", candidates: [] });
+    const candidates = await searchArtistCandidates(q, 8);
+    return res.json({ query: q, candidates });
+  });
+
+  // iTunes Search API for artist-name → Apple Music profile resolution.
+  // No auth, no SDK — public endpoint, returns artistId + artistLinkUrl
+  // which we then feed into the existing /api/admin/people/scrape path
+  // to pull bio + portrait + discography in one shot. iTunes does not
+  // return artist photos in this endpoint (only album/song artwork) so
+  // we deliberately surface only name + Apple Music URL + primary genre.
+  app.get("/api/admin/apple/artist-search", requireAdmin, async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return res.json({ query: "", candidates: [] });
+    try {
+      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=musicArtist&limit=5&country=us`;
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      const r = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: { Accept: "application/json" },
+      }).finally(() => clearTimeout(t));
+      if (!r.ok) return res.json({ query: q, candidates: [] });
+      const json = (await r.json()) as { results?: any[] };
+      const norm = (s: string) =>
+        s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+      const wanted = norm(q);
+      const candidates = (json.results ?? [])
+        .filter((r) => r?.wrapperType === "artist" && r?.artistLinkUrl)
+        .map((r) => ({
+          artistId: String(r.artistId),
+          name: String(r.artistName || ""),
+          appleMusicUrl: String(r.artistLinkUrl),
+          primaryGenre: r.primaryGenreName ? String(r.primaryGenreName) : null,
+        }))
+        .sort((a, b) => {
+          const ax = norm(a.name) === wanted ? 1 : 0;
+          const bx = norm(b.name) === wanted ? 1 : 0;
+          return bx - ax;
+        });
+      return res.json({ query: q, candidates });
+    } catch {
+      return res.json({ query: q, candidates: [] });
+    }
+  });
+
   app.get("/api/admin/people/:id/spotify-candidates", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
     if (!spotifyConfigured()) {

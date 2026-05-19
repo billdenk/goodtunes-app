@@ -11,6 +11,7 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
+import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -51,18 +52,21 @@ export function AdminAlbums() {
   const [view, setView] = useViewMode("albums");
   const { toast } = useToast();
 
-  // "+" in the header — create a blank GoodTunes release and jump straight
-  // into its editor. Mirrors the legacy /admin createAlbum mutation; we
-  // optimistically push the new row into the cache so the editor's loader
-  // doesn't briefly 404 before the refetch lands.
+  // "+" in the header — opens the "Who's the artist?" dialog first so we
+  // can attach a Person up-front (with optional Spotify/Apple enrichment),
+  // then creates the blank GoodTunes release and jumps into its editor.
+  // The dialog can be skipped — that path falls back to the legacy
+  // "Unknown artist" placeholder so the editor still loads.
+  const [artistDialogOpen, setArtistDialogOpen] = useState(false);
   const createAlbum = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (artist?: { name: string; id: string }) => {
       const res = await apiRequest("POST", "/api/admin/albums", {
         title: "New album",
-        artist: "Unknown artist",
+        artist: artist?.name || "Unknown artist",
         artwork: "/album-placeholder.svg",
         type: "LP",
         isGoodTunesRelease: true,
+        primaryArtistId: artist?.id || null,
       });
       return res.json() as Promise<AlbumLite>;
     },
@@ -250,7 +254,7 @@ export function AdminAlbums() {
             <IconBtn
               onClick={() => {
                 if (createAlbum.isPending) return;
-                createAlbum.mutate();
+                setArtistDialogOpen(true);
               }}
               label="New album"
               testId="button-new-album"
@@ -308,6 +312,19 @@ export function AdminAlbums() {
         )}
 
       </div>
+      <NewAlbumArtistDialog
+        open={artistDialogOpen}
+        onOpenChange={setArtistDialogOpen}
+        busy={createAlbum.isPending}
+        onSelect={(artist) => {
+          setArtistDialogOpen(false);
+          createAlbum.mutate(artist);
+        }}
+        onSkip={() => {
+          setArtistDialogOpen(false);
+          createAlbum.mutate(undefined);
+        }}
+      />
     </AdminFrame>
   );
 }
