@@ -515,7 +515,12 @@ export function AlbumDetail() {
                     a smushed "Love Life Tragedy   Nick Carter2025"
                     on one line. */}
                 <span>{album.title}</span>
-                {album.isExplicit && <ExplicitBadge />}
+                {/* The title-row E used to ride here too (Apple
+                    belt-and-braces). Bill called it visual noise once
+                    the same chip also shows in the meta line below —
+                    the meta-line chip wins because it reads as part of
+                    the bulleted "LP · 2025 · E" list rather than
+                    competing with the title for attention. */}
               </h1>
               <button
                 type="button"
@@ -531,20 +536,42 @@ export function AlbumDetail() {
               {/* Genre · Year muted meta line — Apple's "Afro-Pop · 1994 ·
                   Lossless" pattern. Both tokens are optional; we join only
                   what's available so the line never starts with a bullet. */}
-              {(album.genre || album.year || album.isExplicit) && (
+              {(album.genre || album.type || album.year || album.isExplicit) && (
                 <p
                   className="text-[13px] mt-1 flex items-center justify-center gap-1.5"
                   style={{ color: "#98A2B3" }}
                   data-testid="text-album-meta"
                 >
-                  {/* Apple Music's "Pop · 1994 · E" pattern — when an album is
-                      explicit, the chip rides in the meta line as well as
-                      next to the title. Belt-and-braces, but matches user
-                      muscle memory from Music/Spotify.
-                      `flex` (block-level) — see comment on the h1 above for
-                      why we don't use `inline-flex` here. */}
-                  <span>{[album.genre, album.year].filter(Boolean).join(" · ")}</span>
-                  {album.isExplicit && <ExplicitBadge />}
+                  {/* Apple Music's "Pop · 1994 · E" pattern — bullets ride
+                      between every piece, E included. The chip uses the
+                      `muted` tone so it picks up the same #98A2B3 fill as
+                      the surrounding text and reads as another beat in
+                      the bulleted list, not a second standalone badge.
+                      `flex` (block-level) — see comment on the h1 above
+                      for why we don't use `inline-flex` here.
+                      Each piece + its preceding bullet renders as a single
+                      flex item so the gap-1.5 spacing applies uniformly
+                      between bullets and tokens. */}
+                  {(() => {
+                    const pieces: ReactNode[] = [];
+                    if (album.genre) pieces.push(<span key="genre">{album.genre}</span>);
+                    if (album.type) pieces.push(<span key="type">{album.type}</span>);
+                    if (album.year) pieces.push(<span key="year">{album.year}</span>);
+                    if (album.isExplicit) {
+                      pieces.push(
+                        <ExplicitBadge key="explicit" tone="muted" />,
+                      );
+                    }
+                    return pieces.map((node, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1.5"
+                      >
+                        {i > 0 && <span aria-hidden>·</span>}
+                        {node}
+                      </span>
+                    ));
+                  })()}
                 </p>
               )}
               {album.description && (
