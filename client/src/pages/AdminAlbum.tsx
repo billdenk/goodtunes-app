@@ -5085,6 +5085,56 @@ function LyricsEditor({
       }),
   });
 
+  // LRCLIB lookup — free, no key. Pulls plain + synced lyrics from
+  // https://lrclib.net for tracks the artist didn't supply lyrics for.
+  // On success: replaces draft lyrics and lights up GoodSync cues if
+  // the LRC was available.
+  const fetchLrclibMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/songs/${song.id}/fetch-lyrics-from-lrclib`,
+        {},
+      );
+      if (!res.ok) {
+        const msg = await res
+          .json()
+          .then((b: any) => b?.message)
+          .catch(() => null);
+        throw new Error(msg || `Couldn't fetch (HTTP ${res.status})`);
+      }
+      return (await res.json()) as {
+        song: { lyrics: string };
+        hasSynced: boolean;
+        cueCount: number;
+        charCount: number;
+      };
+    },
+    onSuccess: async (data) => {
+      const next = data.song.lyrics ?? "";
+      originalRef.current = next;
+      setDraft(cleanLyricsForEditor(next));
+      userEditedRef.current = false;
+      await onSaved();
+      toast({
+        title: data.hasSynced
+          ? `Lyrics fetched · GoodSync ready (${data.cueCount} lines)`
+          : `Lyrics fetched · ${data.charCount} chars`,
+        description: data.hasSynced
+          ? "Synced timestamps from LRCLIB — open the player to scroll-test."
+          : "Plain lyrics from LRCLIB. Run “Sync with audio” to add timestamps.",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "No LRCLIB match",
+        description:
+          e?.message ||
+          "LRCLIB doesn't have this song. Try Upload or Paste URL.",
+        variant: "destructive",
+      }),
+  });
+
   const handleLyricFile = (f: File) => {
     if (!/\.(pdf|docx?|txt)$/i.test(f.name)) {
       toast({
@@ -5181,8 +5231,19 @@ function LyricsEditor({
                   <>
                     <button
                       type="button"
+                      onClick={() => fetchLrclibMut.mutate()}
+                      disabled={fetchLrclibMut.isPending || uploadLyricMut.isPending}
+                      className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
+                      title="Search LRCLIB by title + artist + album. Pulls plain + synced lyrics (lights up GoodSync if available)."
+                      data-testid={`button-fetch-lrclib-${song.id}`}
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      {fetchLrclibMut.isPending ? "Fetching…" : "Fetch lyrics"}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => lyricFileInputRef.current?.click()}
-                      disabled={uploadLyricMut.isPending}
+                      disabled={uploadLyricMut.isPending || fetchLrclibMut.isPending}
                       className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
                       title="Upload a .pdf, .docx, or .txt — replaces these lyrics"
                       data-testid={`button-upload-lyric-file-${song.id}`}
@@ -5193,7 +5254,7 @@ function LyricsEditor({
                     <button
                       type="button"
                       onClick={() => setShowUrlInput((v) => !v)}
-                      disabled={uploadLyricMut.isPending}
+                      disabled={uploadLyricMut.isPending || fetchLrclibMut.isPending}
                       className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
                       title="Paste a Dropbox file link or any direct .pdf / .docx / .txt URL"
                       data-testid={`button-paste-lyric-url-${song.id}`}
@@ -5232,7 +5293,7 @@ function LyricsEditor({
                   value={lyricUrl}
                   onChange={(e) => setLyricUrl(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && lyricUrl.trim() && !uploadLyricMut.isPending) {
+                    if (e.key === "Enter" && lyricUrl.trim() && !uploadLyricMut.isPending && !fetchLrclibMut.isPending) {
                       e.preventDefault();
                       uploadLyricMut.mutate({ url: lyricUrl.trim() });
                     } else if (e.key === "Escape") {
@@ -5242,7 +5303,7 @@ function LyricsEditor({
                   placeholder="https://www.dropbox.com/scl/fi/…?dl=1"
                   className="flex-1 min-w-0 text-[12px] bg-transparent outline-none placeholder:text-slate-400 text-slate-800"
                   autoFocus
-                  disabled={uploadLyricMut.isPending}
+                  disabled={uploadLyricMut.isPending || fetchLrclibMut.isPending}
                   data-testid={`input-lyric-url-${song.id}`}
                 />
                 <button
@@ -5250,7 +5311,7 @@ function LyricsEditor({
                   onClick={() =>
                     lyricUrl.trim() && uploadLyricMut.mutate({ url: lyricUrl.trim() })
                   }
-                  disabled={!lyricUrl.trim() || uploadLyricMut.isPending}
+                  disabled={!lyricUrl.trim() || uploadLyricMut.isPending || fetchLrclibMut.isPending}
                   className="text-[11px] font-semibold text-[#319ED8] hover:underline disabled:opacity-40"
                   data-testid={`button-fetch-lyric-url-${song.id}`}
                 >

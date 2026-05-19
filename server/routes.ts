@@ -2495,6 +2495,112 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return s.toLowerCase().replace(/[^a-z0-9]/g, "");
   }
 
+  // Slice a multi-song lyric document into per-song sections.
+  //
+  // Many artists PDF every lyric in an album into ONE document with the
+  // track title as a heading and extra metadata after it
+  // (e.g. "1. Adventure Awaits (Written by Jay Putty, Produced by Kevin Gates)").
+  // The filename-based matcher misses these because the filename is
+  // generic ("Album Lyrics.pdf"). This helper scans the doc text for any
+  // line that — once leading numbering and trailing parentheticals are
+  // stripped — fuzzy-matches a song title on the album.
+  //
+  // Returns a Map<songId, sectionText> when 2+ headings are found. If
+  // only 0 or 1 heading is found, returns null so the caller falls back
+  // to the filename matcher (we don't want to greedily re-attribute a
+  // single-song PDF based on one stray heading-looking line).
+  function splitMultiSongLyricDoc(
+    text: string,
+    songKeys: Array<{ song: { id: string; title: string }; key: string }>,
+  ): Map<string, string> | null {
+    const lines = text.split("\n");
+    type Heading = { songId: string; lineIndex: number };
+    const headings: Heading[] = [];
+    // Longest titles win first so "Love Story" beats "Love" on a line
+    // that genuinely is the longer one.
+    const validKeys = songKeys.filter((sk) => sk.key);
+    const keyToSongId = new Map<string, string>();
+    for (const sk of validKeys) {
+      // First write wins — if two album songs happen to fuzzy-key the
+      // same (extremely unlikely), the lower track number takes the
+      // heading. Better than silently overwriting.
+      if (!keyToSongId.has(sk.key)) keyToSongId.set(sk.key, sk.song.id);
+    }
+    // Line-first scan. For each line we compute its "heading key" by
+    // stripping leading numbering and any trailing parenthetical
+    // metadata, then fuzzying what remains. A line is a heading iff
+    // that key EXACTLY equals one of our song keys. Exact-equals
+    // avoids the false-positive trap where title "Love" would match
+    // a lyric line "Love is in the air" via a startsWith check.
+    const assignedSongs = new Set<string>();
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      const stripped = raw
+        // leading "1.", "01)", "Track 2:", etc.
+        .replace(/^\s*(?:track\s*)?\d{1,3}[\.\)\-:]?\s*/i, "")
+        // trailing parenthetical / bracket annotations
+        // ("(Written by …)", "[Bonus]") — applied repeatedly so
+        // "Title (a) [b]" collapses to "Title".
+        .replace(/\s*[\(\[][^\)\]]*[\)\]]\s*/g, " ")
+        .trim();
+      const lkey = fuzzy(stripped);
+      if (!lkey) continue;
+      const songId = keyToSongId.get(lkey);
+      if (!songId) continue;
+      if (assignedSongs.has(songId)) continue; // first heading wins
+      assignedSongs.add(songId);
+      headings.push({ songId, lineIndex: i });
+    }
+    if (headings.length < 2) return null;
+    headings.sort((a, b) => a.lineIndex - b.lineIndex);
+    const result = new Map<string, string>();
+    for (let h = 0; h < headings.length; h++) {
+      const start = headings[h].lineIndex + 1;
+      const end =
+        h + 1 < headings.length ? headings[h + 1].lineIndex : lines.length;
+      const slice = lines
+        .slice(start, end)
+        .join("\n")
+        .replace(/^\n+|\n+$/g, "")
+        .trim();
+      if (slice) result.set(headings[h].songId, slice);
+    }
+    return result;
+  }
+
+  // Parse LRC-format synced lyrics (e.g. "[00:12.34]First line") into
+  // the cue array shape the player consumes. Handles multi-stamp lines
+  // (rare; produced when one lyric repeats at multiple timestamps) and
+  // tolerates either .xx (centiseconds) or .xxx (milliseconds).
+  function parseLrcToCues(lrc: string): Array<{ timeMs: number; text: string }> {
+    const cues: Array<{ timeMs: number; text: string }> = [];
+    const stampRe = /\[(\d{1,2}):(\d{2})(?:[\.:](\d{1,3}))?\]/g;
+    for (const raw of lrc.split(/\r?\n/)) {
+      const stamps: number[] = [];
+      let lastIdx = 0;
+      let m: RegExpExecArray | null;
+      stampRe.lastIndex = 0;
+      while ((m = stampRe.exec(raw)) !== null) {
+        const min = parseInt(m[1], 10);
+        const sec = parseInt(m[2], 10);
+        let frac = 0;
+        if (m[3]) {
+          const padded = m[3].padEnd(3, "0").slice(0, 3);
+          frac = parseInt(padded, 10);
+        }
+        stamps.push(min * 60_000 + sec * 1_000 + frac);
+        lastIdx = m.index + m[0].length;
+      }
+      if (stamps.length === 0) continue;
+      const text = raw.slice(lastIdx).trim();
+      // Skip empty/metadata lines like "[ar: Artist]" — those won't
+      // match the [mm:ss] stamp shape so they're filtered already.
+      for (const timeMs of stamps) cues.push({ timeMs, text });
+    }
+    cues.sort((a, b) => a.timeMs - b.timeMs);
+    return cues;
+  }
+
   app.post("/api/admin/albums/:id/import-tracks-from-dropbox", requireAdminBearer, async (req, res) => {
     try {
       const albumId = String(req.params.id);
@@ -2697,6 +2803,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             .trim();
           if (!text) {
             errors.push({ filename, error: "No text found in file." });
+            continue;
+          }
+
+          // Multi-song master-doc check: if this single file holds 2+
+          // track headings inside it (e.g. "1. Adventure Awaits …",
+          // "2. Made for Us …"), treat it as a master lyrics doc and
+          // split it across all matching tracks. Filename is irrelevant
+          // in that case.
+          const sections = splitMultiSongLyricDoc(text, songKeys);
+          if (sections) {
+            // Once we've classified a file as a master multi-song doc,
+            // never fall back to filename matching for it — that would
+            // attribute the ENTIRE doc to whichever single track its
+            // filename happens to look like.
+            let assignedAny = false;
+            const skippedTitles: string[] = [];
+            for (const [songId, sectionText] of Array.from(sections.entries())) {
+              const target = songs.find((s) => s.id === songId);
+              if (!target) continue;
+              if (claimed.has(songId)) {
+                skippedTitles.push(target.title);
+                continue;
+              }
+              claimed.add(songId);
+              await storage.updateSong(songId, { lyrics: sectionText, syncedLyrics: null as any });
+              matched.push({
+                songId,
+                title: target.title,
+                filename,
+                charCount: sectionText.length,
+              });
+              assignedAny = true;
+            }
+            if (!assignedAny) {
+              unmatched.push({
+                filename,
+                suggestedTitle: deriveTitleFromFilename(filename),
+                charCount: text.length,
+                reason: skippedTitles.length
+                  ? `Multi-song doc — already filled ${skippedTitles.map((t) => `"${t}"`).join(", ")} from an earlier file.`
+                  : "Multi-song doc — no sections matched any track.",
+              });
+            }
             continue;
           }
 
@@ -3340,11 +3489,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
         }
 
-        const text = await extractLyricTextFromBuffer(buf, filename);
+        let text = await extractLyricTextFromBuffer(buf, filename);
         if (!text) {
           return res
             .status(400)
             .json({ message: "No text found in that file." });
+        }
+        // If the artist packed every song's lyrics into one document
+        // and the writer pasted that doc on a single track, slice out
+        // just THIS track's section when its heading is in the doc.
+        // We only slice when 2+ track headings are detected — a single
+        // heading wouldn't be a "master doc".
+        try {
+          const albumSongs = await storage.getSongsByAlbum(song.albumId);
+          const songKeys = albumSongs.map((s) => ({ song: s, key: fuzzy(s.title) }));
+          const sections = splitMultiSongLyricDoc(text, songKeys);
+          if (sections && sections.has(songId)) {
+            text = sections.get(songId)!;
+          }
+        } catch {
+          // best-effort — fall back to the full doc on any error
         }
         if (text.length > FA_MAX_LYRIC_CHARS) {
           return res.status(413).json({
@@ -3697,6 +3861,147 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       transcript: stt.text ?? "",
     });
   });
+
+  // Look up lyrics on LRCLIB (https://lrclib.net) by title + artist +
+  // album + duration. Free, no key. Returns BOTH plain lyrics and
+  // synced LRC; we drop the plain text into `song.lyrics` and parse the
+  // LRC into the GoodSync cue array, lighting up timestamped scrolling
+  // immediately. Demo path for tracks the artist didn't supply lyrics
+  // for — production stays on artist-uploaded copy.
+  app.post(
+    "/api/admin/songs/:id/fetch-lyrics-from-lrclib",
+    requireAdminBearer,
+    async (req, res) => {
+      const startedAt = new Date();
+      const songId = String(req.params.id);
+      let resolvedAlbumId: string | null = null;
+      const logFail = async (errorMessage: string) => {
+        try {
+          await storage.recordJobRun({
+            jobType: "fetch-lyrics-from-lrclib",
+            albumId: resolvedAlbumId,
+            songId,
+            status: "failed",
+            summary: null,
+            errorMessage,
+            startedAt,
+          });
+        } catch {}
+      };
+      try {
+        const song = await storage.getSongById(songId);
+        if (!song) {
+          await logFail("Song not found.");
+          return res.status(404).json({ message: "Song not found." });
+        }
+        resolvedAlbumId = song.albumId;
+        const album = await storage.getAlbumById(song.albumId, { includeHidden: true });
+        if (!album) {
+          await logFail("Album not found.");
+          return res.status(404).json({ message: "Album not found." });
+        }
+        const ua = "GoodTunes/1.0 (admin lyric fetch; https://goodtunes.app)";
+        const tryFetch = async (url: string): Promise<any | null> => {
+          const ac = new AbortController();
+          const timer = setTimeout(() => ac.abort(), 10_000);
+          try {
+            const r = await fetch(url, {
+              headers: { "User-Agent": ua, Accept: "application/json" },
+              signal: ac.signal,
+            });
+            if (!r.ok) return null;
+            return await r.json();
+          } catch {
+            return null;
+          } finally {
+            clearTimeout(timer);
+          }
+        };
+        // Strict lookup first — LRCLIB matches title + artist + album +
+        // duration (±2s) for the highest-confidence hit.
+        const strictParams = new URLSearchParams({
+          track_name: song.title,
+          artist_name: album.artist,
+          album_name: album.title,
+          duration: String(Math.max(0, Math.round(song.duration || 0))),
+        });
+        let hit: any = await tryFetch(`https://lrclib.net/api/get?${strictParams}`);
+        // Fallback: looser search by title + artist; prefer entries with
+        // synced lyrics, then break ties by closest duration.
+        if (!hit) {
+          const searchParams = new URLSearchParams({
+            track_name: song.title,
+            artist_name: album.artist,
+          });
+          const arr = await tryFetch(`https://lrclib.net/api/search?${searchParams}`);
+          if (Array.isArray(arr) && arr.length > 0) {
+            const targetDur = Math.round(song.duration || 0);
+            const ranked = [...arr].sort((a, b) => {
+              const aSync = a?.syncedLyrics ? 1 : 0;
+              const bSync = b?.syncedLyrics ? 1 : 0;
+              if (aSync !== bSync) return bSync - aSync;
+              const aD = Math.abs((a?.duration ?? 0) - targetDur);
+              const bD = Math.abs((b?.duration ?? 0) - targetDur);
+              return aD - bD;
+            });
+            hit = ranked[0];
+          }
+        }
+        if (!hit) {
+          await logFail("No lyrics found on LRCLIB.");
+          return res.status(404).json({ message: "No lyrics found on LRCLIB for that title + artist." });
+        }
+        if (hit.instrumental) {
+          await logFail("LRCLIB marks this song as instrumental.");
+          return res.status(404).json({ message: "LRCLIB lists this song as instrumental." });
+        }
+        const plain = String(hit.plainLyrics || "").trim();
+        const lrc = String(hit.syncedLyrics || "").trim();
+        const cues = lrc ? parseLrcToCues(lrc) : [];
+        if (!plain && cues.length === 0) {
+          await logFail("LRCLIB returned an empty result.");
+          return res.status(404).json({ message: "LRCLIB returned an empty result for that song." });
+        }
+        // When cues exist, use them to derive the text body so the
+        // textarea + the GoodSync overlay stay perfectly word-for-word
+        // aligned. Fall back to the plain text otherwise.
+        const lyricsBody =
+          cues.length > 0
+            ? cues.map((c) => c.text).join("\n").trim() || plain
+            : plain;
+        const updated = await storage.updateSong(songId, {
+          lyrics: lyricsBody,
+          syncedLyrics: cues.length > 0 ? (cues as any) : (null as any),
+        });
+        try {
+          await storage.recordJobRun({
+            jobType: "fetch-lyrics-from-lrclib",
+            albumId: album.id,
+            songId,
+            status: "success",
+            summary: {
+              source: "LRCLIB",
+              hasSynced: cues.length > 0,
+              cueCount: cues.length,
+              charCount: lyricsBody.length,
+            } as any,
+            errorMessage: null,
+            startedAt,
+          });
+        } catch {}
+        return res.json({
+          song: updated,
+          source: "LRCLIB",
+          hasSynced: cues.length > 0,
+          cueCount: cues.length,
+          charCount: lyricsBody.length,
+        });
+      } catch (e: any) {
+        await logFail(e?.message || "Unknown error");
+        return res.status(500).json({ message: e?.message || "LRCLIB fetch failed." });
+      }
+    },
+  );
 
   // Mirror a song's external audio URL (Dropbox share link, etc.) into
   // our Object Storage bucket so playback isn't bottlenecked by Dropbox's
