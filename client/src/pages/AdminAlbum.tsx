@@ -2304,6 +2304,89 @@ type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
    off the parent state (max(trackNumber)+1) so deletions that leave
    gaps don't collide with the tail of the existing tracklist. */
 type UploadMode = "empty" | "dropbox";
+/* ─── Async import job polling ────────────────────────────────────────
+   Long-running admin imports (Dropbox tracks today; lyrics/credits/etc.
+   to follow) return a `{ jobId }` immediately instead of blocking the
+   POST. This helper polls GET /api/admin/imports/:jobId until status is
+   terminal, with two timeouts so the spinner can never hang forever:
+
+   - `perRequestTimeoutMs` aborts a single stuck GET (default 10s).
+   - `overallTimeoutMs` caps wall-clock for the whole poll loop. If we
+     hit it, we throw — the dialog turns the spinner off and shows a
+     toast. The job itself keeps running on the server; the audit-log
+     row in `job_runs` will reflect what actually happened.
+
+   Resolves to the job's `summary` payload (`{ created, errors, skipped }`
+   for the tracks importer) on success/partial; throws on failed or
+   timeout. Keep the loop body free of state setters other than
+   `onProgress` so consumers control their own UI. */
+async function pollImportJob(
+  jobId: string,
+  opts: {
+    onProgress?: (p: { processed: number; total: number }) => void;
+    pollIntervalMs?: number;
+    perRequestTimeoutMs?: number;
+    overallTimeoutMs?: number;
+  } = {},
+): Promise<any> {
+  const pollIntervalMs = opts.pollIntervalMs ?? 1500;
+  const perRequestTimeoutMs = opts.perRequestTimeoutMs ?? 10_000;
+  const overallTimeoutMs = opts.overallTimeoutMs ?? 10 * 60 * 1000;
+  const deadline = Date.now() + overallTimeoutMs;
+  const token = getAuthToken();
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+  // First poll happens almost immediately so a tiny import (one file)
+  // doesn't sit on the spinner for a full interval before resolving.
+  let firstTick = true;
+  while (true) {
+    if (Date.now() > deadline) {
+      throw new Error("Import is taking longer than expected. It may still be running — check back in a minute.");
+    }
+    await new Promise((r) => setTimeout(r, firstTick ? 250 : pollIntervalMs));
+    firstTick = false;
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), perRequestTimeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(`/api/admin/imports/${jobId}`, {
+        headers,
+        credentials: "include",
+        signal: ctrl.signal,
+      });
+    } catch {
+      // A single stuck/aborted poll isn't fatal — try again on the next
+      // tick. The overall deadline above eventually catches a truly
+      // broken connection.
+      clearTimeout(timer);
+      continue;
+    }
+    clearTimeout(timer);
+
+    if (res.status === 404) {
+      // Job entry has aged out of the in-memory map (10 min after
+      // completion) without us seeing the terminal state. Rare — only
+      // if the tab was backgrounded long enough — but worth a clear
+      // error rather than spinning forever.
+      throw new Error("Lost track of the import. It likely finished — refresh the album to see the result.");
+    }
+    if (!res.ok) {
+      const text = (await res.text()) || res.statusText;
+      throw new Error(`${res.status}: ${text}`);
+    }
+    const state = await res.json();
+    if (state.progress && opts.onProgress) opts.onProgress(state.progress);
+    if (state.status === "running") continue;
+    if (state.status === "failed") {
+      throw new Error(state.errorMessage || "Import failed.");
+    }
+    // success | partial — both resolve with the summary so the caller
+    // can render a "X added, Y failed" toast uniformly.
+    return state.summary ?? {};
+  }
+}
+
 function AddMultipleTracksDialog({
   open,
   onOpenChange,
@@ -2331,6 +2414,7 @@ function AddMultipleTracksDialog({
       setFolderUrl("");
       setRunning(false);
       setCreated(0);
+      setProgress(null);
     }
   }, [open]);
 
@@ -2373,16 +2457,37 @@ function AddMultipleTracksDialog({
     onOpenChange(false);
   };
 
+  // Polling progress for the async import job. `processed/total` drives
+  // the inline "Importing 3/12…" spinner; null while we're still
+  // waiting for the first poll to come back.
+  const [progress, setProgress] = useState<{ processed: number; total: number } | null>(null);
+
   const handleConfirmDropbox = async () => {
     if (!folderUrl.trim() || running) return;
     setRunning(true);
+    setProgress(null);
     try {
+      // POST kicks off the import in the background and returns a jobId
+      // immediately (202). The actual import — Dropbox download, audio
+      // upload, duration probe — runs on the server while we poll.
       const res = await apiRequest(
         "POST",
         `/api/admin/albums/${albumId}/import-tracks-from-dropbox`,
         { folderUrl: folderUrl.trim() },
       );
-      const data = await res.json();
+      const { jobId } = await res.json();
+      if (!jobId) throw new Error("Server didn't return a job ID.");
+
+      // Poll until terminal status, with a wall-clock cap so the spinner
+      // can't hang forever (one stuck request, server crash, etc.).
+      const data = await pollImportJob(jobId, {
+        onProgress: (p) => setProgress(p),
+        // 15 min — generous for a long album over slow Dropbox; longer
+        // than this and something's wrong, not slow.
+        overallTimeoutMs: 15 * 60 * 1000,
+        // Per-poll: a single GET shouldn't sit longer than 10s.
+        perRequestTimeoutMs: 10_000,
+      });
       await onSaved();
       const ok = data.created?.length || 0;
       const failed = data.errors?.length || 0;
@@ -2390,6 +2495,7 @@ function AddMultipleTracksDialog({
       if (ok === 0 && failed === 0) {
         toast({ title: "No tracks created", variant: "destructive" });
         setRunning(false);
+        setProgress(null);
         return;
       }
       // Success (even partial) — close the dialog and confirm with a toast.
@@ -2412,6 +2518,7 @@ function AddMultipleTracksDialog({
         description: parts.length > 0 ? parts.join(" · ") : undefined,
       });
       setRunning(false);
+      setProgress(null);
       onOpenChange(false);
     } catch (e: any) {
       toast({
@@ -2420,6 +2527,7 @@ function AddMultipleTracksDialog({
         variant: "destructive",
       });
       setRunning(false);
+      setProgress(null);
     }
   };
 
@@ -2563,7 +2671,9 @@ function AddMultipleTracksDialog({
               {running ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Importing from Dropbox…
+                  {progress && progress.total > 0
+                    ? `Importing ${progress.processed}/${progress.total}…`
+                    : "Importing from Dropbox…"}
                 </>
               ) : (
                 <>Import from Dropbox</>
