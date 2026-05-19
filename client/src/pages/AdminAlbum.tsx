@@ -7540,6 +7540,25 @@ function AudioEditor({
                 className="flex-1 min-w-0 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
                 data-testid={`input-audio-url-${song.id}`}
               />
+              {/* Quiet download anchor — same pattern as the per-row
+                  Tracks-tab download (mirrors lines ~3486–3501). The
+                  big play/pause overlay on the track number + the
+                  Apple-style BottomDock cover playback; an inline
+                  <audio controls> here was redundant chrome. The
+                  download fires the browser save dialog without
+                  opening a tab. */}
+              {song.audioUrl && (
+                <a
+                  href={song.audioUrl}
+                  download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${song.audioUrl.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3"}`}
+                  className="w-8 h-8 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  aria-label="Download master"
+                  title="Download master"
+                  data-testid={`button-download-master-inline-${song.id}`}
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+              )}
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -7585,19 +7604,6 @@ function AudioEditor({
                 </PopoverContent>
               </Popover>
             </div>
-
-            <audio
-              controls
-              src={draftUrl}
-              preload="none"
-              onError={() =>
-                setLocalError(
-                  "Preview failed to load. If you pasted a URL, make sure it's a direct audio link (not a share page).",
-                )
-              }
-              className="w-full h-8"
-              data-testid={`audio-preview-${song.id}`}
-            />
 
             {uploading && (
               <p className="text-[11px] text-slate-400">Uploading…</p>
