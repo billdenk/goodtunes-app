@@ -3906,6 +3906,14 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const checked = !!song.instrumental;
+  // Guard: don't let the admin flip Instrumental ON while lyrics already
+  // exist — the flag implies "no lyrics by design," and turning it on
+  // would suggest the saved lyrics were never meant to be there. We
+  // still allow turning it OFF (in case it was legacy-on with lyrics
+  // somehow attached). The Lyrics editor's Clear/Trash flow is the
+  // intentional path to remove lyrics first.
+  const hasLyrics = !!(song.lyrics && song.lyrics.trim().length > 0);
+  const lockedOn = hasLyrics && !checked;
 
   const toggleMut = useMutation({
     mutationFn: async (next: boolean) =>
@@ -3940,7 +3948,9 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
           Instrumental
         </span>
         <span className="text-[10.5px] text-slate-400 ml-1.5">
-          · no lyrics or singer credits
+          {lockedOn
+            ? "· clear the lyrics first to mark instrumental"
+            : "· no lyrics or singer credits"}
         </span>
       </div>
       {/* Apple HIG Switch — pinned explicitly because shadcn's
@@ -3955,10 +3965,21 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
           brand — the affordance reads as "on" instantly. */}
       <Switch
         checked={checked}
-        disabled={toggleMut.isPending}
-        onCheckedChange={(next) => toggleMut.mutate(next)}
+        disabled={toggleMut.isPending || lockedOn}
+        onCheckedChange={(next) => {
+          if (lockedOn) {
+            toast({
+              title: "Lyrics are already saved for this track",
+              description:
+                "Clear the lyrics first if this is actually an instrumental — that keeps us from accidentally hiding real lyrics.",
+            });
+            return;
+          }
+          toggleMut.mutate(next);
+        }}
         aria-label="Mark this track as instrumental"
-        className="data-[state=unchecked]:bg-[#E9E9EB] data-[state=checked]:bg-[#34C759] [&>span]:!bg-white [&>span]:!shadow-sm"
+        title={lockedOn ? "Clear the lyrics first to mark instrumental" : undefined}
+        className="data-[state=unchecked]:bg-[#E9E9EB] data-[state=checked]:bg-[#34C759] [&>span]:!bg-white [&>span]:!shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
       />
     </div>
   );
