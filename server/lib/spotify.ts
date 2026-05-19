@@ -235,13 +235,39 @@ export async function searchArtistCandidatesDetailed(
   }
 
   const url = `${SEARCH_URL}?q=${encodeURIComponent(name)}&type=artist&limit=${Math.min(20, Math.max(1, limit))}`;
-  let res: Response;
+
+  // Spotify's search endpoint (and Replit's egress to it) is occasionally
+  // flaky — we see sporadic socket resets / 5xx that resolve on an
+  // immediate re-fetch. Demo experience: the admin types "The Beatles"
+  // and gets "Spotify lookup failed." even though everything's fine.
+  // Retry once on transport error OR upstream 5xx with a small backoff
+  // before surfacing the failure UI. 401 still triggers the existing
+  // token-refresh + retry path.
+  const fetchOnce = async (bearer: string) =>
+    fetchWithTimeout(url, { headers: { Authorization: `Bearer ${bearer}` } }, SEARCH_TIMEOUT_MS);
+  const isTransientStatus = (s: number) => s === 429 || (s >= 500 && s < 600);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  let res: Response | null = null;
+  let lastFetchErr: string | null = null;
   try {
-    res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
+    res = await fetchOnce(token);
   } catch (err) {
-    const detail = (err as Error)?.message ?? "";
-    console.warn("[spotify] candidates: fetch_error", detail, "name=", name);
-    return { ok: false, reason: "fetch_error", detail };
+    lastFetchErr = (err as Error)?.message ?? "";
+  }
+  // Quiet retry on transport error or transient upstream status.
+  if (!res || (res.status !== 401 && (res.status === 0 || isTransientStatus(res.status)) && res.ok === false)) {
+    await sleep(350);
+    try {
+      res = await fetchOnce(token);
+    } catch (err) {
+      lastFetchErr = (err as Error)?.message ?? lastFetchErr;
+      res = null;
+    }
+  }
+  if (!res) {
+    console.warn("[spotify] candidates: fetch_error (after retry)", lastFetchErr, "name=", name);
+    return { ok: false, reason: "fetch_error", detail: lastFetchErr ?? "" };
   }
   if (res.status === 401) {
     token = await getAccessToken(true);
@@ -250,10 +276,23 @@ export async function searchArtistCandidatesDetailed(
       return { ok: false, reason: "no_token" };
     }
     try {
-      res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
+      res = await fetchOnce(token);
     } catch (err) {
       const detail = (err as Error)?.message ?? "";
       console.warn("[spotify] candidates: fetch_error after 401", detail, "name=", name);
+      return { ok: false, reason: "fetch_error", detail };
+    }
+  }
+  // Final transient retry — a 5xx after the first retry above can still
+  // happen if the first attempt threw and the second got an upstream
+  // hiccup. Give it one more shot before failing.
+  if (!res.ok && isTransientStatus(res.status)) {
+    await sleep(500);
+    try {
+      res = await fetchOnce(token);
+    } catch (err) {
+      const detail = (err as Error)?.message ?? "";
+      console.warn("[spotify] candidates: fetch_error on transient retry", detail, "name=", name);
       return { ok: false, reason: "fetch_error", detail };
     }
   }
