@@ -87,6 +87,11 @@ export interface Song {
   // overlay uses these timestamps instead of auto-distributing the
   // plain-text `lyrics` field across duration.
   syncedLyrics?: { timeMs: number; text: string }[] | null;
+  // Per-track explicit flag. The album-level `isExplicit` stays as a
+  // separate override so admins can advisory-mark the whole record; the
+  // fan-facing tracklist shows the "E" pill when this song-level flag
+  // is true.
+  isExplicit?: boolean;
 }
 
 // SuperCredits™

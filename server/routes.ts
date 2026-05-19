@@ -1754,7 +1754,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics, instrumental, previewStartMs, previewEndMs } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs } = req.body ?? {};
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
@@ -1762,6 +1762,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
     if (audioUrl !== undefined) updates.audioUrl = audioUrl ? normalizeAudioUrl(String(audioUrl)) : null;
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
+    if (isExplicit !== undefined) updates.isExplicit = Boolean(isExplicit);
     // Preview window is atomic: either both fields null (auto-derived
     // from the master, default) or both finite non-negative integers
     // with end > start. We reject partial/NaN updates with a 400 so

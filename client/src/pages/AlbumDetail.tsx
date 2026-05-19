@@ -159,6 +159,7 @@ export function AlbumDetail() {
       // Player.tsx uses these timestamps instead of auto-distributing the
       // plain-text `lyrics` field across `duration`.
       syncedLyrics: { timeMs: number; text: string }[] | null;
+      isExplicit: boolean;
     }[];
   };
   const { data: apiAlbum } = useQuery<ApiAlbum>({
@@ -196,6 +197,7 @@ export function AlbumDetail() {
           lyrics: s.lyrics ?? undefined,
           audioUrl: s.audioUrl ?? undefined,
           syncedLyrics: s.syncedLyrics ?? null,
+          isExplicit: !!s.isExplicit,
         }));
     }
     return album ? getSongsByAlbum(id) : [];
@@ -635,10 +637,11 @@ export function AlbumDetail() {
                         <span className="text-[15px] tabular-nums" style={{ color: "rgba(255,255,255,0.32)" }}>{song.trackNumber}</span>
                       )}
                     </div>
-                    <div className="flex-1 min-w-0 relative h-full flex items-center">
+                    <div className="flex-1 min-w-0 relative h-full flex items-center gap-1.5">
                       <p className={`text-[15px] font-medium truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}>
                         {song.title}
                       </p>
+                      {song.isExplicit && <ExplicitBadge />}
                       {i > 0 && (
                         <span
                           className="absolute left-0 right-0 top-0 h-px pointer-events-none"

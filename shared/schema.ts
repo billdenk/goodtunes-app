@@ -156,6 +156,12 @@ export const songs = pgTable("songs", {
   // outro). The Lyrics status dot then reads "intentionally none" (grey
   // Ban glyph) instead of "missing" (empty grey ring). Default false.
   instrumental: boolean("instrumental").notNull().default(false),
+  // Per-track explicit flag — Apple Music's model. The fan-facing
+  // tracklist renders a small "E" pill next to the title when true.
+  // Album.isExplicit stays as a separate override (artwork/title
+  // advisory) so admins can mark the whole record without flipping
+  // every song; the album card's "E" badge lights up if either is on.
+  isExplicit: boolean("is_explicit").notNull().default(false),
   // The 30-second in-app preview window. When both are null, the player
   // auto-derives a preview from the first 30s of the master (v1 default
   // → Preview status dot reads "auto-set", green check). When the admin

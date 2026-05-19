@@ -76,6 +76,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { PlayerDock } from "@/components/ui/PlayerDock";
+import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import {
   Dialog,
   DialogContent,
@@ -133,6 +134,7 @@ interface SongLite {
   audioUrl: string | null;
   syncedLyrics?: { timeMs: number; endMs?: number; text: string }[] | null;
   instrumental?: boolean | null;
+  isExplicit?: boolean | null;
   previewStartMs?: number | null;
   previewEndMs?: number | null;
   // Pre-computed waveform peaks (0..1, ~200 numbers) for this master.
@@ -3435,14 +3437,17 @@ function TrackRow({
                 className="block w-full text-left"
                 data-testid={`button-open-track-${song.id}`}
               >
-                <div
-                  className={[
-                    "text-[13.5px] font-medium truncate",
-                    isCurrent ? "text-[#319ED8]" : "text-slate-900",
-                  ].join(" ")}
-                  data-testid={`text-track-title-${song.id}`}
-                >
-                  {song.title}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div
+                    className={[
+                      "text-[13.5px] font-medium truncate",
+                      isCurrent ? "text-[#319ED8]" : "text-slate-900",
+                    ].join(" ")}
+                    data-testid={`text-track-title-${song.id}`}
+                  >
+                    {song.title}
+                  </div>
+                  {song.isExplicit && <ExplicitBadge tone="slate" />}
                 </div>
               </button>
             </>
@@ -3903,6 +3908,61 @@ function TrackRow({
    design — an interlude, a guitar solo, an outro. Saves immediately
    on toggle so the row's Lyrics status dot updates without the admin
    having to touch the textarea or click Save below. */
+
+/* ─── Explicit toggle (paired with Instrumental in the master-tile
+   footer) ────────────────────────────────────────────────────────────
+   Apple Music model: each track carries its own E flag. The album-level
+   `isExplicit` (ExplicitToggle in the album header) stays as an
+   advisory override for artwork/title; once any song.isExplicit is
+   true, the consumer album card's "E" badge lights up. Saves
+   immediately on toggle — no Save button — to match the rest of the
+   master tile's autosave behavior. */
+function ExplicitTrackToggle({ song }: { song: SongLite }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const checked = !!song.isExplicit;
+
+  const toggleMut = useMutation({
+    mutationFn: async (next: boolean) =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, { isExplicit: next }),
+    onSuccess: async (_data, next) => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      toast({
+        title: next ? "Marked as explicit" : "Explicit flag removed",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update the explicit flag",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div
+      className="flex items-center gap-2.5 px-1"
+      data-testid={`toggle-explicit-${song.id}`}
+    >
+      <ExplicitBadge tone="slate" />
+      <div className="flex-1 min-w-0">
+        <span className="text-[11.5px] text-slate-600 font-medium">
+          Explicit
+        </span>
+        <span className="text-[10.5px] text-slate-400 ml-1.5">
+          · shows an E next to the title
+        </span>
+      </div>
+      <Switch
+        checked={checked}
+        disabled={toggleMut.isPending}
+        onCheckedChange={(next) => toggleMut.mutate(next)}
+        aria-label="Mark this track as explicit"
+        className="data-[state=unchecked]:bg-[#E9E9EB] data-[state=checked]:bg-[#34C759] [&>span]:!bg-white [&>span]:!shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      />
+    </div>
+  );
+}
 
 function InstrumentalToggle({ song }: { song: SongLite }) {
   const { toast } = useToast();
@@ -7639,8 +7699,13 @@ function AudioEditor({
                 concern. Only shows once a master exists — there's
                 nothing to be instrumental about otherwise. */}
             {song.audioUrl && (
-              <div className="-mx-3 mt-1 pt-2.5 px-3 border-t border-slate-100">
+              <div className="-mx-3 mt-1 pt-2.5 px-3 border-t border-slate-100 grid grid-cols-2 gap-3 items-center">
+                {/* Instrumental left, Explicit right — two concerns that
+                    live on every master, paired into a single footer
+                    row so the tile doesn't grow another stacked line.
+                    Each toggle still saves on its own. */}
                 <InstrumentalToggle song={song} />
+                <ExplicitTrackToggle song={song} />
               </div>
             )}
           </>
