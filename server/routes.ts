@@ -1721,6 +1721,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
     if (req.body?.isGoodTunesRelease !== undefined)
       updates.isGoodTunesRelease = !!req.body.isGoodTunesRelease;
+    if (req.body?.isExplicit !== undefined) updates.isExplicit = !!req.body.isExplicit;
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
     if (req.body?.genre !== undefined)

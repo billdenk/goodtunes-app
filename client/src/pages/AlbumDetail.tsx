@@ -10,6 +10,7 @@ import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
+import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { ChevronLeft, Share, MoreHorizontal, X as XIcon } from "lucide-react";
 import { startVendorChatAboutInstrument } from "@/lib/chatStore";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -135,6 +136,7 @@ export function AlbumDetail() {
     year: number | null;
     type: "Single" | "EP" | "LP";
     description: string | null;
+    isExplicit: boolean;
     goodTunesReleaseDate: string | null;
     streamingReleaseDate: string | null;
     // Denormalized record-label entity (or null). Comes from the album's
@@ -175,6 +177,7 @@ export function AlbumDetail() {
         year: apiAlbum.year ?? staticAlbum?.year ?? 0,
         type: apiAlbum.type,
         description: apiAlbum.description ?? staticAlbum?.description ?? "",
+        isExplicit: apiAlbum.isExplicit,
       };
     }
     return staticAlbum;
@@ -498,10 +501,11 @@ export function AlbumDetail() {
 
             <div className="relative pt-4 pb-3 px-5 text-center">
               <h1
-                className="text-white text-[22px] font-bold leading-tight tracking-tight"
+                className="text-white text-[22px] font-bold leading-tight tracking-tight inline-flex items-center justify-center gap-2 flex-wrap"
                 data-testid="text-album-title"
               >
-                {album.title}
+                <span>{album.title}</span>
+                {album.isExplicit && <ExplicitBadge />}
               </h1>
               <button
                 type="button"

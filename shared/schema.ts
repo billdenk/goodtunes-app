@@ -77,6 +77,12 @@ export const albums = pgTable("albums", {
   // live in the DB (so they remain reachable from a person's profile
   // and from the credits surface), they're just absent from this list.
   isGoodTunesRelease: boolean("is_goodtunes_release").notNull().default(false),
+  // Parental-advisory flag. When true the consumer surfaces a small "E"
+  // badge next to the album title (Apple Music / Spotify convention).
+  // Admin toggle lives in AdminAlbum's header; defaults false because most
+  // catalog rows are clean and we don't want to force a per-album decision
+  // on every import.
+  isExplicit: boolean("is_explicit").notNull().default(false),
   // Streaming-service handoff. We host the album in-app for the first ~2 weeks
   // then surface "Listen on Apple Music / Spotify" buttons on the album page
   // that point fans at the canonical album URL on each service — same

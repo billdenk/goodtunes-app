@@ -62,6 +62,11 @@ export interface Album {
   type: "Single" | "EP" | "LP";
   description: string;
   genre?: string;
+  isExplicit?: boolean;
+  // True for curated GoodTunes releases (the consumer Collection filters
+  // to these). Optional on the static seed where every row is curated;
+  // the API row from `/api/albums` always sets it.
+  isGoodTunesRelease?: boolean;
   certificateNumber?: number;
   ownedCertificates?: number[];
   purchases?: CertPurchase[];

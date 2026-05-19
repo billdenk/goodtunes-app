@@ -108,6 +108,7 @@ interface AlbumFull {
   description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
+  isExplicit?: boolean;
   genre?: string | null;
   labelId?: string | null;
   // Server-joined label row from AlbumWithLabel (storage.getAlbumById).
@@ -342,6 +343,7 @@ export function AdminAlbum() {
                   Hidden from store
                 </span>
               )}
+              <ExplicitToggle album={album} />
             </div>
             <h1
               className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate"
@@ -8860,6 +8862,67 @@ function AddTile({
 
 
 /* ─── Bits ─────────────────────────────────────────────────────────── */
+
+/**
+ * ExplicitToggle — inline chip in the AdminAlbum header that flips the
+ * album's `isExplicit` flag. Same vocabulary as the consumer "E" badge
+ * (`bg-white/30` on the dark mobile player → `bg-slate-700` here on the
+ * white admin chrome): when ON, shows a filled dark square with a white
+ * "E" + "Explicit" label; when OFF, shows an outlined ghost button so
+ * admins can tap to mark it. Optimistic update via direct PUT — same
+ * shape as artwork/genre updates already going through this route.
+ */
+function ExplicitToggle({ album }: { album: AlbumFull }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const mut = useMutation({
+    mutationFn: async (next: boolean) => {
+      await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
+        isExplicit: next,
+      });
+      return next;
+    },
+    onSuccess: async (next) => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      await qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      toast({ title: next ? "Marked explicit" : "Removed explicit flag" });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't update",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+  const isOn = !!album.isExplicit;
+  return (
+    <button
+      type="button"
+      onClick={() => mut.mutate(!isOn)}
+      disabled={mut.isPending}
+      title={isOn ? "Tap to remove explicit flag" : "Tap to mark explicit"}
+      data-testid="toggle-explicit"
+      className={[
+        "inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10.5px] font-medium normal-case tracking-normal transition-colors disabled:opacity-50",
+        isOn
+          ? "bg-slate-800 text-white hover:bg-slate-700"
+          : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "inline-flex items-center justify-center w-3.5 h-3.5 rounded-[3px] text-[9px] font-bold leading-none",
+          isOn ? "bg-white/25 text-white" : "bg-slate-200 text-slate-500",
+        ].join(" ")}
+      >
+        E
+      </span>
+      Explicit
+    </button>
+  );
+}
 
 function LifecyclePill({
   label,

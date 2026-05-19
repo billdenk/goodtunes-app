@@ -13,6 +13,7 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
+import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 interface UserPlaylist {
@@ -705,8 +706,23 @@ function AlbumCard({
         </button>
       </div>
       <div className="mt-2 px-0.5">
-        <p className="text-white text-sm font-semibold leading-tight truncate">{album.title}</p>
-        <p className="text-white/50 text-xs truncate mt-0.5">{album.artist}</p>
+        {/* Apple Music album-card typography: title 15px/semibold, artist
+            13px/regular at 65% opacity. Earlier sizes (text-sm / text-xs)
+            felt one notch too small + the artist line at white/50 read
+            as low-contrast next to Apple's. The "E" pill sits inline so
+            it shares a baseline with the title and truncates with it
+            (title gets `flex-1 min-w-0` so long titles ellipsize cleanly
+            without pushing the badge off the row). */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p
+            className="flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate"
+            data-testid={`text-album-title-${album.id}`}
+          >
+            {album.title}
+          </p>
+          {album.isExplicit && <ExplicitBadge />}
+        </div>
+        <p className="text-white/65 text-[13px] truncate mt-0.5">{album.artist}</p>
       </div>
     </div>
   );
