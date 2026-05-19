@@ -2093,7 +2093,7 @@ function AddMultipleTracksDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900">
@@ -2199,11 +2199,10 @@ function AddMultipleTracksDialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            disabled={running}
             data-testid="button-bulk-cancel"
-            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
           >
-            Cancel
+            {running ? "Close" : "Cancel"}
           </button>
           {mode === "empty" ? (
             <button
@@ -9161,7 +9160,7 @@ function BulkBonusFromDropboxDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900">
@@ -9210,11 +9209,10 @@ function BulkBonusFromDropboxDialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            disabled={running}
             data-testid={`button-bulk-bonus-${kind}-cancel`}
-            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
           >
-            Cancel
+            {running ? "Close" : "Cancel"}
           </button>
           <button
             type="button"
