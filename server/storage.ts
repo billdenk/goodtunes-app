@@ -73,6 +73,11 @@ export interface IStorage {
   // the fan side can render label name/logo without a second fetch.
   getAlbums(opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel[]>;
   getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel | undefined>;
+  // Returns the set of album IDs that have at least one explicit song.
+  // Used by the /api/albums + /api/albums/:id routes to derive the
+  // album-level "E" badge from per-song flags without a per-album
+  // round-trip. One query per list response.
+  getExplicitAlbumIds(): Promise<Set<string>>;
   getSongsByAlbum(albumId: string): Promise<Song[]>;
   getSongById(id: string): Promise<Song | undefined>;
   getAllSongs(opts?: { includeHidden?: boolean }): Promise<Song[]>;
@@ -433,6 +438,13 @@ export class DbStorage implements IStorage {
   }
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
     return db.select().from(songs).where(eq(songs.albumId, albumId)).orderBy(asc(songs.trackNumber));
+  }
+  async getExplicitAlbumIds(): Promise<Set<string>> {
+    const rows = await db
+      .selectDistinct({ albumId: songs.albumId })
+      .from(songs)
+      .where(eq(songs.isExplicit, true));
+    return new Set(rows.map((r) => r.albumId));
   }
   async getSongById(id: string): Promise<Song | undefined> {
     const [s] = await db.select().from(songs).where(eq(songs.id, id));

@@ -4935,7 +4935,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Admins see hidden albums so the CMS list stays complete; fans don't.
     const includeHidden = await isAdminUser(req);
     const albums = await storage.getAlbums({ includeHidden });
-    return res.json(albums);
+    // Derive album-level explicit from per-song flags so the consumer
+    // "E" badge lights up automatically when any song on the record is
+    // marked explicit. The album.isExplicit column survives as a manual
+    // override (e.g. for an explicit cover/title with clean songs).
+    const explicitAlbumIds = await storage.getExplicitAlbumIds();
+    const enriched = albums.map((a) => ({
+      ...a,
+      isExplicit: a.isExplicit || explicitAlbumIds.has(a.id),
+    }));
+    return res.json(enriched);
   });
 
   app.get("/api/albums/:id", requireAuth, async (req, res) => {
@@ -4943,7 +4952,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const songs = await storage.getSongsByAlbum(album.id);
-    return res.json({ ...album, songs });
+    // Same derivation as the list route — any explicit song lights the
+    // album-level flag the consumer header reads.
+    const derivedExplicit =
+      album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
+    return res.json({ ...album, isExplicit: derivedExplicit, songs });
   });
 
   // Catalog-wide song list. PlayerContext fetches this once and builds an

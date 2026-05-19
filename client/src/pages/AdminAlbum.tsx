@@ -267,7 +267,7 @@ export function AdminAlbum() {
     ? { label: "Prepping", tone: "slate" as const }
     : album.isHidden
       ? { label: "Sunset", tone: "amber" as const }
-      : { label: "Live", tone: "mint" as const };
+      : { label: "Released", tone: "mint" as const };
 
   return (
     <AdminFrame active="albums" preview={<AlbumPreviewCard album={album} />}>
@@ -345,7 +345,13 @@ export function AdminAlbum() {
                   Hidden from store
                 </span>
               )}
-              <ExplicitToggle album={album} />
+              {/* Album-level Explicit toggle removed — now derived
+                  server-side from per-song flags (any explicit song →
+                  album reads explicit). The per-track toggle in the
+                  Tracks tab is the single source of truth. The album's
+                  `isExplicit` column survives as a manual override
+                  path (no UI), should we ever need to advisory-mark a
+                  record whose songs are all clean. */}
             </div>
             <h1
               className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate"
@@ -3912,9 +3918,10 @@ function TrackRow({
 /* ─── Explicit toggle (paired with Instrumental in the master-tile
    footer) ────────────────────────────────────────────────────────────
    Apple Music model: each track carries its own E flag. The album-level
-   `isExplicit` (ExplicitToggle in the album header) stays as an
-   advisory override for artwork/title; once any song.isExplicit is
-   true, the consumer album card's "E" badge lights up. Saves
+   `isExplicit` column survives as a manual override path (no UI today)
+   for the rare case of a clean tracklist with an explicit cover/title;
+   in normal use, any song.isExplicit being true is enough to light
+   the consumer album card's "E" badge — the server derives it. Saves
    immediately on toggle — no Save button — to match the rest of the
    master tile's autosave behavior. */
 function ExplicitTrackToggle({ song }: { song: SongLite }) {
@@ -3941,18 +3948,16 @@ function ExplicitTrackToggle({ song }: { song: SongLite }) {
 
   return (
     <div
-      className="flex items-center gap-2.5 px-1"
+      className="flex items-center justify-center gap-2.5 w-full"
       data-testid={`toggle-explicit-${song.id}`}
     >
       <ExplicitBadge tone="slate" />
-      <div className="flex-1 min-w-0">
-        <span className="text-[11.5px] text-slate-600 font-medium">
-          Explicit
-        </span>
-        <span className="text-[10.5px] text-slate-400 ml-1.5">
-          · shows an E next to the title
-        </span>
-      </div>
+      <span className="text-[11.5px] text-slate-600 font-medium">
+        Explicit
+      </span>
+      <span className="text-[10.5px] text-slate-400">
+        · shows an E next to the title
+      </span>
       <Switch
         checked={checked}
         disabled={toggleMut.isPending}
@@ -3998,23 +4003,21 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
 
   return (
     <div
-      className="flex items-center gap-2.5 px-1"
+      className="flex items-center justify-center gap-2.5 w-full"
       data-testid={`toggle-instrumental-${song.id}`}
     >
       <Ban
         className="w-3.5 h-3.5 text-slate-400 flex-shrink-0"
         aria-hidden="true"
       />
-      <div className="flex-1 min-w-0">
-        <span className="text-[11.5px] text-slate-600 font-medium">
-          Instrumental
-        </span>
-        <span className="text-[10.5px] text-slate-400 ml-1.5">
-          {lockedOn
-            ? "· clear the lyrics first to mark instrumental"
-            : "· no lyrics or singer credits"}
-        </span>
-      </div>
+      <span className="text-[11.5px] text-slate-600 font-medium">
+        Instrumental
+      </span>
+      <span className="text-[10.5px] text-slate-400">
+        {lockedOn
+          ? "· clear the lyrics first to mark instrumental"
+          : "· no lyrics or singer credits"}
+      </span>
       {/* Apple HIG Switch — pinned explicitly because shadcn's
           defaults pull `bg-input` (our dark-navy player token) for the
           track and `bg-background` (also dark navy) for the thumb,
@@ -8933,67 +8936,6 @@ function AddTile({
 
 
 /* ─── Bits ─────────────────────────────────────────────────────────── */
-
-/**
- * ExplicitToggle — inline chip in the AdminAlbum header that flips the
- * album's `isExplicit` flag. Same vocabulary as the consumer "E" badge
- * (`bg-white/30` on the dark mobile player → `bg-slate-700` here on the
- * white admin chrome): when ON, shows a filled dark square with a white
- * "E" + "Explicit" label; when OFF, shows an outlined ghost button so
- * admins can tap to mark it. Optimistic update via direct PUT — same
- * shape as artwork/genre updates already going through this route.
- */
-function ExplicitToggle({ album }: { album: AlbumFull }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const mut = useMutation({
-    mutationFn: async (next: boolean) => {
-      await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
-        isExplicit: next,
-      });
-      return next;
-    },
-    onSuccess: async (next) => {
-      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
-      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
-      await qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
-      toast({ title: next ? "Marked explicit" : "Removed explicit flag" });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't update",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
-  });
-  const isOn = !!album.isExplicit;
-  return (
-    <button
-      type="button"
-      onClick={() => mut.mutate(!isOn)}
-      disabled={mut.isPending}
-      title={isOn ? "Tap to remove explicit flag" : "Tap to mark explicit"}
-      data-testid="toggle-explicit"
-      className={[
-        "inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10.5px] font-medium normal-case tracking-normal transition-colors disabled:opacity-50",
-        isOn
-          ? "bg-slate-800 text-white hover:bg-slate-700"
-          : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
-      ].join(" ")}
-    >
-      <span
-        className={[
-          "inline-flex items-center justify-center w-3.5 h-3.5 rounded-[3px] text-[9px] font-bold leading-none",
-          isOn ? "bg-white/25 text-white" : "bg-slate-200 text-slate-500",
-        ].join(" ")}
-      >
-        E
-      </span>
-      Explicit
-    </button>
-  );
-}
 
 function LifecyclePill({
   label,
