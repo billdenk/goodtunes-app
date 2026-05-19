@@ -2514,7 +2514,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     songKeys: Array<{ song: { id: string; title: string }; key: string }>,
   ): Map<string, string> | null {
     const lines = text.split("\n");
-    type Heading = { songId: string; lineIndex: number };
+    type Heading = { songId: string; lineIndex: number; inlineRest?: string };
     const headings: Heading[] = [];
     // Longest titles win first so "Love Story" beats "Love" on a line
     // that genuinely is the longer one.
@@ -2526,44 +2526,88 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // heading. Better than silently overwriting.
       if (!keyToSongId.has(sk.key)) keyToSongId.set(sk.key, sk.song.id);
     }
-    // Line-first scan. For each line we compute its "heading key" by
-    // stripping leading numbering and any trailing parenthetical
-    // metadata, then fuzzying what remains. A line is a heading iff
-    // that key EXACTLY equals one of our song keys. Exact-equals
-    // avoids the false-positive trap where title "Love" would match
-    // a lyric line "Love is in the air" via a startsWith check.
+    // Line-first scan. Two heading shapes are recognised:
+    //
+    //  (a) Standalone heading — the line, with leading track-number
+    //      and ALL trailing parentheticals stripped, fuzzy-equals a
+    //      song title. e.g. "Adventure Awaits (Written by …)" → ok.
+    //
+    //  (b) Inline-credit heading — Jay Putty's lyric docx can collapse
+    //      the line break between the heading and the first lyric
+    //      line, producing one paragraph like:
+    //          "War With Myself (Written by …, Produced by …) I've been a sinner…"
+    //      We detect "<title> (credit-words…) <rest>" where the
+    //      parenthetical contains credit vocabulary (Written / Produced
+    //      / by / etc). The `<rest>` portion is treated as the first
+    //      line of that song's lyric section. Restricting to credit
+    //      vocabulary keeps us from false-positiving on lyric prose
+    //      like "Love (is in the air)".
+    //
+    // Exact-equals (not startsWith) avoids the trap where title "Love"
+    // would match the lyric line "Love is in the air".
+    // Credit vocabulary for shape-(b) detection. Intentionally excludes
+    // bare "by" — too easy to hit lyric prose like "(by my side)".
+    // Real credit parentheticals always pair a verb (Written / Produced
+    // / Composed / Co-wrote) or the feature marker (feat / featuring)
+    // with the name(s), so requiring one of those verbs is both
+    // necessary and sufficient.
+    const creditRe = /\b(written|produced|prod\.?|composed|feat|featuring|co[-\s]?wrote|lyrics?\s+by|music\s+by)\b/i;
     const assignedSongs = new Set<string>();
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
-      const stripped = raw
-        // leading "1.", "01)", "Track 2:", etc.
-        .replace(/^\s*(?:track\s*)?\d{1,3}[\.\)\-:]?\s*/i, "")
-        // trailing parenthetical / bracket annotations
-        // ("(Written by …)", "[Bonus]") — applied repeatedly so
-        // "Title (a) [b]" collapses to "Title".
+      const leadStripped = raw.replace(/^\s*(?:track\s*)?\d{1,3}[\.\)\-:]?\s*/i, "");
+
+      // Shape (a) — standalone heading.
+      const noParen = leadStripped
         .replace(/\s*[\(\[][^\)\]]*[\)\]]\s*/g, " ")
         .trim();
-      const lkey = fuzzy(stripped);
-      if (!lkey) continue;
-      const songId = keyToSongId.get(lkey);
-      if (!songId) continue;
-      if (assignedSongs.has(songId)) continue; // first heading wins
-      assignedSongs.add(songId);
-      headings.push({ songId, lineIndex: i });
+      const ekey = fuzzy(noParen);
+      const exactSongId = ekey ? keyToSongId.get(ekey) : undefined;
+      if (exactSongId && !assignedSongs.has(exactSongId)) {
+        assignedSongs.add(exactSongId);
+        headings.push({ songId: exactSongId, lineIndex: i });
+        continue;
+      }
+
+      // Shape (b) — inline credit-paren heading.
+      // Use a NON-GREEDY title capture so multi-paren lines still split
+      // on the first parenthetical. We then check the parenthetical's
+      // contents look like credits before claiming the match.
+      const m = leadStripped.match(/^(.+?)\s*[\(\[]([^\)\]]+)[\)\]]\s*(.*)$/);
+      if (m) {
+        const titlePart = m[1].trim();
+        const parenBody = m[2];
+        const rest = m[3].trim();
+        if (creditRe.test(parenBody)) {
+          const ikey = fuzzy(titlePart);
+          const inlineSongId = ikey ? keyToSongId.get(ikey) : undefined;
+          if (inlineSongId && !assignedSongs.has(inlineSongId)) {
+            assignedSongs.add(inlineSongId);
+            headings.push({ songId: inlineSongId, lineIndex: i, inlineRest: rest });
+            continue;
+          }
+        }
+      }
     }
     if (headings.length < 2) return null;
     headings.sort((a, b) => a.lineIndex - b.lineIndex);
     const result = new Map<string, string>();
     for (let h = 0; h < headings.length; h++) {
-      const start = headings[h].lineIndex + 1;
+      const head = headings[h];
+      const start = head.lineIndex + 1;
       const end =
         h + 1 < headings.length ? headings[h + 1].lineIndex : lines.length;
-      const slice = lines
+      let slice = lines
         .slice(start, end)
         .join("\n")
         .replace(/^\n+|\n+$/g, "")
         .trim();
-      if (slice) result.set(headings[h].songId, slice);
+      // For inline-credit headings, the first lyric line is on the
+      // heading row itself — prepend it so it's not dropped.
+      if (head.inlineRest) {
+        slice = slice ? `${head.inlineRest}\n${slice}` : head.inlineRest;
+      }
+      if (slice) result.set(head.songId, slice);
     }
     return result;
   }
