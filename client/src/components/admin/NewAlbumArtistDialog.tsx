@@ -388,8 +388,9 @@ export function NewAlbumArtistDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
       <DialogContent
-        className="sm:max-w-[480px] p-0 gap-0 bg-white"
+        className="sm:max-w-[480px] p-0 gap-0 bg-white min-h-[460px] flex flex-col"
         data-testid="dialog-new-album-artist"
+        aria-describedby={undefined}
       >
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-slate-200">
           <div className="flex items-center gap-2">
