@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, Loader2 } from "lucide-react";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
   Dialog,
@@ -50,6 +50,7 @@ interface PersonLite {
   id: string;
   name: string;
   photoUrl?: string | null;
+  itunesArtistId?: string | null;
 }
 
 interface SpotifyCandidate {
@@ -107,6 +108,15 @@ export interface NewAlbumArtistDialogProps {
   onSkip: () => void;
   /** Disables all internal actions while the album POST is in flight. */
   busy?: boolean;
+  /**
+   * "album" (default) — opener is creating an album and needs an artist
+   * attached. Surfaces a "I'll set the artist later" skip footer and the
+   * confirm button reads "Create artist & album".
+   * "person" — opener is the People index. Picking commits a person row
+   * and navigates to their profile. No skip footer; confirm reads
+   * "Add person".
+   */
+  mode?: "album" | "person";
 }
 
 type Stage = "intro" | "streaming" | "confirm";
@@ -145,6 +155,7 @@ export function NewAlbumArtistDialog({
   onSelect,
   onSkip,
   busy: parentBusy,
+  mode = "album",
 }: NewAlbumArtistDialogProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -344,6 +355,27 @@ export function NewAlbumArtistDialog({
         }
       }
 
+      // 1a) Duplicate guard — if the Apple scrape produced an
+      //     `itunesArtistId` we already have on a local person, OR if
+      //     Apple's canonical name now matches a local row, treat as
+      //     "open existing" instead of creating a duplicate. This is the
+      //     guard the old `NewPersonSheet` used to do post-scrape.
+      const scrapedItunesId = apple?.itunesArtistId || appleCandidate?.artistId || null;
+      const scrapedName = (apple?.name || picked.name).trim().toLowerCase();
+      const existing = people.find(
+        (p) =>
+          (scrapedItunesId && p.itunesArtistId && p.itunesArtistId === scrapedItunesId) ||
+          p.name.trim().toLowerCase() === scrapedName,
+      );
+      if (existing) {
+        toast({
+          title: `Already in your catalog`,
+          description: `Opening ${existing.name}.`,
+        });
+        onSelect({ name: existing.name, id: existing.id });
+        return;
+      }
+
       // 2) Create Person, preferring Apple's canonical name when present
       const personBody: Record<string, unknown> = {
         name: apple?.name || picked.name,
@@ -418,9 +450,9 @@ export function NewAlbumArtistDialog({
               </button>
             )}
             <DialogTitle className="text-[17px] font-semibold text-slate-900">
-              {stage === "intro" && "Who's the artist?"}
+              {stage === "intro" && (mode === "person" ? "Add a person" : "Who's the artist?")}
               {stage === "streaming" && "Search Spotify"}
-              {stage === "confirm" && "Confirm artist"}
+              {stage === "confirm" && (mode === "person" ? "Confirm person" : "Confirm artist")}
             </DialogTitle>
           </div>
         </DialogHeader>
@@ -513,17 +545,19 @@ export function NewAlbumArtistDialog({
               )}
             </div>
 
-            <div className="border-t border-slate-200 -mx-5 px-5 pt-3 mt-3 flex items-center">
-              <button
-                type="button"
-                onClick={onSkip}
-                disabled={busy}
-                className="text-[11.5px] font-medium text-slate-500 hover:text-slate-900 disabled:opacity-60"
-                data-testid="button-skip-artist"
-              >
-                I'll set the artist later
-              </button>
-            </div>
+            {mode === "album" && (
+              <div className="border-t border-slate-200 -mx-5 px-5 pt-3 mt-3 flex items-center">
+                <button
+                  type="button"
+                  onClick={onSkip}
+                  disabled={busy}
+                  className="text-[11.5px] font-medium text-slate-500 hover:text-slate-900 disabled:opacity-60"
+                  data-testid="button-skip-artist"
+                >
+                  I'll set the artist later
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -594,23 +628,50 @@ export function NewAlbumArtistDialog({
             ) : (
               <div className="grid grid-cols-2 gap-2 max-h-[360px] overflow-y-auto -mx-1 px-1">
                 {spotifyCandidates.map((c) => (
-                  <button
+                  // div + role=button (not a <button>) because the card
+                  // contains a nested <a> (open-on-Spotify). Nesting <a>
+                  // inside <button> is invalid HTML and breaks keyboard
+                  // focus order. The picker stops propagation on the
+                  // link click so opening Spotify in a new tab doesn't
+                  // also commit the pick.
+                  <div
                     key={c.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handlePick(c)}
-                    className="flex flex-col items-center gap-2 p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-center active:scale-[0.98] transition"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handlePick(c);
+                      }
+                    }}
+                    className="flex flex-col items-center gap-2 p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-center active:scale-[0.98] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]"
                     data-testid={`option-spotify-${c.id}`}
                   >
                     <Avatar name={c.name} photoUrl={c.photoUrl} size={64} />
                     <div className="w-full">
-                      <div className="text-[13px] font-semibold text-slate-900 truncate">
-                        {c.name}
+                      <div className="flex items-center justify-center gap-1 min-w-0">
+                        <span className="text-[13px] font-semibold text-slate-900 truncate">
+                          {c.name}
+                        </span>
+                        <a
+                          href={c.spotifyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-slate-400 hover:text-[#1DB954] flex-shrink-0 inline-flex items-center"
+                          aria-label={`Open ${c.name} on Spotify`}
+                          title="Open on Spotify"
+                          data-testid={`link-open-spotify-${c.id}`}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                       <div className="text-[11px] text-slate-500 truncate">
                         {c.followers > 0 ? `${formatFollowers(c.followers)} followers` : c.genres[0] || "Artist"}
                       </div>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -695,7 +756,7 @@ export function NewAlbumArtistDialog({
                 ) : (
                   <Check className="w-3.5 h-3.5" />
                 )}
-                Create artist & album
+                {mode === "person" ? "Add person" : "Create artist & album"}
               </button>
             </div>
           </div>
