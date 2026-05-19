@@ -42,6 +42,7 @@ import {
   Check,
   ListChecks,
   RotateCcw,
+  RefreshCw,
   Info,
   MoreHorizontal,
   Search,
@@ -8609,6 +8610,49 @@ function AudioEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftUrl, draftSourceUrl, song.audioUrl, song.audioSourceUrl, uploading]);
 
+  // Legacy backfill — runs the same probe-and-transcode pipeline
+  // that new uploads use against the existing master URL, then
+  // refreshes the row so the new FLAC streams in browsers and the
+  // original WAV becomes the archival source. Server is idempotent
+  // and a no-op when probe says the file is already 16-bit PCM.
+  const reprocessMut = useMutation({
+    mutationFn: async () =>
+      (await apiRequest(
+        "POST",
+        `/api/admin/songs/${song.id}/reprocess-audio`,
+        {},
+      )).json() as Promise<{
+        transcoded: boolean;
+        audioUrl?: string;
+        audioSourceUrl?: string;
+        sourceBitsPerSample?: number;
+      }>,
+    onSuccess: async (data) => {
+      if (data.transcoded) {
+        // Sync local draft state immediately so the URL field reflects
+        // the new FLAC without waiting for the parent refetch.
+        if (data.audioUrl) setDraftUrl(data.audioUrl);
+        if (data.audioSourceUrl) setDraftSourceUrl(data.audioSourceUrl);
+        toast({
+          title: "Master converted for browser playback",
+          description: `${data.sourceBitsPerSample ?? "high"}-bit WAV preserved as the archival original; the FLAC copy will now stream in browsers.`,
+        });
+      } else {
+        toast({
+          title: "Already browser-friendly",
+          description: "Probe says this master is already 16-bit PCM — no conversion needed.",
+        });
+      }
+      await onSaved();
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Re-process failed",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
   return (
     <div
       className="px-5 pt-4 pb-4"
@@ -8784,6 +8828,35 @@ function AudioEditor({
                     <Upload className="w-3.5 h-3.5" />
                     Replace file
                   </button>
+                  {/* Legacy backfill — visible only for masters that
+                      predate the auto-transcode pipeline (a .wav/.aiff
+                      URL with no archival source set). Chrome can't
+                      decode 24-bit PCM WAV, so re-processing converts
+                      to FLAC for playback and preserves the original
+                      as `audioSourceUrl`. Hidden once converted. */}
+                  {(() => {
+                    const playUrl = song.audioUrl || "";
+                    const isLegacyWav =
+                      /\.(wav|aif|aiff)(?:\?|$)/i.test(playUrl) &&
+                      !song.audioSourceUrl;
+                    if (!isLegacyWav) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => reprocessMut.mutate()}
+                        disabled={reprocessMut.isPending}
+                        className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                        data-testid={`button-reprocess-audio-${song.id}`}
+                      >
+                        {reprocessMut.isPending ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                        Re-process for browser
+                      </button>
+                    );
+                  })()}
                   {/* Hairline + breathing room before the destructive
                       action — design-system rule: trash/delete buttons
                       keep gap + divider from neighbors so a thumb can't
