@@ -3498,6 +3498,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const album = await storage.getAlbumById(albumId, { includeHidden: true });
       if (!album) return res.status(404).json({ message: "Album not found." });
 
+      // Trace-log so we can confirm the POST actually lands (separate from
+      // the per-job [import-job] logs further down). Without this, a fail
+      // before the job ever starts is invisible in `npm run dev` output.
+      console.log(`[import-tracks-from-dropbox] album=${albumId} url=${folderUrl.slice(0, 80)}…`);
+
       // Cheap precondition checks (album exists, link non-empty) run
       // synchronously above so a bad link 400s immediately. Anything
       // that could touch the network / large files runs inside the
@@ -3870,7 +3875,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         state.errorMessage = result.errorMessage ?? null;
       } catch (e: any) {
         state.status = "failed";
-        state.errorMessage = e?.message || "Import failed.";
+        // Surface a useful message even when the throw didn't carry one.
+        // Worker exceptions used to land on the client as a generic
+        // "Import failed." with no signal — log the full stack server-side
+        // AND propagate something a human can act on into `errorMessage`.
+        const message =
+          (typeof e?.message === "string" && e.message.trim()) ||
+          (typeof e === "string" && e.trim()) ||
+          (e?.code ? `Import failed (${e.code})` : "Import failed (no error message — check server logs).");
+        state.errorMessage = message;
+        console.error(
+          `[import-job] ${opts.jobType} (album=${opts.albumId ?? "n/a"}, jobId=${jobId}) threw:`,
+          e?.stack || e,
+        );
       } finally {
         state.finishedAt = Date.now();
         try {

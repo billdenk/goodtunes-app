@@ -2610,15 +2610,31 @@ function AddMultipleTracksDialog({
       // surfaced so "where did my tracks go?" answers itself from the toast.
       const parts: string[] = [];
       if (failed > 0) {
-        // Show why the first failure happened so the operator can act
-        // (e.g. "Too large (834 MB; limit 200 MB)") instead of staring
-        // at an opaque count. Caps at one example to keep the toast
-        // readable — server logs carry the full list.
-        const first = errorList[0];
-        const why = first ? ` — ${first.filename}: ${first.error}` : "";
-        parts.push(
-          `${failed} file${failed === 1 ? "" : "s"} couldn't be imported${why}${failed > 1 ? ` (+${failed - 1} more)` : ""}`,
-        );
+        // Roll up to the dominant cause across all failures so a 12-file
+        // import doesn't surface only the first file's error and hide a
+        // common pattern ("11 of 12 too large"). Bucket by the raw error
+        // string, pick the most-frequent bucket, then quote one example
+        // filename from that bucket.
+        const buckets = new Map<string, string[]>();
+        for (const item of errorList) {
+          const key = item.error || "Failed to import";
+          const list = buckets.get(key) ?? [];
+          list.push(item.filename);
+          buckets.set(key, list);
+        }
+        let dominantReason = errorList[0]?.error ?? "Failed to import";
+        let dominantFiles: string[] = errorList[0] ? [errorList[0].filename] : [];
+        for (const [reason, files] of Array.from(buckets.entries())) {
+          if (files.length > dominantFiles.length) {
+            dominantReason = reason;
+            dominantFiles = files;
+          }
+        }
+        const ratio = dominantFiles.length === failed
+          ? `${failed} file${failed === 1 ? "" : "s"}`
+          : `${dominantFiles.length} of ${failed} files`;
+        const example = dominantFiles[0] ? ` — e.g. ${dominantFiles[0]}` : "";
+        parts.push(`${ratio} couldn't be imported: ${dominantReason}${example}`);
       }
       if (skipped.length > 0) {
         const preview = skipped.slice(0, 3).join(", ");
