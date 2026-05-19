@@ -40,6 +40,7 @@ import {
   FileText,
   Users,
   Check,
+  ListChecks,
   RotateCcw,
   Info,
   MoreHorizontal,
@@ -178,6 +179,17 @@ export function AdminAlbum() {
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Selection mode + its checkboxes only make sense on the Tracks tab. If
+  // the operator wanders to Overview/Bonus mid-selection, drop the mode so
+  // the header reverts to the standalone delete-album trash button instead
+  // of stranding a stale "Delete N Tracks" CTA on a tab that has no tracks
+  // visible.
+  useEffect(() => {
+    if (tab !== "tracks" && selectionMode) {
+      setSelectionMode(false);
+      setSelectedTrackIds(new Set());
+    }
+  }, [tab, selectionMode]);
   const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
   const [deleteAllTracksOpen, setDeleteAllTracksOpen] = useState(false);
   // Artwork editor lives as a modal hanging off the page header thumbnail,
@@ -490,6 +502,23 @@ export function AdminAlbum() {
                 {selectedTrackIds.size === 1 ? "Track" : "Tracks"}
               </button>
             </div>
+          ) : tab !== "tracks" ? (
+            // Overview + Bonus: the operator only needs the "nuke this
+            // album" path; the multi-track delete options are scoped to
+            // the Tracks tab where the checkboxes actually live.
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={deleteAlbum.isPending}
+              aria-label="Delete album"
+              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
+              data-testid="button-delete-album"
+            >
+              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                Delete
+              </span>
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -534,7 +563,7 @@ export function AdminAlbum() {
                   data-testid="menu-delete-selected-tracks"
                   className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900 data-[disabled]:opacity-50"
                 >
-                  <Check className="w-4 h-4 text-slate-500" />
+                  <ListChecks className="w-4 h-4 text-slate-500" />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-900">
                       Delete selected tracks…
