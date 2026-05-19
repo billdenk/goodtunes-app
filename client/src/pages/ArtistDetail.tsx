@@ -7,7 +7,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
-import type { PersonDiscography } from "@shared/schema";
+import type { PersonDiscography, Album as DbAlbum } from "@shared/schema";
 import appleMusicLogo from "@/assets/brand/apple-music.svg";
 import spotifyLogo from "@/assets/brand/spotify.svg";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
@@ -23,10 +23,43 @@ export function ArtistDetail() {
     try { return decodeURIComponent(slug || ""); } catch { return slug || ""; }
   }, [slug]);
 
-  const artistAlbums = useMemo(
-    () => ALBUMS.filter((a) => a.artist === artistName),
-    [artistName],
-  );
+  // DB-backed albums. The fan ArtistDetail used to read only the
+  // hardcoded `ALBUMS` from `@/data/musicData`, so anything Bill added
+  // in admin (which writes to the `albums` table) never appeared on
+  // the fan artist page. Now we union static + DB rows, matching the
+  // artist by display name (case-insensitive), and dedupe by id so a
+  // seeded static album that's also been imported into the DB doesn't
+  // render twice.
+  const { data: dbAlbums = [] } = useQuery<DbAlbum[]>({
+    queryKey: ["/api/albums"],
+  });
+  const artistAlbums = useMemo<Album[]>(() => {
+    const nameLc = artistName.trim().toLowerCase();
+    const staticMatches = ALBUMS.filter(
+      (a) => a.artist.trim().toLowerCase() === nameLc,
+    );
+    const seenIds = new Set(staticMatches.map((a) => a.id));
+    // Convert DB Album → fan-side Album shape. The fan UI here only
+    // touches { id, title, artist, artwork, year, type }; the rest of
+    // the static Album fields (description / appleMusicUrl / etc.) are
+    // not read on this page so we don't need to map them.
+    const dbMatches = dbAlbums
+      .filter(
+        (a) =>
+          !a.isHidden &&
+          (a.artist ?? "").trim().toLowerCase() === nameLc &&
+          !seenIds.has(a.id),
+      )
+      .map((a) => ({
+        id: a.id,
+        title: a.title,
+        artist: a.artist ?? artistName,
+        artwork: a.artwork ?? "",
+        year: a.year ?? 0,
+        type: (a.type as Album["type"]) ?? "LP",
+      } as Album));
+    return [...staticMatches, ...dbMatches];
+  }, [artistName, dbAlbums]);
 
   const allArtistSongs = useMemo(
     () =>
@@ -64,7 +97,16 @@ export function ArtistDetail() {
   // /api/people list (small) and match case-insensitively. When this
   // page migrates to a personId-based route we can swap for a direct
   // /api/people/:id fetch.
-  type PublicPerson = { id: string; name: string; bio: string | null; photoUrl: string | null };
+  // `coverUrl` is the wide landscape banner uploaded from the admin
+  // Person → Cover tab. Admin copy literally says "Used as the hero
+  // banner on the fan-side artist page" — this surfaces it.
+  type PublicPerson = {
+    id: string;
+    name: string;
+    bio: string | null;
+    photoUrl: string | null;
+    coverUrl: string | null;
+  };
   const { data: allPeople = [] } = useQuery<PublicPerson[]>({
     queryKey: ["/api/people"],
   });
@@ -125,9 +167,20 @@ export function ArtistDetail() {
 
   const isFav = favArtists.has(artistName);
   const heroArt = artistAlbums[0]?.artwork ?? streamingAll[0]?.artworkUrl ?? undefined;
-  const artistPhoto = ARTIST_PHOTOS[artistName];
+  // DB person fields win over the static asset map — once Bill uploads
+  // a photo or cover in admin, the fan page picks it up immediately
+  // without a code change. Cover is for the wide background banner
+  // (treated less aggressively so it actually reads); photo is for
+  // both the round avatar and the background fallback when no cover
+  // has been uploaded yet.
+  const artistPhoto = artistPerson?.photoUrl ?? ARTIST_PHOTOS[artistName];
   const avatarSrc = artistPhoto ?? heroArt;
-  const blurSrc = artistPhoto ?? heroArt;
+  const coverBannerSrc = artistPerson?.coverUrl ?? null;
+  const blurSrc = coverBannerSrc ?? artistPhoto ?? heroArt;
+  // When the admin has uploaded a real wide cover, treat it as a hero
+  // banner (taller, less aggressively dimmed) instead of just a blur
+  // wash. Without a cover we keep the existing photo-blur behavior.
+  const hasCoverBanner = Boolean(coverBannerSrc);
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
@@ -159,9 +212,37 @@ export function ArtistDetail() {
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
       {blurSrc && (
-        <div className="absolute top-0 left-0 right-0 h-[280px] overflow-hidden pointer-events-none">
-          <img src={blurSrc} alt="" className="w-full h-full object-cover" style={{ filter: "blur(40px) saturate(140%)", transform: "scale(1.2)" }} />
-          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.4) 0%, rgba(0,6,43,0.85) 70%, #00062B 100%)" }} />
+        <div
+          className={`absolute top-0 left-0 right-0 overflow-hidden pointer-events-none ${
+            hasCoverBanner ? "h-[420px]" : "h-[320px]"
+          }`}
+        >
+          <img
+            src={blurSrc}
+            alt=""
+            className="w-full h-full object-cover"
+            style={
+              hasCoverBanner
+                // Real cover banner — light blur to soften edges, full
+                // saturation, no scale. We want the photo readable.
+                ? { filter: "blur(6px) saturate(110%)" }
+                // Photo-blur fallback — heavier blur, scale up so the
+                // edges don't show, and pump saturation so the brand
+                // bg doesn't drown the color.
+                : { filter: "blur(28px) saturate(160%)", transform: "scale(1.15)" }
+            }
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              // Softer top stop than before (0.15 vs 0.4) so the photo
+              // actually shows, then ramp to the brand bg by the
+              // bottom edge so the page content stays readable.
+              background: hasCoverBanner
+                ? "linear-gradient(to bottom, rgba(0,6,43,0.15) 0%, rgba(0,6,43,0.55) 55%, rgba(0,6,43,0.92) 88%, #00062B 100%)"
+                : "linear-gradient(to bottom, rgba(0,6,43,0.20) 0%, rgba(0,6,43,0.70) 60%, #00062B 100%)",
+            }}
+          />
         </div>
       )}
 
