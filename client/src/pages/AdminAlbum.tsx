@@ -6062,55 +6062,84 @@ function LyricsEditor({
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="flex items-center gap-2.5">
-                {originalRef.current && originalRef.current !== draft && (
-                  <button
-                    type="button"
-                    onClick={() => setShowOriginal(true)}
-                    className="text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded"
-                    data-testid={`button-view-original-lyrics-${song.id}`}
+              {/* Collapsed into a single "Lyric options" dropdown so the
+                  toolbar stays readable on narrow breakpoints. The
+                  individual actions used to wrap and crowd the header
+                  against the GoodSync™ pane. */}
+              {!song.instrumental && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded data-[state=open]:underline disabled:opacity-50 flex-shrink-0"
+                    disabled={uploadLyricMut.isPending || fetchLrclibMut.isPending}
+                    data-testid={`button-lyric-options-${song.id}`}
+                    aria-label="Lyric options"
                   >
-                    View original
-                  </button>
-                )}
-                {!song.instrumental && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => fetchLrclibMut.mutate()}
+                    {fetchLrclibMut.isPending
+                      ? "Looking up…"
+                      : uploadLyricMut.isPending
+                        ? "Importing…"
+                        : "Lyric options"}
+                    <ChevronDown className="w-3 h-3 -mr-0.5 text-[#319ED8]/70" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={6}
+                    className="min-w-[220px] p-1.5 bg-white text-slate-900 border border-slate-200 shadow-lg"
+                  >
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        fetchLrclibMut.mutate();
+                      }}
                       disabled={fetchLrclibMut.isPending || uploadLyricMut.isPending}
-                      className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
-                      title="Search LRCLIB by title + artist + album. Pulls plain + synced lyrics (lights up GoodSync if available)."
-                      data-testid={`button-fetch-lrclib-${song.id}`}
+                      data-testid={`menu-fetch-lrclib-${song.id}`}
+                      className="gap-2 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 data-[disabled]:opacity-50"
                     >
-                      <Sparkles className="w-3 h-3" />
-                      {fetchLrclibMut.isPending ? "Looking up…" : "Find lyrics"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => lyricFileInputRef.current?.click()}
+                      <Sparkles className="w-3.5 h-3.5 text-slate-500" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-slate-900">Find lyrics</div>
+                        <div className="text-[11px] text-slate-500">
+                          Look up LRCLIB by title · artist · album.
+                        </div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        lyricFileInputRef.current?.click();
+                      }}
                       disabled={uploadLyricMut.isPending || fetchLrclibMut.isPending}
-                      className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
-                      title="Upload a .pdf, .docx, or .txt — replaces these lyrics"
-                      data-testid={`button-upload-lyric-file-${song.id}`}
+                      data-testid={`menu-upload-lyric-file-${song.id}`}
+                      className="gap-2 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 data-[disabled]:opacity-50"
                     >
-                      <Upload className="w-3 h-3" />
-                      {uploadLyricMut.isPending ? "Importing…" : "Upload"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowUrlInput((v) => !v)}
+                      <Upload className="w-3.5 h-3.5 text-slate-500" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-slate-900">Upload file</div>
+                        <div className="text-[11px] text-slate-500">
+                          .pdf, .docx, or .txt — replaces these lyrics.
+                        </div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        setShowUrlInput((v) => !v);
+                      }}
                       disabled={uploadLyricMut.isPending || fetchLrclibMut.isPending}
-                      className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded disabled:opacity-50"
-                      title="Paste a Dropbox file link or any direct .pdf / .docx / .txt URL"
-                      data-testid={`button-paste-lyric-url-${song.id}`}
+                      data-testid={`menu-paste-lyric-url-${song.id}`}
+                      className="gap-2 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 data-[disabled]:opacity-50"
                     >
-                      <Link2 className="w-3 h-3" />
-                      Paste URL
-                    </button>
-                  </>
-                )}
-              </div>
+                      <Link2 className="w-3.5 h-3.5 text-slate-500" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-slate-900">Paste URL</div>
+                        <div className="text-[11px] text-slate-500">
+                          Dropbox link or any direct .pdf / .docx / .txt.
+                        </div>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
 
             {/* Hidden file input drives the Upload button + drag-and-drop
@@ -6166,28 +6195,6 @@ function LyricsEditor({
               </div>
             )}
 
-            {/* View-original popover: read-only display of the artist's
-                raw paste (with V1 / PRE1 / CHORUS x2 / etc.) so the
-                writers' shorthand isn't lost when the editable view
-                shows the cleaned copy. */}
-            <Dialog open={showOriginal} onOpenChange={setShowOriginal}>
-              <DialogContent className="max-w-lg bg-white">
-                <DialogHeader>
-                  <DialogTitle className="text-slate-900">Original lyrics</DialogTitle>
-                </DialogHeader>
-                <p className="text-[12px] text-slate-500 -mt-1">
-                  Exactly what was typed — section labels and all.
-                  Read-only; edits happen in the Editable Lyrics pane.
-                </p>
-                <pre
-                  className="max-h-[420px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[12.5px] leading-relaxed text-slate-800 font-mono whitespace-pre-wrap"
-                  data-testid={`text-original-lyrics-${song.id}`}
-                >
-                  {originalRef.current || "(empty)"}
-                </pre>
-              </DialogContent>
-            </Dialog>
-
             {song.instrumental ? (
               <div
                 className="rounded-md bg-white border border-slate-200 px-3 py-3 text-[12px] text-slate-600 flex items-start gap-2 min-h-[280px]"
@@ -6226,20 +6233,34 @@ function LyricsEditor({
                 }}
                 data-testid={`dropzone-lyric-${song.id}`}
               >
-                <textarea
-                  ref={textareaRef}
-                  value={draft}
-                  onChange={(e) => {
-                    userEditedRef.current = true;
-                    setDraft(e.target.value);
-                  }}
-                  rows={8}
-                  placeholder={
-                    "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus\n\n— or drop a .pdf / .docx / .txt here —"
-                  }
-                  className="w-full h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
-                  data-testid={`textarea-lyrics-${song.id}`}
-                />
+                {showOriginal ? (
+                  // Read-only swap-in of the artist's raw paste (with V1
+                  // / PRE1 / CHORUS x2 / etc.) — toggled from the
+                  // bottom-row "View original" link. Sits in the same
+                  // box as the textarea so the editable draft is never
+                  // overwritten or hidden mid-edit.
+                  <pre
+                    className="w-full h-[200px] overflow-y-auto rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-[12.5px] leading-relaxed text-slate-700 font-mono whitespace-pre-wrap"
+                    data-testid={`text-original-lyrics-${song.id}`}
+                  >
+                    {originalRef.current || "(empty)"}
+                  </pre>
+                ) : (
+                  <textarea
+                    ref={textareaRef}
+                    value={draft}
+                    onChange={(e) => {
+                      userEditedRef.current = true;
+                      setDraft(e.target.value);
+                    }}
+                    rows={8}
+                    placeholder={
+                      "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus\n\n— or drop a .pdf / .docx / .txt here —"
+                    }
+                    className="w-full h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                    data-testid={`textarea-lyrics-${song.id}`}
+                  />
+                )}
                 {/* Drag-over overlay — only visible while a file is
                     being dragged across the textarea. Sits above the
                     textarea so the drop target is unambiguous. */}
@@ -6259,10 +6280,35 @@ function LyricsEditor({
                 )}
               </div>
             )}
-            {/* Line-count footer — moved out of the header so the
-                toolbar can fit "View original" without crowding. Mirrors
-                the cue-count footer on the GoodSync™ pane. */}
-            <div className="flex items-center justify-end h-4">
+            {/* Bottom row: "View original" toggle pinned far-left, line
+                count pinned far-right. Toggle swaps the editor pane for
+                a read-only view of the original paste so the writer can
+                compare without fear of overwriting their edits. */}
+            <div className="flex items-center justify-between h-4">
+              {!song.instrumental &&
+              originalRef.current &&
+              originalRef.current !== draft ? (
+                <button
+                  type="button"
+                  onClick={() => setShowOriginal((v) => !v)}
+                  aria-pressed={showOriginal}
+                  className="text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded inline-flex items-center gap-1"
+                  data-testid={`button-view-original-lyrics-${song.id}`}
+                >
+                  <span
+                    className={
+                      "inline-block w-3.5 h-3.5 rounded-full border " +
+                      (showOriginal
+                        ? "bg-[#319ED8] border-[#319ED8]"
+                        : "border-[#319ED8]/60 bg-white")
+                    }
+                    aria-hidden="true"
+                  />
+                  {showOriginal ? "Viewing original" : "View original"}
+                </button>
+              ) : (
+                <span />
+              )}
               {!song.instrumental && (
                 <span
                   className="text-[10px] text-slate-400 tabular-nums"
