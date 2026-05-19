@@ -196,7 +196,7 @@ export function AdminAlbums() {
       case "staged":
         return "Staged releases (ready, waiting for sunrise) will appear here when the schedule schema lands.";
       case "live":
-        return "No live releases yet. Tap + to create one.";
+        return "No released albums yet. Tap + to create one.";
       case "sunset":
         return "No sunset releases. Pulled-from-sale albums show up here.";
     }
