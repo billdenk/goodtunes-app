@@ -13,6 +13,9 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
+  Lock,
+  LockOpen,
+  Disc3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
@@ -53,6 +56,12 @@ interface PersonFull {
   name: string;
   photoUrl: string | null;
   coverUrl: string | null;
+  // Curation locks — when `true`, automated refresh paths (Spotify
+  // bulk-match, future Wikipedia/Apple scrapes) MUST skip this field.
+  // The admin's own actions (Replace, Refresh from Spotify) ignore the
+  // lock — it's about automation, not editability.
+  photoLocked: boolean;
+  coverLocked: boolean;
   bio: string | null;
   labelId: string | null;
   appleMusicUrl: string | null;
@@ -71,11 +80,21 @@ interface LabelLite {
   name: string;
 }
 
-type Tab = "overview" | "cover" | "discography";
+// "releases" = albums actually in the GoodTunes catalog (DB-backed, the
+// stuff fans can play/buy inside the app). "streaming" = the cached
+// Apple Music discography (links out, used to round out the artist's
+// public profile). The two are intentionally distinct surfaces because
+// they answer different questions: "what can our app play?" vs. "what
+// has this artist released anywhere?". The route key stays "streaming"
+// even though the discography endpoints under the hood still say
+// "discography" — the rename is UI-only on purpose so the iTunes pull
+// machinery doesn't ripple.
+type Tab = "overview" | "cover" | "releases" | "streaming";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
-  { key: "discography", label: "Discography" },
+  { key: "releases", label: "GoodTunes Releases\u00AE" },
+  { key: "streaming", label: "Streaming" },
 ];
 
 export function AdminPerson() {
@@ -306,7 +325,10 @@ export function AdminPerson() {
           <OverviewPanel person={person} labels={labels} />
         )}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
-        {tab === "discography" && <DiscographyPanel person={person} />}
+        {tab === "releases" && (
+          <ReleasesPanel person={person} allAlbums={allAlbums} />
+        )}
+        {tab === "streaming" && <DiscographyPanel person={person} />}
       </div>
 
       {/* Destructive confirm sheet — names the person and explains what
@@ -619,6 +641,7 @@ function ImageUploadPanel({
 
   const isCover = field === "cover";
   const currentUrl = isCover ? person.coverUrl : person.photoUrl;
+  const locked = isCover ? person.coverLocked : person.photoLocked;
   const successLabel = isCover ? "Cover updated" : "Photo updated";
   const errorLabel = isCover
     ? "Couldn't update the cover"
@@ -628,6 +651,60 @@ function ImageUploadPanel({
   const helperCopy = isCover
     ? "Recommended: wide landscape, at least 2400×800 px. Used as the hero banner on the fan-side artist page."
     : "Recommended: square, at least 1000×1000 px. Used as the avatar everywhere — credits sheet, search, top of the artist page.";
+
+  // Toggle the curation lock. Optimistic via invalidate-on-success so the
+  // chip flips instantly; a failed write rolls back when the refetch
+  // arrives. Photo + cover share this same mutation — the patch shape
+  // changes by `field`.
+  const lockMut = useMutation({
+    mutationFn: async (nextLocked: boolean) => {
+      const patch = isCover
+        ? { coverLocked: nextLocked }
+        : { photoLocked: nextLocked };
+      await apiRequest("PUT", `/api/admin/people/${person.id}`, patch);
+      return nextLocked;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/people", person.id] });
+      await qc.invalidateQueries({ queryKey: ["/api/people"] });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't change the lock",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  // "Refresh from Spotify" — re-pulls the artist's portrait from the
+  // saved Spotify profile and rehosts it. Only meaningful for the photo
+  // field; Spotify's `/v1/artists/{id}` images are square portraits, not
+  // wide banners, so the Cover tab doesn't expose this affordance.
+  const refreshSpotifyMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/people/${person.id}/refresh-image-from-spotify`,
+        {},
+      );
+      return r.json();
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/people", person.id] });
+      await qc.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Photo refreshed from Spotify" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't refresh from Spotify",
+        description:
+          e?.message ||
+          (person.spotifyUrl
+            ? "Try again in a moment."
+            : "Link this person to Spotify first on the Overview tab."),
+        variant: "destructive",
+      }),
+  });
 
   const mut = useMutation({
     mutationFn: async (file: File) => {
@@ -683,8 +760,66 @@ function ImageUploadPanel({
         className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6"
         data-testid={`panel-${field}-current`}
       >
-        <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
-          Current {field}
+        <div className="flex items-start justify-between mb-3">
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
+            Current {field}
+          </div>
+          {/* Lock chip — Apple-style ghost toggle in the card's top-right.
+              Brand blue when locked (= "set" / status), slate when not.
+              Tap to flip. Tooltip explains the scope: locks block *auto*
+              refresh paths, not the admin's own Replace button. */}
+          <div className="flex items-center gap-2">
+            {!isCover && (
+              <button
+                type="button"
+                onClick={() => refreshSpotifyMut.mutate()}
+                disabled={
+                  refreshSpotifyMut.isPending || !person.spotifyUrl
+                }
+                title={
+                  person.spotifyUrl
+                    ? "Re-pull the portrait from this artist's Spotify profile"
+                    : "Link this person to Spotify on the Overview tab first"
+                }
+                className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent text-[11.5px] font-medium"
+                data-testid="button-refresh-photo-spotify"
+              >
+                {refreshSpotifyMut.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <SiSpotify className="w-3.5 h-3.5" />
+                )}
+                {refreshSpotifyMut.isPending ? "Refreshing\u2026" : "Refresh"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => !lockMut.isPending && lockMut.mutate(!locked)}
+              disabled={lockMut.isPending}
+              aria-pressed={locked}
+              title={
+                locked
+                  ? "Locked \u2014 automated refreshes will skip this field"
+                  : "Unlocked \u2014 automated refreshes may update this field"
+              }
+              className={[
+                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+                locked
+                  ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+                lockMut.isPending && "opacity-50",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              data-testid={`button-lock-${field}`}
+            >
+              {locked ? (
+                <Lock className="w-3.5 h-3.5" />
+              ) : (
+                <LockOpen className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
         </div>
         <div
           className={[
@@ -732,19 +867,30 @@ function ImageUploadPanel({
         </div>
         <button
           type="button"
-          onClick={() => !busy && fileInputRef.current?.click()}
+          onClick={() => {
+            if (busy) return;
+            if (locked) {
+              toast({
+                title: "Unlock first",
+                description: `Tap the lock on the Current ${field} card to allow changes.`,
+              });
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
           onDragOver={(e) => {
             e.preventDefault();
-            if (!busy) setDragging(true);
+            if (!busy && !locked) setDragging(true);
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => {
             e.preventDefault();
             setDragging(false);
-            if (busy) return;
+            if (busy || locked) return;
             acceptFile(e.dataTransfer.files?.[0]);
           }}
           disabled={busy}
+          aria-disabled={locked}
           data-testid={`dropzone-${field}`}
           className={[
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
@@ -752,24 +898,39 @@ function ImageUploadPanel({
               ? "border-[#319ED8] bg-[#319ED8]/5"
               : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
             busy && "opacity-60 cursor-not-allowed",
+            locked && "opacity-40 cursor-not-allowed hover:border-slate-200 hover:bg-transparent",
           ]
             .filter(Boolean)
             .join(" ")}
         >
-          <Upload
-            className={[
-              "w-7 h-7",
-              dragging ? "text-[#319ED8]" : "text-slate-400",
-            ].join(" ")}
-          />
-          <div className="text-slate-700 text-[13px] font-semibold">
-            {dragging
-              ? "Drop to upload"
-              : "Drag an image here, or click to pick"}
-          </div>
-          <div className="text-slate-400 text-[11.5px]">
-            JPG, PNG, or WebP · up to 8 MB
-          </div>
+          {locked ? (
+            <>
+              <Lock className="w-6 h-6 text-slate-400" />
+              <div className="text-slate-700 text-[13px] font-semibold">
+                Unlock to replace
+              </div>
+              <div className="text-slate-400 text-[11.5px]">
+                Tap the lock on the current {field} to allow changes.
+              </div>
+            </>
+          ) : (
+            <>
+              <Upload
+                className={[
+                  "w-7 h-7",
+                  dragging ? "text-[#319ED8]" : "text-slate-400",
+                ].join(" ")}
+              />
+              <div className="text-slate-700 text-[13px] font-semibold">
+                {dragging
+                  ? "Drop to upload"
+                  : "Drag an image here, or click to pick"}
+              </div>
+              <div className="text-slate-400 text-[11.5px]">
+                JPG, PNG, or WebP · up to 8 MB
+              </div>
+            </>
+          )}
         </button>
         <input
           ref={fileInputRef}
@@ -791,7 +952,106 @@ function ImageUploadPanel({
 }
 
 
-/* ─── Discography tab (placeholder for now) ───────────────────────── */
+/* ─── GoodTunes Releases® tab ─────────────────────────────────────── */
+
+// Albums actually in the GoodTunes catalog for this person. We match by
+// `primaryArtistId === person.id` OR by case-insensitive artist-name
+// equality, because primaryArtistId isn't always backfilled on older
+// albums but the display name almost always is. Mirrors the union
+// strategy on the fan-side ArtistDetail page so what the admin sees
+// here matches what fans will see in the app.
+function ReleasesPanel({
+  person,
+  allAlbums,
+}: {
+  person: PersonFull;
+  allAlbums: PersonPreviewAlbum[];
+}) {
+  const needle = person.name.trim().toLowerCase();
+  const releases = allAlbums
+    .filter((a) => {
+      if (a.primaryArtistId === person.id) return true;
+      const artist = (a.artist || "").trim().toLowerCase();
+      return needle && artist === needle;
+    })
+    // Most recent first; albums missing a year sink to the bottom.
+    .slice()
+    .sort((a, b) => (b.year ?? -Infinity) - (a.year ?? -Infinity));
+
+  const hiddenCount = releases.filter((r) => r.isHidden).length;
+  const visibleCount = releases.length - hiddenCount;
+  const subline =
+    releases.length === 0
+      ? "No GoodTunes catalog releases for this artist yet."
+      : `${visibleCount} ${visibleCount === 1 ? "release" : "releases"} fans can play in-app${hiddenCount ? ` · ${hiddenCount} hidden` : ""}`;
+
+  return (
+    <section
+      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+      data-testid="panel-releases"
+    >
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+            <Disc3 className="w-4 h-4 text-slate-400" />
+            GoodTunes Releases&reg;
+          </h2>
+          <p className="text-slate-400 text-[11.5px]">{subline}</p>
+        </div>
+      </div>
+      <div className="p-6">
+        {releases.length === 0 ? (
+          <div className="py-10 text-center text-slate-500 text-[12.5px] max-w-md mx-auto">
+            When this artist is set as the primary artist on an Album (or the
+            album's artist field matches their name), the release will appear
+            here.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {releases.map((r) => (
+              <Link
+                key={r.id}
+                href={`/admin/albums/${r.id}`}
+                className="text-left group"
+                data-testid={`release-row-${r.id}`}
+              >
+                <div className="aspect-square rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200 group-hover:ring-slate-300 transition-shadow">
+                  {r.artwork ? (
+                    <img
+                      src={r.artwork}
+                      alt={r.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-400">
+                      <ImageIcon className="w-6 h-6" />
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <div className="text-slate-900 text-[12.5px] font-semibold truncate flex-1">
+                    {r.title}
+                  </div>
+                  {r.isHidden && (
+                    <span className="text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold flex-shrink-0">
+                      Hidden
+                    </span>
+                  )}
+                </div>
+                <div className="text-slate-400 text-[11px] truncate">
+                  {r.type}
+                  {r.year ? ` \u00B7 ${r.year}` : ""}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ─── Streaming tab (cached Apple Music discography) ──────────────── */
 
 interface DiscographyRow {
   collectionId: string;
@@ -883,7 +1143,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
   });
 
   const subline = hasAppleUrl
-    ? `${rows.length} ${rows.length === 1 ? "release" : "releases"} cached from Apple Music · click Pull to refresh`
+    ? `${rows.length} ${rows.length === 1 ? "release" : "releases"} cached from Apple Music · streaming links only, not in-app playback`
     : "Set the Apple Music URL on the Overview tab to enable the pull";
 
   return (
@@ -895,7 +1155,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
         <div>
           <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
             <MusicIcon className="w-4 h-4 text-slate-400" />
-            Discography
+            Streaming
           </h2>
           <p className="text-slate-400 text-[11.5px]">{subline}</p>
         </div>

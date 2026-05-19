@@ -4898,6 +4898,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     name: p.name,
     photoUrl: p.photoUrl ?? null,
     coverUrl: p.coverUrl ?? null,
+    // The lock flags are admin-curation state, not sensitive — surface
+    // them so the admin Person page (which reads through this same
+    // projection) can render the lock toggles without a separate
+    // admin-only endpoint. Knowing an artist's photo is "locked" leaks
+    // nothing about them.
+    photoLocked: !!p.photoLocked,
+    coverLocked: !!p.coverLocked,
     bio: p.bio ?? null,
     labelId: p.labelId ?? null,
     appleMusicUrl: p.appleMusicUrl ?? null,
@@ -4971,10 +4978,74 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.facebookUrl !== undefined) updates.facebookUrl = opt(b.facebookUrl);
     if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
     if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
+    // Curation locks. Stored as bool; coerce loosely so callers can pass
+    // boolean | "true" | "false" without surprises. Locking does NOT
+    // prevent an admin from explicitly setting photoUrl/coverUrl on the
+    // same PUT — locks are about *automated* refresh paths, not about
+    // restricting the admin themselves. The UI dims the Replace
+    // affordance when locked as a usability nudge.
+    if (b.photoLocked !== undefined) {
+      updates.photoLocked = !(b.photoLocked === false || b.photoLocked === "false");
+    }
+    if (b.coverLocked !== undefined) {
+      updates.coverLocked = !(b.coverLocked === false || b.coverLocked === "false");
+    }
     const p = await storage.updatePerson(id, updates);
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(p);
   });
+
+  // Refresh a Person's portrait from Spotify. Pulls fresh /v1/artists/{id}
+  // by the saved `spotifyUrl`, rehosts the largest image into our object
+  // storage so it survives Spotify's URL rotation, and writes it to
+  // `photoUrl`. Admin-explicit action → bypasses `photoLocked`; the lock
+  // exists to block *automated* refreshes, not the admin's own button.
+  app.post(
+    "/api/admin/people/:id/refresh-image-from-spotify",
+    requireAdmin,
+    async (req, res) => {
+      const id = String(req.params.id);
+      const person = await storage.getPersonById(id);
+      if (!person) return res.status(404).json({ message: "Person not found." });
+      if (!person.spotifyUrl) {
+        return res.status(400).json({
+          message: "No Spotify URL saved for this person yet.",
+        });
+      }
+      if (!spotifyConfigured()) {
+        return res.status(503).json({ message: "Spotify is not configured." });
+      }
+      try {
+        const { fetchSpotifyArtistPhotoByUrl } = await import("./lib/spotify");
+        const result = await fetchSpotifyArtistPhotoByUrl(person.spotifyUrl);
+        if (!result || !result.photoUrl) {
+          return res.status(404).json({
+            message: "Spotify didn't return a portrait for this artist.",
+          });
+        }
+        // Rehost into object storage so the URL is stable. The Spotify
+        // CDN rotates image hosts and we'd rather not have a fan-side
+        // 404 a month later when the rotation moves.
+        let finalUrl = result.photoUrl;
+        try {
+          const hosted = await rehostRemoteImage(result.photoUrl);
+          if (hosted) finalUrl = hosted;
+        } catch {
+          /* fall through with the Spotify URL if rehost fails */
+        }
+        const updated = await storage.updatePerson(id, { photoUrl: finalUrl } as any);
+        return res.json({
+          photoUrl: finalUrl,
+          person: updated ?? null,
+        });
+      } catch (err: any) {
+        console.error("[people/refresh-image-from-spotify]", err);
+        return res.status(500).json({
+          message: err?.message || "Couldn't refresh from Spotify.",
+        });
+      }
+    },
+  );
   // Spotify candidate picker. The auto-enrichment on credits-commit only
   // writes a Spotify URL when there is exactly one normalized-name hit;
   // for ambiguous names (or for People rows the admin wants to override)

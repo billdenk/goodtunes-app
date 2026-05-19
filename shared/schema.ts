@@ -234,6 +234,14 @@ export const people = pgTable("people", {
   // circle now always falls back to brand blue (#319ED8); the old
   // per-person `accent` hex was removed.
   coverUrl: text("cover_url"),
+  // Curation locks. When `true`, automated paths (Spotify bulk-match,
+  // credits-import enrichment, future Wikipedia / Apple scrapes) MUST
+  // skip writing this field — the admin has explicitly curated it and
+  // doesn't want a refresh to clobber their choice. Explicit admin
+  // writes (PUT /api/admin/people/:id with a new URL) still go
+  // through; the lock is about *automation*, not editability.
+  photoLocked: boolean("photo_locked").notNull().default(false),
+  coverLocked: boolean("cover_locked").notNull().default(false),
   bio: text("bio"),
   // Optional FK to the label this artist is signed to. Mirrors
   // `albums.labelId` so an artist can be tagged with a label even before

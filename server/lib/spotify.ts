@@ -232,6 +232,62 @@ export async function searchArtist(rawName: string): Promise<SpotifyArtistMatch 
   };
 }
 
+// Re-fetch an artist by Spotify ID/URL and return the largest portrait.
+// Powers the admin "Refresh from Spotify" button on a Person's Photo
+// tab — we already know which Spotify artist this person is (their
+// `spotifyUrl` was saved during the original match), so we go straight
+// to /v1/artists/{id} instead of doing a name search that could drift
+// to a different artist with the same name.
+export async function fetchSpotifyArtistPhotoByUrl(
+  spotifyUrl: string,
+): Promise<{ photoUrl: string | null; name: string | null } | null> {
+  // Accept both the web URL form (https://open.spotify.com/artist/{id})
+  // and the URI form (spotify:artist:{id}). Anything else returns null.
+  const m =
+    /\/artist\/([A-Za-z0-9]+)/.exec(spotifyUrl) ||
+    /spotify:artist:([A-Za-z0-9]+)/.exec(spotifyUrl);
+  const artistId = m?.[1];
+  if (!artistId) return null;
+
+  let token = await getAccessToken();
+  if (!token) return null;
+  const url = `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}`;
+  const fetchOnce = async (bearer: string) =>
+    fetchWithTimeout(
+      url,
+      { headers: { Authorization: `Bearer ${bearer}` } },
+      SEARCH_TIMEOUT_MS,
+    );
+
+  let res: Response;
+  try {
+    res = await fetchOnce(token);
+  } catch (err) {
+    console.warn("[spotify] artist fetch errored", (err as Error)?.message, artistId);
+    return null;
+  }
+  if (res.status === 401) {
+    token = await getAccessToken(true);
+    if (!token) return null;
+    try {
+      res = await fetchOnce(token);
+    } catch {
+      return null;
+    }
+  }
+  if (!res.ok) {
+    console.warn("[spotify] artist fetch failed", res.status, artistId);
+    return null;
+  }
+  const json = (await res.json()) as {
+    name?: string;
+    images?: Array<{ url: string; width: number; height: number }>;
+  };
+  const photo =
+    (json.images ?? []).slice().sort((a, b) => b.width - a.width)[0]?.url ?? null;
+  return { photoUrl: photo, name: json.name ?? null };
+}
+
 // Combined import-flow lookup. One Spotify API call returns both the
 // confident-match decision (when exactly one normalized name hit) AND
 // the top N candidates for the picker when ambiguous. Used by the
