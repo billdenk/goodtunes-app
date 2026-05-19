@@ -59,6 +59,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -710,6 +711,64 @@ function TracksPanel({
   const [lyricsImportOpen, setLyricsImportOpen] = useState(false);
   const [creditsImportOpen, setCreditsImportOpen] = useState(false);
 
+  // Album-wide LRCLIB lookup: walks every track missing lyrics and asks
+  // LRCLIB for both plain text + synced cues. No confirmation dialog —
+  // it never overwrites a track that already has lyrics, so it's safe
+  // to fire-and-toast like Download all masters.
+  const findMissingLyricsMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/albums/${album.id}/find-missing-lyrics`,
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}) as any);
+        throw new Error(body?.message ?? "Lookup failed");
+      }
+      return (await res.json()) as {
+        scanned: number;
+        matched: number;
+        synced: number;
+        plain: number;
+        instrumental: number;
+        notFound: number;
+        failed: number;
+      };
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/songs", album.id] });
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id, "credits"] });
+      if (r.matched === 0) {
+        toast({
+          title: "No lyrics found",
+          description:
+            r.scanned === 0
+              ? "Every track already has lyrics — nothing to look up."
+              : `Searched ${r.scanned} track${r.scanned === 1 ? "" : "s"}, no matches on LRCLIB.`,
+        });
+        return;
+      }
+      const parts: string[] = [];
+      if (r.synced > 0) parts.push(`${r.synced} GoodSync-ready`);
+      if (r.plain > 0) parts.push(`${r.plain} plain`);
+      if (r.notFound > 0) parts.push(`${r.notFound} not found`);
+      if (r.instrumental > 0) parts.push(`${r.instrumental} instrumental`);
+      if (r.failed > 0) parts.push(`${r.failed} errored`);
+      toast({
+        title: `Found lyrics for ${r.matched} of ${r.scanned}`,
+        description: parts.join(" · "),
+      });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Couldn't look up lyrics",
+        description: e.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // ── Playback state for the floating PlayerDock ──────────────────────
   // One audio element drives the entire Tracks tab. Selecting a row sets
   // `currentSongId`; the effect below loads the master into the audio
@@ -1034,8 +1093,17 @@ function TracksPanel({
               // (#00062B) because the mobile player needs it. Admin
               // chrome lives on white, so override here at the call
               // site rather than fork the primitive globally.
-              className="min-w-[260px] p-1 bg-white text-slate-900 border border-slate-200 shadow-lg"
+              //
+              // Section labels match the YEAR/LABEL small-caps used on
+              // the album header — 10px, weight 600, slate-400, tracking
+              // wide. They group the actions into TRACKS / LYRICS /
+              // CREDITS / MASTERS so the operator can scan by intent
+              // instead of reading every row.
+              className="min-w-[280px] p-1.5 bg-white text-slate-900 border border-slate-200 shadow-lg"
             >
+              <DropdownMenuLabel className="px-2.5 pt-1.5 pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-slate-400">
+                Tracks
+              </DropdownMenuLabel>
               <DropdownMenuItem
                 onSelect={() => setBulkAddOpen(true)}
                 data-testid="menu-upload-multiple-tracks"
@@ -1051,6 +1119,10 @@ function TracksPanel({
                   </div>
                 </div>
               </DropdownMenuItem>
+
+              <DropdownMenuLabel className="px-2.5 pt-2.5 pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-slate-400">
+                Lyrics
+              </DropdownMenuLabel>
               <DropdownMenuItem
                 onSelect={() => setLyricsImportOpen(true)}
                 data-testid="menu-import-lyrics"
@@ -1067,17 +1139,26 @@ function TracksPanel({
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={() => setCreditsImportOpen(true)}
-                data-testid="menu-import-credits"
-                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
+                onSelect={(e) => {
+                  // Keep the menu open while the request flies so the
+                  // operator sees the row still highlighted; the toast
+                  // does the heavy reporting on completion.
+                  e.preventDefault();
+                  findMissingLyricsMut.mutate();
+                }}
+                disabled={findMissingLyricsMut.isPending}
+                data-testid="menu-find-missing-lyrics"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900 data-[disabled]:opacity-60"
               >
-                <UserPlus className="w-4 h-4 text-slate-500" />
+                <Sparkles className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    Import Credits
+                    {findMissingLyricsMut.isPending
+                      ? "Looking up lyrics…"
+                      : "Find missing lyrics"}
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    PDF, Word, or text liner notes — matched to tracks.
+                    Looks up lyrics online for every track missing them.
                   </div>
                 </div>
               </DropdownMenuItem>
@@ -1089,13 +1170,36 @@ function TracksPanel({
                 <Wand2 className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    GoodSync™ your Album
+                    GoodSync™ your album
                   </div>
                   <div className="text-[11px] text-slate-500">
                     Auto-sync lyrics on every eligible track.
                   </div>
                 </div>
               </DropdownMenuItem>
+
+              <DropdownMenuLabel className="px-2.5 pt-2.5 pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-slate-400">
+                Credits
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => setCreditsImportOpen(true)}
+                data-testid="menu-import-credits"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
+              >
+                <UserPlus className="w-4 h-4 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    Import credits
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    PDF, Word, or text liner notes — matched to tracks.
+                  </div>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuLabel className="px-2.5 pt-2.5 pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-slate-400">
+                Masters
+              </DropdownMenuLabel>
               {/* Bulk-download every master on this album. We fire one
                   anchor click per track with a small stagger so the
                   browser doesn't dedupe / batch-block them. A real .zip
@@ -5238,7 +5342,7 @@ function LyricsEditor({
                       data-testid={`button-fetch-lrclib-${song.id}`}
                     >
                       <Sparkles className="w-3 h-3" />
-                      {fetchLrclibMut.isPending ? "Fetching…" : "Fetch lyrics"}
+                      {fetchLrclibMut.isPending ? "Looking up…" : "Find lyrics"}
                     </button>
                     <button
                       type="button"

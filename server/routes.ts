@@ -4003,6 +4003,175 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // Album-wide "Find missing lyrics" — walks every track on the album
+  // that has no lyrics yet and asks LRCLIB for them. Never overwrites
+  // existing lyrics (so the operator can safely run this multiple times
+  // as new tracks land). Returns a summary the client renders as a toast.
+  // Mirrors the single-song route's strict-then-search fallback, plus a
+  // small inter-request delay to be polite to LRCLIB's public API.
+  app.post(
+    "/api/admin/albums/:id/find-missing-lyrics",
+    requireAdminBearer,
+    async (req, res) => {
+      const startedAt = new Date();
+      const albumId = String(req.params.id);
+      try {
+        const album = await storage.getAlbumById(albumId, { includeHidden: true });
+        if (!album) {
+          return res.status(404).json({ message: "Album not found." });
+        }
+        const allSongs = await storage.getSongsByAlbum(albumId);
+        const missing = allSongs.filter(
+          (s) => !s.lyrics || !s.lyrics.trim(),
+        );
+        if (missing.length === 0) {
+          try {
+            await storage.recordJobRun({
+              jobType: "find-missing-lyrics",
+              albumId,
+              songId: null,
+              status: "success",
+              summary: { scanned: 0, matched: 0, synced: 0, plain: 0, instrumental: 0, notFound: 0 } as any,
+              errorMessage: null,
+              startedAt,
+            });
+          } catch {}
+          return res.json({ scanned: 0, matched: 0, synced: 0, plain: 0, instrumental: 0, notFound: 0 });
+        }
+        const ua = "GoodTunes/1.0 (admin lyric fetch; https://goodtunes.app)";
+        const tryFetch = async (url: string): Promise<any | null> => {
+          const ac = new AbortController();
+          const timer = setTimeout(() => ac.abort(), 10_000);
+          try {
+            const r = await fetch(url, {
+              headers: { "User-Agent": ua, Accept: "application/json" },
+              signal: ac.signal,
+            });
+            if (!r.ok) return null;
+            return await r.json();
+          } catch {
+            return null;
+          } finally {
+            clearTimeout(timer);
+          }
+        };
+        let synced = 0;
+        let plain = 0;
+        let instrumental = 0;
+        let notFound = 0;
+        let failed = 0;
+        // Per-song try/catch so a parse or DB hiccup on track 4 doesn't
+        // strand tracks 5-12 with stale "no lyrics" state. Anything that
+        // throws gets counted as `failed` and the batch keeps walking.
+        for (const song of missing) {
+          try {
+            const strictParams = new URLSearchParams({
+              track_name: song.title,
+              artist_name: album.artist,
+              album_name: album.title,
+              duration: String(Math.max(0, Math.round(song.duration || 0))),
+            });
+            let hit: any = await tryFetch(`https://lrclib.net/api/get?${strictParams}`);
+            if (!hit) {
+              const searchParams = new URLSearchParams({
+                track_name: song.title,
+                artist_name: album.artist,
+              });
+              const arr = await tryFetch(`https://lrclib.net/api/search?${searchParams}`);
+              if (Array.isArray(arr) && arr.length > 0) {
+                const targetDur = Math.round(song.duration || 0);
+                const ranked = [...arr].sort((a, b) => {
+                  const aSync = a?.syncedLyrics ? 1 : 0;
+                  const bSync = b?.syncedLyrics ? 1 : 0;
+                  if (aSync !== bSync) return bSync - aSync;
+                  const aD = Math.abs((a?.duration ?? 0) - targetDur);
+                  const bD = Math.abs((b?.duration ?? 0) - targetDur);
+                  return aD - bD;
+                });
+                hit = ranked[0];
+              }
+            }
+            if (!hit) {
+              notFound += 1;
+              continue;
+            }
+            if (hit.instrumental) {
+              instrumental += 1;
+              continue;
+            }
+            const plainText = String(hit.plainLyrics || "").trim();
+            const lrc = String(hit.syncedLyrics || "").trim();
+            const cues = lrc ? parseLrcToCues(lrc) : [];
+            if (!plainText && cues.length === 0) {
+              notFound += 1;
+              continue;
+            }
+            const lyricsBody =
+              cues.length > 0
+                ? cues.map((c) => c.text).join("\n").trim() || plainText
+                : plainText;
+            await storage.updateSong(song.id, {
+              lyrics: lyricsBody,
+              syncedLyrics: cues.length > 0 ? (cues as any) : (null as any),
+            });
+            if (cues.length > 0) synced += 1;
+            else plain += 1;
+          } catch (perSongErr: any) {
+            failed += 1;
+            console.error(
+              `[find-missing-lyrics] song ${song.id} (${song.title}) failed:`,
+              perSongErr?.message || perSongErr,
+            );
+          }
+          // Tiny pacing pause so we don't hammer LRCLIB's public API.
+          await new Promise((r) => setTimeout(r, 120));
+        }
+        const matched = synced + plain;
+        try {
+          await storage.recordJobRun({
+            jobType: "find-missing-lyrics",
+            albumId,
+            songId: null,
+            status: failed > 0 && matched === 0 ? "failed" : "success",
+            summary: {
+              scanned: missing.length,
+              matched,
+              synced,
+              plain,
+              instrumental,
+              notFound,
+              failed,
+            } as any,
+            errorMessage: failed > 0 ? `${failed} per-song failure(s)` : null,
+            startedAt,
+          });
+        } catch {}
+        return res.json({
+          scanned: missing.length,
+          matched,
+          synced,
+          plain,
+          instrumental,
+          notFound,
+          failed,
+        });
+      } catch (e: any) {
+        try {
+          await storage.recordJobRun({
+            jobType: "find-missing-lyrics",
+            albumId,
+            songId: null,
+            status: "failed",
+            summary: null,
+            errorMessage: e?.message || "Unknown error",
+            startedAt,
+          });
+        } catch {}
+        return res.status(500).json({ message: e?.message || "Lookup failed." });
+      }
+    },
+  );
+
   // Mirror a song's external audio URL (Dropbox share link, etc.) into
   // our Object Storage bucket so playback isn't bottlenecked by Dropbox's
   // throttled CDN and so ElevenLabs forced alignment reads from a fast,
