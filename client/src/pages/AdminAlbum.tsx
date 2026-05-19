@@ -1348,6 +1348,67 @@ function parseDurationInput(raw: string): { seconds: number; error: string | nul
   return { seconds: 180, error: "Use mm:ss (e.g. 3:30) or whole seconds." };
 }
 
+// Filename → readable track title. Mirrors the server-side
+// `deriveTitleFromFilename` in routes.ts but lighter — the server cleanup
+// (suffix-token stripping, contraction restore, de-shout) reruns when the
+// row is created via the Dropbox importer. For the inline single-file
+// composer we only need a quick, predictable client preview: drop the
+// extension, drop any leading track-number prefix, swap separators to
+// spaces. Admin can edit the result before pressing Add.
+function clientDeriveTitleFromFilename(name: string): string {
+  let s = name.replace(/^.*[/\\]/, ""); // strip any path
+  s = s.replace(/\.[^.]+$/, ""); // strip extension
+  s = s.replace(/^\s*\d{1,3}\s*[-_.\s)]+\s*/, ""); // leading "01 - " / "02_"
+  s = s.replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
+  return s;
+}
+
+const AUDIO_EXT_RE = /\.(mp3|m4a|aac|wav|flac|ogg|aif|aiff)(\?|#|$)/i;
+
+// Probe an audio source (File blob or URL) for its real duration via a
+// hidden <audio> element. Best-effort — returns null if the browser
+// can't decode the metadata fast enough. Used so the duration field
+// fills itself in when an audio file is dropped onto the row.
+function probeAudioDuration(src: File | string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const a = document.createElement("audio");
+    a.preload = "metadata";
+    let objectUrl: string | null = null;
+    if (typeof src === "string") {
+      a.src = src;
+    } else {
+      objectUrl = URL.createObjectURL(src);
+      a.src = objectUrl;
+    }
+    const cleanup = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, 8000);
+    a.addEventListener("loadedmetadata", () => {
+      clearTimeout(timer);
+      const d = isFinite(a.duration) && a.duration > 0
+        ? Math.round(a.duration)
+        : null;
+      cleanup();
+      resolve(d);
+    });
+    a.addEventListener("error", () => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(null);
+    });
+  });
+}
+
+function formatSecondsAsMmSs(s: number): string {
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
+}
+
 function AddTrackForm({
   albumId,
   nextTrackNumber,
@@ -1363,7 +1424,21 @@ function AddTrackForm({
   const [title, setTitle] = useState("");
   const [durationText, setDurationText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Optional master audio attached to the new track. Set when the admin
+  // drops a file onto the row, picks one via the file input, or pastes
+  // an audio URL into the title field. Sent through to POST /api/admin/songs
+  // alongside title + duration so the track lands fully wired.
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioFilename, setAudioFilename] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Staleness guard for duration probes. Each new attach bumps the token;
+  // probes that resolve after a newer attach (or after submit) are
+  // discarded so a slow probe can't repopulate the duration field
+  // after the row has already been cleared or replaced.
+  const probeTokenRef = useRef(0);
 
   // Focus the title field on first mount + after each successful save so
   // the admin can stay on the keyboard and rip through a tracklist.
@@ -1371,13 +1446,95 @@ function AddTrackForm({
     queueMicrotask(() => titleRef.current?.focus());
   }, []);
 
+  const handleAudioFile = async (f: File) => {
+    setError(null);
+    if (
+      !/^audio\//.test(f.type) &&
+      !/\.(mp3|m4a|aac|wav|flac|ogg|aif|aiff)$/i.test(f.name)
+    ) {
+      setError("That's not an audio file. Use MP3, M4A/AAC, WAV, FLAC, or OGG.");
+      return;
+    }
+    if (f.size > 150 * 1024 * 1024) {
+      setError("File too large — keep masters under 150 MB.");
+      return;
+    }
+    // Drop any previously-attached audio URL up front. Without this, a
+    // failed re-attach could leave a stale URL silently committed to
+    // state while the chip's filename gets cleared in the catch below.
+    setAudioUrl(null);
+    // Pre-fill what we can BEFORE the upload finishes so the admin sees
+    // the row populate instantly while the bytes stream up.
+    if (!title.trim()) setTitle(clientDeriveTitleFromFilename(f.name));
+    setAudioFilename(f.name);
+    const token = ++probeTokenRef.current;
+    probeAudioDuration(f).then((secs) => {
+      if (token !== probeTokenRef.current) return; // stale probe — discard
+      if (secs != null) setDurationText(formatSecondsAsMmSs(secs));
+    });
+    setUploading(true);
+    try {
+      const url = await uploadAudioFile(f);
+      setAudioUrl(url);
+    } catch (e: any) {
+      setError(e?.message || "Upload failed");
+      setAudioFilename(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // When the admin pastes (or types) an audio URL directly into the title
+  // field we recognize it, hydrate the audio + duration fields from it,
+  // and replace the title with a derived filename so the row isn't left
+  // displaying the full URL.
+  const tryAdoptPastedAudioUrl = async (raw: string) => {
+    const trimmed = raw.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return false;
+    // Validate the audio extension against the URL pathname only — a
+    // querystring like `?file=foo.mp3` on an HTML page must NOT trip
+    // the audio detection.
+    let pathName: string;
+    try {
+      pathName = new URL(trimmed).pathname;
+    } catch {
+      return false;
+    }
+    if (!AUDIO_EXT_RE.test(pathName)) return false;
+    const file = pathName.replace(/^.*\//, "");
+    const derived = clientDeriveTitleFromFilename(file);
+    const normalized = normalizeAudioUrl(trimmed);
+    setAudioUrl(normalized);
+    setAudioFilename(file);
+    setTitle(derived);
+    const token = ++probeTokenRef.current;
+    probeAudioDuration(normalized).then((secs) => {
+      if (token !== probeTokenRef.current) return; // stale probe — discard
+      if (secs != null) setDurationText(formatSecondsAsMmSs(secs));
+    });
+    return true;
+  };
+
+  const clearAttachedAudio = () => {
+    // Invalidate any in-flight probe so its late resolution can't
+    // re-fill the duration field after detach.
+    probeTokenRef.current++;
+    setAudioUrl(null);
+    setAudioFilename(null);
+  };
+
   const createMut = useMutation({
-    mutationFn: async (input: { title: string; duration: number }) => {
+    mutationFn: async (input: {
+      title: string;
+      duration: number;
+      audioUrl: string | null;
+    }) => {
       const res = await apiRequest("POST", "/api/admin/songs", {
         albumId,
         title: input.title,
         trackNumber: nextTrackNumber,
         duration: input.duration,
+        ...(input.audioUrl ? { audioUrl: input.audioUrl } : {}),
       });
       return res.json();
     },
@@ -1385,8 +1542,14 @@ function AddTrackForm({
       await onSaved();
       toast({ title: `Track ${nextTrackNumber} added` });
       // Clear and refocus so the user can keep adding without re-clicking.
+      // Bump the probe token first so any duration probe still in flight
+      // from this row's attached audio can't write back into the
+      // now-empty duration field of the next row.
+      probeTokenRef.current++;
       setTitle("");
       setDurationText("");
+      setAudioUrl(null);
+      setAudioFilename(null);
       setError(null);
       queueMicrotask(() => titleRef.current?.focus());
     },
@@ -1399,6 +1562,10 @@ function AddTrackForm({
   });
 
   const submit = () => {
+    if (uploading) {
+      setError("Hang on — the audio is still uploading.");
+      return;
+    }
     const trimmed = title.trim();
     if (!trimmed) {
       setError("Title is required.");
@@ -1411,23 +1578,74 @@ function AddTrackForm({
       return;
     }
     setError(null);
-    createMut.mutate({ title: trimmed, duration: parsed.seconds });
+    createMut.mutate({
+      title: trimmed,
+      duration: parsed.seconds,
+      audioUrl,
+    });
   };
 
   return (
     <div
-      className="border-t border-slate-200 bg-[#319ED8]/5 px-5 py-3.5"
+      className={[
+        "border-t border-slate-200 px-5 py-3.5 transition-colors",
+        dragOver
+          ? "bg-[#319ED8]/15 ring-2 ring-inset ring-[#319ED8]/40"
+          : "bg-[#319ED8]/5",
+      ].join(" ")}
       data-testid="form-add-track"
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          if (!createMut.isPending) submit();
+          if (!createMut.isPending && !uploading) submit();
         } else if (e.key === "Escape" && !createMut.isPending) {
           e.preventDefault();
           onClose();
         }
       }}
+      onDragEnter={(e) => {
+        if (Array.from(e.dataTransfer?.types || []).includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragOver={(e) => {
+        if (Array.from(e.dataTransfer?.types || []).includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        // Only un-highlight when the cursor truly leaves the row, not when
+        // it moves between child inputs (which fire dragleave too).
+        if (
+          e.currentTarget.contains(e.relatedTarget as Node | null) === false
+        ) {
+          setDragOver(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f) handleAudioFile(f);
+      }}
     >
+      {/* Hidden file picker for the inline "upload" icon button. Same
+          uploadAudioFile path the master-audio editor uses, so the
+          dropped/picked file ends up at the same Object Storage URL. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.aif,.aiff"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleAudioFile(f);
+          e.target.value = "";
+        }}
+        data-testid="input-new-track-audio-file"
+      />
       <div className="flex items-center gap-2">
         <span className="w-7 text-right text-slate-400 text-[12px] tabular-nums font-medium flex-shrink-0">
           {nextTrackNumber}
@@ -1437,10 +1655,29 @@ function AddTrackForm({
           type="text"
           value={title}
           onChange={(e) => {
-            setTitle(e.target.value);
+            const v = e.target.value;
+            setTitle(v);
             if (error) setError(null);
           }}
-          placeholder="Track title"
+          onPaste={(e) => {
+            // Auto-detect when an admin pastes a direct audio URL into
+            // the title field — pull the filename out, derive a clean
+            // title from it, and probe the URL for duration. Mirrors
+            // the "or paste a URL" behavior of the master-audio editor.
+            const pasted = e.clipboardData.getData("text") || "";
+            if (
+              /^https?:\/\//i.test(pasted.trim()) &&
+              AUDIO_EXT_RE.test(pasted.trim())
+            ) {
+              e.preventDefault();
+              void tryAdoptPastedAudioUrl(pasted);
+            }
+          }}
+          placeholder={
+            audioFilename
+              ? "Track title (edit if needed)"
+              : "Track title — or drop an audio file"
+          }
           disabled={createMut.isPending}
           className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
           data-testid="input-new-track-title"
@@ -1460,8 +1697,23 @@ function AddTrackForm({
         />
         <button
           type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={createMut.isPending || uploading}
+          aria-label="Attach audio file"
+          title="Attach audio file"
+          className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
+          data-testid="button-attach-new-track-audio"
+        >
+          {uploading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#319ED8]" />
+          ) : (
+            <Upload className="w-3.5 h-3.5" />
+          )}
+        </button>
+        <button
+          type="button"
           onClick={submit}
-          disabled={createMut.isPending}
+          disabled={createMut.isPending || uploading}
           className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
           data-testid="button-save-new-track"
         >
@@ -1481,11 +1733,44 @@ function AddTrackForm({
           Done
         </button>
       </div>
+      {/* Attached-audio chip: confirms what was picked up from drop / file
+          picker / pasted URL so the admin can sanity-check (or detach)
+          before pressing Add. */}
+      {audioFilename && (
+        <div
+          className="mt-1.5 ml-9 inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600"
+          data-testid="chip-new-track-audio"
+        >
+          <Music className="w-3 h-3 text-[#319ED8]" />
+          <span className="truncate max-w-[260px]">{audioFilename}</span>
+          {uploading ? (
+            <span className="text-slate-400">· uploading…</span>
+          ) : audioUrl ? (
+            <span className="text-emerald-600">· ready</span>
+          ) : null}
+          <button
+            type="button"
+            onClick={clearAttachedAudio}
+            disabled={uploading || createMut.isPending}
+            className="ml-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-40"
+            aria-label="Detach audio"
+            data-testid="button-detach-new-track-audio"
+          >
+            <XIcon className="w-3 h-3" />
+          </button>
+        </div>
+      )}
       <p className="text-[11px] text-slate-500 mt-1.5 pl-9">
         {error ? (
           <span className="text-rose-600">{error}</span>
+        ) : audioFilename ? (
+          <>Title and duration filled from the file — edit either before pressing Add.</>
         ) : (
-          <>Press Enter to add and keep going · Esc to close · Duration defaults to 3:00 if blank</>
+          <>
+            Press Enter to add and keep going · Esc to close · Duration
+            defaults to 3:00 if blank · Drop an audio file (or paste a
+            direct URL) to autofill
+          </>
         )}
       </p>
     </div>
