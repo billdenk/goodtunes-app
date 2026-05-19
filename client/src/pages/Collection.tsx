@@ -684,14 +684,12 @@ function AlbumCard({
             </div>
           </div>
         )}
-          <div className="absolute top-2 left-2">
-            <span
-              className="text-[9px] font-bold px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)" }}
-            >
-              {album.type}
-            </span>
-          </div>
+          {/* LP/EP/Single chip hidden for now — the format wasn't earning
+              its place in the corner of the artwork (Bill: "we can hide
+              all of the LP/EP on the album covers for now"). Type still
+              lives on the album record and on the admin preview's
+              metadata line; we can bring it back to the cover later if
+              we ever need format-as-filter on the consumer surface. */}
           {isMulti && (
             <div className="absolute top-2 right-2">
               <span
