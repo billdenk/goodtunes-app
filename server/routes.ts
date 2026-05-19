@@ -10,7 +10,7 @@ import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
-import { searchArtist as searchSpotifyArtist, searchArtistCandidates, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
+import { searchArtist as searchSpotifyArtist, searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
 
 const scryptAsync = promisify(scrypt);
 
@@ -3900,8 +3900,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const q = String(req.query.q ?? "").trim();
     if (!q) return res.json({ query: "", candidates: [] });
-    const candidates = await searchArtistCandidates(q, 8);
-    return res.json({ query: q, candidates });
+    const result = await searchArtistCandidatesDetailed(q, 8);
+    if (!result.ok) {
+      // Upstream errored (timeout, 5xx, parse, no_token). Surface a 502
+      // with the reason so the client can show "Spotify lookup failed"
+      // instead of falsely claiming there are no results.
+      return res.status(502).json({
+        message: "Spotify lookup failed.",
+        reason: result.reason,
+        status: result.status ?? null,
+      });
+    }
+    return res.json({ query: q, candidates: result.candidates });
   });
 
   // iTunes Search API for artist-name → Apple Music profile resolution.

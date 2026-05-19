@@ -15,7 +15,7 @@ const SEARCH_URL = "https://api.spotify.com/v1/search";
 // endpoint. The credits-commit loop awaits each enrichment serially, so
 // a hung request would otherwise hang the whole import.
 const TOKEN_TIMEOUT_MS = 4_000;
-const SEARCH_TIMEOUT_MS = 5_000;
+const SEARCH_TIMEOUT_MS = 8_000;
 
 type CachedToken = { value: string; expiresAt: number };
 let cached: CachedToken | null = null;
@@ -213,52 +213,73 @@ export async function searchArtistForImport(
   return { status: "ambiguous", candidates };
 }
 
-// Return the top N Spotify artist candidates for a name so the admin
-// can pick the right one when the auto-match is ambiguous (or when
-// they want to override). Ordering: exact normalized-name hits first,
-// then everything else, both sorted by popularity desc.
-export async function searchArtistCandidates(
+// Like `searchArtistCandidates` but surfaces *why* a lookup returned no
+// rows — empty Spotify results vs. token failure vs. upstream timeout —
+// so a UI surface can show an honest error state instead of pretending
+// "no results." The admin "Who's the artist?" dialog uses this; older
+// callers stick with the simple shape below.
+export type SpotifyCandidatesResult =
+  | { ok: true; candidates: SpotifyArtistCandidate[] }
+  | { ok: false; reason: "no_token" | "fetch_error" | "upstream_error" | "parse_error"; status?: number; detail?: string };
+
+export async function searchArtistCandidatesDetailed(
   rawName: string,
   limit = 5,
-): Promise<SpotifyArtistCandidate[]> {
+): Promise<SpotifyCandidatesResult> {
   const name = rawName.trim();
-  if (!name) return [];
+  if (!name) return { ok: true, candidates: [] };
   let token = await getAccessToken();
-  if (!token) return [];
+  if (!token) {
+    console.warn("[spotify] candidates: no_token for", name);
+    return { ok: false, reason: "no_token" };
+  }
 
   const url = `${SEARCH_URL}?q=${encodeURIComponent(name)}&type=artist&limit=${Math.min(20, Math.max(1, limit))}`;
   let res: Response;
   try {
     res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
   } catch (err) {
-    console.warn("[spotify] candidates errored", (err as Error)?.message, name);
-    return [];
+    const detail = (err as Error)?.message ?? "";
+    console.warn("[spotify] candidates: fetch_error", detail, "name=", name);
+    return { ok: false, reason: "fetch_error", detail };
   }
   if (res.status === 401) {
     token = await getAccessToken(true);
-    if (!token) return [];
+    if (!token) {
+      console.warn("[spotify] candidates: no_token after 401 refresh for", name);
+      return { ok: false, reason: "no_token" };
+    }
     try {
       res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
-    } catch {
-      return [];
+    } catch (err) {
+      const detail = (err as Error)?.message ?? "";
+      console.warn("[spotify] candidates: fetch_error after 401", detail, "name=", name);
+      return { ok: false, reason: "fetch_error", detail };
     }
   }
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.warn("[spotify] candidates: upstream_error", res.status, body.slice(0, 200), "name=", name);
+    return { ok: false, reason: "upstream_error", status: res.status, detail: body.slice(0, 200) };
+  }
 
-  const json = (await res.json()) as {
-    artists?: {
-      items?: Array<{
-        id: string;
-        name: string;
-        external_urls?: { spotify?: string };
-        images?: Array<{ url: string; width: number; height: number }>;
-        popularity?: number;
-        followers?: { total?: number };
-        genres?: string[];
-      }>;
-    };
-  };
-  const items = json.artists?.items ?? [];
+  let json: any;
+  try {
+    json = await res.json();
+  } catch (err) {
+    const detail = (err as Error)?.message ?? "";
+    console.warn("[spotify] candidates: parse_error", detail, "name=", name);
+    return { ok: false, reason: "parse_error", detail };
+  }
+  const items = (json?.artists?.items ?? []) as Array<{
+    id: string;
+    name: string;
+    external_urls?: { spotify?: string };
+    images?: Array<{ url: string; width: number; height: number }>;
+    popularity?: number;
+    followers?: { total?: number };
+    genres?: string[];
+  }>;
   const wanted = normalize(name);
   const rows: SpotifyArtistCandidate[] = items
     .filter((a) => !!a.external_urls?.spotify)
@@ -266,8 +287,7 @@ export async function searchArtistCandidates(
       id: a.id,
       name: a.name,
       spotifyUrl: a.external_urls!.spotify!,
-      photoUrl:
-        (a.images ?? []).slice().sort((x, y) => y.width - x.width)[0]?.url ?? null,
+      photoUrl: (a.images ?? []).slice().sort((x, y) => y.width - x.width)[0]?.url ?? null,
       popularity: a.popularity ?? 0,
       followers: a.followers?.total ?? 0,
       genres: a.genres ?? [],
@@ -278,5 +298,21 @@ export async function searchArtistCandidates(
     if (ax !== bx) return bx - ax;
     return b.popularity - a.popularity;
   });
-  return rows.slice(0, limit);
+  return { ok: true, candidates: rows.slice(0, limit) };
 }
+
+// Return the top N Spotify artist candidates for a name so the admin
+// can pick the right one when the auto-match is ambiguous (or when
+// they want to override). Ordering: exact normalized-name hits first,
+// then everything else, both sorted by popularity desc.
+//
+// Legacy wrapper: collapses any error reason to an empty list so older
+// callers that don't need to differentiate keep working.
+export async function searchArtistCandidates(
+  rawName: string,
+  limit = 5,
+): Promise<SpotifyArtistCandidate[]> {
+  const r = await searchArtistCandidatesDetailed(rawName, limit);
+  return r.ok ? r.candidates : [];
+}
+
