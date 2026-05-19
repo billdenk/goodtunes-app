@@ -2599,6 +2599,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await cleanup();
       throw err;
     }
+    // Calling cancel() after we're done aborts the still-attached fetch body,
+    // which makes the underlying Readable emit an 'error' (AbortError) AFTER
+    // unzipper has detached. With no listener that crashes the whole Node
+    // process. Attach a no-op so post-completion aborts are swallowed; real
+    // mid-stream errors still propagate through the unzipper pipe + for-await.
+    nodeStream.on("error", () => {});
     try {
       // Catch the "this isn't a zip" case up front with a friendly
       // message. unzipper's own error ("invalid signature") is correct
