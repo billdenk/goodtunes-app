@@ -168,6 +168,18 @@ export function AdminAlbum() {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("overview");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // Delete-options dropdown (replaces the standalone trashcan). The
+  // dropdown can either delete the whole album, prime a multi-select
+  // pass over the tracklist, or delete every track in one shot. The
+  // multi-select pass renders checkboxes in the TrackRow (lifted state
+  // so the trigger button up here knows the live selection count and
+  // can re-label itself to "Delete N Tracks").
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
+  const [deleteAllTracksOpen, setDeleteAllTracksOpen] = useState(false);
   // Artwork editor lives as a modal hanging off the page header thumbnail,
   // not as a dedicated panel on Overview. Operators rarely change cover
   // art — making it a hover-pencil → modal kills a whole inline card of
@@ -208,6 +220,39 @@ export function AdminAlbum() {
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       });
+    },
+  });
+
+  // Bulk-delete N songs. No dedicated bulk endpoint exists yet, so we
+  // fan out parallel DELETEs against /api/admin/songs/:id. If any one
+  // fails the whole mutation rejects — the cache invalidation in
+  // onSettled still runs so the operator sees whatever made it through.
+  const bulkDeleteSongs = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(
+        ids.map((id) => apiRequest("DELETE", `/api/admin/songs/${id}`)),
+      );
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      toast({
+        title: `Deleted ${count} ${count === 1 ? "track" : "tracks"}.`,
+      });
+      setDeleteSelectedOpen(false);
+      setDeleteAllTracksOpen(false);
+      setSelectionMode(false);
+      setSelectedTrackIds(new Set());
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't delete tracks",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
     },
   });
 
@@ -409,19 +454,115 @@ export function AdminAlbum() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={deleteAlbum.isPending}
-            aria-label="Delete album"
-            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
-            data-testid="button-delete-album"
-          >
-            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-              Delete
-            </span>
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {/* Delete Options dropdown — replaces the standalone trashcan.
+              Same visual chrome as the Tracks-tab "Advanced" menu so the
+              two top-level actions on the album feel like a matched
+              pair. In multi-select mode the trigger collapses into a
+              "Delete N Tracks" call-to-action (rose-tinted when N>0,
+              slate-100 when N=0) plus a Cancel-out-of-selection link. */}
+          {selectionMode ? (
+            <div className="flex items-center gap-2 mb-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectionMode(false);
+                  setSelectedTrackIds(new Set());
+                }}
+                className="text-[12px] font-medium text-slate-500 hover:text-slate-800 px-1.5 py-1"
+                data-testid="button-cancel-track-selection"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteSelectedOpen(true)}
+                disabled={selectedTrackIds.size === 0}
+                className={
+                  "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 transition-colors " +
+                  (selectedTrackIds.size === 0
+                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                    : "bg-rose-600 text-white hover:bg-rose-700")
+                }
+                data-testid="button-delete-selected-tracks"
+              >
+                <Trash2 className="w-3 h-3" />
+                Delete {selectedTrackIds.size}{" "}
+                {selectedTrackIds.size === 1 ? "Track" : "Tracks"}
+              </button>
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="px-2.5 py-1.5 mb-1 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100 flex-shrink-0"
+                data-testid="button-delete-options"
+                aria-label="Delete options"
+                disabled={deleteAlbum.isPending}
+              >
+                <Trash2 className="w-3 h-3" />
+                Delete options
+                <ChevronDown className="w-3 h-3 -mr-0.5 text-slate-400" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={6}
+                className="min-w-[260px] p-1.5 bg-white text-slate-900 border border-slate-200 shadow-lg"
+              >
+                <DropdownMenuItem
+                  onSelect={() => setDeleteConfirmOpen(true)}
+                  data-testid="menu-delete-album"
+                  className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-rose-50 focus:text-rose-700"
+                >
+                  <Trash2 className="w-4 h-4 text-slate-500" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-900">
+                      Delete album
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Removes the album and every track on it.
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    // Auto-switch to Tracks so the checkboxes are
+                    // visible the instant the operator picks them.
+                    setTab("tracks");
+                    setSelectedTrackIds(new Set());
+                    setSelectionMode(true);
+                  }}
+                  disabled={album.songs.length === 0}
+                  data-testid="menu-delete-selected-tracks"
+                  className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900 data-[disabled]:opacity-50"
+                >
+                  <Check className="w-4 h-4 text-slate-500" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-900">
+                      Delete selected tracks…
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Pick individual tracks with checkboxes.
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setDeleteAllTracksOpen(true)}
+                  disabled={album.songs.length === 0}
+                  data-testid="menu-delete-all-tracks"
+                  className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900 data-[disabled]:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4 text-slate-500" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-900">
+                      Delete all tracks
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Clears the tracklist; keeps the album.
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* TAB CONTENT */}
@@ -429,7 +570,20 @@ export function AdminAlbum() {
           <OverviewPanel album={album} />
         )}
         {tab === "tracks" && (
-          <TracksPanel album={album} onEdit={openInClassicAdmin} />
+          <TracksPanel
+            album={album}
+            onEdit={openInClassicAdmin}
+            selectionMode={selectionMode}
+            selectedTrackIds={selectedTrackIds}
+            onToggleTrack={(id) =>
+              setSelectedTrackIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              })
+            }
+          />
         )}
         {tab === "bonus" && (
           <BonusPanel album={album} onEdit={openInClassicAdmin} />
@@ -486,6 +640,171 @@ export function AdminAlbum() {
               {deleteAlbum.isPending ? "Deleting…" : "Delete album"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete-selected-tracks confirm sheet. Mirrors the album-delete
+          dialog: names the things being destroyed (truncated past 8),
+          rose-tinted primary, breathing-room gap on Cancel. */}
+      <Dialog
+        open={deleteSelectedOpen}
+        onOpenChange={(v) =>
+          !bulkDeleteSongs.isPending && setDeleteSelectedOpen(v)
+        }
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-delete-selected-tracks"
+        >
+          {(() => {
+            const ids = Array.from(selectedTrackIds);
+            const picked = album.songs
+              .filter((s) => selectedTrackIds.has(s.id))
+              .sort((a, b) => a.trackNumber - b.trackNumber);
+            const previewNames = picked.slice(0, 8).map((s) => s.title);
+            const overflow = picked.length - previewNames.length;
+            return (
+              <>
+                <DialogHeader className="text-left space-y-1">
+                  <DialogTitle className="text-[17px] font-semibold text-slate-900">
+                    Delete {ids.length}{" "}
+                    {ids.length === 1 ? "track" : "tracks"}?
+                  </DialogTitle>
+                  <DialogDescription className="text-[13px] font-normal text-slate-500">
+                    This removes their masters, snippets, lyrics, credits,
+                    and any playlist references. This cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+                {previewNames.length > 0 && (
+                  <ul
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] text-slate-700 max-h-40 overflow-y-auto"
+                    data-testid="list-delete-selected-names"
+                  >
+                    {previewNames.map((n) => (
+                      <li
+                        key={n}
+                        className="truncate py-0.5"
+                        title={n}
+                      >
+                        {n}
+                      </li>
+                    ))}
+                    {overflow > 0 && (
+                      <li className="text-slate-500 italic py-0.5">
+                        + {overflow} more
+                      </li>
+                    )}
+                  </ul>
+                )}
+                <DialogFooter className="gap-3 sm:gap-3">
+                  <Button
+                    type="button"
+                    onClick={() => setDeleteSelectedOpen(false)}
+                    disabled={bulkDeleteSongs.isPending}
+                    className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+                    data-testid="button-delete-selected-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => bulkDeleteSongs.mutate(ids)}
+                    disabled={bulkDeleteSongs.isPending || ids.length === 0}
+                    className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+                    data-testid="button-delete-selected-confirm"
+                  >
+                    {bulkDeleteSongs.isPending
+                      ? "Deleting…"
+                      : `Delete ${ids.length} ${ids.length === 1 ? "track" : "tracks"}`}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete-all-tracks confirm sheet. Same shape as the selected
+          variant; operates over every song on the album. Keeps the
+          album shell intact (artwork, metadata, credits) so the
+          operator can rebuild the tracklist from scratch. */}
+      <Dialog
+        open={deleteAllTracksOpen}
+        onOpenChange={(v) =>
+          !bulkDeleteSongs.isPending && setDeleteAllTracksOpen(v)
+        }
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-delete-all-tracks"
+        >
+          {(() => {
+            const all = [...album.songs].sort(
+              (a, b) => a.trackNumber - b.trackNumber,
+            );
+            const ids = all.map((s) => s.id);
+            const previewNames = all.slice(0, 8).map((s) => s.title);
+            const overflow = all.length - previewNames.length;
+            return (
+              <>
+                <DialogHeader className="text-left space-y-1">
+                  <DialogTitle className="text-[17px] font-semibold text-slate-900">
+                    Delete all {all.length}{" "}
+                    {all.length === 1 ? "track" : "tracks"} from{" "}
+                    <span className="italic">{album.title}</span>?
+                  </DialogTitle>
+                  <DialogDescription className="text-[13px] font-normal text-slate-500">
+                    Removes every master, snippet, lyric, credit, and
+                    playlist reference. The album shell stays — you can
+                    rebuild the tracklist after. This cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+                {previewNames.length > 0 && (
+                  <ul
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] text-slate-700 max-h-40 overflow-y-auto"
+                    data-testid="list-delete-all-names"
+                  >
+                    {previewNames.map((n) => (
+                      <li
+                        key={n}
+                        className="truncate py-0.5"
+                        title={n}
+                      >
+                        {n}
+                      </li>
+                    ))}
+                    {overflow > 0 && (
+                      <li className="text-slate-500 italic py-0.5">
+                        + {overflow} more
+                      </li>
+                    )}
+                  </ul>
+                )}
+                <DialogFooter className="gap-3 sm:gap-3">
+                  <Button
+                    type="button"
+                    onClick={() => setDeleteAllTracksOpen(false)}
+                    disabled={bulkDeleteSongs.isPending}
+                    className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+                    data-testid="button-delete-all-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => bulkDeleteSongs.mutate(ids)}
+                    disabled={bulkDeleteSongs.isPending || ids.length === 0}
+                    className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+                    data-testid="button-delete-all-confirm"
+                  >
+                    {bulkDeleteSongs.isPending
+                      ? "Deleting…"
+                      : `Delete ${ids.length} ${ids.length === 1 ? "track" : "tracks"}`}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </AdminFrame>
@@ -682,9 +1001,18 @@ type AdminCreditRole = {
 function TracksPanel({
   album,
   onEdit,
+  selectionMode,
+  selectedTrackIds,
+  onToggleTrack,
 }: {
   album: AlbumFull;
   onEdit: () => void;
+  // Multi-select state lives at the page level so the Delete-Options
+  // trigger up in the tab strip can re-label itself with the live
+  // count. The panel just threads the props down to each TrackRow.
+  selectionMode: boolean;
+  selectedTrackIds: Set<string>;
+  onToggleTrack: (id: string) => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1284,6 +1612,9 @@ function TracksPanel({
               isCurrent={currentSongId === song.id}
               isPlaying={playing && currentSongId === song.id}
               onPlay={handleRowPlay}
+              selectionMode={selectionMode}
+              selected={selectedTrackIds.has(song.id)}
+              onToggleSelect={onToggleTrack}
             />
           );
         })}
@@ -3468,6 +3799,9 @@ function TrackRow({
   isCurrent,
   isPlaying,
   onPlay,
+  selectionMode,
+  selected,
+  onToggleSelect,
 }: {
   song: SongLite;
   albumId: string;
@@ -3483,6 +3817,13 @@ function TrackRow({
   isCurrent: boolean;
   isPlaying: boolean;
   onPlay: (songId: string) => void;
+  // Bulk-delete multi-select. When `selectionMode` is true the row
+  // surfaces a checkbox in the drag-handle slot and the operator can
+  // toggle membership via `onToggleSelect`. Editor chevrons + play
+  // still work as before — selection is purely additive chrome.
+  selectionMode: boolean;
+  selected: boolean;
+  onToggleSelect: (songId: string) => void;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
   // Seamless tile-expansion: the row collapses into the dot meter at
@@ -3604,22 +3945,47 @@ function TrackRow({
         {/* Drag handle — only active while we're in resting view mode so
             it never fights with the title input or the open editors.
             Hidden until row-hover to keep the resting row tidy. */}
-        <button
-          type="button"
-          draggable={!expanded}
-          onDragStart={!expanded ? onDragStart : undefined}
-          aria-label="Drag to reorder"
-          title="Drag to reorder"
-          className={[
-            "w-3.5 h-5 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded transition-opacity",
-            !expanded
-              ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
-              : "opacity-0 pointer-events-none",
-          ].join(" ")}
-          data-testid={`grip-track-${song.id}`}
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </button>
+        {selectionMode ? (
+          // Multi-select checkbox lives in the drag-handle slot so the
+          // row's left-edge alignment is identical between modes. Always
+          // visible (not hover-revealed) — the operator needs to see
+          // every checkbox at a glance while picking.
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect(song.id);
+            }}
+            aria-label={selected ? "Deselect track" : "Select track"}
+            aria-pressed={selected}
+            className={[
+              "w-4 h-4 -ml-1 inline-flex items-center justify-center rounded-[4px] border transition-colors flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+              selected
+                ? "bg-rose-600 border-rose-600 text-white hover:bg-rose-700"
+                : "bg-white border-slate-300 hover:border-slate-500",
+            ].join(" ")}
+            data-testid={`checkbox-track-${song.id}`}
+          >
+            {selected && <Check className="w-3 h-3" strokeWidth={3} />}
+          </button>
+        ) : (
+          <button
+            type="button"
+            draggable={!expanded}
+            onDragStart={!expanded ? onDragStart : undefined}
+            aria-label="Drag to reorder"
+            title="Drag to reorder"
+            className={[
+              "w-3.5 h-5 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded transition-opacity",
+              !expanded
+                ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
+                : "opacity-0 pointer-events-none",
+            ].join(" ")}
+            data-testid={`grip-track-${song.id}`}
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        )}
         {/* Track-number cell doubles as play/pause affordance.
             • Resting: shows the track number (slate-400, 12px tabular).
             • Row hover (master exists): swaps in a play triangle.
