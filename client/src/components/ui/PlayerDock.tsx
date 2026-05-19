@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Play,
   Pause,
@@ -13,6 +13,7 @@ import {
   VolumeX,
   ChevronDown,
   ChevronUp,
+  Music2,
 } from "lucide-react";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 
@@ -154,14 +155,26 @@ export function PlayerDock({
   // bar's edges. Left/right icon clusters stay sharp.
   const [scrubHover, setScrubHover] = useState(false);
 
-  // Manual hide/show — collapses the dock to a small corner pill (cover
-  // thumb + play/pause + chevron-up). Independent of the auto-compact
-  // responsive breakpoint above. Auto-restores when the track changes so
-  // a new selection always surfaces the full dock (architect's UX fix —
-  // otherwise picking a new track from the minimized state leaves the
-  // user with no cover/title preview of what they just queued up).
-  const [dockHidden, setDockHidden] = useState(false);
+  // Manual hide/show — collapses the dock to a small corner pill.
+  // Independent of the auto-compact responsive breakpoint above.
+  //
+  // Default state is COLLAPSED so the dock doesn't dominate the page
+  // chrome before anyone has asked for it. The collapsed pill renders
+  // differently depending on `hasSelection`:
+  //   • no selection → wider "Player" tab with a music glyph + label
+  //     so it doesn't read as a chat-bubble FAB.
+  //   • selection    → the familiar cover · play · chevron-up pill.
+  //
+  // Auto-restores when the track CHANGES (not on initial mount) so a
+  // new selection always surfaces the full dock — otherwise picking a
+  // new track from the collapsed state would leave the user with no
+  // cover/title preview of what they just queued up.
+  const [dockHidden, setDockHidden] = useState(true);
+  const initialTrackRef = useRef(`${track.title}::${track.subtitle ?? ""}`);
   useEffect(() => {
+    const key = `${track.title}::${track.subtitle ?? ""}`;
+    if (key === initialTrackRef.current) return;
+    initialTrackRef.current = key;
     setDockHidden(false);
   }, [track.title, track.subtitle]);
 
@@ -293,48 +306,67 @@ export function PlayerDock({
   // and chevron-up to restore. Title omitted — a tooltip on the cover or
   // a dedicated Now Playing sheet can answer that without bloating the pill.
   if (dockHidden) {
-    // Idle (no selection): a minimal chevron-up pill so Bill can tuck
-    // the empty dock away while editing and bring it back the moment he
-    // wants to audition a track. Playing state keeps the cover +
-    // play/pause + restore chevron.
+    // Idle (no selection): one button — a wider tab-shaped pill with
+    // a music glyph + "Player" label. Reads unambiguously as the music
+    // dock instead of a chat-bubble FAB (the prior single-chevron
+    // circle was visually identical to Intercom/Crisp). Whole pill is
+    // the click target.
+    if (!hasSelection) {
+      return (
+        <div className="fixed right-4 bottom-8 z-40" data-testid="player-dock-mini">
+          <button
+            type="button"
+            aria-label="Show player"
+            title="Show player"
+            onClick={() => setDockHidden(false)}
+            data-testid="button-show-player"
+            className="h-10 pl-3 pr-3 rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 inline-flex items-center gap-2 hover:bg-slate-800/95 transition-colors"
+          >
+            <Music2 className="w-[18px] h-[18px] text-[#319ED8]" />
+            <span className="text-[12.5px] font-semibold tracking-[0.01em] text-slate-100">
+              Player
+            </span>
+            <ChevronUp className="w-4 h-4 text-slate-400 -mr-0.5" />
+          </button>
+        </div>
+      );
+    }
+    // Playing state: cover + play/pause + restore chevron — the user
+    // already knows it's the player because a track is loaded.
     return (
       <div className="fixed right-4 bottom-8 z-40" data-testid="player-dock-mini">
         <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-3 pr-2 py-2">
-          {hasSelection && (
-            <>
-              <div
-                className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
-                aria-label={`${track.title} — now playing`}
-                title={track.subtitle ? `${track.title} — ${track.subtitle}` : track.title}
-                style={
-                  coverNode
-                    ? undefined
-                    : { background: "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)" }
-                }
-              >
-                {coverNode}
-              </div>
-              <button
-                type="button"
-                onClick={onTogglePlay}
-                disabled={!playable}
-                aria-label={playing ? "Pause" : "Play"}
-                data-testid="button-play-mini"
-                className={[
-                  "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
-                  playable
-                    ? "text-white hover:bg-white/10"
-                    : "text-slate-500 cursor-not-allowed",
-                ].join(" ")}
-              >
-                {playing ? (
-                  <Pause className="w-[18px] h-[18px] fill-current" />
-                ) : (
-                  <Play className="w-[18px] h-[18px] ml-0.5 fill-current" />
-                )}
-              </button>
-            </>
-          )}
+          <div
+            className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
+            aria-label={`${track.title} — now playing`}
+            title={track.subtitle ? `${track.title} — ${track.subtitle}` : track.title}
+            style={
+              coverNode
+                ? undefined
+                : { background: "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)" }
+            }
+          >
+            {coverNode}
+          </div>
+          <button
+            type="button"
+            onClick={onTogglePlay}
+            disabled={!playable}
+            aria-label={playing ? "Pause" : "Play"}
+            data-testid="button-play-mini"
+            className={[
+              "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+              playable
+                ? "text-white hover:bg-white/10"
+                : "text-slate-500 cursor-not-allowed",
+            ].join(" ")}
+          >
+            {playing ? (
+              <Pause className="w-[18px] h-[18px] fill-current" />
+            ) : (
+              <Play className="w-[18px] h-[18px] ml-0.5 fill-current" />
+            )}
+          </button>
           <button
             type="button"
             aria-label="Show player"

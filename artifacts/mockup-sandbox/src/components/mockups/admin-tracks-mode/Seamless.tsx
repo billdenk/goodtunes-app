@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GripVertical,
   Plus,
@@ -7,6 +7,7 @@ import {
   Pencil,
   ChevronDown,
   ChevronUp,
+  Music2,
   Disc3,
   Headphones,
   FileText,
@@ -659,12 +660,24 @@ function BottomDock({
   const [scrubHover, setScrubHover] = useState(false);
 
   // Manual hide/show — chevron-down on the dock collapses it into a small
-  // corner pill (cover thumb + play/pause + chevron-up). Mirrors the
-  // "clean canvas while editing" Bill asked for. Independent of the
-  // auto-compact responsive pattern Apple uses on narrow viewports
-  // (deferred until graduation, where admin's LIVE PREVIEW column eats
-  // horizontal room and auto-compact becomes more valuable).
-  const [dockHidden, setDockHidden] = useState(false);
+  // corner pill. Mirrors the "clean canvas while editing" Bill asked for.
+  // Defaults to COLLAPSED so the dock doesn't dominate the page chrome
+  // before anyone asks for it. The collapsed pill renders differently
+  // depending on `hasSelection`:
+  //   • no selection → wider "Player" tab with a music glyph + label
+  //     so it doesn't read as a chat-bubble FAB.
+  //   • selection    → the familiar cover · play · chevron-up pill.
+  // Mirrored from client/src/components/ui/PlayerDock.tsx — keep in sync.
+  const [dockHidden, setDockHidden] = useState(true);
+  // Auto-expand when the user picks a DIFFERENT track (not on initial
+  // mount). Keyed by the stable track id `current.n`. Mirrors the
+  // graduated primitive so a new selection always surfaces the full dock.
+  const initialTrackRef = useRef<number>(current.n);
+  useEffect(() => {
+    if (current.n === initialTrackRef.current) return;
+    initialTrackRef.current = current.n;
+    setDockHidden(false);
+  }, [current.n]);
 
   // ── Responsive auto-compact (Apple's narrow-viewport dock pattern) ──
   // At wide widths the dock is a centered 760px pill with an inset
@@ -732,6 +745,25 @@ function BottomDock({
   // actually need with the dock collapsed), and chevron-up to restore.
   // Title/artist deliberately omitted — a tooltip on the cover or a
   // dedicated "now playing" sheet can answer that without bloating the pill.
+  if (dockHidden && !hasSelection) {
+    return (
+      <div className="absolute right-4 bottom-4 z-20">
+        <button
+          type="button"
+          aria-label="Show player"
+          title="Show player"
+          onClick={() => setDockHidden(false)}
+          className="h-10 pl-3 pr-3 rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 inline-flex items-center gap-2 hover:bg-slate-800/95 transition-colors"
+        >
+          <Music2 className="w-[18px] h-[18px] text-[#319ED8]" />
+          <span className="text-[12.5px] font-semibold tracking-[0.01em] text-slate-100">
+            Player
+          </span>
+          <ChevronUp className="w-4 h-4 text-slate-400 -mr-0.5" />
+        </button>
+      </div>
+    );
+  }
   if (dockHidden && hasSelection) {
     return (
       <div className="absolute right-4 bottom-4 z-20">
