@@ -3111,14 +3111,16 @@ function GoodSyncAlbumDialog({
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [chorusSetIds, setChorusSetIds] = useState<Set<string>>(new Set());
 
+  // Eligibility: master uploaded + not flagged instrumental. Lyrics are
+  // NOT required — when a track has no Words yet, Scribe transcribes the
+  // master and back-populates `song.lyrics` from the transcription, so
+  // the operator can run GoodSync as a "pull lyrics off the audio" pass.
   const eligible = useMemo(
     () =>
       songs.filter(
         (s) =>
           !s.instrumental &&
-          !!s.audioUrl &&
-          !!s.lyrics &&
-          !!s.lyrics.trim(),
+          !!s.audioUrl,
       ),
     [songs],
   );
@@ -3265,8 +3267,8 @@ function GoodSyncAlbumDialog({
                   <>
                     {" "}
                     <span className="text-slate-500">
-                      {ineligible} will be skipped (no master or no
-                      lyrics yet).
+                      {ineligible} will be skipped (no master yet, or
+                      flagged instrumental).
                     </span>
                   </>
                 )}
@@ -5749,20 +5751,23 @@ function LyricsEditor({
   // calls ElevenLabs and saves real `syncedLyrics` server-side.
   const alignMut = useMutation({
     mutationFn: async () => {
-      if (!normalized) throw new Error("Add lyric lines first.");
-      // Step 1 — persist the current draft and trash the existing cues.
-      // Re-sync is intentionally a clean redo: per Bill, when the writer
-      // hits Re-sync they want to throw the old cues away and let
-      // ElevenLabs paint a fresh alignment. If step 2 fails the song is
-      // left with words + no cues — that's the same starting state as
-      // a brand-new track, and the Sync button stays on screen to
-      // recover.
+      // Step 1 — persist the current draft (if any) and trash the existing
+      // cues. Re-sync is intentionally a clean redo: per Bill, when the
+      // writer hits Re-sync they want to throw the old cues away and let
+      // Scribe paint a fresh alignment.
+      //
+      // Empty draft is allowed — Scribe transcribes the master and the
+      // server back-populates `song.lyrics` from the transcription. This
+      // is the path Bill uses when LRCLIB/Genius returned wrong lyrics:
+      // clear the Words box and let GoodSync pull the real ones off the
+      // master.
       await apiRequest("PUT", `/api/admin/songs/${song.id}`, {
         lyrics: normalized,
         syncedLyrics: null,
       });
-      // Step 2 — real ElevenLabs forced alignment. Saves syncedLyrics
-      // server-side and returns the updated song + line/word counts.
+      // Step 2 — Scribe STT + cue grouping. Saves syncedLyrics server-side
+      // and (when Words was empty) writes the transcription into
+      // `song.lyrics` so the editor refreshes with a real first draft.
       const res = await apiRequest(
         "POST",
         `/api/admin/songs/${song.id}/auto-sync-lyrics`,
@@ -5770,17 +5775,35 @@ function LyricsEditor({
       return (await res.json()) as {
         lineCount: number;
         wordCount: number;
+        song?: { lyrics?: string | null };
       };
     },
     onSuccess: async (data) => {
+      // If Words started empty, the server back-populated `song.lyrics`
+      // from the Scribe transcription. Adopt that into the editor's
+      // draft so the operator sees the extracted lyrics immediately,
+      // and reset originalRef so the autosave doesn't see a fake "dirty"
+      // diff against the previous (empty) text.
+      const serverLyrics = data.song?.lyrics ?? null;
+      const backfilled = !normalized && !!serverLyrics && serverLyrics.trim().length > 0;
+      if (backfilled) {
+        const next = serverLyrics!;
+        originalRef.current = next;
+        setDraft(cleanLyricsForEditor(next));
+        userEditedRef.current = false;
+      }
       await onSaved();
       // Editor stays open — Bill: "After it syncs the 'sync with...'
       // has served its purposes and is replaced with a play button."
       // The header swap is automatic once the refetched song has the
-      // new syncedLyrics that match the typed draft.
+      // new syncedLyrics.
       toast({
-        title: "Synced with audio",
-        description: `${data.lineCount} lines · ${data.wordCount} words aligned`,
+        title: backfilled
+          ? "Lyrics pulled from the master"
+          : "Synced with audio",
+        description: backfilled
+          ? `${data.lineCount} lines transcribed · review the Words for any STT mishears.`
+          : `${data.lineCount} lines · ${data.wordCount} words aligned`,
       });
     },
     onError: (e: any) =>

@@ -4350,10 +4350,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!song.audioUrl) {
       return res.status(400).json({ message: "Song has no master audio uploaded — upload a master first." });
     }
-    if (!song.lyrics || !song.lyrics.trim()) {
-      return res.status(400).json({ message: "Song has no lyrics to align — add lyrics first." });
-    }
-    if (song.lyrics.length > FA_MAX_LYRIC_CHARS) {
+    // Plain lyrics are OPTIONAL. When present, we use them to refine and
+    // hallucination-filter the STT output. When absent, the back-populate
+    // pass below writes the transcription itself into `song.lyrics` so
+    // the operator gets a first-draft Words box from scratch — this is
+    // the path Bill uses when LRCLIB/Genius returned the wrong lyrics
+    // (or none at all) and Scribe heard the real ones.
+    if (song.lyrics && song.lyrics.length > FA_MAX_LYRIC_CHARS) {
       return res.status(413).json({ message: `Lyrics too long (${song.lyrics.length} chars; cap ${FA_MAX_LYRIC_CHARS}).` });
     }
 
