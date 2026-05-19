@@ -45,26 +45,53 @@ async function getAccessToken(force = false): Promise<string | null> {
   const id = process.env.SPOTIFY_CLIENT_ID as string;
   const secret = process.env.SPOTIFY_CLIENT_SECRET as string;
   const basic = Buffer.from(`${id}:${secret}`).toString("base64");
-  let res: Response;
-  try {
-    res = await fetchWithTimeout(
-      TOKEN_URL,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basic}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+
+  // Spotify's accounts service (the OAuth token endpoint, not the API)
+  // periodically returns 502/503 with "overflow" — their Google-fronted
+  // load balancer throttling. A single 502 here used to surface as a
+  // "Spotify lookup failed" banner to the admin even when the credentials
+  // are fine. Retry up to 3 times total with exponential-ish backoff
+  // (0/400/1000ms) on transport error OR 429/5xx before giving up.
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const tokenAttempt = async (): Promise<Response | null> => {
+    try {
+      return await fetchWithTimeout(
+        TOKEN_URL,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${basic}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: "grant_type=client_credentials",
         },
-        body: "grant_type=client_credentials",
-      },
-      TOKEN_TIMEOUT_MS,
-    );
-  } catch (err) {
-    console.warn("[spotify] token fetch errored", (err as Error)?.message);
-    return null;
+        TOKEN_TIMEOUT_MS,
+      );
+    } catch (err) {
+      console.warn("[spotify] token fetch errored", (err as Error)?.message);
+      return null;
+    }
+  };
+  const isTransient = (s: number) => s === 429 || (s >= 500 && s < 600);
+  const backoffs = [0, 400, 1000];
+  let res: Response | null = null;
+  for (let i = 0; i < backoffs.length; i++) {
+    if (backoffs[i] > 0) await sleep(backoffs[i]);
+    res = await tokenAttempt();
+    if (res && res.ok) break;
+    if (res && !isTransient(res.status)) {
+      // 4xx (bad creds, etc.) — no point retrying.
+      const body = await res.text().catch(() => "");
+      console.warn("[spotify] token fetch failed", res.status, body.slice(0, 200));
+      return null;
+    }
+    if (res) {
+      const body = await res.text().catch(() => "");
+      console.warn(`[spotify] token fetch transient ${res.status} (attempt ${i + 1}/${backoffs.length})`, body.slice(0, 120));
+    }
   }
-  if (!res.ok) {
-    console.warn("[spotify] token fetch failed", res.status, await res.text().catch(() => ""));
+  if (!res || !res.ok) {
+    console.warn("[spotify] token fetch failed after retries");
     return null;
   }
   const json = (await res.json()) as { access_token: string; expires_in: number };
