@@ -2112,6 +2112,143 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return u;
   }
 
+  // Single-file Dropbox share URLs follow `/scl/fi/<id>/<filename>` (new
+  // share format) or the legacy `/s/<id>/<filename>`. Folders use
+  // `/scl/fo/`. We branch on this so admins can paste either kind in
+  // the "Folder or file" inputs.
+  function isDropboxSingleFileUrl(raw: string): boolean {
+    try {
+      const u = new URL(raw);
+      const p = u.pathname;
+      return /\/scl\/fi\//i.test(p) || /^\/s\//i.test(p);
+    } catch {
+      return false;
+    }
+  }
+
+  // Pull the original filename out of a single-file Dropbox URL — it's
+  // the last path segment (Dropbox URL-encodes it). Falls back to a
+  // generic name when the URL is unusually shaped so the importer can
+  // still surface SOME filename to the matcher.
+  function filenameFromDropboxFileUrl(raw: string, fallback = "file"): string {
+    try {
+      const u = new URL(raw);
+      const segs = u.pathname.split("/").filter(Boolean);
+      const last = segs[segs.length - 1] || "";
+      const decoded = decodeURIComponent(last);
+      return decoded || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  // Download a single Dropbox file share to a tempfile and return it
+  // wrapped in the same shape as `streamDropboxFolderEntries`. Same
+  // SSRF protections (manual redirects + host re-validation) and the
+  // same per-entry size cap. Memory stays at ~64 KB chunks.
+  async function streamDropboxSingleFileEntry(
+    fileUrl: string,
+    shouldKeep: (filename: string) => boolean,
+  ): Promise<{
+    entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    cleanup: () => Promise<void>;
+  }> {
+    const fs = await import("node:fs");
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { Readable } = await import("node:stream");
+    const { Transform } = await import("node:stream");
+    const { pipeline } = await import("node:stream/promises");
+
+    const sessionDir = await fsp.mkdtemp(path.join(os.tmpdir(), "gt-dropbox-"));
+    const cleanup = async () => {
+      try { await fsp.rm(sessionDir, { recursive: true, force: true }); } catch {}
+    };
+
+    let url: URL;
+    try { url = new URL(fileUrl); } catch {
+      await cleanup();
+      throw new Error("That doesn't look like a URL.");
+    }
+    try { assertDropboxHost(url); } catch (e) { await cleanup(); throw e; }
+    url.searchParams.set("dl", "1");
+
+    const filename = filenameFromDropboxFileUrl(fileUrl);
+    if (!shouldKeep(filename)) {
+      await cleanup();
+      return { entries: [], cleanup: async () => {} };
+    }
+
+    const maxHops = 5;
+    const timeoutMs = 30 * 60_000;
+    const ac = new AbortController();
+    const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
+    let response: Awaited<ReturnType<typeof fetch>> | null = null;
+    try {
+      let current = url;
+      for (let hop = 0; hop <= maxHops; hop++) {
+        const r = await fetch(current.toString(), { redirect: "manual", signal: ac.signal });
+        if (r.status >= 300 && r.status < 400) {
+          const loc = r.headers.get("location");
+          if (!loc) throw new Error("Dropbox redirect with no target.");
+          let next: URL;
+          try { next = new URL(loc, current); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
+          assertDropboxHost(next);
+          current = next;
+          try { await r.body?.cancel(); } catch {}
+          continue;
+        }
+        response = r;
+        break;
+      }
+      if (!response) throw new Error("Too many Dropbox redirects.");
+      if (!response.ok) {
+        throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}). Make sure the link is shareable.`);
+      }
+      if (!response.body) throw new Error("Dropbox sent an empty response.");
+
+      const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
+      let size = 0;
+      const cap = new Transform({
+        transform(chunk, _enc, cb) {
+          size += chunk.length;
+          if (size > MAX_DROPBOX_ENTRY_BYTES) {
+            cb(new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`));
+            return;
+          }
+          cb(null, chunk);
+        },
+      });
+      await pipeline(Readable.fromWeb(response.body as any), cap, fs.createWriteStream(tmpPath));
+      clearTimeout(deadlineTimer);
+      return { entries: [{ filename, tmpPath, size }], cleanup };
+    } catch (err: any) {
+      clearTimeout(deadlineTimer);
+      try { ac.abort(); } catch {}
+      await cleanup();
+      if (ac.signal.aborted) throw new Error("Dropbox took too long to respond.");
+      throw err;
+    }
+  }
+
+  // Folder-or-file dispatcher. Both `import-tracks-from-dropbox` and
+  // `import-lyrics-from-dropbox` go through this so admins can paste
+  // either kind of share link.
+  async function streamDropboxEntries(
+    shareUrl: string,
+    shouldKeep: (filename: string) => boolean,
+  ): Promise<{
+    entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    cleanup: () => Promise<void>;
+  }> {
+    if (isDropboxSingleFileUrl(shareUrl)) {
+      return streamDropboxSingleFileEntry(shareUrl, shouldKeep);
+    }
+    return streamDropboxFolderEntries(shareUrl, shouldKeep);
+  }
+
   // Open the Dropbox share URL, follow redirects manually with per-hop
   // SSRF re-validation, and return the Node Readable carrying the raw
   // body bytes. The caller pipes this into `unzipper.Parse()` so the
@@ -2360,7 +2497,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const albumId = String(req.params.id);
       const folderUrl = String(req.body?.folderUrl || "").trim();
-      if (!folderUrl) return res.status(400).json({ message: "Paste a Dropbox folder link." });
+      if (!folderUrl) return res.status(400).json({ message: "Paste a Dropbox folder or file link." });
 
       const album = await storage.getAlbumById(albumId, { includeHidden: true });
       if (!album) return res.status(404).json({ message: "Album not found." });
@@ -2373,16 +2510,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ? 1
         : Math.max(...existingSongs.map(s => s.trackNumber ?? 0)) + 1;
 
-      // Stream the zip → tempfiles. We only keep audio entries; every
-      // other file in the folder (readme.txt, .DS_Store, cover art, etc.)
-      // is autodrained inside the streamer so it never touches disk.
-      const { entries: tmpEntries, cleanup } = await streamDropboxFolderEntries(
+      // Stream the zip → tempfiles (or a single file, for a `/scl/fi/`
+      // share link). We only keep audio entries; every other file in
+      // the folder (readme.txt, .DS_Store, cover art, etc.) is
+      // autodrained inside the streamer so it never touches disk.
+      const { entries: tmpEntries, cleanup } = await streamDropboxEntries(
         folderUrl,
         (filename) => extOf(filename) in AUDIO_MIME_BY_EXT,
       );
       try {
         if (tmpEntries.length === 0) {
-          return res.status(400).json({ message: "No audio files in that folder. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg." });
+          return res.status(400).json({ message: "No audio files in that link. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg." });
         }
 
         // Sort with numeric+base awareness so "Track 2" comes before
@@ -2480,8 +2618,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const folderUrl = String(req.body?.folderUrl || "").trim();
       if (!folderUrl) {
-        await logFail("Missing Dropbox folder link.");
-        return res.status(400).json({ message: "Paste a Dropbox folder link." });
+        await logFail("Missing Dropbox link.");
+        return res.status(400).json({ message: "Paste a Dropbox folder or file link." });
       }
 
       const songs = await storage.getSongsByAlbum(albumId);
@@ -2490,7 +2628,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Add tracks before importing lyrics." });
       }
 
-      const { entries: tmpEntries, cleanup } = await streamDropboxFolderEntries(
+      const { entries: tmpEntries, cleanup } = await streamDropboxEntries(
         folderUrl,
         (filename) => LYRIC_EXTENSIONS.has(extOf(filename)),
       );
@@ -2500,8 +2638,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
 
       if (tmpEntries.length === 0) {
-        await logFail("No PDF, Word, or text files in that folder.");
-        return res.status(400).json({ message: "No PDF, Word, or text files in that folder." });
+        await logFail("No PDF, Word, or text files in that link.");
+        return res.status(400).json({ message: "No PDF, Word, or text files in that link. Supported: .pdf, .docx, .txt." });
       }
 
       const matched: Array<{ songId: string; title: string; filename: string; charCount: number }> = [];

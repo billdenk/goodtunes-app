@@ -1938,8 +1938,8 @@ function AddMultipleTracksDialog({
             Upload multiple tracks
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Stamp out a batch of empty rows, or pull every audio file
-            from a Dropbox folder in one go.
+            Stamp out a batch of empty rows, or pull audio from a Dropbox
+            folder (or a single file) in one go.
           </DialogDescription>
         </DialogHeader>
 
@@ -1947,7 +1947,7 @@ function AddMultipleTracksDialog({
             slate-900 active pill) to match the rest of admin chrome. */}
         <div className="inline-flex bg-slate-100 rounded-lg p-0.5 self-start" role="tablist">
           {([
-            { id: "dropbox", label: "From Dropbox folder" },
+            { id: "dropbox", label: "From Dropbox" },
             { id: "empty", label: "Empty rows" },
           ] as const).map((opt) => (
             <button
@@ -2004,19 +2004,21 @@ function AddMultipleTracksDialog({
             <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
               <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
               <p className="text-[12.5px] leading-snug text-slate-600">
-                In Dropbox, share the folder as <span className="font-medium text-slate-700">Anyone with the link</span> and
-                paste the URL below. I'll number them starting at {nextTrackNumber} in
-                alphabetical order. Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
+                Share a Dropbox <span className="font-medium text-slate-700">folder</span> for a whole
+                album, or a single <span className="font-medium text-slate-700">file</span> for one track
+                — both as <span className="font-medium text-slate-700">Anyone with the link</span>.
+                I'll number them starting at {nextTrackNumber} in alphabetical
+                order. Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
               </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bulk-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
-                Dropbox folder link
+                Dropbox folder or file link
               </Label>
               <Input
                 id="bulk-dropbox-url"
                 type="url"
-                placeholder="https://www.dropbox.com/scl/fo/…"
+                placeholder="https://www.dropbox.com/scl/fo/… or /scl/fi/…"
                 value={folderUrl}
                 onChange={(e) => setFolderUrl(e.target.value)}
                 disabled={running}
@@ -2025,7 +2027,7 @@ function AddMultipleTracksDialog({
                 className="h-10 text-[14px] bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
               />
               <p className="text-[11.5px] text-slate-400">
-                Downloads the whole folder once, then imports every audio file inside.
+                Folder links import every audio file inside; file links import that one track.
               </p>
             </div>
           </>
@@ -2190,15 +2192,16 @@ function ImportLyricsFromDropboxDialog({
             Import lyrics from Dropbox
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Paste a Dropbox folder of lyric documents — I'll match each
-            file to a track by filename and fill in the lyrics.
+            Paste a Dropbox folder of lyric documents — or a single file
+            for one track. I'll match each file to a track by filename
+            and fill in the lyrics.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
           <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <p className="text-[12.5px] leading-snug text-slate-600">
-            Share the folder as <span className="font-medium text-slate-700">Anyone with the link</span>. Supported
+            Share the folder (or file) as <span className="font-medium text-slate-700">Anyone with the link</span>. Supported
             formats: .pdf, .docx, .txt. Name each file after the track
             (e.g. <span className="font-medium">Storms.pdf</span>) and I'll
             do the rest. {songCount > 0 ? `This album has ${songCount} track${songCount === 1 ? "" : "s"} to match against.` : "Add tracks first, then come back here."}
@@ -2207,12 +2210,12 @@ function ImportLyricsFromDropboxDialog({
 
         <div className="space-y-1.5">
           <Label htmlFor="lyrics-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
-            Dropbox folder link
+            Dropbox folder or file link
           </Label>
           <Input
             id="lyrics-dropbox-url"
             type="url"
-            placeholder="https://www.dropbox.com/scl/fo/…"
+            placeholder="https://www.dropbox.com/scl/fo/… or /scl/fi/…"
             value={folderUrl}
             onChange={(e) => setFolderUrl(e.target.value)}
             disabled={running || songCount === 0}
