@@ -88,6 +88,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 /**
  * Admin · Single album. Wrapped in AdminFrame so it shares the top bar +
@@ -5087,6 +5097,21 @@ function GoodSyncPanel({
   const savedCues = song.syncedLyrics ?? [];
   const hasSynced = canSync && savedCues.length > 0;
 
+  // ── Re-sync confirm gate ──────────────────────────────────────────
+  // First-time Sync runs immediately (nothing to lose). Re-sync after
+  // cues exist is destructive: it throws away the saved timings AND
+  // any per-cue text fixes the operator made via the ✏️ pencil. Per
+  // replit.md "destructive actions always confirm", we pop an
+  // AlertDialog named for the action before re-running.
+  const [confirmResync, setConfirmResync] = useState(false);
+  const handleSyncClick = () => {
+    if (hasSynced) {
+      setConfirmResync(true);
+      return;
+    }
+    onSyncWithAudio?.();
+  };
+
   // ── Inline cue-text edit mode ─────────────────────────────────────
   // Admin clicks the pencil → cue list swaps to text inputs (timings
   // are read-only). Save persists via PUT /api/admin/songs/:id with the
@@ -5327,7 +5352,7 @@ function GoodSyncPanel({
             {canSync && onSyncWithAudio && !hasSynced && (
               <button
                 type="button"
-                onClick={onSyncWithAudio}
+                onClick={handleSyncClick}
                 disabled={syncing}
                 title="Sync with audio — uses ElevenLabs to time each line to the master"
                 className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -5348,7 +5373,7 @@ function GoodSyncPanel({
             {canSync && onSyncWithAudio && hasSynced && (
               <button
                 type="button"
-                onClick={onSyncWithAudio}
+                onClick={handleSyncClick}
                 disabled={syncing}
                 aria-label="Re-sync with audio"
                 title="Re-sync with audio — replaces the existing GoodSync cues with a fresh alignment"
@@ -5402,6 +5427,7 @@ function GoodSyncPanel({
   );
 
   return (
+    <>
     <div
       className="flex flex-col gap-2 min-w-0"
       data-testid={`panel-goodsync-${song.id}`}
