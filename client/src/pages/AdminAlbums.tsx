@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
@@ -44,6 +45,7 @@ interface AlbumLite {
   description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
+  isExplicit: boolean;
 }
 
 type TabKey = "prepping" | "staged" | "live" | "sunset";
@@ -371,9 +373,12 @@ function AlbumTile({ album }: { album: AlbumLite }) {
         <div className="text-slate-500 text-[12px] truncate">
           {album.artist}
         </div>
-        <div className="text-slate-400 text-[10.5px] mt-0.5 uppercase tracking-wide font-semibold">
-          {album.type}
-          {album.year && <> · {album.year}</>}
+        <div className="text-slate-400 text-[10.5px] mt-0.5 uppercase tracking-wide font-semibold flex items-center gap-1.5">
+          <span>
+            {album.type}
+            {album.year && <> · {album.year}</>}
+          </span>
+          {album.isExplicit && <ExplicitBadge tone="slate" />}
         </div>
       </div>
     </Link>
@@ -397,10 +402,11 @@ function AlbumRow({ album }: { album: AlbumLite }) {
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          className="text-slate-900 text-[13.5px] font-semibold group-hover:text-[#319ED8] transition-colors flex items-center gap-1.5"
           data-testid={`text-album-title-${album.id}`}
         >
-          {album.title}
+          <span className="min-w-0 flex-1 truncate">{album.title}</span>
+          {album.isExplicit && <ExplicitBadge tone="slate" />}
         </div>
         <div className="text-slate-500 text-[12px] truncate">
           {album.artist}
