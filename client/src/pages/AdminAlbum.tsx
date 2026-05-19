@@ -5688,6 +5688,36 @@ function GoodSyncPanel({
         )}
       </div>
     </div>
+    <AlertDialog open={confirmResync} onOpenChange={setConfirmResync}>
+      <AlertDialogContent data-testid={`dialog-confirm-resync-${song.id}`}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Re-sync GoodSync™ cues?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This re-runs ElevenLabs speech-to-text against the master and
+            replaces the existing cues. Whatever you've typed in the editor
+            is kept and used as the source of truth — but if the editor is
+            empty, the lyrics get re-transcribed from the audio. Either way,
+            any per-cue text fixes you made with the ✏️ pencil — and all
+            current timings — will be overwritten.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid={`button-cancel-resync-${song.id}`}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setConfirmResync(false);
+              onSyncWithAudio?.();
+            }}
+            data-testid={`button-confirm-resync-${song.id}`}
+          >
+            Re-sync
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
