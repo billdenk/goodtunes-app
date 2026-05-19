@@ -2031,6 +2031,20 @@ function AddTrackForm({
       const result = await uploadAudioFile(f);
       setAudioUrl(result.url);
       setAudioSourceUrl(result.sourceUrl);
+      // Server-side duration is canonical (works on 24-bit WAV / AIFF
+      // which the browser <audio> probe can't decode). Apply it
+      // whenever the duration field is still empty or still showing
+      // the stale value from a previous attach — but don't clobber a
+      // value the operator just typed by hand.
+      if (result.duration && result.duration > 0) {
+        probeTokenRef.current++;
+        setDurationText((prev) => {
+          const parsed = parseDurationInput(prev);
+          return parsed.error || parsed.seconds === 0
+            ? formatSecondsAsMmSs(result.duration!)
+            : prev;
+        });
+      }
       if (result.transcoded) {
         toast({
           title: "Master converted for browser playback",
@@ -8568,6 +8582,23 @@ function AudioEditor({
       const result = await uploadAudioFile(f);
       setDraftUrl(result.url);
       setDraftSourceUrl(result.sourceUrl);
+      // Backfill duration when the row is still on the schema default
+      // (180s = 3:00) or 0, and the server's music-metadata probe
+      // returned a real value. Critical for 24-bit WAV / AIFF where
+      // the browser's <audio> probe at row-creation time returned
+      // null and we'd otherwise keep showing "3:00" forever.
+      if (
+        result.duration &&
+        result.duration > 0 &&
+        (!song.duration || song.duration === 180)
+      ) {
+        try {
+          await apiRequest("PUT", `/api/admin/songs/${song.id}`, {
+            duration: result.duration,
+          });
+          await onSaved();
+        } catch { /* non-fatal; the master URL save below still runs */ }
+      }
       if (result.transcoded) {
         toast({
           title: "Master converted for browser playback",
@@ -9350,6 +9381,12 @@ async function uploadAudioFile(
   sourceUrl: string | null;
   transcoded: boolean;
   sourceBitsPerSample?: number;
+  // Server-side duration probe via music-metadata. Set whenever the
+  // server could read the audio header (any bit depth). The client's
+  // own probe via HTMLAudioElement can't decode 24-bit WAV / AIFF —
+  // this is the fallback so hi-res masters don't land at the 3:00
+  // schema default.
+  duration?: number | null;
 }> {
   const fd = new FormData();
   fd.append("file", file);
@@ -9372,6 +9409,7 @@ async function uploadAudioFile(
     sourceUrl: string | null;
     transcoded: boolean;
     sourceBitsPerSample?: number;
+    duration?: number | null;
   };
   return body;
 }

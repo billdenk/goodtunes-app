@@ -1080,11 +1080,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const sourceUrl = conv.action === "transcode"
           ? await uploadFileToObjectStorage(tmpIn, f.mimetype)
           : null;
+        // Duration probe — Chrome's <audio> element can't decode 24-bit
+        // WAV / AIFF, so the client-side probe in AddTrackForm silently
+        // returns null on hi-res masters and we'd fall back to the DB
+        // default (180s = 3:00). music-metadata reads the WAV / AIFF
+        // header directly and works on any bit depth. Best-effort —
+        // a probe failure should not break the upload itself.
+        let duration: number | null = null;
+        try {
+          const mm = await import("music-metadata");
+          const meta = await mm.parseFile(tmpIn);
+          if (meta.format.duration && isFinite(meta.format.duration)) {
+            duration = Math.round(meta.format.duration);
+          }
+        } catch { /* leave null; client probe may have already filled it */ }
         return res.json({
           url,
           sourceUrl,
           transcoded: conv.action === "transcode",
           sourceBitsPerSample: conv.sourceBitsPerSample,
+          duration,
         });
       } catch (err: any) {
         console.error("Audio upload failed", err);
