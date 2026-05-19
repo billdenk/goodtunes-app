@@ -2545,13 +2545,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     //
     // Exact-equals (not startsWith) avoids the trap where title "Love"
     // would match the lyric line "Love is in the air".
-    // Credit vocabulary for shape-(b) detection. Intentionally excludes
-    // bare "by" — too easy to hit lyric prose like "(by my side)".
-    // Real credit parentheticals always pair a verb (Written / Produced
-    // / Composed / Co-wrote) or the feature marker (feat / featuring)
-    // with the name(s), so requiring one of those verbs is both
-    // necessary and sufficient.
-    const creditRe = /\b(written|produced|prod\.?|composed|feat|featuring|co[-\s]?wrote|lyrics?\s+by|music\s+by)\b/i;
+    // Credit vocabulary for shape-(b) detection. Two tiers:
+    //
+    //   Strong-signal verbs / nouns — unambiguous on their own. If the
+    //   parenthetical contains any of these we treat it as a credit:
+    //     Written / Wrote / Writer(s) / Songwriter(s) /
+    //     Composed / Composer(s) /
+    //     Produced / Producer(s) / Prod. /
+    //     Feat / Featuring /
+    //     Co-wrote / Co-written / Co-composed / Co-produced
+    //
+    //   Weak-signal nouns — `Lyrics` / `Music` / `Words` can also show
+    //   up as lyric prose ("(music to my ears)", "(words can't say)"),
+    //   so we only accept them when paired with "by" or a colon:
+    //     "Words by Jay Putty" / "Lyrics: Jay Putty" / "Music by …"
+    //
+    // Intentionally excludes bare "by" — too easy to hit lyric prose
+    // like "(by my side)".
+    const creditRe =
+      /\b(?:written|wrote|writers?|songwriters?|composed|composers?|produced|producers?|prod\.?|feat\.?|featuring|co[-\s]?(?:wrote|written|composed|produced))\b|\b(?:lyrics?|music|words)\s*(?::|by\b)/i;
     const assignedSongs = new Set<string>();
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
