@@ -4043,7 +4043,7 @@ function TrackRow({
    the consumer album card's "E" badge — the server derives it. Saves
    immediately on toggle — no Save button — to match the rest of the
    master tile's autosave behavior. */
-function ExplicitTrackToggle({ song }: { song: SongLite }) {
+function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const checked = !!song.isExplicit;
@@ -4052,7 +4052,16 @@ function ExplicitTrackToggle({ song }: { song: SongLite }) {
     mutationFn: async (next: boolean) =>
       apiRequest("PUT", `/api/admin/songs/${song.id}`, { isExplicit: next }),
     onSuccess: async (_data, next) => {
+      // Invalidate both the list (Albums grid E chip) and the detail
+      // (AdminAlbum header + AlbumPreviewCard album.isExplicit + per-
+      // track E in the preview tracklist). Prefix-match would catch
+      // both, but being explicit guards against any future change to
+      // exact:true defaults and keeps the preview reactive even when
+      // HMR has invalidated AdminAlbum mid-session.
       await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      if (albumId) {
+        await qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      }
       toast({
         title: next ? "Marked as explicit" : "Explicit flag removed",
       });
@@ -7601,7 +7610,7 @@ function PreviewWindowEditor({
 
 function AudioEditor({
   song,
-  albumId: _albumId,
+  albumId,
   onClose,
   onSaved,
 }: {
@@ -7893,7 +7902,7 @@ function AudioEditor({
                   <InstrumentalToggle song={song} />
                 </div>
                 <div className="rounded-lg bg-slate-50 px-2.5 py-2 flex items-center">
-                  <ExplicitTrackToggle song={song} />
+                  <ExplicitTrackToggle song={song} albumId={albumId} />
                 </div>
               </div>
             )}

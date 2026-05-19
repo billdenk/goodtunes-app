@@ -7,6 +7,10 @@ export interface AlbumPreviewSong {
   title: string;
   trackNumber: number;
   duration: number;
+  // Per-track explicit flag — surfaced as an "E" chip next to the
+  // title in the preview's tracklist so the admin sees the same
+  // marker the fan sees in AlbumDetail's song row.
+  isExplicit?: boolean | null;
 }
 
 export interface AlbumPreviewAlbum {
@@ -195,8 +199,11 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
                   >
                     {s.trackNumber}
                   </span>
-                  <span className="flex-1 min-w-0 text-white text-[15px] font-medium truncate">
-                    {s.title}
+                  <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                    <span className="text-white text-[15px] font-medium truncate">
+                      {s.title}
+                    </span>
+                    {s.isExplicit && <ExplicitBadge />}
                   </span>
                   {/* Download circle — outlined, matches fan surface */}
                   <svg
