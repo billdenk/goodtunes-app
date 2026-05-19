@@ -51,6 +51,7 @@ import {
   Download,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
+import { ProgressStrip } from "@/components/ui/ProgressStrip";
 import {
   Popover,
   PopoverContent,
@@ -2748,6 +2749,45 @@ function AddMultipleTracksDialog({
           </>
         )}
 
+        {/* Live progress while the import runs. Lives ABOVE the footer so
+            the action button itself stays compact — the bar is the
+            primary "something is happening" signal, the button just
+            confirms the operation can't be re-fired. Indeterminate
+            shimmer for the Dropbox-download phase (before the server
+            knows the file count), determinate fill once setProgress
+            lands. Sibling label sits right under it so the operator
+            gets both a visual rate AND an exact count. */}
+        {running && mode === "dropbox" && (
+          <div className="space-y-1.5 pt-1" data-testid="bulk-dropbox-progress">
+            <ProgressStrip progress={progress} />
+            <div className="flex items-center justify-between text-[11.5px] text-slate-500">
+              <span data-testid="text-bulk-dropbox-progress">
+                {progress && progress.total > 0
+                  ? `Importing ${progress.processed} of ${progress.total}…`
+                  : "Downloading from Dropbox…"}
+              </span>
+              {progress && progress.total > 0 && (
+                <span className="tabular-nums">
+                  {Math.min(100, Math.round((progress.processed / progress.total) * 100))}%
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {running && mode === "empty" && (
+          <div className="space-y-1.5 pt-1" data-testid="bulk-empty-progress">
+            <ProgressStrip progress={{ processed: created, total: n }} />
+            <div className="flex items-center justify-between text-[11.5px] text-slate-500">
+              <span data-testid="text-bulk-empty-progress">
+                Creating {created} of {n}…
+              </span>
+              <span className="tabular-nums">
+                {n > 0 ? Math.min(100, Math.round((created / n) * 100)) : 0}%
+              </span>
+            </div>
+          </div>
+        )}
+
         <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
           <button
             type="button"
@@ -2766,10 +2806,7 @@ function AddMultipleTracksDialog({
               className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {running ? (
-                <>
-                  <Spinner className="w-3.5 h-3.5 animate-spin" />
-                  Creating {created}/{n}…
-                </>
+                <>Creating…</>
               ) : (
                 <>Create {n} {n === 1 ? "track" : "tracks"}</>
               )}
@@ -2782,16 +2819,7 @@ function AddMultipleTracksDialog({
               data-testid="button-bulk-dropbox-confirm"
               className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {running ? (
-                <>
-                  <Spinner className="w-3.5 h-3.5 animate-spin" />
-                  {progress && progress.total > 0
-                    ? `Importing ${progress.processed}/${progress.total}…`
-                    : "Importing from Dropbox…"}
-                </>
-              ) : (
-                <>Import from Dropbox</>
-              )}
+              {running ? <>Importing…</> : <>Import from Dropbox</>}
             </button>
           )}
         </DialogFooter>

@@ -245,3 +245,16 @@ body.gt-admin {
   border: none;
   cursor: pointer;
 }
+
+/* Indeterminate progress stripe (ProgressStrip primitive). A
+   one-third-width pill slides left-to-right across the rail, used
+   while a long-running import hasn't reported processed/total yet
+   (e.g. server is mid-download of a Dropbox zip). */
+@keyframes gt-progress-indeterminate {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(310%); }
+}
+.gt-progress-indeterminate {
+  animation: gt-progress-indeterminate 1.4s ease-in-out infinite;
+  will-change: transform;
+}
