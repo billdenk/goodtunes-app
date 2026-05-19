@@ -1109,99 +1109,167 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // the video transcoder uses.
 
   // Backfill / re-process for legacy masters that predate the
-  // auto-transcode pipeline. The operator sees a "Re-process for
-  // browser playback" item in the master ⋯ menu whenever a song's
-  // audioUrl ends in .wav/.aif/.aiff and audioSourceUrl is still null
-  // — clicking it runs the exact same probe-and-transcode flow that
-  // new uploads use, then swaps the row to point at the FLAC and
-  // preserves the original WAV as the archival source. Idempotent:
-  // if probe says the file is already 16-bit PCM, we just return
-  // `{ transcoded: false }` and leave the row alone.
+  // auto-transcode pipeline. Extracted into a reusable closure so
+  // both the per-song endpoint AND the post-boot bulk sweep can call
+  // the same logic. Returns a discriminated result instead of writing
+  // to a response so callers control HTTP status / logging.
+  type ReprocessResult =
+    | { kind: "not-found" }
+    | { kind: "no-audio" }
+    | { kind: "already-processed" }
+    | { kind: "wrong-format"; ext: string }
+    | { kind: "passthrough"; sourceBitsPerSample?: number; sourceCodec?: string }
+    | {
+        kind: "transcoded";
+        audioUrl: string;
+        audioSourceUrl: string;
+        sourceBitsPerSample?: number;
+      }
+    | { kind: "race-lost" }
+    | { kind: "error"; message: string };
+
+  async function reprocessSongAudio(id: string): Promise<ReprocessResult> {
+    const song = await storage.getSongById(id);
+    if (!song) return { kind: "not-found" };
+    if (!song.audioUrl) return { kind: "no-audio" };
+    if (song.audioSourceUrl) return { kind: "already-processed" };
+    const ext = (song.audioUrl.match(/\.(\w+)(?:\?|$)/)?.[0] || "").toLowerCase();
+    if (!/^\.(wav|aif|aiff)$/.test(ext)) {
+      return { kind: "wrong-format", ext: ext || "no extension" };
+    }
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const tmpIn = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
+    let transcodedTmp: string | null = null;
+    try {
+      const file = await objectStorage.getObjectEntityFile(song.audioUrl);
+      const [buf] = await file.download();
+      await fsp.writeFile(tmpIn, buf);
+      const conv = await transcodeAudioToWebFriendly(tmpIn, ext);
+      if (conv.action === "passthrough") {
+        return {
+          kind: "passthrough",
+          sourceBitsPerSample: conv.sourceBitsPerSample,
+          sourceCodec: conv.sourceCodec,
+        };
+      }
+      transcodedTmp = conv.outputPath;
+      const newAudioUrl = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
+      // Conditional update — guards against a concurrent reprocess
+      // racing two transcodes. Second writer's UPDATE affects 0 rows.
+      const claim = await pool.query(
+        `UPDATE songs SET audio_url = $1, audio_source_url = $2
+           WHERE id = $3 AND audio_source_url IS NULL
+         RETURNING id`,
+        [newAudioUrl, song.audioUrl, id],
+      );
+      if (claim.rowCount === 0) return { kind: "race-lost" };
+      return {
+        kind: "transcoded",
+        audioUrl: newAudioUrl,
+        audioSourceUrl: song.audioUrl,
+        sourceBitsPerSample: conv.sourceBitsPerSample,
+      };
+    } catch (err: any) {
+      return { kind: "error", message: err?.message || String(err) };
+    } finally {
+      try { await fsp.unlink(tmpIn); } catch {}
+      if (transcodedTmp) {
+        try { await fsp.unlink(transcodedTmp); } catch {}
+      }
+    }
+  }
+
   app.post(
     "/api/admin/songs/:id/reprocess-audio",
     requireAdminBearer,
     async (req, res) => {
-      const id = String(req.params.id);
-      const song = await storage.getSongById(id);
-      if (!song) return res.status(404).json({ message: "Song not found" });
-      if (!song.audioUrl) {
-        return res.status(400).json({ message: "Song has no master to re-process." });
-      }
-      if (song.audioSourceUrl) {
-        return res
-          .status(409)
-          .json({ message: "Already processed — audioSourceUrl is set." });
-      }
-      const ext = (song.audioUrl.match(/\.(\w+)(?:\?|$)/)?.[0] || "").toLowerCase();
-      if (!/^\.(wav|aif|aiff)$/.test(ext)) {
-        return res.status(400).json({
-          message: `Re-process only applies to .wav/.aiff masters (got ${ext || "no extension"}).`,
-        });
-      }
-      const fsp = await import("node:fs/promises");
-      const os = await import("node:os");
-      const path = await import("node:path");
-      const tmpIn = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
-      let transcodedTmp: string | null = null;
-      try {
-        // Download the existing master out of object storage to disk
-        // so ffprobe/ffmpeg can inspect it — same pattern used by the
-        // auto-sync-lyrics route.
-        const file = await objectStorage.getObjectEntityFile(song.audioUrl);
-        const [buf] = await file.download();
-        await fsp.writeFile(tmpIn, buf);
-        const conv = await transcodeAudioToWebFriendly(tmpIn, ext);
-        if (conv.action === "passthrough") {
-          // Already browser-friendly — nothing to do. Return the probe
-          // result so the UI can tell the operator "this file is fine
-          // already, no transcode needed."
+      const r = await reprocessSongAudio(String(req.params.id));
+      switch (r.kind) {
+        case "not-found": return res.status(404).json({ message: "Song not found" });
+        case "no-audio": return res.status(400).json({ message: "Song has no master to re-process." });
+        case "already-processed": return res.status(409).json({ message: "Already processed — audioSourceUrl is set." });
+        case "wrong-format":
+          return res.status(400).json({
+            message: `Re-process only applies to .wav/.aiff masters (got ${r.ext}).`,
+          });
+        case "passthrough":
           return res.json({
             transcoded: false,
-            sourceBitsPerSample: conv.sourceBitsPerSample,
-            sourceCodec: conv.sourceCodec,
+            sourceBitsPerSample: r.sourceBitsPerSample,
+            sourceCodec: r.sourceCodec,
           });
-        }
-        transcodedTmp = conv.outputPath;
-        // Upload the FLAC as the new playback URL. The existing WAV
-        // is already in object storage and we just keep its URL as
-        // the archival source — no need to re-upload the original.
-        const newAudioUrl = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
-        // Conditional update — only swap the row if it's still in the
-        // legacy shape (audioSourceUrl IS NULL). Guards against a
-        // double-click / concurrent reprocess racing two transcodes:
-        // the second one's UPDATE will affect 0 rows and we 409 back
-        // so the operator (and the UI) get a deterministic result
-        // instead of a silent last-write-wins.
-        const claim = await pool.query(
-          `UPDATE songs SET audio_url = $1, audio_source_url = $2
-             WHERE id = $3 AND audio_source_url IS NULL
-           RETURNING id`,
-          [newAudioUrl, song.audioUrl, id],
-        );
-        if (claim.rowCount === 0) {
+        case "race-lost":
           return res.status(409).json({
             message: "Another re-process won the race — refresh to see the result.",
           });
-        }
-        return res.json({
-          transcoded: true,
-          audioUrl: newAudioUrl,
-          audioSourceUrl: song.audioUrl,
-          sourceBitsPerSample: conv.sourceBitsPerSample,
-        });
-      } catch (err: any) {
-        console.error("reprocess-audio failed", err);
-        return res.status(500).json({
-          message: err?.message || "Re-process failed",
-        });
-      } finally {
-        try { await fsp.unlink(tmpIn); } catch {}
-        if (transcodedTmp) {
-          try { await fsp.unlink(transcodedTmp); } catch {}
-        }
+        case "transcoded":
+          return res.json({
+            transcoded: true,
+            audioUrl: r.audioUrl,
+            audioSourceUrl: r.audioSourceUrl,
+            sourceBitsPerSample: r.sourceBitsPerSample,
+          });
+        case "error":
+          console.error("reprocess-audio failed", r.message);
+          return res.status(500).json({ message: r.message });
       }
     },
   );
+
+  // One-shot post-boot backfill — finds every song whose master is
+  // still a raw .wav/.aif/.aiff with no audioSourceUrl (the legacy
+  // pre-auto-transcode shape) and runs the same probe-and-transcode
+  // sweep the per-song endpoint uses. Serial (not parallel) on
+  // purpose: ffmpeg pegs a CPU per process, and the workflow runs
+  // on a single shared box. Logs progress so the operator can watch
+  // it land in the workflow output. Safe to re-run on every boot —
+  // the conditional `audio_source_url IS NULL` check makes this
+  // idempotent end-to-end. Fire-and-forget; we don't block server
+  // start on it.
+  void (async () => {
+    try {
+      // Wait a beat so the HTTP server is actually listening before
+      // we start hammering ffmpeg — keeps the boot screen snappy.
+      await new Promise((r) => setTimeout(r, 2000));
+      const { rows } = await pool.query<{ id: string; title: string | null; audio_url: string }>(
+        `SELECT id, title, audio_url FROM songs
+           WHERE audio_source_url IS NULL
+             AND audio_url ~* '\\.(wav|aif|aiff)(\\?|$)'
+           ORDER BY created_at ASC NULLS LAST, id ASC`,
+      );
+      if (rows.length === 0) return;
+      console.log(`[audio-backfill] Found ${rows.length} legacy WAV/AIFF master(s) — re-processing serially.`);
+      let transcoded = 0;
+      let passthrough = 0;
+      let failed = 0;
+      for (const row of rows) {
+        const r = await reprocessSongAudio(row.id);
+        const label = row.title ? `"${row.title}"` : row.id;
+        switch (r.kind) {
+          case "transcoded":
+            transcoded++;
+            console.log(`[audio-backfill] ✓ ${label} — converted (${r.sourceBitsPerSample ?? "?"}-bit WAV preserved as source).`);
+            break;
+          case "passthrough":
+            passthrough++;
+            console.log(`[audio-backfill] · ${label} — already browser-friendly, skipped.`);
+            break;
+          case "already-processed":
+          case "race-lost":
+            // Another worker (or a prior partial run) handled it — fine.
+            break;
+          default:
+            failed++;
+            console.warn(`[audio-backfill] ✗ ${label} — ${r.kind}${"message" in r ? `: ${r.message}` : ""}`);
+        }
+      }
+      console.log(`[audio-backfill] Done. ${transcoded} transcoded, ${passthrough} passthrough, ${failed} failed.`);
+    } catch (err) {
+      console.error("[audio-backfill] sweep aborted:", err);
+    }
+  })();
 
   app.post(
     "/api/admin/upload",
