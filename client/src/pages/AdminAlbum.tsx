@@ -392,7 +392,25 @@ export function AdminAlbum() {
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider flex items-center gap-2 flex-wrap">
               <span>
-                {album.type} · {album.artist}
+                {album.type} ·{" "}
+                {/* Artist name is a deep-link into the People CMS when the
+                    album is bound to a Person row (primaryArtistId). Same
+                    admin-chrome link treatment we want app-wide: inherits
+                    the slate caps styling at rest, picks up the brand
+                    blue + underline on hover/focus. When no Person is
+                    linked yet, we render the snapshot string as plain
+                    text — no broken link target. */}
+                {album.primaryArtistId ? (
+                  <Link
+                    href={`/admin/people/${album.primaryArtistId}`}
+                    className="text-slate-400 hover:text-[#319ED8] hover:underline underline-offset-2 focus-visible:text-[#319ED8] focus-visible:underline focus-visible:outline-none rounded-sm transition-colors"
+                    data-testid={`link-album-artist-${album.primaryArtistId}`}
+                  >
+                    {album.artist}
+                  </Link>
+                ) : (
+                  <span>{album.artist}</span>
+                )}
               </span>
               {/* Album-level Explicit chip — read-only, derived from any
                   track being marked explicit on the Tracks tab. Lives
