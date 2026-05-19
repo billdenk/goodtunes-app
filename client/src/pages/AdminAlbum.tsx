@@ -3408,39 +3408,42 @@ function TrackRow({
             reverts on Escape. Apple-Music-row sizing (13.5px medium). */}
         <div className="flex-1 min-w-0">
           {expanded ? (
-            <input
-              ref={inputRef}
-              defaultValue={song.title}
-              aria-label={`Track title — ${song.title}`}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  (e.target as HTMLInputElement).blur();
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  if (inputRef.current) {
-                    inputRef.current.value = song.title;
+            <div className="flex items-center gap-1.5 min-w-0">
+              <input
+                ref={inputRef}
+                defaultValue={song.title}
+                aria-label={`Track title — ${song.title}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    if (inputRef.current) {
+                      inputRef.current.value = song.title;
+                    }
+                    (e.target as HTMLInputElement).blur();
                   }
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              onBlur={(e) => {
-                const next = e.target.value.trim();
-                if (!next) {
-                  e.target.value = song.title;
-                  toast({
-                    title: "Title can't be empty",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                if (next === song.title) return;
-                renameMut.mutate(next);
-              }}
-              disabled={renameMut.isPending}
-              className="w-full px-2 -mx-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
-              data-testid={`input-track-title-${song.id}`}
-            />
+                }}
+                onBlur={(e) => {
+                  const next = e.target.value.trim();
+                  if (!next) {
+                    e.target.value = song.title;
+                    toast({
+                      title: "Title can't be empty",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  if (next === song.title) return;
+                  renameMut.mutate(next);
+                }}
+                disabled={renameMut.isPending}
+                className="flex-1 min-w-0 px-2 -mx-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+                data-testid={`input-track-title-${song.id}`}
+              />
+              {song.isExplicit && <ExplicitBadge tone="slate" />}
+            </div>
           ) : (
             <>
               <button
