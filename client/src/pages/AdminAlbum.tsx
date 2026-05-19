@@ -335,6 +335,13 @@ export function AdminAlbum() {
               <span>
                 {album.type} · {album.artist}
               </span>
+              {/* Album-level Explicit chip — read-only, derived from any
+                  track being marked explicit on the Tracks tab. Lives
+                  next to the lifecycle pill so the operator sees the
+                  same "E" the fan will see, with no toggle to confuse
+                  it with the per-track switch. Slate tone matches the
+                  admin chrome (white card, slate text). */}
+              {album.isExplicit && <ExplicitBadge tone="slate" />}
               <LifecyclePill {...lifecycle} />
               {album.isHidden && (
                 <span
