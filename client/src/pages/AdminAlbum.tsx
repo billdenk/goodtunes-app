@@ -10802,6 +10802,12 @@ function AlbumPhotoSheet({
   const [busy, setBusy] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Mirrors the video sheet — segmented control swaps the dropzone for a
+  // URL field. Posts to /api/admin/fetch-image-from-url which validates
+  // the MIME (JPG/PNG/WebP/GIF/AVIF), enforces the 8 MB cap, and uploads
+  // to object storage. Dropbox share links are auto-normalized server-side.
+  const [source, setSource] = useState<"upload" | "url">("upload");
+  const [importUrl, setImportUrl] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -10816,6 +10822,56 @@ function AlbumPhotoSheet({
     } finally {
       setUploadingImage(false);
     }
+  }
+
+  async function handleImportUrl() {
+    let trimmed = importUrl.trim();
+    if (!trimmed) {
+      setErr("Paste a URL first.");
+      return;
+    }
+    // Friendly autofix: assume https if the operator pasted a bare host.
+    if (!/^https?:\/\//i.test(trimmed)) trimmed = `https://${trimmed}`;
+    setErr(null);
+    setUploadingImage(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/fetch-image-from-url", {
+        url: trimmed,
+      });
+      const { url } = (await res.json()) as { url: string };
+      setPhotoUrl(url);
+    } catch (e: any) {
+      // apiRequest throws with a "<status>: <body>" string. Strip the
+      // status prefix and try to pull a clean `message` out of the JSON
+      // payload so we render "Image is larger than 8 MB." instead of
+      // `413: {"message":"Image is larger than 8 MB."}`.
+      const raw = String(e?.message || "");
+      const jsonStart = raw.indexOf("{");
+      if (jsonStart >= 0) {
+        try {
+          const parsed = JSON.parse(raw.slice(jsonStart));
+          if (parsed?.message) {
+            setErr(String(parsed.message));
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      setErr(raw.replace(/^\d+:\s*/, "") || "Couldn't fetch that image.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  // Reset transient mode-specific state when the operator flips the
+  // segmented control so a stale error or drag-hover doesn't leak from
+  // one mode into the other.
+  function handleSourceChange(next: "upload" | "url") {
+    if (next === source) return;
+    setSource(next);
+    setErr(null);
+    setDragActive(false);
   }
 
   // Mirror the video sheet: if the empty-state dropzone primed us with
@@ -10903,54 +10959,148 @@ function AlbumPhotoSheet({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragLeave={() => setDragActive(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragActive(false);
-                  if (e.dataTransfer.files?.[0])
-                    handlePickFile(e.dataTransfer.files[0]);
-                }}
-                disabled={uploadingImage}
-                className={
-                  "w-full max-w-sm mx-auto block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
-                  (dragActive
-                    ? "border-[#319ED8] bg-blue-50"
-                    : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
-                }
-                data-testid="button-photo-dropzone"
-              >
-                {uploadingImage ? (
-                  <>
-                    <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
-                    <p className="text-sm font-medium text-slate-700">
-                      Uploading…
-                    </p>
-                  </>
+              <div className="w-full max-w-sm mx-auto">
+                {/* Segmented control matches the video sheet — Upload vs.
+                    Paste a link. Photos are typically small enough that
+                    a URL import is the faster path (Dropbox previews,
+                    Wikipedia images, press kits, etc.). */}
+                <div className="inline-flex p-0.5 rounded-lg bg-slate-100 mb-3 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => handleSourceChange("upload")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "upload"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-photo-source-upload"
+                  >
+                    Upload file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSourceChange("url")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "url"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-photo-source-url"
+                  >
+                    Paste a link
+                  </button>
+                </div>
+
+                {source === "upload" ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragActive(false);
+                      if (e.dataTransfer.files?.[0])
+                        handlePickFile(e.dataTransfer.files[0]);
+                    }}
+                    disabled={uploadingImage}
+                    className={
+                      "w-full block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
+                      (dragActive
+                        ? "border-[#319ED8] bg-blue-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                    }
+                    data-testid="button-photo-dropzone"
+                  >
+                    {uploadingImage ? (
+                      <>
+                        <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                        <p className="text-sm font-medium text-slate-700">
+                          Uploading…
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus
+                          className={
+                            "w-8 h-8 mb-3 transition-colors " +
+                            (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                          }
+                          strokeWidth={1.75}
+                        />
+                        <p className="text-sm font-medium text-slate-700">
+                          Drop a photo here, or click to browse
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Square · 1200×1200 px recommended · JPG, PNG, WebP, or GIF
+                        </p>
+                      </>
+                    )}
+                  </button>
                 ) : (
-                  <>
-                    <ImagePlus
-                      className={
-                        "w-8 h-8 mb-3 transition-colors " +
-                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
-                      }
-                      strokeWidth={1.75}
-                    />
-                    <p className="text-sm font-medium text-slate-700">
-                      Drop a photo here, or click to browse
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Square · 1200×1200 px recommended · JPG, PNG, WebP, or GIF
-                    </p>
-                  </>
+                  <div className="w-full aspect-square rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6">
+                    {uploadingImage ? (
+                      <>
+                        <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                        <p className="text-sm font-medium text-slate-700">
+                          Fetching…
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-7 h-7 text-slate-400 mb-3"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+                          <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+                          <line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                        <p className="text-sm font-medium text-slate-700 mb-3">
+                          Paste a photo link
+                        </p>
+                        <input
+                          type="url"
+                          autoFocus
+                          placeholder="https://www.dropbox.com/scl/fi/… or https://…/photo.jpg"
+                          value={importUrl}
+                          onChange={(e) => setImportUrl(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleImportUrl();
+                            }
+                          }}
+                          className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                          data-testid="input-photo-import-url"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleImportUrl}
+                          disabled={!importUrl.trim() || uploadingImage}
+                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-xs font-semibold hover:bg-[#319ED8]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                          data-testid="button-photo-import-url-submit"
+                        >
+                          Fetch image
+                        </button>
+                        <p className="text-[11px] text-slate-400 mt-2 text-center">
+                          JPG, PNG, WebP, GIF, or AVIF · up to 8 MB. Dropbox links work too.
+                        </p>
+                      </>
+                    )}
+                  </div>
                 )}
-              </button>
+              </div>
             )}
 
             <input
