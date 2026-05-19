@@ -5889,6 +5889,9 @@ function LyricsEditor({
       userEditedRef.current = false;
       setShowUrlInput(false);
       setLyricUrl("");
+      // Drop the read-only "View original" swap if it was open — the
+      // user just replaced the content; show them the editable result.
+      setShowOriginal(false);
       await onSaved();
       // Offer a one-tap GoodSync follow-up. Only show the action when
       // the track is eligible (master uploaded + not instrumental);
@@ -5954,6 +5957,9 @@ function LyricsEditor({
       originalRef.current = next;
       setDraft(cleanLyricsForEditor(next));
       userEditedRef.current = false;
+      // Same reset as the upload path: a fresh fetch replaces the
+      // content, so flip back to the editable view automatically.
+      setShowOriginal(false);
       await onSaved();
       // Toast copy varies by source. LRCLIB synced → highlights the
       // GoodSync-ready badge; LRCLIB plain → suggests Sync with audio;
@@ -6286,8 +6292,8 @@ function LyricsEditor({
                 compare without fear of overwriting their edits. */}
             <div className="flex items-center justify-between h-4">
               {!song.instrumental &&
-              originalRef.current &&
-              originalRef.current !== draft ? (
+              (showOriginal ||
+                (originalRef.current && originalRef.current !== draft)) ? (
                 <button
                   type="button"
                   onClick={() => setShowOriginal((v) => !v)}
