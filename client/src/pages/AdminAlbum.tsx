@@ -3512,7 +3512,12 @@ function TrackRow({
             reverts on Escape. Apple-Music-row sizing (13.5px medium). */}
         <div className="flex-1 min-w-0">
           {expanded ? (
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              {/* `-ml-2` (not `-mx-2`) so the input's hover/focus border
+                  bleeds into the row's left padding for visual alignment
+                  with the displayed title, but the RIGHT edge respects
+                  the flex gap — otherwise the rounded border kisses the
+                  Explicit "E" badge that sits beside it. */}
               <input
                 ref={inputRef}
                 defaultValue={song.title}
@@ -3543,7 +3548,7 @@ function TrackRow({
                   renameMut.mutate(next);
                 }}
                 disabled={renameMut.isPending}
-                className="flex-1 min-w-0 px-2 -mx-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+                className="flex-1 min-w-0 pl-2 pr-2 -ml-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
                 data-testid={`input-track-title-${song.id}`}
               />
               {song.isExplicit && <ExplicitBadge tone="slate" />}
