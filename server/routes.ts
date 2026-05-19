@@ -2207,7 +2207,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try { await fsp.rm(sessionDir, { recursive: true, force: true }); } catch {}
     };
 
-    const { nodeStream, cancel } = await openDropboxFolderStream(folderUrl);
+    // If opening the Dropbox stream throws (bad URL, SSRF rejection,
+    // HTTP 4xx, timeout) the session dir we just created would otherwise
+    // leak into /tmp forever. Wrap the open call so cleanup runs on
+    // every failure path, not just post-parse ones.
+    let nodeStream: NodeJS.ReadableStream;
+    let cancel: () => void;
+    try {
+      ({ nodeStream, cancel } = await openDropboxFolderStream(folderUrl));
+    } catch (err) {
+      await cleanup();
+      throw err;
+    }
     try {
       // Catch the "this isn't a zip" case up front with a friendly
       // message. unzipper's own error ("invalid signature") is correct
@@ -2362,66 +2373,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ? 1
         : Math.max(...existingSongs.map(s => s.trackNumber ?? 0)) + 1;
 
-      const zipBuf = await fetchDropboxFolderZip(folderUrl);
-      const AdmZip = (await import("adm-zip")).default;
-      const zip = new AdmZip(zipBuf);
-      assertZipWithinBounds(zip);
+      // Stream the zip → tempfiles. We only keep audio entries; every
+      // other file in the folder (readme.txt, .DS_Store, cover art, etc.)
+      // is autodrained inside the streamer so it never touches disk.
+      const { entries: tmpEntries, cleanup } = await streamDropboxFolderEntries(
+        folderUrl,
+        (filename) => extOf(filename) in AUDIO_MIME_BY_EXT,
+      );
+      try {
+        if (tmpEntries.length === 0) {
+          return res.status(400).json({ message: "No audio files in that folder. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg." });
+        }
 
-      // Sort with numeric+base awareness so "Track 2" comes before
-      // "Track 10" — matches Finder / Dropbox web ordering, which is
-      // how Bill thinks about track sequence.
-      const entries = zip.getEntries()
-        .filter((e: any) => !e.isDirectory && (extOf(e.entryName) in AUDIO_MIME_BY_EXT))
-        .sort((a: any, b: any) =>
-          basenameOf(a.entryName).localeCompare(basenameOf(b.entryName), undefined, { numeric: true, sensitivity: "base" })
+        // Sort with numeric+base awareness so "Track 2" comes before
+        // "Track 10" — matches Finder / Dropbox web ordering, which is
+        // how Bill thinks about track sequence.
+        tmpEntries.sort((a, b) =>
+          a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: "base" })
         );
 
-      if (entries.length === 0) {
-        return res.status(400).json({ message: "No audio files in that folder. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg." });
-      }
+        const created: Array<{ id: string; trackNumber: number; title: string; filename: string; duration: number }> = [];
+        const errors: Array<{ filename: string; error: string }> = [];
+        // `trackNumber` already initialized above from existing max+1.
 
-      const created: Array<{ id: string; trackNumber: number; title: string; filename: string; duration: number }> = [];
-      const errors: Array<{ filename: string; error: string }> = [];
-      // `trackNumber` already initialized above from existing max+1.
-
-      for (const entry of entries) {
-        const filename = basenameOf(entry.entryName);
-        try {
-          const ext = extOf(filename);
-          const mime = AUDIO_MIME_BY_EXT[ext];
-          const buf: Buffer = entry.getData();
-
-          const audioUrl = await uploadBufferToObjectStorage(buf, mime);
-
-          // Duration is best-effort — non-fatal. ElevenLabs auto-sync
-          // doesn't need it, but the player UI and lyrics distributor do.
-          let duration = 0;
+        for (const entry of tmpEntries) {
+          const filename = entry.filename;
           try {
-            const mm = await import("music-metadata");
-            const meta = await mm.parseBuffer(buf, mime);
-            duration = Math.round(meta.format.duration || 0);
-          } catch { /* leave at 0; admin can set it manually */ }
+            const ext = extOf(filename);
+            const mime = AUDIO_MIME_BY_EXT[ext];
 
-          const song = await storage.createSong({
-            albumId,
-            title: deriveTitleFromFilename(filename),
-            trackNumber,
-            duration,
-            audioUrl,
-            lyrics: "",
-            instrumental: false,
-            syncedLyrics: null as any,
-            previewStartMs: null as any,
-            previewEndMs: null as any,
-            waveform: null as any,
-          } as any);
-          created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
-          trackNumber++;
-        } catch (e: any) {
-          errors.push({ filename, error: e?.message || "Failed to import" });
+            // Stream the tempfile straight to Object Storage — never
+            // pulls the full audio into a single Buffer.
+            const audioUrl = await uploadFileToObjectStorage(entry.tmpPath, mime);
+
+            // Duration is best-effort — non-fatal. parseFile streams the
+            // tempfile too, so a 500 MB WAV stays bounded.
+            let duration = 0;
+            try {
+              const mm = await import("music-metadata");
+              const meta = await mm.parseFile(entry.tmpPath);
+              duration = Math.round(meta.format.duration || 0);
+            } catch { /* leave at 0; admin can set it manually */ }
+
+            const song = await storage.createSong({
+              albumId,
+              title: deriveTitleFromFilename(filename),
+              trackNumber,
+              duration,
+              audioUrl,
+              lyrics: "",
+              instrumental: false,
+              syncedLyrics: null as any,
+              previewStartMs: null as any,
+              previewEndMs: null as any,
+              waveform: null as any,
+            } as any);
+            created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
+            trackNumber++;
+          } catch (e: any) {
+            errors.push({ filename, error: e?.message || "Failed to import" });
+          }
         }
+        return res.json({ created, errors });
+      } finally {
+        await cleanup();
       }
-      return res.json({ created, errors });
     } catch (e: any) {
       return res.status(400).json({ message: e?.message || "Dropbox import failed." });
     }
@@ -2474,18 +2490,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Add tracks before importing lyrics." });
       }
 
-      const zipBuf = await fetchDropboxFolderZip(folderUrl);
-      const AdmZip = (await import("adm-zip")).default;
-      const zip = new AdmZip(zipBuf);
-      assertZipWithinBounds(zip);
+      const { entries: tmpEntries, cleanup } = await streamDropboxFolderEntries(
+        folderUrl,
+        (filename) => LYRIC_EXTENSIONS.has(extOf(filename)),
+      );
+      try {
+      tmpEntries.sort((a, b) =>
+        a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: "base" })
+      );
 
-      const entries = zip.getEntries()
-        .filter((e: any) => !e.isDirectory && LYRIC_EXTENSIONS.has(extOf(e.entryName)))
-        .sort((a: any, b: any) =>
-          basenameOf(a.entryName).localeCompare(basenameOf(b.entryName), undefined, { numeric: true, sensitivity: "base" })
-        );
-
-      if (entries.length === 0) {
+      if (tmpEntries.length === 0) {
         await logFail("No PDF, Word, or text files in that folder.");
         return res.status(400).json({ message: "No PDF, Word, or text files in that folder." });
       }
@@ -2500,11 +2514,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // lyric files don't silently overwrite the same track's lyrics.
       const claimed = new Set<string>();
 
-      for (const entry of entries) {
-        const filename = basenameOf(entry.entryName);
+      const fsp = await import("node:fs/promises");
+      for (const tmpEntry of tmpEntries) {
+        const filename = tmpEntry.filename;
         const ext = extOf(filename);
         try {
-          const buf: Buffer = entry.getData();
+          // Lyric files are tiny (PDFs ≤ a few MB) — reading once into
+          // a Buffer is fine here; mammoth + pdf-parse both want one.
+          const buf: Buffer = await fsp.readFile(tmpEntry.tmpPath);
           let text = "";
           if (ext === ".pdf") {
             // Import the inner module directly — the package's default
@@ -2603,7 +2620,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           albumId,
           songId: null,
           status,
-          summary: { matched, unmatched, errors, fileCount: entries.length, songCount: songs.length } as any,
+          summary: { matched, unmatched, errors, fileCount: tmpEntries.length, songCount: songs.length } as any,
           errorMessage: null,
           startedAt,
         });
@@ -2611,6 +2628,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("import-lyrics: failed to record job run", logErr);
       }
       return res.json({ matched, unmatched, errors });
+      } finally {
+        await cleanup();
+      }
     } catch (e: any) {
       try {
         await storage.recordJobRun({
