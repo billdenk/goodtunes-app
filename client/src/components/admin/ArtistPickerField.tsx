@@ -4,12 +4,12 @@ import { Link } from "wouter";
 import {
   Check,
   ChevronsUpDown,
-  Loader2,
   Plus,
   X,
   Link2,
   Pencil,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   Popover,
   PopoverContent,
@@ -330,7 +330,7 @@ export function ArtistPickerField({
                 data-testid="button-import-artist-url"
               >
                 {busy ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Link2 className="w-3.5 h-3.5" />
                 )}
@@ -363,7 +363,7 @@ export function ArtistPickerField({
               <CommandList>
                 {isLoading ? (
                   <div className="p-4 text-[12.5px] text-slate-500 inline-flex items-center gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Spinner className="w-3.5 h-3.5 animate-spin" />
                     Loading artists…
                   </div>
                 ) : (
@@ -416,7 +416,7 @@ export function ArtistPickerField({
                             className="flex items-center gap-2"
                           >
                             {busy ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400 flex-shrink-0" />
+                              <Spinner className="w-3.5 h-3.5 animate-spin text-slate-400 flex-shrink-0" />
                             ) : (
                               <Plus className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
                             )}

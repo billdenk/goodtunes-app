@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Loader2, Check, X, ExternalLink, Plus } from "lucide-react";
+import { Pencil, Check, X, ExternalLink, Plus } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ArtistPickerField } from "./ArtistPickerField";
@@ -311,7 +312,7 @@ export function EditablePanel({
             data-testid={`button-save-${slug}`}
           >
             {mut.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Spinner className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <Check className="w-3.5 h-3.5" />
             )}

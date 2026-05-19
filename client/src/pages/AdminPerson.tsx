@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Upload,
-  Loader2,
   ImageIcon,
   User as UserIcon,
   Globe,
@@ -17,6 +16,7 @@ import {
   LockOpen,
   Disc3,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
@@ -785,7 +785,7 @@ function ImageUploadPanel({
                 data-testid="button-refresh-photo-spotify"
               >
                 {refreshSpotifyMut.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <SiSpotify className="w-3.5 h-3.5" />
                 )}
@@ -849,7 +849,7 @@ function ImageUploadPanel({
           )}
           {busy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-              <Loader2 className="w-6 h-6 text-[#319ED8] animate-spin" />
+              <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
               <span className="text-[12px] text-slate-700 font-semibold">
                 Uploading…
               </span>
@@ -1171,7 +1171,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
           data-testid="button-pull-discography"
         >
           {pullMut.isPending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Spinner className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <RefreshCw className="w-3.5 h-3.5" />
           )}
@@ -1185,7 +1185,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
       <div className="p-6">
         {isLoading ? (
           <div className="py-10 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            <Spinner className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-slate-500 text-[12.5px] max-w-sm mx-auto">

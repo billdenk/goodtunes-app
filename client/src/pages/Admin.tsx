@@ -14,7 +14,8 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Loader2, Play, Pencil, Upload } from "lucide-react";
+import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Play, Pencil, Upload } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1975,7 +1976,7 @@ function AlbumVideoSheet({
             >
               {busy ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   {progress !== null
                     ? `Uploading ${Math.round(progress * 100)}%`
                     : isEdit
@@ -2333,7 +2334,7 @@ function AlbumPhotoSheet({
                 />
                 {uploadingImage && (
                   <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-[#319ED8] animate-spin" />
+                    <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
                   </div>
                 )}
                 <button
@@ -2372,7 +2373,7 @@ function AlbumPhotoSheet({
               >
                 {uploadingImage ? (
                   <>
-                    <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                    <Spinner className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
                     <p className="text-sm font-medium text-slate-700">
                       Uploading…
                     </p>
@@ -2476,7 +2477,7 @@ function AlbumPhotoSheet({
             >
               {busy ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   {isEdit ? "Saving…" : "Adding…"}
                 </>
               ) : (

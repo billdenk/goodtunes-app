@@ -23,7 +23,6 @@ import {
   Tag as TagIcon,
   AlertCircle,
   Upload,
-  Loader2,
   ImageIcon,
   ImagePlus,
   Link2,
@@ -51,6 +50,7 @@ import {
   Wand2,
   Download,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   Popover,
   PopoverContent,
@@ -2276,7 +2276,7 @@ function AddTrackForm({
           data-testid="button-attach-new-track-audio"
         >
           {uploading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#319ED8]" />
+            <Spinner className="w-3.5 h-3.5 animate-spin text-[#319ED8]" />
           ) : (
             <Upload className="w-3.5 h-3.5" />
           )}
@@ -2289,7 +2289,7 @@ function AddTrackForm({
           data-testid="button-save-new-track"
         >
           {createMut.isPending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Spinner className="w-3.5 h-3.5 animate-spin" />
           ) : (
             "Add"
           )}
@@ -2753,7 +2753,7 @@ function AddMultipleTracksDialog({
             >
               {running ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   Creating {created}/{n}…
                 </>
               ) : (
@@ -2770,7 +2770,7 @@ function AddMultipleTracksDialog({
             >
               {running ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   {progress && progress.total > 0
                     ? `Importing ${progress.processed}/${progress.total}…`
                     : "Importing from Dropbox…"}
@@ -3042,7 +3042,7 @@ function ImportLyricsFromDropboxDialog({
           >
             {syncProgress ? (
               <div className="flex items-center gap-2 text-[12.5px] text-slate-700">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#319ED8] flex-shrink-0" />
+                <Spinner className="w-3.5 h-3.5 animate-spin text-[#319ED8] flex-shrink-0" />
                 <span className="tabular-nums">
                   GoodSyncing {syncProgress.current} of {syncProgress.total}
                 </span>
@@ -3153,7 +3153,7 @@ function ImportLyricsFromDropboxDialog({
               >
                 {running ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Spinner className="w-3.5 h-3.5 animate-spin" />
                     Importing lyrics…
                   </>
                 ) : (
@@ -3598,7 +3598,7 @@ function TrackRunBadge({
   if (state === "syncing") {
     return (
       <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-slate-700">
-        <Loader2 className="w-3 h-3 animate-spin" />
+        <Spinner className="w-3 h-3 animate-spin" />
         Syncing…
       </span>
     );
@@ -4521,7 +4521,7 @@ function TrackRow({
               data-testid={`button-delete-track-${song.id}`}
             >
               {deleteMut.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Spinner className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Trash2 className="w-3.5 h-3.5" />
               )}
@@ -5386,7 +5386,7 @@ function GoodSyncPanel({
               data-testid={`button-save-cue-edit-${song.id}`}
             >
               {saveCueEdits.isPending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Spinner className="w-3 h-3 animate-spin" />
               ) : null}
               {saveCueEdits.isPending ? "Saving…" : "Save"}
             </button>
@@ -5408,7 +5408,7 @@ function GoodSyncPanel({
                 data-testid={`button-sync-audio-${song.id}`}
               >
                 {syncing ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <Spinner className="w-3 h-3 animate-spin" />
                 ) : (
                   <Sparkles className="w-3 h-3" />
                 )}
@@ -5430,7 +5430,7 @@ function GoodSyncPanel({
                 data-testid={`button-sync-audio-${song.id}`}
               >
                 {syncing ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <RotateCcw className="w-3.5 h-3.5" />
                 )}
@@ -5503,7 +5503,7 @@ function GoodSyncPanel({
             className="flex-1 flex flex-col items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10 gap-2"
             data-testid={`status-syncing-${song.id}`}
           >
-            <Loader2 className="w-5 h-5 text-[#319ED8] animate-spin" />
+            <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
             <span>
               Listening to the master and lining up every word…
               <br />
@@ -6403,7 +6403,7 @@ function LyricsEditor({
                     something is happening. */}
                 {uploadLyricMut.isPending && (
                   <div className="pointer-events-none absolute inset-0 rounded-md bg-white/70 flex items-center justify-center gap-2 text-[12px] text-slate-600">
-                    <Loader2 className="w-4 h-4 animate-spin text-[#319ED8]" />
+                    <Spinner className="w-4 h-4 animate-spin text-[#319ED8]" />
                     Importing lyrics…
                   </div>
                 )}
@@ -6736,7 +6736,7 @@ function SyncedLyricsEditor({
             data-testid={`button-save-vtt-${song.id}`}
           >
             {saveMut.isPending && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Spinner className="w-3.5 h-3.5 animate-spin" />
             )}
             Save sync
           </button>
@@ -7134,7 +7134,7 @@ function CreditRowItem({
             className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
             data-testid={`button-save-credit-${row.id}`}
           >
-            {save.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+            {save.isPending && <Spinner className="w-3 h-3 animate-spin" />}
             Save
           </button>
         </div>
@@ -7199,7 +7199,7 @@ function CreditRowItem({
           data-testid={`button-delete-credit-${row.id}`}
         >
           {del.isPending ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
+            <Spinner className="w-3 h-3 animate-spin" />
           ) : (
             <Trash2 className="w-3 h-3" />
           )}
@@ -7336,7 +7336,7 @@ function AddCreditForm({
           className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
           data-testid={`button-save-add-${kind}`}
         >
-          {create.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+          {create.isPending && <Spinner className="w-3 h-3 animate-spin" />}
           Add
         </button>
       </div>
@@ -8242,7 +8242,7 @@ function RichPreviewEditor({
           data-testid={`button-preview-padlock-${song.id}`}
         >
           {saveMut.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Spinner className="w-4 h-4 animate-spin" />
           ) : locked ? (
             <Lock className="w-4 h-4" />
           ) : (
@@ -8467,7 +8467,7 @@ function PreviewWindowEditor({
         data-testid={`button-save-preview-${song.id}`}
       >
         {saveMut.isPending ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
+          <Spinner className="w-3 h-3 animate-spin" />
         ) : (
           <Lock className="w-3 h-3" />
         )}
@@ -8868,7 +8868,7 @@ function AudioEditor({
           className="flex items-center gap-1.5 pt-3 text-[10.5px] text-slate-400"
           data-testid={`text-audio-autosave-${song.id}`}
         >
-          <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+          <Spinner className="w-3 h-3 animate-spin" aria-hidden="true" />
           <span>Saving…</span>
         </div>
       )}
@@ -9137,7 +9137,7 @@ function ArtworkPanel({
             )}
             {uploadMut.isPending && (
               <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-                <Loader2 className="w-6 h-6 text-[#319ED8] animate-spin" />
+                <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
                 <span className="text-[12px] text-slate-700 font-semibold">
                   Uploading…
                 </span>
@@ -9237,7 +9237,7 @@ function ArtworkPanel({
             >
               {urlMut.isPending ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   Fetching…
                 </>
               ) : (
@@ -9286,7 +9286,7 @@ function ArtworkPanel({
                 data-testid="button-remove-artwork-confirm"
               >
                 {removeMut.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Trash2 className="w-3.5 h-3.5" />
                 )}
@@ -9573,7 +9573,7 @@ function BonusVideos({
       <div className="p-5">
         {isLoading ? (
           <div className="py-10 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            <Spinner className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
         ) : videos.length === 0 ? (
           // Empty state — full-width rich dropzone with drag/drop, click-to-
@@ -9709,7 +9709,7 @@ function BonusPhotos({
       <div className="p-5">
         {isLoading ? (
           <div className="py-10 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            <Spinner className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
         ) : photos.length === 0 ? (
           // Empty state — full-width rich dropzone (drag/drop + browse).
@@ -9999,7 +9999,7 @@ function BulkBonusFromDropboxDialog({
           >
             {running ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Spinner className="w-3.5 h-3.5 animate-spin" />
                 Importing from Dropbox…
               </>
             ) : (
@@ -10332,7 +10332,7 @@ function AddTile({
       ].join(" ")}
     >
       {busy ? (
-        <Loader2 className="w-5 h-5 animate-spin" />
+        <Spinner className="w-5 h-5 animate-spin" />
       ) : (
         <Plus className="w-6 h-6" />
       )}
@@ -10869,7 +10869,7 @@ function AlbumVideoSheet({
             >
               {busy ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   {progress !== null
                     ? `Uploading ${Math.round(progress * 100)}%`
                     : isEdit
@@ -11056,7 +11056,7 @@ function AlbumPhotoSheet({
                 />
                 {uploadingImage && (
                   <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-[#319ED8] animate-spin" />
+                    <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
                   </div>
                 )}
                 <button
@@ -11130,7 +11130,7 @@ function AlbumPhotoSheet({
                   >
                     {uploadingImage ? (
                       <>
-                        <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                        <Spinner className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
                         <p className="text-sm font-medium text-slate-700">
                           Uploading…
                         </p>
@@ -11157,7 +11157,7 @@ function AlbumPhotoSheet({
                   <div className="w-full aspect-square rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6">
                     {uploadingImage ? (
                       <>
-                        <Loader2 className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                        <Spinner className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
                         <p className="text-sm font-medium text-slate-700">
                           Fetching…
                         </p>
@@ -11293,7 +11293,7 @@ function AlbumPhotoSheet({
             >
               {busy ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   {isEdit ? "Saving…" : "Adding…"}
                 </>
               ) : (

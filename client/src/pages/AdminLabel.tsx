@@ -7,13 +7,13 @@ import {
   ArrowLeftRight,
   Pencil,
   Upload,
-  Loader2,
   Tag,
   ExternalLink,
   MapPin,
   Disc,
   Instagram,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
@@ -463,7 +463,7 @@ function ImageUploadPanel({
           )}
           {busy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-              <Loader2 className="w-6 h-6 text-[#319ED8] animate-spin" />
+              <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
               <span className="text-[12px] text-slate-700 font-semibold">
                 Uploading…
               </span>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
   Dialog,
@@ -629,7 +630,7 @@ export function NewAlbumArtistDialog({
                     data-testid="button-enter-manually"
                   >
                     {createPersonMut.isPending ? (
-                      <Loader2 className="inline w-3.5 h-3.5 animate-spin mr-1 -mt-0.5" />
+                      <Spinner className="inline w-3.5 h-3.5 animate-spin mr-1 -mt-0.5" />
                     ) : null}
                     Enter manually
                   </button>
@@ -685,7 +686,7 @@ export function NewAlbumArtistDialog({
 
             {spotifyFetching ? (
               <div className="py-10 flex items-center justify-center text-slate-400">
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Spinner className="w-5 h-5 animate-spin" />
               </div>
             ) : spotifyError ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-4">
@@ -718,7 +719,7 @@ export function NewAlbumArtistDialog({
                     className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
                     data-testid="button-enter-manually-fallback"
                   >
-                    {createPersonMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    {createPersonMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}
                     Enter manually instead
                   </button>
                 </div>
@@ -735,7 +736,7 @@ export function NewAlbumArtistDialog({
                   className="mt-3 h-9 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[12.5px] font-semibold hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
                   data-testid="button-enter-manually-fallback"
                 >
-                  {createPersonMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {createPersonMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}
                   Enter manually instead
                 </button>
               </div>
@@ -824,7 +825,7 @@ export function NewAlbumArtistDialog({
             <div className="rounded-lg border border-slate-200 px-3 py-2.5">
               {!appleLooked ? (
                 <div className="flex items-center gap-2 text-[12.5px] text-slate-500">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                   Checking Apple Music…
                 </div>
               ) : appleCandidate ? (
@@ -879,7 +880,7 @@ export function NewAlbumArtistDialog({
                 data-testid="button-confirm-artist"
               >
                 {busy || !appleLooked ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Check className="w-3.5 h-3.5" />
                 )}

@@ -7,7 +7,6 @@ import {
   ArrowLeftRight,
   Pencil,
   Upload,
-  Loader2,
   ImageIcon,
   Guitar,
   Store,
@@ -17,6 +16,7 @@ import {
   ExternalLink,
   Plus,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPreviewCard";
@@ -406,7 +406,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
           )}
           {busy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-              <Loader2 className="w-6 h-6 text-[#319ED8] animate-spin" />
+              <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
               <span className="text-[12px] text-slate-700 font-semibold">
                 Uploading…
               </span>
@@ -832,7 +832,7 @@ function AddVendorForm({
             data-testid="button-save-add-vendor"
           >
             {createMut.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Spinner className="w-3.5 h-3.5 animate-spin" />
             ) : (
               "Attach vendor"
             )}
@@ -1245,7 +1245,7 @@ function VendorEditForm({
             data-testid={`button-save-edit-vendor-${vendor.id}`}
           >
             {saveMut.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Spinner className="w-3.5 h-3.5 animate-spin" />
             ) : (
               "Save vendor"
             )}
@@ -1353,7 +1353,7 @@ function ImagePicker({
               data-testid={`button-${testId}-upload`}
             >
               {uploading ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Spinner className="w-3 h-3 animate-spin" />
               ) : (
                 <Upload className="w-3 h-3" />
               )}

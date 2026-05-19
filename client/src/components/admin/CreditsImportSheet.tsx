@@ -13,7 +13,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Upload, FileText, X, ChevronRight, UserPlus, Check, AlertCircle, User as UserIcon, SkipForward } from "lucide-react";
+import { Upload, FileText, X, ChevronRight, UserPlus, Check, AlertCircle, User as UserIcon, SkipForward } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { SiSpotify } from "react-icons/si";
 import {
   Dialog,
@@ -318,7 +319,7 @@ export function CreditsImportSheet({
               >
                 {parseMutation.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Spinner className="mr-2 h-4 w-4 animate-spin" />
                     Reading credits…
                   </>
                 ) : (
@@ -348,7 +349,7 @@ export function CreditsImportSheet({
               >
                 {commitMutation.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Spinner className="mr-2 h-4 w-4 animate-spin" />
                     Saving…
                   </>
                 ) : (
