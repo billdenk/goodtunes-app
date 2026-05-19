@@ -657,12 +657,18 @@ function SpotifyMatchBadge({
   if (person.spotifyHasMatch === null || person.spotifyHasMatch === undefined) {
     return null;
   }
+  // Sit half-on / half-off the avatar at the ~4:30 position. The badge
+  // is a square so we anchor its bottom-right corner near the avatar's
+  // bottom-right diagonal — `bottom-[7%] right-[7%]` puts the badge
+  // centered roughly on the circle's edge at 45°, so about half overlaps
+  // the photo and half hangs outside. Matches Apple Music's "verified"
+  // / Spotify's "small-glyph-overlay" convention.
   const dim = size === "md" ? "w-6 h-6" : "w-4 h-4";
   const icon = size === "md" ? "w-3.5 h-3.5" : "w-2.5 h-2.5";
   const hasMatch = person.spotifyHasMatch === true;
   return (
     <div
-      className={`absolute -bottom-0.5 -right-0.5 ${dim} rounded-full bg-white ring-1 ring-slate-200 shadow-sm flex items-center justify-center`}
+      className={`absolute bottom-[7%] right-[7%] ${dim} rounded-full bg-white ring-1 ring-slate-200 shadow-sm flex items-center justify-center`}
       title={
         hasMatch
           ? "Spotify match found — confirm in Advanced › Match on Spotify"
@@ -671,7 +677,7 @@ function SpotifyMatchBadge({
       data-testid={`badge-spotify-${hasMatch ? "match" : "nomatch"}-${person.id}`}
     >
       <SiSpotify
-        className={`${icon} ${hasMatch ? "text-[#1DB954]" : "text-slate-400"}`}
+        className={`${icon} ${hasMatch ? "text-[#1DB954]" : "text-slate-300"}`}
       />
     </div>
   );
