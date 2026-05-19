@@ -1490,6 +1490,16 @@ const AUDIO_EXT_RE = /\.(mp3|m4a|aac|wav|flac|ogg|aif|aiff)(\?|#|$)/i;
 // hidden <audio> element. Best-effort — returns null if the browser
 // can't decode the metadata fast enough. Used so the duration field
 // fills itself in when an audio file is dropped onto the row.
+//
+// Chunked-transfer responses (most notably Dropbox direct downloads at
+// `dl.dropboxusercontent.com`) arrive without a `Content-Length` header,
+// which makes Chrome/Safari report `audio.duration === Infinity` on the
+// initial `loadedmetadata` event. The well-known workaround is to seek
+// past the end (`currentTime = 1e10`) — the browser walks to the real
+// end of the stream, fires `durationchange`, and from then on
+// `audio.duration` is the real, finite seconds count. Without this,
+// every Dropbox single-file paste in the inline composer fell back to
+// the server's 180s default (3:00).
 function probeAudioDuration(src: File | string): Promise<number | null> {
   return new Promise((resolve) => {
     const a = document.createElement("audio");
@@ -1501,26 +1511,44 @@ function probeAudioDuration(src: File | string): Promise<number | null> {
       objectUrl = URL.createObjectURL(src);
       a.src = objectUrl;
     }
+    let settled = false;
     const cleanup = () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-    const timer = setTimeout(() => {
-      cleanup();
-      resolve(null);
-    }, 8000);
-    a.addEventListener("loadedmetadata", () => {
+    const finish = (d: number | null) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      cleanup();
+      resolve(d);
+    };
+    const timer = setTimeout(() => finish(null), 12000);
+    a.addEventListener("loadedmetadata", () => {
+      if (a.duration === Infinity) {
+        // Chunked stream — force the browser to walk to the end so it
+        // can compute real duration. `durationchange` fires once the
+        // real value is known.
+        const onDurationChange = () => {
+          if (a.duration !== Infinity && isFinite(a.duration) && a.duration > 0) {
+            a.removeEventListener("durationchange", onDurationChange);
+            finish(Math.round(a.duration));
+          }
+        };
+        a.addEventListener("durationchange", onDurationChange);
+        try {
+          a.currentTime = 1e10;
+        } catch {
+          // Some browsers throw on giant seeks against unseekable
+          // sources — fall through to the timeout.
+        }
+        return;
+      }
       const d = isFinite(a.duration) && a.duration > 0
         ? Math.round(a.duration)
         : null;
-      cleanup();
-      resolve(d);
+      finish(d);
     });
-    a.addEventListener("error", () => {
-      clearTimeout(timer);
-      cleanup();
-      resolve(null);
-    });
+    a.addEventListener("error", () => finish(null));
   });
 }
 
