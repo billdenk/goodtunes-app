@@ -452,7 +452,7 @@ export function NewAlbumArtistDialog({
                     }
                   }}
                   placeholder="Start typing an artist…"
-                  className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                  className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#319ED8] focus:border-transparent"
                   data-testid="input-artist-name"
                 />
                 <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
