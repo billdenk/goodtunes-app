@@ -559,7 +559,7 @@ export function AlbumDetail() {
                     if (album.year) pieces.push(<span key="year">{album.year}</span>);
                     if (album.isExplicit) {
                       pieces.push(
-                        <ExplicitBadge key="explicit" tone="muted" />,
+                        <ExplicitBadge key="explicit" tone="muted" className="ml-0" />,
                       );
                     }
                     return pieces.map((node, i) => (

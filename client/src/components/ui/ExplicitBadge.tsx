@@ -33,19 +33,22 @@ export function ExplicitBadge({
    */
   tone?: "dark" | "slate" | "muted";
 }) {
-  // `dark` was originally `bg-white/30 text-white`, then `bg-white/75
-  // text-[#00062B]` — both still faded into the #00062B background and
-  // read as a dim blue-grey square on the mobile player (Bill: "so dark
-  // it's blending with the background"). Apple Music's dark-mode chip
-  // is a fully-opaque light tile with a dark glyph — high contrast,
-  // legible as metadata at a glance. We mirror that: solid white fill,
-  // dark-navy glyph. No transparency, no tint pulling toward the bg.
+  // Consumer surfaces (`dark` + `muted`) now share the same dimmed
+  // meta-grey fill (`#98A2B3`). Bill's note: the chip on a title row
+  // should read like metadata — same dim grey as the "LP · 2025 · E"
+  // bullet line — not a high-contrast white tile competing with the
+  // title. Apple Music does the same: their explicit chip on dark
+  // surfaces is a muted grey, never pure white. Admin (`slate`) keeps
+  // its own scale because it sits on a white card, not #00062B.
   const toneClasses =
     tone === "slate"
       ? "bg-slate-200 text-slate-600"
-      : tone === "muted"
-        ? "bg-[#98A2B3] text-[#00062B]"
-        : "bg-white text-[#00062B]";
+      : "bg-[#98A2B3] text-[#00062B]";
+  // Spacing from the title glyph is owned by the parent flex
+  // container's `gap-*` rather than a margin baked in here — every
+  // callsite already sits inside a flex with siblings (title, bullets,
+  // year), so a default margin would double up. Title rows use
+  // `gap-2.5` (10px) to mirror Apple Music's title-to-E breathing room.
   return (
     <span
       aria-label="Explicit"

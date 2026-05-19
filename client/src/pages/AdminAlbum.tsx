@@ -4826,7 +4826,10 @@ function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: strin
       className="flex items-center justify-center gap-2.5 w-full"
       data-testid={`toggle-explicit-${song.id}`}
     >
-      <ExplicitBadge tone="slate" />
+      {/* Parent already controls horizontal rhythm via `gap-2.5`; cancel
+          the badge's baked-in ml-2 so the chip sits flush against the
+          label, not double-spaced. */}
+      <ExplicitBadge tone="slate" className="ml-0" />
       <span className="text-[11.5px] text-slate-600 font-medium">
         Explicit
       </span>
