@@ -9603,6 +9603,12 @@ function BulkBonusFromDropboxDialog({
       const ok = data.created?.length || 0;
       const failed = data.errors?.length || 0;
       const skipped: string[] = Array.isArray(data.skipped) ? data.skipped : [];
+      // `transcoded` only comes back from the video importer — .mov/.m4v
+      // uploads are converted to .mp4 server-side so they play in every
+      // browser. Surface the count so the operator knows their files
+      // were rewritten on the way in.
+      const transcoded: Array<{ filename: string; action: "remux" | "transcode" }> =
+        Array.isArray(data.transcoded) ? data.transcoded : [];
       if (ok === 0 && failed === 0) {
         toast({ title: `No ${nounPlural} created`, variant: "destructive" });
         setRunning(false);
@@ -9616,6 +9622,11 @@ function BulkBonusFromDropboxDialog({
         const preview = skipped.slice(0, 3).join(", ");
         parts.push(
           `${skipped.length} skipped (not ${noun}): ${preview}${skipped.length > 3 ? "…" : ""}`,
+        );
+      }
+      if (transcoded.length > 0) {
+        parts.push(
+          `${transcoded.length} converted to MP4 for playback`,
         );
       }
       const titleSuffix = skipped.length > 0 ? ` · ${skipped.length} skipped` : "";

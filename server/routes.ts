@@ -671,17 +671,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const f = (req as any).file as Express.Multer.File | undefined;
       if (!f) return res.status(400).json({ message: "No file uploaded" });
       try {
-        const ext = VIDEO_MIME_TO_EXT[f.mimetype] || ".mp4";
+        let buffer = f.buffer;
+        let storedMime = f.mimetype;
+        let ext = VIDEO_MIME_TO_EXT[f.mimetype] || ".mp4";
+
+        // .mov / .m4v come in as `video/quicktime` and don't play in
+        // most browsers as-is. Land the buffer on disk, remux or
+        // transcode to H.264 + AAC mp4, and upload that instead.
+        if (f.mimetype === "video/quicktime") {
+          const fsp = await import("node:fs/promises");
+          const os = await import("node:os");
+          const path = await import("node:path");
+          const tmpIn = path.join(os.tmpdir(), `${randomUUID()}.mov`);
+          await fsp.writeFile(tmpIn, f.buffer);
+          try {
+            const conv = await transcodeVideoToWebFriendlyMp4(tmpIn, ".mov");
+            buffer = await fsp.readFile(conv.outputPath);
+            storedMime = conv.mime;
+            ext = conv.ext;
+            try { await fsp.unlink(conv.outputPath); } catch {}
+          } finally {
+            try { await fsp.unlink(tmpIn); } catch {}
+          }
+        }
+
         const id = `${randomUUID()}${ext}`;
-        const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
-        const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
-        const firstSlash = trimmed.indexOf("/");
-        const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
-        const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
-        const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+        const { bucketName, objectName } = uploadDestination(id);
         const file = objectStorageClient.bucket(bucketName).file(objectName);
-        await file.save(f.buffer, {
-          contentType: f.mimetype,
+        await file.save(buffer, {
+          contentType: storedMime,
           metadata: { cacheControl: "public, max-age=31536000, immutable" },
           resumable: false,
         });
@@ -887,37 +905,92 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
 
-        const id = `${randomUUID()}${ext}`;
-        const { bucketName, objectName } = uploadDestination(id);
-        const file = objectStorageClient.bucket(bucketName).file(objectName);
+        // Two paths from here:
+        // 1) .mp4 / .webm → stream upstream → GCS directly (existing
+        //    behavior; no disk, no CPU).
+        // 2) .mov (QuickTime) → land on a tempfile so we can remux /
+        //    transcode to a browser-playable .mp4 before uploading.
+        const needsTranscode = storedMime === "video/quicktime";
 
-        // Stream upstream → GCS. Abort if we cross the size cap mid-stream.
         let received = 0;
-        const writeStream = file.createWriteStream({
-          contentType: storedMime,
-          metadata: { cacheControl: "public, max-age=31536000, immutable" },
-          resumable: false,
-        });
-        const { Readable } = await import("stream");
-        const nodeReadable = Readable.fromWeb(upstream.body as any);
+        let finalId = `${randomUUID()}${ext}`;
+        let finalMime = storedMime;
+        let finalExt = ext;
 
-        let aborted = false;
-        await new Promise<void>((resolve, reject) => {
+        if (needsTranscode) {
+          const fsp = await import("node:fs/promises");
+          const fs = await import("node:fs");
+          const os = await import("node:os");
+          const path = await import("node:path");
+          const { Readable } = await import("stream");
+          const { pipeline } = await import("node:stream/promises");
+
+          const tmpIn = path.join(os.tmpdir(), `${randomUUID()}.mov`);
+          const out = fs.createWriteStream(tmpIn);
+          const nodeReadable = Readable.fromWeb(upstream.body as any);
+          let aborted = false;
           nodeReadable.on("data", (chunk: Buffer) => {
             received += chunk.length;
             if (received > MAX_BYTES && !aborted) {
               aborted = true;
-              nodeReadable.destroy();
-              writeStream.destroy(new Error("Video exceeded 500MB import cap"));
+              nodeReadable.destroy(new Error("Video exceeded 500MB import cap"));
             }
           });
-          nodeReadable.on("error", reject);
-          writeStream.on("error", reject);
-          writeStream.on("finish", resolve);
-          nodeReadable.pipe(writeStream);
-        });
+          let convOut: string | null = null;
+          try {
+            await pipeline(nodeReadable, out);
+            const conv = await transcodeVideoToWebFriendlyMp4(tmpIn, ".mov");
+            convOut = conv.outputPath;
+            finalMime = conv.mime;
+            finalExt = conv.ext;
+            finalId = `${randomUUID()}${finalExt}`;
+            const { bucketName, objectName } = uploadDestination(finalId);
+            const f2 = objectStorageClient.bucket(bucketName).file(objectName);
+            // Stream the transcoded file to GCS instead of buffering
+            // it. Music-video MP4s commonly run 100-300 MB — buffering
+            // them ahead of upload would risk OOM under concurrent
+            // imports.
+            const w = f2.createWriteStream({
+              contentType: finalMime,
+              metadata: { cacheControl: "public, max-age=31536000, immutable" },
+              resumable: false,
+            });
+            await pipeline(fs.createReadStream(conv.outputPath), w);
+            await setObjectAclPolicy(f2, { owner: "admin", visibility: "public" });
+          } finally {
+            try { await fsp.unlink(tmpIn); } catch {}
+            if (convOut) { try { await fsp.unlink(convOut); } catch {} }
+          }
+        } else {
+          const { bucketName, objectName } = uploadDestination(finalId);
+          const file = objectStorageClient.bucket(bucketName).file(objectName);
+          // Stream upstream → GCS. Abort if we cross the size cap mid-stream.
+          const writeStream = file.createWriteStream({
+            contentType: finalMime,
+            metadata: { cacheControl: "public, max-age=31536000, immutable" },
+            resumable: false,
+          });
+          const { Readable } = await import("stream");
+          const nodeReadable = Readable.fromWeb(upstream.body as any);
 
-        await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+          let aborted = false;
+          await new Promise<void>((resolve, reject) => {
+            nodeReadable.on("data", (chunk: Buffer) => {
+              received += chunk.length;
+              if (received > MAX_BYTES && !aborted) {
+                aborted = true;
+                nodeReadable.destroy();
+                writeStream.destroy(new Error("Video exceeded 500MB import cap"));
+              }
+            });
+            nodeReadable.on("error", reject);
+            writeStream.on("error", reject);
+            writeStream.on("finish", resolve);
+            nodeReadable.pipe(writeStream);
+          });
+
+          await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+        }
 
         // Try to recover a sensible default title from the URL path —
         // ("Video Name.mp4" → "Video Name"). The client can still
@@ -926,7 +999,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const suggestedTitle = lastSeg.replace(/\.[^.]+$/, "") || "Imported video";
 
         return res.json({
-          url: `/objects/uploads/${id}`,
+          url: `/objects/uploads/${finalId}`,
           suggestedTitle,
           bytes: received,
         });
@@ -2074,6 +2147,142 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ".webm": "video/webm",
     ".m4v": "video/mp4",
   };
+
+  // QuickTime containers (.mov, .m4v) frequently arrive holding codecs
+  // that browsers can't play directly — ProRes, HEVC/H.265, Animation,
+  // etc. Rather than refusing them in the importer (which forces every
+  // operator to re-export from their NLE), we land the file on disk and
+  // either remux or transcode to a web-friendly H.264 + AAC MP4 before
+  // it ever hits Object Storage. Result: a .mov upload always becomes a
+  // .mp4 that plays in Safari, Chrome, Firefox, Edge.
+  //
+  // Strategy per file:
+  //   - `.mp4` / `.webm` → passthrough, no work.
+  //   - `.mov` / `.m4v` already H.264 video + AAC audio (or no audio) →
+  //     **remux** (`-c copy -movflags +faststart`). Near-instant; just
+  //     repackages the existing streams in an MP4 container.
+  //   - Anything else (ProRes, HEVC, Animation, AC-3 audio, etc.) →
+  //     **transcode** to H.264 + AAC. Slow but guarantees playback.
+  //
+  // ffprobe / ffmpeg are provided by the Replit runtime's full ffmpeg 6
+  // build (libx264 + AAC available). Caller is responsible for cleaning
+  // up the returned path — same convention as the streamDropboxEntries
+  // tempfiles upstream.
+  async function transcodeVideoToWebFriendlyMp4(
+    inputPath: string,
+    inputExt: string,
+  ): Promise<{
+    outputPath: string;
+    mime: string;
+    ext: string;
+    action: "passthrough" | "remux" | "transcode";
+  }> {
+    const lowerExt = inputExt.toLowerCase();
+    if (lowerExt === ".mp4" || lowerExt === ".webm") {
+      return { outputPath: inputPath, mime: VIDEO_MIME_BY_EXT[lowerExt], ext: lowerExt, action: "passthrough" };
+    }
+
+    const { spawn } = await import("node:child_process");
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    // Probe with ffprobe to pick remux vs transcode.
+    const probe = await new Promise<{ vcodec: string; acodec: string | null }>((resolve, reject) => {
+      // ffprobe's `-select_streams` only accepts a single specifier
+      // (e.g. `v:0` *or* `a:0`); a comma-combined value is rejected.
+      // We need both streams, so just dump every stream and pick the
+      // first video + first audio out of the parsed JSON below.
+      const p = spawn(
+        "ffprobe",
+        [
+          "-v", "error",
+          "-print_format", "json",
+          "-show_streams",
+          inputPath,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      let stdout = "";
+      let stderr = "";
+      p.stdout.on("data", (c) => (stdout += c.toString()));
+      p.stderr.on("data", (c) => (stderr += c.toString()));
+      p.on("error", reject);
+      p.on("close", (code) => {
+        if (code !== 0) return reject(new Error(`ffprobe exited ${code}: ${stderr.trim()}`));
+        try {
+          const json = JSON.parse(stdout);
+          const streams: any[] = json.streams || [];
+          const v = streams.find((s) => s.codec_type === "video");
+          const a = streams.find((s) => s.codec_type === "audio");
+          if (!v) return reject(new Error("No video stream found."));
+          resolve({ vcodec: String(v.codec_name || ""), acodec: a ? String(a.codec_name || "") : null });
+        } catch (e: any) {
+          reject(new Error(`ffprobe parse failed: ${e?.message || e}`));
+        }
+      });
+    });
+
+    const outputPath = path.join(
+      os.tmpdir(),
+      `${randomUUID()}.mp4`,
+    );
+
+    const audioPlayable = probe.acodec === null || probe.acodec === "aac";
+    const videoPlayable = probe.vcodec === "h264";
+    const action: "remux" | "transcode" = videoPlayable && audioPlayable ? "remux" : "transcode";
+
+    const args = action === "remux"
+      ? [
+          "-y",
+          "-i", inputPath,
+          "-c", "copy",
+          "-movflags", "+faststart",
+          outputPath,
+        ]
+      : [
+          "-y",
+          "-i", inputPath,
+          // -preset veryfast keeps CPU/wall-time reasonable while still
+          // producing decent quality at CRF 23 (visually lossless-ish
+          // for music-video content at typical bitrates).
+          "-c:v", videoPlayable ? "copy" : "libx264",
+          ...(videoPlayable ? [] : ["-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"]),
+          "-c:a", audioPlayable ? "copy" : "aac",
+          ...(audioPlayable ? [] : ["-b:a", "192k"]),
+          "-movflags", "+faststart",
+          outputPath,
+        ];
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+        let stderr = "";
+        p.stderr.on("data", (c) => (stderr += c.toString()));
+        p.on("error", reject);
+        p.on("close", (code) => {
+          if (code === 0) return resolve();
+          // Surface the ffmpeg tail — long stderr is noisy but the last
+          // few lines almost always explain the failure.
+          const tail = stderr.split("\n").slice(-6).join("\n").trim();
+          reject(new Error(`ffmpeg ${action} failed (exit ${code}): ${tail || "no stderr"}`));
+        });
+      });
+    } catch (err) {
+      // ffmpeg may have written a partial .mp4 to `outputPath` before
+      // exiting non-zero. Callers only see `outputPath` on success, so
+      // we have to unlink it here or it'll sit in /tmp forever.
+      try { await fsp.unlink(outputPath); } catch {}
+      throw err;
+    }
+
+    // Best-effort: remove the original now that the .mp4 has landed.
+    // Failure is non-fatal — the OS will reap it from /tmp eventually.
+    try { await fsp.unlink(inputPath); } catch {}
+
+    return { outputPath, mime: "video/mp4", ext: ".mp4", action };
+  }
+
   const IMAGE_MIME_BY_EXT: Record<string, string> = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -3047,6 +3256,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         const created: Array<{ id: string; filename: string }> = [];
         const errors: Array<{ filename: string; error: string }> = [];
+        // Filenames that arrived as .mov/.m4v and got remuxed or
+        // transcoded to .mp4 on the way in. Surfaced in the response so
+        // the dialog can tell the operator "3 converted to MP4 for
+        // playback" — important context because the album now stores
+        // the .mp4, not their original file.
+        const transcoded: Array<{ filename: string; action: "remux" | "transcode" }> = [];
         const capMB = Math.round(opts.maxEntryBytes / (1024 * 1024));
         for (const entry of tmpEntries) {
           const filename = entry.filename;
@@ -3064,16 +3279,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               continue;
             }
             const ext = extOf(filename);
-            const mime = opts.mimeByExt[ext];
-            const publicUrl = await uploadFileToObjectStorage(entry.tmpPath, mime);
-            const row = await opts.createRow(albumId, publicUrl, filename, position);
-            created.push({ id: row.id, filename });
-            position++;
+            let uploadPath = entry.tmpPath;
+            let mime = opts.mimeByExt[ext];
+            // Tracks the transcoder's output file (only set when we
+            // actually remuxed/transcoded) so the `finally` can unlink
+            // it after upload. Without this, every .mov import would
+            // leave a multi-hundred-MB .mp4 in /tmp.
+            let transcodedTmp: string | null = null;
+
+            try {
+              // Videos in QuickTime containers (.mov, .m4v) get remuxed
+              // (fast, no quality loss) or transcoded (slower) to a
+              // browser-playable H.264 + AAC .mp4 before upload. .mp4 and
+              // .webm passthrough untouched.
+              if (opts.kind === "video") {
+                const conv = await transcodeVideoToWebFriendlyMp4(entry.tmpPath, ext);
+                uploadPath = conv.outputPath;
+                mime = conv.mime;
+                if (conv.action !== "passthrough") {
+                  transcodedTmp = conv.outputPath;
+                  transcoded.push({ filename, action: conv.action });
+                }
+              }
+
+              const publicUrl = await uploadFileToObjectStorage(uploadPath, mime);
+              const row = await opts.createRow(albumId, publicUrl, filename, position);
+              created.push({ id: row.id, filename });
+              position++;
+            } finally {
+              if (transcodedTmp) {
+                const fsp = await import("node:fs/promises");
+                try { await fsp.unlink(transcodedTmp); } catch {}
+              }
+            }
           } catch (e: any) {
             errors.push({ filename, error: e?.message || "Failed to import" });
           }
         }
-        return res.json({ created, errors, skipped });
+        return res.json({ created, errors, skipped, transcoded });
       } finally {
         await cleanup();
       }
