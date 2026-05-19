@@ -27,14 +27,24 @@ ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 // player; that bled into the default shadcn toast and made it pitch
 // black. Force a light surface here regardless of theme so toasts
 // read like iOS / macOS notifications across admin + player.
+//
+// Contrast guardrail: on a small/admin viewport the toast can overlap
+// the dark-navy album header, and the original `bg-white/95` left
+// enough transparency that 5% of #00062B bled through and turned the
+// card a dusty blue-grey under the text. We push the scrim to /[0.98]
+// (visually opaque, still keeps a hint of the glass character), wash
+// out any residual color cast with `backdrop-saturate-50`, and brighten
+// the blurred sample with `backdrop-brightness-125`. Net effect: the
+// frost look survives, but slate-900 text reads cleanly on any
+// background it floats over.
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-xl border px-4 py-3 shadow-lg backdrop-blur-md transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  "group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-xl border px-4 py-3 shadow-lg backdrop-blur-xl backdrop-saturate-50 backdrop-brightness-125 transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
   {
     variants: {
       variant: {
-        default: "border-slate-200/70 bg-white/95 text-slate-900",
+        default: "border-slate-200/70 bg-white/[0.98] text-slate-900",
         destructive:
-          "destructive group border-rose-200 bg-rose-50/95 text-rose-900",
+          "destructive group border-rose-200 bg-rose-50/[0.98] text-rose-900",
       },
     },
     defaultVariants: {
