@@ -1310,6 +1310,97 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   })();
 
+  // One-shot post-boot duration backfill — finds every song still stuck
+  // on the schema default (180s = "3:00") that has a real master in
+  // object storage, downloads it, runs music-metadata, and writes the
+  // probed duration back to the row. Catches songs uploaded before the
+  // server-side duration probe shipped, AND single-track uploads where
+  // the operator hit Save before the upload-audio response arrived (the
+  // client probe returns null on 24-bit WAV so the row defaults to 3:00).
+  //
+  // Idempotent — the WHERE clause excludes rows we've already probed
+  // (anything ≠ 180), so a repeat boot does a cheap SELECT-with-zero-
+  // rows and exits. Serial fetch is fine: we already pay this cost
+  // exactly once per song, and ffprobe via music-metadata is cheap
+  // compared to the network download.
+  void (async () => {
+    try {
+      await new Promise((r) => setTimeout(r, 3000));
+      // Eligibility uses the two unambiguous "unknown duration"
+      // sentinels — `0` and `NULL` — and INTENTIONALLY excludes the
+      // schema default `180`. Reason: `180` is ambiguous (it could mean
+      // "create-song was called without a duration" OR "this song is
+      // genuinely 3:00"). Re-probing a genuinely-180s row on every
+      // boot would (a) waste a full master download and (b) risk
+      // overwriting an operator's intentional value if the probe
+      // disagrees by a second. New rows can't land at 180-as-sentinel
+      // any more — AddTrackForm gates Save on `uploading=true`,
+      // MasterEditor backfills duration when 180 after a master swap,
+      // and the bulk Dropbox importer probes server-side at create.
+      // Legacy rows stuck at 180 are operator-actionable via Master
+      // re-upload, which kicks the MasterEditor one-shot.
+      const { rows } = await pool.query<{ id: string; title: string | null; audio_url: string }>(
+        `SELECT id, title, audio_url FROM songs
+           WHERE (duration = 0 OR duration IS NULL)
+             AND audio_url IS NOT NULL
+             AND audio_url <> ''
+           ORDER BY album_id ASC, track_number ASC, id ASC`,
+      );
+      if (rows.length === 0) return;
+      console.log(`[duration-backfill] Found ${rows.length} song(s) with missing duration — probing.`);
+      const fsp = await import("node:fs/promises");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      const mm = await import("music-metadata");
+      let fixed = 0;
+      let skipped = 0;
+      let failed = 0;
+      for (const row of rows) {
+        const label = row.title ? `"${row.title}"` : row.id;
+        const ext = (row.audio_url.match(/\.(\w+)(?:\?|$)/)?.[0] || ".bin").toLowerCase();
+        const tmpIn = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
+        try {
+          const file = await objectStorage.getObjectEntityFile(row.audio_url);
+          const [buf] = await file.download();
+          await fsp.writeFile(tmpIn, buf);
+          const meta = await mm.parseFile(tmpIn);
+          const dur = meta.format.duration;
+          if (!dur || !isFinite(dur) || dur <= 0) {
+            skipped++;
+            console.warn(`[duration-backfill] · ${label} — probe returned no duration; leaving row alone.`);
+            continue;
+          }
+          const seconds = Math.round(dur);
+          // Guard with the same conditions used in SELECT so an admin
+          // who edited the value by hand between SELECT and UPDATE
+          // doesn't get stomped.
+          const claim = await pool.query(
+            `UPDATE songs SET duration = $1
+               WHERE id = $2
+                 AND (duration = 0 OR duration IS NULL)`,
+            [seconds, row.id],
+          );
+          if (claim.rowCount === 0) {
+            skipped++;
+          } else {
+            fixed++;
+            const mm_ = Math.floor(seconds / 60);
+            const ss = String(seconds % 60).padStart(2, "0");
+            console.log(`[duration-backfill] ✓ ${label} — ${mm_}:${ss}.`);
+          }
+        } catch (err: any) {
+          failed++;
+          console.warn(`[duration-backfill] ✗ ${label} — ${err?.message || err}`);
+        } finally {
+          try { await fsp.unlink(tmpIn); } catch {}
+        }
+      }
+      console.log(`[duration-backfill] Done. ${fixed} fixed, ${skipped} skipped, ${failed} failed.`);
+    } catch (err) {
+      console.error("[duration-backfill] sweep aborted:", err);
+    }
+  })();
+
   app.post(
     "/api/admin/upload",
     requireAdminBearer,
