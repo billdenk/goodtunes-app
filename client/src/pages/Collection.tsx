@@ -706,13 +706,17 @@ function AlbumCard({
         </button>
       </div>
       <div className="mt-2 px-0.5">
-        {/* Apple Music album-card typography: title 15px/semibold, artist
-            13px/regular at 65% opacity. Earlier sizes (text-sm / text-xs)
-            felt one notch too small + the artist line at white/50 read
-            as low-contrast next to Apple's. The "E" pill sits inline so
-            it shares a baseline with the title and truncates with it
-            (title gets `flex-1 min-w-0` so long titles ellipsize cleanly
-            without pushing the badge off the row). */}
+        {/* Apple Music album-card typography. Two-tier contrast:
+            - Title: 15px / semibold / 100% white
+            - Artist: 13px / regular / ~55% white so the secondary line
+              clearly reads as metadata. Earlier 65% looked nearly
+              identical to the title on the dark `#00062B` background
+              — Apple's secondary label color sits around 55–60% white
+              on dark, and the title's bold weight + size already does
+              part of the lifting, so we can go a bit dimmer here.
+            The "E" pill sits inline with the title; the title gets
+            `flex-1 min-w-0` so long titles ellipsize cleanly without
+            pushing the badge off the row. */}
         <div className="flex items-center gap-1.5 min-w-0">
           <p
             className="flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate"
@@ -722,7 +726,12 @@ function AlbumCard({
           </p>
           {album.isExplicit && <ExplicitBadge />}
         </div>
-        <p className="text-white/65 text-[13px] truncate mt-0.5">{album.artist}</p>
+        <p
+          className="text-[13px] font-normal truncate mt-0.5"
+          style={{ color: "rgba(255,255,255,0.55)" }}
+        >
+          {album.artist}
+        </p>
       </div>
     </div>
   );
