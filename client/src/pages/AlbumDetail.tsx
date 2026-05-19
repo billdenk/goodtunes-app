@@ -523,13 +523,18 @@ export function AlbumDetail() {
               {/* Genre · Year muted meta line — Apple's "Afro-Pop · 1994 ·
                   Lossless" pattern. Both tokens are optional; we join only
                   what's available so the line never starts with a bullet. */}
-              {(album.genre || album.year) && (
+              {(album.genre || album.year || album.isExplicit) && (
                 <p
-                  className="text-[13px] mt-1"
+                  className="text-[13px] mt-1 inline-flex items-center justify-center gap-1.5"
                   style={{ color: "#98A2B3" }}
                   data-testid="text-album-meta"
                 >
-                  {[album.genre, album.year].filter(Boolean).join(" · ")}
+                  {/* Apple Music's "Pop · 1994 · E" pattern — when an album is
+                      explicit, the chip rides in the meta line as well as
+                      next to the title. Belt-and-braces, but matches user
+                      muscle memory from Music/Spotify. */}
+                  <span>{[album.genre, album.year].filter(Boolean).join(" · ")}</span>
+                  {album.isExplicit && <ExplicitBadge />}
                 </p>
               )}
               {album.description && (

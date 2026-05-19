@@ -24,8 +24,16 @@ export function ExplicitBadge({
    */
   tone?: "dark" | "slate";
 }) {
+  // `dark` was originally `bg-white/30 text-white`, which faded into the
+  // #00062B background almost completely once it sat next to a song
+  // title in the mini-player dock (Bill: "it seems to get lost"). Apple
+  // Music's explicit chip is a near-solid light square with a dark
+  // glyph — high contrast, instantly readable as metadata. We mirror
+  // that: solid-ish white fill, dark-navy glyph.
   const toneClasses =
-    tone === "slate" ? "bg-slate-200 text-slate-600" : "bg-white/30 text-white";
+    tone === "slate"
+      ? "bg-slate-200 text-slate-600"
+      : "bg-white/75 text-[#00062B]";
   return (
     <span
       aria-label="Explicit"

@@ -1,5 +1,6 @@
 import { Play, Shuffle, Disc3 } from "lucide-react";
 import { PhoneBezel } from "./PhoneBezel";
+import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 
 export interface AlbumPreviewSong {
   id: string;
@@ -17,6 +18,11 @@ export interface AlbumPreviewAlbum {
   type: "Single" | "EP" | "LP";
   description: string | null;
   isHidden: boolean;
+  // Derived server-side from the album's songs — true if any song on the
+  // album has its per-track Explicit toggle on. Surfaced on the preview
+  // so the admin sees the same "E" chip the fan sees, without needing
+  // an album-level toggle.
+  isExplicit?: boolean;
   label?: { id: string; name: string } | null;
   songs: AlbumPreviewSong[];
   // Ownership mirrors the real Album type so the preview's footer matches
@@ -95,22 +101,26 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
         {/* Title + artist */}
         <div className="mt-4 w-full text-center">
           <h2
-            className="text-white text-[22px] font-bold leading-tight tracking-tight"
+            className="text-white text-[22px] font-bold leading-tight tracking-tight inline-flex items-center justify-center gap-2 flex-wrap"
             data-testid="text-preview-album-title"
           >
-            {album.title || "Untitled album"}
+            <span>{album.title || "Untitled album"}</span>
+            {album.isExplicit && <ExplicitBadge />}
           </h2>
           <p className="text-[#319ED8] text-[15px] font-semibold mt-0.5 truncate">
             {album.artist || "Unknown artist"}
           </p>
           <p
-            className="text-[12px] mt-1"
+            className="text-[12px] mt-1 inline-flex items-center justify-center gap-1.5"
             style={{ color: "rgba(235,235,245,0.55)" }}
           >
-            {album.type}
-            {album.year ? ` · ${album.year}` : ""}
-            {album.label?.name ? ` · ${album.label.name}` : ""}
-            {album.isHidden ? " · Hidden" : ""}
+            <span>
+              {album.type}
+              {album.year ? ` · ${album.year}` : ""}
+              {album.label?.name ? ` · ${album.label.name}` : ""}
+              {album.isHidden ? " · Hidden" : ""}
+            </span>
+            {album.isExplicit && <ExplicitBadge />}
           </p>
         </div>
 
