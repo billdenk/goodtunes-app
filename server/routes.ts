@@ -1148,6 +1148,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await fsp.writeFile(tmpIn, buf);
       const conv = await transcodeAudioToWebFriendly(tmpIn, ext);
       if (conv.action === "passthrough") {
+        // File is already browser-friendly (16-bit PCM). Mark it as
+        // probed by setting audio_source_url to the same URL — the
+        // playback file IS the archival source, since no transcode
+        // was needed. This takes the row out of the legacy backfill
+        // set so we don't re-probe it on every boot. "Download
+        // original" still works because /api/songs/:id/download
+        // resolves audioSourceUrl identically to audioUrl in this
+        // case.
+        // Guard with audio_url = original so an admin master-swap
+        // between our read and this UPDATE doesn't get stomped by
+        // marking the new (unprobed) file as already-processed.
+        const claim = await pool.query(
+          `UPDATE songs SET audio_source_url = audio_url
+             WHERE id = $1 AND audio_source_url IS NULL AND audio_url = $2`,
+          [id, song.audioUrl],
+        );
+        if (claim.rowCount === 0) return { kind: "race-lost" };
         return {
           kind: "passthrough",
           sourceBitsPerSample: conv.sourceBitsPerSample,
@@ -1157,12 +1174,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       transcodedTmp = conv.outputPath;
       const newAudioUrl = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
       // Conditional update — guards against a concurrent reprocess
-      // racing two transcodes. Second writer's UPDATE affects 0 rows.
+      // racing two transcodes AND against an admin swapping the
+      // master mid-flight: the `audio_url = $4` clause ensures we
+      // only claim if the row still points at the file we just
+      // transcoded. Second writer's UPDATE affects 0 rows. Orphaned
+      // FLAC uploads on race-lost are accepted storage cost for now
+      // (rare; no cleanup endpoint yet).
       const claim = await pool.query(
         `UPDATE songs SET audio_url = $1, audio_source_url = $2
-           WHERE id = $3 AND audio_source_url IS NULL
+           WHERE id = $3 AND audio_source_url IS NULL AND audio_url = $4
          RETURNING id`,
-        [newAudioUrl, song.audioUrl, id],
+        [newAudioUrl, song.audioUrl, id, song.audioUrl],
       );
       if (claim.rowCount === 0) return { kind: "race-lost" };
       return {
@@ -1233,11 +1255,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Wait a beat so the HTTP server is actually listening before
       // we start hammering ffmpeg — keeps the boot screen snappy.
       await new Promise((r) => setTimeout(r, 2000));
+      // No `created_at` on the songs table — order by (album, track #)
+      // so the log reads like a tracklist as it sweeps through.
       const { rows } = await pool.query<{ id: string; title: string | null; audio_url: string }>(
         `SELECT id, title, audio_url FROM songs
            WHERE audio_source_url IS NULL
              AND audio_url ~* '\\.(wav|aif|aiff)(\\?|$)'
-           ORDER BY created_at ASC NULLS LAST, id ASC`,
+           ORDER BY album_id ASC, track_number ASC, id ASC`,
       );
       if (rows.length === 0) return;
       console.log(`[audio-backfill] Found ${rows.length} legacy WAV/AIFF master(s) — re-processing serially.`);
@@ -3700,6 +3724,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               }
             }
           } catch (e: any) {
+            // Log the *actual* failure server-side with the filename so
+            // we can grep for "import-bonus-failed" when an operator
+            // says "my upload broke." The client only sees the message
+            // string — without this, transient ffmpeg / Object Storage
+            // errors disappeared into the count-only toast.
+            console.warn(
+              `[import-bonus-failed] album=${albumId} kind=${opts.kind} file=${filename}: ${e?.message || e}`,
+            );
             errors.push({ filename, error: e?.message || "Failed to import" });
           }
         }
@@ -3717,8 +3749,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       kind: "video",
       mimeByExt: VIDEO_MIME_BY_EXT,
       supportedHint: ".mp4, .mov, .webm, .m4v",
-      // Matches the manual /api/admin/upload-video multer cap.
-      maxEntryBytes: 200 * 1024 * 1024,
+      // 2 GB per file — phone footage (iPhone .MOV, GoPro .MP4) routinely
+      // sits between 300 MB and 1.5 GB before transcode, so the old 200 MB
+      // ceiling silently rejected most bonus videos. The bulk path streams
+      // each entry to a tempfile via a counting Transform that tears the
+      // stream down the instant the cap is crossed, so raising the cap
+      // does NOT change the memory budget — it's still ~64 KB chunks.
+      // The single-file /api/admin/upload-video multer route stays at
+      // 200 MB on purpose (form-data buffers in memory there); big-file
+      // single uploads go through /upload-video/sign + finalize instead.
+      maxEntryBytes: 2 * 1024 * 1024 * 1024,
       listExisting: (albumId) => storage.listAlbumVideos(albumId),
       createRow: (albumId, videoUrl, filename, position) =>
         storage.createAlbumVideo({

@@ -2578,7 +2578,9 @@ function AddMultipleTracksDialog({
       });
       await onSaved();
       const ok = data.created?.length || 0;
-      const failed = data.errors?.length || 0;
+      const errorList: Array<{ filename: string; error: string }> =
+        Array.isArray(data.errors) ? data.errors : [];
+      const failed = errorList.length;
       const skipped: string[] = Array.isArray(data.skipped) ? data.skipped : [];
       if (ok === 0 && failed === 0) {
         toast({ title: "No tracks created", variant: "destructive" });
@@ -2592,7 +2594,17 @@ function AddMultipleTracksDialog({
       // `skipped` = files the importer ignored (wrong extension, etc.) —
       // surfaced so "where did my tracks go?" answers itself from the toast.
       const parts: string[] = [];
-      if (failed > 0) parts.push(`${failed} file${failed === 1 ? "" : "s"} couldn't be imported`);
+      if (failed > 0) {
+        // Show why the first failure happened so the operator can act
+        // (e.g. "Too large (834 MB; limit 200 MB)") instead of staring
+        // at an opaque count. Caps at one example to keep the toast
+        // readable — server logs carry the full list.
+        const first = errorList[0];
+        const why = first ? ` — ${first.filename}: ${first.error}` : "";
+        parts.push(
+          `${failed} file${failed === 1 ? "" : "s"} couldn't be imported${why}${failed > 1 ? ` (+${failed - 1} more)` : ""}`,
+        );
+      }
       if (skipped.length > 0) {
         const preview = skipped.slice(0, 3).join(", ");
         parts.push(`${skipped.length} skipped (not audio): ${preview}${skipped.length > 3 ? "…" : ""}`);
@@ -8609,49 +8621,6 @@ function AudioEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftUrl, draftSourceUrl, song.audioUrl, song.audioSourceUrl, uploading]);
 
-  // Legacy backfill — runs the same probe-and-transcode pipeline
-  // that new uploads use against the existing master URL, then
-  // refreshes the row so the new FLAC streams in browsers and the
-  // original WAV becomes the archival source. Server is idempotent
-  // and a no-op when probe says the file is already 16-bit PCM.
-  const reprocessMut = useMutation({
-    mutationFn: async () =>
-      (await apiRequest(
-        "POST",
-        `/api/admin/songs/${song.id}/reprocess-audio`,
-        {},
-      )).json() as Promise<{
-        transcoded: boolean;
-        audioUrl?: string;
-        audioSourceUrl?: string;
-        sourceBitsPerSample?: number;
-      }>,
-    onSuccess: async (data) => {
-      if (data.transcoded) {
-        // Sync local draft state immediately so the URL field reflects
-        // the new FLAC without waiting for the parent refetch.
-        if (data.audioUrl) setDraftUrl(data.audioUrl);
-        if (data.audioSourceUrl) setDraftSourceUrl(data.audioSourceUrl);
-        toast({
-          title: "Master converted for browser playback",
-          description: `${data.sourceBitsPerSample ?? "high"}-bit WAV preserved as the archival original; the FLAC copy will now stream in browsers.`,
-        });
-      } else {
-        toast({
-          title: "Already browser-friendly",
-          description: "Probe says this master is already 16-bit PCM — no conversion needed.",
-        });
-      }
-      await onSaved();
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Re-process failed",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      }),
-  });
-
   return (
     <div
       className="px-5 pt-4 pb-4"
@@ -9911,7 +9880,9 @@ function BulkBonusFromDropboxDialog({
       const data = await res.json();
       await onImported();
       const ok = data.created?.length || 0;
-      const failed = data.errors?.length || 0;
+      const errorList: Array<{ filename: string; error: string }> =
+        Array.isArray(data.errors) ? data.errors : [];
+      const failed = errorList.length;
       const skipped: string[] = Array.isArray(data.skipped) ? data.skipped : [];
       // `transcoded` only comes back from the video importer — .mov/.m4v
       // uploads are converted to .mp4 server-side so they play in every
@@ -9926,7 +9897,15 @@ function BulkBonusFromDropboxDialog({
       }
       const parts: string[] = [];
       if (failed > 0) {
-        parts.push(`${failed} file${failed === 1 ? "" : "s"} couldn't be imported`);
+        // Surface the first failure's reason — same pattern as the
+        // tracks importer. Without this, "5 files couldn't be imported"
+        // gave the operator no way to tell a size-cap rejection from
+        // an ffmpeg crash.
+        const first = errorList[0];
+        const why = first ? ` — ${first.filename}: ${first.error}` : "";
+        parts.push(
+          `${failed} file${failed === 1 ? "" : "s"} couldn't be imported${why}${failed > 1 ? ` (+${failed - 1} more)` : ""}`,
+        );
       }
       if (skipped.length > 0) {
         const preview = skipped.slice(0, 3).join(", ");
