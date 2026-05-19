@@ -10,7 +10,7 @@ import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
-import { searchArtist as searchSpotifyArtist, searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
+import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
 
 const scryptAsync = promisify(scrypt);
 
