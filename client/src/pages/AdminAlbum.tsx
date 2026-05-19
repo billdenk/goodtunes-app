@@ -1835,23 +1835,19 @@ function AddMultipleTracksDialog({
   onSaved: () => Promise<void> | void;
 }) {
   const { toast } = useToast();
-  const [mode, setMode] = useState<UploadMode>("empty");
+  const [mode, setMode] = useState<UploadMode>("dropbox");
   const [countText, setCountText] = useState("5");
   const [folderUrl, setFolderUrl] = useState("");
   const [running, setRunning] = useState(false);
   const [created, setCreated] = useState(0);
-  const [importSummary, setImportSummary] = useState<
-    null | { created: Array<{ trackNumber: number; title: string; filename: string }>; errors: Array<{ filename: string; error: string }> }
-  >(null);
 
   useEffect(() => {
     if (open) {
-      setMode("empty");
+      setMode("dropbox");
       setCountText("5");
       setFolderUrl("");
       setRunning(false);
       setCreated(0);
-      setImportSummary(null);
     }
   }, [open]);
 
@@ -1897,7 +1893,6 @@ function AddMultipleTracksDialog({
   const handleConfirmDropbox = async () => {
     if (!folderUrl.trim() || running) return;
     setRunning(true);
-    setImportSummary(null);
     try {
       const res = await apiRequest(
         "POST",
@@ -1905,25 +1900,32 @@ function AddMultipleTracksDialog({
         { folderUrl: folderUrl.trim() },
       );
       const data = await res.json();
-      setImportSummary({ created: data.created || [], errors: data.errors || [] });
       await onSaved();
       const ok = data.created?.length || 0;
       const failed = data.errors?.length || 0;
       if (ok === 0 && failed === 0) {
         toast({ title: "No tracks created", variant: "destructive" });
-      } else {
-        toast({
-          title: `Imported ${ok} ${ok === 1 ? "track" : "tracks"}`,
-          description: failed > 0 ? `${failed} file${failed === 1 ? "" : "s"} couldn't be imported.` : undefined,
-        });
+        setRunning(false);
+        return;
       }
+      // Success (even partial) — close the dialog and confirm with a toast.
+      // Failed files are surfaced in the toast description rather than an
+      // in-dialog summary so the import always ends with the sheet gone.
+      toast({
+        title: "All music has been added!",
+        description:
+          failed > 0
+            ? `${ok} imported · ${failed} file${failed === 1 ? "" : "s"} couldn't be imported.`
+            : undefined,
+      });
+      setRunning(false);
+      onOpenChange(false);
     } catch (e: any) {
       toast({
         title: "Dropbox import failed",
         description: e?.message || "Check the link and try again.",
         variant: "destructive",
       });
-    } finally {
       setRunning(false);
     }
   };
@@ -1945,8 +1947,8 @@ function AddMultipleTracksDialog({
             slate-900 active pill) to match the rest of admin chrome. */}
         <div className="inline-flex bg-slate-100 rounded-lg p-0.5 self-start" role="tablist">
           {([
-            { id: "empty", label: "Empty rows" },
             { id: "dropbox", label: "From Dropbox folder" },
+            { id: "empty", label: "Empty rows" },
           ] as const).map((opt) => (
             <button
               key={opt.id}
@@ -2026,35 +2028,6 @@ function AddMultipleTracksDialog({
                 Downloads the whole folder once, then imports every audio file inside.
               </p>
             </div>
-            {importSummary && (
-              <div className="space-y-2 max-h-[200px] overflow-auto rounded-lg border border-slate-200 p-2.5">
-                {importSummary.created.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="text-[11.5px] font-medium text-emerald-700">
-                      Imported {importSummary.created.length}:
-                    </div>
-                    {importSummary.created.map((c) => (
-                      <div key={c.filename} className="text-[11.5px] text-slate-600 truncate" data-testid={`row-imported-${c.trackNumber}`}>
-                        <span className="text-slate-400 tabular-nums">{c.trackNumber}.</span> {c.title}{" "}
-                        <span className="text-slate-400">· {c.filename}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {importSummary.errors.length > 0 && (
-                  <div className="space-y-1 pt-1">
-                    <div className="text-[11.5px] font-medium text-rose-700">
-                      Couldn't import {importSummary.errors.length}:
-                    </div>
-                    {importSummary.errors.map((e) => (
-                      <div key={e.filename} className="text-[11.5px] text-slate-600 truncate">
-                        {e.filename} <span className="text-slate-400">— {e.error}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </>
         )}
 
@@ -2066,7 +2039,7 @@ function AddMultipleTracksDialog({
             data-testid="button-bulk-cancel"
             className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
           >
-            {importSummary ? "Done" : "Cancel"}
+            Cancel
           </button>
           {mode === "empty" ? (
             <button
@@ -2089,7 +2062,7 @@ function AddMultipleTracksDialog({
             <button
               type="button"
               onClick={handleConfirmDropbox}
-              disabled={running || !folderUrl.trim() || !!importSummary}
+              disabled={running || !folderUrl.trim()}
               data-testid="button-bulk-dropbox-confirm"
               className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
             >
@@ -2098,8 +2071,6 @@ function AddMultipleTracksDialog({
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   Importing from Dropbox…
                 </>
-              ) : importSummary ? (
-                <>Imported</>
               ) : (
                 <>Import from Dropbox</>
               )}
