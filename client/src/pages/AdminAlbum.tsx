@@ -75,6 +75,7 @@ import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
@@ -2265,6 +2266,18 @@ function ImportLyricsFromDropboxDialog({
       songCount?: number;
     }
   >(null);
+  // GoodSync follow-up state — after a lyrics import lands, Bill wanted
+  // the dialog to stay up and offer "Now align them to audio in one
+  // pass" instead of making him reopen each track and hit Sync. We run
+  // /auto-sync-lyrics serially over `summary.matched` (one ElevenLabs
+  // call per track, ~5–15s each). Serial keeps backend load + ElevenLabs
+  // rate-limit risk identical to the per-track button, just hands-off.
+  const [syncProgress, setSyncProgress] = useState<
+    null | { current: number; total: number; currentTitle: string }
+  >(null);
+  const [syncDone, setSyncDone] = useState<
+    null | { synced: number; failed: Array<{ title: string; error: string }> }
+  >(null);
 
   // Sticky summary: persist the last result per album so reopening the
   // dialog shows what happened on the previous run instead of a blank
@@ -2274,6 +2287,8 @@ function ImportLyricsFromDropboxDialog({
     if (open) {
       setFolderUrl("");
       setRunning(false);
+      setSyncProgress(null);
+      setSyncDone(null);
       try {
         const stored = localStorage.getItem(storageKey);
         const parsed = stored ? JSON.parse(stored) : null;
@@ -2333,8 +2348,54 @@ function ImportLyricsFromDropboxDialog({
     }
   };
 
+  // GoodSync follow-up: iterate the matched songs serially and POST
+  // /auto-sync-lyrics per track. Progress is exposed via syncProgress
+  // so the dialog can render "Syncing 3 of 12 · Storms…" inline; the
+  // final tally lands in syncDone for the result card. Failures don't
+  // abort the run — we collect them and surface a per-track list so
+  // Bill can re-run individual tracks afterward.
+  const goodSyncAll = async () => {
+    if (!summary || syncProgress) return;
+    const matched = summary.matched;
+    if (matched.length === 0) return;
+    setSyncDone(null);
+    const failed: Array<{ title: string; error: string }> = [];
+    let synced = 0;
+    for (let i = 0; i < matched.length; i++) {
+      const m = matched[i];
+      setSyncProgress({ current: i + 1, total: matched.length, currentTitle: m.title });
+      try {
+        const res = await apiRequest(
+          "POST",
+          `/api/admin/songs/${m.songId}/auto-sync-lyrics`,
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.message || `HTTP ${res.status}`);
+        }
+        synced++;
+      } catch (e: any) {
+        failed.push({ title: m.title, error: e?.message || "Failed" });
+      }
+    }
+    setSyncProgress(null);
+    setSyncDone({ synced, failed });
+    await onSaved();
+    toast({
+      title:
+        failed.length === 0
+          ? `GoodSync complete · ${synced} ${synced === 1 ? "track" : "tracks"}`
+          : `GoodSync done · ${synced} synced · ${failed.length} failed`,
+      description:
+        failed.length === 0
+          ? "Open any track to scroll-test the alignment."
+          : "Failed tracks left their lyrics intact — re-run from the track row.",
+      variant: failed.length === 0 ? undefined : "destructive",
+    });
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v) => !running && !syncProgress && onOpenChange(v)}>
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900">
@@ -2419,6 +2480,76 @@ function ImportLyricsFromDropboxDialog({
           </div>
         )}
 
+        {/* GoodSync follow-up — stays visible whenever we have matched
+            tracks and we haven't already finished a sync run. Disappears
+            once syncDone is set (results card takes over below). */}
+        {summary && summary.matched.length > 0 && !syncDone && (
+          <div
+            className="rounded-lg border border-[#319ED8]/30 bg-[#319ED8]/5 px-3 py-2.5 space-y-2"
+            data-testid="card-goodsync-prompt"
+          >
+            {syncProgress ? (
+              <div className="flex items-center gap-2 text-[12.5px] text-slate-700">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#319ED8] flex-shrink-0" />
+                <span className="tabular-nums">
+                  GoodSyncing {syncProgress.current} of {syncProgress.total}
+                </span>
+                <span className="text-slate-400 truncate">· {syncProgress.currentTitle}</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-[12.5px] text-slate-700">
+                  <span className="font-medium text-slate-900">Would you like to GoodSync these?</span>{" "}
+                  <span className="text-slate-500">
+                    Aligns each line to the audio using ElevenLabs (~5–15s per track).
+                    You'll get a toast when it's done.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={goodSyncAll}
+                    data-testid="button-goodsync-after-import"
+                    className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    GoodSync {summary.matched.length} {summary.matched.length === 1 ? "track" : "tracks"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncDone({ synced: 0, failed: [] })}
+                    data-testid="button-goodsync-skip"
+                    className="px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-slate-100"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {syncDone && syncDone.synced + syncDone.failed.length > 0 && (
+          <div
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] text-slate-700 space-y-1"
+            data-testid="card-goodsync-result"
+          >
+            <div className="font-medium text-slate-900">
+              GoodSync results · {syncDone.synced} synced
+              {syncDone.failed.length > 0 ? ` · ${syncDone.failed.length} failed` : ""}
+            </div>
+            {syncDone.failed.length > 0 && (
+              <div className="space-y-0.5">
+                {syncDone.failed.map((f) => (
+                  <div key={f.title} className="text-[11.5px] text-rose-600 truncate">
+                    {f.title} <span className="text-slate-400">— {f.error}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <DialogFooter className="flex flex-row justify-end items-center gap-2 pt-2 sm:gap-2">
           {summary ? (
             // After a run, the summary IS the result — no second action
@@ -2431,17 +2562,21 @@ function ImportLyricsFromDropboxDialog({
                   try { localStorage.removeItem(storageKey); } catch {}
                   setSummary(null);
                   setFolderUrl("");
+                  setSyncProgress(null);
+                  setSyncDone(null);
                 }}
+                disabled={!!syncProgress}
                 data-testid="button-lyrics-import-run-again"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
               >
                 Run again
               </button>
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
+                disabled={!!syncProgress}
                 data-testid="button-lyrics-import-done"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
               >
                 Done
               </button>
@@ -5216,11 +5351,29 @@ function LyricsEditor({
       setShowUrlInput(false);
       setLyricUrl("");
       await onSaved();
+      // Offer a one-tap GoodSync follow-up. Only show the action when
+      // the track is eligible (master uploaded + not instrumental);
+      // otherwise the alignment route returns 400 and the toast button
+      // would just look broken.
+      const canGoodSync = !!song.audioUrl && !song.instrumental;
       toast({
         title: `Imported lyrics · ${data.charCount} chars`,
         description: data.filename
-          ? `From ${data.filename}. Existing GoodSync cues cleared — re-run when ready.`
-          : "Existing GoodSync cues cleared — re-run when ready.",
+          ? `From ${data.filename}. Existing GoodSync cues cleared.`
+          : "Existing GoodSync cues cleared.",
+        action: canGoodSync ? (
+          <ToastAction
+            altText="GoodSync these lyrics now"
+            onClick={() => {
+              // Guard against double-tap — alignMut takes several seconds
+              // (ElevenLabs forced alignment) and the toast stays
+              // dismissible for the duration.
+              if (!alignMut.isPending) alignMut.mutate();
+            }}
+          >
+            GoodSync now
+          </ToastAction>
+        ) : undefined,
       });
     },
     onError: (e: any) =>
