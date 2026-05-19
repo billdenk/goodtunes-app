@@ -14,7 +14,7 @@ const SEARCH_URL = "https://api.spotify.com/v1/search";
 // Per-call deadlines so a slow Spotify upstream can't stall the commit
 // endpoint. The credits-commit loop awaits each enrichment serially, so
 // a hung request would otherwise hang the whole import.
-const TOKEN_TIMEOUT_MS = 4_000;
+const TOKEN_TIMEOUT_MS = 8_000;
 const SEARCH_TIMEOUT_MS = 8_000;
 
 type CachedToken = { value: string; expiresAt: number };
@@ -22,6 +22,23 @@ let cached: CachedToken | null = null;
 
 export function spotifyConfigured(): boolean {
   return !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
+}
+
+/**
+ * Best-effort token pre-warm at server boot. Spotify's accounts edge
+ * occasionally returns 503 "overflow" — fetching the token lazily on the
+ * admin's first search means the admin pays that cost. Pre-warming at
+ * boot moves it off the critical path. Silent on failure: the on-demand
+ * retry path inside `getAccessToken` will try again when actually needed.
+ */
+export async function prewarmSpotifyToken(): Promise<void> {
+  if (!spotifyConfigured()) return;
+  try {
+    const t = await getAccessToken();
+    if (t) console.log("[spotify] token pre-warmed");
+  } catch {
+    /* silent — lazy path will retry on first real call */
+  }
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {

@@ -53,10 +53,25 @@ interface PersonLite {
   itunesArtistId?: string | null;
 }
 
+/**
+ * Unified artist-candidate shape. Originally Spotify-only, but Spotify's
+ * accounts edge (accounts.spotify.com) periodically throws 503 "overflow"
+ * from Google's load balancer — common with shared cloud egress IPs.
+ * When that happens we auto-fall-back to Apple's iTunes Search API (no
+ * auth, no shared LB) and surface those candidates here instead. The
+ * `source` discriminator drives which external link, badge, and pick
+ * path the row uses.
+ */
 interface SpotifyCandidate {
   id: string;
   name: string;
-  spotifyUrl: string;
+  source: "spotify" | "apple";
+  /** Present when source === "spotify". */
+  spotifyUrl?: string;
+  /** Present when source === "apple". */
+  appleMusicUrl?: string;
+  /** Apple iTunes artist id — present when source === "apple". */
+  itunesArtistId?: string;
   photoUrl: string | null;
   popularity: number;
   followers: number;
@@ -225,10 +240,54 @@ export function NewAlbumArtistDialog({
   // the UI can show an honest error instead of a misleading empty state.
   const [spotifyCandidates, setSpotifyCandidates] = useState<SpotifyCandidate[]>([]);
   const [spotifyFetching, setSpotifyFetching] = useState(false);
+  // True when results came from the Apple iTunes fallback path instead of
+  // Spotify (because Spotify's accounts edge was throttled). We still
+  // render the same picker grid; only a small banner changes.
+  const [fellBackToApple, setFellBackToApple] = useState(false);
+
+  /**
+   * Apple iTunes Search fallback. Runs when Spotify's accounts edge is
+   * throttled. iTunes Search has no auth and isn't fronted by the same
+   * load balancer, so it reliably succeeds when Spotify's token endpoint
+   * is shedding traffic. Returned candidates lose follower/popularity
+   * counts and an embedded portrait (those are Spotify-only), but the
+   * downstream confirm/scrape path already uses Apple — so a fan ends
+   * up with the same enriched Person row either way.
+   */
+  const runAppleFallback = async (): Promise<SpotifyCandidate[] | null> => {
+    try {
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/admin/apple/artist-search?q=${encodeURIComponent(trimmed)}`,
+        {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      );
+      if (!res.ok) return null;
+      const json = (await res.json()) as { candidates: AppleCandidate[] };
+      return (json.candidates ?? []).map<SpotifyCandidate>((a) => ({
+        id: `apple-${a.artistId}`,
+        name: a.name,
+        source: "apple",
+        appleMusicUrl: a.appleMusicUrl,
+        itunesArtistId: a.artistId,
+        photoUrl: null,
+        popularity: 0,
+        followers: 0,
+        genres: a.primaryGenre ? [a.primaryGenre] : [],
+      }));
+    } catch {
+      return null;
+    }
+  };
+
   const runSpotifySearch = async () => {
     setSpotifyFetching(true);
     setSpotifyError(null);
     setSpotifyCandidates([]);
+    setFellBackToApple(false);
+    let spotifyOk = false;
     try {
       const token = getAuthToken();
       const res = await fetch(
@@ -239,18 +298,37 @@ export function NewAlbumArtistDialog({
         },
       );
       if (res.status === 503) {
+        // 503 here means Spotify isn't configured server-side at all
+        // (no client id/secret). Apple fallback won't help with the
+        // "configured" copy, but it's still strictly better than
+        // showing a dead end — try it.
         setSpotifyError("configured");
       } else if (!res.ok) {
         setSpotifyError("failed");
       } else {
         const json = (await res.json()) as { candidates: SpotifyCandidate[] };
-        setSpotifyCandidates(json.candidates ?? []);
+        const list = (json.candidates ?? []).map<SpotifyCandidate>((c) => ({
+          ...c,
+          source: "spotify",
+        }));
+        setSpotifyCandidates(list);
+        spotifyOk = true;
       }
     } catch {
       setSpotifyError("failed");
-    } finally {
-      setSpotifyFetching(false);
     }
+    // Only fall back to Apple when the Spotify call clearly failed.
+    // "No results" from Spotify is treated as a real answer, not a
+    // failure — we don't shadow it with Apple results.
+    if (!spotifyOk) {
+      const appleList = await runAppleFallback();
+      if (appleList && appleList.length > 0) {
+        setSpotifyCandidates(appleList);
+        setFellBackToApple(true);
+        setSpotifyError(null);
+      }
+    }
+    setSpotifyFetching(false);
   };
 
   // ---------- Mutations ----------
@@ -299,7 +377,7 @@ export function NewAlbumArtistDialog({
     await runSpotifySearch();
   };
 
-  // ---------- Action: pick Spotify candidate → look up Apple ----------
+  // ---------- Action: pick candidate → look up Apple ----------
   const handlePick = async (c: SpotifyCandidate) => {
     // Each pick gets its own monotonic id so a slow earlier lookup
     // can't overwrite a later pick's appleCandidate.
@@ -310,6 +388,19 @@ export function NewAlbumArtistDialog({
     setAppleLooked(false);
     setAppleErrored(false);
     setAppleCandidate(null);
+    // Apple-sourced candidates already carry their Apple identity — no
+    // need to re-resolve via the Apple search endpoint. Short-circuit
+    // straight to "looked" with the candidate we have.
+    if (c.source === "apple" && c.appleMusicUrl && c.itunesArtistId) {
+      setAppleCandidate({
+        artistId: c.itunesArtistId,
+        name: c.name,
+        appleMusicUrl: c.appleMusicUrl,
+        primaryGenre: c.genres[0] ?? null,
+      });
+      setAppleLooked(true);
+      return;
+    }
     try {
       const token = getAuthToken();
       const res = await fetch(
@@ -381,7 +472,10 @@ export function NewAlbumArtistDialog({
         name: apple?.name || picked.name,
         photoUrl: apple?.photoUrl || picked.photoUrl || null,
         bio: apple?.bio || null,
-        spotifyUrl: picked.spotifyUrl,
+        // Only set spotifyUrl when the pick actually came from Spotify.
+        // Apple-fallback picks have no Spotify identity yet — admin can
+        // match later via the bulk Spotify-match tool.
+        spotifyUrl: picked.source === "spotify" ? (picked.spotifyUrl ?? null) : null,
         appleMusicUrl: apple?.appleMusicUrl || appleCandidate?.appleMusicUrl || null,
         itunesArtistId: apple?.itunesArtistId || appleCandidate?.artistId || null,
       };
@@ -451,7 +545,7 @@ export function NewAlbumArtistDialog({
             )}
             <DialogTitle className="text-[17px] font-semibold text-slate-900">
               {stage === "intro" && (mode === "person" ? "Add a person" : "Who's the artist?")}
-              {stage === "streaming" && "Search Spotify"}
+              {stage === "streaming" && "Search streaming"}
               {stage === "confirm" && (mode === "person" ? "Confirm person" : "Confirm artist")}
             </DialogTitle>
           </div>
@@ -575,9 +669,19 @@ export function NewAlbumArtistDialog({
         {stage === "streaming" && (
           <div className="flex-1 overflow-y-auto p-5 space-y-3">
             <div className="flex items-center gap-2 text-[12.5px] text-slate-500">
-              <SiSpotify className="w-3.5 h-3.5 text-[#1DB954]" />
-              Searching Spotify for <span className="font-semibold text-slate-700">"{trimmed}"</span>
+              {fellBackToApple ? (
+                <SiApplemusic className="w-3.5 h-3.5 text-[#FA243C]" />
+              ) : (
+                <SiSpotify className="w-3.5 h-3.5 text-[#1DB954]" />
+              )}
+              {fellBackToApple ? "Showing Apple Music matches for" : "Searching Spotify for"}{" "}
+              <span className="font-semibold text-slate-700">"{trimmed}"</span>
             </div>
+            {fellBackToApple && (
+              <div className="text-[11.5px] text-slate-500 leading-snug -mt-1">
+                Spotify is throttling our edge right now — Apple Music results are below. You can match Spotify later from the artist's profile.
+              </div>
+            )}
 
             {spotifyFetching ? (
               <div className="py-10 flex items-center justify-center text-slate-400">
@@ -664,21 +768,25 @@ export function NewAlbumArtistDialog({
                         <span className="text-[13px] font-semibold text-slate-900 truncate">
                           {c.name}
                         </span>
-                        <a
-                          href={c.spotifyUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-slate-400 hover:text-[#1DB954] flex-shrink-0 inline-flex items-center"
-                          aria-label={`Open ${c.name} on Spotify`}
-                          title="Open on Spotify"
-                          data-testid={`link-open-spotify-${c.id}`}
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                        {(c.source === "spotify" ? c.spotifyUrl : c.appleMusicUrl) && (
+                          <a
+                            href={(c.source === "spotify" ? c.spotifyUrl : c.appleMusicUrl) as string}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className={`flex-shrink-0 inline-flex items-center text-slate-400 ${c.source === "spotify" ? "hover:text-[#1DB954]" : "hover:text-[#FA243C]"}`}
+                            aria-label={`Open ${c.name} on ${c.source === "spotify" ? "Spotify" : "Apple Music"}`}
+                            title={`Open on ${c.source === "spotify" ? "Spotify" : "Apple Music"}`}
+                            data-testid={`link-open-${c.source}-${c.id}`}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-500 truncate">
-                        {c.followers > 0 ? `${formatFollowers(c.followers)} followers` : c.genres[0] || "Artist"}
+                        {c.followers > 0
+                          ? `${formatFollowers(c.followers)} followers`
+                          : c.genres[0] || (c.source === "apple" ? "Apple Music artist" : "Artist")}
                       </div>
                     </div>
                   </div>
@@ -698,8 +806,17 @@ export function NewAlbumArtistDialog({
                   {picked.name}
                 </div>
                 <div className="text-[11.5px] text-slate-500 truncate flex items-center gap-1">
-                  <SiSpotify className="w-3 h-3 text-[#1DB954] flex-shrink-0" />
-                  {picked.followers > 0 ? `${formatFollowers(picked.followers)} followers on Spotify` : "Spotify"}
+                  {picked.source === "spotify" ? (
+                    <>
+                      <SiSpotify className="w-3 h-3 text-[#1DB954] flex-shrink-0" />
+                      {picked.followers > 0 ? `${formatFollowers(picked.followers)} followers on Spotify` : "Spotify"}
+                    </>
+                  ) : (
+                    <>
+                      <SiApplemusic className="w-3 h-3 text-[#FA243C] flex-shrink-0" />
+                      {picked.genres[0] || "Apple Music"}
+                    </>
+                  )}
                 </div>
               </div>
             </div>

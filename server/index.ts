@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedCatalog } from "./storage";
+import { prewarmSpotifyToken } from "./lib/spotify";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -110,6 +111,11 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      // Fire-and-forget Spotify token pre-warm so the admin's first
+      // artist search doesn't pay the cold-start cost (and so a flaky
+      // accounts.spotify.com edge has 3 retry attempts before any UI
+      // sees a failure).
+      prewarmSpotifyToken();
     },
   );
 })();
