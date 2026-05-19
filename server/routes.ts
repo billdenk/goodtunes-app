@@ -2612,6 +2612,132 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return result;
   }
 
+  // Look up plain (non-synced) lyrics on Genius as a fallback when
+  // LRCLIB has nothing. Unauthenticated path — Genius's public
+  // /api/search/multi endpoint accepts unsigned requests, and the song
+  // page itself renders lyrics into `<div data-lyrics-container="true">`
+  // blocks that we can scrape directly. Returns the plain lyrics string
+  // on a confident match, or null otherwise.
+  //
+  // Confidence rules:
+  //   - search hit's primary artist must fuzzy-equal the queried artist
+  //     OR the hit URL must contain the queried artist slug
+  //   - search hit's song title must fuzzy-equal the queried title (so
+  //     we don't accept "Track 1 (Live)" when asked for "Track 1")
+  // Returns null on any failure — caller treats null as "not found".
+  //
+  // No synced cues: Genius doesn't publish timing. Caller can still run
+  // GoodSync (ElevenLabs forced alignment) on the plain text afterward.
+  async function fetchFromGenius(
+    title: string,
+    artist: string,
+  ): Promise<{ plain: string; sourceUrl: string } | null> {
+    const ua = "GoodTunes/1.0 (admin lyric fetch; https://goodtunes.app)";
+    const tryJson = async (url: string): Promise<any | null> => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 10_000);
+      try {
+        const r = await fetch(url, {
+          headers: {
+            "User-Agent": ua,
+            Accept: "application/json, text/plain, */*",
+          },
+          signal: ac.signal,
+        });
+        if (!r.ok) return null;
+        return await r.json();
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    const tryHtml = async (url: string): Promise<string | null> => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 12_000);
+      try {
+        const r = await fetch(url, {
+          headers: { "User-Agent": ua, Accept: "text/html" },
+          signal: ac.signal,
+        });
+        if (!r.ok) return null;
+        return await r.text();
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    if (!title || !artist) return null;
+    const q = encodeURIComponent(`${title} ${artist}`);
+    const search = await tryJson(
+      `https://genius.com/api/search/multi?per_page=5&q=${q}`,
+    );
+    // Response shape: { response: { sections: [{ type: 'song', hits: [{ result: {...} }] }] } }
+    const sections: any[] = search?.response?.sections ?? [];
+    const songHits: any[] = [];
+    for (const sec of sections) {
+      if (sec?.type === "song" && Array.isArray(sec.hits)) {
+        for (const h of sec.hits) if (h?.result) songHits.push(h.result);
+      }
+    }
+    if (songHits.length === 0) return null;
+    const titleKey = fuzzy(title);
+    const artistKey = fuzzy(artist);
+    const match = songHits.find((r) => {
+      const rTitle = fuzzy(String(r?.title || ""));
+      const rArtist = fuzzy(String(r?.primary_artist?.name || ""));
+      const url: string = String(r?.url || "");
+      const urlHasArtist =
+        artistKey.length >= 3 &&
+        url.toLowerCase().replace(/[^a-z0-9]/g, "").includes(artistKey);
+      return rTitle === titleKey && (rArtist === artistKey || urlHasArtist);
+    });
+    if (!match?.url) return null;
+    const html = await tryHtml(String(match.url));
+    if (!html) return null;
+    // Pull every lyrics container. Genius marks the wrapping div with
+    // data-lyrics-container="true"; long songs render two or three of
+    // them stacked. Match opening tag → content → closing div, allowing
+    // any class soup in between.
+    const containerRe =
+      /<div[^>]*data-lyrics-container="true"[^>]*>([\s\S]*?)<\/div>/gi;
+    const parts: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = containerRe.exec(html)) !== null) parts.push(m[1]);
+    if (parts.length === 0) return null;
+    // Convert HTML → plain text:
+    //   1. <br> / <br/> → newline
+    //   2. </p>, </div>, </a> close tags → newline (anchored references)
+    //   3. strip remaining tags
+    //   4. decode the basic HTML entities Genius emits
+    //   5. squeeze >2 blank lines to a single blank line
+    const decode = (s: string) =>
+      s
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#x27;/g, "'");
+    const plain = parts
+      .map((p) =>
+        p
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/(p|div|a)>/gi, "\n")
+          .replace(/<[^>]+>/g, "")
+          .split("\n")
+          .map((l) => decode(l).trim())
+          .join("\n"),
+      )
+      .join("\n\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    if (!plain || plain.length < 20) return null;
+    return { plain, sourceUrl: String(match.url) };
+  }
+
   // Parse LRC-format synced lyrics (e.g. "[00:12.34]First line") into
   // the cue array shape the player consumes. Handles multi-stamp lines
   // (rare; produced when one lyric repeats at multiple timestamps) and
@@ -3991,20 +4117,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             hit = ranked[0];
           }
         }
-        if (!hit) {
-          await logFail("No lyrics found on LRCLIB.");
-          return res.status(404).json({ message: "No lyrics found on LRCLIB for that title + artist." });
+        // Genius fallback — runs when LRCLIB has nothing, returned an
+        // empty result, or flagged the song as instrumental (in which
+        // case LRCLIB has no lyrics on file even though we know the
+        // song isn't actually instrumental). Plain text only (Genius
+        // doesn't publish timing); operator can still run GoodSync on
+        // the result afterward.
+        let geniusResult: { plain: string; sourceUrl: string } | null = null;
+        const lrcLibEmpty =
+          !hit ||
+          !!hit.instrumental ||
+          (!String(hit.plainLyrics || "").trim() &&
+            !String(hit.syncedLyrics || "").trim());
+        if (lrcLibEmpty) {
+          geniusResult = await fetchFromGenius(song.title, album.artist);
         }
-        if (hit.instrumental) {
-          await logFail("LRCLIB marks this song as instrumental.");
-          return res.status(404).json({ message: "LRCLIB lists this song as instrumental." });
+        if (lrcLibEmpty && !geniusResult) {
+          const reason = !hit
+            ? "No lyrics found on LRCLIB or Genius."
+            : hit.instrumental
+              ? "LRCLIB marks this song as instrumental; Genius had no match."
+              : "LRCLIB returned an empty result and Genius had no match.";
+          await logFail(reason);
+          return res.status(404).json({ message: reason });
         }
-        const plain = String(hit.plainLyrics || "").trim();
-        const lrc = String(hit.syncedLyrics || "").trim();
+        const plain = geniusResult
+          ? geniusResult.plain
+          : String(hit.plainLyrics || "").trim();
+        const lrc = geniusResult ? "" : String(hit.syncedLyrics || "").trim();
         const cues = lrc ? parseLrcToCues(lrc) : [];
+        const source: "LRCLIB" | "GENIUS" = geniusResult ? "GENIUS" : "LRCLIB";
         if (!plain && cues.length === 0) {
-          await logFail("LRCLIB returned an empty result.");
-          return res.status(404).json({ message: "LRCLIB returned an empty result for that song." });
+          await logFail(`${source} returned an empty result.`);
+          return res
+            .status(404)
+            .json({ message: `${source} returned an empty result for that song.` });
         }
         // When cues exist, use them to derive the text body so the
         // textarea + the GoodSync overlay stay perfectly word-for-word
@@ -4024,10 +4171,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             songId,
             status: "success",
             summary: {
-              source: "LRCLIB",
+              source,
               hasSynced: cues.length > 0,
               cueCount: cues.length,
               charCount: lyricsBody.length,
+              geniusUrl: geniusResult?.sourceUrl,
             } as any,
             errorMessage: null,
             startedAt,
@@ -4035,7 +4183,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         } catch {}
         return res.json({
           song: updated,
-          source: "LRCLIB",
+          source,
           hasSynced: cues.length > 0,
           cueCount: cues.length,
           charCount: lyricsBody.length,
@@ -4101,6 +4249,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
         let synced = 0;
         let plain = 0;
+        let geniusMatched = 0;
         let instrumental = 0;
         let notFound = 0;
         let failed = 0;
@@ -4135,16 +4284,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 hit = ranked[0];
               }
             }
-            if (!hit) {
-              notFound += 1;
+            // LRCLib whiff (or instrumental flag, or empty result) →
+            // try Genius before giving up. Cheap second pass; the
+            // helper does its own search + scrape + confidence check.
+            // Instrumental tracks STILL get a Genius pass because
+            // LRCLib's `instrumental: true` is often wrong for indie
+            // catalogs — Genius is a useful sanity check.
+            const lrcLibEmpty =
+              !hit ||
+              !!hit?.instrumental ||
+              (!String(hit?.plainLyrics || "").trim() &&
+                !String(hit?.syncedLyrics || "").trim());
+            let geniusResult: { plain: string; sourceUrl: string } | null = null;
+            if (lrcLibEmpty) {
+              geniusResult = await fetchFromGenius(song.title, album.artist);
+            }
+            if (lrcLibEmpty && !geniusResult) {
+              // Genuinely nothing. Honour LRCLib's instrumental flag
+              // for the counter so the operator can spot it in the
+              // summary, otherwise log as not-found.
+              if (hit?.instrumental) instrumental += 1;
+              else notFound += 1;
               continue;
             }
-            if (hit.instrumental) {
-              instrumental += 1;
-              continue;
-            }
-            const plainText = String(hit.plainLyrics || "").trim();
-            const lrc = String(hit.syncedLyrics || "").trim();
+            const plainText = geniusResult
+              ? geniusResult.plain
+              : String(hit.plainLyrics || "").trim();
+            const lrc = geniusResult ? "" : String(hit.syncedLyrics || "").trim();
             const cues = lrc ? parseLrcToCues(lrc) : [];
             if (!plainText && cues.length === 0) {
               notFound += 1;
@@ -4158,7 +4324,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               lyrics: lyricsBody,
               syncedLyrics: cues.length > 0 ? (cues as any) : (null as any),
             });
-            if (cues.length > 0) synced += 1;
+            if (geniusResult) geniusMatched += 1;
+            else if (cues.length > 0) synced += 1;
             else plain += 1;
           } catch (perSongErr: any) {
             failed += 1;
@@ -4170,7 +4337,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // Tiny pacing pause so we don't hammer LRCLIB's public API.
           await new Promise((r) => setTimeout(r, 120));
         }
-        const matched = synced + plain;
+        const matched = synced + plain + geniusMatched;
         try {
           await storage.recordJobRun({
             jobType: "find-missing-lyrics",
@@ -4182,6 +4349,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               matched,
               synced,
               plain,
+              geniusMatched,
               instrumental,
               notFound,
               failed,
@@ -4195,6 +4363,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           matched,
           synced,
           plain,
+          geniusMatched,
           instrumental,
           notFound,
           failed,

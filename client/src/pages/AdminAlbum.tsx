@@ -712,10 +712,10 @@ function TracksPanel({
   const [lyricsImportOpen, setLyricsImportOpen] = useState(false);
   const [creditsImportOpen, setCreditsImportOpen] = useState(false);
 
-  // Album-wide LRCLIB lookup: walks every track missing lyrics and asks
-  // LRCLIB for both plain text + synced cues. No confirmation dialog —
-  // it never overwrites a track that already has lyrics, so it's safe
-  // to fire-and-toast like Download all masters.
+  // Album-wide lyrics lookup: walks every track missing lyrics and
+  // asks LRCLIB first (plain + synced cues), then falls through to a
+  // Genius scrape if LRCLIB has nothing. Never overwrites a track that
+  // already has lyrics, so it's safe to fire-and-toast.
   const findMissingLyricsMut = useMutation({
     mutationFn: async () => {
       const res = await apiRequest(
@@ -731,6 +731,7 @@ function TracksPanel({
         matched: number;
         synced: number;
         plain: number;
+        geniusMatched: number;
         instrumental: number;
         notFound: number;
         failed: number;
@@ -746,13 +747,14 @@ function TracksPanel({
           description:
             r.scanned === 0
               ? "Every track already has lyrics — nothing to look up."
-              : `Searched ${r.scanned} track${r.scanned === 1 ? "" : "s"}, no matches on LRCLIB.`,
+              : `Searched ${r.scanned} track${r.scanned === 1 ? "" : "s"}, no matches on LRCLIB or Genius.`,
         });
         return;
       }
       const parts: string[] = [];
       if (r.synced > 0) parts.push(`${r.synced} GoodSync-ready`);
-      if (r.plain > 0) parts.push(`${r.plain} plain`);
+      if (r.plain > 0) parts.push(`${r.plain} plain from LRCLIB`);
+      if (r.geniusMatched > 0) parts.push(`${r.geniusMatched} from Genius`);
       if (r.notFound > 0) parts.push(`${r.notFound} not found`);
       if (r.instrumental > 0) parts.push(`${r.instrumental} instrumental`);
       if (r.failed > 0) parts.push(`${r.failed} errored`);
@@ -5404,6 +5406,7 @@ function LyricsEditor({
       }
       return (await res.json()) as {
         song: { lyrics: string };
+        source: "LRCLIB" | "GENIUS";
         hasSynced: boolean;
         cueCount: number;
         charCount: number;
@@ -5415,21 +5418,28 @@ function LyricsEditor({
       setDraft(cleanLyricsForEditor(next));
       userEditedRef.current = false;
       await onSaved();
+      // Toast copy varies by source. LRCLIB synced → highlights the
+      // GoodSync-ready badge; LRCLIB plain → suggests Sync with audio;
+      // Genius → mentions the source so the operator knows where the
+      // text came from and that running GoodSync is the next step.
+      const fromGenius = data.source === "GENIUS";
       toast({
         title: data.hasSynced
           ? `Lyrics fetched · GoodSync ready (${data.cueCount} lines)`
           : `Lyrics fetched · ${data.charCount} chars`,
         description: data.hasSynced
           ? "Synced timestamps from LRCLIB — open the player to scroll-test."
-          : "Plain lyrics from LRCLIB. Run “Sync with audio” to add timestamps.",
+          : fromGenius
+            ? "Plain lyrics from Genius. Run \u201CSync with audio\u201D to add timestamps."
+            : "Plain lyrics from LRCLIB. Run \u201CSync with audio\u201D to add timestamps.",
       });
     },
     onError: (e: any) =>
       toast({
-        title: "No LRCLIB match",
+        title: "No lyrics found online",
         description:
           e?.message ||
-          "LRCLIB doesn't have this song. Try Upload or Paste URL.",
+          "LRCLIB and Genius both came back empty. Try Upload or Paste URL.",
         variant: "destructive",
       }),
   });
