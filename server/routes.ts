@@ -412,6 +412,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "audio/aiff": ".aiff",
     "audio/x-aiff": ".aiff",
     "audio/ogg": ".ogg",
+    // Video entries — without these the bulk-videos Dropbox importer
+    // would save every video as `<uuid>.bin` (same shape of bug we hit
+    // for tracks before audio MIMEs were added here). Bulk video import
+    // is the only video path that reaches `uploadFileToObjectStorage`
+    // today; the multer-backed manual upload route owns its own ext
+    // table (`VIDEO_MIME_TO_EXT`).
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
   };
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -2056,6 +2065,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ".aif": "audio/aiff",
     ".ogg": "audio/ogg",
   };
+  // Bonus-tab bulk importers — ext→mime maps for Dropbox folder ingest
+  // of videos and photos. Mirrors AUDIO_MIME_BY_EXT and uses the same
+  // streamDropboxEntries → uploadFileToObjectStorage → createRow loop.
+  const VIDEO_MIME_BY_EXT: Record<string, string> = {
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".m4v": "video/mp4",
+  };
+  const IMAGE_MIME_BY_EXT: Record<string, string> = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+  };
   const LYRIC_EXTENSIONS = new Set([".pdf", ".docx", ".doc", ".txt"]);
   // Per-entry and total-uncompressed caps. With streaming we don't need
   // a wire-size cap any more (the previous 1 GB-on-the-wire bound was a
@@ -2939,6 +2964,141 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       return res.status(400).json({ message: e?.message || "Dropbox import failed." });
     }
+  });
+
+  // Bonus-tab bulk importers. Same plumbing as import-tracks-from-dropbox:
+  // streamDropboxEntries with a per-asset MIME filter, then for each kept
+  // file upload to Object Storage and create one row. The shape mirrors
+  // the audio route on purpose (created/errors/skipped) so the client can
+  // reuse the same toast logic.
+  async function bulkImportBonusFromDropbox(
+    req: any,
+    res: any,
+    opts: {
+      kind: "video" | "photo";
+      mimeByExt: Record<string, string>;
+      supportedHint: string;
+      // Per-entry size cap. Photos stay aligned with the 8 MB manual
+      // upload route; videos stay aligned with the 200 MB manual upload
+      // route. Without this every Bonus import inherited the global
+      // 500 MB Dropbox cap, which would silently let a multi-hundred-MB
+      // photo slip in.
+      maxEntryBytes: number;
+      listExisting: (albumId: string) => Promise<Array<{ position: number }>>;
+      createRow: (
+        albumId: string,
+        publicUrl: string,
+        filename: string,
+        position: number,
+      ) => Promise<{ id: string }>;
+    },
+  ): Promise<any> {
+    try {
+      const albumId = String(req.params.id);
+      const folderUrl = String(req.body?.folderUrl || "").trim();
+      if (!folderUrl) return res.status(400).json({ message: "Paste a Dropbox folder or file link." });
+
+      const album = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found." });
+
+      const existing = await opts.listExisting(albumId);
+      let position = existing.length === 0
+        ? 0
+        : Math.max(...existing.map((e) => e.position ?? 0)) + 1;
+
+      const { entries: tmpEntries, skipped, cleanup } = await streamDropboxEntries(
+        folderUrl,
+        (filename) => extOf(filename) in opts.mimeByExt,
+      );
+      try {
+        if (tmpEntries.length === 0) {
+          const hint = skipped.length > 0
+            ? ` Found ${skipped.length} non-${opts.kind} file${skipped.length === 1 ? "" : "s"}: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? "…" : ""}.`
+            : "";
+          return res.status(400).json({
+            message: `No ${opts.kind}s in that link. Supported: ${opts.supportedHint}.${hint}`,
+            skipped,
+          });
+        }
+        // Finder-style numeric sort so "Photo 2" precedes "Photo 10".
+        tmpEntries.sort((a, b) =>
+          a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: "base" }),
+        );
+
+        const created: Array<{ id: string; filename: string }> = [];
+        const errors: Array<{ filename: string; error: string }> = [];
+        const capMB = Math.round(opts.maxEntryBytes / (1024 * 1024));
+        for (const entry of tmpEntries) {
+          const filename = entry.filename;
+          try {
+            // Per-kind size cap — photos stay at 8 MB, videos at 200 MB,
+            // matching the equivalent manual upload routes. The file has
+            // already streamed to disk by this point so we can't refuse
+            // earlier, but skipping the Object Storage upload + DB row
+            // is what actually matters for product behavior.
+            if (entry.size > opts.maxEntryBytes) {
+              errors.push({
+                filename,
+                error: `Too large (${Math.round(entry.size / (1024 * 1024))} MB; limit ${capMB} MB).`,
+              });
+              continue;
+            }
+            const ext = extOf(filename);
+            const mime = opts.mimeByExt[ext];
+            const publicUrl = await uploadFileToObjectStorage(entry.tmpPath, mime);
+            const row = await opts.createRow(albumId, publicUrl, filename, position);
+            created.push({ id: row.id, filename });
+            position++;
+          } catch (e: any) {
+            errors.push({ filename, error: e?.message || "Failed to import" });
+          }
+        }
+        return res.json({ created, errors, skipped });
+      } finally {
+        await cleanup();
+      }
+    } catch (e: any) {
+      return res.status(400).json({ message: e?.message || "Dropbox import failed." });
+    }
+  }
+
+  app.post("/api/admin/albums/:id/import-videos-from-dropbox", requireAdminBearer, async (req, res) => {
+    return bulkImportBonusFromDropbox(req, res, {
+      kind: "video",
+      mimeByExt: VIDEO_MIME_BY_EXT,
+      supportedHint: ".mp4, .mov, .webm, .m4v",
+      // Matches the manual /api/admin/upload-video multer cap.
+      maxEntryBytes: 200 * 1024 * 1024,
+      listExisting: (albumId) => storage.listAlbumVideos(albumId),
+      createRow: (albumId, videoUrl, filename, position) =>
+        storage.createAlbumVideo({
+          albumId,
+          title: deriveTitleFromFilename(filename) || "Untitled video",
+          description: null as any,
+          videoUrl,
+          posterUrl: null as any,
+          position,
+        } as any),
+    });
+  });
+
+  app.post("/api/admin/albums/:id/import-photos-from-dropbox", requireAdminBearer, async (req, res) => {
+    return bulkImportBonusFromDropbox(req, res, {
+      kind: "photo",
+      mimeByExt: IMAGE_MIME_BY_EXT,
+      supportedHint: ".jpg, .jpeg, .png, .webp, .gif",
+      // Matches the manual photo upload route's 8 MB multer cap and the
+      // "up to 8 MB" copy already shown in the Bonus Photos header.
+      maxEntryBytes: 8 * 1024 * 1024,
+      listExisting: (albumId) => storage.listAlbumPhotos(albumId),
+      createRow: (albumId, photoUrl, _filename, position) =>
+        storage.createAlbumPhoto({
+          albumId,
+          photoUrl,
+          caption: null as any,
+          position,
+        } as any),
+    });
   });
 
   // Audit-log read endpoint. Bill's "did it notify you?" workflow — when
