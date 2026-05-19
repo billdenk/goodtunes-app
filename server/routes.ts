@@ -1030,6 +1030,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "audio/x-flac": ".flac",
     "audio/ogg": ".ogg",
     "audio/webm": ".weba",
+    // AIFF: same auto-transcode flow as WAV (24-bit AIFF won't decode in
+    // Chrome either — the helper probes and emits FLAC when needed).
+    "audio/aiff": ".aiff",
+    "audio/x-aiff": ".aiff",
   };
   const uploadAudio = multer({
     storage: multer.memoryStorage(),
@@ -1048,29 +1052,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       const f = (req as any).file as Express.Multer.File | undefined;
       if (!f) return res.status(400).json({ message: "No file uploaded" });
+      // Stage the upload to a tempfile so ffprobe / ffmpeg can inspect
+      // it. multer's memoryStorage gives us a Buffer; we drop it onto
+      // disk once, run the audio transcode helper (which probes and
+      // either passes through or transcodes 24-bit WAV → FLAC), then
+      // upload both the playback version and — when transcoded — the
+      // ORIGINAL bytes as the archival master.
+      const fsp = await import("node:fs/promises");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      const inExt = AUDIO_MIME_TO_EXT[f.mimetype] || ".mp3";
+      const tmpIn = path.join(os.tmpdir(), `${randomUUID()}${inExt}`);
+      // Track the transcoder output separately so the `finally` can
+      // unlink it without having to re-derive the path.
+      let transcodedTmp: string | null = null;
       try {
-        const ext = AUDIO_MIME_TO_EXT[f.mimetype] || ".mp3";
-        const id = `${randomUUID()}${ext}`;
-        const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
-        const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
-        const firstSlash = trimmed.indexOf("/");
-        const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
-        const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
-        const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
-        const file = objectStorageClient.bucket(bucketName).file(objectName);
-        await file.save(f.buffer, {
-          contentType: f.mimetype,
-          metadata: { cacheControl: "public, max-age=31536000, immutable" },
-          resumable: false,
+        await fsp.writeFile(tmpIn, f.buffer);
+        const conv = await transcodeAudioToWebFriendly(tmpIn, inExt);
+        if (conv.action === "transcode" && conv.outputPath !== tmpIn) {
+          transcodedTmp = conv.outputPath;
+        }
+        // Playback URL — always set (passthrough or transcoded).
+        const url = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
+        // Archival original — only set when we actually transcoded.
+        // Original mime preserved so the saved file lands as .wav /
+        // .aiff on the operator's disk.
+        const sourceUrl = conv.action === "transcode"
+          ? await uploadFileToObjectStorage(tmpIn, f.mimetype)
+          : null;
+        return res.json({
+          url,
+          sourceUrl,
+          transcoded: conv.action === "transcode",
+          sourceBitsPerSample: conv.sourceBitsPerSample,
         });
-        await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
-        return res.json({ url: `/objects/uploads/${id}` });
-      } catch (err) {
+      } catch (err: any) {
         console.error("Audio upload failed", err);
-        return res.status(500).json({ message: "Upload failed" });
+        return res.status(500).json({
+          message: err?.message || "Upload failed",
+        });
+      } finally {
+        // Best-effort cleanup of both tempfiles. The transcoded FLAC
+        // (when present) lives at a different path than tmpIn, so try
+        // both. /tmp gets reaped anyway, so failures are non-fatal.
+        try { await fsp.unlink(tmpIn); } catch {}
+        if (transcodedTmp) {
+          try { await fsp.unlink(transcodedTmp); } catch {}
+        }
       }
     },
   );
+
+  // Bulk + single-file audio uploads share `transcodeAudioToWebFriendly`,
+  // which leaves transcoded FLAC tempfiles in /tmp on the transcode
+  // branch. We rely on os.tmpdir() reaping for those — same convention
+  // the video transcoder uses.
 
   app.post(
     "/api/admin/upload",
@@ -1819,7 +1855,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/songs", requireAdmin, async (req, res) => {
-    const { albumId, title, trackNumber, duration, lyrics, audioUrl } = req.body ?? {};
+    const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl } = req.body ?? {};
     if (!albumId || !title || trackNumber == null) {
       return res.status(400).json({ message: "albumId, title, trackNumber are required" });
     }
@@ -1830,19 +1866,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       duration: duration != null ? Number(duration) : 180,
       lyrics: lyrics ? String(lyrics) : null,
       audioUrl: audioUrl ? normalizeAudioUrl(String(audioUrl)) : null,
+      // Archival original — set by the upload-audio endpoint when it
+      // transcoded a 24-bit / 32-bit / 32-float PCM master down to
+      // FLAC for browser playback. Null when no transcode was needed.
+      audioSourceUrl: audioSourceUrl ? normalizeAudioUrl(String(audioSourceUrl)) : null,
     } as any);
     return res.status(201).json(song);
   });
 
   app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { title, trackNumber, duration, lyrics, audioUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs } = req.body ?? {};
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
     if (duration !== undefined) updates.duration = Number(duration);
     if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
     if (audioUrl !== undefined) updates.audioUrl = audioUrl ? normalizeAudioUrl(String(audioUrl)) : null;
+    // Archival original — cleared when the operator clears the master
+    // (no playback URL ⇒ no archival original to keep). Otherwise set
+    // explicitly when the upload pipeline transcoded the master.
+    if (audioSourceUrl !== undefined) {
+      updates.audioSourceUrl = audioSourceUrl
+        ? normalizeAudioUrl(String(audioSourceUrl))
+        : null;
+    }
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     if (isExplicit !== undefined) updates.isExplicit = Boolean(isExplicit);
     // Preview window is atomic: either both fields null (auto-derived
@@ -2281,6 +2329,155 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try { await fsp.unlink(inputPath); } catch {}
 
     return { outputPath, mime: "video/mp4", ext: ".mp4", action };
+  }
+
+  // Audio equivalent of `transcodeVideoToWebFriendlyMp4`. The common
+  // failure mode is a 24-bit (or 32-bit, or 32-bit-float) PCM WAV
+  // master — HTML5 `<audio>` only reliably decodes **16-bit** PCM,
+  // so Chrome silently refuses to play higher-bit-depth WAVs and
+  // the operator sees a song row whose play button does nothing.
+  //
+  // Strategy per file:
+  //   - `.mp3` / `.m4a` / `.aac` / `.ogg` / `.flac` → already
+  //     browser-friendly across Safari/Chrome/Firefox/Edge,
+  //     **passthrough**.
+  //   - `.wav` / `.aif(f)`: probe with ffprobe. 16-bit PCM →
+  //     passthrough. Anything else (24-bit, 32-bit, 32-bit-float,
+  //     extensible) → **transcode to FLAC** so playback is
+  //     guaranteed without quality loss (FLAC is bit-exact lossless
+  //     and preserves the full 24-bit content from the master).
+  //
+  // The ORIGINAL bytes are never destroyed — callers upload both
+  // the original (for `songs.audioSourceUrl` / archival / future
+  // streaming-service mastering) and the transcoded FLAC (for
+  // `songs.audioUrl` / browser playback). Same caller-cleans-up
+  // convention as the video helper.
+  async function transcodeAudioToWebFriendly(
+    inputPath: string,
+    inputExt: string,
+  ): Promise<{
+    outputPath: string;
+    mime: string;
+    ext: string;
+    action: "passthrough" | "transcode";
+    sourceBitsPerSample?: number;
+    sourceCodec?: string;
+  }> {
+    const lowerExt = inputExt.toLowerCase();
+    // Browser-safe containers — never need a transcode regardless
+    // of internal codec params.
+    const PASSTHROUGH_EXTS = new Set([".mp3", ".m4a", ".aac", ".ogg", ".flac"]);
+    if (PASSTHROUGH_EXTS.has(lowerExt)) {
+      return {
+        outputPath: inputPath,
+        mime: AUDIO_MIME_BY_EXT[lowerExt],
+        ext: lowerExt,
+        action: "passthrough",
+      };
+    }
+
+    const { spawn } = await import("node:child_process");
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    // Probe with ffprobe to find bit depth + codec on the first
+    // audio stream. `bits_per_raw_sample` is the post-decode value;
+    // `bits_per_sample` is the container's claim. They usually
+    // match, but `bits_per_raw_sample` is the source of truth for
+    // PCM-in-WAV.
+    const probe = await new Promise<{ codec: string; bps: number; sampleFmt: string }>(
+      (resolve, reject) => {
+        const p = spawn(
+          "ffprobe",
+          [
+            "-v", "error",
+            "-print_format", "json",
+            "-show_streams",
+            inputPath,
+          ],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        let stdout = "";
+        let stderr = "";
+        p.stdout.on("data", (c) => (stdout += c.toString()));
+        p.stderr.on("data", (c) => (stderr += c.toString()));
+        p.on("error", reject);
+        p.on("close", (code) => {
+          if (code !== 0) return reject(new Error(`ffprobe exited ${code}: ${stderr.trim()}`));
+          try {
+            const json = JSON.parse(stdout);
+            const streams: any[] = json.streams || [];
+            const a = streams.find((s) => s.codec_type === "audio");
+            if (!a) return reject(new Error("No audio stream found."));
+            const bps = Number(a.bits_per_raw_sample || a.bits_per_sample || 0);
+            resolve({
+              codec: String(a.codec_name || ""),
+              bps,
+              sampleFmt: String(a.sample_fmt || ""),
+            });
+          } catch (e: any) {
+            reject(new Error(`ffprobe parse failed: ${e?.message || e}`));
+          }
+        });
+      },
+    );
+
+    // 16-bit PCM (s16) WAV / AIFF plays everywhere — no transcode.
+    const isPcm = /^pcm_/.test(probe.codec);
+    const is16Bit = probe.bps === 16 || probe.sampleFmt === "s16";
+    if (isPcm && is16Bit) {
+      return {
+        outputPath: inputPath,
+        mime: AUDIO_MIME_BY_EXT[lowerExt] || "audio/wav",
+        ext: lowerExt,
+        action: "passthrough",
+        sourceBitsPerSample: probe.bps || 16,
+        sourceCodec: probe.codec,
+      };
+    }
+
+    // Transcode to FLAC. Lossless, browser-supported everywhere,
+    // ~50% smaller than the source WAV, and preserves the full
+    // 24-bit sample depth (FLAC encodes up to 32-bit integer PCM).
+    // Float sources (`pcm_f32le`) are converted to 24-bit integer
+    // FLAC via `-sample_fmt s32` — FLAC stores 32-bit ints but
+    // ffmpeg uses the low 24 bits, which is what every consumer
+    // tool expects.
+    const outputPath = path.join(os.tmpdir(), `${randomUUID()}.flac`);
+    const args = [
+      "-y",
+      "-i", inputPath,
+      "-c:a", "flac",
+      "-compression_level", "5",
+      "-sample_fmt", probe.sampleFmt === "flt" || probe.sampleFmt === "fltp" ? "s32" : "s32",
+      outputPath,
+    ];
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+        let stderr = "";
+        p.stderr.on("data", (c) => (stderr += c.toString()));
+        p.on("error", reject);
+        p.on("close", (code) => {
+          if (code === 0) return resolve();
+          const tail = stderr.split("\n").slice(-6).join("\n").trim();
+          reject(new Error(`ffmpeg audio transcode failed (exit ${code}): ${tail || "no stderr"}`));
+        });
+      });
+    } catch (err) {
+      try { await fsp.unlink(outputPath); } catch {}
+      throw err;
+    }
+
+    return {
+      outputPath,
+      mime: "audio/flac",
+      ext: ".flac",
+      action: "transcode",
+      sourceBitsPerSample: probe.bps || undefined,
+      sourceCodec: probe.codec,
+    };
   }
 
   const IMAGE_MIME_BY_EXT: Record<string, string> = {
@@ -3153,9 +3350,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 const ext = extOf(filename);
                 const mime = AUDIO_MIME_BY_EXT[ext];
 
-                // Stream the tempfile straight to Object Storage — never
-                // pulls the full audio into a single Buffer.
-                const audioUrl = await uploadFileToObjectStorage(entry.tmpPath, mime);
+                // Probe + transcode if the master isn't browser-playable
+                // (24-bit / 32-bit / 32-float PCM WAV is the usual case).
+                // On `passthrough` the helper returns the same tempfile;
+                // on `transcode` it returns a new .flac next to it and
+                // leaves the original in place so we can upload it too.
+                const conv = await transcodeAudioToWebFriendly(entry.tmpPath, ext);
+
+                // Browser-playback URL (always set).
+                const audioUrl = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
+                // Archival original — only set when we actually
+                // transcoded. The original ext/mime is used so the
+                // download lands as `.wav` (or `.aiff`) on disk.
+                const audioSourceUrl = conv.action === "transcode"
+                  ? await uploadFileToObjectStorage(entry.tmpPath, mime)
+                  : null;
+                if (conv.action === "transcode") {
+                  // Clean up the FLAC we generated — the original is
+                  // owned by streamDropboxEntries' cleanup().
+                  try {
+                    const fsp = await import("node:fs/promises");
+                    await fsp.unlink(conv.outputPath);
+                  } catch { /* /tmp gets reaped anyway */ }
+                }
 
                 // Duration is best-effort — non-fatal. parseFile streams the
                 // tempfile too, so a 500 MB WAV stays bounded.
@@ -3172,6 +3389,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   trackNumber,
                   duration,
                   audioUrl,
+                  audioSourceUrl,
                   lyrics: "",
                   instrumental: false,
                   syncedLyrics: null as any,

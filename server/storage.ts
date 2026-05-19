@@ -336,13 +336,15 @@ const SEED_ALBUMS: Album[] = [
 // them loosely and supply the defaults at the insert-site below.
 type SeedSong = Omit<
   Song,
-  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform"
+  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform" | "audioSourceUrl" | "isExplicit"
 > & {
   syncedLyrics?: Song["syncedLyrics"];
   instrumental?: Song["instrumental"];
   previewStartMs?: Song["previewStartMs"];
   previewEndMs?: Song["previewEndMs"];
   waveform?: Song["waveform"];
+  audioSourceUrl?: Song["audioSourceUrl"];
+  isExplicit?: Song["isExplicit"];
 };
 const SEED_SONGS: SeedSong[] = [
   { id: "song-1-1", albumId: "album-1", title: "The Quiet Before", trackNumber: 1, duration: 214, lyrics: "In the space between the seconds\nWhere the clocks forget to breathe\nI found a version of the stillness\nThat I never thought to seek\n\nWhen the world stops, I'll be here\nWhen the world stops, I'll be near\nIn the silence that surrounds us\nIn the peace that comes to ground us\nWhen the world stops", audioUrl: null },

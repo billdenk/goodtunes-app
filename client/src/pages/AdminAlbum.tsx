@@ -145,6 +145,10 @@ interface SongLite {
   duration: number;
   lyrics: string | null;
   audioUrl: string | null;
+  // Archival original — set when the upload pipeline transcoded the
+  // master (e.g. 24-bit WAV → FLAC for browser playback). Null when
+  // the upload was already playable in browsers. See server schema.
+  audioSourceUrl?: string | null;
   syncedLyrics?: { timeMs: number; endMs?: number; text: string }[] | null;
   instrumental?: boolean | null;
   isExplicit?: boolean | null;
@@ -1969,6 +1973,11 @@ function AddTrackForm({
   // an audio URL into the title field. Sent through to POST /api/admin/songs
   // alongside title + duration so the track lands fully wired.
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  // Set alongside `audioUrl` when the upload pipeline transcoded a
+  // high-bit-depth master to FLAC for browser playback. Carries the
+  // ORIGINAL bytes (24-bit WAV / 32-bit PCM / etc.) so we can persist
+  // them in `audioSourceUrl` and offer a download link from the row.
+  const [audioSourceUrl, setAudioSourceUrl] = useState<string | null>(null);
   const [audioFilename, setAudioFilename] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -2002,7 +2011,12 @@ function AddTrackForm({
     // Drop any previously-attached audio URL up front. Without this, a
     // failed re-attach could leave a stale URL silently committed to
     // state while the chip's filename gets cleared in the catch below.
+    // Clear the archival source alongside it — the two travel as a
+    // pair; otherwise a re-attach that fails (or a manual URL paste
+    // afterwards) could ship a stale audioSourceUrl from the previous
+    // upload to the server.
     setAudioUrl(null);
+    setAudioSourceUrl(null);
     // Pre-fill what we can BEFORE the upload finishes so the admin sees
     // the row populate instantly while the bytes stream up.
     if (!title.trim()) setTitle(clientDeriveTitleFromFilename(f.name));
@@ -2014,8 +2028,15 @@ function AddTrackForm({
     });
     setUploading(true);
     try {
-      const url = await uploadAudioFile(f);
-      setAudioUrl(url);
+      const result = await uploadAudioFile(f);
+      setAudioUrl(result.url);
+      setAudioSourceUrl(result.sourceUrl);
+      if (result.transcoded) {
+        toast({
+          title: "Master converted for browser playback",
+          description: `${result.sourceBitsPerSample ?? "high"}-bit WAV preserved as the archival original; a FLAC copy will stream in browsers.`,
+        });
+      }
     } catch (e: any) {
       setError(e?.message || "Upload failed");
       setAudioFilename(null);
@@ -2045,6 +2066,11 @@ function AddTrackForm({
     const derived = clientDeriveTitleFromFilename(file);
     const normalized = normalizeAudioUrl(trimmed);
     setAudioUrl(normalized);
+    // A pasted URL didn't go through our transcode pipeline, so any
+    // prior archival source from a previous upload is now stale —
+    // drop it so we don't ship it to the server alongside an
+    // unrelated playback URL.
+    setAudioSourceUrl(null);
     setAudioFilename(file);
     setTitle(derived);
     const token = ++probeTokenRef.current;
@@ -2060,6 +2086,7 @@ function AddTrackForm({
     // re-fill the duration field after detach.
     probeTokenRef.current++;
     setAudioUrl(null);
+    setAudioSourceUrl(null);
     setAudioFilename(null);
   };
 
@@ -2068,6 +2095,7 @@ function AddTrackForm({
       title: string;
       duration: number;
       audioUrl: string | null;
+      audioSourceUrl: string | null;
     }) => {
       const res = await apiRequest("POST", "/api/admin/songs", {
         albumId,
@@ -2075,6 +2103,7 @@ function AddTrackForm({
         trackNumber: nextTrackNumber,
         duration: input.duration,
         ...(input.audioUrl ? { audioUrl: input.audioUrl } : {}),
+        ...(input.audioSourceUrl ? { audioSourceUrl: input.audioSourceUrl } : {}),
       });
       return res.json();
     },
@@ -2089,6 +2118,7 @@ function AddTrackForm({
       setTitle("");
       setDurationText("");
       setAudioUrl(null);
+      setAudioSourceUrl(null);
       setAudioFilename(null);
       setError(null);
       queueMicrotask(() => titleRef.current?.focus());
@@ -2122,6 +2152,7 @@ function AddTrackForm({
       title: trimmed,
       duration: parsed.seconds,
       audioUrl,
+      audioSourceUrl,
     });
   };
 
@@ -4324,23 +4355,29 @@ function TrackRow({
             without opening a tab. Replaces the dead Masters tab's
             "click to play / download" affordance with a single, focused
             action right where the operator already lives (Tracks). */}
-        {!expanded && !!song.audioUrl && (
-          <a
-            href={song.audioUrl}
-            // Preserve the original audio extension so the saved file
-            // opens correctly. Server stores `/objects/uploads/<uuid>.<ext>`
-            // (mp3 / wav / flac / m4a / ogg) — fall back to .mp3 only
-            // if the URL is malformed (defensive; shouldn't happen).
-            download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${song.audioUrl.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3"}`}
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
-            aria-label={`Download master for ${song.title}`}
-            title="Download master"
-            data-testid={`button-download-master-${song.id}`}
-          >
-            <Download className="w-3.5 h-3.5" />
-          </a>
-        )}
+        {!expanded && !!song.audioUrl && (() => {
+          // Prefer the archival original when the upload pipeline
+          // transcoded the master for browser playback — the operator
+          // almost always wants the 24-bit WAV they uploaded, not the
+          // FLAC proxy. Falls back to audioUrl when no transcode
+          // happened (most modern uploads).
+          const downloadHref = song.audioSourceUrl ?? song.audioUrl!;
+          const downloadExt = downloadHref.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
+          const isOriginal = !!song.audioSourceUrl;
+          return (
+            <a
+              href={downloadHref}
+              download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${downloadExt}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
+              aria-label={`Download master for ${song.title}`}
+              title={isOriginal ? `Download original master (${downloadExt.slice(1).toUpperCase()})` : "Download master"}
+              data-testid={`button-download-master-${song.id}`}
+            >
+              <Download className="w-3.5 h-3.5" />
+            </a>
+          );
+        })()}
             {/* Right-aligned P/L/C status chips — Preview / Lyrics /
                 Credits. Hover-only per the chips mockup: the row stays
                 silent at rest so the eye reads "title · 3:30" cleanly,
@@ -8486,12 +8523,23 @@ function AudioEditor({
   const [draftUrl, setDraftUrl] = useState<string>(() =>
     normalizeAudioUrl(song.audioUrl ?? ""),
   );
+  // Tracks the archival original URL alongside `draftUrl`. Set when a
+  // freshly-uploaded master was transcoded (e.g. 24-bit WAV → FLAC);
+  // also seeded from any persisted `song.audioSourceUrl` on mount so
+  // a re-open of the editor doesn't drop the existing original. When
+  // the operator clears the playback URL we clear this too — the
+  // original only makes sense as a companion to the playback file.
+  const [draftSourceUrl, setDraftSourceUrl] = useState<string | null>(
+    () => song.audioSourceUrl ?? null,
+  );
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const dirty = (draftUrl || null) !== (song.audioUrl ?? null);
+  const dirty =
+    (draftUrl || null) !== (song.audioUrl ?? null) ||
+    (draftSourceUrl ?? null) !== (song.audioSourceUrl ?? null);
 
   const handleFile = async (f: File) => {
     setLocalError(null);
@@ -8505,8 +8553,15 @@ function AudioEditor({
     }
     setUploading(true);
     try {
-      const url = await uploadAudioFile(f);
-      setDraftUrl(url);
+      const result = await uploadAudioFile(f);
+      setDraftUrl(result.url);
+      setDraftSourceUrl(result.sourceUrl);
+      if (result.transcoded) {
+        toast({
+          title: "Master converted for browser playback",
+          description: `${result.sourceBitsPerSample ?? "high"}-bit WAV preserved as the archival original; a FLAC copy will stream in browsers.`,
+        });
+      }
     } catch (e: any) {
       setLocalError(e?.message || "Upload failed");
     } finally {
@@ -8524,6 +8579,10 @@ function AudioEditor({
     mutationFn: async () =>
       apiRequest("PUT", `/api/admin/songs/${song.id}`, {
         audioUrl: draftUrl || null,
+        // Clear the archival original whenever the playback URL is
+        // cleared — they're a pair. Otherwise persist whatever the
+        // transcode pipeline returned.
+        audioSourceUrl: draftUrl ? draftSourceUrl : null,
       }),
     onSuccess: async () => {
       await onSaved();
@@ -8548,7 +8607,7 @@ function AudioEditor({
     const t = setTimeout(() => saveMut.mutate(), 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftUrl, song.audioUrl, uploading]);
+  }, [draftUrl, draftSourceUrl, song.audioUrl, song.audioSourceUrl, uploading]);
 
   return (
     <div
@@ -8641,6 +8700,10 @@ function AudioEditor({
               value={draftUrl}
               onChange={(e) => {
                 setDraftUrl(normalizeAudioUrl(e.target.value));
+                // A manually-typed URL replaces whatever the transcode
+                // pipeline produced — the previous archival original
+                // no longer corresponds to this playback file.
+                setDraftSourceUrl(null);
                 setLocalError(null);
               }}
               placeholder="or paste a URL"
@@ -8663,6 +8726,9 @@ function AudioEditor({
                 value={draftUrl}
                 onChange={(e) => {
                   setDraftUrl(normalizeAudioUrl(e.target.value));
+                  // Manually-typed URL ⇒ drop any transcode-paired
+                  // archival original (no longer corresponds).
+                  setDraftSourceUrl(null);
                   setLocalError(null);
                 }}
                 disabled={uploading || saveMut.isPending}
@@ -8676,18 +8742,23 @@ function AudioEditor({
                   <audio controls> here was redundant chrome. The
                   download fires the browser save dialog without
                   opening a tab. */}
-              {song.audioUrl && (
-                <a
-                  href={song.audioUrl}
-                  download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${song.audioUrl.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3"}`}
-                  className="w-8 h-8 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
-                  aria-label="Download master"
-                  title="Download master"
-                  data-testid={`button-download-master-inline-${song.id}`}
-                >
-                  <Download className="w-4 h-4" />
-                </a>
-              )}
+              {song.audioUrl && (() => {
+                const href = song.audioSourceUrl ?? song.audioUrl!;
+                const ext = href.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
+                const isOriginal = !!song.audioSourceUrl;
+                return (
+                  <a
+                    href={href}
+                    download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${ext}`}
+                    className="w-8 h-8 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                    aria-label="Download master"
+                    title={isOriginal ? `Download original master (${ext.slice(1).toUpperCase()})` : "Download master"}
+                    data-testid={`button-download-master-inline-${song.id}`}
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
+                );
+              })()}
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -8722,6 +8793,7 @@ function AudioEditor({
                     type="button"
                     onClick={() => {
                       setDraftUrl("");
+                      setDraftSourceUrl(null);
                       setLocalError(null);
                     }}
                     className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-rose-600 hover:bg-rose-50"
@@ -9254,7 +9326,19 @@ function ArtworkPanel({
 
 /* ─── Masters tab ──────────────────────────────────────────────────── */
 
-async function uploadAudioFile(file: File): Promise<string> {
+async function uploadAudioFile(
+  file: File,
+): Promise<{
+  url: string;
+  // Set when the server transcoded the master to a browser-friendly
+  // FLAC (24-bit/32-bit/32-float PCM WAV → FLAC). Points at the
+  // ORIGINAL bytes the operator uploaded, preserved for archival
+  // and future streaming-service mastering. Null when the upload
+  // was already playable in browsers (16-bit WAV, FLAC, MP3, …).
+  sourceUrl: string | null;
+  transcoded: boolean;
+  sourceBitsPerSample?: number;
+}> {
   const fd = new FormData();
   fd.append("file", file);
   const token = getAuthToken();
@@ -9271,8 +9355,13 @@ async function uploadAudioFile(file: File): Promise<string> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.message || `Upload failed (${res.status})`);
   }
-  const { url } = await res.json();
-  return url as string;
+  const body = (await res.json()) as {
+    url: string;
+    sourceUrl: string | null;
+    transcoded: boolean;
+    sourceBitsPerSample?: number;
+  };
+  return body;
 }
 
 

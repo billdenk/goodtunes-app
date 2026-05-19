@@ -147,6 +147,16 @@ export const songs = pgTable("songs", {
   duration: integer("duration").notNull().default(180),
   lyrics: text("lyrics"),
   audioUrl: text("audio_url"),
+  // Browser-friendly playback URL is in `audioUrl`. When the operator
+  // uploads a master in a format the browser can't decode (24-bit /
+  // 32-bit / 32-bit-float PCM WAV is the common one — HTML5 <audio>
+  // only handles 16-bit PCM reliably), the import pipeline transcodes
+  // it to FLAC for `audioUrl` and stashes the ORIGINAL bytes here
+  // under `audioSourceUrl`. Null when the upload was already
+  // browser-friendly (no transcode happened). Used for: archival,
+  // re-mastering for streaming services, and a "Download original"
+  // affordance on the admin master row.
+  audioSourceUrl: text("audio_source_url"),
   // Per-line WebVTT-derived timing. Uploaded by admin as a .vtt file,
   // parsed client-side into { timeMs, text } cues. When present, the
   // Player's lyrics overlay uses these timestamps verbatim instead of
