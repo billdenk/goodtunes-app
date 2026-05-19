@@ -21,15 +21,13 @@ export function ExplicitBadge({
   className?: string;
   /**
    * `dark` — for consumer surfaces on the #00062B background (default).
-   *   Solid white fill, dark-navy glyph — Apple's dark-mode chip.
+   * `muted` — alias kept for the consumer album-header meta line
+   *   ("LP · 2025 · E"). Renders identically to `dark` now: per
+   *   replit.md, every "E" on the site uses the same dimmed
+   *   `#98A2B3` chip so the title-row badge and the meta-line badge
+   *   share one styleguide treatment.
    * `slate` — for admin chrome on white cards (used on the Admin Album
    *   Tracks tab next to the collapsed track title).
-   * `muted` — for the consumer album-header meta line ("LP · 2025 · E").
-   *   Matches the surrounding `#98A2B3` meta-text color so the chip
-   *   reads as part of the bulleted list instead of a higher-contrast
-   *   second badge competing with the title-row one. Used after we
-   *   pulled the title-row badge — the meta-line chip is now the sole
-   *   E on the album header.
    */
   tone?: "dark" | "slate" | "muted";
 }) {

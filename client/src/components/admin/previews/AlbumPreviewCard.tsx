@@ -105,7 +105,7 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
         {/* Title + artist */}
         <div className="mt-4 w-full text-center">
           <h2
-            className="text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap"
+            className="text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2.5 flex-wrap"
             data-testid="text-preview-album-title"
           >
             <span>{album.title || "Untitled album"}</span>
@@ -199,7 +199,7 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
                   >
                     {s.trackNumber}
                   </span>
-                  <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                  <span className="flex-1 min-w-0 flex items-center gap-2.5">
                     <span className="text-white text-[15px] font-medium truncate">
                       {s.title}
                     </span>

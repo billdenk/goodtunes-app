@@ -4253,7 +4253,7 @@ function TrackRow({
             reverts on Escape. Apple-Music-row sizing (13.5px medium). */}
         <div className="flex-1 min-w-0">
           {expanded ? (
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               {/* `-ml-2` (not `-mx-2`) so the input's hover/focus border
                   bleeds into the row's left padding for visual alignment
                   with the displayed title, but the RIGHT edge respects
@@ -4303,7 +4303,7 @@ function TrackRow({
                 className="block w-full text-left"
                 data-testid={`button-open-track-${song.id}`}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <div
                     className={[
                       "text-[13.5px] font-medium truncate",
@@ -4826,10 +4826,7 @@ function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: strin
       className="flex items-center justify-center gap-2.5 w-full"
       data-testid={`toggle-explicit-${song.id}`}
     >
-      {/* Parent already controls horizontal rhythm via `gap-2.5`; cancel
-          the badge's baked-in ml-2 so the chip sits flush against the
-          label, not double-spaced. */}
-      <ExplicitBadge tone="slate" className="ml-0" />
+      <ExplicitBadge tone="slate" />
       <span className="text-[11.5px] text-slate-600 font-medium">
         Explicit
       </span>

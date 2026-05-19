@@ -715,7 +715,7 @@ function AlbumCard({
             The "E" pill sits inline with the title; the title gets
             `flex-1 min-w-0` so long titles ellipsize cleanly without
             pushing the badge off the row. */}
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <p
             className="flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate"
             data-testid={`text-album-title-${album.id}`}

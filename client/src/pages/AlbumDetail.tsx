@@ -559,7 +559,7 @@ export function AlbumDetail() {
                     if (album.year) pieces.push(<span key="year">{album.year}</span>);
                     if (album.isExplicit) {
                       pieces.push(
-                        <ExplicitBadge key="explicit" tone="muted" className="ml-0" />,
+                        <ExplicitBadge key="explicit" tone="muted" />,
                       );
                     }
                     return pieces.map((node, i) => (
@@ -679,7 +679,7 @@ export function AlbumDetail() {
                         <span className="text-[15px] tabular-nums" style={{ color: "rgba(255,255,255,0.32)" }}>{song.trackNumber}</span>
                       )}
                     </div>
-                    <div className="flex-1 min-w-0 relative h-full flex items-center gap-1.5">
+                    <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
                       <p className={`text-[15px] font-medium truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}>
                         {song.title}
                       </p>

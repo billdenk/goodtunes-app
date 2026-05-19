@@ -402,7 +402,7 @@ function AlbumRow({ album }: { album: AlbumLite }) {
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold group-hover:text-[#319ED8] transition-colors flex items-center gap-1.5"
+          className="text-slate-900 text-[13.5px] font-semibold group-hover:text-[#319ED8] transition-colors flex items-center gap-2.5"
           data-testid={`text-album-title-${album.id}`}
         >
           <span className="min-w-0 flex-1 truncate">{album.title}</span>
