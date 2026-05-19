@@ -503,9 +503,17 @@ export function AlbumDetail() {
 
             <div className="relative pt-4 pb-3 px-5 text-center">
               <h1
-                className="text-white text-[22px] font-bold leading-tight tracking-tight inline-flex items-center justify-center gap-2 flex-wrap"
+                className="text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap"
                 data-testid="text-album-title"
               >
+                {/* `flex` (not `inline-flex`) so the title row stays
+                    block-level and the artist + meta lines fall under
+                    it. Previously we used inline-flex here AND on the
+                    meta `<p>`, which collapsed all three (title /
+                    artist button / year) onto a single inline row —
+                    Apple-Music's stacked, centered header turned into
+                    a smushed "Love Life Tragedy   Nick Carter2025"
+                    on one line. */}
                 <span>{album.title}</span>
                 {album.isExplicit && <ExplicitBadge />}
               </h1>
@@ -525,14 +533,16 @@ export function AlbumDetail() {
                   what's available so the line never starts with a bullet. */}
               {(album.genre || album.year || album.isExplicit) && (
                 <p
-                  className="text-[13px] mt-1 inline-flex items-center justify-center gap-1.5"
+                  className="text-[13px] mt-1 flex items-center justify-center gap-1.5"
                   style={{ color: "#98A2B3" }}
                   data-testid="text-album-meta"
                 >
                   {/* Apple Music's "Pop · 1994 · E" pattern — when an album is
                       explicit, the chip rides in the meta line as well as
                       next to the title. Belt-and-braces, but matches user
-                      muscle memory from Music/Spotify. */}
+                      muscle memory from Music/Spotify.
+                      `flex` (block-level) — see comment on the h1 above for
+                      why we don't use `inline-flex` here. */}
                   <span>{[album.genre, album.year].filter(Boolean).join(" · ")}</span>
                   {album.isExplicit && <ExplicitBadge />}
                 </p>
