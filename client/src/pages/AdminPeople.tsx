@@ -1,33 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, X, User as UserIcon, Loader2, Sparkles, ChevronDown, SkipForward, ChevronLeft } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, Search, X, User as UserIcon } from "lucide-react";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
-import { SiSpotify } from "react-icons/si";
+import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 
 /**
  * Admin home · People (Phase 6a).
@@ -94,7 +77,6 @@ export function AdminPeople() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [composerOpen, setComposerOpen] = useState(false);
-  const [matchSpotifyOpen, setMatchSpotifyOpen] = useState(false);
   const [view, setView] = useViewMode("people");
 
   useEffect(() => {
@@ -218,42 +200,6 @@ export function AdminPeople() {
             <Plus className="w-3 h-3" />
             Add Person
           </button>
-          {/* Advanced — bulk operations across the whole People catalog.
-              Today only ships "Match on Spotify"; future bulk operations
-              (pull Apple discography for everyone missing one, etc.)
-              would slot in here as additional menu items. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100"
-              data-testid="button-people-advanced"
-              aria-label="Advanced people actions"
-            >
-              <Sparkles className="w-3 h-3" />
-              Advanced
-              <ChevronDown className="w-3 h-3 -mr-0.5 text-slate-400" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={6}
-              className="min-w-[280px] p-1 bg-white text-slate-900 border border-slate-200 shadow-lg"
-            >
-              <DropdownMenuItem
-                onSelect={() => setMatchSpotifyOpen(true)}
-                data-testid="menu-match-spotify"
-                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
-              >
-                <SiSpotify className="w-4 h-4 text-[#1DB954]" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-900">
-                    Match people on Spotify
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Link everyone missing a profile.
-                  </div>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </>)}
       />
 
@@ -311,374 +257,70 @@ export function AdminPeople() {
         }}
         onSkip={() => setComposerOpen(false)}
       />
-
-      <MatchSpotifySheet
-        open={matchSpotifyOpen}
-        onOpenChange={setMatchSpotifyOpen}
-        people={people}
-      />
       </div>
     </AdminFrame>
   );
 }
 
-/* ─── Bulk Spotify matcher ──────────────────────────────────────────────
- * Walks through every Person who's still missing a Spotify URL and
- * fetches their top 3 candidates on demand via the existing
- * /api/admin/people/:id/spotify-candidates endpoint. Identical visual
- * vocabulary to the post-import Spotify step in CreditsImportSheet,
- * just sourced from the catalog rather than from a fresh commit.
- *
- * Per-person candidates fetched lazily (one Spotify API call at a
- * time) so opening the dialog with a 200-person catalog doesn't fan
- * out 200 requests up front.
- */
-interface SpotifyCandidate {
-  id: string;
-  name: string;
-  spotifyUrl: string;
-  photoUrl: string | null;
-  popularity: number;
-  followers: number;
-  genres: string[];
-}
-
-/* Queue entry — person + the candidates we already fetched for them in
- * the bulk scan. Cached up-front so Back/Skip navigation is instant and
- * the queue can be sorted matched-first before the walk begins. */
-interface QueueEntry {
-  id: string;
-  name: string;
-  photoUrl: string | null;
-  candidates: SpotifyCandidate[];
-}
-
-function MatchSpotifySheet({
-  open,
-  onOpenChange,
-  people,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  people: PersonLite[];
-}) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [queue, setQueue] = useState<QueueEntry[]>([]);
-  const [idx, setIdx] = useState(0);
-  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
-  const [phase, setPhase] = useState<"scanning" | "walking" | "empty">("scanning");
-
-  // Bulk scan on open: fetch candidates for every unlinked person at
-  // once, then sort matched-first so the admin breezes through the easy
-  // confirms before hitting the no-match tail. Skipped if nothing to do.
-  useEffect(() => {
-    if (!open) return;
-    const unlinked = people.filter((p) => !p.spotifyUrl);
-    if (unlinked.length === 0) {
-      setQueue([]);
-      setPhase("empty");
-      setIdx(0);
-      setResolvedIds(new Set());
-      return;
-    }
-    let cancelled = false;
-    setPhase("scanning");
-    setIdx(0);
-    setResolvedIds(new Set());
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/people/spotify-scan", {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Scan failed");
-        const json = (await res.json()) as {
-          scanned: { id: string; name: string; candidates: SpotifyCandidate[] }[];
-        };
-        if (cancelled) return;
-        // Only walk people who actually have candidates — no-match rows
-        // are surfaced on the People grid with a small badge instead, so
-        // the dialog doesn't waste the admin's time clicking Skip 20×.
-        const photoById = new Map(people.map((p) => [p.id, p.photoUrl]));
-        const sorted: QueueEntry[] = json.scanned
-          .filter((s) => s.candidates.length > 0)
-          .map((s) => ({
-            ...s,
-            photoUrl: photoById.get(s.id) ?? null,
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        // Refresh the People list so the new spotifyHasMatch badges
-        // appear immediately on the grid behind the dialog.
-        qc.invalidateQueries({ queryKey: ["/api/people"] });
-        setQueue(sorted);
-        setPhase(sorted.length === 0 ? "empty" : "walking");
-      } catch (e: any) {
-        if (cancelled) return;
-        toast({
-          title: "Couldn't scan Spotify",
-          description: e?.message ?? "Try again.",
-          variant: "destructive",
-        });
-        onOpenChange(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const current = queue[idx] ?? null;
-  const resolved = resolvedIds.size;
-
-  const finish = () => {
-    qc.invalidateQueries({ queryKey: ["/api/people"] });
-    if (resolved > 0) {
-      toast({
-        title: "Linked on Spotify",
-        description: `${resolved} ${resolved === 1 ? "person" : "people"} updated.`,
-      });
-    }
-    onOpenChange(false);
-  };
-
-  const advance = () => {
-    const next = idx + 1;
-    if (next >= queue.length) {
-      qc.invalidateQueries({ queryKey: ["/api/people"] });
-      if (resolved > 0) {
-        toast({
-          title: "Linked on Spotify",
-          description: `${resolved} ${resolved === 1 ? "person" : "people"} updated.`,
-        });
-      } else {
-        toast({ title: "Done", description: "No people linked." });
-      }
-      onOpenChange(false);
-    } else {
-      setIdx(next);
-    }
-  };
-
-  const goBack = () => {
-    if (idx > 0) setIdx(idx - 1);
-  };
-
-  const pickMut = useMutation({
-    mutationFn: async (c: SpotifyCandidate) => {
-      if (!current) throw new Error("No current person");
-      // Conservative photo write: only overwrite when the row has no
-      // portrait yet, mirroring SpotifyPickerDialog on AdminPerson.
-      const updates: Record<string, string> = { spotifyUrl: c.spotifyUrl };
-      if (!current.photoUrl && c.photoUrl) updates.photoUrl = c.photoUrl;
-      const res = await apiRequest("PUT", `/api/admin/people/${current.id}`, updates);
-      return res.json();
-    },
-    onSuccess: () => {
-      if (current) {
-        setResolvedIds((prev) => {
-          const next = new Set(prev);
-          next.add(current.id);
-          return next;
-        });
-      }
-      advance();
-    },
-    onError: (err: any) =>
-      toast({
-        title: "Couldn't save",
-        description: err?.message ?? "Try again.",
-        variant: "destructive",
-      }),
-  });
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        if (!v) finish();
-        else onOpenChange(v);
-      }}
-    >
-      <DialogContent
-        className="max-w-2xl bg-white text-slate-900 rounded-xl border-slate-200 shadow-xl p-6 gap-4"
-        data-testid="dialog-match-spotify"
-      >
-        <DialogHeader className="text-left space-y-1 pr-8">
-          {/* Spotify glyph sits inline with the title — same vertical
-              rhythm as the X close button (top-4 right-4) so the header
-              reads as a balanced row across the top of the dialog. */}
-          <div className="flex items-center gap-2">
-            <SiSpotify className="w-5 h-5 text-[#1DB954] shrink-0" />
-            <DialogTitle className="text-[17px] font-semibold text-slate-900">
-              Match people on Spotify
-            </DialogTitle>
-          </div>
-          <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Confirm the right artist, or skip.
-          </DialogDescription>
-        </DialogHeader>
-
-        {phase === "scanning" ? (
-          <div className="py-12 text-center">
-            <Loader2 className="w-5 h-5 mx-auto animate-spin text-slate-400 mb-2" />
-            <div className="text-[13px] font-semibold text-slate-700">
-              Scanning Spotify…
-            </div>
-            <div className="text-[11.5px] text-slate-500 mt-0.5">
-              Pulling candidates for everyone not yet linked.
-            </div>
-          </div>
-        ) : phase === "empty" ? (
-          <div className="py-10 text-center">
-            <SiSpotify className="w-8 h-8 mx-auto text-[#1DB954] mb-2" />
-            <div className="text-[14px] font-semibold text-slate-900">
-              Nothing to confirm
-            </div>
-            <div className="text-[12px] text-slate-500 mt-0.5">
-              Everyone is either linked or has no Spotify match. Check the
-              grid for any "searched, no match" badges.
-            </div>
-          </div>
-        ) : !current ? null : (
-          <div className="space-y-4">
-            <div>
-              <div className="text-[11.5px] font-medium uppercase tracking-wide text-slate-500">
-                {idx + 1} of {queue.length}
-                {resolved > 0 && (
-                  <span className="text-slate-400"> · {resolved} linked</span>
-                )}
-              </div>
-              <div className="mt-0.5 text-[19px] font-semibold text-slate-900" data-testid="text-match-person-name">
-                {current.name}
-              </div>
-            </div>
-
-            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 overflow-hidden">
-                {current.candidates.slice(0, 3).map((c) => (
-                  <li key={c.id}>
-                    <button
-                      onClick={() => pickMut.mutate(c)}
-                      disabled={pickMut.isPending}
-                      className="w-full flex items-center gap-3 py-3 px-3 text-left hover:bg-slate-50 disabled:opacity-60"
-                      data-testid={`button-pick-spotify-${c.id}`}
-                    >
-                      {c.photoUrl ? (
-                        <img
-                          src={c.photoUrl}
-                          alt=""
-                          className="w-14 h-14 rounded-full object-cover bg-slate-100"
-                        />
-                      ) : (
-                        <div className="w-14 h-14 rounded-full bg-slate-200 inline-flex items-center justify-center text-slate-500">
-                          <UserIcon className="w-6 h-6" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-[14.5px] text-slate-900 truncate">
-                          {c.name}
-                        </div>
-                        <div className="text-[12px] text-slate-500 truncate">
-                          {c.followers.toLocaleString()} followers
-                          {c.genres.length > 0 && ` · ${c.genres.slice(0, 3).join(", ")}`}
-                        </div>
-                      </div>
-                      <SiSpotify className="w-4 h-4 text-[#1DB954] shrink-0" />
-                    </button>
-                  </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <DialogFooter className="border-t border-slate-200 pt-3 mt-2 gap-2 sm:justify-between">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={finish}
-              className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              data-testid="button-match-finish"
-            >
-              Finish
-            </button>
-          </div>
-          {phase === "walking" && current && (
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={goBack}
-                disabled={idx === 0 || pickMut.isPending}
-                className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                data-testid="button-match-back"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={advance}
-                disabled={pickMut.isPending}
-                className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                data-testid="button-match-skip"
-              >
-                Skip
-                <SkipForward className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /**
- * SpotifyMatchBadge — small overlay glyph on a person's avatar tile
- * indicating where they stand in the Spotify-match flow:
+ * StreamingBadge — small overlay glyph on a person's avatar tile telling
+ * the admin which streaming services this person is linked to. Sits
+ * half-on / half-off the avatar at ~4:30 (`bottom-[7%] right-[7%]`), the
+ * same convention Apple Music uses for "verified" overlays.
  *
- *   - spotifyUrl set → no badge (already linked, the row is "done")
- *   - spotifyHasMatch === true → green Spotify glyph (scan found candidates,
- *     admin still needs to confirm one via Advanced → Match on Spotify)
- *   - spotifyHasMatch === false → grey glyph with a slash (we searched but
- *     found nothing — admin can edit the person's name and rescan)
- *   - spotifyHasMatch === null → no badge (never scanned)
+ * Priority (only one badge ever renders, max one source of truth):
  *
- * Lives in AdminPeople.tsx for now because the Spotify-match flow is the
- * only consumer; promote to client/src/components/admin/ if a second
- * surface needs it.
+ *   1. `spotifyUrl` set        → full-color Spotify glyph (#1DB954).
+ *      The artist has a confirmed Spotify profile — admin sees the
+ *      brand color and knows the row is "done".
+ *   2. `itunesArtistId` set    → full-color Apple Music glyph (#FA243C).
+ *      Linked on Apple Music but not on Spotify. Common for the
+ *      Apple-fallback path in the new-person dialog.
+ *   3. `spotifyHasMatch === false` → dim slate-300 Spotify glyph.
+ *      We checked Spotify and got zero results. Communicates "we
+ *      looked, don't bother looking again" without claiming a link.
+ *   4. otherwise (never scanned, no Apple link, no Spotify link)
+ *      → no badge.
+ *
+ * Lives in AdminPeople.tsx for now; promote to client/src/components/admin/
+ * if a second surface needs the same vocabulary.
  */
-function SpotifyMatchBadge({
+function StreamingBadge({
   person,
   size,
 }: {
   person: PersonLite;
   size: "sm" | "md";
 }) {
-  if (person.spotifyUrl) return null;
-  if (person.spotifyHasMatch === null || person.spotifyHasMatch === undefined) {
-    return null;
-  }
-  // Sit half-on / half-off the avatar at the ~4:30 position. The badge
-  // is a square so we anchor its bottom-right corner near the avatar's
-  // bottom-right diagonal — `bottom-[7%] right-[7%]` puts the badge
-  // centered roughly on the circle's edge at 45°, so about half overlaps
-  // the photo and half hangs outside. Matches Apple Music's "verified"
-  // / Spotify's "small-glyph-overlay" convention.
   const dim = size === "md" ? "w-6 h-6" : "w-4 h-4";
   const icon = size === "md" ? "w-3.5 h-3.5" : "w-2.5 h-2.5";
-  const hasMatch = person.spotifyHasMatch === true;
+
+  let glyph: JSX.Element | null = null;
+  let title = "";
+  let testid = "";
+
+  if (person.spotifyUrl) {
+    glyph = <SiSpotify className={`${icon} text-[#1DB954]`} />;
+    title = "Linked on Spotify";
+    testid = `badge-spotify-linked-${person.id}`;
+  } else if (person.itunesArtistId) {
+    glyph = <SiApplemusic className={`${icon} text-[#FA243C]`} />;
+    title = "Linked on Apple Music";
+    testid = `badge-apple-linked-${person.id}`;
+  } else if (person.spotifyHasMatch === false) {
+    glyph = <SiSpotify className={`${icon} text-slate-300`} />;
+    title = "Searched Spotify — no match found";
+    testid = `badge-spotify-nomatch-${person.id}`;
+  }
+
+  if (!glyph) return null;
   return (
     <div
       className={`absolute bottom-[7%] right-[7%] ${dim} rounded-full bg-white ring-1 ring-slate-200 shadow-sm flex items-center justify-center`}
-      title={
-        hasMatch
-          ? "Spotify match found — confirm in Advanced › Match on Spotify"
-          : "Searched Spotify — no match found"
-      }
-      data-testid={`badge-spotify-${hasMatch ? "match" : "nomatch"}-${person.id}`}
+      title={title}
+      data-testid={testid}
     >
-      <SiSpotify
-        className={`${icon} ${hasMatch ? "text-[#1DB954]" : "text-slate-300"}`}
-      />
+      {glyph}
     </div>
   );
 }
@@ -715,7 +357,7 @@ function PersonCard({
             </div>
           )}
         </div>
-        <SpotifyMatchBadge person={person} size="md" />
+        <StreamingBadge person={person} size="md" />
       </div>
       <div
         className="mt-3 w-full text-center text-slate-900 text-[13px] font-semibold truncate px-1"
@@ -762,7 +404,7 @@ function PersonRow({
             </div>
           )}
         </div>
-        <SpotifyMatchBadge person={person} size="sm" />
+        <StreamingBadge person={person} size="sm" />
       </div>
       <div className="min-w-0 flex-1">
         <div
