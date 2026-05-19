@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -12,7 +12,9 @@ import {
   Music as MusicIcon,
   RefreshCw,
   Pencil,
+  Trash2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -79,13 +81,42 @@ const TABS: { key: Tab; label: string }[] = [
 export function AdminPerson() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/people/:id");
+  const [, navigate] = useLocation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("overview");
   // Photo editor lives as a modal hanging off the header avatar (same
   // pencil-on-thumbnail pattern as AdminAlbum's Artwork editor). The
   // dedicated Photo tab was removed; Cover is still its own tab because
   // the wide background banner needs more real estate.
   const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const personId = params?.id ?? "";
+
+  // Mirror of AdminAlbum's deleteAlbum mutation. Person FKs on tracks +
+  // albums.primaryArtistId are SET NULL, so deletion unlinks credits and
+  // albums rather than cascading them — the destructive copy below
+  // names that explicitly per the replit.md destructive-actions rule.
+  const deletePerson = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/people/${personId}`);
+    },
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ["/api/people", personId] });
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      toast({ title: "Person deleted." });
+      setDeleteConfirmOpen(false);
+      navigate("/admin/people");
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't delete person",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -227,29 +258,47 @@ export function AdminPerson() {
           </div>
         </div>
 
-        {/* TABS */}
+        {/* TABS — Overview/Cover/Discography on the LEFT, gray trash icon
+            on the RIGHT, both riding the same hairline. Mirrors AdminAlbum:
+            hover reveals a "Delete" label; opens a rose-tinted confirm
+            sheet per the replit.md destructive-actions rule. */}
         <div
-          className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-person"
         >
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={[
-                "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                tab === t.key
-                  ? "text-slate-900"
-                  : "text-slate-400 hover:text-slate-700",
-              ].join(" ")}
-              data-testid={`tab-${t.key}`}
-            >
-              {t.label}
-              {tab === t.key && (
-                <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
-              )}
-            </button>
-          ))}
+          <div className="flex items-center gap-5 overflow-x-auto">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deletePerson.isPending}
+            aria-label="Delete person"
+            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
+            data-testid="button-delete-person"
+          >
+            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              Delete
+            </span>
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* TAB CONTENT */}
@@ -259,6 +308,52 @@ export function AdminPerson() {
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
         {tab === "discography" && <DiscographyPanel person={person} />}
       </div>
+
+      {/* Destructive confirm sheet — names the person and explains what
+          happens to their credits + album links per the replit.md rule.
+          Cancel sits on the left so the thumb defaults away from the
+          destructive action; breathing-room gap before Delete. */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(v) => !deletePerson.isPending && setDeleteConfirmOpen(v)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-delete-person"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Delete <span className="italic">{person.name}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              This removes the person from your catalog. Any credits and
+              albums linked to them stay in place — the credits keep their
+              name snapshot, and albums simply lose the artist link.
+              This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deletePerson.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-delete-person-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => deletePerson.mutate()}
+              disabled={deletePerson.isPending}
+              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              data-testid="button-delete-person-confirm"
+            >
+              {deletePerson.isPending ? "Deleting…" : "Delete person"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminFrame>
   );
 }
