@@ -2652,14 +2652,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         clearTimeout(timer);
       }
     };
+    // Allowlist for the second-hop fetch. We resolve the URL Genius's
+    // search API gave us and confirm it lands on a real Genius host
+    // before issuing the request — defence-in-depth in case the API
+    // response is ever poisoned or unexpectedly redirects elsewhere.
+    const GENIUS_HOSTS = new Set(["genius.com", "www.genius.com"]);
+    const isGeniusUrl = (raw: string): boolean => {
+      try {
+        const u = new URL(raw);
+        return u.protocol === "https:" && GENIUS_HOSTS.has(u.hostname);
+      } catch {
+        return false;
+      }
+    };
     const tryHtml = async (url: string): Promise<string | null> => {
+      if (!isGeniusUrl(url)) return null;
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 12_000);
       try {
+        // `redirect: 'manual'` so a 3xx away from genius.com can't sneak
+        // the request onto an unexpected host. Genius serves the song
+        // page directly with 200 in the normal path; a redirect here is
+        // a signal to bail.
         const r = await fetch(url, {
           headers: { "User-Agent": ua, Accept: "text/html" },
           signal: ac.signal,
+          redirect: "manual",
         });
+        if (r.status === 429) {
+          console.warn(
+            `[fetchFromGenius] rate-limited (429) on ${url} — backing off this run.`,
+          );
+          return null;
+        }
         if (!r.ok) return null;
         return await r.text();
       } catch {
@@ -2698,13 +2723,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!html) return null;
     // Pull every lyrics container. Genius marks the wrapping div with
     // data-lyrics-container="true"; long songs render two or three of
-    // them stacked. Match opening tag → content → closing div, allowing
-    // any class soup in between.
-    const containerRe =
-      /<div[^>]*data-lyrics-container="true"[^>]*>([\s\S]*?)<\/div>/gi;
+    // them stacked AND can nest inline `<div>` children (annotation
+    // anchors, ad slots, etc.). A naive `[\s\S]*?</div>` regex would
+    // terminate at the first inner `</div>` and silently truncate the
+    // lyrics. Instead, find every opening tag with `data-lyrics-container`,
+    // then walk forward with a `<div>`/`</div>` depth counter until the
+    // matching close — that gives us the full container body intact.
+    const openRe = /<div[^>]*data-lyrics-container="true"[^>]*>/gi;
     const parts: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = containerRe.exec(html)) !== null) parts.push(m[1]);
+    let openMatch: RegExpExecArray | null;
+    while ((openMatch = openRe.exec(html)) !== null) {
+      const bodyStart = openMatch.index + openMatch[0].length;
+      const tagRe = /<(\/?)div\b[^>]*>/gi;
+      tagRe.lastIndex = bodyStart;
+      let depth = 1;
+      let end = -1;
+      let tag: RegExpExecArray | null;
+      while ((tag = tagRe.exec(html)) !== null) {
+        if (tag[1] === "/") {
+          depth -= 1;
+          if (depth === 0) {
+            end = tag.index;
+            break;
+          }
+        } else {
+          depth += 1;
+        }
+      }
+      if (end > bodyStart) {
+        parts.push(html.slice(bodyStart, end));
+        openRe.lastIndex = end; // skip past this container so we don't re-enter it
+      }
+    }
     if (parts.length === 0) return null;
     // Convert HTML → plain text:
     //   1. <br> / <br/> → newline
