@@ -518,16 +518,24 @@ export function NewAlbumArtistDialog({
               )}
 
               {trimmed && localMatches.length === 0 && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                // Demo-day pitfall: a previous layout used a 2-column
+                // grid with a generic "Search Spotify" button on the
+                // right. Viewers kept clicking it after typing just a
+                // few letters of the name. Fix: echo the partial name
+                // inside the button label — "Search 'Stevi' on Spotify"
+                // makes it obvious the name isn't finished. "Enter
+                // manually" demotes to a flush-left text link so the
+                // Spotify CTA owns the row visually.
+                <div className="flex items-center justify-between gap-3 pt-1">
                   <button
                     type="button"
                     onClick={handleManual}
                     disabled={busy}
-                    className="h-9 rounded-md border border-slate-300 bg-white text-slate-700 text-[12.5px] font-semibold hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    className="text-[12.5px] font-medium text-slate-500 hover:text-slate-900 underline-offset-2 hover:underline disabled:opacity-60"
                     data-testid="button-enter-manually"
                   >
                     {createPersonMut.isPending ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="inline w-3.5 h-3.5 animate-spin mr-1 -mt-0.5" />
                     ) : null}
                     Enter manually
                   </button>
@@ -535,11 +543,13 @@ export function NewAlbumArtistDialog({
                     type="button"
                     onClick={handleSearchStreaming}
                     disabled={busy}
-                    className="h-9 rounded-md bg-[#1DB954] text-black text-[12.5px] font-semibold hover:bg-[#19a449] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    className="h-9 px-3 rounded-md bg-[#1DB954] text-black text-[12.5px] font-semibold hover:bg-[#19a449] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 max-w-[70%]"
                     data-testid="button-search-streaming"
                   >
-                    <SiSpotify className="w-3.5 h-3.5" />
-                    Search Spotify
+                    <SiSpotify className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">
+                      Search <span className="font-bold">"{trimmed}"</span> on Spotify
+                    </span>
                   </button>
                 </div>
               )}
