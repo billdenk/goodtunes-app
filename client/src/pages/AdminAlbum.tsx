@@ -7699,13 +7699,19 @@ function AudioEditor({
                 concern. Only shows once a master exists — there's
                 nothing to be instrumental about otherwise. */}
             {song.audioUrl && (
-              <div className="-mx-3 mt-1 pt-2.5 px-3 border-t border-slate-100 grid grid-cols-2 gap-3 items-center">
-                {/* Instrumental left, Explicit right — two concerns that
-                    live on every master, paired into a single footer
-                    row so the tile doesn't grow another stacked line.
-                    Each toggle still saves on its own. */}
-                <InstrumentalToggle song={song} />
-                <ExplicitTrackToggle song={song} />
+              <div className="-mx-3 mt-1 pt-2.5 px-3 border-t border-slate-100 grid grid-cols-2 gap-2 items-stretch">
+                {/* Instrumental left, Explicit right — each wrapped in
+                    its own slate-50 chip so the icon + label + switch
+                    read as a single grouped control. Without the chip
+                    the right-hand switch visually floated between the
+                    two labels (Bill: "it looks like Explicit is on
+                    the left"). Apple groups form rows the same way. */}
+                <div className="rounded-lg bg-slate-50 px-2.5 py-2 flex items-center">
+                  <InstrumentalToggle song={song} />
+                </div>
+                <div className="rounded-lg bg-slate-50 px-2.5 py-2 flex items-center">
+                  <ExplicitTrackToggle song={song} />
+                </div>
               </div>
             )}
           </>
