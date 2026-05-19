@@ -23,7 +23,13 @@ import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
  *
  *   - Prepping — we're working on it (today: imported but not yet a GT release)
  *   - Staged   — ready, waiting for sunrise (today: schema doesn't model this; count is 0)
- *   - Live     — visible for purchase (isGoodTunesRelease && !isHidden)
+ *   - Released — visible for purchase (isGoodTunesRelease && !isHidden).
+ *                Industry standard term (Apple Music, Spotify, every
+ *                distro / label tool says "Released"); we used "Live"
+ *                briefly but it reads more like broadcast/streaming.
+ *                The internal TabKey stays "live" — it's just a UI filter
+ *                key, not user-facing, so renaming it would churn for
+ *                no benefit.
  *   - Sunset   — pulled from sale, owners keep access (isHidden)
  *
  * Per-album track count + credit-completion are still Phase 2.
@@ -272,8 +278,8 @@ export function AdminAlbums() {
               <TabBtn active={tab === "staged"} onClick={() => setTab("staged")} count={counts.staged} testId="tab-staged">
                 Staged
               </TabBtn>
-              <TabBtn active={tab === "live"} onClick={() => setTab("live")} count={counts.live} testId="tab-live">
-                Live
+              <TabBtn active={tab === "live"} onClick={() => setTab("live")} count={counts.live} testId="tab-released">
+                Released
               </TabBtn>
               <TabBtn active={tab === "sunset"} onClick={() => setTab("sunset")} count={counts.sunset} testId="tab-sunset">
                 Sunset
