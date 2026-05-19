@@ -50,14 +50,21 @@ export function ArtistDetail() {
           (a.artist ?? "").trim().toLowerCase() === nameLc &&
           !seenIds.has(a.id),
       )
-      .map((a) => ({
-        id: a.id,
-        title: a.title,
-        artist: a.artist ?? artistName,
-        artwork: a.artwork ?? "",
-        year: a.year ?? 0,
-        type: (a.type as Album["type"]) ?? "LP",
-      } as Album));
+      .map(
+        (a) =>
+          ({
+            id: a.id,
+            title: a.title,
+            artist: a.artist ?? artistName,
+            artwork: a.artwork ?? "",
+            // `year` is non-optional on the fan-side Album shape but
+            // DB rows can have it null (admin hasn't filled it in yet).
+            // Use NaN as the "missing" sentinel — the album-tile meta
+            // line below filters it back out so we never render "0".
+            year: a.year ?? NaN,
+            type: (a.type as Album["type"]) ?? "LP",
+          }) as Album,
+      );
     return [...staticMatches, ...dbMatches];
   }, [artistName, dbAlbums]);
 
@@ -354,7 +361,7 @@ export function ArtistDetail() {
                       <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
                     </div>
                     <p className="text-white text-sm font-semibold leading-tight truncate mt-2">{album.title}</p>
-                    <p className="text-white/50 text-xs truncate mt-0.5">{album.year} · {album.type}</p>
+                    <p className="text-white/50 text-xs truncate mt-0.5">{[Number.isFinite(album.year) ? album.year : null, album.type].filter(Boolean).join(" · ")}</p>
                   </button>
                 ))}
               </div>

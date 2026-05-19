@@ -4888,14 +4888,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ----- SuperCredits™ catalog: People -------------------------------------
   // Read is public (the in-app credits surface fetches these); writes are admin.
+  // Public projection of a `people` row. The full row carries admin-only
+  // fields (`contactEmail`, `musoId`, `spotifyHasMatch`) that must never
+  // be returned by these unauthenticated routes — schema comments on
+  // those columns spell this out. Anything not listed here stays admin-
+  // only; add a field explicitly when a fan surface needs it.
+  const toPublicPerson = (p: any) => ({
+    id: p.id,
+    name: p.name,
+    photoUrl: p.photoUrl ?? null,
+    coverUrl: p.coverUrl ?? null,
+    bio: p.bio ?? null,
+    labelId: p.labelId ?? null,
+    appleMusicUrl: p.appleMusicUrl ?? null,
+    spotifyUrl: p.spotifyUrl ?? null,
+    itunesArtistId: p.itunesArtistId ?? null,
+    instagramUrl: p.instagramUrl ?? null,
+    tiktokUrl: p.tiktokUrl ?? null,
+    twitterUrl: p.twitterUrl ?? null,
+    blueskyUrl: p.blueskyUrl ?? null,
+    facebookUrl: p.facebookUrl ?? null,
+    websiteUrl: p.websiteUrl ?? null,
+  });
   app.get("/api/people", async (_req, res) => {
     const rows = await storage.getPeople();
-    return res.json(rows);
+    return res.json(rows.map(toPublicPerson));
   });
   app.get("/api/people/:id", async (req, res) => {
     const p = await storage.getPersonById(String(req.params.id));
     if (!p) return res.status(404).json({ message: "Person not found" });
-    return res.json(p);
+    return res.json(toPublicPerson(p));
   });
   app.post("/api/admin/people", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
