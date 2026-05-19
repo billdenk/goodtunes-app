@@ -424,22 +424,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   });
 
+  // Resolve the public/private bucket + object-name conventions shared by
+  // every upload variant. Factored out so the buffer-, file-, and stream-
+  // based helpers below stay in lock-step.
+  function resolveUploadTarget(mime: string): {
+    id: string;
+    bucketName: string;
+    objectName: string;
+    publicUrl: string;
+  } {
+    const ext = MIME_TO_EXT[mime] || ".bin";
+    const id = `${randomUUID()}${ext}`;
+    const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
+    const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
+    const firstSlash = trimmed.indexOf("/");
+    const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
+    const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
+    const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+    return { id, bucketName, objectName, publicUrl: `/objects/uploads/${id}` };
+  }
+
   // Helper: write a buffer to Object Storage under `.private/uploads/<uuid><ext>`
   // and mark it public so anyone hitting /objects/uploads/<uuid><ext> can read.
   async function uploadBufferToObjectStorage(
     buf: Buffer,
     mime: string,
   ): Promise<string> {
-    const ext = MIME_TO_EXT[mime] || ".bin";
-    const id = `${randomUUID()}${ext}`;
-    const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
-    // privateDir is like "/<bucket>/.private" — strip leading slash, then
-    // split bucket vs object key.
-    const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
-    const firstSlash = trimmed.indexOf("/");
-    const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
-    const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
-    const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+    const { bucketName, objectName, publicUrl } = resolveUploadTarget(mime);
     const file = objectStorageClient.bucket(bucketName).file(objectName);
     await file.save(buf, {
       contentType: mime,
@@ -447,7 +458,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       resumable: false,
     });
     await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
-    return `/objects/uploads/${id}`;
+    return publicUrl;
+  }
+
+  // Stream-from-disk variant used by the Dropbox folder importer. Lets us
+  // hand a 500 MB master to Object Storage without ever loading it into a
+  // single Buffer — the bytes stream tempfile → GCS in ~64 KB chunks. Same
+  // ACL + cache-control shape as `uploadBufferToObjectStorage`.
+  async function uploadFileToObjectStorage(
+    tmpPath: string,
+    mime: string,
+  ): Promise<string> {
+    const fs = await import("node:fs");
+    const { pipeline } = await import("node:stream/promises");
+    const { bucketName, objectName, publicUrl } = resolveUploadTarget(mime);
+    const file = objectStorageClient.bucket(bucketName).file(objectName);
+    // `resumable: false` matches the buffer path. We're already streaming
+    // the request, so multi-chunk resumable uploads would only add latency.
+    const writeStream = file.createWriteStream({
+      contentType: mime,
+      metadata: { cacheControl: "public, max-age=31536000, immutable" },
+      resumable: false,
+    });
+    await pipeline(fs.createReadStream(tmpPath), writeStream);
+    await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+    return publicUrl;
   }
 
   // Paste-from-URL — admin pastes an image URL (Dropbox, Cloudinary,
@@ -2000,8 +2035,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // him paste the share URL once and we fan-out per-track. Same idea
   // for lyrics PDFs/DOCXs. No Dropbox OAuth needed — appending `?dl=1`
   // to a public folder share URL returns a ZIP of every file inside.
-  // We cap downloads at 1 GB to keep memory sane; for a typical album
-  // (10×30 MB WAVs) we're nowhere near that.
+  //
+  // Streaming design: the zip is pulled off Dropbox through `unzipper.Parse()`
+  // and each interesting entry is written straight to a tempfile on local
+  // disk. We NEVER buffer the full zip (or even a full entry) in RAM —
+  // even a 5 GB master folder stays under a few megabytes of heap. The
+  // previous 1 GB-on-the-wire cap was a memory-safety bound; with the
+  // streaming pipeline it's gone. Remaining caps are per-entry (500 MB,
+  // a single audio file) and total-uncompressed (10 GB, a disk-fill
+  // safety bound for one import).
   const AUDIO_MIME_BY_EXT: Record<string, string> = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -2013,13 +2055,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ".ogg": "audio/ogg",
   };
   const LYRIC_EXTENSIONS = new Set([".pdf", ".docx", ".doc", ".txt"]);
-  // Compressed-stream cap and total-inflated cap. Compressed is what we
-  // pull off the wire (streamed, aborted the moment we exceed it).
-  // Uncompressed bounds defend against ZIP-bomb behavior where a tiny
-  // file inflates into a multi-gigabyte payload that fits in RAM only
-  // briefly before OOM-killing the process.
-  const MAX_DROPBOX_COMPRESSED_BYTES = 1024 * 1024 * 1024; // 1 GB on the wire
-  const MAX_DROPBOX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB total inflated
+  // Per-entry and total-uncompressed caps. With streaming we don't need
+  // a wire-size cap any more (the previous 1 GB-on-the-wire bound was a
+  // RAM-safety bound for the buffer-everything design). Per-entry guards
+  // a single pathological file; total-uncompressed guards a zip-bomb that
+  // would otherwise fill the local disk one chunk at a time.
+  const MAX_DROPBOX_UNCOMPRESSED_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB total inflated
   const MAX_DROPBOX_ENTRY_BYTES = 500 * 1024 * 1024; // 500 MB per file
   // Hosts Dropbox uses for share-link content. dl.dropboxusercontent.com
   // is the actual CDN host that `?dl=1` redirects to. Anything else
@@ -2071,120 +2112,152 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return u;
   }
 
-  // Follow redirects manually so we can re-validate the host at every
-  // hop. Native fetch's `redirect: "follow"` will happily send the
-  // request to whatever Location the response specifies, which is
-  // exactly the SSRF vector we have to close.
-  async function fetchDropboxFolderZip(folderUrl: string): Promise<Buffer> {
+  // Open the Dropbox share URL, follow redirects manually with per-hop
+  // SSRF re-validation, and return the Node Readable carrying the raw
+  // body bytes. The caller pipes this into `unzipper.Parse()` so the
+  // zip is decompressed on the fly. Native `redirect: "follow"` is
+  // unsafe — it would send the next hop to whatever Location the
+  // response carries without re-checking the host.
+  async function openDropboxFolderStream(folderUrl: string): Promise<{
+    nodeStream: NodeJS.ReadableStream;
+    cancel: () => void;
+  }> {
+    const { Readable } = await import("node:stream");
     let url = normalizeDropboxFolderUrl(folderUrl);
     const maxHops = 5;
-    // Single shared deadline across the entire fetch — redirect chain
-    // AND body stream. The old per-hop `AbortSignal.timeout` reset on
-    // every hop, so a five-hop chain could quietly burn 5 × 60s before
-    // the body started streaming. 10 minutes is generous enough for a
-    // ~1 GB music master ZIP on a decent connection — the cap is the
-    // wire-size limit (`MAX_DROPBOX_COMPRESSED_BYTES`, currently 1 GB),
-    // not the clock.
-    const timeoutMs = 10 * 60_000;
+    // Single shared deadline across the entire transfer — redirect
+    // chain AND body stream. 30 minutes is generous enough for a
+    // multi-gigabyte master folder on a slow connection.
+    const timeoutMs = 30 * 60_000;
     const ac = new AbortController();
     const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
     let response: Awaited<ReturnType<typeof fetch>> | null = null;
-
     try {
-    for (let hop = 0; hop <= maxHops; hop++) {
-      const r = await fetch(url.toString(), {
-        redirect: "manual",
-        signal: ac.signal,
-      });
-      if (r.status >= 300 && r.status < 400) {
-        const loc = r.headers.get("location");
-        if (!loc) throw new Error("Dropbox redirect with no target.");
-        let next: URL;
-        try { next = new URL(loc, url); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
-        assertDropboxHost(next);
-        url = next;
-        // Discard the redirect body WITHOUT buffering — a hostile 3xx
-        // with a gigabyte payload would otherwise be fully read into
-        // memory before we hop. `cancel()` tears the stream down at
-        // the source.
-        try { await r.body?.cancel(); } catch { /* ignore */ }
-        continue;
-      }
-      response = r;
-      break;
-    }
-    if (!response) throw new Error("Too many Dropbox redirects.");
-    if (!response.ok) {
-      throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}). Make sure the link is shareable.`);
-    }
-    const ct = (response.headers.get("content-type") || "").toLowerCase();
-    if (ct.includes("text/html")) {
-      throw new Error("Dropbox returned a web page instead of files. Check that the link is set to 'Anyone with the link'.");
-    }
-    // Stream the body and stop the moment we exceed our compressed cap.
-    // We don't trust Content-Length because Dropbox doesn't always send
-    // one for chunked transfers.
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Dropbox sent an empty response.");
-    }
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    // Track the first four bytes so we can sniff for the ZIP local-file
-    // header magic (`PK\x03\x04`). Dropbox returns a real zip for folder
-    // shares but the raw file for single-file shares — without this
-    // sniff, AdmZip later barfs "No END header found" which doesn't
-    // tell the admin what they actually did wrong.
-    let magicChecked = false;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        total += value.byteLength;
-        if (total > MAX_DROPBOX_COMPRESSED_BYTES) {
-          try { await reader.cancel(); } catch { /* ignore */ }
-          throw new Error("That folder is too large to import (over 1 GB on the wire).");
+      for (let hop = 0; hop <= maxHops; hop++) {
+        const r = await fetch(url.toString(), {
+          redirect: "manual",
+          signal: ac.signal,
+        });
+        if (r.status >= 300 && r.status < 400) {
+          const loc = r.headers.get("location");
+          if (!loc) throw new Error("Dropbox redirect with no target.");
+          let next: URL;
+          try { next = new URL(loc, url); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
+          assertDropboxHost(next);
+          url = next;
+          // Tear the redirect body down at the source instead of
+          // letting it buffer.
+          try { await r.body?.cancel(); } catch { /* ignore */ }
+          continue;
         }
-        chunks.push(value);
-        if (!magicChecked && total >= 4) {
-          // Concatenate just enough bytes to peek at the header. Cheap —
-          // we abort the whole stream the moment we know it isn't a zip.
-          const head = Buffer.concat(chunks.map((c) => Buffer.from(c)), 4);
-          magicChecked = true;
-          if (!(head[0] === 0x50 && head[1] === 0x4b && (head[2] === 0x03 || head[2] === 0x05 || head[2] === 0x07))) {
-            try { await reader.cancel(); } catch { /* ignore */ }
-            throw new Error(
-              "That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).",
-            );
-          }
-        }
+        response = r;
+        break;
       }
-    }
-    return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+      if (!response) throw new Error("Too many Dropbox redirects.");
+      if (!response.ok) {
+        throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}). Make sure the link is shareable.`);
+      }
+      const ct = (response.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("text/html")) {
+        throw new Error("Dropbox returned a web page instead of files. Check that the link is set to 'Anyone with the link'.");
+      }
+      if (!response.body) throw new Error("Dropbox sent an empty response.");
+      const nodeStream = Readable.fromWeb(response.body as any);
+      return {
+        nodeStream,
+        cancel: () => {
+          try { ac.abort(); } catch {}
+          clearTimeout(deadlineTimer);
+        },
+      };
     } catch (err: any) {
+      clearTimeout(deadlineTimer);
       if (ac.signal.aborted) throw new Error("Dropbox took too long to respond.");
       throw err;
-    } finally {
-      clearTimeout(deadlineTimer);
     }
+    // Note: we deliberately DO NOT clear deadlineTimer on success.
+    // The deadline still has to fire if the body stream stalls — the
+    // caller invokes `cancel()` when the import is done (or fails).
   }
 
-  // ZIP-bomb guard: walk entries' uncompressed sizes BEFORE inflating
-  // any of them. Reject the whole import if any single entry, or the
-  // sum across entries, exceeds our bounds.
-  function assertZipWithinBounds(zip: any): void {
-    let total = 0;
-    for (const e of zip.getEntries()) {
-      if (e.isDirectory) continue;
-      const size = Number(e.header?.size) || 0;
-      if (size > MAX_DROPBOX_ENTRY_BYTES) {
-        throw new Error(`One file in that folder is too large (${Math.round(size / (1024 * 1024))} MB).`);
+  // Stream the Dropbox share zip and write each entry the caller cares
+  // about to a tempfile on local disk. Returns a manifest (filename,
+  // tmpPath, size) plus a `cleanup()` that removes the temp directory.
+  // Memory budget: ~64 KB chunks at a time, regardless of folder size.
+  async function streamDropboxFolderEntries(
+    folderUrl: string,
+    shouldKeep: (filename: string) => boolean,
+  ): Promise<{
+    entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    cleanup: () => Promise<void>;
+  }> {
+    const fs = await import("node:fs");
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { Transform } = await import("node:stream");
+    const { pipeline } = await import("node:stream/promises");
+    const unzipper = (await import("unzipper")).default;
+
+    const sessionDir = await fsp.mkdtemp(path.join(os.tmpdir(), "gt-dropbox-"));
+    const entries: Array<{ filename: string; tmpPath: string; size: number }> = [];
+    let totalUncompressed = 0;
+
+    const cleanup = async () => {
+      try { await fsp.rm(sessionDir, { recursive: true, force: true }); } catch {}
+    };
+
+    const { nodeStream, cancel } = await openDropboxFolderStream(folderUrl);
+    try {
+      // Catch the "this isn't a zip" case up front with a friendly
+      // message. unzipper's own error ("invalid signature") is correct
+      // but won't help the admin who pasted a single-file share.
+      const zipStream = nodeStream.pipe(unzipper.Parse({ forceStream: true } as any));
+
+      for await (const entry of zipStream as AsyncIterable<any>) {
+        const entryPath: string = entry.path || "";
+        const filename = basenameOf(entryPath);
+        if (entry.type === "Directory" || !shouldKeep(filename)) {
+          entry.autodrain();
+          continue;
+        }
+        // Per-entry cap enforced inline by a counting Transform so we
+        // tear the stream down the instant the limit is crossed instead
+        // of writing a 5 GB pathological file out to disk first.
+        const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+        const tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
+        let size = 0;
+        const cap = new Transform({
+          transform(chunk, _enc, cb) {
+            size += chunk.length;
+            if (size > MAX_DROPBOX_ENTRY_BYTES) {
+              cb(new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`));
+              return;
+            }
+            cb(null, chunk);
+          },
+        });
+        await pipeline(entry, cap, fs.createWriteStream(tmpPath));
+        totalUncompressed += size;
+        if (totalUncompressed > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
+          throw new Error(`That folder's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`);
+        }
+        entries.push({ filename, tmpPath, size });
       }
-      total += size;
-      if (total > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
-        throw new Error("That folder's contents are too large to import once unzipped (over 2 GB).");
+    } catch (err: any) {
+      cancel();
+      await cleanup();
+      // unzipper's "invalid signature" / "FILE_ENDED" surface as the
+      // single-file-share case in the wild. Map either to the friendlier
+      // hint we used to show before the streaming rewrite.
+      const msg = String(err?.message || "");
+      if (/invalid signature|FILE_ENDED|end of central directory|END header|not a valid zip/i.test(msg)) {
+        throw new Error("That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).");
       }
+      throw err;
     }
+    cancel();
+    return { entries, cleanup };
   }
   // Turn an artist-supplied filename into a clean track title.
   //
