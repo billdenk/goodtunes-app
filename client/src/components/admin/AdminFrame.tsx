@@ -89,30 +89,21 @@ export function AdminFrame({
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans antialiased">
-      {/* TOP BAR */}
-      <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 flex-shrink-0">
-        <Link
-          href="/admin/albums"
-          className="flex items-center"
-          data-testid="link-admin-home"
-        >
-          <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
-        </Link>
-        <div className="flex items-center gap-3">
-          <span
-            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#319ED8]/10 text-[#319ED8] text-[10.5px] font-bold uppercase tracking-wider"
-            data-testid="badge-admin"
+    <div className="h-screen bg-slate-50 font-sans antialiased flex">
+      <aside className="w-[220px] flex-shrink-0 border-r border-slate-200 bg-white hidden md:flex md:flex-col">
+        {/* Logo sits at the top of the sidebar column so the right
+            preview pane + its vertical divider can reach the very top
+            of the viewport. */}
+        <div className="h-14 flex-shrink-0 flex items-center px-4">
+          <Link
+            href="/admin/albums"
+            className="flex items-center"
+            data-testid="link-admin-home"
           >
-            Admin
-          </span>
+            <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
+          </Link>
         </div>
-      </header>
-
-      {/* BODY */}
-      <div className="flex-1 flex min-h-0">
-        <aside className="w-[220px] flex-shrink-0 border-r border-slate-200 bg-white py-4 hidden md:block">
-          <nav className="px-2 space-y-0.5" data-testid="nav-admin-entities">
+        <nav className="px-2 pt-2 space-y-0.5" data-testid="nav-admin-entities">
             <SidebarLink
               icon={Disc3}
               label="Albums"
@@ -156,9 +147,22 @@ export function AdminFrame({
           </nav>
         </aside>
 
-        <main className="flex-1 min-w-0 p-6 sm:p-8 overflow-x-hidden">
-          <div className="max-w-[1180px]">{children}</div>
-        </main>
+      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto relative">
+        {/* Admin badge anchored to the top-right of the main column so
+            it sits to the LEFT of the preview pane's vertical divider,
+            not above it. `sticky` keeps it visible as the operator
+            scrolls the editor, mirroring how the sidebar logo stays
+            put on the left. */}
+        <div className="sticky top-0 z-10 flex justify-end pointer-events-none px-4 pt-3">
+          <span
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#319ED8]/10 text-[#319ED8] text-[10.5px] font-bold uppercase tracking-wider pointer-events-auto"
+            data-testid="badge-admin"
+          >
+            Admin
+          </span>
+        </div>
+        <div className="max-w-[1180px] px-6 sm:px-8 pb-8 -mt-6">{children}</div>
+      </main>
 
         {/* RIGHT PREVIEW PANE — rendered only when the page passes
             preview content. Toggle persists in localStorage. Collapsed
@@ -210,7 +214,6 @@ export function AdminFrame({
             )}
           </aside>
         )}
-      </div>
     </div>
   );
 }
