@@ -218,41 +218,6 @@ export function ArtistDetail() {
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
-      {blurSrc && (
-        <div
-          className={`absolute top-0 left-0 right-0 overflow-hidden pointer-events-none ${
-            hasCoverBanner ? "h-[420px]" : "h-[320px]"
-          }`}
-        >
-          <img
-            src={blurSrc}
-            alt=""
-            className="w-full h-full object-cover"
-            style={
-              hasCoverBanner
-                // Real cover banner — light blur to soften edges, full
-                // saturation, no scale. We want the photo readable.
-                ? { filter: "blur(6px) saturate(110%)" }
-                // Photo-blur fallback — heavier blur, scale up so the
-                // edges don't show, and pump saturation so the brand
-                // bg doesn't drown the color.
-                : { filter: "blur(28px) saturate(160%)", transform: "scale(1.15)" }
-            }
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              // Softer top stop than before (0.15 vs 0.4) so the photo
-              // actually shows, then ramp to the brand bg by the
-              // bottom edge so the page content stays readable.
-              background: hasCoverBanner
-                ? "linear-gradient(to bottom, rgba(0,6,43,0.15) 0%, rgba(0,6,43,0.55) 55%, rgba(0,6,43,0.92) 88%, #00062B 100%)"
-                : "linear-gradient(to bottom, rgba(0,6,43,0.20) 0%, rgba(0,6,43,0.70) 60%, #00062B 100%)",
-            }}
-          />
-        </div>
-      )}
-
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
         <IconButton
           size="md"
@@ -282,7 +247,43 @@ export function ArtistDetail() {
         </IconButton>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }}>
-          <div className="flex flex-col items-center pt-20 px-5">
+          {/* Hero banner. Sits INSIDE the scroll container so it scrolls
+              with the page (matching the admin Cover preview). Uploaded
+              wide-landscape covers render crisp — same gradient fade as
+              the preview, no blur. The photo-only fallback (no cover
+              uploaded yet) keeps its heavy blur because it's a wash,
+              not a banner. */}
+          {blurSrc && (
+            <div
+              className="relative w-full overflow-hidden pointer-events-none"
+              style={{ aspectRatio: hasCoverBanner ? "1 / 1.05" : "1 / 0.82" }}
+              aria-hidden
+            >
+              <img
+                src={blurSrc}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                style={
+                  hasCoverBanner
+                    ? undefined
+                    : { filter: "blur(28px) saturate(160%)", transform: "scale(1.15)" }
+                }
+              />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: hasCoverBanner
+                    ? "linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)"
+                    : "linear-gradient(to bottom, rgba(0,6,43,0.20) 0%, rgba(0,6,43,0.70) 60%, #00062B 100%)",
+                }}
+              />
+            </div>
+          )}
+          <div
+            className={`flex flex-col items-center px-5 relative ${
+              blurSrc ? "-mt-28" : "pt-20"
+            }`}
+          >
             {avatarSrc && (
               <div className="relative flex-shrink-0">
                 <div
