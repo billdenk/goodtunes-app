@@ -2055,6 +2055,7 @@ function AddMultipleTracksDialog({
       await onSaved();
       const ok = data.created?.length || 0;
       const failed = data.errors?.length || 0;
+      const skipped: string[] = Array.isArray(data.skipped) ? data.skipped : [];
       if (ok === 0 && failed === 0) {
         toast({ title: "No tracks created", variant: "destructive" });
         setRunning(false);
@@ -2063,12 +2064,21 @@ function AddMultipleTracksDialog({
       // Success (even partial) — close the dialog and confirm with a toast.
       // Failed files are surfaced in the toast description rather than an
       // in-dialog summary so the import always ends with the sheet gone.
+      // `skipped` = files the importer ignored (wrong extension, etc.) —
+      // surfaced so "where did my tracks go?" answers itself from the toast.
+      const parts: string[] = [];
+      if (failed > 0) parts.push(`${failed} file${failed === 1 ? "" : "s"} couldn't be imported`);
+      if (skipped.length > 0) {
+        const preview = skipped.slice(0, 3).join(", ");
+        parts.push(`${skipped.length} skipped (not audio): ${preview}${skipped.length > 3 ? "…" : ""}`);
+      }
+      // Flag partial outcomes in the title itself — operators scan titles
+      // first and were missing skip context when it lived only in the
+      // description.
+      const titleSuffix = skipped.length > 0 ? ` · ${skipped.length} skipped` : "";
       toast({
-        title: "All music has been added!",
-        description:
-          failed > 0
-            ? `${ok} imported · ${failed} file${failed === 1 ? "" : "s"} couldn't be imported.`
-            : undefined,
+        title: `${ok} ${ok === 1 ? "track" : "tracks"} added${titleSuffix}`,
+        description: parts.length > 0 ? parts.join(" · ") : undefined,
       });
       setRunning(false);
       onOpenChange(false);

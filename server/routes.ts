@@ -2153,6 +2153,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     shouldKeep: (filename: string) => boolean,
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    skipped: string[];
     cleanup: () => Promise<void>;
   }> {
     const fs = await import("node:fs");
@@ -2179,7 +2180,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const filename = filenameFromDropboxFileUrl(fileUrl);
     if (!shouldKeep(filename)) {
       await cleanup();
-      return { entries: [], cleanup: async () => {} };
+      return { entries: [], skipped: [filename], cleanup: async () => {} };
     }
 
     const maxHops = 5;
@@ -2225,7 +2226,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       await pipeline(Readable.fromWeb(response.body as any), cap, fs.createWriteStream(tmpPath));
       clearTimeout(deadlineTimer);
-      return { entries: [{ filename, tmpPath, size }], cleanup };
+      return { entries: [{ filename, tmpPath, size }], skipped: [], cleanup };
     } catch (err: any) {
       clearTimeout(deadlineTimer);
       try { ac.abort(); } catch {}
@@ -2243,6 +2244,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     shouldKeep: (filename: string) => boolean,
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    skipped: string[];
     cleanup: () => Promise<void>;
   }> {
     if (isDropboxSingleFileUrl(shareUrl)) {
@@ -2328,6 +2330,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     shouldKeep: (filename: string) => boolean,
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    skipped: string[];
     cleanup: () => Promise<void>;
   }> {
     const fs = await import("node:fs");
@@ -2340,6 +2343,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const sessionDir = await fsp.mkdtemp(path.join(os.tmpdir(), "gt-dropbox-"));
     const entries: Array<{ filename: string; tmpPath: string; size: number }> = [];
+    // Filenames the keep-filter rejected (wrong extension, hidden files, etc.).
+    // Reported back to the caller so admins can see exactly what the
+    // importer ignored — turns "where did my tracks go?" into a glance.
+    const skipped: string[] = [];
     let totalUncompressed = 0;
 
     const cleanup = async () => {
@@ -2367,7 +2374,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for await (const entry of zipStream as AsyncIterable<any>) {
         const entryPath: string = entry.path || "";
         const filename = basenameOf(entryPath);
-        if (entry.type === "Directory" || !shouldKeep(filename)) {
+        if (entry.type === "Directory") {
+          entry.autodrain();
+          continue;
+        }
+        if (!shouldKeep(filename)) {
+          // Hide noise files admins never care about (Finder/Dropbox
+          // metadata, resource forks). Real files that were rejected
+          // still surface in the report.
+          if (!/^\._|^\.DS_Store$|^Thumbs\.db$|^desktop\.ini$/i.test(filename)) {
+            skipped.push(filename);
+          }
           entry.autodrain();
           continue;
         }
@@ -2407,7 +2424,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       throw err;
     }
     cancel();
-    return { entries, cleanup };
+    return { entries, skipped, cleanup };
   }
   // Turn an artist-supplied filename into a clean track title.
   //
@@ -2854,13 +2871,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // share link). We only keep audio entries; every other file in
       // the folder (readme.txt, .DS_Store, cover art, etc.) is
       // autodrained inside the streamer so it never touches disk.
-      const { entries: tmpEntries, cleanup } = await streamDropboxEntries(
+      const { entries: tmpEntries, skipped, cleanup } = await streamDropboxEntries(
         folderUrl,
         (filename) => extOf(filename) in AUDIO_MIME_BY_EXT,
       );
       try {
         if (tmpEntries.length === 0) {
-          return res.status(400).json({ message: "No audio files in that link. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg." });
+          const hint = skipped.length > 0
+            ? ` Found ${skipped.length} non-audio file${skipped.length === 1 ? "" : "s"}: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? "…" : ""}.`
+            : "";
+          return res.status(400).json({ message: `No audio files in that link. Supported: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.${hint}`, skipped });
         }
 
         // Sort with numeric+base awareness so "Track 2" comes before
@@ -2912,7 +2932,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             errors.push({ filename, error: e?.message || "Failed to import" });
           }
         }
-        return res.json({ created, errors });
+        return res.json({ created, errors, skipped });
       } finally {
         await cleanup();
       }
