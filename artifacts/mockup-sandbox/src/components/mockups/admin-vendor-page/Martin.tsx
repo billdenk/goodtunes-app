@@ -27,47 +27,9 @@ const BLUE = "#319ED8";
 const PINK = "#FF5470";
 
 const ASSET_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/vendor-assets/martin`;
-const HERO_PHOTO = `${ASSET_BASE}/headstock.webp`;
+const HERO_PHOTO = `${ASSET_BASE}/d28_f.jpg`; // D-28 front, full guitar
 const LOGO_IMG = `${ASSET_BASE}/logo.jpg`;
-
-interface GearItem {
-  id: string;
-  name: string;
-  short: string;
-  price: string;
-  swatch: string; // CSS gradient
-}
-
-const FEATURED: GearItem[] = [
-  {
-    id: "d28",
-    name: "D-28",
-    short: "Dreadnought",
-    price: "$3,299",
-    swatch: "linear-gradient(135deg, #c79360 0%, #6b3a16 100%)",
-  },
-  {
-    id: "d35",
-    name: "D-35",
-    short: "Dreadnought",
-    price: "$3,599",
-    swatch: "linear-gradient(135deg, #b88652 0%, #5a2f10 100%)",
-  },
-  {
-    id: "om28",
-    name: "OM-28",
-    short: "Orchestra",
-    price: "$3,299",
-    swatch: "linear-gradient(135deg, #cf9866 0%, #6e3b18 100%)",
-  },
-  {
-    id: "000-28",
-    name: "000-28",
-    short: "Auditorium",
-    price: "$3,099",
-    swatch: "linear-gradient(135deg, #b8814b 0%, #4f2a10 100%)",
-  },
-];
+const D28_FRONT = `${ASSET_BASE}/d28_f.jpg`;
 
 interface ArtistChip {
   id: string;
@@ -101,22 +63,29 @@ export function Martin() {
           className="relative w-full overflow-hidden"
           style={{ aspectRatio: "1 / 1.05", background: "#0a0805" }}
         >
-          {/* Background photo: Martin headstock with gold tuners */}
+          {/* Warm wood backdrop behind the guitar cut-out */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(120% 90% at 50% 35%, #b88652 0%, #6b3f1a 50%, #2c1808 90%, #140a03 100%)",
+            }}
+          />
+          {/* Hero photo: D-28 front, full guitar */}
           <img
             src={HERO_PHOTO}
-            alt=""
-            aria-hidden="true"
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ objectPosition: "center 30%" }}
+            alt="Martin D-28 acoustic guitar"
+            className="absolute inset-0 w-full h-full object-contain"
+            style={{ objectPosition: "center 58%" }}
             draggable={false}
           />
           {/* Top darkening for chrome legibility */}
           <div
             className="absolute inset-x-0 top-0 z-[1]"
             style={{
-              height: "40%",
+              height: "35%",
               background:
-                "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 60%, rgba(0,0,0,0) 100%)",
+                "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.12) 60%, rgba(0,0,0,0) 100%)",
             }}
           />
 
@@ -138,15 +107,15 @@ export function Martin() {
             </div>
           </div>
 
-          {/* Martin wordmark centered in hero — real logo, screen-blended */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-[2] px-8">
+          {/* Martin wordmark — top of hero, screen-blended over the wood/photo */}
+          <div className="absolute top-16 left-0 right-0 flex justify-center z-[2] px-10 pointer-events-none">
             <img
               src={LOGO_IMG}
               alt="C.F. Martin & Co. — Est. 1833"
-              className="w-full max-w-[300px] h-auto"
+              className="w-full max-w-[260px] h-auto"
               style={{
                 mixBlendMode: "screen",
-                filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.55))",
+                filter: "drop-shadow(0 4px 14px rgba(0,0,0,0.5))",
               }}
               draggable={false}
             />
@@ -164,10 +133,12 @@ export function Martin() {
 
         {/* ============================ PROFILE ROW ============================ */}
         <div className="px-5 -mt-7 relative flex items-end gap-3">
-          {/* Logo chip — small black square with the white wordmark */}
+          {/* Logo chip — wide rect cropped to the wordmark itself */}
           <div
-            className="flex-shrink-0 w-[72px] h-[72px] rounded-2xl overflow-hidden flex items-center justify-center p-2"
+            className="flex-shrink-0 rounded-2xl overflow-hidden"
             style={{
+              width: 132,
+              height: 72,
               background: "#000",
               boxShadow: "0 4px 20px rgba(0,0,0,0.45)",
             }}
@@ -176,7 +147,8 @@ export function Martin() {
               src={LOGO_IMG}
               alt=""
               aria-hidden="true"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-cover"
+              style={{ objectPosition: "center", transform: "scale(1.55)" }}
               draggable={false}
             />
           </div>
@@ -255,55 +227,57 @@ export function Martin() {
           </button>
         </div>
 
-        {/* ============================ FEATURED GEAR ============================ */}
+        {/* ============================ FEATURED PRODUCT ============================ */}
         <div className="px-5 pt-7 pb-2">
           <SectionHeader title="Featured gear" />
         </div>
         <div className="px-5 pb-2">
-          <div className="grid grid-cols-2 gap-3">
-            {FEATURED.map((g) => (
-              <button
-                key={g.id}
-                className="flex flex-col text-left active:scale-[0.94] transition-transform"
-                data-testid={`card-gear-${g.id}`}
+          <button
+            className="w-full text-left rounded-2xl overflow-hidden active:scale-[0.98] transition-transform"
+            style={{
+              background:
+                "linear-gradient(180deg, #c79360 0%, #6b3a16 70%, #3a1d08 100%)",
+              boxShadow: "0 10px 32px rgba(0,0,0,0.5)",
+            }}
+            data-testid="card-featured-d28"
+          >
+            <div
+              className="relative w-full flex items-center justify-center"
+              style={{ aspectRatio: "1 / 1" }}
+            >
+              <img
+                src={D28_FRONT}
+                alt="Martin D-28"
+                className="w-full h-full object-contain"
+                style={{ objectPosition: "center 55%" }}
+                draggable={false}
+              />
+              <span
+                className="absolute top-3 left-3 px-2 py-1 rounded-md text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white"
+                style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)" }}
               >
-                <div
-                  className="aspect-square rounded-xl overflow-hidden relative flex items-end p-3"
-                  style={{
-                    background: g.swatch,
-                    boxShadow: "0 6px 22px rgba(0,0,0,0.45)",
-                  }}
-                >
-                  {/* Stylized headstock silhouette */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div
-                      className="w-[18%] h-[58%] rounded-[14px]"
-                      style={{
-                        background:
-                          "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.1) 100%)",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)",
-                      }}
-                    />
-                  </div>
-                  <span
-                    className="relative text-white text-[11px] font-semibold uppercase tracking-[0.18em]"
-                    style={{ textShadow: "0 1px 3px rgba(0,0,0,0.55)" }}
-                  >
-                    {g.short}
-                  </span>
-                </div>
-                <p className="text-white text-[13.5px] font-semibold leading-tight truncate mt-2">
-                  Martin {g.name}
+                Featured
+              </span>
+            </div>
+            <div className="px-4 pt-3 pb-4 flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-white text-[16px] font-bold leading-tight">
+                  Martin D-28
                 </p>
                 <p
-                  className="text-[12px] truncate mt-0.5"
-                  style={{ color: "rgba(235,235,245,0.55)" }}
+                  className="text-[12.5px] mt-0.5 leading-snug"
+                  style={{ color: "rgba(255,255,255,0.78)" }}
                 >
-                  Guitar · {g.price}
+                  Dreadnought · East Indian rosewood &amp; Sitka spruce
                 </p>
-              </button>
-            ))}
-          </div>
+              </div>
+              <span
+                className="text-white text-[14.5px] font-semibold tabular-nums flex-shrink-0"
+              >
+                $3,499.99
+              </span>
+            </div>
+          </button>
         </div>
 
         {/* ============================ PLAYED BY ============================ */}
