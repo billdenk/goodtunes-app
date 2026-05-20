@@ -2,14 +2,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Search, X, Guitar, Store } from "lucide-react";
+import { Plus, Search, X, Guitar, Store, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 /**
  * Admin home · Gear (Phase 6c).
@@ -30,6 +39,27 @@ interface InstrumentLite {
   shortCategory: string | null;
   photoUrl: string | null;
   vendors: unknown[];
+}
+
+// apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
+// the status prefix and unwrap the JSON `message` so inline dialog errors
+// read like English instead of like a stack trace.
+function humanizeApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  if (!raw) {
+    return "Couldn't read that page. Try the URL again, or Skip to create a blank entry.";
+  }
+  const m = raw.match(/^\d{3}:\s*(.*)$/);
+  const body = m ? m[1] : raw;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return body.trim() || raw;
 }
 
 export function AdminInstruments() {
@@ -77,23 +107,126 @@ export function AdminInstruments() {
   };
 
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  // "Add Gear" opens a paste-URL dialog (restored 2026-05). Pulling the
+  // product page first lets the server scraper prefill name / category /
+  // photo and attach the vendor in one shot — the workflow Bill remembers
+  // from the legacy /admin Gear tab. "Skip" still creates a blank "New gear"
+  // for hand-entry cases where there's no public product URL.
+  const [addOpen, setAddOpen] = useState(false);
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
   const createInstrument = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts: { url?: string }) => {
+      let name = "New gear";
+      let category = "Guitar";
+      let photoUrl: string | null = null;
+      let about: string | null = null;
+      let scraped: any = null;
+      let vendorAttached = false;
+      const trimmedUrl = (opts.url ?? "").trim();
+      if (trimmedUrl) {
+        const sr = await apiRequest("POST", "/api/admin/instruments/scrape", {
+          url: trimmedUrl,
+        });
+        scraped = await sr.json();
+        if (scraped?.name) name = String(scraped.name);
+        if (scraped?.category) category = String(scraped.category);
+        if (scraped?.photoUrl) photoUrl = String(scraped.photoUrl);
+        if (scraped?.description) about = String(scraped.description);
+      }
       const res = await apiRequest("POST", "/api/admin/instruments", {
-        name: "New gear",
-        category: "Guitar",
+        name,
+        category,
+        ...(photoUrl ? { photoUrl } : {}),
+        ...(about ? { about } : {}),
       });
-      return res.json() as Promise<{ id: string }>;
+      const instrument = (await res.json()) as { id: string };
+      if (trimmedUrl && scraped?.vendor?.affiliateUrl) {
+        try {
+          await apiRequest(
+            "POST",
+            `/api/admin/instruments/${instrument.id}/vendors`,
+            {
+              affiliateUrl: scraped.vendor.affiliateUrl,
+              ...(scraped.vendor.name ? { name: scraped.vendor.name } : {}),
+              ...(scraped.vendor.logoUrl
+                ? { logoUrl: scraped.vendor.logoUrl }
+                : {}),
+              ...(scraped.vendor.aboutUrl
+                ? { aboutUrl: scraped.vendor.aboutUrl }
+                : {}),
+            },
+          );
+          vendorAttached = true;
+        } catch (err) {
+          // Vendor attach failing shouldn't block the new gear row from
+          // opening — the operator can re-attach on the detail page. We
+          // surface the partial-success state in the toast below so the
+          // operator isn't told the vendor was attached when it wasn't.
+          console.error("[add-gear] vendor attach failed", err);
+        }
+      }
+      return { instrument, scraped, vendorAttached };
     },
-    onSuccess: (i) => {
+    onSuccess: ({ instrument, scraped, vendorAttached }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
-      navigate(`/admin/instruments/${i.id}`);
+      setAddOpen(false);
+      setPasteUrl("");
+      setPasteError(null);
+      if (scraped?.name) {
+        const hasVendor = !!scraped.vendor?.affiliateUrl;
+        if (hasVendor && !vendorAttached) {
+          toast({
+            title: `Pulled "${scraped.name}"`,
+            description:
+              "Vendor link didn't attach automatically — add it from the detail page.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: `Pulled "${scraped.name}"`,
+            description:
+              vendorAttached && scraped.vendor?.name
+                ? `Vendor: ${scraped.vendor.name}. Review and edit on the detail page.`
+                : "Review and edit on the detail page.",
+          });
+        }
+      }
+      navigate(`/admin/instruments/${instrument.id}`);
+    },
+    onError: (err: any) => {
+      setPasteError(humanizeApiError(err));
     },
   });
 
   const openNewInstrument = () => {
     if (createInstrument.isPending) return;
-    createInstrument.mutate();
+    setPasteError(null);
+    setPasteUrl("");
+    setAddOpen(true);
+  };
+
+  const submitPaste = () => {
+    if (createInstrument.isPending) return;
+    const u = pasteUrl.trim();
+    if (!u) {
+      setPasteError("Paste a product URL, or click Skip to create a blank entry.");
+      return;
+    }
+    if (!/^https?:\/\//i.test(u)) {
+      setPasteError("URL must start with http:// or https://");
+      return;
+    }
+    setPasteError(null);
+    createInstrument.mutate({ url: u });
+  };
+
+  const skipPaste = () => {
+    if (createInstrument.isPending) return;
+    setPasteError(null);
+    createInstrument.mutate({});
   };
 
   if (authLoading) {
@@ -214,6 +347,84 @@ export function AdminInstruments() {
         </div>
       )}
       </div>
+      <Dialog
+        open={addOpen}
+        onOpenChange={(o) => {
+          if (createInstrument.isPending) return;
+          setAddOpen(o);
+          if (!o) {
+            setPasteUrl("");
+            setPasteError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" data-testid="dialog-add-gear">
+          <DialogHeader>
+            <DialogTitle>Add gear</DialogTitle>
+            <DialogDescription>
+              Paste a product URL — Carter Vintage, Reverb, Gibson, Martin,
+              Sweetwater, etc. We'll prefill name, category, photo, and attach
+              the vendor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 pt-1">
+            <input
+              type="url"
+              value={pasteUrl}
+              onChange={(e) => {
+                setPasteUrl(e.target.value);
+                if (pasteError) setPasteError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitPaste();
+                }
+              }}
+              placeholder="https://…"
+              autoFocus
+              disabled={createInstrument.isPending}
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-50"
+              data-testid="input-add-gear-url"
+            />
+            {pasteError && (
+              <p
+                className="text-[12px] text-red-600"
+                data-testid="text-add-gear-error"
+              >
+                {pasteError}
+              </p>
+            )}
+            <p className="text-[11.5px] text-slate-400">
+              Reads the page's Open Graph + product metadata and rehosts the
+              hero image. Most modern shops work without an account.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <button
+              type="button"
+              onClick={skipPaste}
+              disabled={createInstrument.isPending}
+              className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              data-testid="button-add-gear-skip"
+            >
+              Skip — create blank
+            </button>
+            <button
+              type="button"
+              onClick={submitPaste}
+              disabled={createInstrument.isPending || !pasteUrl.trim()}
+              className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold inline-flex items-center gap-1.5 bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-add-gear-pull"
+            >
+              {createInstrument.isPending && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
+              {createInstrument.isPending ? "Reading…" : "Pull from URL"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminFrame>
   );
 }
