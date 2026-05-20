@@ -168,8 +168,7 @@ export function D28() {
               src={LOGO_IMG}
               alt=""
               aria-hidden="true"
-              className="w-full h-full object-cover"
-              style={{ objectPosition: "center", transform: "scale(1.55)" }}
+              className="w-full h-full object-contain p-2.5"
               draggable={false}
             />
           </a>
