@@ -76,6 +76,7 @@ import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import Hls from "hls.js";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -1375,6 +1376,11 @@ function TracksPanel({
   // Seamless mockup's BottomDock (mock state) into real HTMLAudioElement
   // playback against `song.audioUrl` (Object Storage signed URLs).
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // hls.js instance for the admin Tracks-tab player. Kept in a ref so we
+  // can tear it down between songs without re-running the effect on every
+  // render. Non-Safari browsers route Mux HLS through this; Safari/iOS use
+  // native HLS via `audio.src` directly.
+  const hlsRef = useRef<Hls | null>(null);
   const [currentSongId, setCurrentSongId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -1406,25 +1412,96 @@ function TracksPanel({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (!currentSong?.audioUrl) {
+    const teardownHls = () => {
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy(); } catch {}
+        hlsRef.current = null;
+      }
+    };
+    if (!currentSong?.audioUrl && !currentSong?.muxPlaybackId) {
       audio.pause();
+      teardownHls();
       audio.removeAttribute("src");
       audio.load();
       setProgress(0);
       return;
     }
     const epoch = ++playEpochRef.current;
-    audio.src = currentSong.audioUrl;
-    setProgress(0);
-    audio.play().catch(() => {
-      // Swallow rejection (autoplay block, abort from rapid switching).
-      // Only act on the latest epoch — a rejection from a superseded
-      // request must not flip `playing` off for the new track.
-      if (epoch === playEpochRef.current) {
-        setPlaying(false);
+    const useMux =
+      !!currentSong.muxPlaybackId && currentSong.muxStatus === "ready";
+
+    const attachAndPlay = (url: string) => {
+      // Stale-epoch guard — user already clicked another row.
+      if (epoch !== playEpochRef.current) return;
+      teardownHls();
+      const isHls = /\.m3u8(\?|$)/i.test(url);
+      if (
+        isHls &&
+        Hls.isSupported() &&
+        !audio.canPlayType("application/vnd.apple.mpegurl")
+      ) {
+        // Chrome / Firefox: hls.js drives MSE.
+        const hls = new Hls({ enableWorker: true });
+        hlsRef.current = hls;
+        hls.on(Hls.Events.ERROR, (_e, data) => {
+          if (data?.fatal) {
+            console.error("[admin-player] hls fatal", data.type, data.details);
+            if (epoch === playEpochRef.current) setPlaying(false);
+          }
+        });
+        hls.loadSource(url);
+        hls.attachMedia(audio);
+      } else {
+        // Safari / iOS: native HLS, or progressive .wav/.mp3.
+        audio.src = url;
+        audio.load();
       }
-    });
-  }, [currentSong?.id, currentSong?.audioUrl]);
+      setProgress(0);
+      audio.play().catch(() => {
+        if (epoch === playEpochRef.current) setPlaying(false);
+      });
+    };
+
+    if (useMux) {
+      // Fetch a signed 1-hour Mux HLS URL, then attach. Falls back to the
+      // raw audioUrl on failure so admins aren't locked out while we debug.
+      (async () => {
+        try {
+          const r = await apiRequest(
+            "POST",
+            `/api/songs/${currentSong.id}/playback-url`,
+          );
+          const json = (await r.json()) as { url?: string; message?: string };
+          if (epoch !== playEpochRef.current) return;
+          if (json?.url) attachAndPlay(json.url);
+          else throw new Error(json?.message || "no url");
+        } catch (e) {
+          console.warn("[admin-player] Mux signing failed; falling back", e);
+          if (epoch === playEpochRef.current && currentSong.audioUrl) {
+            attachAndPlay(currentSong.audioUrl);
+          }
+        }
+      })();
+    } else if (currentSong.audioUrl) {
+      attachAndPlay(currentSong.audioUrl);
+    }
+  }, [
+    currentSong?.id,
+    currentSong?.audioUrl,
+    currentSong?.muxPlaybackId,
+    currentSong?.muxStatus,
+  ]);
+
+  // Tear down hls.js on unmount so we don't leak an MSE attachment when
+  // the operator leaves the album page mid-playback.
+  useEffect(() => {
+    return () => {
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy(); } catch {}
+        hlsRef.current = null;
+      }
+    };
+  }, []);
 
   // Keep our `playing` state in lock-step with the underlying element so
   // anything that pauses outside our togglePlay path (browser autoplay
@@ -1444,7 +1521,8 @@ function TracksPanel({
 
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio || !currentSong?.audioUrl) return;
+    if (!audio || !currentSong) return;
+    if (!currentSong.audioUrl && !currentSong.muxPlaybackId) return;
     if (audio.paused) {
       // If we ran off the end of the track (queue-end pause path), rewind
       // to the start so hitting Play actually restarts instead of being
@@ -1469,7 +1547,7 @@ function TracksPanel({
     // upload-pending rows so prev/next on the dock can't strand the user
     // on an unplayable selection.
     for (let i = idx - 1; i >= 0; i--) {
-      if (sorted[i].audioUrl) {
+      if (sorted[i].audioUrl || sorted[i].muxPlaybackId) {
         setCurrentSongId(sorted[i].id);
         return;
       }
@@ -1480,7 +1558,7 @@ function TracksPanel({
       ? sorted.findIndex((s) => s.id === currentSongId)
       : -1;
     for (let i = idx + 1; i < sorted.length; i++) {
-      if (sorted[i].audioUrl) {
+      if (sorted[i].audioUrl || sorted[i].muxPlaybackId) {
         setCurrentSongId(sorted[i].id);
         return;
       }
