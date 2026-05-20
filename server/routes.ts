@@ -302,14 +302,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // explicitly public.
   app.get("/objects/uploads/:id", async (req, res) => {
     const id = req.params.id;
+    const reqTag = `[OBJ_SERVE id=${id} range=${req.headers.range || "none"} ua=${(req.headers["user-agent"] || "").slice(0, 40)}]`;
+    console.log(`${reqTag} START`);
     // Block traversal / weird ids; uuid+ext only.
     if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
+      console.log(`${reqTag} 404 bad-id`);
       return res.status(404).json({ message: "Not found" });
     }
+    res.on("error", (e) => {
+      console.error(`${reqTag} RES_ERROR`, e);
+    });
+    res.on("close", () => {
+      console.log(`${reqTag} CLOSE status=${res.statusCode} headersSent=${res.headersSent} writable=${res.writable}`);
+    });
     try {
       const file = await objectStorage.getObjectEntityFile(`/objects/uploads/${id}`);
       const acl = await getObjectAclPolicy(file);
       if (!acl || acl.visibility !== "public") {
+        console.log(`${reqTag} 404 acl=${acl?.visibility || "null"}`);
         return res.status(404).json({ message: "Not found" });
       }
       // Honor Range requests so HTML5 <audio> can seek into multi-MB
@@ -342,11 +352,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           "Accept-Ranges": "bytes",
           "Cache-Control": cacheControl,
         });
+        console.log(`${reqTag} 206 streaming start=${start} end=${end} ct=${contentType} total=${totalSize}`);
         const stream = file.createReadStream({ start, end });
         stream.on("error", (e: unknown) => {
-          console.error("Range stream error:", e);
+          console.error(`${reqTag} RANGE_STREAM_ERROR`, e);
           if (!res.headersSent) res.status(500).end();
           else res.end();
+        });
+        stream.on("response", (gcsRes: any) => {
+          console.log(`${reqTag} GCS_RES status=${gcsRes?.statusCode} cl=${gcsRes?.headers?.["content-length"]}`);
         });
         stream.pipe(res);
         return;
@@ -359,18 +373,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Accept-Ranges": "bytes",
         "Cache-Control": cacheControl,
       });
+      console.log(`${reqTag} 200 full-stream ct=${contentType} total=${totalSize}`);
       const stream = file.createReadStream();
       stream.on("error", (e: unknown) => {
-        console.error("Stream error:", e);
+        console.error(`${reqTag} FULL_STREAM_ERROR`, e);
         if (!res.headersSent) res.status(500).end();
         else res.end();
       });
+      stream.on("response", (gcsRes: any) => {
+        console.log(`${reqTag} GCS_RES status=${gcsRes?.statusCode} cl=${gcsRes?.headers?.["content-length"]}`);
+      });
       stream.pipe(res);
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof ObjectNotFoundError) {
+        console.log(`${reqTag} 404 not-found`);
         return res.status(404).json({ message: "Not found" });
       }
-      console.error("Object serve failed", err);
+      console.error(`${reqTag} OBJECT_SERVE_FAILED`, err?.code, err?.message, err?.stack);
       return res.status(500).json({ message: "Serve failed" });
     }
   });
