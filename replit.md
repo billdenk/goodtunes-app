@@ -24,6 +24,12 @@ Mobile-first, Apple-Music-inspired web player.
 
 ## User preferences
 
+### Streaming rows vs GoodTunes releases — intentionally independent
+A streaming-imported album (Apple/Spotify-sourced, `is_goodtunes_release=false`, `mzstatic` artwork, populated `appleMusicUrl`) and a GoodTunes-original album (`is_goodtunes_release=true`, your own artwork + uploaded tracks) for the **same artist + same title** are **not** duplicates to be merged. They serve different jobs:
+- The streaming row points fans out to the existing Apple/Spotify release.
+- The GoodTunes row is the full GoodTunes edition (full tracks, bonus material, credits, lyrics, etc.) curated by us.
+Treat `(artist, lower(title))` collisions across the `is_goodtunes_release` boundary as expected. Don't propose dedupe, don't auto-claim, don't merge on import. Surface them in admin only as informational (so the operator knows both exist), never as a warning that needs action. The two-row pattern is the product design.
+
 ### Debugging — always check prod alongside dev
 When diagnosing any reported failure (import jobs, audit logs, missing rows, "I don't see X in the UI"), query **both** databases before drawing conclusions. The dev DB and prod DB diverge constantly — the user does most of their real work against the deployed app, so a clean dev DB doesn't mean the bug isn't real. Use `executeSql({ environment: "production" })` (read-only SELECTs only) for the prod read; never assume a single-environment query is the full picture.
 

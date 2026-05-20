@@ -3813,7 +3813,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
             const status: "success" | "partial" | "failed" =
               created.length === 0 ? "failed" : errors.length === 0 ? "success" : "partial";
-            return { status, summary: { created, errors, skipped } };
+            // When the whole import failed (no songs created), bubble the
+            // first per-file error up as the top-level `errorMessage` so
+            // the admin toast / job-runs row actually says what broke. We
+            // were returning `{status:"failed"}` with no errorMessage,
+            // which left `state.errorMessage = null` and produced a blank
+            // "Import failed." toast — leading Bill to think the import
+            // had succeeded silently. If every file errored with the same
+            // reason (e.g. `spawn ffprobe ENOENT` because the deploy
+            // image was missing ffmpeg), say so once with a count rather
+            // than repeating the same string N times.
+            let errorMessage: string | null = null;
+            if (status === "failed" && errors.length > 0) {
+              const first = errors[0].error || "Unknown error";
+              const allSame = errors.every((e) => (e.error || "Unknown error") === first);
+              errorMessage = allSame
+                ? `${first} (${errors.length}/${tmpEntries.length} file${tmpEntries.length === 1 ? "" : "s"})`
+                : `${first} (and ${errors.length - 1} other error${errors.length - 1 === 1 ? "" : "s"})`;
+            }
+            return { status, summary: { created, errors, skipped }, errorMessage };
           } finally {
             await cleanup();
           }
