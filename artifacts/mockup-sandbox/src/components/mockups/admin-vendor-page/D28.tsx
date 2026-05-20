@@ -6,7 +6,6 @@ import {
   MoreHorizontal,
   Bookmark,
   ChevronRight,
-  Check,
   X,
 } from "lucide-react";
 
@@ -22,7 +21,6 @@ import {
 const BG = "#00062B";
 const BLUE = "#319ED8";
 const PINK = "#FF5470";
-const MINT = "#4AFFCA";
 
 const ASSET_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/vendor-assets/martin`;
 const LOGO_IMG = `${ASSET_BASE}/logo.jpg`;
@@ -151,26 +149,15 @@ export function D28() {
             >
               Dreadnought · Standard Series · 2025
             </p>
-            <div className="flex items-baseline gap-2 mt-2.5">
-              <span className="text-white font-bold text-[22px] tabular-nums">
-                $3,499<span className="text-[15px]">.99</span>
-              </span>
-              <span
-                className="text-[12px] inline-flex items-center gap-1"
-                style={{ color: MINT }}
-              >
-                <Check className="w-[13px] h-[13px]" />
-                In stock
-              </span>
-            </div>
           </div>
-          {/* Martin brand chip — moved to the right of the title */}
+          {/* Martin brand chip — square rounded rect, same treatment as
+              the vendor page's logo tile, just placed to the right. */}
           <a
             href="#martin"
             className="flex-shrink-0 rounded-2xl overflow-hidden block active:scale-[0.96] transition-transform"
             style={{
-              width: 116,
-              height: 64,
+              width: 96,
+              height: 96,
               background: "#000",
               boxShadow: "0 4px 18px rgba(0,0,0,0.45)",
             }}
@@ -195,9 +182,9 @@ export function D28() {
             in the "Where to buy" header instead (see Sweetwater row below). */}
         <div className="px-5 pt-5">
           <ArtistNoteCard
-            artist={{ id: "ec", name: "Eric Clapton", initial: "E", hue: "#a25b3b" }}
-            quote="My D-28 has a soul of its own — the dreadnought I'd grab if the house were on fire."
-            albumNote="On Unplugged · 1992"
+            artist={{ id: "fp", name: "Fernando Perdomo", initial: "F", hue: "#7a4c2a" }}
+            quote="My D-28 is the one I reach for when a song needs to sound like the truth — open, woody, room-filling."
+            albumNote="On Out to Sea · 2018"
           />
         </div>
 
@@ -223,48 +210,48 @@ export function D28() {
           </p>
         </div>
 
-        {/* ============================ PHOTOS ============================ */}
-        <div className="px-5 pt-7">
-          <div className="flex items-baseline justify-between">
+        {/* ============================ PHOTOS ============================
+            Labels (front / top / headstock / back) and the per-vendor
+            count vary wildly — Martin happens to publish all four, but
+            Norman's etc. typically only ship one product shot. Render
+            whatever the vendor gave us, unlabeled. If a vendor returns a
+            single photo, the grid collapses to one tile; we hide the
+            whole section if the vendor returns none. */}
+        {VIEWS.length > 0 && (
+          <div className="px-5 pt-7">
             <SectionHeader title="Photos" />
-            <span
-              className="text-[12.5px] font-medium tabular-nums"
-              style={{ color: "rgba(235,235,245,0.55)" }}
+            <div
+              className={
+                "mt-3 grid gap-2 " +
+                (VIEWS.length === 1 ? "grid-cols-1" : "grid-cols-2")
+              }
             >
-              {VIEWS.length}
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {VIEWS.map((v, i) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setLightboxIndex(i)}
-                className="aspect-square rounded-xl overflow-hidden relative active:scale-[0.96] transition-transform"
-                style={{
-                  background:
-                    "linear-gradient(180deg, #b88652 0%, #5a2f10 100%)",
-                }}
-                data-testid={`thumb-photo-${v.id}`}
-                aria-label={`Open ${v.label}`}
-              >
-                <img
-                  src={v.url}
-                  alt={v.label}
-                  className="w-full h-full object-cover"
-                  style={{ objectPosition: "center bottom" }}
-                  draggable={false}
-                />
-                <span
-                  className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-white text-[10px] font-semibold uppercase tracking-[0.14em]"
-                  style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
+              {VIEWS.map((v, i) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setLightboxIndex(i)}
+                  className="aspect-square rounded-xl overflow-hidden relative active:scale-[0.96] transition-transform"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, #b88652 0%, #5a2f10 100%)",
+                  }}
+                  data-testid={`thumb-photo-${v.id}`}
+                  aria-label={`Open photo ${i + 1}`}
                 >
-                  {v.label}
-                </span>
-              </button>
-            ))}
+                  <img
+                    src={v.url}
+                    alt=""
+                    aria-hidden="true"
+                    className="w-full h-full object-cover"
+                    style={{ objectPosition: "center bottom" }}
+                    draggable={false}
+                  />
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ============================ SPECS ============================ */}
         <div className="px-5 pt-7">
