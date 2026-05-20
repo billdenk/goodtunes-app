@@ -740,6 +740,7 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
             <VendorRow
               key={v.id}
               vendor={v}
+              instrumentId={instrument.id}
               onToggleHidden={() => toggleHidden.mutate(v)}
               onDetach={() => {
                 if (confirm(`Detach "${v.name}" from this gear?`)) {
@@ -990,12 +991,14 @@ function AddVendorForm({
 
 function VendorRow({
   vendor,
+  instrumentId,
   onToggleHidden,
   onDetach,
   busy,
   onSaved,
 }: {
   vendor: AttachedVendor;
+  instrumentId: string;
   onToggleHidden: () => void;
   onDetach: () => void;
   busy: boolean;
@@ -1033,15 +1036,29 @@ function VendorRow({
         {/* Identity */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span
-              className={[
-                "text-[13.5px] font-semibold truncate",
-                vendor.isHidden ? "text-slate-500" : "text-slate-900",
-              ].join(" ")}
-              data-testid={`text-vendor-name-${vendor.id}`}
-            >
-              {vendor.name}
-            </span>
+            {vendor.vendorId ? (
+              <Link
+                href={`/admin/vendors/${vendor.vendorId}?from=instrument&instrumentId=${instrumentId}`}
+                onClick={(e) => e.stopPropagation()}
+                className={[
+                  "text-[13.5px] font-semibold truncate hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors",
+                  vendor.isHidden ? "text-slate-500" : "text-slate-900",
+                ].join(" ")}
+                data-testid={`link-vendor-${vendor.vendorId}`}
+              >
+                {vendor.name}
+              </Link>
+            ) : (
+              <span
+                className={[
+                  "text-[13.5px] font-semibold truncate",
+                  vendor.isHidden ? "text-slate-500" : "text-slate-900",
+                ].join(" ")}
+                data-testid={`text-vendor-name-${vendor.id}`}
+              >
+                {vendor.name}
+              </span>
+            )}
             {vendor.isHidden && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold uppercase tracking-wider">
                 <EyeOff className="w-2.5 h-2.5" />

@@ -96,6 +96,24 @@ export function AdminVendor() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  // Origin signal — when the operator came here from an instrument's
+  // Vendors tab, the first breadcrumb crumb swaps from "Vendors" to the
+  // instrument name and routes back to that instrument. Soft signal via
+  // query string so deep-links + refreshes still work.
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const fromInstrumentId = (() => {
+    try {
+      const sp = new URLSearchParams(search);
+      return sp.get("from") === "instrument" ? sp.get("instrumentId") : null;
+    } catch {
+      return null;
+    }
+  })();
+  const { data: fromInstrument } = useQuery<{ id: string; name: string }>({
+    queryKey: ["/api/instruments", fromInstrumentId],
+    enabled: !!user?.isAdmin && !!fromInstrumentId,
+  });
+
   const deleteVendor = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", `/api/admin/vendors/${vendorId}`);
@@ -162,14 +180,25 @@ export function AdminVendor() {
           <h1 className="text-slate-900 text-lg font-semibold">
             Vendor not found
           </h1>
-          <Link
-            href="/admin/vendors"
-            className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
-            data-testid="link-back-to-vendors"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            Back to vendors
-          </Link>
+          {fromInstrumentId && fromInstrument ? (
+            <Link
+              href={`/admin/instruments/${fromInstrumentId}`}
+              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              data-testid={`link-back-to-instrument-${fromInstrumentId}`}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Back to {fromInstrument.name}
+            </Link>
+          ) : (
+            <Link
+              href="/admin/vendors"
+              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              data-testid="link-back-to-vendors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Back to vendors
+            </Link>
+          )}
         </div>
       </AdminFrame>
     );
@@ -187,14 +216,24 @@ export function AdminVendor() {
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          <Link
-            href="/admin/vendors"
-            className="hover:text-slate-700"
-            data-testid="link-breadcrumb-vendors"
-          >
-            Vendors
-          </Link>
-          <ChevronRight className="w-3 h-3" />
+          {fromInstrumentId && fromInstrument ? (
+            <Link
+              href={`/admin/instruments/${fromInstrumentId}`}
+              className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+              data-testid={`link-back-to-instrument-${fromInstrumentId}`}
+            >
+              {fromInstrument.name}
+            </Link>
+          ) : (
+            <Link
+              href="/admin/vendors"
+              className="hover:text-slate-700"
+              data-testid="link-breadcrumb-vendors"
+            >
+              Vendors
+            </Link>
+          )}
+          <ChevronRight className="w-3 h-3 flex-shrink-0" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">
             {vendor.name}
           </span>
