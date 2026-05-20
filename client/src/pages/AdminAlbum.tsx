@@ -2157,6 +2157,12 @@ function AddTrackForm({
   // discarded so a slow probe can't repopulate the duration field
   // after the row has already been cleared or replaced.
   const probeTokenRef = useRef(0);
+  // Handle to the most-recent in-flight probe so `submit()` can await
+  // it when the operator clicks Add before the probe has had a chance
+  // to populate the duration field. Without this, pasting a Dropbox
+  // URL and clicking Add quickly silently saves the track with the
+  // 3:00 default (because `parseDurationInput("")` falls back to 180).
+  const pendingProbeRef = useRef<Promise<number | null> | null>(null);
 
   // Focus the title field on first mount + after each successful save so
   // the admin can stay on the keyboard and rip through a tracklist.
@@ -2191,7 +2197,9 @@ function AddTrackForm({
     if (!title.trim()) setTitle(clientDeriveTitleFromFilename(f.name));
     setAudioFilename(f.name);
     const token = ++probeTokenRef.current;
-    probeAudioDuration(f).then((secs) => {
+    const probe = probeAudioDuration(f);
+    pendingProbeRef.current = probe;
+    probe.then((secs) => {
       if (token !== probeTokenRef.current) return; // stale probe — discard
       if (secs != null) setDurationText(formatSecondsAsMmSs(secs));
     });
@@ -2257,7 +2265,9 @@ function AddTrackForm({
     setAudioFilename(file);
     setTitle(derived);
     const token = ++probeTokenRef.current;
-    probeAudioDuration(normalized).then((secs) => {
+    const probe = probeAudioDuration(normalized);
+    pendingProbeRef.current = probe;
+    probe.then((secs) => {
       if (token !== probeTokenRef.current) return; // stale probe — discard
       if (secs != null) setDurationText(formatSecondsAsMmSs(secs));
     });
@@ -2314,7 +2324,7 @@ function AddTrackForm({
       }),
   });
 
-  const submit = () => {
+  const submit = async () => {
     if (uploading) {
       setError("Hang on — the audio is still uploading.");
       return;
@@ -2325,15 +2335,51 @@ function AddTrackForm({
       titleRef.current?.focus();
       return;
     }
-    const parsed = parseDurationInput(durationText);
-    if (parsed.error) {
-      setError(parsed.error);
-      return;
+    // Click-faster-than-probe guard. When audio is attached but the
+    // duration field is still empty (the operator clicked Add before
+    // the browser-side <audio> probe resolved — typical when pasting a
+    // remote URL like a Dropbox direct link), await the in-flight
+    // probe with a short timeout so we don't silently fall back to
+    // the 3:00 default that `parseDurationInput("")` returns.
+    let durationSeconds: number | null = null;
+    if (!durationText.trim() && audioUrl && pendingProbeRef.current) {
+      const probe = pendingProbeRef.current;
+      setError(null);
+      const secs = await Promise.race<number | null>([
+        probe,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+      ]);
+      if (secs != null && secs > 0) {
+        durationSeconds = secs;
+        setDurationText(formatSecondsAsMmSs(secs));
+      }
+    }
+    if (durationSeconds == null) {
+      // Either there was no in-flight probe, or it returned null /
+      // timed out. Parse whatever's in the field (which the probe may
+      // have just filled in synchronously above, but the parser here
+      // reads from `durationText` state — fall back to the parsed
+      // value so manual entries and probe-filled values both work).
+      if (!durationText.trim() && audioUrl) {
+        // Audio is attached, duration field is still empty, and the
+        // probe couldn't tell us how long the track is. Refuse to
+        // silently save 3:00 — make the operator type the length.
+        setError(
+          "Couldn't read the track length automatically. Type the duration (e.g. 3:42) and try again.",
+        );
+        return;
+      }
+      const parsed = parseDurationInput(durationText);
+      if (parsed.error) {
+        setError(parsed.error);
+        return;
+      }
+      durationSeconds = parsed.seconds;
     }
     setError(null);
     createMut.mutate({
       title: trimmed,
-      duration: parsed.seconds,
+      duration: durationSeconds,
       audioUrl,
       audioSourceUrl,
     });
