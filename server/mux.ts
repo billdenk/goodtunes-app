@@ -83,15 +83,27 @@ export function verifyWebhook(
   signatureHeader: string | undefined,
 ): any | null {
   const secret = process.env.MUX_WEBHOOK_SECRET;
-  if (!secret || !signatureHeader) {
-    // If no secret configured, accept payload but log — webhooks aren't
-    // strictly required for v1; we can also poll asset status on the
-    // admin "Refresh" button.
+  const isProd = process.env.NODE_ENV === "production";
+  if (!secret) {
+    // No secret configured. In production we MUST refuse to mutate state
+    // on unsigned payloads — anyone could POST a fake `video.asset.ready`
+    // and corrupt our songs table. In dev we accept unsigned so local
+    // tunnel/ngrok setups don't need the secret round-trip.
+    if (isProd) {
+      console.error(
+        "[mux-webhook] MUX_WEBHOOK_SECRET not set in production — rejecting.",
+      );
+      return null;
+    }
     try {
       return JSON.parse(rawBody);
     } catch {
       return null;
     }
+  }
+  if (!signatureHeader) {
+    // Secret is configured but request is unsigned — always reject.
+    return null;
   }
   try {
     const verified = (Mux as any).Webhooks.verifyHeader(

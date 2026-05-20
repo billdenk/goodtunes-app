@@ -310,8 +310,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // to another song, we drop the stale result instead of clobbering
   // the now-current song's src.
   const srcTokenRef = useRef(0);
+  // Mirror `isPlaying` into a ref so the source-resolution effect can peek
+  // at the latest value WITHOUT being re-run on every play/pause toggle.
+  // Re-running the effect on isPlaying caused (a) extra Mux URL signings on
+  // every pause/resume and (b) currentTime resetting to 0 — i.e. the song
+  // restarted whenever the user tapped pause then play. Play/pause is now
+  // handled by a separate, lightweight effect (below) that only calls
+  // audio.play() / audio.pause() on the already-attached source.
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
-  // Sync the hidden <audio> element with the current song + isPlaying state.
+  // Resolve and attach the audio source. Deps deliberately exclude
+  // `isPlaying` — see comment on isPlayingRef above.
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -363,7 +373,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
       setAudioDuration(null);
       setCurrentTime(0);
-      if (isPlaying) {
+      if (isPlayingRef.current) {
         a.play().catch(() => setIsPlaying(false));
       }
     };
@@ -385,21 +395,28 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
       })();
     } else if (currentSong.audioUrl) {
-      // Same-URL guard: avoid resetting an already-loaded progressive src
-      // (used to cause double-play on every isPlaying toggle).
-      if (a.src === currentSong.audioUrl) {
-        if (isPlaying) a.play().catch(() => setIsPlaying(false));
-        else a.pause();
-      } else {
+      // Same-URL guard: avoid resetting an already-loaded progressive src.
+      if (a.src !== currentSong.audioUrl) {
         // NOTE: do NOT set crossOrigin — Dropbox shared-link CDNs don't
         // send Access-Control-Allow-Origin, so requesting CORS would
         // fail the load. We don't need pixel access to the audio.
         attachSrc(currentSong.audioUrl);
       }
     }
+  }, [currentSong?.id, currentSong?.audioUrl, currentSong?.muxPlaybackId, currentSong?.muxStatus]);
 
-    if (!isPlaying) a.pause();
-  }, [currentSong?.id, currentSong?.audioUrl, currentSong?.muxPlaybackId, currentSong?.muxStatus, isPlaying]);
+  // Play/pause toggle — operates on the already-attached source without
+  // re-fetching or re-loading. Keeps tap-pause-tap-play seamless.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!a.src && !hlsRef.current) return; // nothing attached yet
+    if (isPlaying) {
+      a.play().catch(() => setIsPlaying(false));
+    } else {
+      a.pause();
+    }
+  }, [isPlaying]);
 
   // Tear down hls.js on unmount.
   useEffect(() => () => {
