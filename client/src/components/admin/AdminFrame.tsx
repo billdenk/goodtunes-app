@@ -93,8 +93,10 @@ export function AdminFrame({
       <aside className="w-[220px] flex-shrink-0 border-r border-slate-200 bg-white hidden md:flex md:flex-col">
         {/* Logo sits at the top of the sidebar column so the right
             preview pane + its vertical divider can reach the very top
-            of the viewport. */}
-        <div className="h-14 flex-shrink-0 flex items-center px-4">
+            of the viewport. The border-b extends the top-of-page
+            hairline across this column so the divider runs unbroken
+            from sidebar → main → preview pane. */}
+        <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
           <Link
             href="/admin/albums"
             className="flex items-center"
@@ -147,21 +149,21 @@ export function AdminFrame({
           </nav>
         </aside>
 
-      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto relative">
-        {/* Admin badge anchored to the top-right of the main column so
-            it sits to the LEFT of the preview pane's vertical divider,
-            not above it. `sticky` keeps it visible as the operator
-            scrolls the editor, mirroring how the sidebar logo stays
-            put on the left. */}
-        <div className="sticky top-0 z-10 flex justify-end pointer-events-none px-4 pt-3">
+      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto relative flex flex-col">
+        {/* Top header strip — matches the sidebar logo header height
+            (h-14) so the bottom hairline runs unbroken across all
+            three columns. The Admin chip lives here on the right;
+            pages can use AdminPageHeader inside the body to render
+            their own breadcrumb/title beneath this strip. */}
+        <div className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-end px-4 sm:px-6">
           <span
-            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#319ED8]/10 text-[#319ED8] text-[10.5px] font-bold uppercase tracking-wider pointer-events-auto"
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#319ED8]/10 text-[#319ED8] text-[10.5px] font-bold uppercase tracking-wider"
             data-testid="badge-admin"
           >
             Admin
           </span>
         </div>
-        <div className="max-w-[1180px] px-6 sm:px-8 pb-8 -mt-6">{children}</div>
+        <div className="max-w-[1180px] px-6 sm:px-8 pt-6 pb-8">{children}</div>
       </main>
 
         {/* RIGHT PREVIEW PANE — rendered only when the page passes
@@ -179,7 +181,7 @@ export function AdminFrame({
           >
             <div
               className={[
-                "h-12 flex-shrink-0 border-b border-slate-100 flex items-center",
+                "h-14 flex-shrink-0 border-b border-slate-200 flex items-center",
                 previewOpen ? "justify-between px-3" : "justify-center px-0",
               ].join(" ")}
             >
