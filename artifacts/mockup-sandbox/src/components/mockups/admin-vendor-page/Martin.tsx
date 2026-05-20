@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   ChevronLeft,
   Share,
@@ -410,7 +411,7 @@ export function Martin() {
 
 /* ── helpers ────────────────────────────────────────────────────── */
 
-function CircularGlass({ children }: { children: React.ReactNode }) {
+function CircularGlass({ children }: { children: ReactNode }) {
   return (
     <button
       className="w-11 h-11 rounded-full inline-flex items-center justify-center active:scale-[0.94] transition-transform"
