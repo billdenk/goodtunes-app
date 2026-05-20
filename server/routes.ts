@@ -2875,6 +2875,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function streamDropboxSingleFileEntry(
     fileUrl: string,
     shouldKeep: (filename: string) => boolean,
+    opts: {
+      onDownloadProgress?: (downloaded: number, total: number | null) => void;
+    } = {},
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
     skipped: string[];
@@ -2937,6 +2940,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
       const tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
+      const clHeader = response.headers.get("content-length");
+      const totalBytes = clHeader ? Number(clHeader) || null : null;
+      let lastReported = 0;
       let size = 0;
       const cap = new Transform({
         transform(chunk, _enc, cb) {
@@ -2945,10 +2951,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             cb(new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`));
             return;
           }
+          // Throttle progress callbacks to ~64 KB chunks-worth so we
+          // don't burn cycles fanning out a setProgress on every TCP
+          // packet. Final emit happens on stream end below.
+          if (opts.onDownloadProgress && size - lastReported >= 64 * 1024) {
+            lastReported = size;
+            try { opts.onDownloadProgress(size, totalBytes); } catch {}
+          }
           cb(null, chunk);
         },
       });
       await pipeline(Readable.fromWeb(response.body as any), cap, fs.createWriteStream(tmpPath));
+      try { opts.onDownloadProgress?.(size, totalBytes ?? size); } catch {}
       clearTimeout(deadlineTimer);
       return { entries: [{ filename, tmpPath, size }], skipped: [], cleanup };
     } catch (err: any) {
@@ -3083,6 +3097,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function streamDropboxFolderEntries(
     folderUrl: string,
     shouldKeep: (filename: string) => boolean,
+    opts: {
+      onDownloadProgress?: (downloaded: number, total: number | null) => void;
+    } = {},
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
     skipped: string[];
@@ -3115,8 +3132,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // every failure path, not just post-parse ones.
     let nodeStream: NodeJS.ReadableStream;
     let cancel: () => void;
+    let dropboxTotalBytes: number | null;
     try {
-      ({ nodeStream, cancel } = await openDropboxFolderStream(folderUrl));
+      ({ nodeStream, cancel, totalBytes: dropboxTotalBytes } = await openDropboxFolderStream(folderUrl));
     } catch (err) {
       await cleanup();
       throw err;
@@ -3133,8 +3151,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // common case) the on-disk and inflated sizes are roughly equal, so
     // a single cap covers both. Per-entry caps are still enforced in
     // phase 2 below.
+    //
+    // While streaming we fire `onDownloadProgress` so the UI can paint
+    // a left-to-right fill against Dropbox's Content-Length total. We
+    // throttle to ~64 KB chunks-worth of progress reports so a 165 MB
+    // download doesn't fan out thousands of setProgress calls.
     try {
       let downloaded = 0;
+      let lastReported = 0;
       const cap = new Transform({
         transform(chunk, _enc, cb) {
           downloaded += chunk.length;
@@ -3142,10 +3166,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             cb(new Error(`That folder's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`));
             return;
           }
+          if (opts.onDownloadProgress && downloaded - lastReported >= 64 * 1024) {
+            lastReported = downloaded;
+            try { opts.onDownloadProgress(downloaded, dropboxTotalBytes); } catch {}
+          }
           cb(null, chunk);
         },
       });
       await pipeline(nodeStream, cap, fs.createWriteStream(zipPath));
+      // Final emit so the bar reaches 100% even when the last partial
+      // chunk fell under the 64 KB throttle.
+      try { opts.onDownloadProgress?.(downloaded, dropboxTotalBytes ?? downloaded); } catch {}
     } catch (err) {
       cancel();
       await cleanup();
@@ -3675,6 +3706,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const { entries: tmpEntries, skipped, cleanup } = await streamDropboxEntries(
             folderUrl,
             (filename) => extOf(filename) in AUDIO_MIME_BY_EXT,
+            {
+              // Fan Dropbox-byte progress into the job state so the
+              // ProgressStrip can paint a real left-to-right fill while
+              // we download the zip, instead of the indeterminate
+              // shimmer. Phase flips to "process" once extraction
+              // finishes and we start creating song rows.
+              onDownloadProgress: (downloaded, total) => {
+                // Always mark the phase as "download" so the client can
+                // pick the right label even when Content-Length is
+                // missing (rare; some proxies strip it). When total is
+                // unknown we send total=0, which keeps ProgressStrip in
+                // indeterminate-shimmer mode while still letting the
+                // sibling label read "Downloading from Dropbox…"
+                // instead of staying stuck on "Connecting…".
+                setProgress({
+                  processed: downloaded,
+                  total: total && total > 0 ? total : 0,
+                  phase: "download",
+                });
+              },
+            },
           );
           try {
             if (tmpEntries.length === 0) {
@@ -3697,7 +3749,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
             const created: Array<{ id: string; trackNumber: number; title: string; filename: string; duration: number }> = [];
             const errors: Array<{ filename: string; error: string }> = [];
-            setProgress({ processed: 0, total: tmpEntries.length });
+            setProgress({ processed: 0, total: tmpEntries.length, phase: "process" });
 
             for (const entry of tmpEntries) {
               const filename = entry.filename;
@@ -3757,7 +3809,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               } catch (e: any) {
                 errors.push({ filename, error: e?.message || "Failed to import" });
               }
-              setProgress({ processed: created.length + errors.length, total: tmpEntries.length });
+              setProgress({ processed: created.length + errors.length, total: tmpEntries.length, phase: "process" });
             }
             const status: "success" | "partial" | "failed" =
               created.length === 0 ? "failed" : errors.length === 0 ? "success" : "partial";
@@ -3979,7 +4031,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     status: "running" | "success" | "partial" | "failed";
     startedAt: number;
     finishedAt: number | null;
-    progress: { processed: number; total: number } | null;
+    progress: { processed: number; total: number; phase?: "download" | "process" } | null;
     summary: any;
     errorMessage: string | null;
   };
@@ -3990,7 +4042,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     jobType: string;
     albumId: string | null;
     work: (ctx: {
-      setProgress: (p: { processed: number; total: number }) => void;
+      setProgress: (p: { processed: number; total: number; phase?: "download" | "process" }) => void;
     }) => Promise<{
       status: "success" | "partial" | "failed";
       summary: any;

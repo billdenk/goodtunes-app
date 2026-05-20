@@ -2426,7 +2426,7 @@ type UploadMode = "empty" | "dropbox";
 async function pollImportJob(
   jobId: string,
   opts: {
-    onProgress?: (p: { processed: number; total: number }) => void;
+    onProgress?: (p: { processed: number; total: number; phase?: "download" | "process" }) => void;
     pollIntervalMs?: number;
     perRequestTimeoutMs?: number;
     overallTimeoutMs?: number;
@@ -2563,7 +2563,7 @@ function AddMultipleTracksDialog({
   // Polling progress for the async import job. `processed/total` drives
   // the inline "Importing 3/12…" spinner; null while we're still
   // waiting for the first poll to come back.
-  const [progress, setProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ processed: number; total: number; phase?: "download" | "process" } | null>(null);
 
   const handleConfirmDropbox = async () => {
     if (!folderUrl.trim() || running) return;
@@ -2778,9 +2778,11 @@ function AddMultipleTracksDialog({
             <ProgressStrip progress={progress} />
             <div className="flex items-center justify-between text-[11.5px] text-slate-500">
               <span data-testid="text-bulk-dropbox-progress">
-                {progress && progress.total > 0
-                  ? `Importing ${progress.processed} of ${progress.total}…`
-                  : "Downloading from Dropbox…"}
+                {!progress
+                  ? "Connecting to Dropbox…"
+                  : progress.phase === "process"
+                    ? `Importing ${progress.processed} of ${progress.total}…`
+                    : "Downloading from Dropbox…"}
               </span>
               {progress && progress.total > 0 && (
                 <span className="tabular-nums">
