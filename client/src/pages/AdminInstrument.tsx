@@ -27,6 +27,7 @@ import {
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { SHORT_CATEGORIES } from "@shared/categories";
@@ -690,20 +691,23 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
             as removed, useful when a competing brand is sponsoring this track
           </p>
         </div>
-        <button
-          onClick={() => setAdding((v) => !v)}
-          className={
-            "px-3 py-1.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 " +
-            (adding
-              ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              : "bg-[#319ED8] text-white hover:bg-[#2890c8]")
-          }
-          aria-expanded={adding}
-          data-testid="button-toggle-add-vendor"
-        >
-          <Plus className={"w-3.5 h-3.5 " + (adding ? "rotate-45" : "")} />
-          {adding ? "Done" : "Add vendor"}
-        </button>
+        {adding ? (
+          <button
+            onClick={() => setAdding(false)}
+            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200"
+            aria-expanded={adding}
+            data-testid="button-toggle-add-vendor"
+          >
+            <Plus className="w-3 h-3 rotate-45" />
+            Done
+          </button>
+        ) : (
+          <AddEntityButton
+            label="Add vendor"
+            onClick={() => setAdding(true)}
+            testId="button-toggle-add-vendor"
+          />
+        )}
       </div>
 
       {adding && (
@@ -962,11 +966,12 @@ function AddVendorForm({
           >
             Cancel
           </button>
-          <button
+          <Button
             type="button"
             onClick={submit}
             disabled={createMut.isPending}
-            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+            size="sm"
+            className="h-8 text-[11.5px] font-semibold"
             data-testid="button-save-add-vendor"
           >
             {createMut.isPending ? (
@@ -974,7 +979,7 @@ function AddVendorForm({
             ) : (
               "Attach vendor"
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -34,6 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 
 interface AdminAlbum {
   id: string;
@@ -1022,15 +1023,12 @@ function AlbumEditor({
             <h3 className="text-slate-900 text-sm font-semibold uppercase tracking-wider">
               Tracklist
             </h3>
-            <button
-              type="button"
+            <AddEntityButton
+              label="Add song"
               onClick={() => addSong.mutate()}
               disabled={addSong.isPending}
-              className="text-[12px] text-[#319ED8] hover:underline"
-              data-testid="button-add-song"
-            >
-              + Add song
-            </button>
+              testId="button-add-song"
+            />
           </div>
           <div className="rounded-lg border border-slate-200 overflow-hidden">
             {(data?.songs ?? []).map((s) => (
@@ -4109,14 +4107,11 @@ function PersonGearManager({
             : `${gearRows.length} piece${gearRows.length === 1 ? "" : "s"} of gear across ${gearRows.reduce((n, r) => n + r.tracks.length, 0)} track${gearRows.reduce((n, r) => n + r.tracks.length, 0) === 1 ? "" : "s"}.`}
         </p>
         {!adding && (
-          <button
-            type="button"
+          <AddEntityButton
+            label="Add gear"
             onClick={() => setAdding(true)}
-            className="text-[12px] text-[#319ED8] hover:underline"
-            data-testid="button-add-gear"
-          >
-            + Add gear
-          </button>
+            testId="button-add-gear"
+          />
         )}
       </div>
 
@@ -5189,15 +5184,12 @@ function PersonEditor({
                       <div className="flex items-center gap-3">
                         <span className="text-[11px] text-slate-400">{g.items.length}</span>
                         {unmatched.length > 0 && (
-                          <button
-                            type="button"
+                          <AddEntityButton
+                            label={addAll.isPending ? "Adding…" : `Add all (${unmatched.length})`}
                             onClick={() => addAll.mutate(unmatched)}
                             disabled={addAll.isPending}
-                            className="text-[11px] font-medium text-[#319ED8] hover:underline disabled:opacity-40"
-                            data-testid={`button-add-all-${g.label.toLowerCase()}`}
-                          >
-                            {addAll.isPending ? "Adding…" : `+ Add all (${unmatched.length})`}
-                          </button>
+                            testId={`button-add-all-${g.label.toLowerCase()}`}
+                          />
                         )}
                       </div>
                     </div>
@@ -5927,15 +5919,14 @@ function InstrumentEditor({
               Affiliate links that surface in the in-app gear sheet's
               "Where to buy" list.
             </p>
-            <button
-              type="button"
-              onClick={() => addVendor.mutate()}
-              disabled={addVendor.isPending}
-              className="text-[12px] text-[#319ED8] hover:underline flex-shrink-0 ml-3"
-              data-testid="button-new-vendor"
-            >
-              + Add vendor
-            </button>
+            <div className="flex-shrink-0 ml-3">
+              <AddEntityButton
+                label="Add vendor"
+                onClick={() => addVendor.mutate()}
+                disabled={addVendor.isPending}
+                testId="button-new-vendor"
+              />
+            </div>
           </div>
           <div className="space-y-2">
             {form.vendors.map((v) => (

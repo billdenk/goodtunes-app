@@ -20,6 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 /**
  * Admin home · Gear (Phase 6c).
@@ -412,18 +413,19 @@ export function AdminInstruments() {
             >
               Skip — create blank
             </button>
-            <button
+            <Button
               type="button"
               onClick={submitPaste}
               disabled={createInstrument.isPending || !pasteUrl.trim()}
-              className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold inline-flex items-center gap-1.5 bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 disabled:cursor-not-allowed"
+              size="sm"
+              className="text-[12.5px] font-semibold"
               data-testid="button-add-gear-pull"
             >
               {createInstrument.isPending && (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               )}
               {createInstrument.isPending ? "Reading…" : "Pull from URL"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

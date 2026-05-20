@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 
 // Per-track Credits panel.
 //
@@ -526,20 +527,16 @@ function AddPicker({
             </option>
           ))}
         </select>
-        <button
-          type="button"
+        <AddEntityButton
+          label="Add"
           onClick={commit}
           disabled={
             busy ||
             (!picked && !query.trim()) ||
             !pickedRoleId
           }
-          className="rounded-md bg-[#319ED8] px-2.5 py-1 text-[12px] font-semibold text-white shadow-sm hover:bg-[#2789bd] disabled:opacity-40 inline-flex items-center gap-1"
-          data-testid="button-commit-add-credit"
-        >
-          <Plus className="h-3 w-3" strokeWidth={2.5} />
-          Add
-        </button>
+          testId="button-commit-add-credit"
+        />
       </div>
 
       {showInstrumentFields && (
