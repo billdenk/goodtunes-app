@@ -139,12 +139,12 @@ export function D28() {
             </span>
             <h1
               className="text-white font-bold leading-tight tracking-tight mt-1.5"
-              style={{ fontSize: 32 }}
+              style={{ fontSize: 26 }}
             >
               D-28
             </h1>
             <p
-              className="text-[14px] mt-1 leading-snug"
+              className="text-[15px] mt-1 leading-snug"
               style={{ color: "rgba(235,235,245,0.7)" }}
             >
               Dreadnought · Standard Series · 2025
@@ -617,7 +617,7 @@ function CircularGlass({ children }: { children: ReactNode }) {
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <h2 className="text-white text-[20px] font-bold leading-tight tracking-tight">
+    <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">
       {title}
     </h2>
   );
