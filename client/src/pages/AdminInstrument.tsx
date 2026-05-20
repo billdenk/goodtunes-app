@@ -15,6 +15,7 @@ import {
   Trash2,
   ExternalLink,
   Plus,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPreviewCard";
@@ -81,12 +83,26 @@ interface InstrumentFull {
   vendors: AttachedVendor[];
 }
 
-type Tab = "overview" | "photo" | "vendors";
+type Tab = "overview" | "photo" | "vendors" | "people";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "photo", label: "Photo" },
   { key: "vendors", label: "Vendors" },
+  { key: "people", label: "People" },
 ];
+
+// Row shape for the People tab — derived from the existing
+// `/api/instruments/:id/profile` `artists` array.
+interface InstrumentArtist {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  trackCount: number;
+}
+interface InstrumentProfile {
+  instrument: InstrumentFull;
+  artists: InstrumentArtist[];
+}
 
 export function AdminInstrument() {
   const { user, isLoading: authLoading } = useAuth();
@@ -97,6 +113,7 @@ export function AdminInstrument() {
   const instrumentId = params?.id ?? "";
   const qc = useQueryClient();
   const { toast } = useToast();
+  const backCrumb = useSmartBackCrumb();
 
   const deleteInstrument = useMutation({
     mutationFn: async () => {
@@ -181,14 +198,25 @@ export function AdminInstrument() {
           <h1 className="text-slate-900 text-lg font-semibold">
             Gear not found
           </h1>
-          <Link
-            href="/admin/instruments"
-            className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
-            data-testid="link-back-to-instruments"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            Back to gear
-          </Link>
+          {backCrumb ? (
+            <Link
+              href={backCrumb.href}
+              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              data-testid={backCrumb.testId}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Back to {backCrumb.name}
+            </Link>
+          ) : (
+            <Link
+              href="/admin/instruments"
+              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              data-testid="link-back-to-instruments"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Back to gear
+            </Link>
+          )}
         </div>
       </AdminFrame>
     );
@@ -204,14 +232,24 @@ export function AdminInstrument() {
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          <Link
-            href="/admin/instruments"
-            className="hover:text-slate-700"
-            data-testid="link-breadcrumb-instruments"
-          >
-            Gear
-          </Link>
-          <ChevronRight className="w-3 h-3" />
+          {backCrumb ? (
+            <Link
+              href={backCrumb.href}
+              className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+              data-testid={backCrumb.testId}
+            >
+              {backCrumb.name}
+            </Link>
+          ) : (
+            <Link
+              href="/admin/instruments"
+              className="hover:text-slate-700"
+              data-testid="link-breadcrumb-instruments"
+            >
+              Gear
+            </Link>
+          )}
+          <ChevronRight className="w-3 h-3 flex-shrink-0" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">
             {instrument.name}
           </span>
@@ -297,6 +335,7 @@ export function AdminInstrument() {
         {tab === "vendors" && (
           <VendorsPanel instrument={instrument} />
         )}
+        {tab === "people" && <PeoplePanel instrument={instrument} />}
       </div>
 
       <Dialog
@@ -984,6 +1023,103 @@ function AddVendorForm({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── People tab — read-and-pivot view of credited artists ────────── */
+
+function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
+  // Reuses the existing public profile endpoint — `artists` is already
+  // the dedup'd Person list with a per-person `trackCount`. No new
+  // server endpoint needed (see Task #17).
+  const { data, isLoading, error } = useQuery<InstrumentProfile>({
+    queryKey: ["/api/instruments", instrument.id, "profile"],
+    enabled: !!instrument.id,
+  });
+
+  if (isLoading) {
+    return (
+      <div
+        className="py-10 flex items-center justify-center"
+        data-testid="people-panel-loading"
+      >
+        <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-[13px] text-rose-700"
+        data-testid="people-panel-error"
+      >
+        Couldn't load the people credited on this gear. Try refreshing.
+      </div>
+    );
+  }
+
+  const artists = data?.artists ?? [];
+
+  if (artists.length === 0) {
+    return (
+      <div
+        className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center"
+        data-testid="people-panel-empty"
+      >
+        <Users className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+        <p className="text-[13.5px] text-slate-500">
+          No one's been credited on this instrument yet.
+        </p>
+        <p className="text-[11.5px] text-slate-400 mt-1">
+          Credits added on an album's Tracks tab will show up here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul
+      className="rounded-lg border bg-white divide-y divide-slate-100"
+      data-testid="list-instrument-people"
+    >
+      {artists.map((a) => (
+        <li
+          key={a.id}
+          className="group hover:bg-slate-50/50 transition-colors"
+          data-testid={`row-person-${a.id}`}
+        >
+          <Link
+            href={`/admin/people/${a.id}?from=instrument&instrumentId=${instrument.id}`}
+            className="flex items-center gap-4 px-6 py-3.5"
+            data-testid={`link-person-${a.id}`}
+          >
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
+              {a.photoUrl ? (
+                <img
+                  src={a.photoUrl}
+                  alt={a.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-[12px] font-bold text-slate-400">
+                  {a.name.charAt(0).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[#319ED8] group-hover:underline underline-offset-2 transition-colors">
+                {a.name}
+              </div>
+              <div className="text-[11.5px] text-slate-400">
+                {a.trackCount} {a.trackCount === 1 ? "track" : "tracks"} on this instrument
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 

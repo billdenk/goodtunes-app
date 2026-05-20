@@ -71,6 +71,33 @@ The five admin index pages (Albums, People, Gear, Vendors, Labels) all carry the
 
 When adding a new admin index page, follow the same pattern: `useViewMode("<entity>")`, place the `<ViewModeToggle>` in the right-side header cluster, and render a per-entity `<EntityRow>` for the list branch.
 
+### Admin cross-section deep links — `?from=<entity>&<entity>Id=<id>`
+Many admin entities relate to each other (a Person plays Gear, Gear is sold by a Vendor, an Album is on a Label). When the operator pivots from one entity's detail page into a related entity's detail page (e.g. Gear → Vendor, Gear → Person, Person → Gear), the destination's first breadcrumb should swap from the canonical section root ("Vendors", "People", "Gear") to a **back-link at the origin row**, and the section-not-found error state should offer "Back to {origin name}" instead of "Back to {section}".
+
+The signal is a pair of query-string params on the destination URL:
+
+```
+/admin/<destEntity>/<destId>?from=<originEntity>&<originEntity>Id=<originId>
+```
+
+Examples:
+- Gear → Vendor: `/admin/vendors/v_123?from=instrument&instrumentId=i_77`
+- Gear → Person: `/admin/people/p_42?from=instrument&instrumentId=i_77`
+- Person → Gear: `/admin/instruments/i_77?from=person&personId=p_42`
+
+The destination consumes the params via the shared `useSmartBackCrumb()` hook at `client/src/hooks/useSmartBackCrumb.ts`, which:
+- Reads `?from=<entity>` + the matching `<entity>Id=<id>` param.
+- Fetches `/api/<entity>/{id}` so the crumb reads the row's real name (not just "Gear").
+- Returns `{ origin, id, name, href, testId }` or `null` when no origin is present.
+- Falls back to the canonical section root crumb when null — direct visits keep reading normally.
+
+**Adding a new cross-section pivot:**
+1. On the **origin** page, render the deep link with `?from=<entity>&<entity>Id=<id>` on the row that pivots. Reuse the inline-link treatment (inherit color → brand-blue + underline on hover).
+2. If your destination entity is new to the hook, add it to the `ORIGINS` map in `useSmartBackCrumb.ts` (param name + API path + admin href + testid prefix + fallback name).
+3. On the **destination** page, call `useSmartBackCrumb()` once and use the returned crumb in both the breadcrumb chain and the not-found error state. No further state is needed — refreshes and shared deep-links work because the signal lives in the URL.
+
+Currently wired: Gear ↔ Vendor, Gear ↔ Person. Album ↔ Person, Album ↔ Label, Vendor ↔ Label use the same primitive — wire them in when their cross-section tabs ship.
+
 ### Person sheet — content guardrails
 The public, fan-facing Person sheet (and any artist bio surface we ingest) must **not** include legal-issue, criminal-allegation, lawsuit, or controversy content, even when the source (Wikipedia, Roon, MusicBrainz, etc.) has those sections. When ingesting biographies, filter out sections titled along the lines of "Legal issues", "Allegations", "Controversy", "Lawsuits", or any incident/court coverage — keep early life, career, discography, charity work, family, and music-related content only. This is a product rule, not a one-off Nick decision.
 

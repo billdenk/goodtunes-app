@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
@@ -96,23 +97,12 @@ export function AdminVendor() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  // Origin signal — when the operator came here from an instrument's
-  // Vendors tab, the first breadcrumb crumb swaps from "Vendors" to the
-  // instrument name and routes back to that instrument. Soft signal via
-  // query string so deep-links + refreshes still work.
-  const search = typeof window !== "undefined" ? window.location.search : "";
-  const fromInstrumentId = (() => {
-    try {
-      const sp = new URLSearchParams(search);
-      return sp.get("from") === "instrument" ? sp.get("instrumentId") : null;
-    } catch {
-      return null;
-    }
-  })();
-  const { data: fromInstrument } = useQuery<{ id: string; name: string }>({
-    queryKey: ["/api/instruments", fromInstrumentId],
-    enabled: !!user?.isAdmin && !!fromInstrumentId,
-  });
+  // Origin signal — when the operator came here from a sibling section
+  // (e.g. an instrument's Vendors tab), the first breadcrumb swaps from
+  // "Vendors" to the origin row's name and links back to it. Soft signal
+  // via `?from=<entity>&<entity>Id=<id>` query string so deep-links +
+  // refreshes still work. See `useSmartBackCrumb` + replit.md.
+  const backCrumb = useSmartBackCrumb();
 
   const deleteVendor = useMutation({
     mutationFn: async () => {
@@ -180,14 +170,14 @@ export function AdminVendor() {
           <h1 className="text-slate-900 text-lg font-semibold">
             Vendor not found
           </h1>
-          {fromInstrumentId && fromInstrument ? (
+          {backCrumb ? (
             <Link
-              href={`/admin/instruments/${fromInstrumentId}`}
+              href={backCrumb.href}
               className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
-              data-testid={`link-back-to-instrument-${fromInstrumentId}`}
+              data-testid={backCrumb.testId}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
-              Back to {fromInstrument.name}
+              Back to {backCrumb.name}
             </Link>
           ) : (
             <Link
@@ -216,13 +206,13 @@ export function AdminVendor() {
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          {fromInstrumentId && fromInstrument ? (
+          {backCrumb ? (
             <Link
-              href={`/admin/instruments/${fromInstrumentId}`}
+              href={backCrumb.href}
               className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
-              data-testid={`link-back-to-instrument-${fromInstrumentId}`}
+              data-testid={backCrumb.testId}
             >
-              {fromInstrument.name}
+              {backCrumb.name}
             </Link>
           ) : (
             <Link

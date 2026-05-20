@@ -15,11 +15,13 @@ import {
   Lock,
   LockOpen,
   Disc3,
+  Guitar,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import {
   PersonPreviewCard,
@@ -89,13 +91,33 @@ interface LabelLite {
 // even though the discography endpoints under the hood still say
 // "discography" — the rename is UI-only on purpose so the iTunes pull
 // machinery doesn't ripple.
-type Tab = "overview" | "cover" | "releases" | "streaming";
+type Tab = "overview" | "cover" | "releases" | "streaming" | "gear";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
   { key: "releases", label: "GoodTunes Releases\u00AE" },
   { key: "streaming", label: "Streaming" },
+  { key: "gear", label: "Gear" },
 ];
+
+// Track row shape from `/api/people/:id/profile` — used to derive the
+// dedup'd instrument list for the Gear tab.
+interface PersonProfileTrack {
+  songId: string;
+  songTitle: string;
+  albumTitle: string;
+  albumArtwork: string;
+  instrumentId: string | null;
+  instrumentName: string | null;
+  instrumentShortCategory: string | null;
+  instrumentCategory: string | null;
+  instrumentPhotoUrl: string | null;
+  role: string | null;
+}
+interface PersonProfile {
+  person: PersonFull;
+  tracks: PersonProfileTrack[];
+}
 
 export function AdminPerson() {
   const { user, isLoading: authLoading } = useAuth();
@@ -111,6 +133,7 @@ export function AdminPerson() {
   const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const personId = params?.id ?? "";
+  const backCrumb = useSmartBackCrumb();
 
   // Mirror of AdminAlbum's deleteAlbum mutation. Person FKs on tracks +
   // albums.primaryArtistId are SET NULL, so deletion unlinks credits and
@@ -190,14 +213,25 @@ export function AdminPerson() {
           <h1 className="text-slate-900 text-lg font-semibold">
             Person not found
           </h1>
-          <Link
-            href="/admin/people"
-            className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
-            data-testid="link-back-to-people"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            Back to people
-          </Link>
+          {backCrumb ? (
+            <Link
+              href={backCrumb.href}
+              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              data-testid={backCrumb.testId}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Back to {backCrumb.name}
+            </Link>
+          ) : (
+            <Link
+              href="/admin/people"
+              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              data-testid="link-back-to-people"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Back to people
+            </Link>
+          )}
         </div>
       </AdminFrame>
     );
@@ -217,14 +251,24 @@ export function AdminPerson() {
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          <Link
-            href="/admin/people"
-            className="hover:text-slate-700"
-            data-testid="link-breadcrumb-people"
-          >
-            People
-          </Link>
-          <ChevronRight className="w-3 h-3" />
+          {backCrumb ? (
+            <Link
+              href={backCrumb.href}
+              className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+              data-testid={backCrumb.testId}
+            >
+              {backCrumb.name}
+            </Link>
+          ) : (
+            <Link
+              href="/admin/people"
+              className="hover:text-slate-700"
+              data-testid="link-breadcrumb-people"
+            >
+              People
+            </Link>
+          )}
+          <ChevronRight className="w-3 h-3 flex-shrink-0" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">
             {person.name}
           </span>
@@ -329,6 +373,7 @@ export function AdminPerson() {
           <ReleasesPanel person={person} allAlbums={allAlbums} />
         )}
         {tab === "streaming" && <DiscographyPanel person={person} />}
+        {tab === "gear" && <GearPanel person={person} />}
       </div>
 
       {/* Destructive confirm sheet — names the person and explains what
@@ -1230,3 +1275,125 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
   );
 }
 
+
+/* ─── Gear tab — read-and-pivot view of instruments credited ──────── */
+
+function GearPanel({ person }: { person: PersonFull }) {
+  // Reuses the existing `/api/people/:id/profile` endpoint. We dedupe
+  // tracks by instrumentId here so the same D-28 used on three tracks
+  // shows once with a trackCount of 3. Role-only credits (instrumentId
+  // null) are skipped — they aren't gear, they're roles.
+  const { data, isLoading, error } = useQuery<PersonProfile>({
+    queryKey: ["/api/people", person.id, "profile"],
+    enabled: !!person.id,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="py-10 flex items-center justify-center" data-testid="gear-panel-loading">
+        <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-[13px] text-rose-700"
+        data-testid="gear-panel-error"
+      >
+        Couldn't load this person's gear credits. Try refreshing.
+      </div>
+    );
+  }
+
+  type GearRow = {
+    instrumentId: string;
+    instrumentName: string;
+    instrumentCategory: string | null;
+    instrumentShortCategory: string | null;
+    instrumentPhotoUrl: string | null;
+    trackCount: number;
+  };
+  const tracks = data?.tracks ?? [];
+  const byId = new Map<string, GearRow>();
+  for (const t of tracks) {
+    if (!t.instrumentId || !t.instrumentName) continue;
+    const existing = byId.get(t.instrumentId);
+    if (existing) {
+      existing.trackCount += 1;
+    } else {
+      byId.set(t.instrumentId, {
+        instrumentId: t.instrumentId,
+        instrumentName: t.instrumentName,
+        instrumentCategory: t.instrumentCategory,
+        instrumentShortCategory: t.instrumentShortCategory,
+        instrumentPhotoUrl: t.instrumentPhotoUrl,
+        trackCount: 1,
+      });
+    }
+  }
+  const rows = Array.from(byId.values()).sort((a, b) =>
+    a.instrumentName.localeCompare(b.instrumentName),
+  );
+
+  if (rows.length === 0) {
+    return (
+      <div
+        className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center"
+        data-testid="gear-panel-empty"
+      >
+        <Guitar className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+        <p className="text-[13.5px] text-slate-500">
+          No instrument credits for this person yet.
+        </p>
+        <p className="text-[11.5px] text-slate-400 mt-1">
+          Add a performer credit with an attached piece of gear on any album's Tracks tab.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul
+      className="rounded-lg border bg-white divide-y divide-slate-100"
+      data-testid="list-person-gear"
+    >
+      {rows.map((r) => (
+        <li
+          key={r.instrumentId}
+          className="group hover:bg-slate-50/50 transition-colors"
+          data-testid={`row-instrument-${r.instrumentId}`}
+        >
+          <Link
+            href={`/admin/instruments/${r.instrumentId}?from=person&personId=${person.id}`}
+            className="flex items-center gap-4 px-6 py-3.5"
+            data-testid={`link-instrument-${r.instrumentId}`}
+          >
+            <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+              {r.instrumentPhotoUrl ? (
+                <img
+                  src={r.instrumentPhotoUrl}
+                  alt={r.instrumentName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Guitar className="w-5 h-5 text-slate-300" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[#319ED8] group-hover:underline underline-offset-2 transition-colors">
+                {r.instrumentName}
+              </div>
+              <div className="text-[11.5px] text-slate-400 truncate">
+                {r.instrumentShortCategory || r.instrumentCategory || "Gear"} ·{" "}
+                {r.trackCount} {r.trackCount === 1 ? "track" : "tracks"}
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
