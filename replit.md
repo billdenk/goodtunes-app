@@ -24,6 +24,9 @@ Mobile-first, Apple-Music-inspired web player.
 
 ## User preferences
 
+### Debugging — always check prod alongside dev
+When diagnosing any reported failure (import jobs, audit logs, missing rows, "I don't see X in the UI"), query **both** databases before drawing conclusions. The dev DB and prod DB diverge constantly — the user does most of their real work against the deployed app, so a clean dev DB doesn't mean the bug isn't real. Use `executeSql({ environment: "production" })` (read-only SELECTs only) for the prod read; never assume a single-environment query is the full picture.
+
 ### Design system (app-wide — admin + player)
 **One design system covers the entire product** — the mobile player, the admin/CMS, and every mockup. Identical concepts must look identical everywhere. No one-off colors, button sizes, hover treatments, or icon sizes outside the primitives.
 
