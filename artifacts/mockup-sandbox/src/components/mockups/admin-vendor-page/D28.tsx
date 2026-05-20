@@ -159,6 +159,7 @@ export function D28() {
               width: 96,
               height: 96,
               background: "#000",
+              border: "1px solid rgba(255,255,255,0.10)",
               boxShadow: "0 4px 18px rgba(0,0,0,0.45)",
             }}
             aria-label="C.F. Martin & Co."
