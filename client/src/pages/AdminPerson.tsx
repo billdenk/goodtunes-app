@@ -344,7 +344,7 @@ export function AdminPerson() {
           data-testid="dialog-delete-person"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
               Delete <span className="italic">{person.name}</span>?
             </DialogTitle>
             <DialogDescription className="text-[13px] font-normal text-slate-500">

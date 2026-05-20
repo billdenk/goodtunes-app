@@ -10,7 +10,9 @@ import {
   Store,
   ExternalLink,
   MapPin,
+  Trash2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -89,7 +91,31 @@ export function AdminVendor() {
   // wide background banner needs more real estate (and a different art
   // direction story we're still figuring out).
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const vendorId = params?.id ?? "";
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const deleteVendor = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/vendors/${vendorId}`);
+    },
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ["/api/vendors", vendorId, "profile"] });
+      qc.invalidateQueries({ queryKey: ["/api/vendors"] });
+      qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      toast({ title: "Vendor deleted." });
+      setDeleteConfirmOpen(false);
+      navigate("/admin/vendors");
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't delete vendor",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -246,29 +272,47 @@ export function AdminVendor() {
           </div>
         </div>
 
-        {/* TABS */}
+        {/* TABS — left-aligned tabs, gray trash on the right, both
+            riding the same hairline. Mirrors AdminPerson/AdminAlbum:
+            hover reveals a "Delete" label; opens a rose-tinted confirm
+            sheet per the replit.md destructive-actions rule. */}
         <div
-          className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-vendor"
         >
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={[
-                "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                tab === t.key
-                  ? "text-slate-900"
-                  : "text-slate-400 hover:text-slate-700",
-              ].join(" ")}
-              data-testid={`tab-${t.key}`}
-            >
-              {t.label}
-              {tab === t.key && (
-                <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
-              )}
-            </button>
-          ))}
+          <div className="flex items-center gap-5 overflow-x-auto">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteVendor.isPending}
+            aria-label="Delete vendor"
+            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
+            data-testid="button-delete-vendor"
+          >
+            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              Delete
+            </span>
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* CONTENT */}
@@ -278,6 +322,62 @@ export function AdminVendor() {
           <InstrumentsPanel instruments={instruments} />
         )}
       </div>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(v) => !deleteVendor.isPending && setDeleteConfirmOpen(v)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-delete-vendor"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Delete <span className="italic">{vendor.name}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              {instruments.length > 0 ? (
+                <>
+                  This vendor is listed on{" "}
+                  <span className="font-semibold text-slate-700">
+                    {instruments.length}{" "}
+                    {instruments.length === 1
+                      ? "piece of gear"
+                      : "pieces of gear"}
+                  </span>
+                  . Cancel to review the Instruments tab first, or continue
+                  to remove it everywhere — this can't be undone.
+                </>
+              ) : (
+                <>
+                  Nothing currently links to this vendor. This cannot be
+                  undone.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deleteVendor.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-delete-vendor-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => deleteVendor.mutate()}
+              disabled={deleteVendor.isPending}
+              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              data-testid="button-delete-vendor-confirm"
+            >
+              {deleteVendor.isPending ? "Deleting…" : "Delete vendor"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminFrame>
   );
 }

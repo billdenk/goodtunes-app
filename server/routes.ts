@@ -6542,6 +6542,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!i) return res.status(404).json({ message: "Instrument not found" });
     return res.json(i);
   });
+  app.get("/api/admin/instruments/:id/usage", requireAdmin, async (req, res) => {
+    return res.json(await storage.getInstrumentUsage(String(req.params.id)));
+  });
   app.delete("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
     await storage.deleteInstrument(String(req.params.id));
     return res.json({ message: "Deleted" });

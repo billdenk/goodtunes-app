@@ -12,7 +12,16 @@ import {
   MapPin,
   Disc,
   Instagram,
+  Trash2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -70,7 +79,32 @@ export function AdminLabel() {
   const [, params] = useRoute<{ id: string }>("/admin/labels/:id");
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const labelId = params?.id ?? "";
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const deleteLabel = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/labels/${labelId}`);
+    },
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ["/api/labels", labelId] });
+      qc.invalidateQueries({ queryKey: ["/api/labels"] });
+      qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Label deleted." });
+      setDeleteConfirmOpen(false);
+      navigate("/admin/labels");
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't delete label",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -100,6 +134,14 @@ export function AdminLabel() {
         .filter((a) => a.labelId === labelId)
         .sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
     [allAlbums, labelId],
+  );
+
+  // People directly signed to this label. `albums.labelId` is also a link
+  // but we count those via `releases` above so the operator sees the two
+  // numbers separately.
+  const linkedPeopleCount = useMemo(
+    () => allPeople.filter((p) => p.labelId === labelId).length,
+    [allPeople, labelId],
   );
 
   const openInClassicAdmin = () => {
@@ -239,29 +281,45 @@ export function AdminLabel() {
           </div>
         </div>
 
-        {/* TABS */}
+        {/* TABS — left tabs + gray trash on the right, both riding the
+            same hairline. Mirrors AdminPerson/AdminAlbum. */}
         <div
-          className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-label"
         >
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={[
-                "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                tab === t.key
-                  ? "text-slate-900"
-                  : "text-slate-400 hover:text-slate-700",
-              ].join(" ")}
-              data-testid={`tab-${t.key}`}
-            >
-              {t.label}
-              {tab === t.key && (
-                <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
-              )}
-            </button>
-          ))}
+          <div className="flex items-center gap-5 overflow-x-auto">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteLabel.isPending}
+            aria-label="Delete label"
+            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
+            data-testid="button-delete-label"
+          >
+            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              Delete
+            </span>
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {tab === "overview" && <OverviewPanel label={label} />}
@@ -269,6 +327,70 @@ export function AdminLabel() {
         {tab === "cover" && <CoverPanel label={label} />}
         {tab === "releases" && <ReleasesPanel releases={releases} />}
       </div>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(v) => !deleteLabel.isPending && setDeleteConfirmOpen(v)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-delete-label"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Delete <span className="italic">{label.name}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              {releases.length > 0 || linkedPeopleCount > 0 ? (
+                <>
+                  This label is linked to{" "}
+                  {releases.length > 0 && (
+                    <span className="font-semibold text-slate-700">
+                      {releases.length}{" "}
+                      {releases.length === 1 ? "album" : "albums"}
+                    </span>
+                  )}
+                  {releases.length > 0 && linkedPeopleCount > 0 && " and "}
+                  {linkedPeopleCount > 0 && (
+                    <span className="font-semibold text-slate-700">
+                      {linkedPeopleCount}{" "}
+                      {linkedPeopleCount === 1 ? "person" : "people"}
+                    </span>
+                  )}
+                  . They'll keep their snapshot but lose the label link.
+                  Cancel to review them first, or continue — this can't be
+                  undone.
+                </>
+              ) : (
+                <>
+                  Nothing currently links to this label. This cannot be
+                  undone.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deleteLabel.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-delete-label-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => deleteLabel.mutate()}
+              disabled={deleteLabel.isPending}
+              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              data-testid="button-delete-label-confirm"
+            >
+              {deleteLabel.isPending ? "Deleting…" : "Delete label"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminFrame>
   );
 }

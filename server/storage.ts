@@ -142,6 +142,11 @@ export interface IStorage {
   createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument>;
   updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined>;
   deleteInstrument(id: string): Promise<void>;
+  // Pre-delete usage check — how many track credits (performer rows)
+  // currently reference this instrument. Used by the admin delete-
+  // confirm dialog so the operator sees "Used on 12 track credits"
+  // before they cascade.
+  getInstrumentUsage(id: string): Promise<{ performerCount: number }>;
 
   // Label ENTITY CRUD. Each album.labelId points here (nullable, SET NULL).
   // Editing the label propagates to every album released on it.
@@ -727,6 +732,17 @@ export class DbStorage implements IStorage {
     // rows go with the instrument. Vendor entities are untouched (they may
     // still be attached to other instruments).
     await db.delete(instruments).where(eq(instruments.id, id));
+  }
+
+  async getInstrumentUsage(id: string): Promise<{ performerCount: number }> {
+    // Count track_performer rows referencing this instrument. These are
+    // the credit lines that will have their `instrumentId` SET NULL on
+    // delete (the snapshot `name` survives, the gear link is what's lost).
+    const [row] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(trackPerformers)
+      .where(eq(trackPerformers.instrumentId, id));
+    return { performerCount: row?.c ?? 0 };
   }
 
   // ----- Label ENTITY CRUD --------------------------------------------

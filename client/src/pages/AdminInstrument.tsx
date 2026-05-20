@@ -16,6 +16,14 @@ import {
   ExternalLink,
   Plus,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -84,7 +92,40 @@ export function AdminInstrument() {
   const [, params] = useRoute<{ id: string }>("/admin/instruments/:id");
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const instrumentId = params?.id ?? "";
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const deleteInstrument = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/instruments/${instrumentId}`);
+    },
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ["/api/instruments", instrumentId] });
+      qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      qc.invalidateQueries({ queryKey: ["/api/vendors"] });
+      qc.invalidateQueries({ queryKey: ["/api/songs"] });
+      // Track credits live under ["/api/albums", albumId, "credits"] and
+      // ["/api/songs", songId, "credits"]. With staleTime: Infinity we
+      // must invalidate by predicate so any open credits surface drops
+      // the gear reference we just SET NULL'd.
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) && q.queryKey[2] === "credits",
+      });
+      toast({ title: "Gear deleted." });
+      setDeleteConfirmOpen(false);
+      navigate("/admin/instruments");
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't delete gear",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -96,6 +137,14 @@ export function AdminInstrument() {
   const { data: instrument, isLoading, error } = useQuery<InstrumentFull>({
     queryKey: ["/api/instruments", instrumentId],
     enabled: !!user?.isAdmin && !!instrumentId,
+  });
+
+  // How many track credits currently point at this instrument. Loaded
+  // lazily when the delete-confirm dialog opens so the operator sees
+  // "Used on N track credits" before they cascade.
+  const { data: usage } = useQuery<{ performerCount: number }>({
+    queryKey: ["/api/admin/instruments", instrumentId, "usage"],
+    enabled: !!user?.isAdmin && !!instrumentId && deleteConfirmOpen,
   });
 
   const openInClassicAdmin = () => {
@@ -200,29 +249,45 @@ export function AdminInstrument() {
           </div>
         </div>
 
-        {/* TABS */}
+        {/* TABS — left tabs + gray trash on the right, both riding the
+            same hairline. Mirrors AdminPerson/AdminAlbum. */}
         <div
-          className="flex items-center gap-5 border-b border-slate-200 overflow-x-auto"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-instrument"
         >
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={[
-                "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                tab === t.key
-                  ? "text-slate-900"
-                  : "text-slate-400 hover:text-slate-700",
-              ].join(" ")}
-              data-testid={`tab-${t.key}`}
-            >
-              {t.label}
-              {tab === t.key && (
-                <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
-              )}
-            </button>
-          ))}
+          <div className="flex items-center gap-5 overflow-x-auto">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteInstrument.isPending}
+            aria-label="Delete gear"
+            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
+            data-testid="button-delete-instrument"
+          >
+            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              Delete
+            </span>
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* TAB CONTENT */}
@@ -232,6 +297,77 @@ export function AdminInstrument() {
           <VendorsPanel instrument={instrument} />
         )}
       </div>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(v) =>
+          !deleteInstrument.isPending && setDeleteConfirmOpen(v)
+        }
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-delete-instrument"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Delete <span className="italic">{instrument.name}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              {(() => {
+                const vc = instrument.vendors?.length ?? 0;
+                const pc = usage?.performerCount ?? 0;
+                if (vc === 0 && pc === 0) {
+                  return (
+                    <>
+                      Nothing currently links to this piece of gear. This
+                      cannot be undone.
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    This piece of gear is linked to{" "}
+                    {vc > 0 && (
+                      <span className="font-semibold text-slate-700">
+                        {vc} {vc === 1 ? "vendor listing" : "vendor listings"}
+                      </span>
+                    )}
+                    {vc > 0 && pc > 0 && " and "}
+                    {pc > 0 && (
+                      <span className="font-semibold text-slate-700">
+                        {pc} {pc === 1 ? "track credit" : "track credits"}
+                      </span>
+                    )}
+                    . Vendor listings are removed; track credits keep their
+                    snapshot but lose the gear link. Cancel to review first,
+                    or continue — this can't be undone.
+                  </>
+                );
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deleteInstrument.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-delete-instrument-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => deleteInstrument.mutate()}
+              disabled={deleteInstrument.isPending}
+              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              data-testid="button-delete-instrument-confirm"
+            >
+              {deleteInstrument.isPending ? "Deleting…" : "Delete gear"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminFrame>
   );
 }
