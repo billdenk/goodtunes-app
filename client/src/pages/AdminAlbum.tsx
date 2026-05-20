@@ -425,6 +425,21 @@ export function AdminAlbum() {
   const { data: album, isLoading, error } = useQuery<AlbumFull>({
     queryKey: ["/api/albums", albumId],
     enabled: !!user?.isAdmin && !!albumId,
+    // While Mux is still encoding any track on this album (status is
+    // `ingesting` or `preparing`), poll every 3s so the admin player and
+    // the "Mux N/N" pill flip to `ready` the moment encoding finishes —
+    // without the operator needing to click anything. Returns false once
+    // every track with audio is `ready` (or has no audio), which stops
+    // the interval.
+    refetchInterval: (query) => {
+      const songs = (query.state.data as AlbumFull | undefined)?.songs ?? [];
+      const stillEncoding = songs.some(
+        (s) =>
+          !!s.audioUrl &&
+          (s.muxStatus === "ingesting" || s.muxStatus === "preparing"),
+      );
+      return stillEncoding ? 3000 : false;
+    },
   });
 
   const deleteAlbum = useMutation({
@@ -1462,6 +1477,15 @@ function TracksPanel({
       });
     };
 
+    // If Mux is still encoding this track (`ingesting`/`preparing`), don't
+    // attempt the raw `/objects/*.wav` fallback — large WAVs 500 on the
+    // Replit edge proxy and the user would just hear silence + a broken
+    // player. Sit tight: the album query polls every 3s, so the moment
+    // Mux flips to `ready` this effect re-runs (muxStatus is in deps) and
+    // attaches the HLS stream automatically. No button click required.
+    const muxEncoding =
+      currentSong.muxStatus === "ingesting" ||
+      currentSong.muxStatus === "preparing";
     if (useMux) {
       // Fetch a signed 1-hour Mux HLS URL, then attach. Falls back to the
       // raw audioUrl on failure so admins aren't locked out while we debug.
@@ -1482,6 +1506,15 @@ function TracksPanel({
           }
         }
       })();
+    } else if (muxEncoding) {
+      // Wait for the poll to flip this to `ready`. Pause & clear src so the
+      // dock doesn't appear to be playing nothing.
+      audio.pause();
+      teardownHls();
+      audio.removeAttribute("src");
+      audio.load();
+      setProgress(0);
+      setPlaying(false);
     } else if (currentSong.audioUrl) {
       attachAndPlay(currentSong.audioUrl);
     }
