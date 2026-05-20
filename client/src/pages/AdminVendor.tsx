@@ -255,7 +255,7 @@ export function AdminVendor() {
               <img
                 src={vendor.logoUrl}
                 alt={vendor.name}
-                className="w-full h-full object-contain p-2 transition-transform group-hover:scale-[1.03]"
+                className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
                 data-testid="img-vendor-logo"
               />
             ) : (

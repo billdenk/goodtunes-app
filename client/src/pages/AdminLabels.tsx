@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, X, Tag } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -33,6 +35,32 @@ export function AdminLabels() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("labels");
+  const { toast } = useToast();
+
+  // Create-then-route, mirroring AdminAlbums. Backend only requires
+  // `name`, so we POST a placeholder the admin renames on the detail page.
+  const createLabel = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/labels", {
+        name: "New label",
+      });
+      return res.json() as Promise<LabelLite>;
+    },
+    onSuccess: (l) => {
+      queryClient.setQueryData<LabelLite[]>(["/api/labels"], (old) =>
+        old ? (old.some((x) => x.id === l.id) ? old : [...old, l]) : [l],
+      );
+      queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
+      navigate(`/admin/labels/${l.id}`);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't create label",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -66,11 +94,8 @@ export function AdminLabels() {
   const openLabel = (id: string) => navigate(`/admin/labels/${id}`);
 
   const openNewLabel = () => {
-    try {
-      localStorage.setItem("gt:admin:entity", "labels");
-      localStorage.setItem("gt:admin:new", "label");
-    } catch {}
-    navigate("/admin");
+    if (createLabel.isPending) return;
+    createLabel.mutate();
   };
 
   if (authLoading) {
@@ -143,6 +168,7 @@ export function AdminLabels() {
           <AddEntityButton
             label="Add Label"
             onClick={openNewLabel}
+            disabled={createLabel.isPending}
             testId="button-new-label"
           />
         </>)}

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { Search, X, Store } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Search, X, Store, Loader2 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -10,6 +12,36 @@ import {
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+
+// apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
+// the status prefix and unwrap the JSON `message` so inline dialog errors
+// read like English instead of like a stack trace.
+function humanizeApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  if (!raw) {
+    return "Couldn't read that page. Try the URL again, or Skip to create a blank entry.";
+  }
+  const m = raw.match(/^\d{3}:\s*(.*)$/);
+  const body = m ? m[1] : raw;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return body.trim() || raw;
+}
 
 /**
  * Admin home · Vendors (Phase 6e).
@@ -38,6 +70,76 @@ export function AdminVendors() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("vendors");
+  const { toast } = useToast();
+
+  // "Add Vendor" opens a paste-URL dialog — paste the vendor's home or
+  // About page and the server scraper prefills name / domain / logo /
+  // cover / bio. Mirrors AdminInstruments. "Skip" still creates a blank
+  // placeholder so hand-entry isn't blocked.
+  const [addOpen, setAddOpen] = useState(false);
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
+  const createVendor = useMutation({
+    mutationFn: async (opts: { url?: string }) => {
+      let payload: Record<string, unknown> = {
+        name: "New vendor",
+        domain: `new-vendor-${Date.now()}.example`,
+      };
+      let scrapedName: string | null = null;
+      const trimmedUrl = (opts.url ?? "").trim();
+      if (trimmedUrl) {
+        const sr = await apiRequest("POST", "/api/admin/vendors/scrape", {
+          url: trimmedUrl,
+        });
+        const scraped = (await sr.json()) as {
+          name: string | null;
+          domain: string | null;
+          homeUrl: string | null;
+          aboutUrl: string | null;
+          logoUrl: string | null;
+          coverUrl: string | null;
+          bio: string | null;
+          tagline: string | null;
+        };
+        scrapedName = scraped.name;
+        payload = {
+          name: scraped.name || "New vendor",
+          // Fall back to a unique placeholder so the unique-domain
+          // constraint never blocks the create when scrape returns null.
+          domain: scraped.domain || `new-vendor-${Date.now()}.example`,
+          ...(scraped.homeUrl ? { homeUrl: scraped.homeUrl } : {}),
+          ...(scraped.aboutUrl ? { aboutUrl: scraped.aboutUrl } : {}),
+          ...(scraped.logoUrl ? { logoUrl: scraped.logoUrl } : {}),
+          ...(scraped.coverUrl ? { coverUrl: scraped.coverUrl } : {}),
+          ...(scraped.bio ? { bio: scraped.bio } : {}),
+          ...(scraped.tagline ? { tagline: scraped.tagline } : {}),
+        };
+      }
+      const res = await apiRequest("POST", "/api/admin/vendors", payload);
+      const vendor = (await res.json()) as VendorLite;
+      return { vendor, scrapedName };
+    },
+    onSuccess: ({ vendor, scrapedName }) => {
+      queryClient.setQueryData<VendorLite[]>(["/api/vendors"], (old) =>
+        old ? (old.some((x) => x.id === vendor.id) ? old : [...old, vendor]) : [vendor],
+      );
+      queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
+      setAddOpen(false);
+      setPasteUrl("");
+      setPasteError(null);
+      if (scrapedName) {
+        toast({
+          title: `Pulled "${scrapedName}"`,
+          description: "Review and edit on the detail page.",
+        });
+      }
+      navigate(`/admin/vendors/${vendor.id}`);
+    },
+    onError: (err: any) => {
+      setPasteError(humanizeApiError(err));
+    },
+  });
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -72,11 +174,31 @@ export function AdminVendors() {
   const openVendor = (id: string) => navigate(`/admin/vendors/${id}`);
 
   const openNewVendor = () => {
-    try {
-      localStorage.setItem("gt:admin:entity", "vendors");
-      localStorage.setItem("gt:admin:new", "vendor");
-    } catch {}
-    navigate("/admin");
+    if (createVendor.isPending) return;
+    setPasteError(null);
+    setPasteUrl("");
+    setAddOpen(true);
+  };
+
+  const submitPaste = () => {
+    if (createVendor.isPending) return;
+    const u = pasteUrl.trim();
+    if (!u) {
+      setPasteError("Paste a vendor URL, or click Skip to create a blank entry.");
+      return;
+    }
+    if (!/^https?:\/\//i.test(u)) {
+      setPasteError("URL must start with http:// or https://");
+      return;
+    }
+    setPasteError(null);
+    createVendor.mutate({ url: u });
+  };
+
+  const skipPaste = () => {
+    if (createVendor.isPending) return;
+    setPasteError(null);
+    createVendor.mutate({});
   };
 
   if (authLoading) {
@@ -149,6 +271,7 @@ export function AdminVendors() {
           <AddEntityButton
             label="Add Vendor"
             onClick={openNewVendor}
+            disabled={createVendor.isPending}
             testId="button-new-vendor"
           />
         </>)}
@@ -188,6 +311,91 @@ export function AdminVendors() {
         </div>
       )}
       </div>
+      <Dialog
+        open={addOpen}
+        onOpenChange={(o) => {
+          if (createVendor.isPending) return;
+          setAddOpen(o);
+          if (!o) {
+            setPasteUrl("");
+            setPasteError(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-add-vendor"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Add vendor
+            </DialogTitle>
+            <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
+              Paste a URL from the vendor's site — the About page works best,
+              but the home page is fine too. We'll prefill name, domain, logo,
+              cover, and bio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 pt-1">
+            <input
+              type="url"
+              value={pasteUrl}
+              onChange={(e) => {
+                setPasteUrl(e.target.value);
+                if (pasteError) setPasteError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitPaste();
+                }
+              }}
+              placeholder="https://…/about"
+              autoFocus
+              disabled={createVendor.isPending}
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-50"
+              data-testid="input-add-vendor-url"
+            />
+            {pasteError && (
+              <p
+                className="text-[12px] text-red-600"
+                data-testid="text-add-vendor-error"
+              >
+                {pasteError}
+              </p>
+            )}
+            <p className="text-[11.5px] text-slate-400">
+              Reads the page's Open Graph metadata and rehosts the logo + cover
+              image. Instagram and Facebook pages aren't supported — paste the
+              vendor's own website instead.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <button
+              type="button"
+              onClick={skipPaste}
+              disabled={createVendor.isPending}
+              className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              data-testid="button-add-vendor-skip"
+            >
+              Skip — create blank
+            </button>
+            <Button
+              type="button"
+              onClick={submitPaste}
+              disabled={createVendor.isPending || !pasteUrl.trim()}
+              size="sm"
+              className="text-[12.5px] font-semibold"
+              data-testid="button-add-vendor-pull"
+            >
+              {createVendor.isPending && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
+              {createVendor.isPending ? "Reading…" : "Pull from URL"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminFrame>
   );
 }
@@ -206,12 +414,12 @@ function VendorCard({
       className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#319ED8]/30 transition-all p-4 flex items-center gap-3.5"
       data-testid={`card-vendor-${vendor.id}`}
     >
-      <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
         {vendor.logoUrl ? (
           <img
             src={vendor.logoUrl}
             alt={vendor.name}
-            className="w-full h-full object-contain p-1.5"
+            className="w-full h-full object-cover"
           />
         ) : (
           <Store className="w-6 h-6 text-slate-300" />
@@ -251,12 +459,12 @@ function VendorRow({
       className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
       data-testid={`row-vendor-${vendor.id}`}
     >
-      <div className="w-10 h-10 rounded-md overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
         {vendor.logoUrl ? (
           <img
             src={vendor.logoUrl}
             alt={vendor.name}
-            className="w-full h-full object-contain p-1"
+            className="w-full h-full object-cover"
           />
         ) : (
           <Store className="w-4 h-4 text-slate-300" />

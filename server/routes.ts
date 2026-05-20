@@ -6742,6 +6742,116 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ]);
     return res.json({ vendor, instruments: insts, artists });
   });
+  // Vendor page scraper. Paste any URL on the vendor's site — home page
+  // works, but an About page gives us a real bio (og:description on a
+  // home page is usually marketing copy). Mirrors the labels scraper:
+  // og:title → name, og:description → bio, apple-touch-icon → logo,
+  // og:image → cover. We also derive `domain` (host minus www),
+  // `homeUrl` (origin), and treat the pasted URL as `aboutUrl` when it
+  // doesn't look like a bare home page. Instagram/Facebook URLs are
+  // rejected up front — Meta serves a login shell to non-authenticated
+  // server fetches.
+  app.post("/api/admin/vendors/scrape", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// vendor URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)facebook\.com$/.test(host)) {
+      return res.status(400).json({
+        message: "Instagram/Facebook pages can't be scraped — paste the vendor's website instead.",
+      });
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) {
+        const key = m[1].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[2]);
+      }
+      while ((m = re2.exec(html))) {
+        const key = m[2].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[1]);
+      }
+
+      // Logo: prefer apple-touch-icon (clean square brand mark), fall back
+      // to og:image, then favicon as last resort.
+      let logoUrl: string | null = null;
+      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+      if (touchA) logoUrl = touchA[1];
+      else if (touchB) logoUrl = touchB[1];
+      if (!logoUrl) {
+        const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
+        if (iconA) logoUrl = iconA[1];
+        else if (iconB) logoUrl = iconB[1];
+      }
+      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
+      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+
+      // Cover: og:image is usually a wide hero shot — perfect for cover.
+      let coverUrl: string | null =
+        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      if (coverUrl?.startsWith("//")) coverUrl = `https:${coverUrl}`;
+      if (coverUrl?.startsWith("/")) coverUrl = `${parsed.origin}${coverUrl}`;
+
+      // Name: og:title or og:site_name — strip common trailing service tags.
+      let name = meta["og:site_name"] || meta["og:title"] || meta["twitter:title"] || null;
+      if (name) {
+        name = name
+          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|about(?:\s+us)?|store|shop|the\s+official\s+site).*$/i, "")
+          .trim();
+      }
+      const bio =
+        meta["og:description"] ||
+        meta["twitter:description"] ||
+        meta["description"] ||
+        null;
+      // Use og:site_name as a tagline when the title (which we used for
+      // name) duplicates it; otherwise leave tagline null for the admin
+      // to fill in by hand.
+      const tagline: string | null = null;
+
+      // Treat the pasted URL as the about URL when it looks like one
+      // (path contains "about" or it isn't just `/`); otherwise keep it
+      // as the home URL only. The admin can swap on the detail page.
+      const looksLikeAbout = /about/i.test(parsed.pathname) || parsed.pathname.replace(/\/+$/, "") !== "";
+      const homeUrl = parsed.origin;
+      const aboutUrl = looksLikeAbout ? url : null;
+
+      return res.json({
+        name,
+        domain: host,
+        homeUrl,
+        aboutUrl,
+        logoUrl,
+        coverUrl,
+        bio,
+        tagline,
+      });
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Failed to read page" });
+    }
+  });
+
   app.post("/api/admin/vendors", requireAdmin, async (req, res) => {
     const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl } = req.body ?? {};
     if (!name || !domain) return res.status(400).json({ message: "name and domain are required" });
