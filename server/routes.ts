@@ -2183,6 +2183,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // FLAC for browser playback. Null when no transcode was needed.
       audioSourceUrl: audioSourceUrl ? normalizeAudioUrl(String(audioSourceUrl)) : null,
     } as any);
+    // Kick off Mux ingest the moment the master lands in object storage —
+    // fire-and-forget; the admin UI polls muxStatus.
+    void maybeIngestToMux(song.id, (song as any).audioUrl);
     return res.status(201).json(song);
   });
 
@@ -2273,8 +2276,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         updates.syncedLyrics = null;
       }
     }
+    // If the master URL actually changed, the previously-attached Mux
+    // asset is now stale. Reset to 'errored' BEFORE the update commits so
+    // the claim in maybeIngestToMux sees an eligible row and re-ingests
+    // the new master. (Without this, the dedupe in claimSongForMuxIngest
+    // would skip the swap and Bill would be left on the old playback ID.)
+    if (updates.audioUrl !== undefined) {
+      const prev = await storage.getSongById(id);
+      const prevUrl = (prev as any)?.audioUrl ?? null;
+      if (prev && prevUrl !== updates.audioUrl && (prev as any).muxAssetId) {
+        updates.muxStatus = "errored";
+      }
+    }
     const updated = await storage.updateSong(id, updates);
     if (!updated) return res.status(404).json({ message: "Song not found" });
+    if (updates.audioUrl !== undefined) {
+      void maybeIngestToMux(id, updates.audioUrl);
+    }
     return res.json(updated);
   });
 
@@ -3823,6 +3841,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   previewEndMs: null as any,
                   waveform: null as any,
                 } as any);
+                // Auto-ingest to Mux — Dropbox-batch is the primary upload
+                // path, so every new GoodTunes release flows through here.
+                void maybeIngestToMux(song.id, audioUrl);
                 created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
                 trackNumber++;
               } catch (e: any) {
@@ -7306,6 +7327,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return `${proto}://${host}${audioUrl.startsWith("/") ? "" : "/"}${audioUrl}`;
   }
 
+  // Auto-ingest helper — call this fire-and-forget right after a song gets
+  // its audioUrl set to a /objects/ path. We never block the response on
+  // it; Mux ingest takes 5–60s and the admin UI polls muxStatus separately.
+  // Safe to call repeatedly: skips songs that already have a non-errored
+  // asset, skips when Mux isn't configured, skips external/streaming URLs.
+  // Function *declaration* (not const) so it's hoisted to all callsites,
+  // including the song create/update/import endpoints earlier in this file.
+  async function maybeIngestToMux(songId: string, audioUrl: string | null | undefined) {
+    if (!isMuxConfigured() || !audioUrl) return;
+    if (!audioUrl.startsWith("/objects/")) return;
+    // Fire-and-forget — never propagate errors back to the caller.
+    (async () => {
+      try {
+        // Atomic claim: only one caller wins per (song × eligibility window).
+        // Protects against double ingest from (a) the boot backfill racing
+        // the auto-ingest hook on a brand-new upload, (b) multi-instance
+        // Autoscale cold boots, (c) duplicate clicks of the retry route.
+        const claimed = await storage.claimSongForMuxIngest(songId);
+        if (!claimed) return;
+        const publicUrl = await objectStorage.getSignedDownloadUrl(audioUrl);
+        const asset = await createAssetFromUrl(publicUrl);
+        await storage.updateSong(songId, {
+          muxAssetId: asset.assetId,
+          muxPlaybackId: asset.playbackId,
+          muxStatus: asset.status,
+        });
+        console.log(`[mux-auto] song=${songId} asset=${asset.assetId} status=${asset.status}`);
+      } catch (err: any) {
+        // Mark errored so the next boot-backfill or admin retry can pick
+        // it back up — without this we'd be stranded in "ingesting".
+        try {
+          await storage.updateSong(songId, { muxStatus: "errored" });
+        } catch { /* secondary failure — already logged below */ }
+        console.error(`[mux-auto] song=${songId} failed`, err?.message);
+      }
+    })();
+  }
+
   app.post("/api/admin/songs/:id/mux-ingest", requireAdminBearer, async (req, res) => {
     if (!isMuxConfigured()) {
       return res.status(503).json({ message: "Mux not configured (missing MUX_* env vars)" });
@@ -7313,22 +7372,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const song = await storage.getSongById(req.params.id as string);
     if (!song) return res.status(404).json({ message: "Song not found" });
     if (!song.audioUrl) return res.status(400).json({ message: "Song has no audioUrl to ingest" });
-    if (song.muxAssetId && song.muxStatus !== "errored") {
+    // Atomic claim — same path as the auto-ingest hook. If the song is
+    // already ready/preparing/ingesting, return its current state instead
+    // of double-ingesting.
+    const claimed = await storage.claimSongForMuxIngest(song.id);
+    if (!claimed) {
+      const cur = await storage.getSongById(song.id);
       return res.json({
         ok: true,
         alreadyIngested: true,
-        muxAssetId: song.muxAssetId,
-        muxPlaybackId: song.muxPlaybackId,
-        muxStatus: song.muxStatus,
+        muxAssetId: cur?.muxAssetId ?? null,
+        muxPlaybackId: cur?.muxPlaybackId ?? null,
+        muxStatus: cur?.muxStatus ?? null,
       });
     }
     try {
       // Mint a direct GCS signed URL so Mux pulls bytes from
       // storage.googleapis.com instead of our /objects/uploads/<id>.wav
       // Express route — Replit's edge proxy intermittently 500s on large
-      // WAV streams, which made every Mux ingest flip to `errored` within
-      // seconds. Falls back to the public Express URL only if the audio
-      // is already a full external URL (e.g. mzstatic).
+      // WAV streams. External URLs (e.g. mzstatic) pass through.
       const publicUrl = /^https?:\/\//i.test(song.audioUrl)
         ? song.audioUrl
         : await objectStorage.getSignedDownloadUrl(song.audioUrl);
@@ -7341,8 +7403,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.log(`[mux-ingest] song=${song.id} asset=${asset.assetId} status=${asset.status}`);
       res.json({ ok: true, song: updated });
     } catch (err: any) {
+      // Release the claim so the next retry / boot-backfill can pick it up.
+      try { await storage.updateSong(song.id, { muxStatus: "errored" }); } catch {}
       console.error("[mux-ingest] failed", err?.message, err?.stack);
       res.status(500).json({ message: err?.message || "Mux ingest failed" });
+    }
+  });
+
+  // Bulk migrate every uploaded song (audioUrl starts with /objects/) that
+  // isn't already `ready` on Mux. Iterates serially with a small delay so
+  // we don't spike Mux's create-asset throughput. Streams nothing fancy —
+  // returns a summary the admin button can toast. Re-runnable: songs with
+  // a non-errored Mux asset are skipped by the per-song ingest guard.
+  app.post("/api/admin/mux-migrate-all", requireAdminBearer, async (_req, res) => {
+    if (!isMuxConfigured()) {
+      return res.status(503).json({ message: "Mux not configured" });
+    }
+    try {
+      const all = await storage.getAllSongs({ includeHidden: true });
+      const eligible = all.filter(
+        (s: any) =>
+          typeof s.audioUrl === "string" &&
+          s.audioUrl.startsWith("/objects/") &&
+          (s.muxStatus !== "ready" || !s.muxPlaybackId),
+      );
+      // Delegate to the auto-ingest helper so dedupe/claim/error-recovery
+      // semantics are identical across every entry point. 250ms pacing
+      // stays under Mux's create-asset rate limit for 100+ track sweeps.
+      let queued = 0;
+      for (const s of eligible) {
+        maybeIngestToMux(s.id, (s as any).audioUrl);
+        queued++;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      res.json({ ok: true, eligible: eligible.length, queued });
+    } catch (err: any) {
+      console.error("[mux-migrate-all] fatal", err?.message, err?.stack);
+      res.status(500).json({ message: err?.message || "Bulk Mux migration failed" });
     }
   });
 
@@ -7422,6 +7519,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "webhook handler failed" });
     }
   });
+
+  // Boot-time Mux backfill — runs once, ~10s after server start, so the
+  // app finishes initializing before we spend cycles on background work.
+  // Sweeps every uploaded song that isn't `ready` on Mux yet and kicks
+  // off ingest with a 250ms pacing gap. This means:
+  //   • Existing albums that pre-date Mux get migrated automatically.
+  //   • If a previous ingest errored, the next boot retries it.
+  //   • New albums uploaded via the admin already auto-ingest at upload
+  //     time, so this loop will find nothing on subsequent boots — a
+  //     cheap no-op idle sweep.
+  // No-ops cleanly when Mux isn't configured (dev without secrets).
+  if (isMuxConfigured()) {
+    setTimeout(async () => {
+      try {
+        const all = await storage.getAllSongs({ includeHidden: true });
+        const eligible = all.filter(
+          (s: any) =>
+            typeof s.audioUrl === "string" &&
+            s.audioUrl.startsWith("/objects/") &&
+            (s.muxStatus !== "ready" || !s.muxPlaybackId) &&
+            (!s.muxAssetId || s.muxStatus === "errored"),
+        );
+        if (eligible.length === 0) return;
+        console.log(`[mux-backfill] starting — ${eligible.length} song(s) need Mux ingest`);
+        let done = 0;
+        for (const s of eligible) {
+          maybeIngestToMux(s.id, (s as any).audioUrl);
+          done++;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        console.log(`[mux-backfill] queued ${done} song(s)`);
+      } catch (err: any) {
+        console.error("[mux-backfill] sweep failed", err?.message);
+      }
+    }, 10_000);
+  }
 
   return httpServer;
 }

@@ -89,6 +89,13 @@ export interface IStorage {
   deleteAlbum(id: string): Promise<void>;
   createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song>;
   updateSong(id: string, data: Partial<Song>): Promise<Song | undefined>;
+  // Atomically claim a song for Mux ingest. Conditional UPDATE that sets
+  // mux_status='ingesting' only when no other caller has already claimed
+  // it (i.e. the song has no mux_asset_id, or its previous attempt
+  // errored, or we're explicitly re-ingesting after an audioUrl swap).
+  // Returns true if THIS caller claimed it — false means someone else
+  // already started, so the caller should bail out.
+  claimSongForMuxIngest(id: string): Promise<boolean>;
   deleteSong(id: string): Promise<void>;
 
   // Bonus album content. Public reads expose only the rows attached to
@@ -552,6 +559,24 @@ export class DbStorage implements IStorage {
     if (Object.keys(rest).length === 0) return this.getSongById(id);
     const [s] = await db.update(songs).set(rest).where(eq(songs.id, id)).returning();
     return s;
+  }
+  async claimSongForMuxIngest(id: string): Promise<boolean> {
+    // Atomic compare-and-swap: only one caller (auto-ingest hook OR boot
+    // backfill OR explicit retry route) can flip a song into "ingesting"
+    // at a time. Eligible rows: never-ingested (NULL asset) or previously
+    // errored. The asset_id reset clears any stale linkage so callers
+    // always see a clean slate when they win the claim.
+    const rows = await db
+      .update(songs)
+      .set({ muxStatus: "ingesting", muxAssetId: null, muxPlaybackId: null })
+      .where(
+        and(
+          eq(songs.id, id),
+          sql`(${songs.muxAssetId} IS NULL OR ${songs.muxStatus} = 'errored')`,
+        ),
+      )
+      .returning({ id: songs.id });
+    return rows.length > 0;
   }
   async deleteSong(id: string): Promise<void> {
     await db.transaction(async (tx) => {
