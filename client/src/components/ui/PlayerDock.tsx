@@ -313,7 +313,7 @@ export function PlayerDock({
     // the click target.
     if (!hasSelection) {
       return (
-        <div className="fixed right-4 bottom-8 z-40" data-testid="player-dock-mini">
+        <div className="fixed left-4 bottom-8 z-40" data-testid="player-dock-mini">
           <button
             type="button"
             aria-label="Show player"
@@ -334,7 +334,7 @@ export function PlayerDock({
     // Playing state: cover + play/pause + restore chevron — the user
     // already knows it's the player because a track is loaded.
     return (
-      <div className="fixed right-4 bottom-8 z-40" data-testid="player-dock-mini">
+      <div className="fixed left-4 bottom-8 z-40" data-testid="player-dock-mini">
         <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-3 pr-2 py-2">
           <div
             className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
