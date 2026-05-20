@@ -219,7 +219,7 @@ export function Martin() {
         {/* ============================ PRIMARY CTAs ============================ */}
         <div className="px-5 pt-5 flex gap-2.5">
           <button
-            className="flex-1 h-11 rounded-full text-white text-[14px] font-semibold inline-flex items-center justify-center gap-2 active:scale-[0.97] transition-transform"
+            className="flex-1 h-11 rounded-full text-white text-[14px] font-semibold inline-flex items-center justify-center gap-2 active:scale-[0.94] transition-transform"
             style={{ background: BLUE }}
             data-testid="button-shop-martin"
           >
@@ -266,7 +266,7 @@ export function Martin() {
             {FEATURED.map((g) => (
               <button
                 key={g.id}
-                className="flex flex-col text-left active:scale-[0.98] transition-transform"
+                className="flex flex-col text-left active:scale-[0.94] transition-transform"
                 data-testid={`card-gear-${g.id}`}
               >
                 <div
@@ -320,7 +320,7 @@ export function Martin() {
             {PLAYED_BY.map((a) => (
               <button
                 key={a.id}
-                className="flex flex-col items-center flex-shrink-0 active:scale-[0.97] transition-transform"
+                className="flex flex-col items-center flex-shrink-0 active:scale-[0.94] transition-transform"
                 style={{ width: 78 }}
                 data-testid={`chip-artist-${a.id}`}
               >
@@ -364,7 +364,7 @@ export function Martin() {
           ].map((v) => (
             <button
               key={v.name}
-              className="w-full h-12 rounded-xl px-4 flex items-center justify-between active:scale-[0.99] transition-transform"
+              className="w-full h-12 rounded-xl px-4 flex items-center justify-between active:scale-[0.94] transition-transform"
               style={{ background: "rgba(255,255,255,0.06)" }}
               data-testid={`row-vendor-${v.name.toLowerCase().replace(/\s+/g, "-")}`}
             >
