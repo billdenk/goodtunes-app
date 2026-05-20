@@ -2966,15 +2966,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function streamDropboxEntries(
     shareUrl: string,
     shouldKeep: (filename: string) => boolean,
+    opts: {
+      // Called during the download phase with running byte total + the
+      // expected total (null when Dropbox didn't send Content-Length).
+      // Lets the importer surface a left-to-right "Downloading from
+      // Dropbox… X%" fill instead of the indeterminate shimmer.
+      onDownloadProgress?: (downloaded: number, total: number | null) => void;
+    } = {},
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
     skipped: string[];
     cleanup: () => Promise<void>;
   }> {
     if (isDropboxSingleFileUrl(shareUrl)) {
-      return streamDropboxSingleFileEntry(shareUrl, shouldKeep);
+      return streamDropboxSingleFileEntry(shareUrl, shouldKeep, opts);
     }
-    return streamDropboxFolderEntries(shareUrl, shouldKeep);
+    return streamDropboxFolderEntries(shareUrl, shouldKeep, opts);
   }
 
   // Open the Dropbox share URL, follow redirects manually with per-hop
@@ -2986,6 +2993,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function openDropboxFolderStream(folderUrl: string): Promise<{
     nodeStream: NodeJS.ReadableStream;
     cancel: () => void;
+    totalBytes: number | null;
   }> {
     const { Readable } = await import("node:stream");
     let url = normalizeDropboxFolderUrl(folderUrl);
@@ -3028,12 +3036,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       if (!response.body) throw new Error("Dropbox sent an empty response.");
       const nodeStream = Readable.fromWeb(response.body as any);
+      // Dropbox sets Content-Length on folder zips (we verified 165 MB
+      // for the test folder). When missing — extremely rare, but
+      // possible behind some proxies — we fall back to indeterminate
+      // progress on the client.
+      const clHeader = response.headers.get("content-length");
+      const totalBytes = clHeader ? Number(clHeader) || null : null;
       return {
         nodeStream,
         cancel: () => {
           try { ac.abort(); } catch {}
           clearTimeout(deadlineTimer);
         },
+        totalBytes,
       };
     } catch (err: any) {
       clearTimeout(deadlineTimer);
