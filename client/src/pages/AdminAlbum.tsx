@@ -725,7 +725,7 @@ export function AdminAlbum() {
             <>
             <MigrateToMuxButton
               albumId={albumId!}
-              songs={(songs as SongLite[]).filter((s) => !!s.audioUrl)}
+              songs={album.songs.filter((s) => !!s.audioUrl)}
             />
             <DropdownMenu>
               <DropdownMenuTrigger
