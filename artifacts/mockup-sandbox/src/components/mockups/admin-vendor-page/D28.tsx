@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ChevronLeft,
@@ -11,6 +11,7 @@ import {
   Truck,
   Shield,
   Check,
+  X,
 } from "lucide-react";
 
 /**
@@ -59,8 +60,8 @@ const SPECS: SpecRow[] = [
 ];
 
 export function D28() {
-  const [activeView, setActiveView] = useState("f");
-  const hero = VIEWS.find((v) => v.id === activeView) ?? VIEWS[0];
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const hero = VIEWS[0];
 
   return (
     <div
@@ -102,54 +103,31 @@ export function D28() {
             </div>
           </div>
 
-          {/* Hero product photo */}
-          <img
-            src={hero.url}
-            alt={`Martin D-28 — ${hero.label}`}
-            className="absolute inset-0 w-full h-full object-contain z-[1]"
-            style={{ objectPosition: "center 55%" }}
-            draggable={false}
-          />
+          {/* Hero product photo — tap to open lightbox at index 0 */}
+          <button
+            type="button"
+            onClick={() => setLightboxIndex(0)}
+            className="absolute inset-0 z-[1] active:scale-[0.99] transition-transform"
+            aria-label="Open photo"
+            data-testid="button-hero-d28"
+          >
+            <img
+              src={hero.url}
+              alt={`Martin D-28 — ${hero.label}`}
+              className="w-full h-full object-contain"
+              style={{ objectPosition: "center 55%" }}
+              draggable={false}
+            />
+          </button>
 
           {/* Bottom fade into page bg */}
           <div
-            className="absolute inset-x-0 bottom-0 z-[2]"
+            className="absolute inset-x-0 bottom-0 z-[2] pointer-events-none"
             style={{
               height: "30%",
               background: `linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.4) 50%, ${BG} 100%)`,
             }}
           />
-        </div>
-
-        {/* ============================ THUMBNAIL STRIP ============================ */}
-        <div className="px-5 -mt-2 relative z-[3]">
-          <div className="flex gap-2">
-            {VIEWS.map((v) => {
-              const active = v.id === activeView;
-              return (
-                <button
-                  key={v.id}
-                  onClick={() => setActiveView(v.id)}
-                  className="flex-1 aspect-square rounded-lg overflow-hidden active:scale-[0.94] transition-transform"
-                  style={{
-                    background: "rgba(255,255,255,0.06)",
-                    outline: active ? `2px solid ${BLUE}` : "none",
-                    outlineOffset: 1,
-                  }}
-                  data-testid={`thumb-d28-${v.id}`}
-                  aria-label={v.label}
-                >
-                  <img
-                    src={v.url}
-                    alt={v.label}
-                    className="w-full h-full object-contain"
-                    style={{ objectPosition: "center 55%" }}
-                    draggable={false}
-                  />
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {/* ============================ TITLE BLOCK ============================ */}
@@ -267,6 +245,49 @@ export function D28() {
           >
             Read more
           </button>
+        </div>
+
+        {/* ============================ PHOTOS ============================ */}
+        <div className="px-5 pt-7">
+          <div className="flex items-baseline justify-between">
+            <SectionHeader title="Photos" />
+            <span
+              className="text-[12.5px] font-medium tabular-nums"
+              style={{ color: "rgba(235,235,245,0.55)" }}
+            >
+              {VIEWS.length}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {VIEWS.map((v, i) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setLightboxIndex(i)}
+                className="aspect-square rounded-xl overflow-hidden relative active:scale-[0.96] transition-transform"
+                style={{
+                  background:
+                    "linear-gradient(180deg, #b88652 0%, #5a2f10 100%)",
+                }}
+                data-testid={`thumb-photo-${v.id}`}
+                aria-label={`Open ${v.label}`}
+              >
+                <img
+                  src={v.url}
+                  alt={v.label}
+                  className="w-full h-full object-contain"
+                  style={{ objectPosition: "center 55%" }}
+                  draggable={false}
+                />
+                <span
+                  className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-white text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
+                >
+                  {v.label}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ============================ SPECS ============================ */}
@@ -399,6 +420,215 @@ export function D28() {
             Vendor links are affiliate-aware — when fans buy through GoodTunes,
             a portion supports the artists who chose this gear.
           </p>
+        </div>
+      </div>
+
+      {/* ============================ LIGHTBOX ============================ */}
+      {lightboxIndex !== null && (
+        <PhotoLightbox
+          photos={VIEWS}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Photo Lightbox ─────────────────────────────────────────────────
+   Fullscreen swipeable photo viewer, modeled on the artist-photos
+   control. Touch-drag or arrow buttons to page between photos; tap the
+   X or backdrop to dismiss. */
+
+interface Photo {
+  id: string;
+  url: string;
+  label: string;
+}
+
+function PhotoLightbox({
+  photos,
+  startIndex,
+  onClose,
+}: {
+  photos: Photo[];
+  startIndex: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(startIndex);
+  const [dragX, setDragX] = useState(0);
+  const startXRef = useRef<number | null>(null);
+  const widthRef = useRef<number>(420);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (trackRef.current) {
+      widthRef.current = trackRef.current.clientWidth || 420;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") setIndex((i) => Math.max(0, i - 1));
+      if (e.key === "ArrowRight")
+        setIndex((i) => Math.min(photos.length - 1, i + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, photos.length]);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    startXRef.current = e.touches[0].clientX;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (startXRef.current == null) return;
+    setDragX(e.touches[0].clientX - startXRef.current);
+  };
+  const onTouchEnd = () => {
+    if (startXRef.current == null) return;
+    const threshold = widthRef.current * 0.18;
+    if (dragX < -threshold && index < photos.length - 1) setIndex(index + 1);
+    else if (dragX > threshold && index > 0) setIndex(index - 1);
+    startXRef.current = null;
+    setDragX(0);
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    startXRef.current = e.clientX;
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (startXRef.current == null) return;
+    setDragX(e.clientX - startXRef.current);
+  };
+  const onPointerUp = () => onTouchEnd();
+
+  const translatePct = -(index * 100) + (dragX / widthRef.current) * 100;
+  const atFirst = index === 0;
+  const atLast = index === photos.length - 1;
+  const current = photos[index];
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex flex-col"
+      style={{ background: "#000" }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Photo viewer"
+      data-testid="lightbox-d28"
+    >
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-3 pt-3 pb-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-11 h-11 rounded-full inline-flex items-center justify-center active:scale-[0.94] transition-transform"
+          style={{
+            background: "rgba(255,255,255,0.12)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+          }}
+          data-testid="button-lightbox-close"
+          aria-label="Close"
+        >
+          <X className="w-[19px] h-[19px] text-white" />
+        </button>
+        <span className="text-white text-[14px] font-semibold tabular-nums">
+          {index + 1} / {photos.length}
+        </span>
+        <div className="w-11 h-11" />
+      </div>
+
+      {/* Swipeable track */}
+      <div
+        ref={trackRef}
+        className="flex-1 overflow-hidden relative"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        style={{ touchAction: "pan-y", cursor: "grab" }}
+      >
+        <div
+          className="flex h-full"
+          style={{
+            transform: `translateX(${translatePct}%)`,
+            transition: startXRef.current == null ? "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+            width: `${photos.length * 100}%`,
+          }}
+        >
+          {photos.map((p) => (
+            <div
+              key={p.id}
+              className="h-full flex items-center justify-center px-4"
+              style={{ width: `${100 / photos.length}%` }}
+            >
+              <img
+                src={p.url}
+                alt={p.label}
+                className="max-w-full max-h-full object-contain select-none"
+                draggable={false}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Side arrow buttons (desktop / non-touch) */}
+        {!atFirst && (
+          <button
+            type="button"
+            onClick={() => setIndex(index - 1)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full inline-flex items-center justify-center active:scale-[0.94] transition-transform"
+            style={{
+              background: "rgba(255,255,255,0.12)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+            }}
+            data-testid="button-lightbox-prev"
+            aria-label="Previous"
+          >
+            <ChevronLeft className="w-[19px] h-[19px] text-white" />
+          </button>
+        )}
+        {!atLast && (
+          <button
+            type="button"
+            onClick={() => setIndex(index + 1)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full inline-flex items-center justify-center active:scale-[0.94] transition-transform"
+            style={{
+              background: "rgba(255,255,255,0.12)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+            }}
+            data-testid="button-lightbox-next"
+            aria-label="Next"
+          >
+            <ChevronRight className="w-[19px] h-[19px] text-white" />
+          </button>
+        )}
+      </div>
+
+      {/* Caption + dots */}
+      <div className="px-5 pt-3 pb-5 flex flex-col items-center gap-3">
+        <span className="text-white text-[14px] font-semibold">
+          {current.label}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {photos.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setIndex(i)}
+              aria-label={`Go to ${p.label}`}
+              className="rounded-full transition-all"
+              style={{
+                width: i === index ? 18 : 6,
+                height: 6,
+                background: i === index ? "#fff" : "rgba(255,255,255,0.4)",
+              }}
+            />
+          ))}
         </div>
       </div>
     </div>
