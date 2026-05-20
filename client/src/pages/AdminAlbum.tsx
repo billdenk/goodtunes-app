@@ -581,10 +581,6 @@ export function AdminAlbum() {
             </button>
           ) : (
             <>
-            <MigrateToMuxButton
-              albumId={albumId!}
-              songs={album.songs.filter((s) => !!s.audioUrl)}
-            />
             <DropdownMenu>
               <DropdownMenuTrigger
                 className="px-2.5 py-1.5 mb-1 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100 flex-shrink-0"
