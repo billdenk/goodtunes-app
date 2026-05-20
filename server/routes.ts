@@ -7656,7 +7656,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     setTimeout(async () => {
       try {
         const all = await storage.getAllSongs({ includeHidden: true });
-        const eligible = all.filter(
+
+        // Pass 1: reconcile songs stuck in `preparing` / `ingesting` by
+        // polling Mux directly. The normal happy path is the
+        // `/api/webhooks/mux` callback flipping these to `ready`, but
+        // that fails silently when `MUX_WEBHOOK_SECRET` isn't set in
+        // prod, or when Mux's webhook delivery drops a payload. Without
+        // this pass songs sit on `preparing` forever and the player
+        // keeps toasting "Mux is still encoding this track."
+        const stuck = all.filter(
+          (s: any) =>
+            s.muxAssetId &&
+            s.muxStatus !== "ready" &&
+            s.muxStatus !== "errored",
+        );
+        if (stuck.length > 0) {
+          console.log(
+            `[mux-backfill] reconciling ${stuck.length} song(s) stuck in preparing/ingesting`,
+          );
+          const { getAsset } = await import("./mux");
+          let healed = 0;
+          for (const s of stuck) {
+            try {
+              const asset: any = await getAsset((s as any).muxAssetId);
+              const realStatus = asset?.status;
+              if (realStatus !== "ready" && realStatus !== "errored") continue;
+              const pb = (asset.playback_ids || []).find(
+                (p: any) => p.policy === "signed",
+              );
+              await storage.updateSong(s.id, {
+                muxStatus: realStatus,
+                muxPlaybackId: pb?.id ?? (s as any).muxPlaybackId,
+              });
+              healed++;
+            } catch (err: any) {
+              console.error(
+                `[mux-backfill] reconcile failed for song ${s.id}: ${err?.message}`,
+              );
+            }
+            await new Promise((r) => setTimeout(r, 150));
+          }
+          console.log(`[mux-backfill] reconciled ${healed}/${stuck.length} song(s)`);
+        }
+
+        // Pass 2: ingest songs that never made it onto Mux (or errored
+        // out on a previous attempt). Re-read storage so any song that
+        // pass 1 just discovered to be `errored` is eligible for retry
+        // in the same boot run — not just on the next restart.
+        const all2 = await storage.getAllSongs({ includeHidden: true });
+        const eligible = all2.filter(
           (s: any) =>
             typeof s.audioUrl === "string" &&
             s.audioUrl.startsWith("/objects/") &&
