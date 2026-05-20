@@ -357,7 +357,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       milestonesRef.current.completed = true;
       handleNext(false);
     };
-    const onError = () => setIsPlaying(false);
+    const onError = () => {
+      // Surface the actual MediaError so prod-side playback failures
+      // stop being silent. Without this `<audio>` swallows the error
+      // and the UI just flips back to paused with no signal — leaving
+      // us to guess between "file 404", "wrong MIME", "decode failed",
+      // "CORS blocked", or "network aborted". Logging code + message +
+      // src is enough to identify all five from the browser console.
+      const err = a.error;
+      const song = currentSongRef.current;
+      const codeMap: Record<number, string> = {
+        1: "MEDIA_ERR_ABORTED",
+        2: "MEDIA_ERR_NETWORK",
+        3: "MEDIA_ERR_DECODE",
+        4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
+      };
+      console.error("[player] audio error", {
+        code: err?.code,
+        name: err ? codeMap[err.code] || "UNKNOWN" : "no MediaError",
+        message: err?.message || "(empty)",
+        src: a.currentSrc || a.src,
+        readyState: a.readyState,
+        networkState: a.networkState,
+        songId: song?.id,
+        songTitle: song?.title,
+      });
+      setIsPlaying(false);
+    };
     const onPlaying = () => {
       const m = milestonesRef.current;
       const song = currentSongRef.current;
