@@ -26,11 +26,9 @@ const BG = "#00062B";
 const BLUE = "#319ED8";
 const PINK = "#FF5470";
 
-// Cream linen gradient evokes Martin's wood/case aesthetic without
-// committing to a specific photo. Replaces with vendor.coverUrl in real
-// data.
-const HERO_BG =
-  "radial-gradient(120% 90% at 50% 30%, #d6b582 0%, #8a5a2a 45%, #3a2510 80%, #1a0e05 100%)";
+const ASSET_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/vendor-assets/martin`;
+const HERO_PHOTO = `${ASSET_BASE}/headstock.webp`;
+const LOGO_IMG = `${ASSET_BASE}/logo.jpg`;
 
 interface GearItem {
   id: string;
@@ -100,9 +98,28 @@ export function Martin() {
       <div className="mx-auto" style={{ maxWidth: 420 }}>
         {/* ============================ HERO ============================ */}
         <div
-          className="relative w-full"
-          style={{ aspectRatio: "1 / 1.05", background: HERO_BG }}
+          className="relative w-full overflow-hidden"
+          style={{ aspectRatio: "1 / 1.05", background: "#0a0805" }}
         >
+          {/* Background photo: Martin headstock with gold tuners */}
+          <img
+            src={HERO_PHOTO}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ objectPosition: "center 30%" }}
+            draggable={false}
+          />
+          {/* Top darkening for chrome legibility */}
+          <div
+            className="absolute inset-x-0 top-0 z-[1]"
+            style={{
+              height: "40%",
+              background:
+                "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 60%, rgba(0,0,0,0) 100%)",
+            }}
+          />
+
           {/* Floating chrome — back / share / more */}
           <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10">
             <CircularGlass>
@@ -121,38 +138,23 @@ export function Martin() {
             </div>
           </div>
 
-          {/* Martin wordmark centered in hero */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div
-              className="px-5 py-3 rounded-2xl"
+          {/* Martin wordmark centered in hero — real logo, screen-blended */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-[2] px-8">
+            <img
+              src={LOGO_IMG}
+              alt="C.F. Martin & Co. — Est. 1833"
+              className="w-full max-w-[300px] h-auto"
               style={{
-                background: "rgba(255,255,255,0.95)",
-                boxShadow: "0 10px 40px rgba(0,0,0,0.4)",
+                mixBlendMode: "screen",
+                filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.55))",
               }}
-            >
-              <span
-                style={{
-                  fontFamily: "'Times New Roman', Georgia, serif",
-                  fontSize: 44,
-                  fontWeight: 700,
-                  color: "#1a0e05",
-                  letterSpacing: "-0.04em",
-                  lineHeight: 1,
-                }}
-              >
-                Martin
-              </span>
-            </div>
-            <span
-              className="mt-2 text-white/85 text-[11px] font-medium uppercase tracking-[0.28em]"
-            >
-              Est. 1833 · Nazareth, PA
-            </span>
+              draggable={false}
+            />
           </div>
 
           {/* Bottom fade into page bg */}
           <div
-            className="absolute inset-x-0 bottom-0"
+            className="absolute inset-x-0 bottom-0 z-[3]"
             style={{
               height: "55%",
               background: `linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, ${BG} 78%, ${BG} 100%)`,
@@ -162,25 +164,21 @@ export function Martin() {
 
         {/* ============================ PROFILE ROW ============================ */}
         <div className="px-5 -mt-7 relative flex items-end gap-3">
-          {/* Logo chip */}
+          {/* Logo chip — small black square with the white wordmark */}
           <div
-            className="flex-shrink-0 w-[72px] h-[72px] rounded-2xl overflow-hidden flex items-center justify-center"
+            className="flex-shrink-0 w-[72px] h-[72px] rounded-2xl overflow-hidden flex items-center justify-center p-2"
             style={{
-              background: "#fff",
+              background: "#000",
               boxShadow: "0 4px 20px rgba(0,0,0,0.45)",
             }}
           >
-            <span
-              style={{
-                fontFamily: "'Times New Roman', Georgia, serif",
-                fontSize: 32,
-                fontWeight: 700,
-                color: "#1a0e05",
-                letterSpacing: "-0.04em",
-              }}
-            >
-              M
-            </span>
+            <img
+              src={LOGO_IMG}
+              alt=""
+              aria-hidden="true"
+              className="w-full h-full object-contain"
+              draggable={false}
+            />
           </div>
           <div className="min-w-0 flex-1 pb-1">
             <h1
