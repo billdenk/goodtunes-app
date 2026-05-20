@@ -358,10 +358,15 @@ export function AdminInstruments() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-md" data-testid="dialog-add-gear">
-          <DialogHeader>
-            <DialogTitle>Add gear</DialogTitle>
-            <DialogDescription>
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-add-gear"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Add gear
+            </DialogTitle>
+            <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
               Paste a product URL — Carter Vintage, Reverb, Gibson, Martin,
               Sweetwater, etc. We'll prefill name, category, photo, and attach
               the vendor.
