@@ -142,11 +142,11 @@ export function AdminLabels() {
           <button
             type="button"
             onClick={openNewLabel}
-            className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
             data-testid="button-new-label"
           >
-            <Plus className="w-4 h-4" />
-            New label
+            <Plus className="w-3 h-3" />
+            Add Label
           </button>
         </>)}
       />
