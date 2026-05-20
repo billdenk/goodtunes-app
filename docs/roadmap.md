@@ -255,6 +255,20 @@ Every event is per-identified-user (paid product, can't be anonymous). Required:
 - Account-settings button: **"Delete my listening history"** → backend `DELETE /me/events`. GDPR + CCPA both require this; cheap to build, expensive to retrofit if regulators ask.
 - Artist-facing reports show **aggregates only** — top-fan list shows display name + city, never raw event log.
 
+### Cookie / tracker consent banner (deferred — ships with the first non-essential tracker)
+Today the app uses only strictly-necessary storage (auth session, favorites/downloads/playlists/chats in `localStorage`, Object Storage for images), so **no consent banner is legally required and none is shipped**. The earlier ad-hoc "Accept" card was off-brand and non-compliant, so it was removed. This section captures what to build the moment we add any of: play analytics, ad pixel, embedded third-party player that sets cookies, or affiliate-tracking cookie.
+
+**Trigger**: any PR that introduces the first non-essential tracker (the play-analytics work in "Play analytics" above is the most likely first trigger) must ship the consent banner in the same change-set. Don't merge the tracker without the banner.
+
+**What to build then**:
+1. **Consent store** — small client-side primitive backed by `localStorage` (e.g. `gt:consent`), event-emitting like `gt:favorites-changed`. Exposes per-category booleans `{ necessary, analytics, advertising, embeds }` + a `hasDecided` flag. Every tracker reads from this store before initializing.
+2. **Banner + preferences sheet** — dark-glass sheet over `#00062B`, brand colors only, `IconButton` primitives, 44×44 touch targets, mobile-first at 375px scaling cleanly up. Three actions of equal visual weight: **Accept all** · **Reject all (non-essential)** · **Manage preferences**. Preferences view = toggles per category (Strictly necessary is on + disabled; the rest default off).
+3. **Region gating** — best-effort EU/UK vs US-or-rest detection via `Accept-Language` + `Intl.DateTimeFormat().resolvedOptions().timeZone` heuristic (no third-party geo service). EU/UK → full blocking sheet; US/rest → lightweight non-blocking "we use cookies" notice with a Cookie Settings link. Default to the stricter banner when uncertain.
+4. **Footer entry point** — persistent "Cookie Settings" affordance in the app footer / settings area so a fan can change their choice later. Re-opens the preferences sheet.
+5. **`whenConsented(category, fn)` helper** — tiny gate so each tracker integration doesn't reinvent the check. Runs `fn` immediately if already consented; otherwise queues it until the consent event fires.
+
+**Out of scope when it lands**: server-side consent storage / cross-device sync (`localStorage` is fine for v1), accurate IP-based geo (heuristic only), and a Privacy Policy rewrite (link out to the existing policy).
+
 ---
 
 ## Auth plan (when moving off in-memory store)
