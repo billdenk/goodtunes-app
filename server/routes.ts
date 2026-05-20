@@ -7310,7 +7310,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isMuxConfigured()) {
       return res.status(503).json({ message: "Mux not configured (missing MUX_* env vars)" });
     }
-    const song = await storage.getSong(req.params.id);
+    const song = await storage.getSongById(req.params.id);
     if (!song) return res.status(404).json({ message: "Song not found" });
     if (!song.audioUrl) return res.status(400).json({ message: "Song has no audioUrl to ingest" });
     if (song.muxAssetId && song.muxStatus !== "errored") {
@@ -7340,7 +7340,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/admin/songs/:id/mux-refresh", requireAdminBearer, async (req, res) => {
     if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
-    const song = await storage.getSong(req.params.id);
+    const song = await storage.getSongById(req.params.id);
     if (!song?.muxAssetId) return res.status(400).json({ message: "Song has no muxAssetId" });
     try {
       const asset = await getAsset(song.muxAssetId);
@@ -7358,7 +7358,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/songs/:id/playback-url", requireAuth, async (req, res) => {
     if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
-    const song = await storage.getSong(req.params.id);
+    const song = await storage.getSongById(req.params.id);
     if (!song?.muxPlaybackId) return res.status(404).json({ message: "No Mux playback for this song" });
     if (song.muxStatus !== "ready") {
       return res.status(409).json({ message: "Mux asset not ready", status: song.muxStatus });
