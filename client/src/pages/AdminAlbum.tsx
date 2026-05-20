@@ -1487,23 +1487,45 @@ function TracksPanel({
       currentSong.muxStatus === "ingesting" ||
       currentSong.muxStatus === "preparing";
     if (useMux) {
-      // Fetch a signed 1-hour Mux HLS URL, then attach. Falls back to the
-      // raw audioUrl on failure so admins aren't locked out while we debug.
+      // Fetch a signed 1-hour Mux HLS URL, then attach. We try twice with
+      // a short backoff — a single sporadic 5xx from the signing endpoint
+      // shouldn't kick the operator out to the raw `.wav` (which 500s on
+      // the Replit edge for large masters anyway). If both attempts fail
+      // we surface a real error toast instead of silently switching to a
+      // playback path we already know is broken on prod.
       (async () => {
-        try {
+        const trySign = async () => {
           const r = await apiRequest(
             "POST",
             `/api/songs/${currentSong.id}/playback-url`,
           );
           const json = (await r.json()) as { url?: string; message?: string };
-          if (epoch !== playEpochRef.current) return;
-          if (json?.url) attachAndPlay(json.url);
-          else throw new Error(json?.message || "no url");
-        } catch (e) {
-          console.warn("[admin-player] Mux signing failed; falling back", e);
-          if (epoch === playEpochRef.current && currentSong.audioUrl) {
-            attachAndPlay(currentSong.audioUrl);
+          if (!json?.url) throw new Error(json?.message || "no url");
+          return json.url;
+        };
+        try {
+          let url: string;
+          try {
+            url = await trySign();
+          } catch (firstErr) {
+            console.warn("[admin-player] Mux sign attempt 1 failed; retrying", firstErr);
+            if (epoch !== playEpochRef.current) return;
+            await new Promise((res) => setTimeout(res, 800));
+            if (epoch !== playEpochRef.current) return;
+            url = await trySign();
           }
+          if (epoch !== playEpochRef.current) return;
+          attachAndPlay(url);
+        } catch (e) {
+          console.error("[admin-player] Mux signing failed after retry", e);
+          if (epoch !== playEpochRef.current) return;
+          setPlaying(false);
+          toast({
+            title: "Couldn't start playback",
+            description:
+              "Mux didn't return a stream URL. Try again in a moment — refresh if it keeps happening.",
+            variant: "destructive",
+          });
         }
       })();
     } else if (muxEncoding) {
@@ -1573,14 +1595,21 @@ function TracksPanel({
     }
   };
 
+  // A track is dock-navigable only when it has a master AND Mux isn't
+  // still encoding it — otherwise prev/next would silently land on a row
+  // that the play effect immediately pauses + clears, which looks like
+  // playback "randomly stopped" to the operator. Encoding rows show the
+  // spinner in the list and become navigable once Mux flips to ready.
+  const isDockPlayable = (s: SongLite) =>
+    (!!s.audioUrl || !!s.muxPlaybackId) &&
+    s.muxStatus !== "ingesting" &&
+    s.muxStatus !== "preparing";
+
   const playPrev = () => {
     if (!currentSongId) return;
     const idx = sorted.findIndex((s) => s.id === currentSongId);
-    // Step to the previous track that actually has a master; skipping
-    // upload-pending rows so prev/next on the dock can't strand the user
-    // on an unplayable selection.
     for (let i = idx - 1; i >= 0; i--) {
-      if (sorted[i].audioUrl || sorted[i].muxPlaybackId) {
+      if (isDockPlayable(sorted[i])) {
         setCurrentSongId(sorted[i].id);
         return;
       }
@@ -1591,7 +1620,7 @@ function TracksPanel({
       ? sorted.findIndex((s) => s.id === currentSongId)
       : -1;
     for (let i = idx + 1; i < sorted.length; i++) {
-      if (sorted[i].audioUrl || sorted[i].muxPlaybackId) {
+      if (isDockPlayable(sorted[i])) {
         setCurrentSongId(sorted[i].id);
         return;
       }
@@ -1602,6 +1631,21 @@ function TracksPanel({
   };
 
   const handleRowPlay = (songId: string) => {
+    // Block plays on tracks Mux is still encoding — the row UI already
+    // shows the spinner, but a fast-clicker can still slip a tap through.
+    // Surface a one-shot toast so they know the wait is intentional and
+    // playback will start automatically once Mux finishes.
+    const target = sorted.find((s) => s.id === songId);
+    if (
+      target &&
+      (target.muxStatus === "ingesting" || target.muxStatus === "preparing")
+    ) {
+      toast({
+        title: "Preparing stream…",
+        description: "Mux is still encoding this track. It'll play in a few seconds.",
+      });
+      return;
+    }
     if (songId === currentSongId) {
       togglePlay();
       return;
@@ -4604,34 +4648,60 @@ function TrackRow({
           >
             {song.trackNumber}
           </span>
-          {song.audioUrl && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPlay(song.id);
-              }}
-              aria-label={
-                isCurrent && isPlaying ? "Pause track" : "Play track"
-              }
-              title={isCurrent && isPlaying ? "Pause" : "Play"}
-              data-testid={`button-play-track-${song.id}`}
-              className={[
-                "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
-                expanded
-                  ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]"
-                  : isCurrent
-                    ? "opacity-100 text-[#319ED8]"
-                    : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]",
-              ].join(" ")}
-            >
-              {isCurrent && isPlaying ? (
-                <Pause className="w-3 h-3 fill-current" />
-              ) : (
-                <Play className="w-3 h-3 fill-current ml-0.5" />
-              )}
-            </button>
-          )}
+          {song.audioUrl && (() => {
+            // While Mux is still encoding this track, the play affordance
+            // becomes a small spinner: always visible (so the operator
+            // sees at a glance which rows aren't yet streamable), and the
+            // tap still routes through onPlay → handleRowPlay, which fires
+            // a one-shot "Preparing stream…" toast instead of attempting
+            // playback. Once Mux flips to `ready`, the row re-renders and
+            // this branch goes away on its own.
+            const muxEncoding =
+              song.muxStatus === "ingesting" ||
+              song.muxStatus === "preparing";
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPlay(song.id);
+                }}
+                aria-label={
+                  muxEncoding
+                    ? "Stream preparing"
+                    : isCurrent && isPlaying
+                      ? "Pause track"
+                      : "Play track"
+                }
+                title={
+                  muxEncoding
+                    ? "Preparing stream…"
+                    : isCurrent && isPlaying
+                      ? "Pause"
+                      : "Play"
+                }
+                data-testid={`button-play-track-${song.id}`}
+                className={[
+                  "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+                  muxEncoding
+                    ? "opacity-100 text-slate-400 cursor-wait"
+                    : expanded
+                      ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]"
+                      : isCurrent
+                        ? "opacity-100 text-[#319ED8]"
+                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]",
+                ].join(" ")}
+              >
+                {muxEncoding ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : isCurrent && isPlaying ? (
+                  <Pause className="w-3 h-3 fill-current" />
+                ) : (
+                  <Play className="w-3 h-3 fill-current ml-0.5" />
+                )}
+              </button>
+            );
+          })()}
         </div>
 
         {/* Title — plain at rest, inline input when expanded. No more
