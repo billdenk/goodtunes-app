@@ -3045,10 +3045,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // caller invokes `cancel()` when the import is done (or fails).
   }
 
-  // Stream the Dropbox share zip and write each entry the caller cares
-  // about to a tempfile on local disk. Returns a manifest (filename,
-  // tmpPath, size) plus a `cleanup()` that removes the temp directory.
-  // Memory budget: ~64 KB chunks at a time, regardless of folder size.
+  // Download the Dropbox folder zip to a tempfile, then open it via the
+  // central directory. Returns a manifest (filename, tmpPath, size)
+  // plus a `cleanup()` that removes the temp directory.
+  //
+  // Why download-then-open instead of `unzipper.Parse` streaming:
+  // Dropbox folder zips use compression method `store` (no compression
+  // — sensible, since the contents are already-compressed mp3s). When
+  // the folder contains a `.docx` (or any nested zip — .pages, .key,
+  // .xlsx, .epub, ...), every internal entry of that nested zip starts
+  // with the same `PK\x03\x04` local-file-header signature as outer-zip
+  // entries. `unzipper.Parse` scans forward for those signatures, so it
+  // walks INTO the nested zip and treats `word/settings.xml`,
+  // `word/fontTable.xml`, etc. as if they were top-level entries of the
+  // Dropbox archive — losing track of the real .mp3 entries that come
+  // after the .docx. `unzipper.Open.file` reads the central directory
+  // at the end of the zip, which is the authoritative entry list and
+  // immune to nested-zip confusion.
+  //
+  // Memory budget stays at ~64 KB chunks during the download; the cost
+  // is one full pass to /tmp before extraction begins.
   async function streamDropboxFolderEntries(
     folderUrl: string,
     shouldKeep: (filename: string) => boolean,
@@ -3066,6 +3082,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const unzipper = (await import("unzipper")).default;
 
     const sessionDir = await fsp.mkdtemp(path.join(os.tmpdir(), "gt-dropbox-"));
+    const zipPath = path.join(sessionDir, "folder.zip");
     const entries: Array<{ filename: string; tmpPath: string; size: number }> = [];
     // Filenames the keep-filter rejected (wrong extension, hidden files, etc.).
     // Reported back to the caller so admins can see exactly what the
@@ -3091,23 +3108,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     // Calling cancel() after we're done aborts the still-attached fetch body,
     // which makes the underlying Readable emit an 'error' (AbortError) AFTER
-    // unzipper has detached. With no listener that crashes the whole Node
+    // the pipe has detached. With no listener that crashes the whole Node
     // process. Attach a no-op so post-completion aborts are swallowed; real
-    // mid-stream errors still propagate through the unzipper pipe + for-await.
+    // mid-stream errors still propagate through the pipeline.
     nodeStream.on("error", () => {});
-    try {
-      // Catch the "this isn't a zip" case up front with a friendly
-      // message. unzipper's own error ("invalid signature") is correct
-      // but won't help the admin who pasted a single-file share.
-      const zipStream = nodeStream.pipe(unzipper.Parse({ forceStream: true } as any));
 
-      for await (const entry of zipStream as AsyncIterable<any>) {
-        const entryPath: string = entry.path || "";
+    // Phase 1: stream the zip to disk with an overall size cap. We cap
+    // at MAX_DROPBOX_UNCOMPRESSED_BYTES — for store-mode zips (the
+    // common case) the on-disk and inflated sizes are roughly equal, so
+    // a single cap covers both. Per-entry caps are still enforced in
+    // phase 2 below.
+    try {
+      let downloaded = 0;
+      const cap = new Transform({
+        transform(chunk, _enc, cb) {
+          downloaded += chunk.length;
+          if (downloaded > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
+            cb(new Error(`That folder's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`));
+            return;
+          }
+          cb(null, chunk);
+        },
+      });
+      await pipeline(nodeStream, cap, fs.createWriteStream(zipPath));
+    } catch (err) {
+      cancel();
+      await cleanup();
+      throw err;
+    }
+    cancel();
+
+    // Phase 2: open via central directory and extract only the entries
+    // the keep-filter accepts. Open.file throws on truncated / non-zip
+    // bodies, which is how we surface the "you pasted a single file
+    // instead of a folder" case to admins.
+    let directory: Awaited<ReturnType<typeof unzipper.Open.file>>;
+    try {
+      directory = await unzipper.Open.file(zipPath);
+    } catch (err: any) {
+      await cleanup();
+      const msg = String(err?.message || "");
+      if (/invalid signature|FILE_ENDED|end of central directory|END header|not a valid zip/i.test(msg)) {
+        throw new Error("That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).");
+      }
+      throw err;
+    }
+
+    try {
+      for (const file of directory.files) {
+        if (file.type === "Directory") continue;
+        const entryPath: string = file.path || "";
         const filename = basenameOf(entryPath);
-        if (entry.type === "Directory") {
-          entry.autodrain();
-          continue;
-        }
         if (!shouldKeep(filename)) {
           // Hide noise files admins never care about (Finder/Dropbox
           // metadata, resource forks). Real files that were rejected
@@ -3115,12 +3166,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (!/^\._|^\.DS_Store$|^Thumbs\.db$|^desktop\.ini$/i.test(filename)) {
             skipped.push(filename);
           }
-          entry.autodrain();
           continue;
         }
-        // Per-entry cap enforced inline by a counting Transform so we
-        // tear the stream down the instant the limit is crossed instead
-        // of writing a 5 GB pathological file out to disk first.
+        // Per-entry cap enforced by a counting Transform.
         const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
         const tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
         let size = 0;
@@ -3134,26 +3182,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             cb(null, chunk);
           },
         });
-        await pipeline(entry, cap, fs.createWriteStream(tmpPath));
+        await pipeline(file.stream(), cap, fs.createWriteStream(tmpPath));
         totalUncompressed += size;
         if (totalUncompressed > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
           throw new Error(`That folder's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`);
         }
         entries.push({ filename, tmpPath, size });
       }
-    } catch (err: any) {
-      cancel();
+    } catch (err) {
       await cleanup();
-      // unzipper's "invalid signature" / "FILE_ENDED" surface as the
-      // single-file-share case in the wild. Map either to the friendlier
-      // hint we used to show before the streaming rewrite.
-      const msg = String(err?.message || "");
-      if (/invalid signature|FILE_ENDED|end of central directory|END header|not a valid zip/i.test(msg)) {
-        throw new Error("That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).");
-      }
       throw err;
     }
-    cancel();
+
+    // Drop the downloaded zip; we already have the extracted tempfiles.
+    try { await fsp.unlink(zipPath); } catch {}
     return { entries, skipped, cleanup };
   }
   // Turn an artist-supplied filename into a clean track title.
