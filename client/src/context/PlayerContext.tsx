@@ -1,8 +1,10 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Hls from "hls.js";
 import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { track } from "@/lib/analytics";
+import { apiRequest } from "@/lib/queryClient";
 
 export interface PlayerSong extends Song {
   album: Album;
@@ -300,14 +302,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [currentIndex, hasRealAudio, songMeta]);
 
+  // Track the active hls.js instance so we can tear it down on song change
+  // (otherwise repeated mounts leak `MediaSource` listeners + buffers).
+  const hlsRef = useRef<Hls | null>(null);
+  // Race-token: a counter bumped on every src resolution. If a slower
+  // Mux signed-URL fetch resolves AFTER the user has already skipped
+  // to another song, we drop the stale result instead of clobbering
+  // the now-current song's src.
+  const srcTokenRef = useRef(0);
+
   // Sync the hidden <audio> element with the current song + isPlaying state.
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
 
-    if (!currentSong || !currentSong.audioUrl) {
+    const teardownHls = () => {
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy(); } catch {}
+        hlsRef.current = null;
+      }
+    };
+
+    if (!currentSong || (!currentSong.audioUrl && !currentSong.muxPlaybackId)) {
       // No real audio for this song — pause and clear any in-flight source.
       a.pause();
+      teardownHls();
       if (a.src) {
         a.removeAttribute("src");
         a.load();
@@ -316,26 +335,79 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Load new source if it changed.
-    // NOTE: do NOT set crossOrigin — Dropbox shared-link CDNs don't send
-    // Access-Control-Allow-Origin, so requesting CORS would fail the load.
-    // We don't need pixel access to the audio, so leaving it unset is fine.
-    if (a.src !== currentSong.audioUrl) {
-      a.src = currentSong.audioUrl;
+    const token = ++srcTokenRef.current;
+    const useMux =
+      !!currentSong.muxPlaybackId && currentSong.muxStatus === "ready";
+
+    const attachSrc = (url: string) => {
+      // Stale resolution — user already moved on to another song.
+      if (srcTokenRef.current !== token) return;
+      teardownHls();
+      const isHls = /\.m3u8(\?|$)/i.test(url);
+      if (isHls && Hls.isSupported() && !a.canPlayType("application/vnd.apple.mpegurl")) {
+        // Chrome / Firefox / non-Safari: use hls.js to drive MSE.
+        const hls = new Hls({ enableWorker: true });
+        hlsRef.current = hls;
+        hls.on(Hls.Events.ERROR, (_e, data) => {
+          if (data?.fatal) {
+            console.error("[player] hls fatal", data.type, data.details);
+            setIsPlaying(false);
+          }
+        });
+        hls.loadSource(url);
+        hls.attachMedia(a);
+      } else {
+        // Native HLS (Safari/iOS) or progressive (wav/mp3) — direct src.
+        a.src = url;
+        a.load();
+      }
       setAudioDuration(null);
       setCurrentTime(0);
-      a.load();
+      if (isPlaying) {
+        a.play().catch(() => setIsPlaying(false));
+      }
+    };
+
+    if (useMux) {
+      // Async: fetch a signed 1-hour HLS URL, then attach.
+      (async () => {
+        try {
+          const r = await apiRequest("POST", `/api/songs/${currentSong.id}/playback-url`);
+          const json = await r.json();
+          if (json?.url) attachSrc(json.url);
+          else throw new Error(json?.message || "no url");
+        } catch (e) {
+          // Fall back to the raw audioUrl if Mux signing fails so admins
+          // aren't locked out while the asset finishes encoding / a creds
+          // mishap gets fixed.
+          if (currentSong.audioUrl) attachSrc(currentSong.audioUrl);
+          else setIsPlaying(false);
+        }
+      })();
+    } else if (currentSong.audioUrl) {
+      // Same-URL guard: avoid resetting an already-loaded progressive src
+      // (used to cause double-play on every isPlaying toggle).
+      if (a.src === currentSong.audioUrl) {
+        if (isPlaying) a.play().catch(() => setIsPlaying(false));
+        else a.pause();
+      } else {
+        // NOTE: do NOT set crossOrigin — Dropbox shared-link CDNs don't
+        // send Access-Control-Allow-Origin, so requesting CORS would
+        // fail the load. We don't need pixel access to the audio.
+        attachSrc(currentSong.audioUrl);
+      }
     }
 
-    if (isPlaying) {
-      a.play().catch(() => {
-        // Autoplay was blocked or load failed — flip the UI state back.
-        setIsPlaying(false);
-      });
-    } else {
-      a.pause();
+    if (!isPlaying) a.pause();
+  }, [currentSong?.id, currentSong?.audioUrl, currentSong?.muxPlaybackId, currentSong?.muxStatus, isPlaying]);
+
+  // Tear down hls.js on unmount.
+  useEffect(() => () => {
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch {}
+      hlsRef.current = null;
     }
-  }, [currentSong?.id, currentSong?.audioUrl, isPlaying]);
+  }, []);
 
   // Wire audio element events once
   useEffect(() => {

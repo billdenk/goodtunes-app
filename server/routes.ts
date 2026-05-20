@@ -7279,5 +7279,141 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(searchWriter(name));
   });
 
+  // ───────────────────────────────────────────────────────────────────
+  // Mux integration — launch-plan Phase 3.
+  //
+  // Three operator-facing routes + one Mux→us webhook:
+  //   POST /api/admin/songs/:id/mux-ingest   — submit a song's master to Mux
+  //   POST /api/admin/songs/:id/mux-refresh  — manually re-check asset status
+  //   POST /api/songs/:id/playback-url       — fan-facing: mint signed HLS URL
+  //   POST /api/webhooks/mux                 — Mux lifecycle events
+  //
+  // Ownership check on /playback-url is a TODO once Phase 4 ships the
+  // userAlbums purchase records. For now, we gate behind `requireAuth`
+  // so at least anonymous traffic can't mint signed URLs.
+  // ───────────────────────────────────────────────────────────────────
+  const { createAssetFromUrl, getAsset, signPlaybackUrl, isMuxConfigured, verifyWebhook } =
+    await import("./mux");
+
+  function absoluteUploadUrl(req: Request, audioUrl: string): string {
+    // Mux needs to fetch the master over the public internet. Our
+    // /objects/uploads/<id> route is public (ACL-gated), so prefix
+    // with the current host. Prefer X-Forwarded-Host (Replit/Autoscale)
+    // over req.host so this works behind the proxy.
+    if (/^https?:\/\//i.test(audioUrl)) return audioUrl;
+    const host = String(req.headers["x-forwarded-host"] || req.get("host") || "");
+    const proto = String(req.headers["x-forwarded-proto"] || "https");
+    return `${proto}://${host}${audioUrl.startsWith("/") ? "" : "/"}${audioUrl}`;
+  }
+
+  app.post("/api/admin/songs/:id/mux-ingest", requireAdminBearer, async (req, res) => {
+    if (!isMuxConfigured()) {
+      return res.status(503).json({ message: "Mux not configured (missing MUX_* env vars)" });
+    }
+    const song = await storage.getSong(req.params.id);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    if (!song.audioUrl) return res.status(400).json({ message: "Song has no audioUrl to ingest" });
+    if (song.muxAssetId && song.muxStatus !== "errored") {
+      return res.json({
+        ok: true,
+        alreadyIngested: true,
+        muxAssetId: song.muxAssetId,
+        muxPlaybackId: song.muxPlaybackId,
+        muxStatus: song.muxStatus,
+      });
+    }
+    try {
+      const publicUrl = absoluteUploadUrl(req, song.audioUrl);
+      const asset = await createAssetFromUrl(publicUrl);
+      const updated = await storage.updateSong(song.id, {
+        muxAssetId: asset.assetId,
+        muxPlaybackId: asset.playbackId,
+        muxStatus: asset.status,
+      });
+      console.log(`[mux-ingest] song=${song.id} asset=${asset.assetId} status=${asset.status}`);
+      res.json({ ok: true, song: updated });
+    } catch (err: any) {
+      console.error("[mux-ingest] failed", err?.message, err?.stack);
+      res.status(500).json({ message: err?.message || "Mux ingest failed" });
+    }
+  });
+
+  app.post("/api/admin/songs/:id/mux-refresh", requireAdminBearer, async (req, res) => {
+    if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
+    const song = await storage.getSong(req.params.id);
+    if (!song?.muxAssetId) return res.status(400).json({ message: "Song has no muxAssetId" });
+    try {
+      const asset = await getAsset(song.muxAssetId);
+      const pb = (asset.playback_ids || []).find((p: any) => p.policy === "signed");
+      const updated = await storage.updateSong(song.id, {
+        muxPlaybackId: pb?.id ?? song.muxPlaybackId,
+        muxStatus: asset.status,
+      });
+      res.json({ ok: true, song: updated });
+    } catch (err: any) {
+      console.error("[mux-refresh] failed", err?.message);
+      res.status(500).json({ message: err?.message || "Mux refresh failed" });
+    }
+  });
+
+  app.post("/api/songs/:id/playback-url", requireAuth, async (req, res) => {
+    if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
+    const song = await storage.getSong(req.params.id);
+    if (!song?.muxPlaybackId) return res.status(404).json({ message: "No Mux playback for this song" });
+    if (song.muxStatus !== "ready") {
+      return res.status(409).json({ message: "Mux asset not ready", status: song.muxStatus });
+    }
+    // TODO(phase 4): verify the requesting user owns the album OR the
+    // song is a free preview. Until ownership records exist, gate on
+    // authentication only.
+    try {
+      const url = await signPlaybackUrl(song.muxPlaybackId);
+      res.json({ url, expiresInSec: 3600 });
+    } catch (err: any) {
+      console.error("[playback-url] failed", err?.message);
+      res.status(500).json({ message: err?.message || "Failed to sign playback URL" });
+    }
+  });
+
+  // Mux fires lifecycle events here. Keep this BEFORE express.json() body
+  // parsing would normally apply (Express already parsed JSON for other
+  // routes, but we use the verifier with the stringified payload, which
+  // works because we re-stringify req.body — fine for v1; harden with
+  // express.raw() before going to production-grade signature verify).
+  app.post("/api/webhooks/mux", async (req, res) => {
+    const sig = req.headers["mux-signature"] as string | undefined;
+    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
+    const payload = verifyWebhook(rawBody, sig);
+    if (!payload) {
+      console.warn("[mux-webhook] signature verification failed");
+      return res.status(400).json({ message: "Bad signature" });
+    }
+    const type = payload.type;
+    const assetId = payload.data?.id;
+    console.log(`[mux-webhook] type=${type} asset=${assetId}`);
+    if (!assetId) return res.json({ ok: true });
+    // Find the song with this asset id and update its status.
+    try {
+      const songs = await storage.getSongs();
+      const song = songs.find((s) => s.muxAssetId === assetId);
+      if (!song) return res.json({ ok: true, ignored: "no matching song" });
+      const pb = (payload.data?.playback_ids || []).find((p: any) => p.policy === "signed");
+      const newStatus =
+        type === "video.asset.ready"
+          ? "ready"
+          : type === "video.asset.errored"
+            ? "errored"
+            : payload.data?.status || song.muxStatus;
+      await storage.updateSong(song.id, {
+        muxStatus: newStatus,
+        muxPlaybackId: pb?.id ?? song.muxPlaybackId,
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[mux-webhook] update failed", err?.message);
+      res.status(500).json({ message: "webhook handler failed" });
+    }
+  });
+
   return httpServer;
 }

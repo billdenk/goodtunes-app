@@ -92,6 +92,13 @@ export interface Song {
   // fan-facing tracklist shows the "E" pill when this song-level flag
   // is true.
   isExplicit?: boolean;
+  // Mux integration (launch-plan Phase 3). When set + `muxStatus === "ready"`,
+  // the player should request a signed HLS URL via POST /api/songs/:id/playback-url
+  // and play through hls.js (or native HLS on Safari) instead of fetching
+  // `audioUrl` directly. While the asset is `preparing`, fall back to audioUrl.
+  muxAssetId?: string | null;
+  muxPlaybackId?: string | null;
+  muxStatus?: "preparing" | "ready" | "errored" | string | null;
 }
 
 // SuperCredits™
