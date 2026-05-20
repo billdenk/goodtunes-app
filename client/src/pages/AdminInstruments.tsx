@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Search, X, Guitar, Store, Loader2 } from "lucide-react";
+import { Search, X, Guitar, Store, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -11,6 +11,7 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import {
   Dialog,
   DialogContent,
@@ -299,16 +300,12 @@ export function AdminInstruments() {
           {/* Matches AdminPeople's "Add Person": denser px-2.5/py-1.5 chrome,
               white-outline button so the Gear index reads as the same admin
               surface family rather than a louder blue CTA. */}
-          <button
-            type="button"
+          <AddEntityButton
+            label="Add Gear"
             onClick={openNewInstrument}
             disabled={createInstrument.isPending}
-            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid="button-new-instrument"
-          >
-            <Plus className="w-3 h-3" />
-            Add Gear
-          </button>
+            testId="button-new-instrument"
+          />
         </>)}
       />
 

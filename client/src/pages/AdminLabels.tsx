@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, X, Tag } from "lucide-react";
+import { Search, X, Tag } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -9,6 +9,7 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 
 /**
  * Admin home · Labels (Phase 6f).
@@ -139,15 +140,11 @@ export function AdminLabels() {
             onChange={setView}
             testIdPrefix="view-mode-labels"
           />
-          <button
-            type="button"
+          <AddEntityButton
+            label="Add Label"
             onClick={openNewLabel}
-            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-            data-testid="button-new-label"
-          >
-            <Plus className="w-3 h-3" />
-            Add Label
-          </button>
+            testId="button-new-label"
+          />
         </>)}
       />
 

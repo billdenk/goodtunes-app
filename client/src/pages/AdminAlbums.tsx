@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, Search, Filter, EyeOff, X } from "lucide-react";
+import { Search, Filter, EyeOff, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,6 +12,7 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 
 /**
@@ -259,19 +260,15 @@ export function AdminAlbums() {
                 testIdPrefix="view-mode-albums"
               />
             </div>
-            <button
-              type="button"
+            <AddEntityButton
+              label="Add Album"
               onClick={() => {
                 if (createAlbum.isPending) return;
                 setArtistDialogOpen(true);
               }}
               disabled={createAlbum.isPending}
-              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              data-testid="button-new-album"
-            >
-              <Plus className="w-3 h-3" />
-              Add Album
-            </button>
+              testId="button-new-album"
+            />
           </>)}
           belowHeader={(
             <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">

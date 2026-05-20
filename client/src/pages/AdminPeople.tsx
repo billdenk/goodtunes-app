@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, X, User as UserIcon } from "lucide-react";
+import { Search, X, User as UserIcon } from "lucide-react";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +11,7 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 
 /**
  * Admin home · People (Phase 6a).
@@ -191,15 +192,11 @@ export function AdminPeople() {
           {/* Matches the Tracks card header on AdminAlbum: denser px-2.5/py-1.5
               chrome, white-outline buttons, so the People index reads as the
               same admin surface family rather than a louder blue CTA. */}
-          <button
-            type="button"
+          <AddEntityButton
+            label="Add Person"
             onClick={() => setComposerOpen(true)}
-            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-            data-testid="button-new-person"
-          >
-            <Plus className="w-3 h-3" />
-            Add Person
-          </button>
+            testId="button-new-person"
+          />
         </>)}
       />
 
