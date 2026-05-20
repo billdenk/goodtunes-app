@@ -6563,10 +6563,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(l);
   });
   app.post("/api/admin/labels", requireAdmin, async (req, res) => {
-    const { name, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
+    const { name, domain, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
     if (!name) return res.status(400).json({ message: "name is required" });
+    const normDomain = domain
+      ? String(domain).toLowerCase().replace(/^www\./, "")
+      : null;
+    // Mirror the vendors flow: when a domain is supplied, surface an
+    // existing label with that domain as a 409 (+ the row), so the admin
+    // UI can offer "open existing" instead of silently double-creating.
+    if (normDomain) {
+      const existing = await storage.getLabelByDomain(normDomain);
+      if (existing) {
+        return res
+          .status(409)
+          .json({ message: "A label with that domain already exists", label: existing });
+      }
+    }
     const l = await storage.createLabel({
       name: String(name),
+      domain: normDomain,
       logoUrl: logoUrl ? String(logoUrl) : null,
       bio: bio ? String(bio) : null,
       location: location ? String(location) : null,
@@ -6578,18 +6593,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.put("/api/admin/labels/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
+    const { name, domain, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
+    if (domain !== undefined) {
+      updates.domain = domain
+        ? String(domain).toLowerCase().replace(/^www\./, "")
+        : null;
+    }
     if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (location !== undefined) updates.location = location ? String(location) : null;
     if (websiteUrl !== undefined) updates.websiteUrl = websiteUrl ? String(websiteUrl) : null;
     if (instagramUrl !== undefined) updates.instagramUrl = instagramUrl ? String(instagramUrl) : null;
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
-    const l = await storage.updateLabel(id, updates);
-    if (!l) return res.status(404).json({ message: "Label not found" });
-    return res.json(l);
+    try {
+      const l = await storage.updateLabel(id, updates);
+      if (!l) return res.status(404).json({ message: "Label not found" });
+      return res.json(l);
+    } catch (err: any) {
+      // Map the postgres unique-violation on `labels.domain` to a real 409
+      // — same shape as the vendors PUT — so the client can show "another
+      // label already uses this domain" instead of a generic 500.
+      if (err?.code === "23505") {
+        return res.status(409).json({ message: "Another label is already using that domain" });
+      }
+      throw err;
+    }
   });
   app.delete("/api/admin/labels/:id", requireAdmin, async (req, res) => {
     // SET NULL on albums.label_id — releases stay, label credit clears.
@@ -6680,6 +6710,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       return res.json({
         name,
+        domain: host,
         logoUrl,
         bio,
         websiteUrl: meta["og:url"] || url,

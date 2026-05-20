@@ -22,6 +22,11 @@ export const users = pgTable("users", {
 export const labels = pgTable("labels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  // Canonical apex domain (lowercased, no www). Mirrors `vendors.domain`
+  // as the dedup key so the "paste a label URL" flow can detect "already
+  // added" before double-creating. Nullable for legacy rows created
+  // before the paste-URL flow existed.
+  domain: text("domain").unique(),
   logoUrl: text("logo_url"),
   bio: text("bio"),
   location: text("location"),

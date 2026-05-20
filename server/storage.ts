@@ -152,6 +152,7 @@ export interface IStorage {
   // Editing the label propagates to every album released on it.
   getLabels(): Promise<Label[]>;
   getLabelById(id: string): Promise<Label | undefined>;
+  getLabelByDomain(domain: string): Promise<Label | undefined>;
   createLabel(data: InsertLabel & { id?: string }): Promise<Label>;
   updateLabel(id: string, data: Partial<Label>): Promise<Label | undefined>;
   deleteLabel(id: string): Promise<void>;
@@ -748,6 +749,10 @@ export class DbStorage implements IStorage {
   // ----- Label ENTITY CRUD --------------------------------------------
   async getLabels(): Promise<Label[]> {
     return await db.select().from(labels).orderBy(asc(labels.name));
+  }
+  async getLabelByDomain(domain: string): Promise<Label | undefined> {
+    const [l] = await db.select().from(labels).where(eq(labels.domain, domain));
+    return l;
   }
   async getLabelById(id: string): Promise<Label | undefined> {
     const [l] = await db.select().from(labels).where(eq(labels.id, id));
