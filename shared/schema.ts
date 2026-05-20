@@ -191,6 +191,24 @@ export const songs = pgTable("songs", {
   // matches the actual audio. Null until the master has been analyzed —
   // UI falls back to decorative bars in that case.
   waveform: jsonb("waveform").$type<number[]>(),
+  // Mux integration (launch-plan Phase 3). When an admin migrates a
+  // master to Mux, the import pipeline POSTs the WAV to Mux as a new
+  // asset under `playback_policy: signed` and stashes the IDs here.
+  // - `muxAssetId`     — internal Mux asset handle, returned synchronously
+  //                       at creation. Persists even before encoding finishes.
+  // - `muxPlaybackId`  — the HLS playback handle (`https://stream.mux.com/<id>.m3u8`).
+  //                       Only set once Mux fires `video.asset.ready`.
+  // - `muxStatus`      — `preparing` (asset created, encoding) → `ready`
+  //                       (playable) → `errored` (Mux failed). Drives the
+  //                       admin "Mux: ready/preparing/errored" pill on the
+  //                       Tracks tab and gates the player swap to HLS.
+  // The original `audioUrl` is left intact so non-Mux songs keep playing
+  // and we can fall back if a Mux asset gets deleted. Once all songs are
+  // on Mux + Phase 3 audit lands, the Object-Storage masters become
+  // archival only and we restrict their ACL.
+  muxAssetId: text("mux_asset_id"),
+  muxPlaybackId: text("mux_playback_id"),
+  muxStatus: text("mux_status"),
 });
 
 export const userAlbums = pgTable(
