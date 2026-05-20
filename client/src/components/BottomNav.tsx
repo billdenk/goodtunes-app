@@ -106,7 +106,7 @@ export function BottomNav() {
   const chatIcon = (active: boolean) => (
     <div className="relative">
       <svg width="25" height="25" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? "0" : "1.8"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
       </svg>
       {unread > 0 && (
         <span

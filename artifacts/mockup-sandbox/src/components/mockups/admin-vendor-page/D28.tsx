@@ -4,12 +4,8 @@ import {
   ChevronLeft,
   Share,
   MoreHorizontal,
-  Heart,
-  ShoppingBag,
-  MessageCircle,
+  Bookmark,
   ChevronRight,
-  Truck,
-  Shield,
   Check,
   X,
 } from "lucide-react";
@@ -88,22 +84,8 @@ export function D28() {
             }}
           />
 
-          {/* Floating chrome */}
-          <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10">
-            <CircularGlass>
-              <ChevronLeft className="w-[19px] h-[19px] text-white" />
-            </CircularGlass>
-            <div className="flex items-center gap-2">
-              <CircularGlass>
-                <Share className="w-[19px] h-[19px] text-white" />
-              </CircularGlass>
-              <CircularGlass>
-                <MoreHorizontal className="w-[19px] h-[19px] text-white" />
-              </CircularGlass>
-            </div>
-          </div>
-
-          {/* Hero product photo — tap to open lightbox at index 0 */}
+          {/* Hero photo: guitar fills full width, anchored at bottom.
+              Cover-fills so the neck/headstock crop above is intentional. */}
           <button
             type="button"
             onClick={() => setLightboxIndex(0)}
@@ -114,11 +96,29 @@ export function D28() {
             <img
               src={hero.url}
               alt={`Martin D-28 — ${hero.label}`}
-              className="w-full h-full object-contain"
-              style={{ objectPosition: "center 55%" }}
+              className="w-full h-full object-cover"
+              style={{ objectPosition: "center bottom" }}
               draggable={false}
             />
           </button>
+
+          {/* Floating chrome on top of photo */}
+          <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10">
+            <CircularGlass>
+              <ChevronLeft className="w-[19px] h-[19px] text-white" />
+            </CircularGlass>
+            <div className="flex items-center gap-2">
+              <CircularGlass>
+                <Bookmark className="w-[19px] h-[19px] text-white" />
+              </CircularGlass>
+              <CircularGlass>
+                <Share className="w-[19px] h-[19px] text-white" />
+              </CircularGlass>
+              <CircularGlass>
+                <MoreHorizontal className="w-[19px] h-[19px] text-white" />
+              </CircularGlass>
+            </div>
+          </div>
 
           {/* Bottom fade into page bg */}
           <div
@@ -131,88 +131,74 @@ export function D28() {
         </div>
 
         {/* ============================ TITLE BLOCK ============================ */}
-        <div className="px-5 pt-5">
-          {/* Brand line */}
-          <div className="flex items-center gap-2">
-            <div
-              className="rounded-md overflow-hidden flex-shrink-0"
-              style={{ width: 56, height: 24, background: "#000" }}
-            >
-              <img
-                src={LOGO_IMG}
-                alt="C.F. Martin & Co."
-                className="w-full h-full object-cover"
-                style={{ transform: "scale(1.55)" }}
-                draggable={false}
-              />
-            </div>
+        <div className="px-5 pt-5 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
             <span
-              className="text-[12px] font-semibold uppercase tracking-[0.18em]"
+              className="text-[11.5px] font-semibold uppercase tracking-[0.22em] block"
               style={{ color: "rgba(235,235,245,0.55)" }}
             >
               C.F. Martin &amp; Co.
             </span>
-          </div>
-
-          <h1
-            className="text-white font-bold leading-tight tracking-tight mt-3"
-            style={{ fontSize: 28 }}
-          >
-            D-28
-          </h1>
-          <p
-            className="text-[14px] mt-1 leading-snug"
-            style={{ color: "rgba(235,235,245,0.7)" }}
-          >
-            Dreadnought · Standard Series · 2025
-          </p>
-
-          <div className="flex items-baseline gap-2 mt-3">
-            <span className="text-white font-bold text-[24px] tabular-nums">
-              $3,499<span className="text-[16px]">.99</span>
-            </span>
-            <span
-              className="text-[12px] inline-flex items-center gap-1"
-              style={{ color: MINT }}
+            <h1
+              className="text-white font-bold leading-tight tracking-tight mt-1.5"
+              style={{ fontSize: 32 }}
             >
-              <Check className="w-[13px] h-[13px]" />
-              In stock at Martin
-            </span>
+              D-28
+            </h1>
+            <p
+              className="text-[14px] mt-1 leading-snug"
+              style={{ color: "rgba(235,235,245,0.7)" }}
+            >
+              Dreadnought · Standard Series · 2025
+            </p>
+            <div className="flex items-baseline gap-2 mt-2.5">
+              <span className="text-white font-bold text-[22px] tabular-nums">
+                $3,499<span className="text-[15px]">.99</span>
+              </span>
+              <span
+                className="text-[12px] inline-flex items-center gap-1"
+                style={{ color: MINT }}
+              >
+                <Check className="w-[13px] h-[13px]" />
+                In stock
+              </span>
+            </div>
           </div>
+          {/* Martin brand chip — moved to the right of the title */}
+          <a
+            href="#martin"
+            className="flex-shrink-0 rounded-2xl overflow-hidden block active:scale-[0.96] transition-transform"
+            style={{
+              width: 116,
+              height: 64,
+              background: "#000",
+              boxShadow: "0 4px 18px rgba(0,0,0,0.45)",
+            }}
+            aria-label="C.F. Martin & Co."
+            data-testid="chip-vendor-martin"
+          >
+            <img
+              src={LOGO_IMG}
+              alt=""
+              aria-hidden="true"
+              className="w-full h-full object-cover"
+              style={{ objectPosition: "center", transform: "scale(1.55)" }}
+              draggable={false}
+            />
+          </a>
         </div>
 
-        {/* ============================ PRIMARY CTAs ============================ */}
-        <div className="px-5 pt-5 flex gap-2.5">
-          <button
-            className="flex-1 h-12 rounded-full text-white text-[14.5px] font-semibold inline-flex items-center justify-center gap-2 active:scale-[0.94] transition-transform"
-            style={{ background: BLUE }}
-            data-testid="button-buy-d28"
-          >
-            <ShoppingBag className="w-[16px] h-[16px]" />
-            Buy at martinguitar.com
-          </button>
-          <button
-            className="w-12 h-12 rounded-full inline-flex items-center justify-center active:scale-[0.94] transition-transform"
-            style={{ background: "rgba(255,255,255,0.14)" }}
-            data-testid="button-favorite-d28"
-            aria-label="Save"
-          >
-            <Heart className="w-[19px] h-[19px] text-white" />
-          </button>
-          <button
-            className="w-12 h-12 rounded-full inline-flex items-center justify-center active:scale-[0.94] transition-transform"
-            style={{ background: "rgba(255,255,255,0.14)" }}
-            data-testid="button-message-vendor-d28"
-            aria-label="Message Martin"
-          >
-            <MessageCircle className="w-[19px] h-[19px] text-white" />
-          </button>
-        </div>
-
-        {/* Trust strip */}
-        <div className="px-5 pt-4 flex gap-2">
-          <TrustChip icon={<Truck className="w-3.5 h-3.5" />} text="Free shipping" />
-          <TrustChip icon={<Shield className="w-3.5 h-3.5" />} text="Lifetime warranty" />
+        {/* ============================ ARTIST'S NOTE ============================
+            Shown when the fan landed here from an artist's credits — the artist
+            who chose this gear gets to say a sentence about it. For the
+            vendor-entry variant, this card is hidden and the vendor surfaces
+            in the "Where to buy" header instead (see Sweetwater row below). */}
+        <div className="px-5 pt-5">
+          <ArtistNoteCard
+            artist={{ id: "ec", name: "Eric Clapton", initial: "E", hue: "#a25b3b" }}
+            quote="My D-28 has a soul of its own — the dreadnought I'd grab if the house were on fire."
+            albumNote="On Unplugged · 1992"
+          />
         </div>
 
         {/* ============================ OVERVIEW ============================ */}
@@ -222,29 +208,19 @@ export function D28() {
             className="text-[14px] leading-relaxed mt-3"
             style={{ color: "rgba(235,235,245,0.78)" }}
           >
-            The D-28 is the standard by which every other dreadnought is judged.
-            A Sitka spruce top paired with East Indian rosewood back and sides,
-            and scalloped forward-shifted X-bracing, delivers the bold, projective
-            tone with strong bass and clear highs that have defined American
-            acoustic music since 1931.
+            The D-28 is the standard by which every other dreadnought is
+            judged. A Sitka spruce top paired with East Indian rosewood back
+            and sides, and scalloped forward-shifted X-bracing, delivers the
+            bold, projective tone with strong bass and clear highs that have
+            defined American acoustic music since 1931.{" "}
+            <button
+              className="font-semibold"
+              style={{ color: "rgba(235,235,245,0.55)" }}
+              data-testid="button-overview-more"
+            >
+              …more
+            </button>
           </p>
-          <p
-            className="text-[14px] leading-relaxed mt-3"
-            style={{ color: "rgba(235,235,245,0.78)" }}
-          >
-            With antique white binding, an ebony fingerboard with mother-of-pearl
-            dot inlays, an ebony bridge with bone pins, and nickel open-gear
-            tuners, the D-28 blends timeless craftsmanship with refined
-            playability — the most iconic Martin, trusted by artists across
-            generations.
-          </p>
-          <button
-            className="mt-2 text-[13px] font-semibold"
-            style={{ color: BLUE }}
-            data-testid="button-overview-more"
-          >
-            Read more
-          </button>
         </div>
 
         {/* ============================ PHOTOS ============================ */}
@@ -275,8 +251,8 @@ export function D28() {
                 <img
                   src={v.url}
                   alt={v.label}
-                  className="w-full h-full object-contain"
-                  style={{ objectPosition: "center 55%" }}
+                  className="w-full h-full object-cover"
+                  style={{ objectPosition: "center bottom" }}
                   draggable={false}
                 />
                 <span
@@ -369,9 +345,9 @@ export function D28() {
           </div>
         </div>
 
-        {/* ============================ ALSO STOCKED AT ============================ */}
+        {/* ============================ WHERE TO BUY ============================ */}
         <div className="px-5 pt-6">
-          <SectionHeader title="Also available at" />
+          <SectionHeader title="Where to buy" />
         </div>
         <div className="px-5 pt-3 pb-8 space-y-2">
           {[
@@ -660,14 +636,68 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-function TrustChip({ icon, text }: { icon: ReactNode; text: string }) {
+/* ── Artist's note card ─────────────────────────────────────────────
+   Used in the "from credits" entry variant: a rounded photo of the
+   artist who chose this gear, their name, and a short quote about why
+   they play it. Vendor-entry variant hides this and lets the vendor
+   surface in the Where-to-buy section instead. */
+function ArtistNoteCard({
+  artist,
+  quote,
+  albumNote,
+}: {
+  artist: { id: string; name: string; initial: string; hue: string; photoUrl?: string };
+  quote: string;
+  albumNote?: string;
+}) {
   return (
     <div
-      className="flex-1 h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-white text-[12px] font-medium"
+      className="rounded-2xl px-4 py-4 flex items-start gap-3.5"
       style={{ background: "rgba(255,255,255,0.06)" }}
+      data-testid={`card-artist-note-${artist.id}`}
     >
-      <span style={{ color: "rgba(235,235,245,0.7)" }}>{icon}</span>
-      {text}
+      {/* Avatar */}
+      <div
+        className="w-[52px] h-[52px] rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold overflow-hidden"
+        style={{
+          background: artist.hue,
+          fontSize: 22,
+          boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
+        }}
+      >
+        {artist.photoUrl ? (
+          <img
+            src={artist.photoUrl}
+            alt={artist.name}
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          artist.initial
+        )}
+      </div>
+      {/* Quote + attribution */}
+      <div className="min-w-0 flex-1">
+        <p
+          className="text-white text-[14.5px] leading-snug"
+          style={{ fontStyle: "italic" }}
+        >
+          “{quote}”
+        </p>
+        <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+          <span className="text-white text-[12.5px] font-semibold">
+            — {artist.name}
+          </span>
+          {albumNote && (
+            <span
+              className="text-[11.5px]"
+              style={{ color: "rgba(235,235,245,0.55)" }}
+            >
+              {albumNote}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
