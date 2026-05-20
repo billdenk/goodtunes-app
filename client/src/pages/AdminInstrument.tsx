@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import { SHORT_CATEGORIES } from "@shared/categories";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -267,8 +268,9 @@ function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
           {
             key: "shortCategory",
             label: "Short category",
-            type: "text",
+            type: "select",
             placeholder: "e.g. Guitar",
+            options: SHORT_CATEGORIES.map((c) => ({ value: c, label: c })),
           },
         ]}
       />

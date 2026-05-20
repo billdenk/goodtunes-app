@@ -8,6 +8,7 @@ import { scrypt, randomBytes, timingSafeEqual, randomUUID } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
+import { SHORT_CATEGORIES } from "@shared/categories";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
@@ -6509,6 +6510,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/instruments", requireAdmin, async (req, res) => {
     const { name, category, shortCategory, photoUrl, about, artistNote } = req.body ?? {};
     if (!name || !category) return res.status(400).json({ message: "name and category are required" });
+    if (shortCategory && !(SHORT_CATEGORIES as readonly string[]).includes(String(shortCategory))) {
+      return res.status(400).json({ message: `Invalid shortCategory. Allowed: ${SHORT_CATEGORIES.join(", ")}` });
+    }
     const i = await storage.createInstrument({
       name: String(name),
       category: String(category),
@@ -6525,7 +6529,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (category !== undefined) updates.category = String(category);
-    if (shortCategory !== undefined) updates.shortCategory = shortCategory ? String(shortCategory) : null;
+    if (shortCategory !== undefined) {
+      if (shortCategory && !(SHORT_CATEGORIES as readonly string[]).includes(String(shortCategory))) {
+        return res.status(400).json({ message: `Invalid shortCategory. Allowed: ${SHORT_CATEGORIES.join(", ")}` });
+      }
+      updates.shortCategory = shortCategory ? String(shortCategory) : null;
+    }
     if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
     if (about !== undefined) updates.about = about ? String(about) : null;
     if (artistNote !== undefined) updates.artistNote = artistNote ? String(artistNote) : null;
