@@ -216,9 +216,13 @@ function MigrateToMuxButton({
     };
   }, []);
 
+  // Anything with audio that isn't `ready` is actionable. We split it
+  // into errored (needs a retry) vs not-yet-ingested so the label can
+  // tell the operator what they're actually clicking.
   const pending = songs.filter(
     (s) => !!s.audioUrl && (!s.muxPlaybackId || s.muxStatus !== "ready"),
   );
+  const errored = pending.filter((s) => s.muxStatus === "errored");
   const ready = songs.filter((s) => s.muxStatus === "ready").length;
   const total = songs.length;
 
@@ -276,20 +280,42 @@ function MigrateToMuxButton({
         }
         if (cancelRef.current) return;
         outstanding = stillPending;
-        queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+        // Re-read the fresh album to count ready vs errored from the
+        // server's source of truth, not from a counter that conflates
+        // both terminal states.
+        await queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
         if (stillPending.length > 0 && elapsed < 180) {
           timeoutRef.current = setTimeout(tick, 5000);
         } else {
           timeoutRef.current = null;
           if (!mountedRef.current) return;
           setBusy(false);
-          toast({
-            title: stillPending.length === 0 ? "Mux: ready" : "Mux: polling stopped",
-            description:
-              stillPending.length === 0
-                ? `${ingested.length} tracks are now streaming via Mux HLS.`
-                : `${ingested.length - stillPending.length} ready, ${stillPending.length} still encoding. Refresh to recheck.`,
-          });
+          const album = queryClient.getQueryData<{ songs?: SongLite[] }>([
+            "/api/albums",
+            albumId,
+          ]);
+          const ingestedSet = new Set(ingested);
+          const inBatch = (album?.songs ?? []).filter((s) => ingestedSet.has(s.id));
+          const readyCount = inBatch.filter((s) => s.muxStatus === "ready").length;
+          const erroredCount = inBatch.filter((s) => s.muxStatus === "errored").length;
+          const stuckCount = stillPending.length;
+          if (erroredCount > 0) {
+            toast({
+              title: `Mux: ${erroredCount} track${erroredCount === 1 ? "" : "s"} errored`,
+              description: `${readyCount} ready, ${erroredCount} errored${stuckCount ? `, ${stuckCount} still encoding` : ""}. Click Migrate to Mux again to retry the errored tracks.`,
+              variant: "destructive",
+            });
+          } else if (stuckCount === 0) {
+            toast({
+              title: "Mux: ready",
+              description: `${readyCount} track${readyCount === 1 ? "" : "s"} now streaming via Mux HLS.`,
+            });
+          } else {
+            toast({
+              title: "Mux: polling stopped",
+              description: `${readyCount} ready, ${stuckCount} still encoding. Refresh to recheck.`,
+            });
+          }
         }
       };
       if (ingested.length > 0) {
@@ -315,7 +341,11 @@ function MigrateToMuxButton({
     ? `Migrating… ${ready}/${total}`
     : pending.length === 0
       ? `Mux ${ready}/${total} ✓`
-      : `Migrate to Mux (${pending.length})`;
+      : errored.length === pending.length
+        ? `Retry Mux (${errored.length} errored)`
+        : errored.length > 0
+          ? `Migrate to Mux (${pending.length}, ${errored.length} errored)`
+          : `Migrate to Mux (${pending.length})`;
 
   return (
     <button

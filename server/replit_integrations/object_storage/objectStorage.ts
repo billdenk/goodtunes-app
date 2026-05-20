@@ -154,6 +154,25 @@ export class ObjectStorageService {
     });
   }
 
+  // Mints a direct GCS signed GET URL for an `/objects/<id>` path. This
+  // bypasses our Express + Replit's edge proxy entirely — used when an
+  // external service (e.g. Mux) needs to pull the raw bytes and we can't
+  // route them through our app (Replit's edge intermittently 500s on
+  // large WAV streams). Returns a URL on storage.googleapis.com.
+  async getSignedDownloadUrl(objectPath: string, ttlSec = 3600): Promise<string> {
+    if (!objectPath.startsWith("/objects/")) {
+      throw new ObjectNotFoundError();
+    }
+    const parts = objectPath.slice(1).split("/");
+    if (parts.length < 2) throw new ObjectNotFoundError();
+    const entityId = parts.slice(1).join("/");
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) entityDir = `${entityDir}/`;
+    const fullPath = `${entityDir}${entityId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+  }
+
   // Gets the object entity file from the object path.
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith("/objects/")) {

@@ -7310,7 +7310,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isMuxConfigured()) {
       return res.status(503).json({ message: "Mux not configured (missing MUX_* env vars)" });
     }
-    const song = await storage.getSongById(req.params.id);
+    const song = await storage.getSongById(req.params.id as string);
     if (!song) return res.status(404).json({ message: "Song not found" });
     if (!song.audioUrl) return res.status(400).json({ message: "Song has no audioUrl to ingest" });
     if (song.muxAssetId && song.muxStatus !== "errored") {
@@ -7323,7 +7323,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     }
     try {
-      const publicUrl = absoluteUploadUrl(req, song.audioUrl);
+      // Mint a direct GCS signed URL so Mux pulls bytes from
+      // storage.googleapis.com instead of our /objects/uploads/<id>.wav
+      // Express route — Replit's edge proxy intermittently 500s on large
+      // WAV streams, which made every Mux ingest flip to `errored` within
+      // seconds. Falls back to the public Express URL only if the audio
+      // is already a full external URL (e.g. mzstatic).
+      const publicUrl = /^https?:\/\//i.test(song.audioUrl)
+        ? song.audioUrl
+        : await objectStorage.getSignedDownloadUrl(song.audioUrl);
       const asset = await createAssetFromUrl(publicUrl);
       const updated = await storage.updateSong(song.id, {
         muxAssetId: asset.assetId,
@@ -7340,7 +7348,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/admin/songs/:id/mux-refresh", requireAdminBearer, async (req, res) => {
     if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
-    const song = await storage.getSongById(req.params.id);
+    const song = await storage.getSongById(req.params.id as string);
     if (!song?.muxAssetId) return res.status(400).json({ message: "Song has no muxAssetId" });
     try {
       const asset = await getAsset(song.muxAssetId);
@@ -7358,7 +7366,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/songs/:id/playback-url", requireAuth, async (req, res) => {
     if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
-    const song = await storage.getSongById(req.params.id);
+    const song = await storage.getSongById(req.params.id as string);
     if (!song?.muxPlaybackId) return res.status(404).json({ message: "No Mux playback for this song" });
     if (song.muxStatus !== "ready") {
       return res.status(409).json({ message: "Mux asset not ready", status: song.muxStatus });
@@ -7394,8 +7402,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!assetId) return res.json({ ok: true });
     // Find the song with this asset id and update its status.
     try {
-      const songs = await storage.getSongs();
-      const song = songs.find((s) => s.muxAssetId === assetId);
+      const songs = await storage.getAllSongs({ includeHidden: true });
+      const song = songs.find((s: any) => s.muxAssetId === assetId);
       if (!song) return res.json({ ok: true, ignored: "no matching song" });
       const pb = (payload.data?.playback_ids || []).find((p: any) => p.policy === "signed");
       const newStatus =
