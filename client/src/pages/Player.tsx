@@ -193,6 +193,14 @@ export function Player() {
     };
   }, [showLyrics]);
 
+  // Fire song_viewed whenever the full Now Playing surface presents a new
+  // song. The mini-player tap mounts this component, and queue-advance
+  // swaps `currentSong.id`, so this captures both entry points.
+  useEffect(() => {
+    if (!currentSong) return;
+    track("song_viewed", { songId: currentSong.id, albumId: currentSong.album?.id });
+  }, [currentSong?.id]);
+
   if (!currentSong) return null;
 
   const progress = duration > 0 ? currentTime / duration : 0;
@@ -453,7 +461,7 @@ export function Player() {
                 onClick={() => {
                   if (currentSong.lyrics) {
                     setShowLyrics(true);
-                    track("lyrics_open", { songId: currentSong.id, songTitle: currentSong.title, albumId: currentSong.album?.id });
+                    track("lyrics_opened", { songId: currentSong.id, albumId: currentSong.album?.id });
                   }
                 }}
                 disabled={!currentSong.lyrics}

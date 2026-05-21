@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { track } from "@/lib/analytics";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -77,6 +78,13 @@ export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () =>
         setOptions(j);
         const firstAvailable = j.skus.find((s) => !s.soldOut);
         if (firstAvailable) setFormat(firstAvailable.format);
+        // Fan is now looking at the full bundle (format SKUs × signed-cert
+        // add-on). Distinct from `album_viewed` (just landing on the page).
+        track("bundle_viewed", {
+          albumId,
+          skuCount: j.skus.length,
+          hasSignedCert: j.addons.some((a) => a.kind === "signed_cert"),
+        });
       } catch (e: any) {
         setError(e?.message ?? "Couldn't load buy options");
       }
@@ -104,6 +112,7 @@ export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () =>
     setBusy(true);
     setError(null);
     try {
+      track("checkout_started", { albumId, priceCents: totalCents });
       const r = await apiRequest("POST", "/api/checkout/session", {
         albumId,
         skuFormat: selectedSku.format,

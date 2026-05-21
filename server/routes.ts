@@ -11,6 +11,7 @@ import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSc
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
+import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
 
 const scryptAsync = promisify(scrypt);
@@ -8615,22 +8616,84 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const userId = await getUserIdFromRequest(req);
     const events = Array.isArray(req.body?.events) ? req.body.events : [];
     const now = Date.now();
-    const rows = events
+    const geo = geoFromRequest(req);
+    // Build the full envelope server-side so the DB row + the PostHog
+    // forward see the same shape. Geo overrides whatever the client
+    // sent (clients can't be trusted to honestly self-report country).
+    const enriched = events
       .filter((e: any) => e && typeof e.name === "string")
-      .map((e: any) => ({
-        clientId: e.id ? String(e.id) : undefined,
-        name: String(e.name),
-        payload: e.payload && typeof e.payload === "object" ? e.payload : {},
-        ts: new Date(typeof e.ts === "number" ? e.ts : now),
-        sessionId: e.sessionId ? String(e.sessionId) : undefined,
-        userId,
-      }));
-    if (rows.length) {
+      .map((e: any) => {
+        const ts = new Date(typeof e.ts === "number" ? e.ts : now);
+        const deviceId = e.deviceId ? String(e.deviceId) : null;
+        const sessionId = e.sessionId ? String(e.sessionId) : null;
+        const platform = e.platform ? String(e.platform) : null;
+        const referrer = e.referrer ? String(e.referrer) : null;
+        const payload = e.payload && typeof e.payload === "object" ? e.payload : {};
+        // Mirror the envelope fields into the persisted payload so the
+        // analytics_events table is self-contained (one row → one event
+        // with full context) without needing extra columns. The top-level
+        // columns (sessionId / userId / clientId) stay populated too for
+        // index-able lookups.
+        const fullPayload = {
+          ...payload,
+          _device_id: deviceId,
+          _platform: platform,
+          _referrer: referrer,
+          _country: geo.country,
+          _region: geo.region,
+        };
+        return {
+          clientId: e.id ? String(e.id) : undefined,
+          name: String(e.name),
+          payload: fullPayload,
+          ts,
+          sessionId: sessionId ?? undefined,
+          userId,
+          deviceId,
+          platform,
+          referrer,
+          country: geo.country,
+          region: geo.region,
+        };
+      });
+
+    if (enriched.length) {
+      // Postgres is the canonical, reconcilable store for analytics; if the
+      // insert fails we MUST surface a non-2xx so the client keeps the batch
+      // queued and retries on the next flush. Swallowing the error and
+      // returning 204 would silently drop events from analytics_events while
+      // PostHog still received them — divergent state we can't reconcile.
       try {
-        await storage.insertAnalyticsEvents(rows);
+        await storage.insertAnalyticsEvents(enriched.map((e: any) => ({
+          clientId: e.clientId,
+          name: e.name,
+          payload: e.payload,
+          ts: e.ts,
+          sessionId: e.sessionId,
+          userId: e.userId,
+        })));
       } catch (err) {
         console.error("[analytics] insert failed", err);
+        return res.status(503).json({ message: "Analytics persistence unavailable; retry later" });
       }
+      // Only forward to PostHog AFTER the canonical write succeeded. Still
+      // fire-and-forget (no await) — a PostHog outage must not turn into a
+      // 5xx on our ingest — but a Postgres failure now short-circuits before
+      // we get here, so PostHog can never see events that aren't also in
+      // analytics_events.
+      void forwardToPostHog(enriched.map((e: any) => ({
+        name: e.name,
+        payload: e.payload,
+        ts: e.ts,
+        sessionId: e.sessionId ?? null,
+        userId: e.userId ?? null,
+        clientId: e.clientId ?? null,
+        deviceId: e.deviceId,
+        platform: e.platform,
+        referrer: e.referrer,
+        country: e.country,
+        region: e.region,
+      })));
     }
     return res.status(204).end();
   });
@@ -8643,6 +8706,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/events/recent", requireAuth, async (req, res) => {
     const rows = await storage.getRecentAnalyticsForUser(req.session.userId!, 100);
     return res.json(rows);
+  });
+
+  // Admin-only: latest N events across all users. Powers the admin
+  // debug overlay's "live tail" view so we can verify instrumentation
+  // landed without grepping logs.
+  app.get("/api/admin/events/recent", requireAdmin, async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const rows = await storage.getRecentAnalyticsEvents(limit);
+    return res.json({ events: rows, posthog: isPostHogEnabled() });
   });
 
   // Public OpenGraph share page for a GoodDeed certificate.

@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, setAuthToken, queryClient } from "@/lib/queryClient";
+import { track } from "@/lib/analytics";
 
 type Mode = "login" | "register";
 // Step 1: name/email/password (admin) or email+password (customer).
@@ -394,6 +395,10 @@ export function Login() {
   };
 
   const handleOAuth = (provider: "google" | "apple") => {
+    // Fire before the redirect (the page is about to be replaced). Mode
+    // distinguishes sign-up vs sign-in for the same OAuth click — the
+    // segmented control above sets `mode`.
+    track(mode === "register" ? "sign_up" : "sign_in", { provider, kind });
     window.location.href = `/api/auth/${provider}/start?kind=${kind}`;
   };
 
@@ -453,6 +458,7 @@ export function Login() {
         realName: realName.trim(),
         password,
       });
+      track("sign_up", { provider: "password", kind });
       if (isAdmin || result?.requiresLogin) {
         setMode("login");
         setLoginIdent(finalUsername);
@@ -478,6 +484,7 @@ export function Login() {
         setResendCooldown(60);
         setAdminPhase("emailOtp");
       } else if (result?.token) {
+        track("sign_in", { provider: "password", kind });
         finishCustomer();
       }
     } catch {}

@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { INSTRUMENTS, type Instrument, type InstrumentVendor } from "@/data/musicData";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
+import { track } from "@/lib/analytics";
 
 function parseInstrumentAbout(about: string): { prose: string; specs: { label: string; value: string }[] } {
   const lines = about.split(/\r?\n/);
@@ -27,6 +28,14 @@ export function InstrumentDetail() {
   const [, params] = useRoute<{ id: string }>("/instrument/:id");
   const [, navigate] = useLocation();
   const instrument: Instrument | undefined = params?.id ? INSTRUMENTS[params.id] : undefined;
+
+  // Fire gear_viewed when a real instrument is resolved. Skipped on the
+  // "no longer available" fallback below so we don't track 404s.
+  useEffect(() => {
+    if (instrument?.id) {
+      track("gear_viewed", { instrumentId: instrument.id, instrumentName: instrument.name });
+    }
+  }, [instrument?.id, instrument?.name]);
 
   const [isBookmarked, setIsBookmarked] = useState<boolean>(() => {
     if (!params?.id || typeof window === "undefined") return false;

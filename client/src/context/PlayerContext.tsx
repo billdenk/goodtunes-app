@@ -529,11 +529,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
   }, [hydrate, beginPlayInstance]);
 
-  const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
+  const togglePlay = useCallback(() => {
+    setIsPlaying((p) => {
+      const next = !p;
+      const song = currentSongRef.current;
+      if (song) {
+        // Only fire pause/resume when a song is actually loaded — toggling
+        // play with no queue is a no-op visually and shouldn't show up
+        // in the funnel.
+        track(next ? "play_resume" : "play_pause", {
+          ...songMeta(song),
+          at: currentTimeRef.current,
+        });
+      }
+      return next;
+    });
+  }, [songMeta]);
   const seekTo = useCallback((time: number) => {
     const clamped = Math.max(0, Math.min(time, duration));
     const song = currentSongRef.current;
-    if (song) track("seek", { ...songMeta(song), from: currentTime, to: clamped, duration });
+    if (song) track("play_seek", { ...songMeta(song), from: currentTime, to: clamped, duration });
     setCurrentTime(clamped);
     const a = audioRef.current;
     if (a && hasRealAudio) a.currentTime = clamped;
@@ -546,7 +561,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const toggleFavorite = useCallback((songId: string) => {
     const wasFav = favSongs.has(songId);
     favSongs.toggle(songId);
-    track(wasFav ? "unfavorite" : "favorite", { songId });
+    track(wasFav ? "unfavorite_song" : "favorite_song", { songId });
   }, [favSongs]);
 
   const isFavorite = useCallback((songId: string) => favSongs.has(songId), [favSongs]);

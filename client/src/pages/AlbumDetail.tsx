@@ -14,6 +14,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { ChevronLeft, Share, MoreHorizontal, X as XIcon } from "lucide-react";
 import { startVendorChatAboutInstrument } from "@/lib/chatStore";
+import { track } from "@/lib/analytics";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
 
@@ -111,6 +112,17 @@ function AlbumDetailMobile() {
   const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song; creditId?: string } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
+  // Wrap setInAppBrowser so every in-app browser open from a vendor row
+  // also fires gear_vendor_clicked. Centralising it here keeps the two
+  // call-sites (Gear tab + Vendor profile) in sync and prevents drift
+  // if a third entry point is added later.
+  const openVendorInAppBrowser = (b: { url: string; title: string; logoUrl?: string }) => {
+    try {
+      const domain = new URL(b.url).hostname.replace(/^www\./, "");
+      track("gear_vendor_clicked", { vendorName: b.title, vendorDomain: domain, url: b.url });
+    } catch {}
+    setInAppBrowser(b);
+  };
   const [showDescription, setShowDescription] = useState(false);
   const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
   const [bookmarkedInstruments, setBookmarkedInstruments] = useState<Set<string>>(() => {
@@ -302,6 +314,9 @@ function AlbumDetailMobile() {
     : [];
 
   useEffect(() => {
+    if (album?.id) {
+      track("album_viewed", { albumId: album.id, albumTitle: album.title, artistId: undefined });
+    }
     setActiveVideo(null);
     setPhotoIndex(null);
     setShowOwnership(false);
@@ -404,10 +419,16 @@ function AlbumDetailMobile() {
             onClick={async () => {
               const url = `${window.location.origin}/album/${album.id}`;
               const shareData = { title: album.title, text: `${album.title} by ${album.artist}`, url };
+              const hasNativeShare = typeof navigator.share === "function";
+              const destination: "native" | "copy" = hasNativeShare ? "native" : "copy";
+              track("share_initiated", { albumId: album.id, destination });
               try {
-                if (navigator.share) await navigator.share(shareData);
-                else {
+                if (hasNativeShare) {
+                  await navigator.share(shareData);
+                  track("share_completed", { albumId: album.id, destination: "native" });
+                } else {
                   await navigator.clipboard.writeText(url);
+                  track("share_completed", { albumId: album.id, destination: "copy" });
                   setShareToast("Link copied");
                   setTimeout(() => setShareToast(""), 2000);
                 }
@@ -1028,7 +1049,11 @@ function AlbumDetailMobile() {
               onAddToQueue={() => { addToQueue({ ...s, album }); setShareToast("Added to Queue"); setTimeout(() => setShareToast(""), 1600); }}
               onPlayLast={() => { playLast({ ...s, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
               queueHasUpcoming={queueHasUpcoming}
-              onViewCredits={() => { setSongMenuFor(null); setCreditsForSong(s); }}
+              onViewCredits={() => {
+                setSongMenuFor(null);
+                setCreditsForSong(s);
+                track("credits_opened", { songId: s.id, albumId: album.id });
+              }}
               hasCredits={!!getCredits(s.id)}
               onClose={() => setSongMenuFor(null)}
             />
@@ -1050,11 +1075,12 @@ function AlbumDetailMobile() {
             instrument={vendorSheet.instrument}
             isBookmarked={!!vendorSheet.vendor.vendorId && bookmarkedVendors.has(vendorSheet.vendor.vendorId)}
             onToggleBookmark={() => vendorSheet.vendor.vendorId && toggleBookmarkVendor(vendorSheet.vendor.vendorId)}
-            onOpenInAppBrowser={(b) => setInAppBrowser(b)}
+            onOpenInAppBrowser={openVendorInAppBrowser}
             onMessageVendor={(vendor) => {
               const inst = vendorSheet.instrument;
               try {
                 const domain = new URL(vendor.affiliateUrl).hostname.replace(/^www\./, "");
+                track("gear_vendor_chat_opened", { instrumentId: inst.id, vendorName: vendor.name });
                 const tid = startVendorChatAboutInstrument({
                   kind: "instrument",
                   instrumentId: inst.id,
@@ -1089,12 +1115,13 @@ function AlbumDetailMobile() {
             attribution={instrumentSheet.attribution}
             isBookmarked={bookmarkedInstruments.has(instrumentSheet.instrument.id)}
             onToggleBookmark={() => toggleBookmarkInstrument(instrumentSheet.instrument.id)}
-            onOpenInAppBrowser={(b) => setInAppBrowser(b)}
+            onOpenInAppBrowser={openVendorInAppBrowser}
             onOpenVendor={(vendor) => setVendorSheet({ vendor, instrument: instrumentSheet.instrument })}
             onMessageVendor={(vendor) => {
               const inst = instrumentSheet.instrument;
               try {
                 const domain = new URL(vendor.affiliateUrl).hostname.replace(/^www\./, "");
+                track("gear_vendor_chat_opened", { instrumentId: inst.id, vendorName: vendor.name });
                 const tid = startVendorChatAboutInstrument({
                   kind: "instrument",
                   instrumentId: inst.id,
@@ -1136,7 +1163,10 @@ function AlbumDetailMobile() {
             credits={getCredits(creditsForSong.id)}
             resolvePerson={(pid) => (pid ? peopleById.get(pid) : undefined)}
             resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
-            onOpenPerformer={(person, creditId) => setPerformerSheet({ person, song: creditsForSong, creditId })}
+            onOpenPerformer={(person, creditId) => {
+              setPerformerSheet({ person, song: creditsForSong, creditId });
+              track("credits_person_clicked", { personId: person.id, songId: creditsForSong.id, albumId: album.id });
+            }}
             onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
             onClose={() => setCreditsForSong(null)}
           />

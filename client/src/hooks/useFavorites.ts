@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { track } from "@/lib/analytics";
 
 const SONGS_KEY = "gt:fav:songs";
 const ARTISTS_KEY = "gt:fav:artists";
@@ -84,6 +85,41 @@ export function useFavoriteSongs() {
   return useFavoriteSet(SONGS_KEY);
 }
 
+// Artist favorites get their own analytics events so the discovery
+// rollup can distinguish "fan loved this song" vs "fan loved this
+// artist" without inspecting which set the id belongs to. (Song
+// favorites are tracked in PlayerContext.toggleFavorite.)
 export function useFavoriteArtists() {
-  return useFavoriteSet(ARTISTS_KEY);
+  const inner = useFavoriteSet(ARTISTS_KEY);
+  const toggle = useCallback(
+    (id: string) => {
+      const was = inner.has(id);
+      inner.toggle(id);
+      track(was ? "unfavorite_artist" : "favorite_artist", { artistId: id });
+      // Star = follow in GoodTunes (see shared/analytics.ts comment).
+      // Mirror to `follow_artist` on the additive transition only so
+      // dashboards can pivot on the follow concept independent of which
+      // surface fired the event.
+      if (!was) track("follow_artist", { artistId: id });
+    },
+    [inner],
+  );
+  const add = useCallback(
+    (id: string) => {
+      if (inner.has(id)) return;
+      inner.add(id);
+      track("favorite_artist", { artistId: id });
+      track("follow_artist", { artistId: id });
+    },
+    [inner],
+  );
+  const remove = useCallback(
+    (id: string) => {
+      if (!inner.has(id)) return;
+      inner.remove(id);
+      track("unfavorite_artist", { artistId: id });
+    },
+    [inner],
+  );
+  return { ...inner, toggle, add, remove };
 }

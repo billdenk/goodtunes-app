@@ -9,6 +9,7 @@ import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { track } from "@/lib/analytics";
 
 type OrderItem = { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number };
 type Order = {
@@ -68,6 +69,21 @@ export function Welcome() {
         if (!j.order && attempt < 8) {
           setTimeout(() => poll(attempt + 1), 750);
         } else {
+          if (j.order) {
+            // Fire checkout_completed exactly once when the webhook-materialized
+            // order first appears. Subsequent polls short-circuit on `attempt`,
+            // and the dedupe-by-sessionId guard below survives StrictMode
+            // double-mount in dev.
+            const key = `gt:checkout-tracked:${sessionId}`;
+            if (!sessionStorage.getItem(key)) {
+              sessionStorage.setItem(key, "1");
+              track("checkout_completed", {
+                albumId: j.order.albumId,
+                orderId: j.order.id,
+                priceCents: j.order.totalCents,
+              });
+            }
+          }
           queryClient.invalidateQueries();
         }
       } catch (e: any) {

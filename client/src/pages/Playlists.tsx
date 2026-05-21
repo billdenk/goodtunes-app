@@ -8,6 +8,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { SONGS, ALBUMS, type Song, type Album } from "@/data/musicData";
 import type { Song as DbSong, Album as DbAlbum } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { track } from "@/lib/analytics";
 import { useFavoriteSongs, useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 
@@ -279,7 +280,8 @@ export function Playlists() {
       const res = await apiRequest("POST", "/api/playlists", { name });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      track("playlist_created", { playlistId: data?.id, name: data?.name });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
       setShowCreate(false);
       setNewPlaylistName("");
@@ -293,8 +295,10 @@ export function Playlists() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/playlists/${id}`);
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
+      track("playlist_deleted", { playlistId: id });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
       if (selectedPlaylist) setSelectedPlaylist(null);
     },
@@ -305,7 +309,8 @@ export function Playlists() {
       const res = await apiRequest("PUT", `/api/playlists/${id}`, { name });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      track("playlist_renamed", { playlistId: data?.id });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
       setEditingPlaylist(null);
     },
@@ -314,8 +319,10 @@ export function Playlists() {
   const removeSongMutation = useMutation({
     mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
       await apiRequest("DELETE", `/api/playlists/${playlistId}/songs/${songId}`);
+      return { playlistId, songId };
     },
-    onSuccess: () => {
+    onSuccess: ({ playlistId, songId }) => {
+      track("song_removed_from_playlist", { playlistId, songId });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
     },
@@ -324,9 +331,10 @@ export function Playlists() {
   const addSongMutation = useMutation({
     mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
       const res = await apiRequest("POST", `/api/playlists/${playlistId}/songs`, { songId });
-      return res.json();
+      return { row: await res.json(), playlistId, songId };
     },
-    onSuccess: () => {
+    onSuccess: ({ playlistId, songId }) => {
+      track("song_added_to_playlist", { playlistId, songId });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", selectedPlaylist?.id, "songs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
     },

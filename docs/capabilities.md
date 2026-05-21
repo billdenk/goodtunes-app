@@ -56,6 +56,7 @@ The operator surface that powers the catalog.
 - **Light admin theme.** The operator surface uses a clean white-and-slate Mac-app skin, distinct from the dark fan player — same brand vocabulary, denser layout for getting work done.
 - **2FA-protected admin sign-in.** Every admin sign-in requires a second factor — by default a one-time code emailed to the admin, with an option to switch to an authenticator-app TOTP enrollment and scrypt-hashed recovery codes. Super-admin grant and revoke are gated to existing super-admins from inside the app.
 - **Admin invitations.** A super-admin can invite a teammate by email and pre-assign their role (super admin, label, artist, manufacturer, or fulfillment partner). The invitee gets a one-shot link, sets a username and password, and lands directly in the admin shell with the right scope baked in — no shared credentials, no manual database edits. Pending invites can be revoked from the same screen.
+- **Product-analytics pipeline.** Every meaningful fan interaction — plays, favorites, playlist edits, searches, gear-vendor taps, shares, checkouts, sign-ins — flows through a typed event registry, gets enriched with device, session, user, platform and geo, batches to our own Postgres event store, and forwards server-side to PostHog. Admins get a live in-app debug overlay on every page to confirm any new event is wired end-to-end. Foundation for LCID and every future artist/label dashboard.
 
 ## Integrations
 

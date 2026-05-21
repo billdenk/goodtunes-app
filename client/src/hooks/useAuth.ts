@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, setAuthToken, getAuthToken } from "@/lib/queryClient";
+import { identifyAnalyticsUser, track } from "@/lib/analytics";
 
 interface AuthUser {
   id: string;
@@ -41,6 +43,12 @@ export function useAuth() {
     retry: false,
     staleTime: 1000 * 60 * 5,
   });
+
+  // Stitch analytics events to the authenticated user (or clear on sign-out).
+  // Runs whenever /api/me resolves so refreshes / OAuth round-trips re-identify.
+  useEffect(() => {
+    identifyAnalyticsUser(user?.id ?? null);
+  }, [user?.id]);
 
   const loginMutation = useMutation({
     mutationFn: async (data: { username: string; password: string }) => {
@@ -103,12 +111,22 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      // Fire sign_out before clearing the session — the analytics SDK
+      // stitches it to the still-known userId so the event lands on the
+      // correct identity. We capture the auth kind from the cached `/api/me`
+      // response so admin vs customer sign-outs are distinguishable in the
+      // funnel.
+      try {
+        const me = queryClient.getQueryData<AuthUser | null>(["/api/me"]);
+        track("sign_out", { kind: me?.kind });
+      } catch {}
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
       setAuthToken(null);
       queryClient.setQueryData(["/api/me"], null);
       queryClient.clear();
+      identifyAnalyticsUser(null);
     },
   });
 

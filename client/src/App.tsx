@@ -44,6 +44,8 @@ import { GiftClaim } from "@/pages/GiftClaim";
 import { Redeem } from "@/pages/Redeem";
 import { AdminShopify } from "@/pages/AdminShopify";
 import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
+import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
+import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -252,6 +254,7 @@ function Router() {
         </Route>
       </Switch>
       <PlayerOverlay />
+      {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
     </>
   );
 }

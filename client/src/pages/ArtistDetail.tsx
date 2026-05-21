@@ -12,6 +12,7 @@ import appleMusicLogo from "@/assets/brand/apple-music.svg";
 import spotifyLogo from "@/assets/brand/spotify.svg";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
+import { track } from "@/lib/analytics";
 
 export function ArtistDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -22,6 +23,11 @@ export function ArtistDetail() {
   const artistName = useMemo(() => {
     try { return decodeURIComponent(slug || ""); } catch { return slug || ""; }
   }, [slug]);
+
+  // One artist_viewed per artist nav; tie to slug so back/forward emits again.
+  useEffect(() => {
+    if (artistName) track("artist_viewed", { artistName });
+  }, [artistName]);
 
   // DB-backed albums. The fan ArtistDetail used to read only the
   // hardcoded `ALBUMS` from `@/data/musicData`, so anything Bill added

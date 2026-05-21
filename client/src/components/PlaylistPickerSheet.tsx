@@ -72,7 +72,7 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
     },
     onSuccess: (_data, playlistId) => {
       const ids = songIds && songIds.length > 0 ? songIds : songId ? [songId] : [];
-      ids.forEach((id) => track("add_to_playlist", { songId: id, playlistId }));
+      ids.forEach((id) => track("song_added_to_playlist", { songId: id, playlistId }));
       setAdded(playlistId);
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
       queryClient.invalidateQueries({ queryKey: ["/api/playlists", playlistId, "songs"] });

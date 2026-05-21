@@ -403,6 +403,7 @@ export interface IStorage {
   }[]): Promise<void>;
   deleteAnalyticsForUser(userId: string): Promise<void>;
   getRecentAnalyticsForUser(userId: string, limit: number): Promise<any[]>;
+  getRecentAnalyticsEvents(limit: number): Promise<any[]>;
 
   // Job-run audit log (Dropbox imports, GoodSync, etc.).
   recordJobRun(data: InsertJobRun): Promise<JobRun>;
@@ -467,7 +468,7 @@ const SEED_ALBUMS: SeedAlbum[] = [
 // them loosely and supply the defaults at the insert-site below.
 type SeedSong = Omit<
   Song,
-  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform" | "audioSourceUrl" | "isExplicit"
+  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform" | "audioSourceUrl" | "isExplicit" | "isPreviewable" | "playlistCount" | "muxAssetId" | "muxPlaybackId" | "muxStatus"
 > & {
   syncedLyrics?: Song["syncedLyrics"];
   instrumental?: Song["instrumental"];
@@ -476,6 +477,11 @@ type SeedSong = Omit<
   waveform?: Song["waveform"];
   audioSourceUrl?: Song["audioSourceUrl"];
   isExplicit?: Song["isExplicit"];
+  isPreviewable?: Song["isPreviewable"];
+  playlistCount?: Song["playlistCount"];
+  muxAssetId?: Song["muxAssetId"];
+  muxPlaybackId?: Song["muxPlaybackId"];
+  muxStatus?: Song["muxStatus"];
 };
 const SEED_SONGS: SeedSong[] = [
   { id: "song-1-1", albumId: "album-1", title: "The Quiet Before", trackNumber: 1, duration: 214, lyrics: "In the space between the seconds\nWhere the clocks forget to breathe\nI found a version of the stillness\nThat I never thought to seek\n\nWhen the world stops, I'll be here\nWhen the world stops, I'll be near\nIn the silence that surrounds us\nIn the peace that comes to ground us\nWhen the world stops", audioUrl: null },
@@ -1579,7 +1585,19 @@ export class DbStorage implements IStorage {
     return p;
   }
   async deletePlaylist(id: string): Promise<void> {
+    // Decrement playlistCount on every song that was in this playlist
+    // before we drop the rows. Same denormalization rule as remove-song.
+    const rows = await db
+      .select({ songId: playlistSongs.songId })
+      .from(playlistSongs)
+      .where(eq(playlistSongs.playlistId, id));
     await db.delete(playlistSongs).where(eq(playlistSongs.playlistId, id));
+    for (const r of rows) {
+      await db
+        .update(songs)
+        .set({ playlistCount: sql`GREATEST(${songs.playlistCount} - 1, 0)` })
+        .where(eq(songs.id, r.songId));
+    }
     await db.delete(playlists).where(eq(playlists.id, id));
   }
   async getPlaylistSongs(playlistId: string): Promise<(PlaylistSong & { song: Song & { album: Album } })[]> {
@@ -1607,12 +1625,26 @@ export class DbStorage implements IStorage {
       .insert(playlistSongs)
       .values({ playlistId, songId, position })
       .returning();
+    // Bump the denormalized counter (see schema comment on songs.playlistCount).
+    await db
+      .update(songs)
+      .set({ playlistCount: sql`${songs.playlistCount} + 1` })
+      .where(eq(songs.id, songId));
     return ps;
   }
   async removeSongFromPlaylist(playlistId: string, songId: string): Promise<void> {
-    await db
+    const result = await db
       .delete(playlistSongs)
       .where(and(eq(playlistSongs.playlistId, playlistId), eq(playlistSongs.songId, songId)));
+    // Only decrement if a row was actually removed — keeps counts honest
+    // when a no-op delete (already gone) is called twice.
+    const removed = (result as any).rowCount ?? 0;
+    if (removed > 0) {
+      await db
+        .update(songs)
+        .set({ playlistCount: sql`GREATEST(${songs.playlistCount} - 1, 0)` })
+        .where(eq(songs.id, songId));
+    }
   }
 
   async createAuthToken(token: string, userId: string, kind: "admin" | "customer" = "admin"): Promise<void> {
@@ -1799,6 +1831,13 @@ export class DbStorage implements IStorage {
       .select()
       .from(analyticsEvents)
       .where(eq(analyticsEvents.userId, userId))
+      .orderBy(desc(analyticsEvents.receivedAt))
+      .limit(limit);
+  }
+  async getRecentAnalyticsEvents(limit: number): Promise<any[]> {
+    return db
+      .select()
+      .from(analyticsEvents)
       .orderBy(desc(analyticsEvents.receivedAt))
       .limit(limit);
   }
@@ -1999,7 +2038,44 @@ export class DbStorage implements IStorage {
   }
 }
 
+// Idempotent schema/data migrations that need to run on every boot,
+// before any code reads/writes columns that drizzle expects. We can't
+// rely on `npm run db:push` having been executed in every environment
+// (notably ephemeral preview DBs), so anything load-bearing for runtime
+// code goes here.
+//
+// playlist_count denorm: songs.playlist_count is read on the song row
+// and incremented/decremented on every add/remove_song_to_playlist. If
+// the column is missing the next playlist mutation throws; if it's
+// present but never backfilled the counts read as 0 for every song that
+// existed before the column landed.
+async function ensureRuntimeMigrations(): Promise<void> {
+  try {
+    // ADD COLUMN is idempotent (IF NOT EXISTS) and cheap.
+    await db.execute(sql`ALTER TABLE songs ADD COLUMN IF NOT EXISTS playlist_count INTEGER NOT NULL DEFAULT 0`);
+    // One-time backfill: recompute from playlist_songs only when no song
+    // currently carries a non-zero count. The first boot after the
+    // column lands fills it; subsequent boots short-circuit cheaply.
+    const probe = await db.execute(sql`SELECT 1 FROM songs WHERE playlist_count > 0 LIMIT 1`);
+    if ((probe as any).rows?.length === 0 || (probe as any).length === 0) {
+      await db.execute(sql`
+        UPDATE songs s
+        SET playlist_count = COALESCE(c.cnt, 0)
+        FROM (
+          SELECT song_id, COUNT(*)::int AS cnt
+          FROM playlist_songs
+          GROUP BY song_id
+        ) c
+        WHERE c.song_id = s.id AND s.playlist_count <> c.cnt
+      `);
+    }
+  } catch (e) {
+    console.error("[migrations] ensureRuntimeMigrations failed:", e);
+  }
+}
+
 export async function seedCatalog(): Promise<void> {
+  await ensureRuntimeMigrations();
   // First-run-only. We used to insert with onConflictDoNothing every boot
   // for self-healing, but that backfired in production: deleting a seed
   // album (e.g. swapping it out for a real Apple Music import) only stuck

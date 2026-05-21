@@ -10,6 +10,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { IconButton } from "@/components/ui/IconButton";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { track } from "@/lib/analytics";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
@@ -201,6 +202,23 @@ export function Collection() {
 
   const sortLabel = sortOptions[tab].find((o) => o.value === sortBy)?.label ?? "";
 
+  // Fire search_performed once the user pauses typing for 500ms. Debounce
+  // keeps the analytics_events table from being spammed on every keystroke
+  // and matches the moment we'd want a "what's in the result set" snapshot
+  // (i.e. once the list has settled).
+  useEffect(() => {
+    if (!q) return;
+    const t = setTimeout(() => {
+      const counts: Record<string, number> = {
+        albums: filteredAlbums.length,
+        songs: filteredSongs.length,
+        artists: filteredArtists.length,
+      };
+      track("search_performed", { query: q, tab, resultCount: counts[tab] ?? 0 });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [q, tab, filteredAlbums.length, filteredSongs.length, filteredArtists.length]);
+
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden">
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
@@ -220,7 +238,10 @@ export function Collection() {
                   <button
                     key={album.id}
                     type="button"
-                    onClick={() => navigate(`/album/${album.id}`)}
+                    onClick={() => {
+                      if (q) track("search_result_clicked", { kind: "album", albumId: album.id, query: q });
+                      navigate(`/album/${album.id}`);
+                    }}
                     className="flex-shrink-0 flex flex-col active:scale-[0.95] transition-transform"
                     style={{ width: 90 }}
                   >
@@ -411,7 +432,10 @@ export function Collection() {
                   >
                     <button
                       type="button"
-                      onClick={() => playSong(song, filteredSongs)}
+                      onClick={() => {
+                        if (q) track("search_result_clicked", { kind: "song", songId: song.id, albumId: song.album.id, query: q });
+                        playSong(song, filteredSongs);
+                      }}
                       className="flex items-center gap-3 flex-1 min-w-0 active:opacity-60 transition-opacity text-left"
                       data-testid={`button-play-song-${song.id}`}
                     >
@@ -468,7 +492,10 @@ export function Collection() {
                   <button
                     key={artist.name}
                     type="button"
-                    onClick={() => navigate(`/artist/${encodeURIComponent(artist.name)}`)}
+                    onClick={() => {
+                      if (q) track("search_result_clicked", { kind: "artist", query: q });
+                      navigate(`/artist/${encodeURIComponent(artist.name)}`);
+                    }}
                     className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
                     style={{
                       borderBottom: idx < filteredArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",

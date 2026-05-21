@@ -3,6 +3,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 
 // Task #46 — gift block on each row exposes the buyer's self-serve
@@ -96,7 +97,10 @@ export function Orders() {
       const r = await apiRequest("PATCH", `/api/orders/${args.orderId}/gift`, args.body);
       return (await r.json()) as { shareUrl: string };
     },
-    onSuccess: async (res) => {
+    onSuccess: async (res, vars) => {
+      // First buyer-initiated recipient set/change on this order — this is
+      // the moment a paid order actually becomes a gift to a real person.
+      track("gift_initiated", { orderId: vars.orderId });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       try {
         await navigator.clipboard.writeText(res.shareUrl);

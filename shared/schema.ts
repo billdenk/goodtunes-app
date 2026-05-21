@@ -224,6 +224,12 @@ export const songs = pgTable("songs", {
   // row renders inert + greyed until the fan owns the album. Default
   // off — operator opts a song into the preview slot per track.
   isPreviewable: boolean("is_previewable").notNull().default(false),
+  // Denormalized "song in N playlists" counter. Incremented in storage's
+  // addSongToPlaylist / decremented in removeSongFromPlaylist (and on
+  // cascade from deletePlaylist), so the analytics roll-up / admin "most
+  // playlisted" surface doesn't have to COUNT(*) joining playlist_songs
+  // on every read. Default 0 — backfilled lazily as users add/remove.
+  playlistCount: integer("playlist_count").notNull().default(0),
   // The 30-second in-app preview window. When both are null, the player
   // auto-derives a preview from the first 30s of the master (v1 default
   // → Preview status dot reads "auto-set", green check). When the admin
