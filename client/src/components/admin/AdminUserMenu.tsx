@@ -50,7 +50,11 @@ export function AdminUserMenu() {
           {initials}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60" data-testid="menu-admin-user">
+      <DropdownMenuContent
+        align="end"
+        className="w-60 bg-white border border-slate-200 shadow-lg text-slate-900"
+        data-testid="menu-admin-user"
+      >
         <DropdownMenuLabel className="font-normal py-2">
           <div className="text-[13px] font-semibold text-slate-900 truncate" data-testid="text-admin-user-name">
             {displayName}
@@ -59,20 +63,20 @@ export function AdminUserMenu() {
             {user.email}
           </div>
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
+        <DropdownMenuSeparator className="bg-slate-200" />
         <DropdownMenuItem
           onClick={() => navigate("/admin/security")}
           data-testid="menu-item-security"
-          className="text-[13px] cursor-pointer"
+          className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
         >
           <ShieldCheck className="w-4 h-4 mr-2 text-slate-500" />
           Security
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        <DropdownMenuSeparator className="bg-slate-200" />
         <DropdownMenuItem
           onClick={handleSignOut}
           data-testid="menu-item-sign-out"
-          className="text-[13px] cursor-pointer text-slate-700"
+          className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
         >
           <LogOut className="w-4 h-4 mr-2 text-slate-500" />
           Sign out
