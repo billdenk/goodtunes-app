@@ -1,6 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
+import { serveStaticAssets, serveStaticFallback } from "./static";
 import { createServer } from "http";
 import { seedCatalog } from "./storage";
 import { prewarmSpotifyToken } from "./lib/spotify";
@@ -95,13 +95,20 @@ app.use((req, res, next) => {
   next();
 });
 
-// Bind the port FIRST so Replit's deploy health-check sees an open socket
-// within its tight Promote-stage window. Route registration, catalog
-// seeding, static/Vite setup, and Spotify pre-warm all run AFTER listen()
-// — early-arriving requests get a bare 404 (port-open is enough to pass
-// the health probe). Without this, slower init paths can push port-binding
-// past the health-check timeout and the new deploy gets killed before it
-// finishes coming up.
+// In production, mount the built client's static assets BEFORE listen() so
+// Replit's deploy health probe — an HTTP GET on `/` — gets a real 2xx with
+// index.html the moment the port opens. Without this, the probe lands while
+// seedCatalog + registerRoutes are still running and gets a 404, which
+// Replit reads as unhealthy and kills the Promote stage. The SPA catch-all
+// (serveStaticFallback) and OG injector mount AFTER routes so they don't
+// shadow /api/*.
+if (process.env.NODE_ENV === "production") {
+  serveStaticAssets(app);
+}
+
+// Bind the port FIRST so the health probe finds an open socket within the
+// Promote-stage window. Route registration, catalog seeding, Vite/static
+// fallback, and Spotify pre-warm all run AFTER listen().
 const port = parseInt(process.env.PORT || "5000", 10);
 httpServer.listen(
   {
@@ -135,7 +142,7 @@ httpServer.listen(
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
+    serveStaticFallback(app);
   } else {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
