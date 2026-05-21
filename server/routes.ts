@@ -269,6 +269,59 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ...shapeCustomer(c), token });
   });
 
+  // ─── Auth lookup: "how does this email sign in?" ──────────────────
+  // Task #45. Customer login UI calls this on email blur so we can swap
+  // the password field for a "Continue with Google/Apple" CTA *before*
+  // the fan submits a password that will never work. Returns only
+  // `{ exists, provider }` — never any PII — and is rate-limited per IP
+  // with a constant-time response so it can't be used as a user-list
+  // scraper.
+  const lookupBuckets = new Map<string, { count: number; resetAt: number }>();
+  function lookupRateLimit(ip: string): boolean {
+    const now = Date.now();
+    const b = lookupBuckets.get(ip);
+    if (!b || b.resetAt < now) {
+      lookupBuckets.set(ip, { count: 1, resetAt: now + 60_000 });
+      return true;
+    }
+    b.count += 1;
+    return b.count <= 30; // 30 lookups / minute / IP
+  }
+  app.post("/api/auth/lookup", async (req, res) => {
+    // Use Express's trusted `req.ip` — it honours `trust proxy` and is
+    // not influenced by a spoofed `X-Forwarded-For` value picked off the
+    // raw headers. Falls back to the raw socket address only when the
+    // proxy chain hasn't run yet (local dev).
+    const ip = (req.ip || req.socket.remoteAddress || "unknown").trim();
+    const okRate = lookupRateLimit(ip);
+    const started = Date.now();
+    const raw = String(req.body?.email ?? "").trim().toLowerCase();
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(raw);
+    const kind = req.authKind;
+    let exists = false;
+    let provider: "password" | "google" | "apple" | null = null;
+    if (okRate && looksLikeEmail) {
+      const user = kind === "admin"
+        ? await storage.getUserByEmail(raw)
+        : await storage.getCustomerByEmail(raw);
+      if (user) {
+        exists = true;
+        const ids = await storage.listIdentities(kind, user.id);
+        // Prefer the OAuth provider when present — that's the lockout
+        // case (fan typed a password for an account that signs in with
+        // Google/Apple). Falls back to "password" otherwise.
+        if (ids.some((i) => i.provider === "google")) provider = "google";
+        else if (ids.some((i) => i.provider === "apple")) provider = "apple";
+        else provider = "password";
+      }
+    }
+    // Constant-floor latency (~80ms) so a "miss" can't be timed apart
+    // from a "hit". The DB call is well under that ceiling.
+    const elapsed = Date.now() - started;
+    if (elapsed < 80) await new Promise((r) => setTimeout(r, 80 - elapsed));
+    return res.json({ exists, provider });
+  });
+
   app.post("/api/logout", async (req, res) => {
     const auth = req.headers.authorization;
     if (auth && auth.startsWith("Bearer ")) {

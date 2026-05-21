@@ -14,6 +14,116 @@ import { useFavoriteArtists } from "@/hooks/useFavorites";
 // Linked OAuth providers for this account. Reads/writes hit the
 // kind-aware /api/auth/identities endpoint — same component works on
 // both the customer profile and (eventually) admin account chrome.
+// Task #45 — Apple private-relay → real email capture banner. Shows
+// when the customer's email is an `@privaterelay.appleid.com`
+// forwarder so we can collect a deliverable address for order
+// receipts/shipping. Reuses the 6-digit code flow from Task #44.
+function PrivateRelayBanner({ relayEmail }: { relayEmail: string }) {
+  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState<"enter" | "verify">("enter");
+  const [newEmail, setNewEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const start = async () => {
+    setBusy(true); setErr(null); setDevCode(null);
+    try {
+      const r = await apiRequest("POST", "/api/customer/real-email/start", { email: newEmail.trim() });
+      const j = await r.json();
+      if (j?.devCode) setDevCode(String(j.devCode));
+      setPhase("verify");
+    } catch (e: any) {
+      setErr(e?.message ?? "Couldn't send a code — try again");
+    } finally { setBusy(false); }
+  };
+  const confirm = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await apiRequest("POST", "/api/customer/real-email/confirm", { email: newEmail.trim(), code });
+      queryClient.invalidateQueries();
+      setOpen(false); setPhase("enter"); setCode(""); setNewEmail("");
+    } catch (e: any) {
+      setErr(e?.message ?? "That code didn't match");
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-2xl overflow-hidden mb-4 px-4 py-3.5" style={{ background: "rgba(255, 84, 112, 0.10)", border: "1px solid rgba(255,84,112,0.25)" }} data-testid="banner-privaterelay">
+      <p className="text-white text-[14px] font-semibold mb-1">Add a real email</p>
+      <p className="text-white/70 text-[12px] leading-snug mb-3">
+        You signed in with Apple's <strong>Hide my email</strong>. We can reach you at <span className="font-mono text-white/85">{relayEmail}</span> but deliverability can be flaky — give us a real address for order updates.
+      </p>
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-[13px] font-semibold text-[#FF5470] active:opacity-70"
+          data-testid="button-open-realemail"
+        >
+          Add real email →
+        </button>
+      ) : (
+        <div className="flex flex-col gap-2 mt-1">
+          {phase === "enter" ? (
+            <>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false}
+                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                data-testid="input-realemail"
+              />
+              {err && <p className="text-[12px] text-rose-300" data-testid="text-realemail-err">{err}</p>}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={start}
+                  disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail.trim())}
+                  className="px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40"
+                  data-testid="button-send-realemail-code"
+                >
+                  {busy ? "Sending…" : "Send code"}
+                </button>
+                <button type="button" onClick={() => setOpen(false)} className="text-white/55 text-[12px]" data-testid="button-cancel-realemail">Cancel</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-white/65 text-[12px]">Code sent to <strong>{newEmail}</strong>.{devCode ? <> Dev code: <code className="font-mono text-white/85">{devCode}</code></> : null}</p>
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="123456"
+                inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[#319ED8]"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+                data-testid="input-realemail-code"
+              />
+              {err && <p className="text-[12px] text-rose-300" data-testid="text-realemail-err">{err}</p>}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={confirm}
+                  disabled={busy || code.length !== 6}
+                  className="px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40"
+                  data-testid="button-confirm-realemail"
+                >
+                  {busy ? "Verifying…" : "Confirm"}
+                </button>
+                <button type="button" onClick={() => { setPhase("enter"); setCode(""); }} className="text-white/55 text-[12px]" data-testid="button-back-realemail">Back</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LinkedProvidersPanel() {
   const kind = useAuthKind();
   const { data: identities = [], isLoading } = useQuery<Array<{ id: string; provider: string; email: string | null }>>({
@@ -254,6 +364,10 @@ export function Account() {
               </button>
             ))}
           </div>
+
+          {user?.email && user.email.endsWith("@privaterelay.appleid.com") && (
+            <PrivateRelayBanner relayEmail={user.email} />
+          )}
 
           <LinkedProvidersPanel />
 

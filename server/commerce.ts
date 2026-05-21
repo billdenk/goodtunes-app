@@ -430,6 +430,84 @@ export function registerCommerceRoutes(app: Express) {
     });
   });
 
+  // ─── Apple private-relay → real email capture (Task #45) ─────────
+  // When an Apple Sign-In fan picks "Hide my email," their Apple
+  // identity arrives with a `@privaterelay.appleid.com` forwarder.
+  // We store the relay on `customer_identities.email` (the link key)
+  // but want a real, deliverable address on `customer_users.email` so
+  // order receipts / shipping notifications go straight to them.
+  //
+  // POST /api/customer/real-email/start { email }   (auth: customer)
+  // POST /api/customer/real-email/confirm { email, code }  (auth: customer)
+  //
+  // Reuses the `emailVerifications` table — same 15min TTL, same 5-attempt
+  // cap, same scrypt-hashed code. The confirm step overwrites the relay
+  // address on customer_users with the verified real email.
+  async function customerFromBearer(req: Request) {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith("Bearer ")) return null;
+    const a = await storage.getAuthBy(auth.slice(7));
+    if (!a || a.kind !== "customer") return null;
+    return storage.getCustomer(a.userId);
+  }
+  app.post("/api/customer/real-email/start", async (req, res) => {
+    const customer = await customerFromBearer(req);
+    if (!customer) return res.status(401).json({ message: "Sign in required" });
+    const email = normalizeEmail(req.body?.email ?? "");
+    if (!isValidEmail(email)) return res.status(400).json({ message: "Please enter a valid email" });
+    if (email.endsWith("@privaterelay.appleid.com")) {
+      return res.status(400).json({ message: "That's an Apple relay address — enter your real email" });
+    }
+    const taken = await storage.getCustomerByEmail(email);
+    if (taken && taken.id !== customer.id) {
+      return res.status(409).json({ message: "Another GoodTunes account already uses that email" });
+    }
+    const code = generateSixDigitCode();
+    const codeHash = await hashCode(code);
+    const expiresAt = new Date(Date.now() + 15 * 60_000);
+    await db.insert(emailVerifications).values({ email, codeHash, expiresAt });
+    // Never log the plaintext code or destination email in production —
+    // those land in deployment logs the operator can search. Keep a
+    // minimal trace (customer id only) so we can still audit volume.
+    if (process.env.NODE_ENV === "production") {
+      console.log(`[verify] real-email customer=${customer.id} (code sent, 15min ttl)`);
+    } else {
+      console.log(`[verify] real-email customer=${customer.id} email=${email} code=${code} (15min ttl)`);
+    }
+    res.json({ ok: true, devCode: process.env.NODE_ENV === "production" ? undefined : code });
+  });
+  app.post("/api/customer/real-email/confirm", async (req, res) => {
+    const customer = await customerFromBearer(req);
+    if (!customer) return res.status(401).json({ message: "Sign in required" });
+    const email = normalizeEmail(req.body?.email ?? "");
+    const code = String(req.body?.code ?? "").trim();
+    if (!email || !/^\d{6}$/.test(code)) return res.status(400).json({ message: "Enter the 6-digit code from your email" });
+    const rows = await db
+      .select()
+      .from(emailVerifications)
+      .where(and(eq(emailVerifications.email, email), sql`${emailVerifications.consumedAt} IS NULL`))
+      .orderBy(desc(emailVerifications.createdAt))
+      .limit(5);
+    for (const row of rows) {
+      if (row.expiresAt && row.expiresAt < new Date()) continue;
+      if (row.attempts >= 5) continue;
+      const match = await verifyCode(code, row.codeHash);
+      await db.update(emailVerifications).set({ attempts: row.attempts + 1 }).where(eq(emailVerifications.id, row.id));
+      if (match) {
+        await db.update(emailVerifications).set({ consumedAt: new Date() }).where(eq(emailVerifications.id, row.id));
+        // Final uniqueness check inside the success branch — somebody
+        // could have grabbed the address between start and confirm.
+        const taken = await storage.getCustomerByEmail(email);
+        if (taken && taken.id !== customer.id) {
+          return res.status(409).json({ message: "Another GoodTunes account already uses that email" });
+        }
+        await storage.updateCustomer(customer.id, { email, emailVerifiedAt: new Date() });
+        return res.json({ ok: true, email });
+      }
+    }
+    res.status(400).json({ message: "That code didn't match — check the latest email and try again" });
+  });
+
   // ─── Checkout session create ─────────────────────────────────────
   // POST /api/checkout/session
   // Body: { albumId, skuFormat, signedCert: boolean }

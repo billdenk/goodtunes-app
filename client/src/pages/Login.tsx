@@ -192,6 +192,38 @@ export function Login() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  // Task #45 — "How does this email sign in?" lookup. When the fan
+  // finishes typing their email (blur) we ask the server which provider
+  // (if any) actually authenticates that address. If it's google/apple
+  // we swap the password field for a "Continue with {Provider}" CTA so
+  // the fan never gets the silent "invalid credentials" lockout.
+  // Only runs on customer login (admin TOTP makes the swap pointless).
+  // Blur-triggered (not change-triggered) so each character doesn't
+  // burn a request against the per-IP rate limiter.
+  const [lookupProvider, setLookupProvider] = useState<"password" | "google" | "apple" | null>(null);
+  useEffect(() => {
+    // Any change to the email clears the previous answer so a stale
+    // OAuth-swap state can't strand a fan on the wrong provider.
+    setLookupProvider(null);
+  }, [loginIdent, mode]);
+  const runLookup = async () => {
+    if (isAdmin) return;
+    if (mode !== "login") return;
+    const raw = loginIdent.trim().toLowerCase();
+    if (!isValidEmail(raw)) return;
+    try {
+      const r = await apiRequest("POST", "/api/auth/lookup", { email: raw });
+      const j = await r.json();
+      if (j?.exists && (j.provider === "google" || j.provider === "apple")) {
+        setLookupProvider(j.provider);
+      } else {
+        setLookupProvider(j?.provider ?? null);
+      }
+    } catch {
+      setLookupProvider(null);
+    }
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -578,27 +610,66 @@ export function Login() {
               <input
                 type="text" name="username" value={loginIdent}
                 onChange={(e) => setLoginIdent(e.target.value.replace(/\s/g, ""))}
+                onBlur={runLookup}
                 placeholder="@username or you@example.com"
                 autoComplete="username" autoCapitalize="none" spellCheck={false} inputMode="email"
                 className={s.input} style={inputBg} required data-testid="input-login-username"
               />
             </div>
-            <div>
-              <label className={s.label}>Password</label>
-              <input
-                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••" name="password" autoComplete="current-password"
-                className={s.input} style={inputBg} required data-testid="input-login-password"
-              />
-            </div>
-            {error && <div className={s.errorBox}>{error}</div>}
-            <button
-              type="submit" disabled={isPending || !loginValid}
-              className={s.primaryBtn} style={s.primaryBtnStyle}
-              data-testid="button-submit-login"
-            >
-              {isPending ? "Signing in..." : "Sign In"}
-            </button>
+            {lookupProvider === "google" || lookupProvider === "apple" ? (
+              <div className="flex flex-col gap-2.5" data-testid="oauth-swap">
+                <div className={`text-sm ${isAdmin ? "text-slate-600" : "text-white/70"}`} data-testid="text-oauth-hint">
+                  This email signs in with <strong>{lookupProvider === "google" ? "Google" : "Apple"}</strong> — use the button below.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleOAuth(lookupProvider)}
+                  className={s.oauthBtn}
+                  data-testid={`button-${lookupProvider}-continue`}
+                >
+                  {lookupProvider === "google" ? (
+                    <svg width={s.oauthIcon.googleW} height={s.oauthIcon.googleH} viewBox="0 0 48 48">
+                      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
+                      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.4 6.3 14.7z"/>
+                      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.5 16.2 44 24 44z"/>
+                      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.2 5.2C40.9 36.4 44 30.7 44 24c0-1.3-.1-2.4-.4-3.5z"/>
+                    </svg>
+                  ) : (
+                    <svg width={s.oauthIcon.appleW} height={s.oauthIcon.appleH} viewBox="0 0 24 24" fill={s.oauthIcon.appleFill}>
+                      <path d="M17.05 12.04c-.03-3.02 2.47-4.49 2.58-4.56-1.41-2.06-3.6-2.34-4.38-2.37-1.86-.19-3.64 1.1-4.59 1.1-.96 0-2.42-1.07-3.98-1.04-2.05.03-3.95 1.19-5 3.02-2.13 3.7-.55 9.17 1.53 12.18 1.02 1.47 2.23 3.13 3.81 3.07 1.53-.06 2.11-.99 3.96-.99 1.85 0 2.37.99 3.99.96 1.65-.03 2.69-1.5 3.69-2.98 1.16-1.71 1.64-3.36 1.67-3.45-.04-.02-3.21-1.23-3.24-4.94zM14.13 3.4c.84-1.02 1.41-2.43 1.25-3.84-1.21.05-2.69.81-3.56 1.83-.78.9-1.47 2.34-1.29 3.72 1.36.1 2.74-.69 3.6-1.71z"/>
+                    </svg>
+                  )}
+                  Continue with {lookupProvider === "google" ? "Google" : "Apple"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLookupProvider("password")}
+                  className={s.ghostBtn}
+                  data-testid="button-use-password-anyway"
+                >
+                  Use a password instead
+                </button>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className={s.label}>Password</label>
+                  <input
+                    type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••" name="password" autoComplete="current-password"
+                    className={s.input} style={inputBg} required data-testid="input-login-password"
+                  />
+                </div>
+                {error && <div className={s.errorBox}>{error}</div>}
+                <button
+                  type="submit" disabled={isPending || !loginValid}
+                  className={s.primaryBtn} style={s.primaryBtnStyle}
+                  data-testid="button-submit-login"
+                >
+                  {isPending ? "Signing in..." : "Sign In"}
+                </button>
+              </>
+            )}
           </form>
         )}
 
