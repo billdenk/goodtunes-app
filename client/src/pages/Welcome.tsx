@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 type OrderItem = { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number };
 type Order = {
@@ -29,11 +30,25 @@ type SessionResponse = {
 export function Welcome() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [data, setData] = useState<SessionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [suggestedUsername, setSuggestedUsername] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
+  // Task #46 — gift flow on the post-checkout screen. The buyer can flip
+  // a single toggle to convert this order into a gift, fill out the
+  // recipient, and walk away with a shareable link. We deliberately keep
+  // this on the same page (no extra step) so the moment of purchase
+  // becomes the moment of gifting.
+  const [giftMode, setGiftMode] = useState(false);
+  const [giftFirst, setGiftFirst] = useState("");
+  const [giftLast, setGiftLast] = useState("");
+  const [giftContactKind, setGiftContactKind] = useState<"email" | "phone">("email");
+  const [giftContact, setGiftContact] = useState("");
+  const [giftSubmitting, setGiftSubmitting] = useState(false);
+  const [giftShareUrl, setGiftShareUrl] = useState<string | null>(null);
+  const [giftCopied, setGiftCopied] = useState(false);
 
   useEffect(() => {
     const sessionId = new URL(window.location.href).searchParams.get("session_id");
@@ -71,6 +86,45 @@ export function Welcome() {
     setSuggestedUsername(local);
     setUsernameInput(local);
   }, [user?.email]);
+
+  const submitGift = async () => {
+    if (!data?.order) return;
+    if (!giftFirst.trim() || !giftLast.trim()) {
+      toast({ title: "Add the recipient's name", variant: "destructive" });
+      return;
+    }
+    if (!giftContact.trim()) {
+      toast({ title: `Add the recipient's ${giftContactKind}`, variant: "destructive" });
+      return;
+    }
+    setGiftSubmitting(true);
+    try {
+      const r = await apiRequest("POST", `/api/orders/${data.order.id}/gift`, {
+        firstName: giftFirst.trim(),
+        lastName: giftLast.trim(),
+        email: giftContactKind === "email" ? giftContact.trim() : "",
+        phone: giftContactKind === "phone" ? giftContact.trim() : "",
+      });
+      const j = await r.json();
+      setGiftShareUrl(j.shareUrl);
+      toast({ title: "Gift link ready", description: "Copy it into a message — or we'll text/email it from server logs in dev." });
+    } catch (e: any) {
+      toast({ title: "Couldn't create gift", description: e?.message, variant: "destructive" });
+    } finally {
+      setGiftSubmitting(false);
+    }
+  };
+
+  const copyShareUrl = async () => {
+    if (!giftShareUrl) return;
+    try {
+      await navigator.clipboard.writeText(giftShareUrl);
+      setGiftCopied(true);
+      setTimeout(() => setGiftCopied(false), 1800);
+    } catch {
+      toast({ title: "Couldn't copy", description: "Long-press the link to copy manually.", variant: "destructive" });
+    }
+  };
 
   const finish = async () => {
     // We surface the username suggestion here but persist via the
@@ -157,6 +211,101 @@ export function Welcome() {
             <span className="font-semibold">${(data.order.totalCents / 100).toFixed(2)}</span>
           </div>
         </div>
+
+        {/* Task #46 — Gift toggle. Show only before a share link has
+            been minted; once we have the link, swap to the share panel. */}
+        {!giftShareUrl ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5" data-testid="welcome-gift-toggle">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="flex items-center gap-2">
+                <span aria-hidden="true">🎁</span>
+                <span className="text-[14px] font-medium">This is a gift</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={giftMode}
+                onChange={(e) => setGiftMode(e.target.checked)}
+                className="w-5 h-5 accent-[#319ED8]"
+                data-testid="checkbox-gift-mode"
+              />
+            </label>
+            {giftMode && (
+              <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={giftFirst}
+                    onChange={(e) => setGiftFirst(e.target.value)}
+                    placeholder="First name"
+                    className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                    data-testid="input-gift-first"
+                  />
+                  <input
+                    type="text"
+                    value={giftLast}
+                    onChange={(e) => setGiftLast(e.target.value)}
+                    placeholder="Last name"
+                    className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                    data-testid="input-gift-last"
+                  />
+                </div>
+                <div className="flex p-0.5 rounded-xl bg-white/[0.06] border border-white/10">
+                  {(["email", "phone"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => { setGiftContactKind(k); setGiftContact(""); }}
+                      className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium capitalize ${
+                        giftContactKind === k ? "bg-white/15 text-white" : "text-white/50"
+                      }`}
+                      data-testid={`toggle-gift-${k}`}
+                    >
+                      {k}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type={giftContactKind === "email" ? "email" : "tel"}
+                  value={giftContact}
+                  onChange={(e) => setGiftContact(e.target.value)}
+                  placeholder={giftContactKind === "email" ? "their@email.com" : "+1 555 555 5555"}
+                  className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                  data-testid="input-gift-contact"
+                />
+                <p className="text-white/40 text-[11px] leading-snug">
+                  We'll generate a one-time claim link. You can share it directly or we'll send it on your behalf.
+                </p>
+                <button
+                  type="button"
+                  onClick={submitGift}
+                  disabled={giftSubmitting}
+                  className="w-full py-2.5 rounded-xl bg-[#7F10A7] text-white text-sm font-semibold disabled:opacity-50"
+                  data-testid="button-gift-create"
+                >
+                  {giftSubmitting ? "Creating…" : "Create gift link"}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[#7F10A7]/40 bg-[#7F10A7]/10 p-5 mb-5" data-testid="welcome-gift-share">
+            <div className="text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2">🎁 Your gift is ready</div>
+            <div className="text-[13px] text-white/80 mb-3 leading-snug">
+              Send this link to {giftFirst} — when they open it and claim, the album + GoodDeed move to their account.
+            </div>
+            <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2">
+              <code className="text-[11px] text-white/80 truncate flex-1" data-testid="text-gift-share-url">{giftShareUrl}</code>
+              <button
+                type="button"
+                onClick={copyShareUrl}
+                className="px-2.5 py-1 rounded-lg bg-white/15 text-[11px] font-semibold"
+                data-testid="button-gift-copy"
+              >
+                {giftCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
           <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-1.5">

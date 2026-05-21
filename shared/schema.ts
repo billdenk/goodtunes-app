@@ -731,7 +731,37 @@ export const orders = pgTable("orders", {
   goodDeedNumber: integer("good_deed_number"),
   shippedAt: timestamp("shipped_at"),
   refundedAt: timestamp("refunded_at"),
+  // Task #46 — gifting. Nullable FK to the gifts row when this order was
+  // bought as a gift. Lets the buyer's order list + admin orders view
+  // pull the gift status without a separate query.
+  giftId: varchar("gift_id"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Task #46 — Gifting. One row per gifted order. Created when the buyer
+// taps "This is a gift" on the order-confirmation screen. `claimToken`
+// is the shareable secret embedded in /gift/:token. When the recipient
+// signs in/up and claims, `claimedByUserId` + `claimedAt` get filled,
+// AND the parent order.customerId + matching user_albums.userId both
+// move to the claimer so the certificate + library follow the gift.
+// `expiresAt` is suggested 30 days from creation; the buyer can re-send
+// (rotates `claimToken`) or change the recipient within 24h.
+export const gifts = pgTable("gifts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }).unique(),
+  buyerUserId: varchar("buyer_user_id").notNull().references(() => customerUsers.id),
+  recipientFirstName: text("recipient_first_name").notNull(),
+  recipientLastName: text("recipient_last_name").notNull(),
+  recipientEmail: text("recipient_email"),
+  recipientPhone: text("recipient_phone"),
+  claimToken: text("claim_token").notNull().unique(),
+  claimedByUserId: varchar("claimed_by_user_id").references(() => customerUsers.id),
+  claimedAt: timestamp("claimed_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  // Bookkeeping for "Sent / Resent" admin pill — increments each resend.
+  resendCount: integer("resend_count").notNull().default(0),
+  lastSentAt: timestamp("last_sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // One row per line item on an order. `kind` is "format" (the physical SKU
@@ -1027,5 +1057,21 @@ export type Order = typeof orders.$inferSelect;
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true, createdAt: true });
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
+
+// Task #46 — gift create/update inputs. Recipient name fields are
+// required; contact is "at least one of email/phone" — enforced at the
+// route layer because zod refinement on createInsertSchema makes the
+// type ergonomics awkward downstream.
+export const insertGiftSchema = createInsertSchema(gifts).omit({
+  id: true,
+  claimToken: true,
+  claimedByUserId: true,
+  claimedAt: true,
+  resendCount: true,
+  lastSentAt: true,
+  createdAt: true,
+});
+export type InsertGift = z.infer<typeof insertGiftSchema>;
+export type Gift = typeof gifts.$inferSelect;
 
 export type EmailVerification = typeof emailVerifications.$inferSelect;

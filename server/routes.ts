@@ -8442,5 +8442,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerCommerceRoutes } = await import("./commerce");
   registerCommerceRoutes(app);
 
+  // Task #46 — Gifting flow (claim links, recipient transfer).
+  const { registerGiftRoutes } = await import("./gifts");
+  registerGiftRoutes(app);
+
   return httpServer;
 }

@@ -33,6 +33,7 @@ import { AdminLabel } from "@/pages/AdminLabel";
 import { Welcome } from "@/pages/Welcome";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
+import { GiftClaim } from "@/pages/GiftClaim";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -117,6 +118,10 @@ function Router() {
             (Welcome polls /api/checkout/session/:id to confirm the
             order, then bounces into the unlocked album). */}
         <Route path="/welcome" component={Welcome} />
+        {/* Task #46 — Public gift claim page. The recipient hits this
+            without an account; the page itself routes them through
+            sign-in/up before letting them call POST claim. */}
+        <Route path="/gift/:token" component={GiftClaim} />
         <Route path="/orders">
           <ProtectedRoute component={Orders} />
         </Route>

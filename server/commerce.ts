@@ -25,6 +25,7 @@ import {
   emailVerifications,
   userAlbums,
   authTokens,
+  gifts,
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
   ALBUM_ADDON_KINDS,
@@ -37,7 +38,7 @@ import {
   type Order,
   type OrderItem,
 } from "@shared/schema";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
 import { getStripe, getStripePublishableKey, getStripeWebhookSecret } from "./stripe";
@@ -734,21 +735,56 @@ export function registerCommerceRoutes(app: Express) {
     if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Sign in required" });
     const a = await storage.getAuthBy(auth.slice(7));
     if (!a || a.kind !== "customer") return res.status(401).json({ message: "Sign in required" });
+    // Buyer sees:
+    //   (a) orders they own outright, AND
+    //   (b) orders they bought as gifts — even after claim transfers
+    //       order.customerId to the recipient. The UNION on gifts.buyerUserId
+    //       keeps them visible in the buyer's history with a "gifted" badge.
+    const myGiftedOrderIds = (
+      await db.select({ orderId: gifts.orderId }).from(gifts).where(eq(gifts.buyerUserId, a.userId))
+    ).map((x) => x.orderId);
+    const whereClause = myGiftedOrderIds.length > 0
+      ? or(eq(orders.customerId, a.userId), inArray(orders.id, myGiftedOrderIds))
+      : eq(orders.customerId, a.userId);
     const rows = await db
       .select({ order: orders, album: albums })
       .from(orders)
       .innerJoin(albums, eq(orders.albumId, albums.id))
-      .where(eq(orders.customerId, a.userId))
+      .where(whereClause)
       .orderBy(desc(orders.createdAt));
+    const orderIds = rows.map((r) => r.order.id);
+    const giftRows = orderIds.length > 0
+      ? await db.select().from(gifts).where(inArray(gifts.orderId, orderIds))
+      : [];
+    const giftByOrder = new Map(giftRows.map((g) => [g.orderId, g]));
     // Flat shape matches client/src/pages/Orders.tsx OrderRow.
     const out = await Promise.all(
-      rows.map(async (r) => ({
-        ...r.order,
-        albumTitle: r.album.title,
-        albumArtist: r.album.artist,
-        albumArtwork: r.album.artwork,
-        items: await getOrderItems(r.order.id),
-      })),
+      rows.map(async (r) => {
+        const g = giftByOrder.get(r.order.id);
+        return {
+          ...r.order,
+          albumTitle: r.album.title,
+          albumArtist: r.album.artist,
+          albumArtwork: r.album.artwork,
+          items: await getOrderItems(r.order.id),
+          gift: g
+            ? {
+                id: g.id,
+                buyerUserId: g.buyerUserId,
+                recipientFirstName: g.recipientFirstName,
+                recipientLastName: g.recipientLastName,
+                recipientEmail: g.recipientEmail,
+                recipientPhone: g.recipientPhone,
+                claimToken: g.buyerUserId === a.userId ? g.claimToken : null,
+                claimed: !!g.claimedAt,
+                claimedAt: g.claimedAt,
+                expiresAt: g.expiresAt,
+                resendCount: g.resendCount,
+                isBuyer: g.buyerUserId === a.userId,
+              }
+            : null,
+        };
+      }),
     );
     res.json(out);
   });
@@ -764,10 +800,16 @@ export function registerCommerceRoutes(app: Express) {
       .$dynamic();
     if (status) q = q.where(eq(orders.status, status));
     const rows = await q.orderBy(desc(orders.createdAt)).limit(500);
+    const orderIds = rows.map((r) => r.order.id);
+    const giftRows = orderIds.length > 0
+      ? await db.select().from(gifts).where(inArray(gifts.orderId, orderIds))
+      : [];
+    const giftByOrder = new Map(giftRows.map((g) => [g.orderId, g]));
     // Flat shape matches client/src/pages/AdminOrders.tsx AdminOrderRow.
     const out = await Promise.all(
       rows.map(async (r) => {
         const ship: any = r.order.shippingAddress ?? null;
+        const g = giftByOrder.get(r.order.id);
         return {
           ...r.order,
           albumTitle: r.album.title,
@@ -776,6 +818,20 @@ export function registerCommerceRoutes(app: Express) {
           customerName: r.customer.realName ?? r.customer.displayName ?? null,
           shippingName: ship?.name ?? null,
           items: await getOrderItems(r.order.id),
+          gift: g
+            ? {
+                id: g.id,
+                recipientFirstName: g.recipientFirstName,
+                recipientLastName: g.recipientLastName,
+                recipientEmail: g.recipientEmail,
+                recipientPhone: g.recipientPhone,
+                claimed: !!g.claimedAt,
+                claimedAt: g.claimedAt,
+                expiresAt: g.expiresAt,
+                resendCount: g.resendCount,
+                createdAt: g.createdAt,
+              }
+            : null,
         };
       }),
     );

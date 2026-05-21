@@ -6,6 +6,19 @@ import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+type GiftInfo = {
+  id: string;
+  recipientFirstName: string;
+  recipientLastName: string;
+  recipientEmail: string | null;
+  recipientPhone: string | null;
+  claimed: boolean;
+  claimedAt: string | null;
+  expiresAt: string;
+  resendCount: number;
+  createdAt: string;
+};
+
 type AdminOrderRow = {
   id: string;
   customerId: string;
@@ -23,7 +36,15 @@ type AdminOrderRow = {
   refundedAt: string | null;
   createdAt: string;
   items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
+  gift: GiftInfo | null;
 };
+
+function giftStatus(g: GiftInfo): { label: string; cls: string } {
+  if (g.claimed) return { label: "Gift · Claimed", cls: "bg-violet-50 text-violet-700" };
+  if (new Date(g.expiresAt).getTime() < Date.now()) return { label: "Gift · Expired", cls: "bg-rose-50 text-rose-700" };
+  if (g.resendCount > 0) return { label: `Gift · Resent ×${g.resendCount}`, cls: "bg-amber-50 text-amber-700" };
+  return { label: "Gift · Sent", cls: "bg-fuchsia-50 text-fuchsia-700" };
+}
 
 const STATUSES = ["all", "paid", "shipped", "refunded"] as const;
 type StatusFilter = (typeof STATUSES)[number];
@@ -43,6 +64,26 @@ export function AdminOrders() {
       toast({ title: "Marked shipped" });
     },
     onError: (e: any) => toast({ title: "Couldn't update", description: e?.message, variant: "destructive" }),
+  });
+
+  // Task #46 — operator-driven resend. The buyer can also do this from
+  // their own order list, but admin support sometimes needs to do it for
+  // a confused fan ("I lost the text") without making them open the app.
+  const resendGift = useMutation({
+    mutationFn: async (orderId: string) => {
+      const r = await apiRequest("POST", `/api/admin/orders/${orderId}/gift/resend-as-admin`, {});
+      return (await r.json()) as { shareUrl: string };
+    },
+    onSuccess: async (res) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      try {
+        await navigator.clipboard.writeText(res.shareUrl);
+        toast({ title: "Gift link resent + copied to clipboard" });
+      } catch {
+        toast({ title: "Gift link resent", description: res.shareUrl });
+      }
+    },
+    onError: (e: any) => toast({ title: "Couldn't resend", description: e?.message, variant: "destructive" }),
   });
 
   const filtered = (orders ?? []).filter((o) => (filter === "all" ? true : o.status === filter));
@@ -83,7 +124,7 @@ export function AdminOrders() {
           {filtered.map((o) => (
             <div key={o.id} className="px-4 py-4 flex items-center gap-4" data-testid={`row-admin-order-${o.id}`}>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-[11px]">
+                <div className="flex items-center gap-2 text-[11px] flex-wrap">
                   <span className={[
                     "px-2 py-0.5 rounded-full font-semibold uppercase",
                     o.status === "paid" ? "bg-emerald-50 text-emerald-700" :
@@ -91,11 +132,26 @@ export function AdminOrders() {
                     o.status === "refunded" ? "bg-rose-50 text-rose-700" :
                     "bg-slate-100 text-slate-600",
                   ].join(" ")}>{o.status}</span>
+                  {o.gift && (() => {
+                    const s = giftStatus(o.gift);
+                    return (
+                      <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${s.cls}`} data-testid={`pill-gift-${o.id}`}>
+                        {s.label}
+                      </span>
+                    );
+                  })()}
                   {o.goodDeedNumber !== null && (
                     <span className="text-slate-400">#{o.goodDeedNumber}</span>
                   )}
                   <span className="text-slate-400">{new Date(o.createdAt).toLocaleDateString()}</span>
                 </div>
+                {o.gift && (
+                  <div className="text-[11.5px] text-slate-500 mt-1.5 leading-snug" data-testid={`text-gift-${o.id}`}>
+                    Gift to <span className="text-slate-700 font-medium">{o.gift.recipientFirstName} {o.gift.recipientLastName}</span>
+                    {o.gift.recipientEmail && <> · {o.gift.recipientEmail}</>}
+                    {o.gift.recipientPhone && <> · {o.gift.recipientPhone}</>}
+                  </div>
+                )}
                 <div className="text-[14px] font-medium text-slate-900 mt-1">
                   <Link href={`/admin/albums/${o.albumId}`} className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors">
                     {o.albumTitle}
@@ -131,6 +187,17 @@ export function AdminOrders() {
                     data-testid={`button-ship-${o.id}`}
                   >
                     Mark shipped
+                  </button>
+                )}
+                {o.gift && !o.gift.claimed && new Date(o.gift.expiresAt).getTime() > Date.now() && (
+                  <button
+                    type="button"
+                    onClick={() => resendGift.mutate(o.id)}
+                    disabled={resendGift.isPending}
+                    className="mt-2 ml-2 px-3 py-1 rounded-md text-[12px] font-medium bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200 disabled:opacity-50"
+                    data-testid={`button-resend-gift-${o.id}`}
+                  >
+                    Resend link
                   </button>
                 )}
               </div>

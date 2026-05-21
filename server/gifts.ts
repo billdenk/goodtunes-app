@@ -1,0 +1,313 @@
+// Task #46 — Gifting flow.
+//
+// Buyer marks a paid order as a gift, optionally provides recipient
+// name + email/phone, and gets a shareable /gift/:token URL. Recipient
+// opens the link, signs in or signs up (handled by the existing
+// customer auth flow), and POSTs /api/gifts/:token/claim. On claim we
+// reassign the parent order.customerId AND the matching user_albums
+// entitlement row to the claimer, so the library + GoodDeed certificate
+// follow the gift. Physical shipping stays on the buyer's address (per
+// task — physical fulfillment of a gift box is out of scope).
+//
+// All routes are customer-side (Bearer-token auth). The public GET
+// /api/gifts/:token only returns sanitized data (no recipient contact).
+import type { Express, Request, Response } from "express";
+import { randomBytes } from "crypto";
+import { and, eq, or } from "drizzle-orm";
+import { db } from "./db";
+import { storage } from "./storage";
+import { gifts, orders, albums, customerUsers, userAlbums, type Gift } from "@shared/schema";
+
+const SHARE_BASE_PATH = "/gift/";
+const CLAIM_WINDOW_DAYS = 30;
+const RECIPIENT_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+
+function newToken() {
+  return randomBytes(24).toString("base64url");
+}
+
+function shareUrlFor(req: Request, token: string): string {
+  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol ?? "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+  return `${proto}://${host}${SHARE_BASE_PATH}${token}`;
+}
+
+async function requireCustomer(req: Request, res: Response): Promise<{ userId: string } | null> {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ")) {
+    const a = await storage.getAuthBy(auth.slice(7));
+    if (a?.kind === "customer") return { userId: a.userId };
+  }
+  // Session fallback (admin login bypass also sets session for customers).
+  if (req.session?.userId && req.session?.kind === "customer") {
+    return { userId: req.session.userId };
+  }
+  res.status(401).json({ message: "Sign in required" });
+  return null;
+}
+
+// Validate recipient fields. At least one of email/phone must be present;
+// names are trimmed and required.
+function parseRecipient(body: any): { ok: true; v: { firstName: string; lastName: string; email: string | null; phone: string | null } } | { ok: false; message: string } {
+  const firstName = String(body?.firstName ?? "").trim();
+  const lastName = String(body?.lastName ?? "").trim();
+  const emailRaw = String(body?.email ?? "").trim().toLowerCase();
+  const phoneRaw = String(body?.phone ?? "").trim();
+  if (!firstName) return { ok: false, message: "Recipient first name is required" };
+  if (!lastName) return { ok: false, message: "Recipient last name is required" };
+  const email = emailRaw || null;
+  const phone = phoneRaw || null;
+  if (!email && !phone) return { ok: false, message: "Add an email or phone so the recipient can be notified" };
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, message: "That email doesn't look right" };
+  }
+  return { ok: true, v: { firstName, lastName, email, phone } };
+}
+
+// Public projection (no recipient contact details).
+function publicGift(g: Gift, opts: { album: { id: string; title: string; artist: string; artwork: string }; buyerName: string | null }) {
+  const now = Date.now();
+  const expired = !g.claimedAt && g.expiresAt.getTime() < now;
+  return {
+    token: g.claimToken,
+    album: opts.album,
+    buyerName: opts.buyerName,
+    recipientFirstName: g.recipientFirstName,
+    recipientLastName: g.recipientLastName,
+    claimed: !!g.claimedAt,
+    claimedAt: g.claimedAt,
+    expired,
+    expiresAt: g.expiresAt,
+  };
+}
+
+// Lightweight admin guard mirroring the one in commerce.ts. Kept inline
+// so this module stays self-contained.
+async function requireAdminLocal(req: Request, res: Response): Promise<boolean> {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ")) {
+    const a = await storage.getAuthBy(auth.slice(7));
+    if (a?.kind === "admin") return true;
+  }
+  if (req.session?.userId && req.session?.kind === "admin") return true;
+  res.status(401).json({ message: "Admin only" });
+  return false;
+}
+
+export function registerGiftRoutes(app: Express) {
+  // ─── Admin-side resend (no buyer-ownership check) ──────────────────
+  // Surfaces on AdminOrders so support can recover for a confused fan.
+  app.post("/api/admin/orders/:id/gift/resend-as-admin", async (req, res) => {
+    if (!(await requireAdminLocal(req, res))) return;
+    const orderId = String(req.params.id);
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order || !order.giftId) return res.status(404).json({ message: "Order isn't a gift" });
+    const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
+    if (!gift) return res.status(404).json({ message: "Gift not found" });
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed" });
+    const [updated] = await db
+      .update(gifts)
+      .set({ resendCount: gift.resendCount + 1, lastSentAt: new Date() })
+      .where(eq(gifts.id, gift.id))
+      .returning();
+    const url = shareUrlFor(req, updated.claimToken);
+    if (updated.recipientEmail) console.log(`[gift admin-resend] email=${updated.recipientEmail} url=${url}`);
+    if (updated.recipientPhone) console.log(`[gift admin-resend] sms=${updated.recipientPhone} url=${url}`);
+    res.json({ gift: updated, shareUrl: url });
+  });
+
+
+  // ─── Create a gift for a paid order ────────────────────────────────
+  app.post("/api/orders/:id/gift", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const orderId = String(req.params.id);
+    const parsed = parseRecipient(req.body);
+    if (!parsed.ok) return res.status(400).json({ message: parsed.message });
+
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.customerId !== me.userId) return res.status(403).json({ message: "Not your order" });
+    if (order.status !== "paid") return res.status(400).json({ message: "Only paid orders can be gifted" });
+    if (order.giftId) return res.status(409).json({ message: "This order has already been marked as a gift" });
+
+    const token = newToken();
+    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const [gift] = await db
+      .insert(gifts)
+      .values({
+        orderId: order.id,
+        buyerUserId: me.userId,
+        recipientFirstName: parsed.v.firstName,
+        recipientLastName: parsed.v.lastName,
+        recipientEmail: parsed.v.email,
+        recipientPhone: parsed.v.phone,
+        claimToken: token,
+        expiresAt,
+        lastSentAt: new Date(),
+      })
+      .returning();
+    await db.update(orders).set({ giftId: gift.id }).where(eq(orders.id, order.id));
+
+    // No email/SMS infra yet — log a synthetic "send" so the operator
+    // can grab it from server logs in dev, exactly like email-verification
+    // codes today. The buyer always gets the share link in the UI too.
+    const url = shareUrlFor(req, token);
+    if (parsed.v.email) console.log(`[gift] notify email=${parsed.v.email} url=${url}`);
+    if (parsed.v.phone) console.log(`[gift] notify sms=${parsed.v.phone} url=${url}`);
+
+    res.json({ gift, shareUrl: url });
+  });
+
+  // ─── Update gift recipient (within 24h, pre-claim) ─────────────────
+  app.patch("/api/orders/:id/gift", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const orderId = String(req.params.id);
+    const parsed = parseRecipient(req.body);
+    if (!parsed.ok) return res.status(400).json({ message: parsed.message });
+
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order || order.customerId !== me.userId) return res.status(404).json({ message: "Order not found" });
+    if (!order.giftId) return res.status(400).json({ message: "Order isn't a gift" });
+
+    const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
+    if (!gift) return res.status(404).json({ message: "Gift not found" });
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed — can't change recipient" });
+    if (Date.now() - gift.createdAt.getTime() > RECIPIENT_EDIT_WINDOW_MS) {
+      return res.status(400).json({ message: "Recipient can only be changed within 24h of creating the gift" });
+    }
+
+    // Rotate token so the previous one (which may have been shared with
+    // the wrong person) can't be redeemed anymore.
+    const token = newToken();
+    const [updated] = await db
+      .update(gifts)
+      .set({
+        recipientFirstName: parsed.v.firstName,
+        recipientLastName: parsed.v.lastName,
+        recipientEmail: parsed.v.email,
+        recipientPhone: parsed.v.phone,
+        claimToken: token,
+        lastSentAt: new Date(),
+      })
+      .where(eq(gifts.id, gift.id))
+      .returning();
+
+    const url = shareUrlFor(req, token);
+    if (parsed.v.email) console.log(`[gift] notify email=${parsed.v.email} url=${url}`);
+    if (parsed.v.phone) console.log(`[gift] notify sms=${parsed.v.phone} url=${url}`);
+    res.json({ gift: updated, shareUrl: url });
+  });
+
+  // ─── Resend (log + return current share link, bump counter) ────────
+  app.post("/api/orders/:id/gift/resend", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const orderId = String(req.params.id);
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order || order.customerId !== me.userId) return res.status(404).json({ message: "Order not found" });
+    if (!order.giftId) return res.status(400).json({ message: "Order isn't a gift" });
+    const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
+    if (!gift) return res.status(404).json({ message: "Gift not found" });
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed" });
+
+    const [updated] = await db
+      .update(gifts)
+      .set({ resendCount: gift.resendCount + 1, lastSentAt: new Date() })
+      .where(eq(gifts.id, gift.id))
+      .returning();
+    const url = shareUrlFor(req, updated.claimToken);
+    if (updated.recipientEmail) console.log(`[gift] resend email=${updated.recipientEmail} url=${url}`);
+    if (updated.recipientPhone) console.log(`[gift] resend sms=${updated.recipientPhone} url=${url}`);
+    res.json({ gift: updated, shareUrl: url });
+  });
+
+  // ─── Public claim-page data ────────────────────────────────────────
+  app.get("/api/gifts/:token", async (req, res) => {
+    const token = String(req.params.token);
+    const [gift] = await db.select().from(gifts).where(eq(gifts.claimToken, token));
+    if (!gift) return res.status(404).json({ message: "This gift link is invalid or has been replaced." });
+    const [row] = await db
+      .select({ album: albums, buyer: customerUsers })
+      .from(orders)
+      .innerJoin(albums, eq(orders.albumId, albums.id))
+      .innerJoin(customerUsers, eq(orders.customerId, customerUsers.id))
+      .where(eq(orders.id, gift.orderId));
+    if (!row) return res.status(404).json({ message: "Gift not found" });
+
+    const buyerName = row.buyer.realName || row.buyer.displayName || null;
+    res.json(
+      publicGift(gift, {
+        album: { id: row.album.id, title: row.album.title, artist: row.album.artist, artwork: row.album.artwork },
+        buyerName,
+      }),
+    );
+  });
+
+  // ─── Claim a gift (auth required — caller becomes owner) ───────────
+  app.post("/api/gifts/:token/claim", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const token = String(req.params.token);
+    const [gift] = await db.select().from(gifts).where(eq(gifts.claimToken, token));
+    if (!gift) return res.status(404).json({ message: "This gift link is invalid or has been replaced." });
+    if (gift.claimedAt) return res.status(400).json({ message: "This gift has already been claimed." });
+    if (gift.expiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ message: "This gift link has expired. Ask the buyer to resend." });
+    }
+    if (gift.buyerUserId === me.userId) {
+      return res.status(400).json({ message: "You can't claim your own gift — share the link with the recipient." });
+    }
+
+    // Atomic-ish transfer: order → claimer, user_albums → claimer,
+    // gift → claimed. Drizzle's pg driver doesn't expose transactions on
+    // the surface we're using here; the three writes are sequenced and
+    // each is idempotent on its own (claim guard above prevents replay).
+    await db.update(orders).set({ customerId: me.userId }).where(eq(orders.id, gift.orderId));
+    // Move the existing user_albums row, or insert if missing.
+    const [order] = await db.select().from(orders).where(eq(orders.id, gift.orderId));
+    if (order) {
+      const existing = await db
+        .select()
+        .from(userAlbums)
+        .where(and(eq(userAlbums.albumId, order.albumId), eq(userAlbums.userId, gift.buyerUserId)));
+      if (existing.length > 0) {
+        await db.update(userAlbums).set({ userId: me.userId }).where(eq(userAlbums.id, existing[0].id));
+      } else {
+        await db
+          .insert(userAlbums)
+          .values({ userId: me.userId, albumId: order.albumId })
+          .onConflictDoNothing();
+      }
+    }
+    // If the claimer hasn't set a verified real name yet, seed it from
+    // the recipient name the buyer typed during gift creation. This is
+    // what makes the GoodDeed certificate print correctly on first open
+    // — without this, a brand-new claimer's cert would default to their
+    // display name (often an email local-part). Existing realName values
+    // are never overwritten; the claimer's identity wins if they already
+    // set one in their profile.
+    const [claimer] = await db.select().from(customerUsers).where(eq(customerUsers.id, me.userId));
+    if (claimer && !claimer.realName) {
+      const seeded = `${gift.recipientFirstName} ${gift.recipientLastName}`.trim();
+      if (seeded) {
+        await db.update(customerUsers).set({ realName: seeded }).where(eq(customerUsers.id, me.userId));
+      }
+    }
+    const [updated] = await db
+      .update(gifts)
+      .set({ claimedByUserId: me.userId, claimedAt: new Date() })
+      .where(eq(gifts.id, gift.id))
+      .returning();
+    res.json({ gift: updated, albumId: order?.albumId ?? null });
+  });
+}
+
+// Helper used by /api/orders + /api/admin/orders to enrich rows with
+// gift status. Keeps the join logic out of the route bodies.
+export async function loadGiftForOrders(orderIds: string[]): Promise<Map<string, Gift>> {
+  if (orderIds.length === 0) return new Map();
+  const rows = await db.select().from(gifts).where(or(...orderIds.map((id) => eq(gifts.orderId, id))) as any);
+  return new Map(rows.map((g) => [g.orderId, g]));
+}
