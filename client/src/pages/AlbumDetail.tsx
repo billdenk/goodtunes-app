@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { BuySheet } from "@/components/checkout/BuySheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
@@ -73,6 +74,13 @@ export function AlbumDetail() {
   const { user } = useAuth();
   const favSongs = useFavoriteSongs();
   const [showCert, setShowCert] = useState(false);
+  // Task #44 — opens the Buy bottom sheet (format picker + signed-cert
+  // add-on + embedded Stripe Checkout). `?buy=1` in the URL auto-opens
+  // it so the Login bounce-back lands directly on the format picker.
+  const [showBuySheet, setShowBuySheet] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URL(window.location.href).searchParams.get("buy") === "1";
+  });
   const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
@@ -643,6 +651,27 @@ export function AlbumDetail() {
             })()}
           </div>
 
+          {/* Buy this album — Task #44. Sits below the play/shuffle row
+              and above the tracklist; opens the Buy bottom sheet
+              (format picker → signed-cert toggle → embedded Stripe
+              Checkout inside GoodTunes). */}
+          <div className="px-5 mt-2 mb-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowBuySheet(true)}
+              className="inline-flex items-center gap-2 h-11 px-5 rounded-full text-[14px] font-semibold text-white active:scale-[0.98] transition-transform"
+              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+              data-testid="button-open-buy-sheet"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="21" r="1" />
+                <circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+              </svg>
+              Buy this album
+            </button>
+          </div>
+
           {/* Tracks */}
           <div className="bg-[#00062B] px-5 mt-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
             {songs.map((song, i) => {
@@ -881,6 +910,24 @@ export function AlbumDetail() {
 
         <MiniPlayer />
         <BottomNav />
+
+        {showBuySheet && (
+          <BuySheet
+            albumId={album.id}
+            onClose={() => {
+              setShowBuySheet(false);
+              // Strip the ?buy=1 marker so a refresh doesn't keep
+              // popping the sheet open after the fan closes it.
+              try {
+                const url = new URL(window.location.href);
+                if (url.searchParams.get("buy") === "1") {
+                  url.searchParams.delete("buy");
+                  window.history.replaceState({}, "", url.toString());
+                }
+              } catch {}
+            }}
+          />
+        )}
 
         {showCert && (
           <GoodDeedCertificate

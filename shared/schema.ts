@@ -615,6 +615,137 @@ export const customerUsers = pgTable("customer_users", {
   realName: text("real_name"),
   // Nullable: OAuth-only customers never set a password.
   password: text("password"),
+  // Task #44 — Stripe-backed identity columns. The Stripe Customer is the
+  // source of truth for legal name + addresses + phone; webhook handlers
+  // backfill these columns on payment success. realName/displayName above
+  // remain user-editable on the profile; the Stripe-backed `billing*` +
+  // `shipping*` snapshots are append-only history.
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  billingAddress: jsonb("billing_address").$type<StripeAddressSnapshot>(),
+  shippingAddress: jsonb("shipping_address").$type<StripeAddressSnapshot>(),
+  phone: text("phone"),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// JSON shape we persist for billing/shipping snapshots. Matches the subset
+// of Stripe's Address object we actually read on receipts + cert prints.
+export type StripeAddressSnapshot = {
+  name?: string | null;
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+};
+
+// 6-digit email verification codes. Issued when a guest types an email at
+// the Buy-flow signup gate; the code lands in their inbox and proves the
+// address before a password / Stripe customer ever gets attached. Stored
+// as scrypt-hashed strings so a DB leak can't be replayed. Expire in 15m;
+// `attempts` caps brute force; `consumedAt` is non-null after a successful
+// verification so the row can't be redeemed twice.
+export const emailVerifications = pgTable("email_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  codeHash: text("code_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  consumedAt: timestamp("consumed_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ─── Commerce (Task #44) ─────────────────────────────────────────────────
+// Album SKUs: per-album, per-physical-format rows. The fan-side Buy sheet
+// reads `active=true` rows for an album to populate the format picker, and
+// the admin "Sell this album" panel writes here. We keep this table narrow
+// (format type + price + stock + active) because price + design rules vary
+// per album, not per global format catalog.
+//
+// `format` is a closed enum at the API edge (see `ALBUM_FORMAT` below);
+// the column stays `text` so future formats land without a migration.
+export const albumSkus = pgTable(
+  "album_skus",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+    format: text("format").notNull(),
+    priceCents: integer("price_cents").notNull(),
+    // null = unlimited stock; non-null = decrement on successful order.
+    stock: integer("stock"),
+    active: boolean("active").notNull().default(true),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    albumFormatUnique: unique("album_skus_album_format_unique").on(t.albumId, t.format),
+  }),
+);
+
+// Generic per-album add-on. First user: the **signed_cert** add-on (printed
+// & signed GoodDeed certificate). Future shapes (professional framing,
+// full-album-sized framed GoodDeed with QR provenance) drop in here as new
+// `kind` values without a migration rewrite. `minPriceCents` is the per-
+// album floor the artist can't price below; `priceCents` is what they
+// chose for this album.
+export const albumAddons = pgTable(
+  "album_addons",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    priceCents: integer("price_cents").notNull(),
+    minPriceCents: integer("min_price_cents").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    albumKindUnique: unique("album_addons_album_kind_unique").on(t.albumId, t.kind),
+  }),
+);
+
+// Orders. One row per Stripe Checkout Session that completed payment.
+// Idempotent writes are keyed on `stripeCheckoutSessionId` (and also
+// `stripePaymentIntentId` once Stripe attaches one) so webhook replays
+// don't double-write. Status lifecycle: pending → paid → shipped (or
+// → refunded at any point). `goodDeedNumber` is assigned at paid-time
+// (atomically picking the next number for the album) and voided on
+// refund. Address + buyer snapshots are duplicated here so a later
+// customer-profile edit doesn't rewrite history.
+export const orders = pgTable("orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull().references(() => customerUsers.id),
+  albumId: varchar("album_id").notNull().references(() => albums.id),
+  totalCents: integer("total_cents").notNull(),
+  currency: text("currency").notNull().default("usd"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id").unique(),
+  stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+  status: text("status").notNull().default("pending"),
+  shippingAddress: jsonb("shipping_address").$type<StripeAddressSnapshot>(),
+  billingAddress: jsonb("billing_address").$type<StripeAddressSnapshot>(),
+  buyerEmail: text("buyer_email"),
+  buyerName: text("buyer_name"),
+  buyerPhone: text("buyer_phone"),
+  goodDeedNumber: integer("good_deed_number"),
+  shippedAt: timestamp("shipped_at"),
+  refundedAt: timestamp("refunded_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// One row per line item on an order. `kind` is "format" (the physical SKU
+// the fan picked) or "addon" (signed_cert today, framing/etc. later).
+// `label` is a human snapshot — even if the SKU row is later renamed in
+// admin, the receipt + order history keep reading the original label.
+export const orderItems = pgTable("order_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  sku: text("sku").notNull(),
+  label: text("label").notNull(),
+  unitPriceCents: integer("unit_price_cents").notNull(),
+  quantity: integer("quantity").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -841,3 +972,60 @@ export type PlaylistSong = typeof playlistSongs.$inferSelect;
 export type AuthToken = typeof authTokens.$inferSelect;
 export type ProfilePhoto = typeof profilePhotos.$inferSelect;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+
+// ─── Commerce constants + insert schemas (Task #44) ──────────────────────
+// Closed enum of formats the API accepts. The DB column stays text so a
+// new format ships without a migration, but every write path validates
+// against this list to keep the catalog clean. Labels rendered to the fan
+// live in `ALBUM_FORMAT_LABEL` so admin + buy-sheet read identical copy.
+export const ALBUM_FORMATS = ["7_inch", "12_lp", "12_double", "cassette", "cd"] as const;
+export type AlbumFormat = (typeof ALBUM_FORMATS)[number];
+export const ALBUM_FORMAT_LABEL: Record<AlbumFormat, string> = {
+  "7_inch": '7" Single',
+  "12_lp": '12" LP',
+  "12_double": '12" Double LP',
+  cassette: "Cassette",
+  cd: "CD",
+};
+// Closed enum of add-on kinds. Today the only shipped add-on is the
+// printed & signed GoodDeed certificate (`signed_cert`). Future shapes
+// (`framing`, `framed_gooddeed_qr`) drop in here without a schema change.
+export const ALBUM_ADDON_KINDS = ["signed_cert"] as const;
+export type AlbumAddonKind = (typeof ALBUM_ADDON_KINDS)[number];
+export const ALBUM_ADDON_LABEL: Record<AlbumAddonKind, string> = {
+  signed_cert: "Printed & Signed GoodDeed Certificate",
+};
+
+export const insertAlbumSkuSchema = createInsertSchema(albumSkus)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    format: z.enum(ALBUM_FORMATS),
+    priceCents: z.number().int().min(0),
+    stock: z.number().int().min(0).nullable().optional(),
+  });
+export type InsertAlbumSku = z.infer<typeof insertAlbumSkuSchema>;
+export type AlbumSku = typeof albumSkus.$inferSelect;
+
+export const insertAlbumAddonSchema = createInsertSchema(albumAddons)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    kind: z.enum(ALBUM_ADDON_KINDS),
+    priceCents: z.number().int().min(0),
+    minPriceCents: z.number().int().min(0),
+  })
+  .refine((d) => d.priceCents >= d.minPriceCents, {
+    message: "Price must be at or above the per-album minimum",
+    path: ["priceCents"],
+  });
+export type InsertAlbumAddon = z.infer<typeof insertAlbumAddonSchema>;
+export type AlbumAddon = typeof albumAddons.$inferSelect;
+
+export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type Order = typeof orders.$inferSelect;
+
+export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true, createdAt: true });
+export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
+export type OrderItem = typeof orderItems.$inferSelect;
+
+export type EmailVerification = typeof emailVerifications.$inferSelect;

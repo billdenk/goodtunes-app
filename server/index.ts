@@ -23,6 +23,11 @@ declare module "http" {
   }
 }
 
+// Stripe webhooks must read the **raw** request body so the signature
+// header verifies against the exact bytes Stripe sent. We mount raw()
+// only on the webhook path; every other route still gets JSON below.
+app.use("/api/webhooks/stripe", express.raw({ type: "*/*", limit: "1mb" }));
+
 app.use(
   express.json({
     // 10MB ceiling so profile-photo and other small image data-URLs

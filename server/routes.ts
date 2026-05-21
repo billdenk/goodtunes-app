@@ -8363,5 +8363,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }, 10_000);
   }
 
+  // ─── Task #44 — Bundle checkout (SKUs, add-ons, orders, Stripe) ──
+  const { registerCommerceRoutes } = await import("./commerce");
+  registerCommerceRoutes(app);
+
   return httpServer;
 }

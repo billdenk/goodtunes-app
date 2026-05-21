@@ -83,6 +83,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
 import { PlayerDock } from "@/components/ui/PlayerDock";
+import { SellPanel } from "@/components/admin/SellPanel";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import {
   Dialog,
@@ -171,10 +172,12 @@ interface SongLite {
   waveform?: number[] | null;
 }
 
-type Tab = "overview" | "tracks" | "bonus";
+type Tab = "overview" | "tracks" | "bonus" | "sell";
 const TABS: { key: Tab; label: string; phase: number }[] = [
   { key: "overview", label: "Overview", phase: 2 },
   { key: "tracks", label: "Tracks", phase: 2 },
+  // Sell — Task #44 bundle configuration (formats + signed-cert addon).
+  { key: "sell", label: "Sell", phase: 2 },
   // Artwork lives inside Overview now (between Release and Metadata) —
   // cover art is core release metadata, not a separate concern.
   // Masters used to live as a separate tab here — it was redundant with
@@ -680,6 +683,7 @@ export function AdminAlbum() {
         {tab === "bonus" && (
           <BonusPanel album={album} onEdit={openInClassicAdmin} />
         )}
+        {tab === "sell" && <SellPanel albumId={album.id} />}
       </div>
 
       {/* Destructive confirm sheet — names the album being destroyed

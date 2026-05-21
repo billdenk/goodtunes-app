@@ -7,7 +7,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, setAuthToken, queryClient } from "@/lib/queryClient";
 
 type Mode = "login" | "register";
-type Step = 1 | 2;
+// Step 1: name/email/password (admin) or email+password (customer).
+// Step 2: username/displayName (admin only — customer skips and gets a
+//         server-suggested handle from the email local-part).
+// Step "verify": 6-digit email code (customer only — the Task #44 gate
+//         that proves email ownership before the password sticks).
+type Step = 1 | 2 | "verify";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const isValidEmail = (v: string) => EMAIL_RE.test(v.trim());
@@ -256,7 +261,55 @@ export function Login() {
   const finalDisplayLive = (displayTouched ? displayName : suggestedDisplay).trim();
   const step2Valid = finalUsernameLive.length >= 3 && finalDisplayLive.length > 0;
 
-  const switchMode = (m: Mode) => { setMode(m); setStep(1); };
+  const switchMode = (m: Mode) => { setMode(m); setStep(1); setVerifyCode(""); setVerifyError(null); setVerifyToken(null); };
+
+  // Customer-side email verification state. The 6-digit code is sent to
+  // the email entered on step 1; on confirm we trade it for a short-
+  // lived `verifyToken` the signup-with-code endpoint consumes.
+  // Admin-side users never see this path.
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [verifyToken, setVerifyToken] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [devCode, setDevCode] = useState<string | null>(null);
+
+  const startCustomerVerify = async () => {
+    setVerifyBusy(true); setVerifyError(null); setDevCode(null);
+    try {
+      const res = await apiRequest("POST", "/api/email-verifications/start", { email: email.trim() });
+      const j = await res.json();
+      if (j.devCode) setDevCode(String(j.devCode));
+      setStep("verify");
+    } catch (e: any) {
+      setVerifyError(e?.message ?? "Couldn't send a code — check the email and try again");
+    } finally {
+      setVerifyBusy(false);
+    }
+  };
+
+  const submitCustomerVerify = async () => {
+    setVerifyBusy(true); setVerifyError(null);
+    try {
+      const r1 = await apiRequest("POST", "/api/email-verifications/confirm", { email: email.trim(), code: verifyCode });
+      const j1 = await r1.json();
+      const r2 = await apiRequest("POST", "/api/customer/signup-with-code", {
+        email: email.trim(),
+        password,
+        verifyToken: j1.verifyToken,
+      });
+      const j2 = await r2.json();
+      if (j2.token) setAuthToken(j2.token);
+      queryClient.invalidateQueries();
+      // Land in the player at the next URL if one was set (Buy flow
+      // sets ?next=/album/<id>), otherwise the standard /account home.
+      const next = new URL(window.location.href).searchParams.get("next") || "/account";
+      navigate(next);
+    } catch (e: any) {
+      setVerifyError(e?.message ?? "That code didn't match");
+    } finally {
+      setVerifyBusy(false);
+    }
+  };
 
   const handleOAuth = (provider: "google" | "apple") => {
     window.location.href = `/api/auth/${provider}/start?kind=${kind}`;
@@ -264,6 +317,15 @@ export function Login() {
 
   const goToStep2 = (e: React.FormEvent) => {
     e.preventDefault();
+    // Customer side: skip the username/displayName step entirely
+    // (Task #44) and route through the email-code verification gate.
+    // Stripe collects legal name at checkout; the fan can rename their
+    // handle on /welcome after payment.
+    if (!isAdmin) {
+      if (!isValidEmail(email) || !isValidPassword(password)) return;
+      startCustomerVerify();
+      return;
+    }
     if (!step1Valid) return;
     setUsername(suggestedUsername);
     setDisplayName(suggestedDisplay);
@@ -542,14 +604,20 @@ export function Login() {
 
         {mode === "register" && step === 1 && (
           <form onSubmit={goToStep2} className="flex flex-col gap-3">
-            <div>
-              <label className={s.label}>Name</label>
-              <input
-                type="text" value={realName} onChange={(e) => setRealName(e.target.value)}
-                placeholder="Nigel Tufnel" autoComplete="name"
-                className={s.input} style={inputBg} required data-testid="input-real-name"
-              />
-            </div>
+            {/* Customer signup skips the Name field — Stripe collects
+                legal name at checkout (it's the name on the card, so
+                fans type it carefully). Admin still asks for it because
+                admins never go through Stripe. */}
+            {isAdmin && (
+              <div>
+                <label className={s.label}>Name</label>
+                <input
+                  type="text" value={realName} onChange={(e) => setRealName(e.target.value)}
+                  placeholder="Nigel Tufnel" autoComplete="name"
+                  className={s.input} style={inputBg} required data-testid="input-real-name"
+                />
+              </div>
+            )}
             <div>
               <label className={s.label}>Email</label>
               <input
@@ -577,16 +645,83 @@ export function Login() {
               </p>
             </div>
             <button
-              type="submit" disabled={!step1Valid}
+              type="submit"
+              disabled={isAdmin
+                ? !step1Valid
+                : (verifyBusy || !isValidEmail(email) || !isValidPassword(password))}
               className={s.primaryBtn} style={s.primaryBtnStyle}
               data-testid="button-continue-step1"
             >
-              Continue
+              {!isAdmin && verifyBusy ? "Sending code…" : "Continue"}
+            </button>
+            {!isAdmin && verifyError && <div className={s.errorBox}>{verifyError}</div>}
+          </form>
+        )}
+
+        {mode === "register" && step === "verify" && !isAdmin && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); submitCustomerVerify(); }}
+            className="flex flex-col gap-3"
+            data-testid="form-verify-code"
+          >
+            <p className={s.subtitle}>
+              We sent a 6-digit code to <strong>{email}</strong>. Enter it below to finish creating your account.
+            </p>
+            {devCode && (
+              <div className={`text-[11px] ${isAdmin ? "text-slate-500" : "text-white/55"}`}>
+                Dev mode: code is <code className="font-mono">{devCode}</code>
+              </div>
+            )}
+            <div>
+              <label className={s.label}>6-digit code</label>
+              <input
+                type="text"
+                value={verifyCode}
+                onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                maxLength={6}
+                className={s.inputCenter} style={inputBg}
+                required
+                data-testid="input-verify-code"
+              />
+            </div>
+            {verifyError && <div className={s.errorBox} data-testid="text-verify-error">{verifyError}</div>}
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => { setStep(1); setVerifyError(null); }}
+                aria-label="Back"
+                className={s.backChip}
+                style={isAdmin ? undefined : { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.10)" }}
+                data-testid="button-back-verify"
+              >
+                <svg width={s.backChevronSize} height={s.backChevronSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+              </button>
+              <button
+                type="submit"
+                disabled={verifyBusy || verifyCode.length !== 6}
+                className={`${s.primaryBtn} flex-1 mt-0`}
+                style={s.primaryBtnStyle}
+                data-testid="button-submit-verify"
+              >
+                {verifyBusy ? "Verifying…" : "Verify & create"}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => startCustomerVerify()}
+              disabled={verifyBusy}
+              className={s.ghostBtn}
+              data-testid="button-resend-code"
+            >
+              Resend code
             </button>
           </form>
         )}
 
-        {mode === "register" && step === 2 && (
+        {mode === "register" && step === 2 && isAdmin && (
           <form onSubmit={handleRegister} className="flex flex-col gap-3">
             <div>
               <label className={s.label}>Username</label>
@@ -638,7 +773,7 @@ export function Login() {
           </form>
         )}
 
-        {!(mode === "register" && step === 2) && (
+        {!(mode === "register" && (step === 2 || step === "verify")) && (
           <>
             <div className="flex items-center gap-3 my-5">
               <div className={s.divider} />

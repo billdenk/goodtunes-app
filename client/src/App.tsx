@@ -30,6 +30,9 @@ import { AdminVendors } from "@/pages/AdminVendors";
 import { AdminVendor } from "@/pages/AdminVendor";
 import { AdminLabels } from "@/pages/AdminLabels";
 import { AdminLabel } from "@/pages/AdminLabel";
+import { Welcome } from "@/pages/Welcome";
+import { Orders } from "@/pages/Orders";
+import { AdminOrders } from "@/pages/AdminOrders";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -109,6 +112,17 @@ function Router() {
             chrome is host-derived and these are simply aliases. */}
         <Route path="/admin/login" component={Login} />
         <Route path="/admin/register" component={Login} />
+        {/* Task #44 — post-checkout landing. Public so the Stripe
+            return URL works even before the auth cookie has settled
+            (Welcome polls /api/checkout/session/:id to confirm the
+            order, then bounces into the unlocked album). */}
+        <Route path="/welcome" component={Welcome} />
+        <Route path="/orders">
+          <ProtectedRoute component={Orders} />
+        </Route>
+        <Route path="/admin/orders">
+          <ProtectedRoute component={AdminOrders} />
+        </Route>
         <Route path="/collection">
           <ProtectedRoute component={Collection} />
         </Route>
