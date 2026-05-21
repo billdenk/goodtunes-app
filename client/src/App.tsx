@@ -46,7 +46,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    return <Redirect to="/login" />;
+    // Preserve the admin/customer distinction on the dev URL — visiting
+    // /admin/* unauthenticated should land on the admin-chromed login,
+    // not the dark customer one.
+    const isAdminPath = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+    return <Redirect to={isAdminPath ? "/admin/login" : "/login"} />;
   }
 
   return <Component />;
@@ -99,6 +103,12 @@ function Router() {
       <Switch>
         <Route path="/login" component={Login} />
         <Route path="/register" component={Login} />
+        {/* Mirror routes under /admin so the dev URL can preview the
+            admin-chromed login (detectAuthKind falls back to pathname
+            on *.replit.app). On the admin.goodtunes.music host the
+            chrome is host-derived and these are simply aliases. */}
+        <Route path="/admin/login" component={Login} />
+        <Route path="/admin/register" component={Login} />
         <Route path="/collection">
           <ProtectedRoute component={Collection} />
         </Route>
