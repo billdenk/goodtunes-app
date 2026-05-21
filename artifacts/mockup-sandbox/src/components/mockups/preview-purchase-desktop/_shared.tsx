@@ -188,6 +188,44 @@ export function DesktopSidebar() {
   );
 }
 
+/* ── TopNowPlayingStrip ─────────────────────────────────────────────
+   Sandbox copy of the graduated primitive at
+   `client/src/components/ui/AlbumTopNowPlayingStrip.tsx`. The sandbox
+   alias can't reach `client/src`, so any polish needs to land in both
+   places until the alias gains real cross-app reach. */
+
+export function TopNowPlayingStrip() {
+  return (
+    <div
+      className="flex items-center gap-3 px-6 h-14 border-b border-white/8 flex-shrink-0"
+      data-testid="top-now-playing-strip"
+    >
+      <div className="flex items-center gap-3 min-w-0 max-w-[420px]">
+        <div className="w-9 h-9 rounded-md overflow-hidden flex-shrink-0 bg-white/10">
+          <img src={ALBUM_COVER} alt="" className="w-full h-full object-cover" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-white text-[13px] font-semibold truncate">
+            {TRACKS[0]?.title ?? "—"}
+          </div>
+          <div className="text-white/55 text-[11.5px] truncate">{ALBUM.artist}</div>
+        </div>
+      </div>
+      <div className="flex-1" />
+      <button
+        type="button"
+        aria-label="Search"
+        className="w-10 h-10 rounded-full inline-flex items-center justify-center text-white/65 hover:text-white hover:bg-white/8 transition-colors"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 /* ── Breadcrumb ─────────────────────────────────────────────────────── */
 
 export function Breadcrumb() {

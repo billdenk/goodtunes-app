@@ -3082,6 +3082,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
     if (req.body?.genre !== undefined)
       updates.genre = req.body.genre ? String(req.body.genre).trim() : null;
+    // Bundle price in cents — admin sets per album. Null clears it (no
+    // Buy Bundle CTA on the consumer page). Reject negatives/non-finite
+    // so we don't end up rendering "$-2.99".
+    if (req.body?.priceCents !== undefined) {
+      const raw = req.body.priceCents;
+      if (raw === null || raw === "") {
+        updates.priceCents = null;
+      } else {
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+          return res.status(400).json({ message: "priceCents must be a non-negative integer or null." });
+        }
+        updates.priceCents = n;
+      }
+    }
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
     return res.json(updated);
@@ -3134,6 +3149,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     if (isExplicit !== undefined) updates.isExplicit = Boolean(isExplicit);
+    // Preview-single opt-in for the fan-facing Preview & Purchase page.
+    if (req.body?.isPreviewable !== undefined)
+      updates.isPreviewable = Boolean(req.body.isPreviewable);
     // Preview window is atomic: either both fields null (auto-derived
     // from the master, default) or both finite non-negative integers
     // with end > start. We reject partial/NaN updates with a 400 so

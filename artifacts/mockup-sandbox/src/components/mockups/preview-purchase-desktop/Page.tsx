@@ -5,9 +5,9 @@ import {
   BRAND_BG,
   Breadcrumb,
   DesktopSidebar,
-  FloatingPlayerDock,
   HeroTabs,
   TabPlaceholder,
+  TopNowPlayingStrip,
   TRACKS,
   TrackRow,
   type TabKey,
@@ -73,14 +73,6 @@ export default function PreviewPurchaseDesktop() {
         </main>
       </div>
 
-      {/* Local style overrides — Tailwind's `line-clamp-3` requires the
-          `@tailwindcss/line-clamp` plugin in older setups, but Tailwind
-          v4 (used by this sandbox) bakes it in. Title block uses the
-          system font so this surface reads like Apple's product pages
-          without pulling SF Pro from a CDN. */}
-      <style>{`
-        [data-testid="album-description"] { ${ALBUM ? "" : ""} }
-      `}</style>
     </div>
   );
 }

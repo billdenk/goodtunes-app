@@ -141,6 +141,9 @@ interface AlbumFull {
   // and saved here so a re-open of the album shows "saved from a previous
   // import" — no fan-side rendering yet.
   linerNotes?: string | null;
+  // Bundle purchase price in cents — drives the consumer Buy Bundle CTA.
+  // Null = not for sale yet, no CTA shown on /album/:id.
+  priceCents?: number | null;
   songs: SongLite[];
 }
 
@@ -160,6 +163,9 @@ interface SongLite {
   isExplicit?: boolean | null;
   previewStartMs?: number | null;
   previewEndMs?: number | null;
+  // Artist-designated preview single — fan-facing Preview & Purchase
+  // page renders this row "playable" pre-purchase. Default false.
+  isPreviewable?: boolean | null;
   // Mux ingest state — populated by the "Migrate to Mux" admin action.
   // `muxStatus` is `preparing` while encoding, `ready` once playable,
   // `errored` if Mux failed. Player swaps to signed HLS when ready.
@@ -987,6 +993,11 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           genre: album.genre,
           labelId: album.labelId ?? "",
           description: album.description,
+          // Stored in cents on the wire, edited as dollars (e.g. "19.99")
+          // in the admin form — dollars-to-cents normalization happens in
+          // EditablePanel's onSave below.
+          priceCents:
+            album.priceCents == null ? "" : (album.priceCents / 100).toFixed(2),
         }}
         invalidate={invalidate}
         fields={[
@@ -1041,6 +1052,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "Description",
             type: "textarea",
             placeholder: "Liner-notes-style blurb shown on the album page.",
+          },
+          {
+            key: "priceCents",
+            label: "Bundle Price (USD)",
+            type: "text",
+            placeholder: "19.99",
           },
         ]}
       />
@@ -5244,6 +5261,52 @@ function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: strin
   );
 }
 
+/* ─── Previewable single toggle ─────────────────────────────────────
+   Opts a track into the fan-facing Preview & Purchase track row's
+   "playable" state on a not-yet-owned album. Off by default — the
+   operator hand-picks the 1–3 singles per release that fans get to
+   sample. Matches Apple Music's "Days We Left Behind"-style preview
+   on pre-release pages. */
+function PreviewableTrackToggle({ song }: { song: SongLite }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const checked = !!song.isPreviewable;
+  const toggleMut = useMutation({
+    mutationFn: async (next: boolean) =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, { isPreviewable: next }),
+    onSuccess: async (_data, next) => {
+      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      toast({
+        title: next ? "Marked as preview single" : "Preview single removed",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update preview flag",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div
+      className="flex items-center justify-center gap-2.5 w-full"
+      data-testid={`toggle-previewable-${song.id}`}
+    >
+      <Play className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 fill-current" aria-hidden="true" />
+      <span className="text-[11.5px] text-slate-600 font-medium">Preview</span>
+      <span className="text-[10.5px] text-slate-400">· playable pre-purchase</span>
+      <Switch
+        checked={checked}
+        disabled={toggleMut.isPending}
+        onCheckedChange={(next) => toggleMut.mutate(next)}
+        aria-label="Mark this track as a preview single"
+        className="data-[state=unchecked]:bg-[#E9E9EB] data-[state=checked]:bg-[#34C759] [&>span]:!bg-white [&>span]:!shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      />
+    </div>
+  );
+}
+
 function InstrumentalToggle({ song }: { song: SongLite }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -9235,18 +9298,18 @@ function AudioEditor({
                 concern. Only shows once a master exists — there's
                 nothing to be instrumental about otherwise. */}
             {song.audioUrl && (
-              <div className="-mx-3 mt-1 pt-2.5 px-3 border-t border-slate-100 grid grid-cols-2 gap-2 items-stretch">
-                {/* Instrumental left, Explicit right — each wrapped in
+              <div className="-mx-3 mt-1 pt-2.5 px-3 border-t border-slate-100 grid grid-cols-3 gap-2 items-stretch">
+                {/* Instrumental · Explicit · Preview — each wrapped in
                     its own slate-50 chip so the icon + label + switch
-                    read as a single grouped control. Without the chip
-                    the right-hand switch visually floated between the
-                    two labels (Bill: "it looks like Explicit is on
-                    the left"). Apple groups form rows the same way. */}
+                    read as a single grouped control. */}
                 <div className="rounded-lg bg-slate-50 px-2.5 py-2 flex items-center">
                   <InstrumentalToggle song={song} />
                 </div>
                 <div className="rounded-lg bg-slate-50 px-2.5 py-2 flex items-center">
                   <ExplicitTrackToggle song={song} albumId={albumId} />
+                </div>
+                <div className="rounded-lg bg-slate-50 px-2.5 py-2 flex items-center">
+                  <PreviewableTrackToggle song={song} />
                 </div>
               </div>
             )}

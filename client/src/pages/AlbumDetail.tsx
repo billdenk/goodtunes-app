@@ -66,7 +66,23 @@ function normalizeInstrument(i: ApiInstrument): Instrument {
   };
 }
 
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
+
+/**
+ * Fan-facing album route. Switches between the Apple-Music-style mobile
+ * shell (`AlbumDetailMobile`, the original surface) and the desktop
+ * Preview & Purchase shell (`AlbumDetailDesktop`, graduated from the
+ * mockup sandbox) at the 1024px breakpoint. Both branches consume the
+ * same `/api/albums/:id` cache so there's no double fetch on resize.
+ */
 export function AlbumDetail() {
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  if (isDesktop) return <AlbumDetailDesktop />;
+  return <AlbumDetailMobile />;
+}
+
+function AlbumDetailMobile() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex } = usePlayer();

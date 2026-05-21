@@ -136,6 +136,12 @@ export const albums = pgTable("albums", {
   payoutCertCentsOverride: integer("payout_cert_cents_override"),
   payoutOwnerKind: text("payout_owner_kind"),
   payoutOwnerId: varchar("payout_owner_id"),
+  // Bundle purchase price in cents (e.g. 1999 for $19.99). Nullable so
+  // back-catalog rows and discography-imported albums (which aren't for
+  // sale on GoodTunes) stay null and don't surface a Buy Bundle CTA. Set
+  // by admin on the Preview & Purchase pipeline. Real checkout (Stripe +
+  // cart sheet) arrives in later tasks — this is the data + stub button.
+  priceCents: integer("price_cents"),
 });
 
 // Bonus content attached to an album. Both tables are intentionally
@@ -211,6 +217,13 @@ export const songs = pgTable("songs", {
   // advisory) so admins can mark the whole record without flipping
   // every song; the album card's "E" badge lights up if either is on.
   isExplicit: boolean("is_explicit").notNull().default(false),
+  // Artist-designated preview single on a pre-release / not-yet-owned
+  // album. When true, the fan-facing Preview & Purchase track row gets
+  // the full Apple-Music treatment (bold title, runtime, ⋯ menu) and the
+  // 30s preview window plays through `PlayerContext`. When false, the
+  // row renders inert + greyed until the fan owns the album. Default
+  // off — operator opts a song into the preview slot per track.
+  isPreviewable: boolean("is_previewable").notNull().default(false),
   // The 30-second in-app preview window. When both are null, the player
   // auto-derives a preview from the first 30s of the master (v1 default
   // → Preview status dot reads "auto-set", green check). When the admin
