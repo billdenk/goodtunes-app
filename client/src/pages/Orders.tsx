@@ -1,10 +1,21 @@
 // Orders — the fan-facing list of every album bundle they've bought
 // (Task #44, step 11). Reads /api/orders, joins items+album server-side.
+//
+// Task #74 — adds the fulfillment-tracking surface: every physical order
+// row carries a status pill driven by `fulfillmentStatus` (populated by
+// the Order Desk webhook in #73), an inline carrier + tracking link,
+// and a "View details" sheet that expands to show the full timeline
+// (paid → submitted → in fulfillment → shipped → delivered), line items,
+// shipping address, and gift-recipient info.
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Check, Truck, Package, MapPin, ExternalLink } from "lucide-react";
+import type { StripeAddressSnapshot } from "@shared/schema";
 
 // Task #46 — gift block on each row exposes the buyer's self-serve
 // gifting controls (copy share link, resend, change recipient within
@@ -41,9 +52,27 @@ type OrderRow = {
   // Task #49 — order origin. "direct" = bought on goodtunes.music,
   // "shopify:<storeId>" = arrived via a label's Shopify webhook.
   origin?: string;
+  // Task #73 / #74 — fulfillment lifecycle from the Order Desk webhook.
+  // Null on digital-only orders (no physical leg).
+  skuKind?: string | null;
+  fulfillmentStatus?: string | null;
+  submittedToFulfillmentAt?: string | null;
+  inFulfillmentAt?: string | null;
+  deliveredAt?: string | null;
+  cancelledAt?: string | null;
+  returnedAt?: string | null;
+  carrier?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  shippingAddress?: StripeAddressSnapshot | null;
   items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
   gift: GiftInfo | null;
 };
+
+const PHYSICAL_KINDS = new Set(["vinyl", "cassette", "cd", "bundle"]);
+function isPhysical(o: OrderRow): boolean {
+  return !!o.skuKind && PHYSICAL_KINDS.has(o.skuKind);
+}
 
 // Origin label rendered next to the status pill. Direct orders stay
 // unbadged (it's the default); Shopify-sourced orders surface a small
@@ -69,11 +98,26 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   pending: { label: "Pending", cls: "bg-white/10 text-white/55" },
 };
 
+// Customer-facing pill for the fulfillment lifecycle. The Stripe-side
+// `status` ("paid", "refunded") stays primary on the row — this is the
+// physical-leg secondary pill so the fan can see at a glance where their
+// vinyl actually is. Mirrors AdminOrders' palette but on the dark shell.
+const FULFILLMENT_PILL: Record<string, { label: string; cls: string }> = {
+  pending: { label: "Awaiting fulfillment", cls: "bg-white/10 text-white/65" },
+  submitted: { label: "Submitted", cls: "bg-violet-500/20 text-violet-300" },
+  in_fulfillment: { label: "In fulfillment", cls: "bg-indigo-500/20 text-indigo-200" },
+  shipped: { label: "Shipped", cls: "bg-[#319ED8]/15 text-[#319ED8]" },
+  delivered: { label: "Delivered", cls: "bg-[#4AFFCA]/15 text-[#4AFFCA]" },
+  cancelled: { label: "Cancelled", cls: "bg-rose-500/15 text-rose-300" },
+  returned: { label: "Returned", cls: "bg-rose-500/15 text-rose-300" },
+};
+
 const RECIPIENT_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function Orders() {
   const { data: orders, isLoading } = useQuery<OrderRow[]>({ queryKey: ["/api/orders"] });
   const { toast } = useToast();
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
 
   const resendGift = useMutation({
     mutationFn: async (orderId: string) => {
@@ -134,6 +178,8 @@ export function Orders() {
     patchGift.mutate({ orderId: o.id, body: { firstName, lastName, email, phone } });
   }
 
+  const openOrder = openOrderId ? orders?.find((o) => o.id === openOrderId) ?? null : null;
+
   return (
     <main className="min-h-screen bg-[#00062B] text-white pb-24" data-testid="page-orders">
       <div className="max-w-[440px] mx-auto px-5 pt-8">
@@ -144,9 +190,16 @@ export function Orders() {
         {!isLoading && orders && orders.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center" data-testid="orders-empty">
             <div className="text-white/85 font-medium">No orders yet</div>
-            <div className="text-white/55 text-[13px] mt-1">
-              When you buy a record, it shows up here.
+            <div className="text-white/55 text-[13px] mt-1 mb-4">
+              When you buy a record, it shows up here — with its tracking number once it ships.
             </div>
+            <Link
+              href="/"
+              className="inline-flex items-center px-4 py-2 rounded-full bg-[#319ED8] text-white text-[13px] font-semibold active:opacity-80"
+              data-testid="button-browse-music"
+            >
+              Browse music
+            </Link>
           </div>
         )}
 
@@ -165,6 +218,9 @@ export function Orders() {
               : g.resendCount > 0
               ? { label: `Gift · Resent ×${g.resendCount}`, cls: "bg-amber-400/15 text-amber-200" }
               : { label: "Gift · Sent", cls: "bg-fuchsia-500/20 text-fuchsia-300" };
+            const physical = isPhysical(o);
+            const fStatus = (o.fulfillmentStatus ?? (physical ? "pending" : null)) as string | null;
+            const fPill = fStatus ? FULFILLMENT_PILL[fStatus] ?? FULFILLMENT_PILL.pending : null;
             return (
               <div
                 key={o.id}
@@ -181,6 +237,14 @@ export function Orders() {
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${st.cls}`}>
                           {st.label}
                         </span>
+                        {fPill && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${fPill.cls}`}
+                            data-testid={`pill-fulfillment-${o.id}`}
+                          >
+                            {fPill.label}
+                          </span>
+                        )}
                         <OriginBadge origin={o.origin} />
                         {giftPill && (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${giftPill.cls}`} data-testid={`pill-gift-${o.id}`}>
@@ -209,6 +273,44 @@ export function Orders() {
                     ))}
                   </div>
                 </Link>
+
+                {/* Inline tracking strip — surfaces the carrier + tap-to-track
+                    link without needing to open the detail sheet. Only shows
+                    once the carrier has actually picked up. */}
+                {physical && o.trackingNumber && (
+                  <div
+                    className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2 text-[12px] text-white/75"
+                    data-testid={`tracking-strip-${o.id}`}
+                  >
+                    <Truck className="w-4 h-4 text-[#319ED8]" />
+                    <span className="text-white/55">{o.carrier ?? "Carrier"}:</span>
+                    {o.trackingUrl ? (
+                      <a
+                        href={o.trackingUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#319ED8] font-medium inline-flex items-center gap-1 active:opacity-70"
+                        data-testid={`link-tracking-${o.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {o.trackingNumber}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span className="text-white font-medium" data-testid={`text-tracking-${o.id}`}>{o.trackingNumber}</span>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setOpenOrderId(o.id)}
+                  className="mt-3 w-full text-left text-[12.5px] text-white/65 hover:text-white active:opacity-70 inline-flex items-center justify-between"
+                  data-testid={`button-order-details-${o.id}`}
+                >
+                  <span>View order details</span>
+                  <span aria-hidden className="text-white/35">›</span>
+                </button>
 
                 {g && g.isBuyer && (
                   <div className="mt-3 pt-3 border-t border-white/10" data-testid={`gift-controls-${o.id}`}>
@@ -266,6 +368,205 @@ export function Orders() {
           })}
         </div>
       </div>
+
+      <OrderDetailSheet order={openOrder} onClose={() => setOpenOrderId(null)} />
     </main>
+  );
+}
+
+// ───────────────────────── Order detail sheet ─────────────────────────
+// Bottom sheet (Apple-Music-style modal) for a single order: line items,
+// shipping address, full lifecycle timeline (paid → submitted → in
+// fulfillment → shipped → delivered, plus cancelled/returned offshoots),
+// carrier + tap-to-track link, gift-recipient block when applicable.
+function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose: () => void }) {
+  return (
+    <Sheet open={!!order} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent
+        side="bottom"
+        className="bg-[#00062B] text-white border-white/10 rounded-t-3xl max-h-[90vh] overflow-y-auto"
+        data-testid="sheet-order-detail"
+      >
+        {order && (
+          <>
+            <SheetHeader className="text-left">
+              <SheetTitle className="text-white text-[20px] font-bold">{order.albumTitle}</SheetTitle>
+              <p className="text-white/55 text-[13px]">{order.albumArtist}</p>
+            </SheetHeader>
+
+            <div className="mt-4 flex items-center gap-2 flex-wrap text-[11px]">
+              <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${(STATUS_LABEL[order.status] ?? STATUS_LABEL.pending).cls}`}>
+                {(STATUS_LABEL[order.status] ?? STATUS_LABEL.pending).label}
+              </span>
+              {order.goodDeedNumber !== null && (
+                <span className="text-white/55">GoodDeed #{order.goodDeedNumber}</span>
+              )}
+              <span className="text-white/40">· {new Date(order.createdAt).toLocaleString()}</span>
+            </div>
+
+            <FulfillmentTimeline order={order} />
+
+            {/* Line items — what was actually purchased. */}
+            <section className="mt-5">
+              <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2">Items</h3>
+              <div className="rounded-2xl bg-white/5 border border-white/10 divide-y divide-white/10">
+                {order.items.map((it) => (
+                  <div key={it.id} className="flex items-center justify-between px-4 py-3" data-testid={`detail-item-${it.id}`}>
+                    <div>
+                      <div className="text-[14px] text-white">{it.label}</div>
+                      {it.quantity > 1 && (
+                        <div className="text-[11px] text-white/45">Qty {it.quantity}</div>
+                      )}
+                    </div>
+                    <div className="text-[13px] tabular-nums text-white/85">
+                      {dollars(it.unitPriceCents * it.quantity)}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-3 bg-white/[0.03]">
+                  <div className="text-[12px] uppercase tracking-widest text-white/45 font-semibold">Total</div>
+                  <div className="text-[15px] font-semibold tabular-nums">{dollars(order.totalCents)}</div>
+                </div>
+              </div>
+            </section>
+
+            {/* Shipping address — only on physical orders that have one. */}
+            {isPhysical(order) && order.shippingAddress && (
+              <section className="mt-5" data-testid="detail-shipping-address">
+                <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2 flex items-center gap-1.5">
+                  <MapPin className="w-3 h-3" /> Shipping to
+                </h3>
+                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px] text-white/85 leading-snug">
+                  {order.shippingAddress.name && <div className="text-white font-medium">{order.shippingAddress.name}</div>}
+                  {order.shippingAddress.line1 && <div>{order.shippingAddress.line1}</div>}
+                  {order.shippingAddress.line2 && <div>{order.shippingAddress.line2}</div>}
+                  <div>
+                    {[order.shippingAddress.city, order.shippingAddress.state, order.shippingAddress.postalCode].filter(Boolean).join(", ")}
+                  </div>
+                  {order.shippingAddress.country && <div>{order.shippingAddress.country}</div>}
+                </div>
+              </section>
+            )}
+
+            {/* Carrier + tracking, repeated here for the detail context. */}
+            {isPhysical(order) && order.trackingNumber && (
+              <section className="mt-5" data-testid="detail-tracking">
+                <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2 flex items-center gap-1.5">
+                  <Truck className="w-3 h-3" /> Tracking
+                </h3>
+                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px]">
+                  <div className="text-white/55 mb-1">{order.carrier ?? "Carrier"}</div>
+                  {order.trackingUrl ? (
+                    <a
+                      href={order.trackingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#319ED8] font-semibold inline-flex items-center gap-1 active:opacity-70"
+                      data-testid="link-tracking-detail"
+                    >
+                      {order.trackingNumber}
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  ) : (
+                    <span className="text-white font-semibold">{order.trackingNumber}</span>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Gift recipient — visible to both buyer and recipient, with
+                appropriate framing for each side. */}
+            {order.gift && (
+              <section className="mt-5" data-testid="detail-gift">
+                <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2">
+                  {order.gift.isBuyer ? "Gifted to" : "Sent to you by"}
+                </h3>
+                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px] text-white/85 leading-snug">
+                  {order.gift.isBuyer ? (
+                    <>
+                      <div className="text-white font-medium">{order.gift.recipientFirstName} {order.gift.recipientLastName}</div>
+                      {order.gift.recipientEmail && <div className="text-white/55">{order.gift.recipientEmail}</div>}
+                      {order.gift.recipientPhone && <div className="text-white/55">{order.gift.recipientPhone}</div>}
+                      <div className="text-white/45 mt-1 text-[12px]">
+                        {order.gift.claimed && order.gift.claimedAt
+                          ? `Claimed ${new Date(order.gift.claimedAt).toLocaleDateString()}`
+                          : `Awaiting claim · expires ${new Date(order.gift.expiresAt).toLocaleDateString()}`}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-white/75">A friend bought this record for you on GoodTunes. Enjoy.</div>
+                  )}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// Vertical timeline rendered inside the order detail sheet. Walks the
+// canonical lifecycle in order and dims any step that hasn't happened
+// yet; cancelled / returned terminate the timeline early with a rose
+// callout. Digital-only orders collapse to just "Paid".
+function FulfillmentTimeline({ order: o }: { order: OrderRow }) {
+  const physical = isPhysical(o);
+  type Step = { key: string; label: string; at: string | null | undefined; tone?: "rose" };
+  const steps: Step[] = [];
+  steps.push({ key: "paid", label: "Paid", at: o.createdAt });
+  if (physical) {
+    steps.push({ key: "submitted", label: "Submitted to fulfillment", at: o.submittedToFulfillmentAt });
+    steps.push({ key: "in_fulfillment", label: "In fulfillment", at: o.inFulfillmentAt });
+    steps.push({ key: "shipped", label: "Shipped", at: o.shippedAt });
+    steps.push({ key: "delivered", label: "Delivered", at: o.deliveredAt });
+  }
+  if (o.refundedAt) steps.push({ key: "refunded", label: "Refunded", at: o.refundedAt, tone: "rose" });
+  if (o.cancelledAt) steps.push({ key: "cancelled", label: "Cancelled", at: o.cancelledAt, tone: "rose" });
+  if (o.returnedAt) steps.push({ key: "returned", label: "Returned", at: o.returnedAt, tone: "rose" });
+
+  return (
+    <section className="mt-5" data-testid="detail-timeline">
+      <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2">Status</h3>
+      <ol className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 flex flex-col gap-2.5">
+        {steps.map((s) => {
+          const reached = !!s.at;
+          const isRose = s.tone === "rose";
+          return (
+            <li key={s.key} className="flex items-center gap-3" data-testid={`timeline-${s.key}`}>
+              <span
+                className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  reached
+                    ? isRose
+                      ? "bg-rose-500/25 text-rose-200"
+                      : "bg-[#4AFFCA]/20 text-[#4AFFCA]"
+                    : "bg-white/5 text-white/30"
+                }`}
+              >
+                {reached ? (
+                  isRose ? (
+                    <Package className="w-3.5 h-3.5" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                  )
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+                )}
+              </span>
+              <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
+                <span className={`text-[13.5px] ${reached ? (isRose ? "text-rose-200" : "text-white") : "text-white/45"}`}>
+                  {s.label}
+                </span>
+                {s.at && (
+                  <span className="text-[11px] text-white/40 tabular-nums">
+                    {new Date(s.at).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }

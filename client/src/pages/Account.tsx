@@ -11,6 +11,18 @@ import { clearLocalAnalytics } from "@/lib/analytics";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 
+// Task #74 — minimal order shape for the "My Orders" card on the
+// profile. We only need a few fields to render the count + most-recent
+// status line; the full row + detail sheet lives on /orders.
+type AccountOrderSummary = {
+  id: string;
+  status: string;
+  fulfillmentStatus?: string | null;
+  trackingNumber?: string | null;
+  createdAt: string;
+  albumTitle: string;
+};
+
 // Linked OAuth providers for this account. Reads/writes hit the
 // kind-aware /api/auth/identities endpoint — same component works on
 // both the customer profile and (eventually) admin account chrome.
@@ -221,6 +233,31 @@ export function Account() {
   // so this page stays scannable as we add more collection types.
   const favArtists = useFavoriteArtists();
   const favoriteArtistCount = favArtists.ordered.length;
+
+  // Task #74 — "My Orders" card pulls a thin summary off the same
+  // /api/orders endpoint the Orders page uses. We surface the count
+  // plus a one-line current status (fulfillment first if it's a
+  // physical order, otherwise the Stripe-side status) so the fan can
+  // tell at a glance whether anything is moving.
+  const { data: orderSummaries = [] } = useQuery<AccountOrderSummary[]>({
+    queryKey: ["/api/orders"],
+    enabled: !!user,
+  });
+  const orderCount = orderSummaries.length;
+  const latestOrder = orderSummaries[0];
+  const latestStatusLine = (() => {
+    if (!latestOrder) return null;
+    const f = latestOrder.fulfillmentStatus;
+    if (f === "delivered") return "Latest: Delivered";
+    if (f === "shipped") return latestOrder.trackingNumber ? `Latest: Shipped — tracking ${latestOrder.trackingNumber}` : "Latest: Shipped";
+    if (f === "in_fulfillment") return "Latest: In fulfillment";
+    if (f === "submitted") return "Latest: Submitted to fulfillment";
+    if (f === "cancelled") return "Latest: Cancelled";
+    if (f === "returned") return "Latest: Returned";
+    if (latestOrder.status === "refunded") return "Latest: Refunded";
+    if (latestOrder.status === "paid") return "Latest: Paid · digital ready";
+    return `Latest: ${latestOrder.status}`;
+  })();
   const [bookmarkCount, setBookmarkCount] = useState<number>(0);
   useEffect(() => {
     const load = () => {
@@ -292,6 +329,42 @@ export function Account() {
               Keeps Account a hub instead of a feed; new collection types
               (Followed Labels, Saved Gear, Stations…) slot in here without
               bloating the top-level Account screen. */}
+          {/* My Orders — Task #74. Sits above Your Collections because
+              an in-flight record purchase ("where's my vinyl?") is the
+              most time-sensitive thing the fan can land on; collections
+              are evergreen. Hidden entirely when the customer has never
+              placed an order so a brand-new profile stays clean. */}
+          {orderCount > 0 && (
+            <>
+              <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">My Orders</p>
+              <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
+                <button
+                  type="button"
+                  onClick={() => navigate("/orders")}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-white/[0.06]"
+                  data-testid="row-orders"
+                >
+                  <span className="w-5 flex items-center justify-center flex-shrink-0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M16 11V7a4 4 0 0 0-8 0v4" />
+                      <rect x="3" y="11" width="18" height="11" rx="2" />
+                    </svg>
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-white text-[15px]">Orders &amp; tracking</span>
+                    {latestStatusLine && (
+                      <span className="block text-white/45 text-[12px] truncate" data-testid="text-orders-latest">{latestStatusLine}</span>
+                    )}
+                  </span>
+                  <span className="text-white/40 text-[13px] tabular-nums" data-testid="row-orders-count">{orderCount}</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+                    <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          )}
+
           <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Your Collections</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             {([
