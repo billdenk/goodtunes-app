@@ -10,6 +10,7 @@ import {
   Factory,
   Truck,
   ArrowLeft,
+  BarChart3,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
@@ -36,7 +37,8 @@ export type EntityKey =
   | "vendors"
   | "labels"
   | "manufacturers"
-  | "fulfillment";
+  | "fulfillment"
+  | "reports";
 
 export function AdminFrame({
   active,
@@ -183,6 +185,16 @@ export function AdminFrame({
               onClick={() => navigate("/admin/fulfillment-partners")}
               testId="nav-fulfillment"
             />
+            {/* Task #80 — Reports surface. No count here (it's a tool,
+                not a CRUD list) so we pass -1 and special-case below. */}
+            <SidebarLink
+              icon={BarChart3}
+              label="Reports"
+              count={-1}
+              active={active === "reports"}
+              onClick={() => navigate("/admin/reports")}
+              testId="nav-reports"
+            />
           </nav>
         </aside>
 
@@ -286,14 +298,16 @@ function SidebarLink({
         ].join(" ")}
       />
       <span className="flex-1 text-left">{label}</span>
-      <span
-        className={[
-          "tabular-nums text-[11.5px] font-bold",
-          active ? "text-[#319ED8]" : "text-slate-400",
-        ].join(" ")}
-      >
-        {count}
-      </span>
+      {count >= 0 && (
+        <span
+          className={[
+            "tabular-nums text-[11.5px] font-bold",
+            active ? "text-[#319ED8]" : "text-slate-400",
+          ].join(" ")}
+        >
+          {count}
+        </span>
+      )}
     </button>
   );
 }

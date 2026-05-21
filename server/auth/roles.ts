@@ -3,12 +3,22 @@
 // comment near ADMIN_ROLES) so we read them via raw SQL here. Once
 // we're ready to fold them into the main `users` definition this
 // file collapses to a thin re-export.
+//
+// This module serves two callers:
+//   1. Task #69 role gating — getUserRole / setUserRole / requireRole
+//      enforce per-role access on admin routes.
+//   2. Task #80 partner-reports scope resolution — resolveReportScope /
+//      requireReportScope / effectiveScopeFilter compute which albums
+//      a caller can see, with super_admin impersonation via
+//      ?asPartner=<id>&asPartnerKind=label|artist.
 
 import type { Request, Response, NextFunction } from "express";
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { db, pool } from "../db";
 import { storage } from "../storage";
 import { ADMIN_ROLES, type AdminRole } from "@shared/schema";
+
+export type { AdminRole };
 
 export interface UserRoleInfo {
   role: AdminRole;
@@ -53,4 +63,79 @@ export function requireRole(...roles: AdminRole[]) {
     (req as any).userRole = info;
     next();
   };
+}
+
+// ─── Task #80 — partner-reports scope resolution ─────────────────────
+//
+// `PartnerScope` extends `UserRoleInfo` with super_admin impersonation
+// state. The reports endpoints filter their queries by the resolved
+// (kind, id) tuple so every partner sees only their own catalogue.
+
+export interface PartnerScope extends UserRoleInfo {
+  // When super_admin uses ?asPartner=<id>&asPartnerKind=label|artist
+  // these are populated and the report query filters as if the caller
+  // were that partner. The role itself stays "super_admin" so we know
+  // not to demote them mid-request.
+  viewAs?: { kind: "label" | "artist"; id: string };
+}
+
+let roleColumnsKnownToExist: boolean | null = null;
+
+async function detectRoleColumns(): Promise<boolean> {
+  if (roleColumnsKnownToExist !== null) return roleColumnsKnownToExist;
+  try {
+    const r = await pool.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'users' AND column_name IN ('role','role_scope_id')`,
+    );
+    roleColumnsKnownToExist = r.rowCount === 2;
+  } catch {
+    roleColumnsKnownToExist = false;
+  }
+  return roleColumnsKnownToExist;
+}
+
+export async function getPartnerScope(userId: string): Promise<PartnerScope> {
+  const hasCols = await detectRoleColumns();
+  if (!hasCols) return { role: "super_admin", roleScopeId: null };
+  const info = await getUserRole(userId);
+  if (!info) return { role: "super_admin", roleScopeId: null };
+  return info;
+}
+
+/**
+ * Resolve the effective scope for a partner-reports request. Reads the
+ * caller's role; if super_admin, honors ?asPartner=<id>&asPartnerKind=...
+ * for read-through impersonation. Returns null on missing auth.
+ */
+export async function resolveReportScope(req: Request): Promise<PartnerScope | null> {
+  const userId = req.session?.userId;
+  if (!userId) return null;
+  const user = await storage.getUser(userId);
+  if (!user?.isAdmin) return null;
+  const scope = await getPartnerScope(userId);
+  if (scope.role === "super_admin") {
+    const asPartner = String(req.query.asPartner || "").trim();
+    const asKind = String(req.query.asPartnerKind || "").trim();
+    if (asPartner && (asKind === "label" || asKind === "artist")) {
+      return { ...scope, viewAs: { kind: asKind, id: asPartner } };
+    }
+  }
+  return scope;
+}
+
+export async function requireReportScope(req: Request, res: Response, next: NextFunction) {
+  const scope = await resolveReportScope(req);
+  if (!scope) return res.status(401).json({ message: "Unauthorized" });
+  (req as any).reportScope = scope;
+  next();
+}
+
+// Effective (kind, id) the report should filter by. Returns null when
+// the caller is super_admin with no asPartner — i.e. "see everything".
+export function effectiveScopeFilter(scope: PartnerScope): { kind: "label" | "artist"; id: string } | null {
+  if (scope.viewAs) return scope.viewAs;
+  if (scope.role === "label" && scope.roleScopeId) return { kind: "label", id: scope.roleScopeId };
+  if (scope.role === "artist" && scope.roleScopeId) return { kind: "artist", id: scope.roleScopeId };
+  return null;
 }

@@ -376,6 +376,18 @@ export const people = pgTable("people", {
   // roster for verified-artist invites + label-side follow-ups. NEVER
   // surfaced on the public Person page — only readable on admin endpoints.
   contactEmail: text("contact_email"),
+  // Task #80 — referrer chain. When THIS person is the *referred* artist,
+  // either or both of these point at who referred them in. The referrer
+  // gets `referrerPerUnitCents` (default 100¢ = $1) for every paid order
+  // on an album whose primaryArtistId is this person. Both nullable so
+  // an artist with no referrer is the common path. NPO (organization)
+  // referrers and artist (person) referrers earn the same way; the partner
+  // shell shows them a Referrals report scoped to their cohort. We let
+  // BOTH be set (NPO and a person both referred Fernando) — the per-unit
+  // amount is paid to each independently; GoodTunes funds it from its cut.
+  referredByPersonId: varchar("referred_by_person_id"),
+  referredByOrgId: varchar("referred_by_org_id"),
+  referrerPerUnitCents: integer("referrer_per_unit_cents").notNull().default(100),
 });
 
 // Alias rows for a Person — extra names + extra source IDs that all point
@@ -1153,6 +1165,25 @@ export const analyticsEvents = pgTable("analytics_events", {
   userId: varchar("user_id"),
   receivedAt: timestamp("received_at").defaultNow(),
 });
+
+// Task #80 — Reporting v1. Cache the (city, region, country) → lat/long
+// geocode lookups we feed to the partner Fan Map. Nominatim (OSM) is our
+// default provider; its terms forbid hammering, so we cache aggressively
+// and only re-geocode on cache miss. `query` is the normalized lookup
+// string ("brooklyn|ny|us") and is the unique key — countries and
+// regions get rows too so an order with only a country still maps.
+// lat/lon are nullable when the provider returned no result; we still
+// cache the miss so we don't re-ask. Source = "nominatim" | "manual".
+export const geoCache = pgTable("geo_cache", {
+  query: text("query").primaryKey(),
+  lat: integer("lat_e6"),
+  lon: integer("lon_e6"),
+  displayName: text("display_name"),
+  countryCode: text("country_code"),
+  source: text("source").notNull().default("nominatim"),
+  cachedAt: timestamp("cached_at").defaultNow(),
+});
+export type GeoCache = typeof geoCache.$inferSelect;
 
 // Audit log for long-running admin jobs (Dropbox imports, GoodSync,
 // etc.). One row per completed run. The summary jsonb captures the

@@ -46,6 +46,7 @@ import { AdminShopify } from "@/pages/AdminShopify";
 import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
+import { AdminReports } from "@/pages/AdminReports";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -234,6 +235,10 @@ function Router() {
         </Route>
         <Route path="/admin/fulfillment-partners">
           <ProtectedRoute component={AdminFulfillmentPartners} />
+        </Route>
+        {/* Task #80 — Partner reporting v1. */}
+        <Route path="/admin/reports">
+          <ProtectedRoute component={AdminReports} />
         </Route>
         {/* Bare /admin used to render the legacy 3-column monolith. We now
             redirect straight into the new Albums index so anyone who lands

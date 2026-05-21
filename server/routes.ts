@@ -9167,6 +9167,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerPayoutRoutes } = await import("./payouts");
   registerPayoutRoutes(app);
 
+  // ─── Task #80 — Partner reporting v1 ───────────────────────────
+  const { registerReportRoutes } = await import("./reports/routes");
+  registerReportRoutes(app);
+
   // ─── Admin invitations ─────────────────────────────────────────
   // A super-admin issues an invite (email + role + optional scope id),
   // we mail a one-shot link, and the recipient sets a username + password
