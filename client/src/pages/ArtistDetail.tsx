@@ -53,6 +53,13 @@ export function ArtistDetail() {
       .filter(
         (a) =>
           !a.isHidden &&
+          // Only actual GoodTunes-distributed releases. Streaming-imported
+          // Apple/Spotify rows for the same artist are surfaced separately
+          // via the discography section below and must not appear under
+          // the "GoodTunes® Releases" header. See
+          // docs/admin-conventions.md § "Streaming rows vs GoodTunes
+          // releases".
+          a.isGoodTunesRelease &&
           (a.artist ?? "").trim().toLowerCase() === nameLc &&
           !seenIds.has(a.id),
       )
@@ -354,7 +361,7 @@ export function ArtistDetail() {
 
           {hasGtReleases && (
             <div className="px-5 mt-9">
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3">GoodTunes Releases</h2>
+              <h2 className="text-white text-xl font-bold tracking-tight mb-3">GoodTunes&reg; Releases</h2>
               <div className="grid grid-cols-2 gap-4">
                 {artistAlbums.map((album) => (
                   <button

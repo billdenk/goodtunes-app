@@ -27,6 +27,12 @@ export interface PersonPreviewAlbum {
   type: string;
   primaryArtistId: string | null;
   isHidden: boolean;
+  // True only for albums curated as actual GoodTunes releases. The
+  // admin Releases tab and the fan-side ArtistDetail both filter on
+  // this so streaming-imported Apple/Spotify rows don't pollute the
+  // GoodTunes catalog view. See docs/admin-conventions.md §
+  // "Streaming rows vs GoodTunes releases".
+  isGoodTunesRelease: boolean;
 }
 
 /**

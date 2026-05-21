@@ -96,7 +96,7 @@ type Tab = "overview" | "cover" | "releases" | "streaming" | "gear" | "payouts";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
-  { key: "releases", label: "GoodTunes Releases\u00AE" },
+  { key: "releases", label: "GoodTunes\u00AE Releases" },
   { key: "streaming", label: "Streaming" },
   { key: "gear", label: "Gear" },
   { key: "payouts", label: "Payouts" },
@@ -1007,7 +1007,7 @@ function ImageUploadPanel({
 }
 
 
-/* ─── GoodTunes Releases® tab ─────────────────────────────────────── */
+/* ─── GoodTunes® Releases tab ─────────────────────────────────────── */
 
 // Albums actually in the GoodTunes catalog for this person. We match by
 // `primaryArtistId === person.id` OR by case-insensitive artist-name
@@ -1025,6 +1025,11 @@ function ReleasesPanel({
   const needle = person.name.trim().toLowerCase();
   const releases = allAlbums
     .filter((a) => {
+      // Only actual GoodTunes-distributed releases belong in this tab.
+      // Streaming-imported Apple/Spotify rows for the same artist live
+      // in the Streaming tab — see docs/admin-conventions.md §
+      // "Streaming rows vs GoodTunes releases".
+      if (!a.isGoodTunesRelease) return false;
       if (a.primaryArtistId === person.id) return true;
       const artist = (a.artist || "").trim().toLowerCase();
       return needle && artist === needle;
@@ -1037,7 +1042,7 @@ function ReleasesPanel({
   const visibleCount = releases.length - hiddenCount;
   const subline =
     releases.length === 0
-      ? "No GoodTunes catalog releases for this artist yet."
+      ? "No GoodTunes\u00AE releases for this artist yet."
       : `${visibleCount} ${visibleCount === 1 ? "release" : "releases"} fans can play in-app${hiddenCount ? ` · ${hiddenCount} hidden` : ""}`;
 
   return (
@@ -1049,7 +1054,7 @@ function ReleasesPanel({
         <div>
           <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
             <Disc3 className="w-4 h-4 text-slate-400" />
-            GoodTunes Releases&reg;
+            GoodTunes&reg; Releases
           </h2>
           <p className="text-slate-400 text-[11.5px]">{subline}</p>
         </div>
@@ -1057,9 +1062,10 @@ function ReleasesPanel({
       <div className="p-6">
         {releases.length === 0 ? (
           <div className="py-10 text-center text-slate-500 text-[12.5px] max-w-md mx-auto">
-            When this artist is set as the primary artist on an Album (or the
-            album's artist field matches their name), the release will appear
-            here.
+            When an album is flagged as a GoodTunes&reg; release and this
+            artist is its primary artist (or the album's artist field
+            matches their name), the release will appear here. Streaming-only
+            Apple/Spotify rows for this artist live in the Streaming tab.
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
