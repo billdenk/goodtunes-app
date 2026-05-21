@@ -1,0 +1,524 @@
+// Task #48 — Stripe Connect payouts for artists & labels.
+//
+// One module owning: Connect Express account create + onboarding link,
+// payout-settings CRUD (platform fee % + cert cost off the top),
+// payout-target resolution (album → per-album override / labelId /
+// primaryArtistId), the transfer triggered on "Mark shipped", refund
+// reversal, and the stuck-cases dashboard read.
+//
+// Express accounts in test mode only today; once a real platform onboards
+// to live mode, swap the connector environment and these endpoints
+// continue to work unchanged.
+import type { Express, Request, Response } from "express";
+import { db } from "./db";
+import {
+  orders,
+  albums,
+  payoutAccounts,
+  payoutSettings,
+  people,
+  labels,
+  customerUsers,
+  type PayoutAccount,
+  type PayoutSettings,
+  type PayoutOwnerKind,
+  type Order,
+  type Album,
+  PAYOUT_OWNER_KINDS,
+} from "@shared/schema";
+import { and, desc, eq, sql, or, isNull, inArray } from "drizzle-orm";
+import { z } from "zod";
+import { storage } from "./storage";
+import { getStripe } from "./stripe";
+import type Stripe from "stripe";
+
+// ─── Settings ─────────────────────────────────────────────────────────
+
+// Singleton row keyed by id='default'. Seeded lazily on first read so
+// fresh DBs don't need a separate migration step.
+export async function getPayoutSettings(): Promise<PayoutSettings> {
+  const [row] = await db.select().from(payoutSettings).where(eq(payoutSettings.id, "default"));
+  if (row) return row;
+  const [inserted] = await db
+    .insert(payoutSettings)
+    .values({ id: "default", platformFeePct: 10, certCostCents: 500 })
+    .onConflictDoNothing()
+    .returning();
+  if (inserted) return inserted;
+  const [again] = await db.select().from(payoutSettings).where(eq(payoutSettings.id, "default"));
+  return again!;
+}
+
+// ─── Account helpers ──────────────────────────────────────────────────
+
+async function getAccountByOwner(ownerKind: PayoutOwnerKind, ownerId: string): Promise<PayoutAccount | undefined> {
+  const [row] = await db
+    .select()
+    .from(payoutAccounts)
+    .where(and(eq(payoutAccounts.ownerKind, ownerKind), eq(payoutAccounts.ownerId, ownerId)));
+  return row;
+}
+
+async function getAccountByStripeId(stripeAccountId: string): Promise<PayoutAccount | undefined> {
+  const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.stripeAccountId, stripeAccountId));
+  return row;
+}
+
+// Syncs the local row from a Stripe Account object. Idempotent —
+// safe to call from the webhook and the on-demand refresh endpoint.
+export async function syncAccountFromStripe(stripeAcct: Stripe.Account): Promise<PayoutAccount | undefined> {
+  const existing = await getAccountByStripeId(stripeAcct.id);
+  if (!existing) return undefined;
+  const requirementsDue = [
+    ...(stripeAcct.requirements?.currently_due ?? []),
+    ...(stripeAcct.requirements?.past_due ?? []),
+  ];
+  const [updated] = await db
+    .update(payoutAccounts)
+    .set({
+      payoutsEnabled: !!stripeAcct.payouts_enabled,
+      chargesEnabled: !!stripeAcct.charges_enabled,
+      detailsSubmitted: !!stripeAcct.details_submitted,
+      requirementsDue: Array.from(new Set(requirementsDue)),
+      disabledReason: stripeAcct.requirements?.disabled_reason ?? null,
+      email: stripeAcct.email ?? existing.email,
+      lastSyncedAt: new Date(),
+    })
+    .where(eq(payoutAccounts.id, existing.id))
+    .returning();
+  return updated;
+}
+
+// ─── Resolve who gets paid for a given album ──────────────────────────
+// Priority:
+//   1. album.payoutOwnerKind + album.payoutOwnerId (explicit override)
+//   2. album.labelId → ("label", labelId)
+//   3. album.primaryArtistId → ("person", primaryArtistId)
+//   4. null → operator must reconcile manually ("skipped")
+export async function resolvePayoutTarget(album: Album): Promise<PayoutAccount | null> {
+  const candidates: Array<{ kind: PayoutOwnerKind; id: string }> = [];
+  if (album.payoutOwnerKind === "person" || album.payoutOwnerKind === "label") {
+    if (album.payoutOwnerId) candidates.push({ kind: album.payoutOwnerKind, id: album.payoutOwnerId });
+  }
+  if (album.labelId) candidates.push({ kind: "label", id: album.labelId });
+  if (album.primaryArtistId) candidates.push({ kind: "person", id: album.primaryArtistId });
+  for (const c of candidates) {
+    const acct = await getAccountByOwner(c.kind, c.id);
+    if (acct && acct.payoutsEnabled) return acct;
+  }
+  return null;
+}
+
+// ─── Compute the split ────────────────────────────────────────────────
+export interface PayoutSplit {
+  totalCents: number;
+  platformFeeCents: number;
+  certCostCents: number;
+  payoutAmountCents: number;
+  platformFeePct: number;
+}
+
+export async function computeSplit(order: Order, album: Album): Promise<PayoutSplit> {
+  const s = await getPayoutSettings();
+  const feePct = album.payoutFeePctOverride ?? s.platformFeePct;
+  const certCfg = album.payoutCertCentsOverride ?? s.certCostCents;
+  // Only deduct the per-cert cost if the buyer actually added the cert
+  // add-on. We snapshot in `order_items` but the cheapest signal is
+  // `totalCents > sku price` — easier: deduct certCfg whenever the
+  // order has a signed_cert line. We re-read items inline.
+  const items = await db.select().from((await import("@shared/schema")).orderItems).where(eq((await import("@shared/schema")).orderItems.orderId, order.id));
+  const hasCert = items.some((i: any) => i.kind === "addon" && i.sku === "signed_cert");
+  const certCostCents = hasCert ? certCfg : 0;
+  const remainder = Math.max(order.totalCents - certCostCents, 0);
+  const platformFeeCents = Math.max(Math.floor((remainder * feePct) / 100), 0);
+  const payoutAmountCents = Math.max(remainder - platformFeeCents, 0);
+  return {
+    totalCents: order.totalCents,
+    platformFeeCents,
+    certCostCents,
+    payoutAmountCents,
+    platformFeePct: feePct,
+  };
+}
+
+// ─── Transfer on "Mark shipped" ───────────────────────────────────────
+// Idempotent: re-running on a transferred order short-circuits. We
+// pass `transfer_group` keyed on the order id so the operator can find
+// the matching transfer in the Stripe dashboard.
+export async function attemptTransferForOrder(order: Order): Promise<{
+  status: "transferred" | "skipped" | "failed";
+  error?: string;
+  transferId?: string;
+  amount?: number;
+}> {
+  if (order.payoutStatus === "transferred") {
+    return { status: "transferred", transferId: order.payoutTransferId ?? undefined, amount: order.payoutAmountCents ?? undefined };
+  }
+  const album = await storage.getAlbumById(order.albumId, { includeHidden: true });
+  if (!album) return { status: "failed", error: "Album not found" };
+  const split = await computeSplit(order, album);
+  const target = await resolvePayoutTarget(album);
+  if (!target) {
+    await db
+      .update(orders)
+      .set({
+        payoutStatus: "skipped",
+        platformFeeCents: split.platformFeeCents,
+        certCostCents: split.certCostCents,
+        payoutAmountCents: split.payoutAmountCents,
+        payoutError: "No connected account with payouts enabled",
+      })
+      .where(eq(orders.id, order.id));
+    return { status: "skipped", error: "No connected account" };
+  }
+  if (split.payoutAmountCents <= 0) {
+    await db
+      .update(orders)
+      .set({
+        payoutStatus: "skipped",
+        platformFeeCents: split.platformFeeCents,
+        certCostCents: split.certCostCents,
+        payoutAmountCents: 0,
+        payoutOwnerKind: target.ownerKind,
+        payoutOwnerId: target.ownerId,
+        payoutError: "Computed payout amount was zero",
+      })
+      .where(eq(orders.id, order.id));
+    return { status: "skipped", error: "Zero payout" };
+  }
+  try {
+    const stripe = await getStripe();
+    const transfer = await stripe.transfers.create(
+      {
+        amount: split.payoutAmountCents,
+        currency: order.currency || "usd",
+        destination: target.stripeAccountId,
+        transfer_group: `order_${order.id}`,
+        // Source the funds from the charge we captured at checkout.
+        // When the PI used a normal charge the source_transaction is
+        // the charge id; if we don't have it, Stripe falls back to
+        // the platform balance (also fine for test mode).
+        ...(order.stripePaymentIntentId ? { source_transaction: undefined } : {}),
+        metadata: {
+          gt_order_id: order.id,
+          gt_album_id: order.albumId,
+          gt_owner_kind: target.ownerKind,
+          gt_owner_id: target.ownerId,
+        },
+      },
+      { idempotencyKey: `transfer_${order.id}` },
+    );
+    await db
+      .update(orders)
+      .set({
+        payoutStatus: "transferred",
+        payoutTransferId: transfer.id,
+        payoutAmountCents: split.payoutAmountCents,
+        platformFeeCents: split.platformFeeCents,
+        certCostCents: split.certCostCents,
+        payoutOwnerKind: target.ownerKind,
+        payoutOwnerId: target.ownerId,
+        payoutAt: new Date(),
+        payoutError: null,
+      })
+      .where(eq(orders.id, order.id));
+    return { status: "transferred", transferId: transfer.id, amount: split.payoutAmountCents };
+  } catch (e: any) {
+    const msg = e?.message || "Transfer failed";
+    await db
+      .update(orders)
+      .set({
+        payoutStatus: "failed",
+        platformFeeCents: split.platformFeeCents,
+        certCostCents: split.certCostCents,
+        payoutAmountCents: split.payoutAmountCents,
+        payoutOwnerKind: target.ownerKind,
+        payoutOwnerId: target.ownerId,
+        payoutError: msg,
+      })
+      .where(eq(orders.id, order.id));
+    return { status: "failed", error: msg };
+  }
+}
+
+// ─── Reverse a transfer on refund ─────────────────────────────────────
+export async function reverseTransferForOrder(order: Order): Promise<void> {
+  if (order.payoutStatus !== "transferred" || !order.payoutTransferId) return;
+  try {
+    const stripe = await getStripe();
+    await stripe.transfers.createReversal(
+      order.payoutTransferId,
+      { refund_application_fee: false, metadata: { gt_order_id: order.id } },
+      { idempotencyKey: `reversal_${order.id}` },
+    );
+    await db
+      .update(orders)
+      .set({ payoutStatus: "reversed", payoutError: null })
+      .where(eq(orders.id, order.id));
+  } catch (e: any) {
+    await db
+      .update(orders)
+      .set({ payoutError: `Reversal failed: ${e?.message || "unknown error"}` })
+      .where(eq(orders.id, order.id));
+  }
+}
+
+// ─── Route registrar ──────────────────────────────────────────────────
+export function registerPayoutRoutes(app: Express) {
+  const requireAdmin = async (req: Request, res: Response, next: () => void) => {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const a = await storage.getAuthBy(auth.slice(7));
+    if (!a || a.kind !== "admin") return res.status(401).json({ message: "Unauthorized" });
+    const u = await storage.getUser(a.userId);
+    if (!u?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    (req as any).adminUserId = a.userId;
+    next();
+  };
+
+  // ─── Settings ────────────────────────────────────────────────────
+  app.get("/api/admin/payout-settings", requireAdmin, async (_req, res) => {
+    res.json(await getPayoutSettings());
+  });
+  const settingsSchema = z.object({
+    platformFeePct: z.number().int().min(0).max(50),
+    certCostCents: z.number().int().min(0).max(10000),
+  });
+  app.put("/api/admin/payout-settings", requireAdmin, async (req, res) => {
+    const parsed = settingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid settings" });
+    await getPayoutSettings(); // ensure seeded
+    const [row] = await db
+      .update(payoutSettings)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(eq(payoutSettings.id, "default"))
+      .returning();
+    res.json(row);
+  });
+
+  // ─── Account list + read ─────────────────────────────────────────
+  app.get("/api/admin/payouts/accounts", requireAdmin, async (req, res) => {
+    const ownerKind = (req.query.ownerKind as string | undefined) || null;
+    const ownerId = (req.query.ownerId as string | undefined) || null;
+    if (ownerKind && ownerId) {
+      const row = await getAccountByOwner(ownerKind as PayoutOwnerKind, ownerId);
+      return res.json(row ?? null);
+    }
+    const rows = await db.select().from(payoutAccounts).orderBy(desc(payoutAccounts.createdAt));
+    res.json(rows);
+  });
+
+  // ─── Create a Connect Express account ────────────────────────────
+  const createAccountSchema = z.object({
+    ownerKind: z.enum(PAYOUT_OWNER_KINDS),
+    ownerId: z.string().min(1),
+    country: z.string().length(2).optional(),
+    email: z.string().email().optional(),
+  });
+  app.post("/api/admin/payouts/accounts", requireAdmin, async (req, res) => {
+    const parsed = createAccountSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
+    const { ownerKind, ownerId } = parsed.data;
+    // Validate owner exists.
+    if (ownerKind === "person") {
+      const [p] = await db.select({ id: people.id, name: people.name }).from(people).where(eq(people.id, ownerId));
+      if (!p) return res.status(404).json({ message: "Person not found" });
+    } else {
+      const [l] = await db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.id, ownerId));
+      if (!l) return res.status(404).json({ message: "Label not found" });
+    }
+    const existing = await getAccountByOwner(ownerKind, ownerId);
+    if (existing) return res.status(409).json({ message: "Account already exists", account: existing });
+
+    try {
+      const stripe = await getStripe();
+      const acct = await stripe.accounts.create({
+        type: "express",
+        country: parsed.data.country ?? "US",
+        email: parsed.data.email,
+        capabilities: {
+          transfers: { requested: true },
+          card_payments: { requested: true },
+        },
+        metadata: { gt_owner_kind: ownerKind, gt_owner_id: ownerId },
+      });
+      const requirementsDue = [
+        ...(acct.requirements?.currently_due ?? []),
+        ...(acct.requirements?.past_due ?? []),
+      ];
+      const [row] = await db
+        .insert(payoutAccounts)
+        .values({
+          ownerKind,
+          ownerId,
+          stripeAccountId: acct.id,
+          country: parsed.data.country ?? "US",
+          email: parsed.data.email ?? null,
+          payoutsEnabled: !!acct.payouts_enabled,
+          chargesEnabled: !!acct.charges_enabled,
+          detailsSubmitted: !!acct.details_submitted,
+          requirementsDue: Array.from(new Set(requirementsDue)),
+          disabledReason: acct.requirements?.disabled_reason ?? null,
+          lastSyncedAt: new Date(),
+        })
+        .returning();
+      res.status(201).json(row);
+    } catch (e: any) {
+      res.status(502).json({ message: `Stripe error: ${e?.message ?? "create failed"}` });
+    }
+  });
+
+  // ─── Create an onboarding link ───────────────────────────────────
+  app.post("/api/admin/payouts/accounts/:id/onboard", requireAdmin, async (req, res) => {
+    const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
+    if (!row) return res.status(404).json({ message: "Account not found" });
+    try {
+      const stripe = await getStripe();
+      const origin = absoluteOrigin(req);
+      const link = await stripe.accountLinks.create({
+        account: row.stripeAccountId,
+        refresh_url: `${origin}/admin/payouts?refresh=${row.id}`,
+        return_url: `${origin}/admin/payouts?return=${row.id}`,
+        type: "account_onboarding",
+      });
+      res.json({ url: link.url, expiresAt: link.expires_at });
+    } catch (e: any) {
+      res.status(502).json({ message: `Stripe error: ${e?.message ?? "onboarding link failed"}` });
+    }
+  });
+
+  // ─── Sync from Stripe on demand ──────────────────────────────────
+  app.post("/api/admin/payouts/accounts/:id/refresh", requireAdmin, async (req, res) => {
+    const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
+    if (!row) return res.status(404).json({ message: "Account not found" });
+    try {
+      const stripe = await getStripe();
+      const acct = await stripe.accounts.retrieve(row.stripeAccountId);
+      const updated = await syncAccountFromStripe(acct);
+      res.json(updated ?? row);
+    } catch (e: any) {
+      res.status(502).json({ message: `Stripe error: ${e?.message ?? "refresh failed"}` });
+    }
+  });
+
+  // ─── Delete (test-mode cleanup) ──────────────────────────────────
+  app.delete("/api/admin/payouts/accounts/:id", requireAdmin, async (req, res) => {
+    const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
+    if (!row) return res.json({ ok: true });
+    try {
+      const stripe = await getStripe();
+      // Stripe rejects deletes against live accounts that have completed
+      // onboarding. Best-effort — swallow the error and remove the
+      // local row either way so the operator can re-link from scratch.
+      await stripe.accounts.del(row.stripeAccountId).catch(() => null);
+    } catch {}
+    await db.delete(payoutAccounts).where(eq(payoutAccounts.id, row.id));
+    res.json({ ok: true });
+  });
+
+  // ─── Stuck-cases dashboard ───────────────────────────────────────
+  // Anything shipped where the payout didn't cleanly land. Includes
+  // skipped (no connected account at ship time) and failed (Stripe
+  // rejected the transfer).
+  app.get("/api/admin/payouts/stuck", requireAdmin, async (_req, res) => {
+    const rows = await db
+      .select({ order: orders, album: albums, customer: customerUsers })
+      .from(orders)
+      .innerJoin(albums, eq(orders.albumId, albums.id))
+      .innerJoin(customerUsers, eq(orders.customerId, customerUsers.id))
+      .where(
+        and(
+          eq(orders.status, "shipped"),
+          or(
+            eq(orders.payoutStatus, "skipped"),
+            eq(orders.payoutStatus, "failed"),
+            isNull(orders.payoutStatus),
+          ),
+        ),
+      )
+      .orderBy(desc(orders.shippedAt));
+    const out = rows.map((r) => ({
+      ...r.order,
+      albumTitle: r.album.title,
+      albumArtist: r.album.artist,
+      customerEmail: r.customer.email,
+      customerName: r.customer.realName ?? r.customer.displayName ?? null,
+    }));
+    res.json(out);
+  });
+
+  // ─── Retry a stuck transfer ──────────────────────────────────────
+  app.post("/api/admin/payouts/orders/:id/retry", requireAdmin, async (req, res) => {
+    const [order] = await db.select().from(orders).where(eq(orders.id, String(req.params.id)));
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.status !== "shipped") return res.status(400).json({ message: "Only shipped orders can be paid out" });
+    if (order.payoutStatus === "transferred") {
+      return res.status(409).json({ message: "Already transferred" });
+    }
+    const result = await attemptTransferForOrder(order);
+    const [refreshed] = await db.select().from(orders).where(eq(orders.id, order.id));
+    res.json({ result, order: refreshed });
+  });
+
+  // ─── Album-level payout overrides ────────────────────────────────
+  // Mirror the EditablePanel `{ field: value }` body shape used elsewhere.
+  const albumOverrideSchema = z.object({
+    payoutFeePctOverride: z.number().int().min(0).max(50).nullable().optional(),
+    payoutCertCentsOverride: z.number().int().min(0).max(10000).nullable().optional(),
+    payoutOwnerKind: z.enum(PAYOUT_OWNER_KINDS).nullable().optional(),
+    payoutOwnerId: z.string().nullable().optional(),
+  });
+  app.put("/api/admin/albums/:id/payout-overrides", requireAdmin, async (req, res) => {
+    const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const parsed = albumOverrideSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid override" });
+    const [row] = await db
+      .update(albums)
+      .set(parsed.data as any)
+      .where(eq(albums.id, album.id))
+      .returning();
+    res.json(row);
+  });
+
+  // ─── Read a single order's payout target preview ─────────────────
+  // Used by the AdminOrders / album-level UI to show "Who gets paid"
+  // before the order ships.
+  app.get("/api/admin/albums/:id/payout-preview", requireAdmin, async (req, res) => {
+    const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const target = await resolvePayoutTarget(album);
+    let ownerName: string | null = null;
+    if (target) {
+      if (target.ownerKind === "person") {
+        const [p] = await db.select({ name: people.name }).from(people).where(eq(people.id, target.ownerId));
+        ownerName = p?.name ?? null;
+      } else {
+        const [l] = await db.select({ name: labels.name }).from(labels).where(eq(labels.id, target.ownerId));
+        ownerName = l?.name ?? null;
+      }
+    }
+    const settings = await getPayoutSettings();
+    res.json({
+      target,
+      ownerName,
+      settings,
+      effective: {
+        platformFeePct: album.payoutFeePctOverride ?? settings.platformFeePct,
+        certCostCents: album.payoutCertCentsOverride ?? settings.certCostCents,
+      },
+      override: {
+        payoutFeePctOverride: album.payoutFeePctOverride,
+        payoutCertCentsOverride: album.payoutCertCentsOverride,
+        payoutOwnerKind: album.payoutOwnerKind,
+        payoutOwnerId: album.payoutOwnerId,
+      },
+    });
+  });
+}
+
+function absoluteOrigin(req: Request): string {
+  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol ?? "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+  return `${proto}://${host}`;
+}

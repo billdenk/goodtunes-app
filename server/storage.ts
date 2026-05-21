@@ -398,7 +398,14 @@ export interface IStorage {
 // client `musicData.ts` because that module pulls Vite-managed `@assets/*`
 // imports that the server can't resolve. The catalog tables for people /
 // instruments / vendors / credits land in the next phase along with the CMS.
-const SEED_ALBUMS: Album[] = [
+// Seed albums predate later schema additions (linerNotes, isExplicit, payout
+// override columns added in task #48). Keep the seed loose and let the DB
+// defaults fill in the rest.
+type SeedAlbum = Omit<
+  Album,
+  "isExplicit" | "linerNotes" | "payoutFeePctOverride" | "payoutCertCentsOverride" | "payoutOwnerKind" | "payoutOwnerId"
+>;
+const SEED_ALBUMS: SeedAlbum[] = [
   { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "LP", description: "A sweeping collection of songs about stillness, change, and the moments between.", labelId: null, isHidden: false, isGoodTunesRelease: true, appleMusicUrl: null, spotifyUrl: null, goodTunesReleaseDate: null, streamingReleaseDate: null, primaryArtistId: null, genre: null },
   { id: "album-2", title: "Guitar as a Voice", artist: "Fernando Perdomo", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png", year: 2024, type: "LP", description: "Instrumental mastery meets emotional storytelling.", labelId: null, isHidden: false, isGoodTunesRelease: true, appleMusicUrl: null, spotifyUrl: null, goodTunesReleaseDate: null, streamingReleaseDate: null, primaryArtistId: null, genre: null },
   { id: "album-3", title: "Love Spell EP", artist: "Whitney Lyman", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500-1.png", year: 2024, type: "EP", description: "Four songs that cast a spell.", labelId: null, isHidden: false, isGoodTunesRelease: true, appleMusicUrl: null, spotifyUrl: null, goodTunesReleaseDate: null, streamingReleaseDate: null, primaryArtistId: null, genre: null },

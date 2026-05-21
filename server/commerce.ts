@@ -721,6 +721,15 @@ export function registerCommerceRoutes(app: Express) {
           if (piId) await handleRefund(piId);
           break;
         }
+        case "account.updated": {
+          // Task #48 — Connect capability flip. The local
+          // payout_accounts row mirrors `payouts_enabled` etc. so the
+          // admin UI doesn't have to round-trip Stripe on every read.
+          const acct = event.data.object as Stripe.Account;
+          const { syncAccountFromStripe } = await import("./payouts");
+          await syncAccountFromStripe(acct);
+          break;
+        }
         default:
           // Ignore everything else.
           break;
@@ -850,7 +859,20 @@ export function registerCommerceRoutes(app: Express) {
       .set({ status: "shipped", shippedAt: new Date() })
       .where(eq(orders.id, o.id))
       .returning();
-    res.json(updated);
+    // ─── Task #48 — auto-transfer to the connected account on ship.
+    // Best-effort: a Stripe failure leaves the order shipped with
+    // payoutStatus = "failed" / "skipped" so the operator can retry
+    // from the stuck-cases dashboard. We never block the ship action
+    // on the payout — physical fulfillment is the source of truth.
+    try {
+      const { attemptTransferForOrder } = await import("./payouts");
+      const result = await attemptTransferForOrder(updated);
+      const [refreshed] = await db.select().from(orders).where(eq(orders.id, updated.id));
+      return res.json({ ...refreshed, payoutResult: result });
+    } catch (e: any) {
+      console.error(`[ship] payout attempt threw for order ${updated.id}`, e?.message);
+      return res.json(updated);
+    }
   });
 }
 
@@ -1007,6 +1029,13 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
   const [order] = await db.select().from(orders).where(eq(orders.stripePaymentIntentId, paymentIntentId));
   if (!order) return;
   if (order.status === "refunded") return; // idempotent
+  // Reverse the Connect transfer BEFORE flipping status so a failed
+  // reversal leaves an audit trail on the still-transferred order.
+  // The reversal helper is itself idempotent (keyed on order id).
+  if (order.payoutStatus === "transferred" && order.payoutTransferId) {
+    const { reverseTransferForOrder } = await import("./payouts");
+    await reverseTransferForOrder(order);
+  }
   await db
     .update(orders)
     .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })

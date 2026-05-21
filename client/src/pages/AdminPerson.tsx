@@ -28,6 +28,7 @@ import {
   type PersonPreviewAlbum,
 } from "@/components/admin/previews/PersonPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -91,13 +92,14 @@ interface LabelLite {
 // even though the discography endpoints under the hood still say
 // "discography" — the rename is UI-only on purpose so the iTunes pull
 // machinery doesn't ripple.
-type Tab = "overview" | "cover" | "releases" | "streaming" | "gear";
+type Tab = "overview" | "cover" | "releases" | "streaming" | "gear" | "payouts";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
   { key: "releases", label: "GoodTunes Releases\u00AE" },
   { key: "streaming", label: "Streaming" },
   { key: "gear", label: "Gear" },
+  { key: "payouts", label: "Payouts" },
 ];
 
 // Track row shape from `/api/people/:id/profile` — used to derive the
@@ -374,6 +376,14 @@ export function AdminPerson() {
         )}
         {tab === "streaming" && <DiscographyPanel person={person} />}
         {tab === "gear" && <GearPanel person={person} />}
+        {tab === "payouts" && (
+          <PayoutAccountPanel
+            ownerKind="person"
+            ownerId={person.id}
+            ownerName={person.name}
+            ownerEmail={(person as any).email ?? null}
+          />
+        )}
       </div>
 
       {/* Destructive confirm sheet — names the person and explains what

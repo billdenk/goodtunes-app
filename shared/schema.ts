@@ -125,6 +125,17 @@ export const albums = pgTable("albums", {
   // record" version: anything the AI couldn't slot into a structured row
   // is still readable here. Surfaced on the album detail page when set.
   linerNotes: text("liner_notes"),
+  // ─── Task #48 — per-album payout override ────────────────────────
+  // When set, this album's orders use these split values instead of
+  // the global payout_settings row. NULL means "inherit the default".
+  // `payoutOwnerKind` + `payoutOwnerId` let an operator route revenue
+  // to a specific People or Label row when the album's primaryArtistId
+  // / labelId isn't who should be paid (e.g. compilations, side
+  // projects). When NULL we fall back to labelId, then primaryArtistId.
+  payoutFeePctOverride: integer("payout_fee_pct_override"),
+  payoutCertCentsOverride: integer("payout_cert_cents_override"),
+  payoutOwnerKind: text("payout_owner_kind"),
+  payoutOwnerId: varchar("payout_owner_id"),
 });
 
 // Bonus content attached to an album. Both tables are intentionally
@@ -760,6 +771,28 @@ export const orders = pgTable("orders", {
   // bought as a gift. Lets the buyer's order list + admin orders view
   // pull the gift status without a separate query.
   giftId: varchar("gift_id"),
+  // ─── Task #48 — Stripe Connect payouts ────────────────────────────
+  // Lifecycle: null → "pending" (paid, awaiting ship) → "transferred"
+  // (ship triggered a Connect Transfer) → "reversed" (refund reversed
+  // the transfer). "skipped" means we shipped but had no connected
+  // account to pay (operator must reconcile manually). "failed" means
+  // we tried the transfer and Stripe rejected it — surfaced in the
+  // stuck-cases dashboard with the error string.
+  payoutStatus: text("payout_status"),
+  payoutTransferId: text("payout_transfer_id"),
+  // Amount transferred to the connected account, in cents. Equals
+  // `totalCents - platformFeeCents - certCostCents` at transfer time.
+  // Snapshotted so a later settings change can't rewrite history.
+  payoutAmountCents: integer("payout_amount_cents"),
+  platformFeeCents: integer("platform_fee_cents"),
+  certCostCents: integer("cert_cost_cents"),
+  // Which connected-account owner received the payout. Mirrors
+  // payout_accounts.ownerKind / ownerId so the admin order row can
+  // deep-link to the recipient even if the album's owner later changes.
+  payoutOwnerKind: text("payout_owner_kind"),
+  payoutOwnerId: varchar("payout_owner_id"),
+  payoutAt: timestamp("payout_at"),
+  payoutError: text("payout_error"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -787,6 +820,45 @@ export const gifts = pgTable("gifts", {
   resendCount: integer("resend_count").notNull().default(0),
   lastSentAt: timestamp("last_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Stripe Connect (Express) account attached to a People row or a
+// Label row. Pair (ownerKind, ownerId) is unique — each artist or
+// label has at most one connected account. Created via
+// POST /api/admin/payouts/accounts (operator-driven; no self-serve
+// artist portal yet). `payoutsEnabled` + `chargesEnabled` mirror
+// the Stripe account capability flags; we refresh them on demand
+// (GET /accounts/:id/refresh) and on the `account.updated` webhook.
+export const payoutAccounts = pgTable(
+  "payout_accounts",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    ownerKind: text("owner_kind").notNull(),
+    ownerId: varchar("owner_id").notNull(),
+    stripeAccountId: text("stripe_account_id").notNull().unique(),
+    country: text("country").notNull().default("US"),
+    email: text("email"),
+    payoutsEnabled: boolean("payouts_enabled").notNull().default(false),
+    chargesEnabled: boolean("charges_enabled").notNull().default(false),
+    detailsSubmitted: boolean("details_submitted").notNull().default(false),
+    requirementsDue: jsonb("requirements_due").$type<string[]>(),
+    disabledReason: text("disabled_reason"),
+    lastSyncedAt: timestamp("last_synced_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    ownerUnique: unique("payout_accounts_owner_unique").on(t.ownerKind, t.ownerId),
+  }),
+);
+
+// Singleton settings row (id = 'default'). Platform fee + per-order
+// certificate cost are global defaults; per-album overrides live on
+// the `albums` table (see payoutFeePctOverride / payoutCertCentsOverride).
+export const payoutSettings = pgTable("payout_settings", {
+  id: varchar("id").primaryKey().default("default"),
+  platformFeePct: integer("platform_fee_pct").notNull().default(10),
+  certCostCents: integer("cert_cost_cents").notNull().default(500),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // One row per line item on an order. `kind` is "format" (the physical SKU
@@ -1118,5 +1190,18 @@ export const insertGiftSchema = createInsertSchema(gifts).omit({
 });
 export type InsertGift = z.infer<typeof insertGiftSchema>;
 export type Gift = typeof gifts.$inferSelect;
+
+// ─── Task #48 — Stripe Connect payouts ──────────────────────────────────
+export const PAYOUT_OWNER_KINDS = ["person", "label"] as const;
+export type PayoutOwnerKind = (typeof PAYOUT_OWNER_KINDS)[number];
+
+export const insertPayoutAccountSchema = createInsertSchema(payoutAccounts)
+  .omit({ id: true, createdAt: true, lastSyncedAt: true })
+  .extend({
+    ownerKind: z.enum(PAYOUT_OWNER_KINDS),
+  });
+export type InsertPayoutAccount = z.infer<typeof insertPayoutAccountSchema>;
+export type PayoutAccount = typeof payoutAccounts.$inferSelect;
+export type PayoutSettings = typeof payoutSettings.$inferSelect;
 
 export type EmailVerification = typeof emailVerifications.$inferSelect;

@@ -28,6 +28,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import {
   LabelPreviewCard,
   type LabelPreviewAlbum,
@@ -73,12 +74,13 @@ interface AlbumLite {
   primaryArtistId: string | null;
 }
 
-type Tab = "overview" | "logo" | "cover" | "releases";
+type Tab = "overview" | "logo" | "cover" | "releases" | "payouts";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "logo", label: "Logo" },
   { key: "cover", label: "Cover" },
   { key: "releases", label: "Releases" },
+  { key: "payouts", label: "Payouts" },
 ];
 
 export function AdminLabel() {
@@ -333,6 +335,14 @@ export function AdminLabel() {
         {tab === "logo" && <LogoPanel label={label} />}
         {tab === "cover" && <CoverPanel label={label} />}
         {tab === "releases" && <ReleasesPanel releases={releases} />}
+        {tab === "payouts" && (
+          <PayoutAccountPanel
+            ownerKind="label"
+            ownerId={label.id}
+            ownerName={label.name}
+            ownerEmail={null}
+          />
+        )}
       </div>
 
       <Dialog

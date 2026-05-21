@@ -8698,5 +8698,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerGiftRoutes } = await import("./gifts");
   registerGiftRoutes(app);
 
+  // ─── Task #48 — Stripe Connect payouts ─────────────────────────
+  const { registerPayoutRoutes } = await import("./payouts");
+  registerPayoutRoutes(app);
+
   return httpServer;
 }

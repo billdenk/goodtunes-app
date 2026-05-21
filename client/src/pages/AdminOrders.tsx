@@ -1,10 +1,20 @@
 // AdminOrders — operator-facing orders list with status filters +
 // shipping action (Task #44, step 11). Admin-only.
+//
+// Task #48 additions:
+// - Per-row payout chip (status + amount) and "Retry payout" button
+//   when status === "failed" / "skipped".
+// - "Stuck payouts" panel at the top of the page (collapsed by default)
+//   driven by GET /api/admin/payouts/stuck — operator sees every shipped
+//   order whose Connect transfer hasn't landed.
+// - Inline settings popover for platformFeePct + certCostCents.
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { AlertTriangle, Settings2, RefreshCw, Loader2 } from "lucide-react";
+import type { PayoutSettings } from "@shared/schema";
 
 type GiftInfo = {
   id: string;
@@ -35,6 +45,11 @@ type AdminOrderRow = {
   shippedAt: string | null;
   refundedAt: string | null;
   createdAt: string;
+  payoutStatus: string | null;
+  payoutAmountCents: number | null;
+  payoutError: string | null;
+  payoutOwnerKind: string | null;
+  payoutOwnerId: string | null;
   items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
   gift: GiftInfo | null;
 };
@@ -52,8 +67,10 @@ const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 export function AdminOrders() {
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
   const { data: orders, isLoading } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/orders"] });
+  const { data: stuck } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/payouts/stuck"] });
 
   const ship = useMutation({
     mutationFn: async (orderId: string) => {
@@ -61,6 +78,7 @@ export function AdminOrders() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payouts/stuck"] });
       toast({ title: "Marked shipped" });
     },
     onError: (e: any) => toast({ title: "Couldn't update", description: e?.message, variant: "destructive" }),
@@ -119,6 +137,17 @@ export function AdminOrders() {
     patchGift.mutate({ orderId: o.id, body: { firstName, lastName, email, phone } });
   }
 
+  const retryPayout = useMutation({
+    mutationFn: async (orderId: string) => apiRequest("POST", `/api/admin/payouts/orders/${orderId}/retry`, {}),
+    onSuccess: (_d, orderId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payouts/stuck"] });
+      toast({ title: `Retried payout for order ${orderId.slice(0, 8)}` });
+    },
+    onError: (e: any) => toast({ title: "Retry failed", description: e?.message, variant: "destructive" }),
+  });
+
+
   const filtered = (orders ?? []).filter((o) => (filter === "all" ? true : o.status === filter));
 
   return (
@@ -129,21 +158,41 @@ export function AdminOrders() {
             <h1 className="text-[22px] font-semibold text-slate-900">Orders</h1>
             <p className="text-slate-500 text-[13px]">Physical fulfillment + refund tracking.</p>
           </div>
-          <div className="flex p-0.5 rounded-md bg-slate-100">
-            {STATUSES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilter(s)}
-                className={`px-3 py-1 rounded text-[12px] font-medium capitalize ${
-                  filter === s ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
-                }`}
-                data-testid={`filter-status-${s}`}
-              >
-                {s}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSettings((v) => !v)}
+              className="h-8 px-3 rounded-md border border-slate-200 bg-white text-slate-700 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
+              data-testid="button-payout-settings"
+            >
+              <Settings2 className="w-3.5 h-3.5" /> Payout settings
+            </button>
+            <div className="flex p-0.5 rounded-md bg-slate-100">
+              {STATUSES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilter(s)}
+                  className={`px-3 py-1 rounded text-[12px] font-medium capitalize ${
+                    filter === s ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                  data-testid={`filter-status-${s}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+
+        {showSettings && <PayoutSettingsPanel onClose={() => setShowSettings(false)} />}
+
+        {stuck && stuck.length > 0 && (
+          <StuckPayoutsPanel
+            rows={stuck}
+            onRetry={(id) => retryPayout.mutate(id)}
+            isRetrying={retryPayout.isPending}
+          />
+        )}
 
         {isLoading && <div className="text-slate-500 text-sm" data-testid="admin-orders-loading">Loading…</div>}
         {!isLoading && filtered.length === 0 && (
@@ -173,6 +222,7 @@ export function AdminOrders() {
                       </span>
                     );
                   })()}
+                  {o.payoutStatus && <PayoutChip status={o.payoutStatus} amountCents={o.payoutAmountCents} />}
                   {o.goodDeedNumber !== null && (
                     <span className="text-slate-400">#{o.goodDeedNumber}</span>
                   )}
@@ -206,6 +256,11 @@ export function AdminOrders() {
                   <div className="text-[11.5px] text-slate-500 mt-1.5 leading-snug">
                     Ship to: {o.shippingName ?? o.customerName ?? "—"},{" "}
                     {[o.shippingAddress.line1, o.shippingAddress.line2, o.shippingAddress.city, o.shippingAddress.state, o.shippingAddress.postalCode, o.shippingAddress.country].filter(Boolean).join(", ")}
+                  </div>
+                )}
+                {o.payoutError && (
+                  <div className="text-[11.5px] text-rose-600 mt-1.5" data-testid={`text-payout-error-${o.id}`}>
+                    Payout error: {o.payoutError}
                   </div>
                 )}
               </div>
@@ -244,11 +299,172 @@ export function AdminOrders() {
                     Change recipient
                   </button>
                 )}
+                {o.status === "shipped" && o.payoutStatus && o.payoutStatus !== "transferred" && (
+                  <button
+                    type="button"
+                    onClick={() => retryPayout.mutate(o.id)}
+                    disabled={retryPayout.isPending}
+                    className="mt-2 px-3 py-1 rounded-md text-[12px] font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 inline-flex items-center gap-1.5"
+                    data-testid={`button-retry-payout-${o.id}`}
+                  >
+                    {retryPayout.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    Retry payout
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
       </div>
     </main>
+  );
+}
+
+function PayoutChip({ status, amountCents }: { status: string; amountCents: number | null }) {
+  const tone =
+    status === "transferred"
+      ? "bg-emerald-50 text-emerald-700"
+      : status === "reversed"
+      ? "bg-slate-100 text-slate-600"
+      : status === "skipped"
+      ? "bg-amber-50 text-amber-700"
+      : status === "failed"
+      ? "bg-rose-50 text-rose-700"
+      : "bg-slate-100 text-slate-600";
+  return (
+    <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${tone}`} data-testid={`payout-chip-${status}`}>
+      payout: {status}{amountCents != null && status === "transferred" ? ` · ${dollars(amountCents)}` : ""}
+    </span>
+  );
+}
+
+function StuckPayoutsPanel({
+  rows,
+  onRetry,
+  isRetrying,
+}: {
+  rows: AdminOrderRow[];
+  onRetry: (id: string) => void;
+  isRetrying: boolean;
+}) {
+  return (
+    <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-4" data-testid="panel-stuck-payouts">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle className="w-4 h-4 text-amber-600" />
+        <h2 className="text-amber-900 text-[13px] font-bold uppercase tracking-wide">
+          Stuck payouts ({rows.length})
+        </h2>
+      </div>
+      <div className="space-y-2">
+        {rows.map((o) => (
+          <div
+            key={o.id}
+            className="rounded-md bg-white border border-amber-100 px-3 py-2 flex items-center gap-3 text-[12.5px]"
+            data-testid={`row-stuck-${o.id}`}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-slate-900 truncate">
+                {o.albumTitle} <span className="text-slate-400">·</span>{" "}
+                <span className="text-slate-600">{o.albumArtist}</span>
+              </div>
+              <div className="text-slate-500 text-[11.5px]">
+                Order {o.id.slice(0, 8)} · shipped {o.shippedAt ? new Date(o.shippedAt).toLocaleDateString() : "—"} ·{" "}
+                <span className="text-amber-700 font-medium">{o.payoutStatus ?? "no-status"}</span>
+                {o.payoutError && <span className="text-rose-600"> — {o.payoutError}</span>}
+              </div>
+            </div>
+            <div className="font-semibold text-slate-900">{dollars(o.totalCents)}</div>
+            <button
+              type="button"
+              onClick={() => onRetry(o.id)}
+              disabled={isRetrying}
+              className="h-8 px-3 rounded-md bg-amber-500 text-white text-[12px] font-semibold hover:bg-amber-600 disabled:opacity-60 inline-flex items-center gap-1.5"
+              data-testid={`button-retry-stuck-${o.id}`}
+            >
+              {isRetrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              Retry
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast();
+  const { data: settings, isLoading } = useQuery<PayoutSettings>({ queryKey: ["/api/admin/payout-settings"] });
+  const [feePct, setFeePct] = useState<string>("");
+  const [certCents, setCertCents] = useState<string>("");
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const body: any = {};
+      if (feePct !== "") body.platformFeePct = Number(feePct);
+      if (certCents !== "") body.certCostCents = Number(certCents);
+      return apiRequest("PUT", "/api/admin/payout-settings", body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-settings"] });
+      toast({ title: "Payout settings saved" });
+      onClose();
+    },
+    onError: (e: any) => toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
+
+  const currentFee = settings?.platformFeePct ?? 10;
+  const currentCert = settings?.certCostCents ?? 500;
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4 mb-4 space-y-3" data-testid="panel-payout-settings">
+      <div className="flex items-center justify-between">
+        <h2 className="text-slate-900 text-[13px] font-bold">Payout settings</h2>
+        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 text-[12px]">Close</button>
+      </div>
+      {isLoading ? (
+        <div className="text-slate-400 text-[12px]">Loading…</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="block">
+            <span className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">Platform fee %</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              placeholder={String(currentFee)}
+              value={feePct}
+              onChange={(e) => setFeePct(e.target.value)}
+              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+              data-testid="input-platform-fee-pct"
+            />
+            <p className="text-slate-400 text-[11px] mt-1">Currently {currentFee}%. Applied off the top of every paid order.</p>
+          </label>
+          <label className="block">
+            <span className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">Cert cost (cents)</span>
+            <input
+              type="number"
+              min={0}
+              placeholder={String(currentCert)}
+              value={certCents}
+              onChange={(e) => setCertCents(e.target.value)}
+              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+              data-testid="input-cert-cost-cents"
+            />
+            <p className="text-slate-400 text-[11px] mt-1">Currently {dollars(currentCert)}. Subtracted before the artist split when a signed cert is in the order.</p>
+          </label>
+        </div>
+      )}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => save.mutate()}
+          disabled={save.isPending || (feePct === "" && certCents === "")}
+          className="h-9 px-4 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60"
+          data-testid="button-save-payout-settings"
+        >
+          {save.isPending ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </section>
   );
 }
