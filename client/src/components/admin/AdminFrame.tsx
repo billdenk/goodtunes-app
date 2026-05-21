@@ -110,7 +110,7 @@ export function AdminFrame({
 
   return (
     <div className="h-screen bg-slate-50 font-sans antialiased flex">
-      <aside className="w-[220px] flex-shrink-0 border-r border-slate-200 bg-white hidden md:flex md:flex-col">
+      <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
         {/* Logo sits at the top of the sidebar column so the right
             preview pane + its vertical divider can reach the very top
             of the viewport. The border-b extends the top-of-page
@@ -125,7 +125,7 @@ export function AdminFrame({
             <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
           </Link>
         </div>
-        <nav className="px-2 pt-2 space-y-0.5" data-testid="nav-admin-entities">
+        <nav className="flex-1 px-2 pt-2 space-y-0.5 border-r border-slate-200" data-testid="nav-admin-entities">
             <SidebarLink
               icon={Disc3}
               label="Albums"
