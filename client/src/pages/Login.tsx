@@ -276,6 +276,26 @@ export function Login() {
       setAdminPhase(next === "enroll" ? "enroll" : "totp");
       window.history.replaceState({}, "", loginPath);
     }
+    // OAuth round-trip for an email-OTP admin: the callback set
+    // `pendingTotpUserId` on the session and bounced back with
+    // ?oauth=…&next=emailOtp. Drop into the email-code phase and
+    // immediately ask the server to issue a code so the masked email +
+    // dev-only code render without the admin having to click "resend".
+    if (oauth && next === "emailOtp") {
+      setAdminPhase("emailOtp");
+      window.history.replaceState({}, "", loginPath);
+      (async () => {
+        try {
+          const res = await apiRequest("POST", "/api/auth/email-otp/start");
+          const j = await res.json();
+          setEmailOtpInfo({ email: j.email ?? "", devCode: j.devCode });
+          setTotpAlsoEnrolled(!!j.totpEnrolled);
+          setResendCooldown(60);
+        } catch (e: any) {
+          setEmailOtpError(e?.message ?? "Couldn't send a code. Try again.");
+        }
+      })();
+    }
     if (window.location.hash.startsWith("#token=")) {
       const token = decodeURIComponent(window.location.hash.slice("#token=".length));
       setAuthToken(token);

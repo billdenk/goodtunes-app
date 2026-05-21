@@ -794,9 +794,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (process.env.NODE_ENV !== "production") {
       console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
     }
+    // `totpEnrolled` lets the login UI render the "Use authenticator
+    // instead" fallback link when the OAuth-emailOtp branch boots up
+    // and the session-restored response from /api/login isn't around.
+    const totp = await storage.getAdminTotp(userId);
     return res.json({
       ok: true,
       email: maskEmail(user.email),
+      totpEnrolled: !!totp,
       ...(process.env.NODE_ENV !== "production" ? { devCode: code } : {}),
     });
   });
@@ -858,8 +863,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
-  app.post("/api/auth/factor-preference", requireAuth, async (req, res) => {
-    if (req.session.kind !== "admin") return res.status(403).json({ message: "Admin only" });
+  // Mutating the second-factor preference is a security-sensitive write.
+  // Session cookies are `sameSite: "none"` for the OAuth pop-up flow, so
+  // a cross-site POST could otherwise ride a logged-in admin's session
+  // and silently downgrade their 2FA. requireAdminBearer forces an
+  // `Authorization: Bearer …` header that lives in localStorage and is
+  // unreadable cross-origin — matches the hardening on the rest of
+  // /api/admin/*.
+  app.post("/api/auth/factor-preference", requireAdminBearer, async (req, res) => {
     const factor = String(req.body?.factor ?? "");
     if (factor !== "email" && factor !== "totp") return res.status(400).json({ message: "factor must be 'email' or 'totp'" });
     if (factor === "totp") {
@@ -868,6 +879,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     await storage.setUserFactorPref(req.session.userId!, factor as "email" | "totp");
     return res.json({ ok: true, factorPref: factor });
+  });
+
+  // Regenerate recovery codes for an already-enrolled admin. Returns
+  // the fresh plaintext codes once — they're shown to the admin and
+  // never retrievable again. Bearer-only to dodge the same CSRF risk
+  // as factor-preference. Requires an existing TOTP enrollment; if the
+  // admin hasn't set up an authenticator yet, the enroll flow already
+  // mints the initial set.
+  app.post("/api/auth/totp/recovery-codes/regenerate", requireAdminBearer, async (req, res) => {
+    const userId = req.session.userId!;
+    const totp = await storage.getAdminTotp(userId);
+    if (!totp) return res.status(400).json({ message: "Set up an authenticator app first." });
+    const codes = generateRecoveryCodes(10);
+    const hashes = await Promise.all(codes.map(hashRecoveryCode));
+    await storage.setAdminTotp(userId, totp.secretEncrypted, hashes);
+    return res.json({ recoveryCodes: codes });
   });
 
   // ─── Linked identities (profile) ──────────────────────────────────

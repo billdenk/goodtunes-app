@@ -29,6 +29,9 @@ export default function AdminSecurity() {
   const [enrollData, setEnrollData] = useState<EnrollData | null>(null);
   const [enrollCode, setEnrollCode] = useState("");
   const [enrollError, setEnrollError] = useState<string | null>(null);
+  // Codes returned by the regenerate flow. Held in state so the admin
+  // can copy them; the server only returns them once.
+  const [regeneratedCodes, setRegeneratedCodes] = useState<string[] | null>(null);
 
   const switchPref = useMutation({
     mutationFn: async (factor: "email" | "totp") => {
@@ -49,6 +52,19 @@ export default function AdminSecurity() {
     },
     onSuccess: (j) => setEnrollData({ qr: j.qr, secret: j.secret, recoveryCodes: j.recoveryCodes }),
     onError: (e: any) => toast({ title: e?.message ?? "Couldn't start enrollment", variant: "destructive" }),
+  });
+
+  const regenerate = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/totp/recovery-codes/regenerate");
+      return res.json();
+    },
+    onSuccess: (j) => {
+      setRegeneratedCodes(j.recoveryCodes);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/factor-preference"] });
+      toast({ title: "New recovery codes generated", description: "Old codes no longer work." });
+    },
+    onError: (e: any) => toast({ title: e?.message ?? "Couldn't regenerate codes", variant: "destructive" }),
   });
 
   const confirmEnroll = useMutation({
@@ -119,6 +135,42 @@ export default function AdminSecurity() {
           </label>
         </div>
       </Card>
+
+      {data.totpEnrolled && (
+        <Card className="p-5 space-y-3" data-testid="card-recovery-codes">
+          <h2 className="text-lg font-semibold">Recovery codes</h2>
+          <p className="text-sm text-slate-500">
+            {data.recoveryCodesRemaining} code{data.recoveryCodesRemaining === 1 ? "" : "s"} remaining. Regenerate if you've lost the printed list or used most of them — old codes stop working immediately.
+          </p>
+          {!regeneratedCodes ? (
+            <Button
+              onClick={() => regenerate.mutate()}
+              disabled={regenerate.isPending}
+              variant="outline"
+              data-testid="button-regenerate-recovery-codes"
+            >
+              {regenerate.isPending ? "Generating…" : "Regenerate recovery codes"}
+            </Button>
+          ) : (
+            <div className="p-3 bg-slate-50 rounded border">
+              <p className="text-xs text-slate-500 mb-2">Save these — you won't see them again.</p>
+              <div className="grid grid-cols-2 gap-1.5 font-mono text-[13px]">
+                {regeneratedCodes.map((c) => (
+                  <div key={c} className="px-2 py-1 bg-white border border-slate-200 rounded" data-testid={`text-new-recovery-${c}`}>{c}</div>
+                ))}
+              </div>
+              <Button
+                onClick={() => setRegeneratedCodes(null)}
+                variant="ghost"
+                className="mt-3"
+                data-testid="button-dismiss-recovery-codes"
+              >
+                I've saved them
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
 
       {!data.totpEnrolled && (
         <Card className="p-5 space-y-3">
