@@ -7,6 +7,8 @@ import {
   Guitar,
   Store,
   Tag,
+  Factory,
+  Truck,
   ArrowLeft,
   PanelRightClose,
   PanelRightOpen,
@@ -26,7 +28,14 @@ const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
  * is reached only via per-page "Open in classic admin" jump-offs that
  * set their own focus keys.
  */
-export type EntityKey = "albums" | "people" | "gear" | "vendors" | "labels";
+export type EntityKey =
+  | "albums"
+  | "people"
+  | "gear"
+  | "vendors"
+  | "labels"
+  | "manufacturers"
+  | "fulfillment";
 
 export function AdminFrame({
   active,
@@ -87,6 +96,17 @@ export function AdminFrame({
     queryKey: ["/api/labels"],
     enabled: !!user?.isAdmin,
   });
+  // Task #69 — pressing plants + fulfillment warehouses live in the
+  // same admin shell, gated to super_admin today + visible to their
+  // own role-scope rows when role-gating ships.
+  const { data: manufacturers = [] } = useQuery<unknown[]>({
+    queryKey: ["/api/manufacturers"],
+    enabled: !!user?.isAdmin,
+  });
+  const { data: fulfillment = [] } = useQuery<unknown[]>({
+    queryKey: ["/api/fulfillment-partners"],
+    enabled: !!user?.isAdmin,
+  });
 
   return (
     <div className="h-screen bg-slate-50 font-sans antialiased flex">
@@ -145,6 +165,22 @@ export function AdminFrame({
               active={active === "labels"}
               onClick={() => navigate("/admin/labels")}
               testId="nav-labels"
+            />
+            <SidebarLink
+              icon={Factory}
+              label="Manufacturers"
+              count={manufacturers.length}
+              active={active === "manufacturers"}
+              onClick={() => navigate("/admin/manufacturers")}
+              testId="nav-manufacturers"
+            />
+            <SidebarLink
+              icon={Truck}
+              label="Fulfillment"
+              count={fulfillment.length}
+              active={active === "fulfillment"}
+              onClick={() => navigate("/admin/fulfillment-partners")}
+              testId="nav-fulfillment"
             />
           </nav>
         </aside>

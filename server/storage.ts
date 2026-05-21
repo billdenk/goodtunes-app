@@ -62,6 +62,18 @@ import {
   instrumentVendors,
   vendors,
   labels,
+  manufacturers,
+  fulfillmentPartners,
+  rfqs,
+  rfqReplies,
+  type Manufacturer,
+  type InsertManufacturer,
+  type FulfillmentPartner,
+  type InsertFulfillmentPartner,
+  type Rfq,
+  type InsertRfq,
+  type RfqReply,
+  type InsertRfqReply,
   trackWriters,
   trackPerformers,
   creditRoles,
@@ -392,6 +404,32 @@ export interface IStorage {
   // Job-run audit log (Dropbox imports, GoodSync, etc.).
   recordJobRun(data: InsertJobRun): Promise<JobRun>;
   listJobRuns(opts?: { limit?: number; albumId?: string; jobType?: string }): Promise<JobRun[]>;
+
+  // Task #69 — Manufacturer + fulfillment partner entity CRUD. Mirrors
+  // the Label entity shape (one row per partner, edit propagates).
+  getManufacturers(): Promise<Manufacturer[]>;
+  getManufacturerById(id: string): Promise<Manufacturer | undefined>;
+  createManufacturer(data: InsertManufacturer & { id?: string }): Promise<Manufacturer>;
+  updateManufacturer(id: string, data: Partial<Manufacturer>): Promise<Manufacturer | undefined>;
+  deleteManufacturer(id: string): Promise<void>;
+
+  getFulfillmentPartners(): Promise<FulfillmentPartner[]>;
+  getFulfillmentPartnerById(id: string): Promise<FulfillmentPartner | undefined>;
+  createFulfillmentPartner(data: InsertFulfillmentPartner & { id?: string }): Promise<FulfillmentPartner>;
+  updateFulfillmentPartner(id: string, data: Partial<FulfillmentPartner>): Promise<FulfillmentPartner | undefined>;
+  deleteFulfillmentPartner(id: string): Promise<void>;
+
+  // RFQ flow — basic data layer. UI for the comparison + accept flow
+  // lands in a follow-up; today the routes expose CRUD so plants can
+  // submit quotes via /admin/rfqs even before the polished compare
+  // table ships.
+  listRfqs(opts?: { albumId?: string }): Promise<Rfq[]>;
+  getRfqById(id: string): Promise<Rfq | undefined>;
+  createRfq(data: InsertRfq & { createdByUserId: string; manufacturerIds: string[] }): Promise<Rfq>;
+  listRfqReplies(rfqId: string): Promise<RfqReply[]>;
+  listRfqRepliesForManufacturer(manufacturerId: string): Promise<RfqReply[]>;
+  upsertRfqReply(rfqId: string, manufacturerId: string, patch: Partial<RfqReply>): Promise<RfqReply>;
+  acceptRfqReply(rfqId: string, replyId: string): Promise<Rfq | undefined>;
 }
 
 // Seed catalog (albums + songs). Kept inline rather than imported from the
@@ -1763,6 +1801,147 @@ export class DbStorage implements IStorage {
     let q = db.select().from(jobRuns).$dynamic();
     if (conds.length) q = q.where(conds.length === 1 ? conds[0] : and(...conds));
     return q.orderBy(desc(jobRuns.finishedAt)).limit(opts?.limit ?? 50);
+  }
+
+  // ----- Manufacturer ENTITY CRUD (Task #69) --------------------------
+  async getManufacturers(): Promise<Manufacturer[]> {
+    return await db.select().from(manufacturers).orderBy(asc(manufacturers.name));
+  }
+  async getManufacturerById(id: string): Promise<Manufacturer | undefined> {
+    const [m] = await db.select().from(manufacturers).where(eq(manufacturers.id, id));
+    return m;
+  }
+  async createManufacturer(data: InsertManufacturer & { id?: string }): Promise<Manufacturer> {
+    const [m] = await db.insert(manufacturers).values(data as any).returning();
+    return m;
+  }
+  async updateManufacturer(id: string, data: Partial<Manufacturer>): Promise<Manufacturer | undefined> {
+    const { id: _i, createdAt: _c, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return this.getManufacturerById(id);
+    const [m] = await db.update(manufacturers).set(rest).where(eq(manufacturers.id, id)).returning();
+    return m;
+  }
+  async deleteManufacturer(id: string): Promise<void> {
+    await db.delete(manufacturers).where(eq(manufacturers.id, id));
+  }
+
+  // ----- Fulfillment partner ENTITY CRUD (Task #69) -------------------
+  async getFulfillmentPartners(): Promise<FulfillmentPartner[]> {
+    return await db.select().from(fulfillmentPartners).orderBy(asc(fulfillmentPartners.name));
+  }
+  async getFulfillmentPartnerById(id: string): Promise<FulfillmentPartner | undefined> {
+    const [f] = await db.select().from(fulfillmentPartners).where(eq(fulfillmentPartners.id, id));
+    return f;
+  }
+  async createFulfillmentPartner(data: InsertFulfillmentPartner & { id?: string }): Promise<FulfillmentPartner> {
+    const [f] = await db.insert(fulfillmentPartners).values(data as any).returning();
+    return f;
+  }
+  async updateFulfillmentPartner(id: string, data: Partial<FulfillmentPartner>): Promise<FulfillmentPartner | undefined> {
+    const { id: _i, createdAt: _c, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return this.getFulfillmentPartnerById(id);
+    const [f] = await db.update(fulfillmentPartners).set(rest).where(eq(fulfillmentPartners.id, id)).returning();
+    return f;
+  }
+  async deleteFulfillmentPartner(id: string): Promise<void> {
+    await db.delete(fulfillmentPartners).where(eq(fulfillmentPartners.id, id));
+  }
+
+  // ----- RFQ flow (Task #69) ------------------------------------------
+  async listRfqs(opts?: { albumId?: string }): Promise<Rfq[]> {
+    let q = db.select().from(rfqs).$dynamic();
+    if (opts?.albumId) q = q.where(eq(rfqs.albumId, opts.albumId));
+    return q.orderBy(desc(rfqs.createdAt));
+  }
+  async getRfqById(id: string): Promise<Rfq | undefined> {
+    const [r] = await db.select().from(rfqs).where(eq(rfqs.id, id));
+    return r;
+  }
+  async createRfq(
+    data: InsertRfq & { createdByUserId: string; manufacturerIds: string[] },
+  ): Promise<Rfq> {
+    const { manufacturerIds, ...rfqData } = data;
+    const [r] = await db.insert(rfqs).values(rfqData as any).returning();
+    if (manufacturerIds.length) {
+      await db
+        .insert(rfqReplies)
+        .values(
+          manufacturerIds.map((mid) => ({
+            rfqId: r.id,
+            manufacturerId: mid,
+            status: "invited" as const,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+    return r;
+  }
+  async listRfqReplies(rfqId: string): Promise<RfqReply[]> {
+    return await db
+      .select()
+      .from(rfqReplies)
+      .where(eq(rfqReplies.rfqId, rfqId))
+      .orderBy(asc(rfqReplies.createdAt));
+  }
+  async listRfqRepliesForManufacturer(manufacturerId: string): Promise<RfqReply[]> {
+    return await db
+      .select()
+      .from(rfqReplies)
+      .where(eq(rfqReplies.manufacturerId, manufacturerId))
+      .orderBy(desc(rfqReplies.createdAt));
+  }
+  async upsertRfqReply(
+    rfqId: string,
+    manufacturerId: string,
+    patch: Partial<RfqReply>,
+  ): Promise<RfqReply> {
+    const existing = await db
+      .select()
+      .from(rfqReplies)
+      .where(
+        and(eq(rfqReplies.rfqId, rfqId), eq(rfqReplies.manufacturerId, manufacturerId)),
+      );
+    if (existing.length) {
+      const { id: _i, createdAt: _c, ...rest } = patch as any;
+      const [r] = await db
+        .update(rfqReplies)
+        .set({ ...rest, repliedAt: rest.repliedAt ?? new Date() })
+        .where(eq(rfqReplies.id, existing[0].id))
+        .returning();
+      return r;
+    }
+    const [r] = await db
+      .insert(rfqReplies)
+      .values({ rfqId, manufacturerId, ...(patch as any), repliedAt: new Date() })
+      .returning();
+    return r;
+  }
+  async acceptRfqReply(rfqId: string, replyId: string): Promise<Rfq | undefined> {
+    const [winner] = await db.select().from(rfqReplies).where(eq(rfqReplies.id, replyId));
+    if (!winner || winner.rfqId !== rfqId) return undefined;
+    await db
+      .update(rfqReplies)
+      .set({ status: "won" })
+      .where(eq(rfqReplies.id, replyId));
+    // Every other invited/quoted reply on this RFQ becomes "declined".
+    const others = await db
+      .select()
+      .from(rfqReplies)
+      .where(eq(rfqReplies.rfqId, rfqId));
+    for (const o of others) {
+      if (o.id !== replyId && o.status !== "declined") {
+        await db
+          .update(rfqReplies)
+          .set({ status: "declined" })
+          .where(eq(rfqReplies.id, o.id));
+      }
+    }
+    const [r] = await db
+      .update(rfqs)
+      .set({ status: "awarded", acceptedReplyId: replyId, awardedAt: new Date() })
+      .where(eq(rfqs.id, rfqId))
+      .returning();
+    return r;
   }
 }
 

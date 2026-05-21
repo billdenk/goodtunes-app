@@ -7719,6 +7719,212 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // ─── Task #69 — Manufacturer & fulfillment partner CRUD + RFQ ──────
+  // Both partner types follow the labels CRUD shape. RFQ endpoints are
+  // intentionally thin — the polished compare/accept UI lands as a
+  // follow-up. Today they expose the data layer so quotes can flow.
+  const normDomain = (d: unknown) =>
+    d ? String(d).toLowerCase().replace(/^www\./, "") : null;
+  const strOrNull = (v: unknown) => (v == null ? null : String(v));
+  // Coerce a body field to a finite integer or null. Returns the
+  // sentinel `INVALID` when the caller passed a non-numeric value so
+  // the route can respond with a clean 400 instead of crashing on a
+  // NaN db insert.
+  const INVALID = Symbol("invalid");
+  const intOrNull = (v: unknown): number | null | typeof INVALID => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : INVALID;
+  };
+  const reqPosInt = (v: unknown): number | typeof INVALID => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : INVALID;
+  };
+
+  app.get("/api/manufacturers", async (_req, res) => {
+    return res.json(await storage.getManufacturers());
+  });
+  app.get("/api/manufacturers/:id", async (req, res) => {
+    const m = await storage.getManufacturerById(String(req.params.id));
+    if (!m) return res.status(404).json({ message: "Manufacturer not found" });
+    return res.json(m);
+  });
+  app.post("/api/admin/manufacturers", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    if (!b.name) return res.status(400).json({ message: "name is required" });
+    const ta = intOrNull(b.turnaroundDays);
+    if (ta === INVALID) return res.status(400).json({ message: "turnaroundDays must be a number" });
+    const m = await storage.createManufacturer({
+      name: String(b.name),
+      domain: normDomain(b.domain),
+      logoUrl: strOrNull(b.logoUrl),
+      coverUrl: strOrNull(b.coverUrl),
+      bio: strOrNull(b.bio),
+      location: strOrNull(b.location),
+      websiteUrl: strOrNull(b.websiteUrl),
+      contactEmail: strOrNull(b.contactEmail),
+      contactPhone: strOrNull(b.contactPhone),
+      turnaroundDays: ta,
+      specialties: Array.isArray(b.specialties)
+        ? b.specialties.map((s: unknown) => String(s)).filter(Boolean)
+        : [],
+      defaultFulfillmentPartnerId: strOrNull(b.defaultFulfillmentPartnerId),
+    });
+    return res.status(201).json(m);
+  });
+  app.put("/api/admin/manufacturers/:id", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    const u: any = {};
+    if (b.name !== undefined) u.name = String(b.name);
+    if (b.domain !== undefined) u.domain = normDomain(b.domain);
+    if (b.logoUrl !== undefined) u.logoUrl = strOrNull(b.logoUrl);
+    if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
+    if (b.bio !== undefined) u.bio = strOrNull(b.bio);
+    if (b.location !== undefined) u.location = strOrNull(b.location);
+    if (b.websiteUrl !== undefined) u.websiteUrl = strOrNull(b.websiteUrl);
+    if (b.contactEmail !== undefined) u.contactEmail = strOrNull(b.contactEmail);
+    if (b.contactPhone !== undefined) u.contactPhone = strOrNull(b.contactPhone);
+    if (b.turnaroundDays !== undefined) {
+      const ta = intOrNull(b.turnaroundDays);
+      if (ta === INVALID) return res.status(400).json({ message: "turnaroundDays must be a number" });
+      u.turnaroundDays = ta;
+    }
+    if (b.specialties !== undefined) {
+      u.specialties = Array.isArray(b.specialties)
+        ? b.specialties.map((s: unknown) => String(s)).filter(Boolean)
+        : [];
+    }
+    if (b.defaultFulfillmentPartnerId !== undefined) {
+      u.defaultFulfillmentPartnerId = strOrNull(b.defaultFulfillmentPartnerId);
+    }
+    const m = await storage.updateManufacturer(String(req.params.id), u);
+    if (!m) return res.status(404).json({ message: "Manufacturer not found" });
+    return res.json(m);
+  });
+  app.delete("/api/admin/manufacturers/:id", requireAdmin, async (req, res) => {
+    await storage.deleteManufacturer(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  app.get("/api/fulfillment-partners", async (_req, res) => {
+    return res.json(await storage.getFulfillmentPartners());
+  });
+  app.get("/api/fulfillment-partners/:id", async (req, res) => {
+    const f = await storage.getFulfillmentPartnerById(String(req.params.id));
+    if (!f) return res.status(404).json({ message: "Fulfillment partner not found" });
+    return res.json(f);
+  });
+  app.post("/api/admin/fulfillment-partners", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    if (!b.name) return res.status(400).json({ message: "name is required" });
+    const f = await storage.createFulfillmentPartner({
+      name: String(b.name),
+      domain: normDomain(b.domain),
+      logoUrl: strOrNull(b.logoUrl),
+      coverUrl: strOrNull(b.coverUrl),
+      bio: strOrNull(b.bio),
+      location: strOrNull(b.location),
+      websiteUrl: strOrNull(b.websiteUrl),
+      contactEmail: strOrNull(b.contactEmail),
+      contactPhone: strOrNull(b.contactPhone),
+      shippingAddress: strOrNull(b.shippingAddress),
+    });
+    return res.status(201).json(f);
+  });
+  app.put("/api/admin/fulfillment-partners/:id", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    const u: any = {};
+    if (b.name !== undefined) u.name = String(b.name);
+    if (b.domain !== undefined) u.domain = normDomain(b.domain);
+    if (b.logoUrl !== undefined) u.logoUrl = strOrNull(b.logoUrl);
+    if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
+    if (b.bio !== undefined) u.bio = strOrNull(b.bio);
+    if (b.location !== undefined) u.location = strOrNull(b.location);
+    if (b.websiteUrl !== undefined) u.websiteUrl = strOrNull(b.websiteUrl);
+    if (b.contactEmail !== undefined) u.contactEmail = strOrNull(b.contactEmail);
+    if (b.contactPhone !== undefined) u.contactPhone = strOrNull(b.contactPhone);
+    if (b.shippingAddress !== undefined) u.shippingAddress = strOrNull(b.shippingAddress);
+    const f = await storage.updateFulfillmentPartner(String(req.params.id), u);
+    if (!f) return res.status(404).json({ message: "Fulfillment partner not found" });
+    return res.json(f);
+  });
+  app.delete("/api/admin/fulfillment-partners/:id", requireAdmin, async (req, res) => {
+    await storage.deleteFulfillmentPartner(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  // RFQ (Request For Quote) — data layer. The compare-and-accept UI
+  // lands in a follow-up; until then, the admin can already broadcast
+  // a quote request and plants can reply via PUT below.
+  app.get("/api/admin/rfqs", requireAdmin, async (req, res) => {
+    const albumId = req.query.albumId ? String(req.query.albumId) : undefined;
+    const list = await storage.listRfqs(albumId ? { albumId } : undefined);
+    return res.json(list);
+  });
+  app.get("/api/admin/rfqs/:id", requireAdmin, async (req, res) => {
+    const r = await storage.getRfqById(String(req.params.id));
+    if (!r) return res.status(404).json({ message: "RFQ not found" });
+    const replies = await storage.listRfqReplies(r.id);
+    return res.json({ ...r, replies });
+  });
+  app.post("/api/admin/rfqs", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    if (!b.albumId) return res.status(400).json({ message: "albumId is required" });
+    const qty = reqPosInt(b.quantity);
+    if (qty === INVALID) {
+      return res.status(400).json({ message: "quantity must be a positive integer" });
+    }
+    if (!b.format) return res.status(400).json({ message: "format is required" });
+    const manufacturerIds = Array.isArray(b.manufacturerIds)
+      ? b.manufacturerIds.map((m: unknown) => String(m))
+      : [];
+    if (manufacturerIds.length === 0) {
+      return res.status(400).json({ message: "Invite at least one manufacturer" });
+    }
+    const r = await storage.createRfq({
+      albumId: String(b.albumId),
+      quantity: qty,
+      format: String(b.format),
+      notes: strOrNull(b.notes),
+      desiredCompletionDate: strOrNull(b.desiredCompletionDate),
+      createdByUserId: req.session.userId!,
+      manufacturerIds,
+    });
+    return res.status(201).json(r);
+  });
+  // Plant-side reply. Today gated to requireAdmin (Bill can submit on
+  // behalf of a plant while we onboard them). Once the manufacturer
+  // role middleware ships, this swaps to requireRole("manufacturer")
+  // + scope check against rfqReplies.manufacturerId.
+  app.put("/api/admin/rfqs/:id/replies/:manufacturerId", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    const patch: any = { status: "quoted" };
+    for (const k of ["unitPriceCents", "setupFeeCents", "leadTimeDays"] as const) {
+      if (b[k] !== undefined) {
+        const n = intOrNull(b[k]);
+        if (n === INVALID) {
+          return res.status(400).json({ message: `${k} must be a number` });
+        }
+        patch[k] = n;
+      }
+    }
+    if (b.notes !== undefined) patch.notes = strOrNull(b.notes);
+    if (b.status !== undefined) patch.status = String(b.status);
+    const reply = await storage.upsertRfqReply(
+      String(req.params.id),
+      String(req.params.manufacturerId),
+      patch,
+    );
+    return res.json(reply);
+  });
+  app.post("/api/admin/rfqs/:id/accept", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    if (!b.replyId) return res.status(400).json({ message: "replyId is required" });
+    const r = await storage.acceptRfqReply(String(req.params.id), String(b.replyId));
+    if (!r) return res.status(404).json({ message: "Reply not found on this RFQ" });
+    return res.json(r);
+  });
+
   // Label page scraper. Paste the label's own website URL and we pull
   // og:title (name), og:description (bio), and the best square logo we
   // can find — preferring apple-touch-icon (usually a clean 180×180+

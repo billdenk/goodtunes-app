@@ -30,6 +30,10 @@ import { AdminVendors } from "@/pages/AdminVendors";
 import { AdminVendor } from "@/pages/AdminVendor";
 import { AdminLabels } from "@/pages/AdminLabels";
 import { AdminLabel } from "@/pages/AdminLabel";
+import { AdminManufacturers } from "@/pages/AdminManufacturers";
+import { AdminManufacturer } from "@/pages/AdminManufacturer";
+import { AdminFulfillmentPartners } from "@/pages/AdminFulfillmentPartners";
+import { AdminFulfillmentPartner } from "@/pages/AdminFulfillmentPartner";
 import { Welcome } from "@/pages/Welcome";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
@@ -208,6 +212,18 @@ function Router() {
         </Route>
         <Route path="/admin/labels">
           <ProtectedRoute component={AdminLabels} />
+        </Route>
+        <Route path="/admin/manufacturers/:id">
+          <ProtectedRoute component={AdminManufacturer} />
+        </Route>
+        <Route path="/admin/manufacturers">
+          <ProtectedRoute component={AdminManufacturers} />
+        </Route>
+        <Route path="/admin/fulfillment-partners/:id">
+          <ProtectedRoute component={AdminFulfillmentPartner} />
+        </Route>
+        <Route path="/admin/fulfillment-partners">
+          <ProtectedRoute component={AdminFulfillmentPartners} />
         </Route>
         {/* Bare /admin used to render the legacy 3-column monolith. We now
             redirect straight into the new Albums index so anyone who lands

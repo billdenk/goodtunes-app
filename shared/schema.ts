@@ -1350,3 +1350,179 @@ export type InsertShopifyProductMapping = z.infer<typeof insertShopifyProductMap
 export type ShopifyProductMapping = typeof shopifyProductMappings.$inferSelect;
 
 export type ShopifyRedemptionCode = typeof shopifyRedemptionCodes.$inferSelect;
+
+// ─── Task #69 — Manufacturer & fulfillment partner roles + RFQ ──────────
+// Two new partner entities, both first-class in the single admin shell:
+//
+//   manufacturers          — vinyl/CD/cassette pressing plants. Bid on
+//                            RFQs from labels/artists, then receive
+//                            masters + artwork once awarded.
+//   fulfillment_partners   — warehouses that take finished units and
+//                            ship them to fans. Each manufacturer
+//                            optionally points at a default fulfillment
+//                            partner (their preferred shipper).
+//
+// Both reuse the labels-style profile shape (name/contact/logo/cover/
+// location/website) — we explicitly chose NOT to overload the existing
+// Vendors table here. Vendors is for affiliate-linked instrument shops
+// (Reverb, Carter, etc.); it has no concept of turnaround days,
+// specialties, or fulfillment FK. Conflating the two would force every
+// vendor read path to filter on a `kind` column and would muddy fan-side
+// surfaces that should never see B2B operations data.
+export const manufacturers = pgTable("manufacturers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  domain: text("domain").unique(),
+  logoUrl: text("logo_url"),
+  coverUrl: text("cover_url"),
+  bio: text("bio"),
+  location: text("location"),
+  websiteUrl: text("website_url"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  // Typical lead-time the plant quotes for a standard 12" LP press run,
+  // in calendar days. Admin-entered; surfaces on the RFQ comparison
+  // table so the operator can sort by turnaround. Nullable while the
+  // record is still being onboarded.
+  turnaroundDays: integer("turnaround_days"),
+  // Free-text array of capabilities this plant handles natively. We
+  // keep it loose-text (not a closed enum) so Bill can write "180g
+  // black", "splatter / picture disc", "lathe-cut", "Direct Metal
+  // Mastering" without a schema migration each time. Surfaces as chips
+  // on the manufacturer card + filters the RFQ broadcast list.
+  specialties: text("specialties").array().notNull().default(sql`'{}'::text[]`),
+  // Preferred fulfillment partner — the warehouse this plant ships
+  // finished units to by default. The label/artist can still override
+  // per-album. SET NULL so deleting a fulfillment partner doesn't
+  // orphan the manufacturer record.
+  defaultFulfillmentPartnerId: varchar("default_fulfillment_partner_id").references(
+    (): any => fulfillmentPartners.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const fulfillmentPartners = pgTable("fulfillment_partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  domain: text("domain").unique(),
+  logoUrl: text("logo_url"),
+  coverUrl: text("cover_url"),
+  bio: text("bio"),
+  location: text("location"),
+  websiteUrl: text("website_url"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  // The warehouse address shipments are received at + ship from.
+  // Free-text single line (the manufacturer formats it on the carton
+  // label themselves). Optional while onboarding.
+  shippingAddress: text("shipping_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// One open quote request from a label/artist out to N manufacturers.
+// `albumId` is the album being pressed; the broadcast list (rfqReplies
+// with status="invited") is materialized when the RFQ is created. As
+// each invited plant submits a quote that row flips to "quoted". The
+// label/artist accepts exactly one reply — its plant's id becomes
+// `albums.manufacturerId` and every other reply flips to "declined".
+export const rfqs = pgTable("rfqs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  // Who opened the RFQ. We capture both the admin user id and an
+  // optional scope (label/artist) so the manufacturer-facing inbox can
+  // show "Atlantic Records — Album X" rather than the operator's name.
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // Closed enum: "open" | "awarded" | "cancelled". Once awarded the
+  // accepted reply id is in `acceptedReplyId` and the row is read-only.
+  status: text("status").notNull().default("open"),
+  // Target quantity for the run. Plants quote against this number.
+  quantity: integer("quantity").notNull(),
+  // The format being requested. Mirrors albumSkus.format values but
+  // kept as text so the API never crashes if a new format ships
+  // without this table being migrated in lockstep.
+  format: text("format").notNull(),
+  // Free-text notes the requester pastes for plants ("matte sleeve,
+  // metallic ink on the labels, splatter vinyl"). Markdown-ish, no
+  // server-side rendering yet.
+  notes: text("notes"),
+  // The desired completion date (when the requester needs finished
+  // units in hand). Plants whose `turnaroundDays` would miss this
+  // date can still bid but the comparison view flags them.
+  desiredCompletionDate: text("desired_completion_date"),
+  acceptedReplyId: varchar("accepted_reply_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  awardedAt: timestamp("awarded_at"),
+});
+
+// One row per (rfq, manufacturer). Created up front in "invited" state
+// the moment the RFQ is broadcast — gives every invited plant an inbox
+// row even before they reply. The plant edits this same row to submit
+// their quote; we never insert a second row per (rfq, manufacturer).
+export const rfqReplies = pgTable(
+  "rfq_replies",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    rfqId: varchar("rfq_id").notNull().references(() => rfqs.id, { onDelete: "cascade" }),
+    manufacturerId: varchar("manufacturer_id").notNull().references(() => manufacturers.id, { onDelete: "cascade" }),
+    // "invited" | "quoted" | "declined" | "won". Plants whose RFQ was
+    // awarded to someone else flip to "declined" on acceptance.
+    status: text("status").notNull().default("invited"),
+    unitPriceCents: integer("unit_price_cents"),
+    setupFeeCents: integer("setup_fee_cents"),
+    leadTimeDays: integer("lead_time_days"),
+    notes: text("notes"),
+    repliedAt: timestamp("replied_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    rfqManufacturerUnique: unique("rfq_replies_rfq_manufacturer_unique").on(t.rfqId, t.manufacturerId),
+  }),
+);
+
+// users.role / role_scope — promoted to first-class columns on the
+// admin user table so the SAME /admin/* surface can render different
+// views per partner type. "super_admin" keeps the existing god-mode
+// behaviour (Bill, agents). "label" / "artist" / "manufacturer" /
+// "fulfillment" each scope their reads to a single row via
+// roleScopeId. Existing rows backfill to "super_admin" via the DB
+// CREATE so no current admin loses access.
+//
+// We add these as new columns via ALTER TABLE in the migration
+// alongside this schema — the new fields are intentionally NOT in the
+// `users` pgTable definition above to keep that diff out of the labels/
+// albums region of this file. The role column is read via raw SQL in
+// the auth middleware (see server/auth/roles.ts) until we get a chance
+// to fold it into the main `users` definition without diff-bombing
+// every consumer.
+
+export const insertManufacturerSchema = createInsertSchema(manufacturers).omit({ id: true, createdAt: true });
+export type InsertManufacturer = z.infer<typeof insertManufacturerSchema>;
+export type Manufacturer = typeof manufacturers.$inferSelect;
+
+export const insertFulfillmentPartnerSchema = createInsertSchema(fulfillmentPartners).omit({ id: true, createdAt: true });
+export type InsertFulfillmentPartner = z.infer<typeof insertFulfillmentPartnerSchema>;
+export type FulfillmentPartner = typeof fulfillmentPartners.$inferSelect;
+
+export const RFQ_STATUSES = ["open", "awarded", "cancelled"] as const;
+export type RfqStatus = (typeof RFQ_STATUSES)[number];
+export const RFQ_REPLY_STATUSES = ["invited", "quoted", "declined", "won"] as const;
+export type RfqReplyStatus = (typeof RFQ_REPLY_STATUSES)[number];
+
+export const insertRfqSchema = createInsertSchema(rfqs)
+  .omit({ id: true, createdAt: true, awardedAt: true, acceptedReplyId: true, status: true })
+  .extend({
+    quantity: z.number().int().min(1),
+    format: z.string().min(1),
+  });
+export type InsertRfq = z.infer<typeof insertRfqSchema>;
+export type Rfq = typeof rfqs.$inferSelect;
+
+export const insertRfqReplySchema = createInsertSchema(rfqReplies).omit({ id: true, createdAt: true });
+export type InsertRfqReply = z.infer<typeof insertRfqReplySchema>;
+export type RfqReply = typeof rfqReplies.$inferSelect;
+
+// Closed enum used by route + middleware code. Mirrors the values
+// written to users.role.
+export const ADMIN_ROLES = ["super_admin", "label", "artist", "manufacturer", "fulfillment"] as const;
+export type AdminRole = (typeof ADMIN_ROLES)[number];

@@ -1,1 +1,1 @@
-- [Post-merge db:push hangs](post-merge-db-push.md) — when dev DB suddenly "lost" rows or returns 500s with `column "..." does not exist`, db:push silently failed on an interactive rename prompt; diff schema vs `\d <table>` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+- [Drizzle-kit push hang on this repo](post-merge-db-push.md) — drizzle-kit push prompts interactively on a payout_accounts rename and hangs; new tables/cols must be added via psql ALTER/CREATE against $DATABASE_URL.
