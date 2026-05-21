@@ -126,9 +126,7 @@ function Router() {
         <Route path="/collection">
           <ProtectedRoute component={Collection} />
         </Route>
-        <Route path="/album/:id">
-          <ProtectedRoute component={AlbumDetail} />
-        </Route>
+        <Route path="/album/:id" component={AlbumDetail} />
         <Route path="/instrument/:id">
           <ProtectedRoute component={InstrumentDetail} />
         </Route>

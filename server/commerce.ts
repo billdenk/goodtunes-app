@@ -868,7 +868,7 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
   if (order.status === "refunded") return; // idempotent
   await db
     .update(orders)
-    .set({ status: "refunded", refundedAt: new Date() })
+    .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
     .where(eq(orders.id, order.id));
   // Restore stock if the SKU was metered. Best-effort — pulled from the
   // first format-kind order item snapshot we wrote at purchase time.
@@ -884,9 +884,10 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
         sql`${albumSkus.stock} IS NOT NULL`,
       ));
   }
-  // NB: goodDeedNumber is intentionally left in place. Voiding the
-  // number is recorded by `status='refunded'`; never reuse it on a
-  // subsequent purchase (MAX()+1 stays monotonic even with gaps).
+  // goodDeedNumber is voided (nulled) on refund so the certificate is
+  // no longer renderable for this order. We never reuse the freed slot
+  // — MAX()+1 stays monotonic even with gaps (Task #52 will add a
+  // partial unique index + retry loop for concurrent assignment).
   // Return the album lock to its pre-purchase state. (Other orders for
   // this customer + album may still grant access; we only revoke when
   // this is the *only* paid order for the pair.)
