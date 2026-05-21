@@ -1,1 +1,1 @@
-- [Drizzle-kit push hang on this repo](post-merge-db-push.md) — drizzle-kit push prompts interactively on a payout_accounts rename and hangs; new tables/cols must be added via psql ALTER/CREATE against $DATABASE_URL.
+- [Albums query schema drift](albums-schema-drift.md) — if /api/albums returns 500 with "Failed query… price_cents" (or any column), drizzle schema has a column the live DB doesn't; the symptom in the UI is "all albums gone" + sidebar Albums=0.
