@@ -2,6 +2,7 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/admin-album-bonus/BonusTab.tsx": () => import("../components/mockups/admin-album-bonus/BonusTab.tsx"),
+  "./components/mockups/admin-album-title/TitleOverview.tsx": () => import("../components/mockups/admin-album-title/TitleOverview.tsx"),
   "./components/mockups/admin-album-tracks/TracksList.tsx": () => import("../components/mockups/admin-album-tracks/TracksList.tsx"),
   "./components/mockups/admin-albums-list/AlbumsHome.tsx": () => import("../components/mockups/admin-albums-list/AlbumsHome.tsx"),
   "./components/mockups/admin-credits-row/Horizontal.tsx": () => import("../components/mockups/admin-credits-row/Horizontal.tsx"),
@@ -17,7 +18,6 @@ export const modules: ModuleMap = {
   "./components/mockups/admin-track-edit/TrackLyrics.tsx": () => import("../components/mockups/admin-track-edit/TrackLyrics.tsx"),
   "./components/mockups/admin-track-status/Chips.tsx": () => import("../components/mockups/admin-track-status/Chips.tsx"),
   "./components/mockups/admin-track-status/Pills.tsx": () => import("../components/mockups/admin-track-status/Pills.tsx"),
-  "./components/mockups/admin-album-title/TitleOverview.tsx": () => import("../components/mockups/admin-album-title/TitleOverview.tsx"),
   "./components/mockups/admin-tracks-mode/AlbumCredits.tsx": () => import("../components/mockups/admin-tracks-mode/AlbumCredits.tsx"),
   "./components/mockups/admin-tracks-mode/Edit.tsx": () => import("../components/mockups/admin-tracks-mode/Edit.tsx"),
   "./components/mockups/admin-tracks-mode/EditRowOptions.tsx": () => import("../components/mockups/admin-tracks-mode/EditRowOptions.tsx"),
