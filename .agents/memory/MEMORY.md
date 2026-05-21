@@ -1,2 +1,1 @@
-- [Dev auth-kind boundary](dev-auth-kind.md) — in dev there's no admin/customer host split; trust session.kind over path-derived authKind or every non-/admin API call 401s.
-- [Gifting ownership transfer](gifting.md) — moving a gift requires updating BOTH orders.customerId AND user_albums.userId; the cert reads from user_albums.
+- [Post-merge db:push hangs](post-merge-db-push.md) — when dev DB suddenly "lost" rows or returns 500s with `column "..." does not exist`, db:push silently failed on an interactive rename prompt; diff schema vs `\d <table>` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
