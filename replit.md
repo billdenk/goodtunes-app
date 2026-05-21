@@ -2,6 +2,8 @@
 
 Mobile-first, Apple-Music-inspired web player.
 
+> **Investor doc**: a deck-grade summary of everything GoodTunes has actually shipped lives in **[docs/capabilities.md](./docs/capabilities.md)**. Whenever a task that ships a customer-visible capability merges, add or update its line there. Roadmap = future; capabilities = today.
+
 ## Stack
 - React + TypeScript + Vite (frontend)
 - Express + tsx (backend)
@@ -30,3 +32,6 @@ Read the doc that matches your task before changing code:
 ## User preferences
 
 Save preferences here that don't fit a topic doc. Topic-scoped preferences belong in the matching doc above (design system rules in `docs/design-system.md`, etc.).
+
+### Investor doc — keep `docs/capabilities.md` current
+Whenever a task ships a customer-visible capability (player feature, admin/CMS surface, platform capability, or a newly-wired integration), add or update its one- to two-sentence bullet in [`docs/capabilities.md`](./docs/capabilities.md) as part of the same change-set. That doc is what Nick reads from when pitching investors, so it must stay honest about what fans can actually do today. Anything still in design or behind a feature flag stays in `docs/roadmap.md` instead.
