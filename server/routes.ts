@@ -1833,7 +1833,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // the conditional `audio_source_url IS NULL` check makes this
   // idempotent end-to-end. Fire-and-forget; we don't block server
   // start on it.
-  void (async () => {
+  //
+  // Gated behind RUN_LEGACY_BACKFILLS=1 because running ffmpeg on
+  // 100+ legacy WAVs every Autoscale boot pegs the CPU and fails
+  // Replit's Promote-stage health probe. Operator opts in via the
+  // env var when they want to clean up legacy masters; otherwise
+  // the loop is dormant.
+  if (process.env.RUN_LEGACY_BACKFILLS === "1") void (async () => {
     try {
       // Wait a beat so the HTTP server is actually listening before
       // we start hammering ffmpeg — keeps the boot screen snappy.
@@ -1891,7 +1897,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // rows and exits. Serial fetch is fine: we already pay this cost
   // exactly once per song, and ffprobe via music-metadata is cheap
   // compared to the network download.
-  void (async () => {
+  //
+  // Same gate as the audio-backfill above (RUN_LEGACY_BACKFILLS=1):
+  // legacy cleanup loop, not something to run on every Autoscale boot.
+  if (process.env.RUN_LEGACY_BACKFILLS === "1") void (async () => {
     try {
       await new Promise((r) => setTimeout(r, 3000));
       // Eligibility uses the two unambiguous "unknown duration"
