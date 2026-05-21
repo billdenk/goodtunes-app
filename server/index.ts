@@ -95,6 +95,25 @@ app.use((req, res, next) => {
   next();
 });
 
+// Bind the port FIRST so Replit's deploy health-check sees an open socket
+// within its tight Promote-stage window. Route registration, catalog
+// seeding, static/Vite setup, and Spotify pre-warm all run AFTER listen()
+// — early-arriving requests get a bare 404 (port-open is enough to pass
+// the health probe). Without this, slower init paths can push port-binding
+// past the health-check timeout and the new deploy gets killed before it
+// finishes coming up.
+const port = parseInt(process.env.PORT || "5000", 10);
+httpServer.listen(
+  {
+    port,
+    host: "0.0.0.0",
+    reusePort: true,
+  },
+  () => {
+    log(`serving on port ${port}`);
+  },
+);
+
 (async () => {
   await seedCatalog();
   await registerRoutes(httpServer, app);
@@ -122,24 +141,9 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-      // Fire-and-forget Spotify token pre-warm so the admin's first
-      // artist search doesn't pay the cold-start cost (and so a flaky
-      // accounts.spotify.com edge has 3 retry attempts before any UI
-      // sees a failure).
-      prewarmSpotifyToken();
-    },
-  );
+  // Fire-and-forget Spotify token pre-warm so the admin's first
+  // artist search doesn't pay the cold-start cost (and so a flaky
+  // accounts.spotify.com edge has 3 retry attempts before any UI
+  // sees a failure).
+  prewarmSpotifyToken();
 })();
