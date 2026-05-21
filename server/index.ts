@@ -27,6 +27,10 @@ declare module "http" {
 // header verifies against the exact bytes Stripe sent. We mount raw()
 // only on the webhook path; every other route still gets JSON below.
 app.use("/api/webhooks/stripe", express.raw({ type: "*/*", limit: "1mb" }));
+// Task #49 — Shopify webhook handler. Same raw-body posture as Stripe so
+// the X-Shopify-Hmac-Sha256 header verifies against the exact bytes
+// Shopify signed.
+app.use("/api/webhooks/shopify", express.raw({ type: "*/*", limit: "1mb" }));
 
 app.use(
   express.json({

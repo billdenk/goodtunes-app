@@ -37,9 +37,28 @@ type OrderRow = {
   shippedAt: string | null;
   refundedAt: string | null;
   createdAt: string;
+  // Task #49 — order origin. "direct" = bought on goodtunes.music,
+  // "shopify:<storeId>" = arrived via a label's Shopify webhook.
+  origin?: string;
   items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
   gift: GiftInfo | null;
 };
+
+// Origin label rendered next to the status pill. Direct orders stay
+// unbadged (it's the default); Shopify-sourced orders surface a small
+// "Shopify" tag so a fan can tell where they came from at a glance.
+function OriginBadge({ origin }: { origin: string | undefined }) {
+  if (!origin || origin === "direct") return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-[#95BF47]/15 text-[#95BF47] text-[10.5px] font-semibold uppercase tracking-wider px-2 py-0.5"
+      data-testid="badge-origin-shopify"
+      title="Bundled with a label's Shopify order"
+    >
+      Shopify
+    </span>
+  );
+}
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -158,6 +177,7 @@ export function Orders() {
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${st.cls}`}>
                           {st.label}
                         </span>
+                        <OriginBadge origin={o.origin} />
                         {giftPill && (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${giftPill.cls}`} data-testid={`pill-gift-${o.id}`}>
                             {giftPill.label}

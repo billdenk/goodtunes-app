@@ -793,6 +793,118 @@ export const orders = pgTable("orders", {
   payoutOwnerId: varchar("payout_owner_id"),
   payoutAt: timestamp("payout_at"),
   payoutError: text("payout_error"),
+  // ─── Task #49 — order origin ───────────────────────────────────────
+  // "direct"            → bought on goodtunes.music via Stripe Checkout
+  // "shopify:<storeId>" → bought on a label's Shopify store; webhook
+  //                       arrived at /api/webhooks/shopify/orders.
+  // Existing rows backfill to "direct" via column default. Order surfaces
+  // (fan + admin) read this to render the origin badge.
+  origin: text("origin").notNull().default("direct"),
+  // FK to shopify_stores when origin starts with "shopify:". Null for
+  // direct orders. Lets admin lists join to store_name without parsing
+  // the origin string.
+  shopifyStoreId: varchar("shopify_store_id"),
+  // Shopify's numeric order id (stringified). Unique across the system
+  // so a replayed `orders/paid` webhook is a no-op. Null for direct.
+  shopifyOrderId: text("shopify_order_id").unique(),
+  // Task #49 — Shopify's per-order unguessable token (`order.token` on the
+  // payload, also exposed to the order-status-page JS as
+  // Shopify.checkout.token). We require it on the public redemption-by-
+  // order endpoint so possession of an order id alone isn't enough to
+  // pull the redemption code; the buyer also has to be on their own
+  // order status page (where Shopify hands them the token).
+  shopifyOrderToken: text("shopify_order_token"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ─── Task #49 — Shopify redemption flow ─────────────────────────────────
+// One row per Shopify store that has installed the GoodTunes app. We
+// store the offline access token Shopify hands us at OAuth callback so
+// later admin calls (script-tag install, refund queries) can authenticate
+// without the operator re-clicking through the install flow. v1 stores
+// the token in plaintext — pre-production we should envelope-encrypt it
+// like admin_totp.secretEncrypted.
+export const shopifyStores = pgTable("shopify_stores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // The myshopify.com domain (e.g. "tim-snider-records.myshopify.com").
+  // Unique because Shopify's OAuth handshake is per-shop and a re-install
+  // overwrites the same row.
+  shopDomain: text("shop_domain").notNull().unique(),
+  // Display name of the store, pulled from /admin/api/.../shop.json on
+  // install so admin lists don't have to make a live call.
+  storeName: text("store_name"),
+  accessToken: text("access_token").notNull(),
+  scopes: text("scopes"),
+  // Set when the store calls app/uninstalled. We keep the row (for
+  // historical order joins) but clear accessToken and stamp this column
+  // so admin UI can render "Disconnected" without losing the linkage.
+  installedAt: timestamp("installed_at").defaultNow(),
+  uninstalledAt: timestamp("uninstalled_at"),
+});
+
+// Mapping a Shopify product (or specific variant) on a connected store
+// to a GoodTunes album. One row per (storeId, productId, variantId).
+// `offerSignedCert` toggles whether the label is bundling a printed +
+// signed GoodDeed certificate into the same Shopify order — the price
+// label sets here is enforced at webhook time against the album's
+// per-album minimum floor (album_addons.signed_cert.minPriceCents).
+export const shopifyProductMappings = pgTable(
+  "shopify_product_mappings",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    storeId: varchar("store_id")
+      .notNull()
+      .references(() => shopifyStores.id, { onDelete: "cascade" }),
+    // Both ids stored as strings — Shopify uses int64 ids that overflow
+    // JS numbers in some cases, so always treat them as strings.
+    shopifyProductId: text("shopify_product_id").notNull(),
+    // null variantId = match every variant of the product (label hasn't
+    // split formats into separate variants; the album maps the whole
+    // product). Required for products with multiple variants where the
+    // label wants different albums per variant — they create one mapping
+    // per variant id instead.
+    shopifyVariantId: text("shopify_variant_id"),
+    // Snapshot for the admin list ("Bundled with: ‹product title›")
+    // so we don't round-trip Shopify on every render.
+    shopifyProductTitle: text("shopify_product_title"),
+    albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+    offerSignedCert: boolean("offer_signed_cert").notNull().default(false),
+    // Price the label is selling the cert for inside the Shopify cart.
+    // Subject to the album's min floor — webhook discards values below.
+    signedCertPriceCents: integer("signed_cert_price_cents"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  // No table-level uniqueness here — Postgres treats NULL variantId as
+  // distinct from every other NULL, so a single 3-col unique constraint
+  // would let product-wide mappings (variantId=null) duplicate. Instead
+  // we maintain two PARTIAL unique indexes via raw SQL migration:
+  //   * shopify_mapping_unique_with_variant: (store, product, variant)
+  //       WHERE variant IS NOT NULL
+  //   * shopify_mapping_unique_product_wide: (store, product)
+  //       WHERE variant IS NULL
+  // Drizzle's table builder doesn't model partial indexes today, so
+  // these live in code-managed SQL alongside the upsert in
+  // server/shopify.ts (which uses a manual select-then-update-or-insert
+  // because Postgres requires the conflict target to match exactly one
+  // of the two partial indexes).
+);
+
+// One-time redemption code minted at orders/paid webhook time. The code
+// is the path component on /redeem/<code> — both the order-status-page
+// script and the email template button deep-link to it. We don't hash
+// it (unlike admin OTPs) because the code IS the secret being mailed to
+// the fan, and order resolution requires the raw string anyway. Long
+// enough (16 hex chars = 64 bits) that brute force is uneconomical.
+export const shopifyRedemptionCodes = pgTable("shopify_redemption_codes", {
+  code: varchar("code").primaryKey(),
+  orderId: varchar("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" })
+    .unique(),
+  // Filled when /redeem/:code lands the fan in the player. Idempotent —
+  // a second click just signs them in to the already-claimed account.
+  redeemedAt: timestamp("redeemed_at"),
+  redeemedByUserId: varchar("redeemed_by_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1205,3 +1317,23 @@ export type PayoutAccount = typeof payoutAccounts.$inferSelect;
 export type PayoutSettings = typeof payoutSettings.$inferSelect;
 
 export type EmailVerification = typeof emailVerifications.$inferSelect;
+
+// ─── Task #49 — Shopify redemption flow ─────────────────────────────────
+export const insertShopifyStoreSchema = createInsertSchema(shopifyStores).omit({
+  id: true,
+  installedAt: true,
+  uninstalledAt: true,
+});
+export type InsertShopifyStore = z.infer<typeof insertShopifyStoreSchema>;
+export type ShopifyStore = typeof shopifyStores.$inferSelect;
+
+export const insertShopifyProductMappingSchema = createInsertSchema(shopifyProductMappings)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    shopifyProductId: z.string().min(1),
+    signedCertPriceCents: z.number().int().min(0).nullable().optional(),
+  });
+export type InsertShopifyProductMapping = z.infer<typeof insertShopifyProductMappingSchema>;
+export type ShopifyProductMapping = typeof shopifyProductMappings.$inferSelect;
+
+export type ShopifyRedemptionCode = typeof shopifyRedemptionCodes.$inferSelect;

@@ -59,6 +59,7 @@ The third-party services GoodTunes already runs against in production.
 - **Apple Sign-In.** Apple ID is wired as a first-class login option for fans on iOS-heavy devices (final activation is gated on a production signing key).
 - **OrderDesk.** Order routing and fulfillment for the physical side of GoodTunes — vinyl, merchandise, and bundle deliveries flow through OrderDesk to the right warehouse automatically.
 - **Google Sign-In.** Fans and admins can sign in with their Google account — one tap, no password.
+- **Shopify Bundle.** Labels and artists who already sell physical product on Shopify can bundle GoodTunes digital access into the same checkout. After the buyer pays on the label's store, our app unlocks the album for the email on the order, mints a one-time redemption code, and adds a "Get your music now" button to both the order-status page and the confirmation email. The fan lands on a branded redeem page that already knows their name, sets a password (or signs in if they already have GoodTunes), and drops straight into the player with their GoodDeed number assigned. Refunds reverse the unlock automatically. Operators connect a label's store from our admin in two clicks — no plugin to download — and each album's admin Shopify tab maps the physical product (or specific variant) to the digital release.
 
 ---
 

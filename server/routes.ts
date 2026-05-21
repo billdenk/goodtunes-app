@@ -8818,6 +8818,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── Task #44 — Bundle checkout (SKUs, add-ons, orders, Stripe) ──
   const { registerCommerceRoutes } = await import("./commerce");
   registerCommerceRoutes(app);
+  // Task #49 — Shopify redemption flow. Mounted after the JSON body
+  // parser is in place because the only raw-body route on this module
+  // (/api/webhooks/shopify/orders) is opted in via express.raw() in
+  // server/index.ts ahead of express.json().
+  const { registerShopifyRoutes } = await import("./shopify");
+  registerShopifyRoutes(app);
 
   // Task #46 — Gifting flow (claim links, recipient transfer).
   const { registerGiftRoutes } = await import("./gifts");

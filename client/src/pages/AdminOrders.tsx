@@ -50,9 +50,27 @@ type AdminOrderRow = {
   payoutError: string | null;
   payoutOwnerKind: string | null;
   payoutOwnerId: string | null;
+  // Task #49 — order origin. "direct" | "shopify:<storeId>".
+  origin?: string;
   items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
   gift: GiftInfo | null;
 };
+
+// Small operator-facing badge surfacing where a row came from. Direct
+// orders stay unbadged; Shopify rows render the Shopify green so the
+// admin can filter visually without reading the origin string.
+function OriginBadge({ origin }: { origin: string | undefined }) {
+  if (!origin || origin === "direct") return null;
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-[#95BF47]/15 text-[#5a7c2c] text-[10.5px] font-semibold uppercase tracking-wider px-2 py-0.5"
+      data-testid="badge-origin-shopify"
+      title="Bundled with a label's Shopify order"
+    >
+      Shopify
+    </span>
+  );
+}
 
 function giftStatus(g: GiftInfo): { label: string; cls: string } {
   if (g.claimed) return { label: "Gift · Claimed", cls: "bg-violet-50 text-violet-700" };
@@ -214,6 +232,7 @@ export function AdminOrders() {
                     o.status === "refunded" ? "bg-rose-50 text-rose-700" :
                     "bg-slate-100 text-slate-600",
                   ].join(" ")}>{o.status}</span>
+                  <OriginBadge origin={o.origin} />
                   {o.gift && (() => {
                     const s = giftStatus(o.gift);
                     return (

@@ -35,6 +35,9 @@ import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { GiftClaim } from "@/pages/GiftClaim";
+import { Redeem } from "@/pages/Redeem";
+import { AdminShopify } from "@/pages/AdminShopify";
+import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -123,6 +126,9 @@ function Router() {
             without an account; the page itself routes them through
             sign-in/up before letting them call POST claim. */}
         <Route path="/gift/:token" component={GiftClaim} />
+        {/* Task #49 — Shopify redemption landing. Public; the page itself
+            routes the fan through sign-in/up before calling claim. */}
+        <Route path="/redeem/:code" component={Redeem} />
         <Route path="/orders">
           <ProtectedRoute component={Orders} />
         </Route>
@@ -167,8 +173,14 @@ function Router() {
             the classic /admin route so wouter's Switch picks the more specific
             match first). The classic /admin route remains the source of truth
             for all editing until each tab is migrated. */}
+        <Route path="/admin/albums/:id/engagement">
+          <ProtectedRoute component={AdminAlbumEngagement} />
+        </Route>
         <Route path="/admin/albums/:id">
           <ProtectedRoute component={AdminAlbum} />
+        </Route>
+        <Route path="/admin/shopify">
+          <ProtectedRoute component={AdminShopify} />
         </Route>
         <Route path="/admin/albums">
           <ProtectedRoute component={AdminAlbums} />
