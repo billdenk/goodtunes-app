@@ -33,6 +33,7 @@ import { AdminLabel } from "@/pages/AdminLabel";
 import { Welcome } from "@/pages/Welcome";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
+import AdminSecurity from "@/pages/AdminSecurity";
 import { GiftClaim } from "@/pages/GiftClaim";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -127,6 +128,9 @@ function Router() {
         </Route>
         <Route path="/admin/orders">
           <ProtectedRoute component={AdminOrders} />
+        </Route>
+        <Route path="/admin/security">
+          <ProtectedRoute component={AdminSecurity} />
         </Route>
         <Route path="/collection">
           <ProtectedRoute component={Collection} />

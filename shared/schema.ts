@@ -11,6 +11,13 @@ export const users = pgTable("users", {
   realName: text("real_name"),
   password: text("password").notNull(),
   isAdmin: boolean("is_admin").default(false).notNull(),
+  // Task #57 — preferred second factor for admin sign-in:
+  // "email"  → 6-digit code emailed each sign-in (default for new admins)
+  // "totp"   → authenticator app (existing TOTP-enrolled admins)
+  // Anyone with a row in admin_totp is migrated to "totp" on first apply
+  // so no current admin gets locked out. Switching factors is a one-click
+  // toggle on the admin security page (only allowed if both are set up).
+  factorPref: text("factor_pref").notNull().default("email"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -825,10 +832,30 @@ export const adminTotp = pgTable("admin_totp", {
   enrolledAt: timestamp("enrolled_at").defaultNow(),
 });
 
+// Task #57 — Email-a-code admin sign-in.
+// One row per admin currently mid-sign-in: holds the scrypt-hashed
+// 6-digit code, its expiry, and the attempt counter. The row is deleted
+// the moment the code verifies (or replaced when the admin asks for a
+// fresh one). We only store ONE active code at a time — issuing a new
+// code invalidates the previous one, which is what users expect from
+// "didn't get it, resend".
+//
+// Phone number is intentionally absent: SMS delivery is out of scope for
+// this task. When SMS lands we add `phoneE164` here and branch on
+// channel at issue time — no other shape change needed.
+export const adminEmailOtp = pgTable("admin_email_otp", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastSentAt: timestamp("last_sent_at").defaultNow(),
+});
+
 export type CustomerUser = typeof customerUsers.$inferSelect;
 export type AdminIdentity = typeof adminIdentities.$inferSelect;
 export type CustomerIdentity = typeof customerIdentities.$inferSelect;
 export type AdminTotp = typeof adminTotp.$inferSelect;
+export type AdminEmailOtp = typeof adminEmailOtp.$inferSelect;
 
 export const insertCustomerUserSchema = createInsertSchema(customerUsers).pick({
   username: true,

@@ -26,7 +26,15 @@ export function kindFromRequest(req: Request): { kind: AuthKind; hostKnown: bool
   if (host === CUSTOMER_HOST) return { kind: "customer", hostKnown: true };
   // Dev / preview fallback — path-based.
   const path = req.path || "";
-  const looksAdmin = path.startsWith("/api/admin") || path.startsWith("/admin") || path.startsWith("/api/auth/totp");
+  const looksAdmin =
+    path.startsWith("/api/admin") ||
+    path.startsWith("/admin") ||
+    path.startsWith("/api/auth/totp") ||
+    // Task #57 — email-OTP routes are admin-only too. Without this the
+    // *.replit.dev preview hosts (no canonical host match) would treat
+    // them as customer and 403 the password-leg admin sign-in flow.
+    path.startsWith("/api/auth/email-otp") ||
+    path.startsWith("/api/auth/factor-preference");
   // Allow explicit override via ?kind= on OAuth start endpoints (so the
   // login page in dev can specify which side it wants).
   const override = (req.query?.kind as string | undefined);

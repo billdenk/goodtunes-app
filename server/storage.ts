@@ -43,6 +43,8 @@ import {
   type CustomerIdentity,
   adminTotp,
   type AdminTotp,
+  adminEmailOtp,
+  type AdminEmailOtp,
   albums,
   songs,
   userAlbums,
@@ -345,9 +347,26 @@ export interface IStorage {
   // ---- Admin TOTP --------------------------------------------------
   getAdminTotp(userId: string): Promise<AdminTotp | undefined>;
   setAdminTotp(userId: string, secretEncrypted: string, recoveryCodeHashes: string[]): Promise<void>;
+  deleteAdminTotp(userId: string): Promise<void>;
   // Removes a recovery hash from the stored array. Returns true if a hash
   // was actually removed (i.e. the supplied code matched something).
   consumeRecoveryCode(userId: string, matchHash: string): Promise<boolean>;
+
+  // ---- Admin email-OTP (Task #57) ---------------------------------
+  // Single active 6-digit code per admin. setAdminEmailOtp replaces any
+  // previous code (issuing a new code invalidates the old one). The
+  // delete is called after a successful verify so the row never lingers.
+  getAdminEmailOtp(userId: string): Promise<AdminEmailOtp | undefined>;
+  setAdminEmailOtp(userId: string, codeHash: string, expiresAt: Date): Promise<void>;
+  bumpAdminEmailOtpAttempts(userId: string): Promise<void>;
+  deleteAdminEmailOtp(userId: string): Promise<void>;
+  // Atomic verify+consume: delete the row only if the stored hash still
+  // matches `codeHash`. Returns true on the winning request; concurrent
+  // duplicates see false. Use this in verify endpoints to prevent the
+  // race where two parallel requests both pass verifyCode and both mint
+  // tokens before the row is deleted.
+  consumeAdminEmailOtp(userId: string, codeHash: string): Promise<boolean>;
+  setUserFactorPref(userId: string, pref: "email" | "totp"): Promise<void>;
 
   // Super-admin grant/revoke (Task #31 step 9). `listAdmins` is the
   // source of truth for the admin-only UI.
@@ -1598,6 +1617,48 @@ export class DbStorage implements IStorage {
     const next = row.recoveryCodes.slice(0, idx).concat(row.recoveryCodes.slice(idx + 1));
     await db.update(adminTotp).set({ recoveryCodes: next }).where(eq(adminTotp.userId, userId));
     return true;
+  }
+  async deleteAdminTotp(userId: string): Promise<void> {
+    await db.delete(adminTotp).where(eq(adminTotp.userId, userId));
+  }
+
+  // ---- Admin email-OTP (Task #57) -----------------------------------
+  async getAdminEmailOtp(userId: string): Promise<AdminEmailOtp | undefined> {
+    const [row] = await db.select().from(adminEmailOtp).where(eq(adminEmailOtp.userId, userId));
+    return row;
+  }
+  async setAdminEmailOtp(userId: string, codeHash: string, expiresAt: Date): Promise<void> {
+    // Upsert: issuing a new code REPLACES any prior code + resets the
+    // attempt counter. This is what "didn't get it, resend" needs.
+    await db
+      .insert(adminEmailOtp)
+      .values({ userId, codeHash, expiresAt, attempts: 0, lastSentAt: new Date() })
+      .onConflictDoUpdate({
+        target: adminEmailOtp.userId,
+        set: { codeHash, expiresAt, attempts: 0, lastSentAt: new Date() },
+      });
+  }
+  async bumpAdminEmailOtpAttempts(userId: string): Promise<void> {
+    await db
+      .update(adminEmailOtp)
+      .set({ attempts: sql`${adminEmailOtp.attempts} + 1` })
+      .where(eq(adminEmailOtp.userId, userId));
+  }
+  async deleteAdminEmailOtp(userId: string): Promise<void> {
+    await db.delete(adminEmailOtp).where(eq(adminEmailOtp.userId, userId));
+  }
+  async consumeAdminEmailOtp(userId: string, codeHash: string): Promise<boolean> {
+    // Single conditional delete — the DB guarantees only one parallel
+    // request wins. We key on both userId and the exact hash so a stale
+    // verify can't accidentally consume a freshly-issued (resent) code.
+    const rows = await db
+      .delete(adminEmailOtp)
+      .where(and(eq(adminEmailOtp.userId, userId), eq(adminEmailOtp.codeHash, codeHash)))
+      .returning({ userId: adminEmailOtp.userId });
+    return rows.length > 0;
+  }
+  async setUserFactorPref(userId: string, pref: "email" | "totp"): Promise<void> {
+    await db.update(users).set({ factorPref: pref }).where(eq(users.id, userId));
   }
 
   async listAdmins() {

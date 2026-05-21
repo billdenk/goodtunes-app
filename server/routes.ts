@@ -28,12 +28,25 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+// Hide all but the first character of the local part. We surface this on
+// the email-OTP step so the admin sees which inbox to check without us
+// echoing the full address back to a page that might be screen-shared.
+function maskEmail(email: string): string {
+  const at = email.indexOf("@");
+  if (at <= 0) return "•••";
+  const local = email.slice(0, at);
+  const domain = email.slice(at);
+  const head = local.slice(0, 1);
+  return `${head}${"•".repeat(Math.max(2, local.length - 1))}${domain}`;
+}
+
 declare module "express-session" {
   interface SessionData {
     userId: string;
     kind?: "admin" | "customer";
-    // Temp marker for "password verified but TOTP not yet provided". The
-    // session is useless for everything else (requireAuth checks both).
+    // Temp marker for "password verified but second factor not yet
+    // provided". Used for both TOTP and email-OTP flows — the session is
+    // useless for everything else (requireAuth checks both userId+kind).
     pendingTotpUserId?: string;
   }
 }
@@ -304,10 +317,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.createAuthToken(token, user.id, "admin");
         return res.json({ ...shapeAdmin(user), token, kind: "admin", devBypass: true });
       }
-      const totp = await storage.getAdminTotp(user.id);
       req.session.pendingTotpUserId = user.id;
-      if (!totp) return res.json({ requiresEnrollment: true, userId: user.id, kind: "admin" });
-      return res.json({ requires2fa: true, userId: user.id, kind: "admin" });
+      const totp = await storage.getAdminTotp(user.id);
+      // Task #57 — second-factor router. `factorPref` is the admin's
+      // chosen channel: 'email' (default for new admins) or 'totp' (the
+      // legacy authenticator-app flow). Existing TOTP-enrolled admins
+      // were bulk-migrated to 'totp' at schema rollout so they don't get
+      // switched without consent.
+      if (user.factorPref === "totp") {
+        if (!totp) return res.json({ requiresEnrollment: true, userId: user.id, kind: "admin" });
+        return res.json({ requires2fa: true, userId: user.id, kind: "admin" });
+      }
+      // Tell the client whether TOTP is also linked — drives the "Use
+      // authenticator instead" affordance on the email-OTP screen so an
+      // admin with both factors can fall back without round-tripping.
+      const totpAlsoEnrolled = !!totp;
+      // factorPref === 'email' (or anything unknown): issue a code now.
+      const { hashCode: _hash, generateSixDigitCode: _gen } = await import("./commerce");
+      const code = _gen();
+      const codeHash = await _hash(code);
+      const expiresAt = new Date(Date.now() + 10 * 60_000);
+      await storage.setAdminEmailOtp(user.id, codeHash, expiresAt);
+      // No transactional email infra wired yet — log the code on the
+      // server in non-prod so the admin can grab it from the workflow
+      // console. The `devCode` field is only set off-prod; production
+      // returns just the masked email and the admin reads the code from
+      // their inbox. See docs/auth-and-dual-shell.md for the seam.
+      const masked = maskEmail(user.email);
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
+      }
+      return res.json({
+        requiresEmailCode: true,
+        userId: user.id,
+        kind: "admin",
+        email: masked,
+        totpEnrolled: totpAlsoEnrolled,
+        ...(process.env.NODE_ENV !== "production" ? { devCode: code } : {}),
+      });
     }
 
     // Customer side — no 2FA, immediate token.
@@ -584,14 +631,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.linkIdentity(kind, { userId, provider, providerUserId: identity.sub, email: identity.email });
     }
 
-    // Admin side requires TOTP before we hand out the real token.
+    // Admin side requires a second factor before we hand out the real
+    // token. Honor `factorPref` (Task #57) so an OAuth-signin doesn't
+    // override the admin's chosen channel — TOTP-pref admins still see
+    // the authenticator screen, email-pref admins get a code mailed.
     if (kind === "admin") {
       req.session.pendingTotpUserId = userId;
+      const user = await storage.getUser(userId);
       const totp = await storage.getAdminTotp(userId);
-      const params = new URLSearchParams({
-        oauth: provider,
-        next: totp ? "totp" : "enroll",
-      });
+      const usesEmail = user?.factorPref === "email";
+      if (!usesEmail) {
+        const params = new URLSearchParams({
+          oauth: provider,
+          next: totp ? "totp" : "enroll",
+        });
+        return res.redirect(`/login?${params.toString()}`);
+      }
+      // Email-pref path: issue a code now, then redirect into the
+      // emailOtp UI phase. The login page reads `oauth=…&next=emailOtp`
+      // and switches its adminPhase, then calls /api/auth/email-otp/start
+      // to fetch the masked email (and devCode off-prod) into view.
+      const code = gen6();
+      const codeHash = await hashOtp(code);
+      const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
+      await storage.setAdminEmailOtp(userId, codeHash, expiresAt);
+      if (process.env.NODE_ENV !== "production" && user) {
+        console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
+      }
+      const params = new URLSearchParams({ oauth: provider, next: "emailOtp" });
       return res.redirect(`/login?${params.toString()}`);
     }
 
@@ -688,6 +755,119 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const u = await storage.getUser(userId);
     const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
     return res.json({ ...shapeAdmin(u, photoUrl), token });
+  });
+
+  // ─── Admin Email-OTP (Task #57) ────────────────────────────────────
+  // The password leg of /api/login already issued the first code for
+  // factorPref='email' admins; these endpoints handle (a) the user
+  // clicking "Resend" and (b) submitting the 6 digits.
+  const { hashCode: hashOtp, verifyCode: verifyOtp, generateSixDigitCode: gen6 } = await import("./commerce");
+  const EMAIL_OTP_TTL_MS = 10 * 60_000;
+  const EMAIL_OTP_RESEND_COOLDOWN_MS = 60_000;
+  const EMAIL_OTP_MAX_ATTEMPTS = 5;
+
+  app.post("/api/auth/email-otp/start", async (req, res) => {
+    if (req.authKind !== "admin") return res.status(403).json({ message: "Admin only" });
+    const userId = req.session.pendingTotpUserId;
+    if (!userId) return res.status(401).json({ message: "Sign in with your password first." });
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    // Refuse to issue an email code to a TOTP-pref admin — the only
+    // path where the wrong factor could reach here is a stale tab open
+    // while the admin switched preferences elsewhere.
+    if (user.factorPref !== "email") return res.status(400).json({ message: "Email codes aren't enabled on this account." });
+    // 60-second resend cooldown — protects against accidental double-tap
+    // *and* against someone using us as a free mail spammer once a real
+    // email channel is wired up.
+    const existing = await storage.getAdminEmailOtp(userId);
+    if (existing?.lastSentAt) {
+      const ageMs = Date.now() - existing.lastSentAt.getTime();
+      if (ageMs < EMAIL_OTP_RESEND_COOLDOWN_MS) {
+        const retryAfter = Math.ceil((EMAIL_OTP_RESEND_COOLDOWN_MS - ageMs) / 1000);
+        return res.status(429).json({ message: `Wait ${retryAfter}s before requesting another code.`, retryAfter });
+      }
+    }
+    const code = gen6();
+    const codeHash = await hashOtp(code);
+    const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
+    await storage.setAdminEmailOtp(userId, codeHash, expiresAt);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
+    }
+    return res.json({
+      ok: true,
+      email: maskEmail(user.email),
+      ...(process.env.NODE_ENV !== "production" ? { devCode: code } : {}),
+    });
+  });
+
+  app.post("/api/auth/email-otp/verify", async (req, res) => {
+    if (req.authKind !== "admin") return res.status(403).json({ message: "Admin only" });
+    const userId = req.session.pendingTotpUserId;
+    if (!userId) return res.status(401).json({ message: "Sign in with your password first." });
+    const user = await storage.getUser(userId);
+    if (!user || user.factorPref !== "email") return res.status(400).json({ message: "Email codes aren't enabled on this account." });
+    const code = String(req.body?.code ?? "").trim();
+    if (!/^\d{6}$/.test(code)) return res.status(400).json({ message: "Enter the 6-digit code." });
+    const row = await storage.getAdminEmailOtp(userId);
+    if (!row) return res.status(400).json({ message: "No code on file. Request a new one." });
+    if (row.expiresAt.getTime() < Date.now()) {
+      await storage.deleteAdminEmailOtp(userId);
+      return res.status(400).json({ message: "That code has expired. Request a new one." });
+    }
+    if (row.attempts >= EMAIL_OTP_MAX_ATTEMPTS) {
+      await storage.deleteAdminEmailOtp(userId);
+      return res.status(429).json({ message: "Too many wrong attempts. Request a new code." });
+    }
+    const ok = await verifyOtp(code, row.codeHash);
+    if (!ok) {
+      await storage.bumpAdminEmailOtpAttempts(userId);
+      const remaining = EMAIL_OTP_MAX_ATTEMPTS - row.attempts - 1;
+      return res.status(400).json({ message: remaining > 0 ? `Code didn't match. ${remaining} attempts left.` : "Code didn't match." });
+    }
+    // Atomically consume the code. If two requests race past verifyOtp,
+    // only the one that wins the DELETE proceeds — the loser sees no row
+    // and 400s out. Same defense even though we already verified above.
+    const consumed = await storage.consumeAdminEmailOtp(userId, row.codeHash);
+    if (!consumed) return res.status(400).json({ message: "Code already used. Sign in again." });
+    const token = generateToken();
+    await storage.createAuthToken(token, userId, "admin");
+    req.session.userId = userId;
+    req.session.kind = "admin";
+    req.session.pendingTotpUserId = undefined;
+    const u = await storage.getUser(userId);
+    const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
+    return res.json({ ...shapeAdmin(u, photoUrl), token });
+  });
+
+  // ─── Admin factor-preference (Task #57) ────────────────────────────
+  // Read/write the admin's chosen second factor. Switching TO 'totp' is
+  // only allowed if a TOTP row already exists — otherwise the admin
+  // would lock themselves out at next sign-in. Switching back to 'email'
+  // is always allowed.
+  app.get("/api/auth/factor-preference", requireAuth, async (req, res) => {
+    if (req.session.kind !== "admin") return res.status(403).json({ message: "Admin only" });
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const totp = await storage.getAdminTotp(user.id);
+    return res.json({
+      factorPref: user.factorPref,
+      email: maskEmail(user.email),
+      totpEnrolled: !!totp,
+      recoveryCodesRemaining: totp?.recoveryCodes.length ?? 0,
+    });
+  });
+
+  app.post("/api/auth/factor-preference", requireAuth, async (req, res) => {
+    if (req.session.kind !== "admin") return res.status(403).json({ message: "Admin only" });
+    const factor = String(req.body?.factor ?? "");
+    if (factor !== "email" && factor !== "totp") return res.status(400).json({ message: "factor must be 'email' or 'totp'" });
+    if (factor === "totp") {
+      const totp = await storage.getAdminTotp(req.session.userId!);
+      if (!totp) return res.status(400).json({ message: "Set up an authenticator app first." });
+    }
+    await storage.setUserFactorPref(req.session.userId!, factor as "email" | "totp");
+    return res.json({ ok: true, factorPref: factor });
   });
 
   // ─── Linked identities (profile) ──────────────────────────────────

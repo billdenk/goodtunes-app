@@ -30,7 +30,10 @@ function suggestDisplayName(realName: string): string {
 }
 
 // Sub-step the admin sign-in lands on after password/OAuth succeeds.
-type AdminPhase = "password" | "totp" | "enroll";
+// "emailOtp" is the Task #57 default for new admins — a 6-digit code
+// delivered to the admin's email. "totp" / "enroll" remain for power
+// users who opted in to an authenticator app on the security page.
+type AdminPhase = "password" | "totp" | "enroll" | "emailOtp";
 
 // ─── Chrome styles ────────────────────────────────────────────────
 // Two variants — admin (white card on slate bg, h-9 controls, slate
@@ -185,6 +188,17 @@ export function Login() {
   const [recoveryCode, setRecoveryCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
   const [enrollData, setEnrollData] = useState<{ qr: string; secret: string; recoveryCodes: string[] } | null>(null);
+  // Task #57 — email-OTP flow state. `emailOtpInfo` carries the masked
+  // recipient address and (off-prod only) the actual code so a dev
+  // looking at the sign-in screen can copy it without tabbing to the
+  // server log. `resendCooldown` ticks down to re-enable the button.
+  const [emailCode, setEmailCode] = useState("");
+  const [emailOtpInfo, setEmailOtpInfo] = useState<{ email: string; devCode?: string } | null>(null);
+  const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  // TOTP fallback offered if the admin has BOTH factors set up — surfaced
+  // as "Use authenticator instead" on the email-OTP screen.
+  const [totpAlsoEnrolled, setTotpAlsoEnrolled] = useState(false);
   const [totpError, setTotpError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -438,6 +452,11 @@ export function Login() {
         setAdminPhase("enroll");
       } else if (result?.requires2fa) {
         setAdminPhase("totp");
+      } else if (result?.requiresEmailCode) {
+        setEmailOtpInfo({ email: result.email, devCode: result.devCode });
+        setTotpAlsoEnrolled(!!result.totpEnrolled);
+        setResendCooldown(60);
+        setAdminPhase("emailOtp");
       } else if (result?.token) {
         finishCustomer();
       }
@@ -461,6 +480,42 @@ export function Login() {
       setSubmitting(false);
     }
   };
+
+  const submitEmailOtp = async () => {
+    setSubmitting(true); setEmailOtpError(null);
+    try {
+      const res = await apiRequest("POST", "/api/auth/email-otp/verify", { code: emailCode.trim() });
+      const j = await res.json();
+      if (j.token) setAuthToken(j.token);
+      queryClient.invalidateQueries();
+      navigate("/admin");
+    } catch (e: any) {
+      setEmailOtpError(e?.message ?? "Code didn't match");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resendEmailOtp = async () => {
+    setEmailOtpError(null);
+    try {
+      const res = await apiRequest("POST", "/api/auth/email-otp/start");
+      const j = await res.json();
+      setEmailOtpInfo({ email: j.email ?? emailOtpInfo?.email ?? "", devCode: j.devCode });
+      setResendCooldown(60);
+      setEmailCode("");
+      toast({ title: "Code sent", description: "A fresh code is on its way." });
+    } catch (e: any) {
+      setEmailOtpError(e?.message ?? "Couldn't send a new code");
+    }
+  };
+
+  // Tick down the resend cooldown once per second while > 0.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((n) => Math.max(0, n - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
 
   const submitEnrollVerify = async () => {
     setSubmitting(true); setTotpError(null);
@@ -530,6 +585,67 @@ export function Login() {
             </>
           ) : (
             <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-center`}>Loading…</p>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  if (adminPhase === "emailOtp") {
+    return (
+      <main className={s.page}>
+        <div className={s.card}>
+          <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant={isAdmin ? "color" : "white"} /></div>
+          <h1 className={`text-xl font-semibold text-center mb-2 ${titleColor}`}>Check your email</h1>
+          <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-sm text-center mb-6`}>
+            We sent a 6-digit code to <span className={`${isAdmin ? "text-slate-800" : "text-white/85"} font-medium`}>{emailOtpInfo?.email ?? "your inbox"}</span>. It expires in 10 minutes.
+          </p>
+          {emailOtpInfo?.devCode && (
+            <p className={`${isAdmin ? "text-amber-700 bg-amber-50 border-amber-200" : "text-amber-200 bg-amber-500/10 border-amber-400/30"} text-[12px] border rounded px-2 py-1 mb-3 text-center`}>
+              Dev only — your code is <span className="font-mono font-semibold">{emailOtpInfo.devCode}</span>
+            </p>
+          )}
+          <input
+            type="text"
+            value={emailCode}
+            onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="123 456"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            className={s.inputCenter}
+            style={inputBg}
+            data-testid="input-email-otp"
+          />
+          {emailOtpError && <p className={s.totpErr}>{emailOtpError}</p>}
+          <button
+            type="button"
+            onClick={submitEmailOtp}
+            disabled={submitting || emailCode.length !== 6}
+            className={s.primaryBtn}
+            style={s.primaryBtnStyle}
+            data-testid="button-email-otp-verify"
+          >
+            {submitting ? "Verifying..." : "Verify"}
+          </button>
+          <button
+            type="button"
+            onClick={resendEmailOtp}
+            disabled={resendCooldown > 0}
+            className={s.ghostBtn}
+            data-testid="button-email-otp-resend"
+          >
+            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Didn't get it? Resend"}
+          </button>
+          {totpAlsoEnrolled && (
+            <button
+              type="button"
+              onClick={() => { setAdminPhase("totp"); setEmailOtpError(null); }}
+              className={s.ghostBtn}
+              data-testid="button-use-authenticator-instead"
+            >
+              Use authenticator app instead
+            </button>
           )}
         </div>
       </main>
@@ -911,6 +1027,19 @@ export function Login() {
                 Continue with Apple
               </button>
             </div>
+            {/* Dev-only shortcut so task-review previews (which have no
+                session because cookies are per-host) can land in /admin
+                in one click without typing creds. The server route is
+                404 in production. */}
+            {isAdmin && import.meta.env.DEV && (
+              <a
+                href="/dev-login-bill"
+                className={`${s.oauthBtn} mt-2.5 justify-center text-xs`}
+                data-testid="link-dev-login-bill"
+              >
+                Dev sign-in (bill) →
+              </a>
+            )}
           </>
         )}
       </div>

@@ -48,12 +48,15 @@ const scrypt = promisify(_scrypt);
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-async function hashCode(code: string): Promise<string> {
+// Exported so the admin email-OTP routes (Task #57) can reuse the same
+// scrypt envelope — keeps "what an OTP hash looks like in our DB" in one
+// place. Anywhere we store a short numeric code, this is how we hash it.
+export async function hashCode(code: string): Promise<string> {
   const salt = randomBytes(16);
   const buf = (await scrypt(code, salt, 32)) as Buffer;
   return `${salt.toString("hex")}:${buf.toString("hex")}`;
 }
-async function verifyCode(code: string, stored: string): Promise<boolean> {
+export async function verifyCode(code: string, stored: string): Promise<boolean> {
   const [saltHex, hashHex] = stored.split(":");
   if (!saltHex || !hashHex) return false;
   const salt = Buffer.from(saltHex, "hex");
@@ -62,7 +65,7 @@ async function verifyCode(code: string, stored: string): Promise<boolean> {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-function generateSixDigitCode(): string {
+export function generateSixDigitCode(): string {
   // 100000–999999. We avoid leading-zero codes so the fan never has to
   // count zeros — Apple/Google/Stripe all do the same.
   return String(100000 + Math.floor(Math.random() * 900000));
