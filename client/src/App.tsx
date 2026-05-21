@@ -178,10 +178,10 @@ function Router() {
           <Redirect to="/admin/albums" />
         </Route>
         <Route path="/">
-          {user ? <Redirect to="/collection" /> : <Redirect to="/login" />}
+          {user ? <Redirect to="/admin" /> : <Redirect to="/login" />}
         </Route>
         <Route>
-          {user ? <Redirect to="/collection" /> : <Redirect to="/login" />}
+          {user ? <Redirect to="/admin" /> : <Redirect to="/login" />}
         </Route>
       </Switch>
       <PlayerOverlay />
