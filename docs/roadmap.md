@@ -616,8 +616,24 @@ The artist-to-fan loop that ties the rest of the platform together. Built **afte
 - `orders` — `{ id, fanUserId, albumId, packageId, stripePaymentIntentId, orderDeskOrderId?, status, shippingAddress?, createdAt }`
 - `goodDeeds` — `{ id, fanUserId, albumId, orderId, claimedAt, isPrintedAndSigned, printedAt?, signedBy?, shippedAt? }`
 
+### Album-creation pricing step (artist-facing)
+When an artist gets to the **pricing section while creating an album** (not at signup — this lives inside the per-album setup flow), we want pricing to feel transparent: they should be able to see their costs, their floor, and their profit before they commit. Sketch of the questions, in order:
+
+1. **"How many do you think you might sell (minimum)?"** — dropdown of quantity tiers. This is the manufacturing run size we plan around. Surfaces a soft expectation ("most artists sell ~25% of their pressed quantity to true fans") so they don't over-press.
+2. **"Choose your packages."** — preset packages (digital-only / digital + vinyl / digital + vinyl + printed-and-signed GoodDeed / CD / cassette / etc.) plus a **Custom** option that pings us for a quote (vinyl color, gatefold, inserts, etc.).
+3. **"How much would you like to sell it for?"** — we show a **suggested price** per package based on the chosen quantity tier and our per-unit cost, and the artist can tweak it. The page shows live: per-unit cost, floor (suggested minimum), the artist's chosen price, and the resulting **profit per unit + projected profit** (using the 25% sell-through assumption against their quantity tier).
+4. **"Add a printed + signed GoodDeed Certificate?"** — yes/no add-on, with its own incremental cost + suggested upcharge.
+
+The artist's chosen price functions as the **floor** the rest of the pipeline already references — every dollar a fan pays above the floor is upside, shared per the splits decision below.
+
+**Cost baseline (to confirm with Bill):** ~$10 per unit all-in for the manufactured package today. Example: at a $20 sell price, that's ~$10 of upside per unit before splits. Real numbers — including how cost moves with quantity tier and package — to be locked in before this UX ships; the page should pull from a cost table, not hard-code $10.
+
+**Connects to:**
+- The future **"pay what you want, with a floor"** fan-facing purchase UX on the public album page — the artist's floor here is the floor fans see there.
+- The Manufacturing tab — the quantity tier + package mix feed straight into the manufacturing run plan.
+
 ### Open decisions
-- **Splits** (artist / label / GoodTunes / featured collaborators). Bill wants this eventually, not in v1. Likely Stripe Connect with per-album split rules.
+- **Splits** (artist / label / GoodTunes / featured collaborators). Bill wants this eventually, not in v1. Likely Stripe Connect with per-album split rules. Includes how the **over-floor** amount from the pay-what-you-want UX is split — same decision, applied to that bucket.
 - **Reporting surface** — own `/artist` dashboard vs. fold into existing admin. Probably separate (different audience + chrome).
 - **Sales tax / VAT** — Stripe Tax recommended over manual jurisdiction handling.
 - **Refunds / chargebacks** — what happens to digital access + an already-minted GoodDeed?
