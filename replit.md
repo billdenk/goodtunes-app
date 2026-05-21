@@ -27,6 +27,7 @@ Read the doc that matches your task before changing code:
 - **[docs/auth-and-dual-shell.md](./docs/auth-and-dual-shell.md)** — dual auth (admin + customer), TOTP, OAuth (Google + Apple), host-based routing, login-page provider lookup, Apple private-relay capture.
 - **[docs/admin-conventions.md](./docs/admin-conventions.md)** — dev-vs-prod debugging, streaming-row vs GoodTunes-release rule, paste-a-URL pattern, grid/list toggle, cross-section deep links, Person-sheet content guardrails.
 - **[docs/credits-and-chat.md](./docs/credits-and-chat.md)** — SuperCredits™, vendor chat demo + in-app browser, GoodSync™ lyrics, playlist covers, favorites, downloads & song row.
+- **[docs/investor-update.md](./docs/investor-update.md)** — deck-grade one-pager pulling shipped capabilities, in-flight work, and near-term roadmap into a single document Nick can send investors. Re-date and refresh whenever the in-flight queue meaningfully shifts.
 - **[docs/roadmap.md](./docs/roadmap.md)** — auth plan, AWS integration, DRM ladder, mobile RN port, play analytics, artist upload portal, Micro-Sponsorships economics, streaming-service handoff, muso.ai evaluation, verified-artist outreach, lyrics data plan. Read this for anything labelled "planned" or "deferred."
 
 ## User preferences
