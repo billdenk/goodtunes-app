@@ -44,7 +44,13 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: { username: string; password: string }) => {
-      const res = await fetch("/api/login", {
+      // On the dev/preview host there's no admin.* vs my.* split, so the
+      // server can't pick admin vs customer from the host. Pass an explicit
+      // ?kind=admin when we're on the admin shell (server honors it via
+      // kindFromRequest's query override).
+      const isAdminShell = window.location.pathname.startsWith("/admin");
+      const url = isAdminShell ? "/api/login?kind=admin" : "/api/login";
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
