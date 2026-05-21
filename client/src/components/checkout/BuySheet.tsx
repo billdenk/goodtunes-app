@@ -108,6 +108,7 @@ export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () =>
         albumId,
         skuFormat: selectedSku.format,
         signedCert,
+        signedCertPriceCents: signedCert && addon ? addon.priceCents : undefined,
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");

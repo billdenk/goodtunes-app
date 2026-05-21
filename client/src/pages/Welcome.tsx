@@ -80,7 +80,7 @@ export function Welcome() {
     setSavingUsername(true);
     try {
       if (usernameInput && user && usernameInput !== user.username) {
-        await apiRequest("PUT", "/api/me", { username: usernameInput });
+        await apiRequest("PATCH", "/api/me/profile", { username: usernameInput });
         queryClient.invalidateQueries();
       }
     } catch {

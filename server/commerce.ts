@@ -510,14 +510,17 @@ export function registerCommerceRoutes(app: Express) {
 
   // ─── Checkout session create ─────────────────────────────────────
   // POST /api/checkout/session
-  // Body: { albumId, skuFormat, signedCert: boolean }
+  // Body: { albumId, skuFormat, signedCert: boolean, signedCertPriceCents?: number }
   // Requires a signed-in customer. Returns { clientSecret } for embedded checkout.
   // NB: all prices are read server-side from albumSkus / albumAddons — the
-  // client cannot influence the amount Stripe charges.
+  // client cannot influence the amount Stripe charges (the optional
+  // signedCertPriceCents is an *override above* the floor, never below).
   const checkoutSchema = z.object({
     albumId: z.string().min(1),
     skuFormat: z.enum(ALBUM_FORMATS),
     signedCert: z.boolean().default(false),
+    // Optional override price for the signed cert add-on. Must be >= min.
+    signedCertPriceCents: z.number().int().min(0).optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
     const auth = req.headers.authorization;
@@ -542,7 +545,10 @@ export function registerCommerceRoutes(app: Express) {
       const addons = await listActiveAddons(album.id);
       addon = addons.find((x) => x.kind === "signed_cert") ?? null;
       if (!addon) return res.status(400).json({ message: "Signed certificate isn't offered on this album" });
-      addonPriceCents = addon.priceCents;
+      addonPriceCents = parsed.data.signedCertPriceCents ?? addon.priceCents;
+      if (addonPriceCents < addon.minPriceCents) {
+        return res.status(400).json({ message: `Signed certificate must be at least $${(addon.minPriceCents / 100).toFixed(2)}` });
+      }
     }
 
     const stripe = await getStripe();

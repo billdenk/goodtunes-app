@@ -52,10 +52,11 @@ Naming: "Sub-gear" is fine internally but probably needs a friendlier user-facin
 The "View artist profile" link on a performer sheet is the seed of a much bigger flow. It belongs to GoodTunes' core sales pitch (see "Sell first. Then stream." strategy deck): **fans buy on GoodTunes pre-launch and listen here; once the album reaches Spotify / Apple Music / Pandora / Deezer / etc., we hand them off**.
 
 Planned UX:
-- **One-time service picker** — first time after we've launched to streaming, the player surfaces a pop-up: *"This album is now on streaming. Pick the service you'd like us to send you to from now on."* The user taps a service icon. We store this as their preferred streaming service.
-- **From then on**, when they tap "View artist profile" (or any cross-album link from a performer sheet), we deep-link straight into their preferred service. They can change the preference any time in user settings.
+- **Ask on entry, not on first handoff** — during onboarding (right after first sign-in, before the user lands on Library) ask: *"When this music lands on streaming, where would you like us to send you?"* Tiles for Apple Music / Spotify / Qobuz / Tidal / Amazon Music / Pandora / Deezer / YouTube Music + "Ask me later." Storing this up front means we already know where to point them the day a release goes live — no second pop-up needed. Editable any time in Account settings.
+- **Per-album "live on streaming" alert** — when the artist/label tells us an album has gone live and gives us the per-service URLs, we surface an in-app banner the next time that fan opens the player: *"X Album is live on Qobuz — open now."* One tap deep-links straight into their preferred service. If the album isn't on their preferred service, fall back to the next service in their list (or the first available link) and label it accordingly.
+- **Deep links from performer sheets** — same preferred-service routing powers the "View artist profile" link and any cross-album link from a performer sheet.
 - **Notifications** — once a fan has chosen a service, we can notify them when an artist they care about drops something new on that service. The performer sheet is the natural place to subscribe, because they're already showing intent to follow this person.
-- **Data value** — preferred-service selections are first-party data we can report back to artists (who's listening where).
+- **Data value** — preferred-service selections + per-album go-live click-throughs are first-party data we can report back to artists (who's listening where, who clicks through on day-one).
 
 This is post-launch work. For now the link is a toast placeholder, but the row is intentionally there in the design so demos can point at it.
 
