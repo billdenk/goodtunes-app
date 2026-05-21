@@ -260,7 +260,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // picks the token out of the hash, stores it in localStorage, and
     // navigates onward. No inline <script> (Replit's preview iframe
     // CSP blocks those), no cookie shenanigans, no extra UI.
-    res.redirect(`/login?kind=admin#token=${encodeURIComponent(token)}`);
+    // Use /admin/login (not /login) — on *.replit.dev hosts the auth
+    // kind is detected from the pathname (anything under /admin* counts
+    // as admin), so /login would force customer chrome and bounce the
+    // admin token to /account where it doesn't authenticate.
+    res.redirect(`/admin/login#token=${encodeURIComponent(token)}`);
   });
 
   app.post("/api/login", async (req, res) => {
