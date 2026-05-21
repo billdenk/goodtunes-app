@@ -35,6 +35,13 @@ export const labels = pgTable("labels", {
   // before the paste-URL flow existed.
   domain: text("domain").unique(),
   logoUrl: text("logo_url"),
+  // Curation lock on `logoUrl`. When true, automated paths (favicon
+  // backfills, "re-scrape from website" enrichment, any future logo
+  // enrichment job) MUST skip writing `logoUrl` — the operator has
+  // explicitly curated it. Explicit admin writes (PUT /api/admin/labels/:id
+  // with a new `logoUrl`) bypass the lock; locks are about automation,
+  // not editability. Mirrors `people.photoLocked` / `people.coverLocked`.
+  logoLocked: boolean("logo_locked").notNull().default(false),
   bio: text("bio"),
   location: text("location"),
   websiteUrl: text("website_url"),
@@ -418,6 +425,13 @@ export const vendors = pgTable("vendors", {
   homeUrl: text("home_url"),
   aboutUrl: text("about_url"),
   logoUrl: text("logo_url"),
+  // Curation lock on `logoUrl`. When true, automated paths (favicon
+  // backfills, "re-scrape from website" enrichment, any future logo
+  // enrichment job) MUST skip writing `logoUrl` — the operator has
+  // explicitly curated it. Explicit admin writes (PUT /api/admin/vendors/:id
+  // with a new `logoUrl`) bypass the lock; locks are about automation,
+  // not editability. Mirrors `people.photoLocked` / `people.coverLocked`.
+  logoLocked: boolean("logo_locked").notNull().default(false),
   tagline: text("tagline"),
   bio: text("bio"),
   location: text("location"),

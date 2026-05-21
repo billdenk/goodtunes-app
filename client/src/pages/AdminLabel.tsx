@@ -9,6 +9,8 @@ import {
   Upload,
   Tag,
   ExternalLink,
+  Lock,
+  LockOpen,
   MapPin,
   Disc,
   Instagram,
@@ -47,6 +49,11 @@ interface Label {
   id: string;
   name: string;
   logoUrl: string | null;
+  // Curation lock on `logoUrl` — when true, automated refresh paths
+  // (favicon backfill, future "re-scrape from website" enrichment)
+  // skip writing the logo. The admin's own Replace upload still works
+  // after unlock. Mirrors `people.photoLocked` / `vendors.logoLocked`.
+  logoLocked: boolean;
   bio: string | null;
   location: string | null;
   websiteUrl: string | null;
@@ -502,6 +509,11 @@ function ImageUploadPanel({
   const [dragging, setDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  // Curation lock — only `logoUrl` is lockable today (per the locked-vendor-
+  // logos task). Cover keeps a plain dropzone.
+  const isLogo = field === "logoUrl";
+  const locked = isLogo ? !!label.logoLocked : false;
+
   const mut = useMutation({
     mutationFn: async (file: File) => {
       setPreviewUrl(URL.createObjectURL(file));
@@ -527,6 +539,27 @@ function ImageUploadPanel({
         variant: "destructive",
       });
     },
+  });
+
+  // Toggle the curation lock. Invalidate-on-success so the chip flips
+  // when the row refetches. Mirrors AdminPerson's photo/cover lock.
+  const lockMut = useMutation({
+    mutationFn: async (nextLocked: boolean) => {
+      await apiRequest("PUT", `/api/admin/labels/${label.id}`, {
+        logoLocked: nextLocked,
+      });
+      return nextLocked;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/labels", label.id] });
+      await qc.invalidateQueries({ queryKey: ["/api/labels"] });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't change the lock",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
   });
 
   const acceptFile = (file: File | undefined | null) => {
@@ -562,8 +595,41 @@ function ImageUploadPanel({
         className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6"
         data-testid={`panel-${field}-current`}
       >
-        <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
-          Current {fieldLabel.toLowerCase()}
+        <div className="flex items-start justify-between mb-3">
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
+            Current {fieldLabel.toLowerCase()}
+          </div>
+          {/* Lock chip — only on Logo. Mirrors AdminPerson + AdminVendor:
+              brand-blue when locked, slate when not, 7×7 ghost button. */}
+          {isLogo && (
+            <button
+              type="button"
+              onClick={() => !lockMut.isPending && lockMut.mutate(!locked)}
+              disabled={lockMut.isPending}
+              aria-pressed={locked}
+              title={
+                locked
+                  ? "Locked \u2014 automated refreshes will skip this logo"
+                  : "Unlocked \u2014 automated refreshes may update this logo"
+              }
+              className={[
+                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 active:scale-[0.94]",
+                locked
+                  ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+                lockMut.isPending && "opacity-50",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              data-testid="button-lock-logo"
+            >
+              {locked ? (
+                <Lock className="w-3.5 h-3.5" />
+              ) : (
+                <LockOpen className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
         </div>
         <div
           className={[
@@ -603,19 +669,30 @@ function ImageUploadPanel({
         </div>
         <button
           type="button"
-          onClick={() => !busy && fileInputRef.current?.click()}
+          onClick={() => {
+            if (busy) return;
+            if (locked) {
+              toast({
+                title: "Unlock first",
+                description: `Tap the lock on the Current ${fieldLabel.toLowerCase()} card to allow changes.`,
+              });
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
           onDragOver={(e) => {
             e.preventDefault();
-            if (!busy) setDragging(true);
+            if (!busy && !locked) setDragging(true);
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => {
             e.preventDefault();
             setDragging(false);
-            if (busy) return;
+            if (busy || locked) return;
             acceptFile(e.dataTransfer.files?.[0]);
           }}
           disabled={busy}
+          aria-disabled={locked}
           data-testid={`dropzone-${field}`}
           className={[
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
@@ -623,24 +700,39 @@ function ImageUploadPanel({
               ? "border-[#319ED8] bg-[#319ED8]/5"
               : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
             busy && "opacity-60 cursor-not-allowed",
+            locked && "opacity-40 cursor-not-allowed hover:border-slate-200 hover:bg-transparent",
           ]
             .filter(Boolean)
             .join(" ")}
         >
-          <Upload
-            className={[
-              "w-7 h-7",
-              dragging ? "text-[#319ED8]" : "text-slate-400",
-            ].join(" ")}
-          />
-          <div className="text-slate-700 text-[13px] font-semibold">
-            {dragging
-              ? "Drop to upload"
-              : "Drag an image here, or click to pick"}
-          </div>
-          <div className="text-slate-400 text-[11.5px]">
-            JPG, PNG, or WebP · up to 8 MB
-          </div>
+          {locked ? (
+            <>
+              <Lock className="w-6 h-6 text-slate-400" />
+              <div className="text-slate-700 text-[13px] font-semibold">
+                Unlock to replace
+              </div>
+              <div className="text-slate-400 text-[11.5px]">
+                Tap the lock on the current {fieldLabel.toLowerCase()} to allow changes.
+              </div>
+            </>
+          ) : (
+            <>
+              <Upload
+                className={[
+                  "w-7 h-7",
+                  dragging ? "text-[#319ED8]" : "text-slate-400",
+                ].join(" ")}
+              />
+              <div className="text-slate-700 text-[13px] font-semibold">
+                {dragging
+                  ? "Drop to upload"
+                  : "Drag an image here, or click to pick"}
+              </div>
+              <div className="text-slate-400 text-[11.5px]">
+                JPG, PNG, or WebP · up to 8 MB
+              </div>
+            </>
+          )}
         </button>
         <input
           ref={fileInputRef}

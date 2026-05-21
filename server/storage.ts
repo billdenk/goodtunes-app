@@ -825,8 +825,21 @@ export class DbStorage implements IStorage {
     const [l] = await db.insert(labels).values(data as any).returning();
     return l;
   }
-  async updateLabel(id: string, data: Partial<Label>): Promise<Label | undefined> {
-    const { id: _i, createdAt: _c, ...rest } = data as any;
+  async updateLabel(id: string, data: Partial<Label> & { __bypassLogoLock?: boolean }): Promise<Label | undefined> {
+    const { id: _i, createdAt: _c, __bypassLogoLock, ...rest } = data as any;
+    // Curation lock guard. If the row is locked AND the caller hasn't
+    // opted in via `__bypassLogoLock`, drop the `logoUrl` write silently
+    // — that path is reserved for explicit operator Replace from the
+    // admin Logo dialog. Automated/enrichment callers that don't know
+    // about the bypass flag (favicon backfills, future re-scrape jobs)
+    // therefore can't overwrite a curated logo. Mirrors the
+    // `people.photoLocked` / `people.coverLocked` contract.
+    if (rest.logoUrl !== undefined && !__bypassLogoLock) {
+      const current = await this.getLabelById(id);
+      if (current?.logoLocked) {
+        delete rest.logoUrl;
+      }
+    }
     if (Object.keys(rest).length === 0) return this.getLabelById(id);
     const [l] = await db.update(labels).set(rest).where(eq(labels.id, id)).returning();
     return l;
@@ -853,9 +866,22 @@ export class DbStorage implements IStorage {
     const [v] = await db.insert(vendors).values({ ...data, domain: data.domain.toLowerCase() } as any).returning();
     return v;
   }
-  async updateVendor(id: string, data: Partial<Vendor>): Promise<Vendor | undefined> {
-    const { id: _i, createdAt: _c, ...rest } = data as any;
+  async updateVendor(id: string, data: Partial<Vendor> & { __bypassLogoLock?: boolean }): Promise<Vendor | undefined> {
+    const { id: _i, createdAt: _c, __bypassLogoLock, ...rest } = data as any;
     if (rest.domain) rest.domain = String(rest.domain).toLowerCase();
+    // Curation lock guard. If the row is locked AND the caller hasn't
+    // opted in via `__bypassLogoLock`, drop the `logoUrl` write silently
+    // — that path is reserved for explicit operator Replace from the
+    // admin logo editor. Automated/enrichment callers that don't know
+    // about the bypass flag (favicon backfills, future re-scrape jobs)
+    // therefore can't overwrite a curated logo. Mirrors the
+    // `people.photoLocked` / `people.coverLocked` contract.
+    if (rest.logoUrl !== undefined && !__bypassLogoLock) {
+      const current = await this.getVendorById(id);
+      if (current?.logoLocked) {
+        delete rest.logoUrl;
+      }
+    }
     if (Object.keys(rest).length === 0) return this.getVendorById(id);
     const [v] = await db.update(vendors).set(rest).where(eq(vendors.id, id)).returning();
     return v;

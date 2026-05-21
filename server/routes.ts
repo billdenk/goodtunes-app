@@ -7513,13 +7513,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : null;
     }
     if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
+    // Curation lock on the label logo. Loose-coerce so callers can pass
+    // boolean | "true" | "false". Locking does NOT prevent a same-PUT
+    // logoUrl write — locks gate *automated* refresh paths, not the
+    // admin's own Replace upload. The UI dims the dropzone when locked
+    // as a usability nudge. Mirrors the Person lock pattern.
+    if (req.body?.logoLocked !== undefined) {
+      updates.logoLocked = !(req.body.logoLocked === false || req.body.logoLocked === "false");
+    }
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (location !== undefined) updates.location = location ? String(location) : null;
     if (websiteUrl !== undefined) updates.websiteUrl = websiteUrl ? String(websiteUrl) : null;
     if (instagramUrl !== undefined) updates.instagramUrl = instagramUrl ? String(instagramUrl) : null;
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
     try {
-      const l = await storage.updateLabel(id, updates);
+      // Explicit operator Replace from the admin Logo dialog — bypass
+      // the storage-level lock guard. Automated callers (favicon
+      // backfill, future re-scrape enrichment) MUST NOT pass this flag.
+      const l = await storage.updateLabel(id, { ...updates, __bypassLogoLock: true });
       if (!l) return res.status(404).json({ message: "Label not found" });
       return res.json(l);
     } catch (err: any) {
@@ -7822,12 +7833,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (homeUrl !== undefined) updates.homeUrl = homeUrl ? String(homeUrl) : null;
     if (aboutUrl !== undefined) updates.aboutUrl = aboutUrl ? String(aboutUrl) : null;
     if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
+    // Curation lock on the vendor logo. Loose-coerce so callers can pass
+    // boolean | "true" | "false". Locking does NOT prevent a same-PUT
+    // logoUrl write — locks gate *automated* refresh paths, not the
+    // admin's own Replace upload. The UI dims the dropzone when locked
+    // as a usability nudge. Mirrors the Person lock pattern.
+    if (req.body?.logoLocked !== undefined) {
+      updates.logoLocked = !(req.body.logoLocked === false || req.body.logoLocked === "false");
+    }
     if (tagline !== undefined) updates.tagline = tagline ? String(tagline) : null;
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (location !== undefined) updates.location = location ? String(location) : null;
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
     try {
-      const v = await storage.updateVendor(id, updates);
+      // Explicit operator Replace from the admin logo editor — bypass
+      // the storage-level lock guard. Automated callers (favicon
+      // backfill, future re-scrape enrichment) MUST NOT pass this flag.
+      const v = await storage.updateVendor(id, { ...updates, __bypassLogoLock: true });
       if (!v) return res.status(404).json({ message: "Vendor not found" });
       return res.json(v);
     } catch (err: any) {
