@@ -71,6 +71,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
@@ -9782,6 +9783,7 @@ interface AlbumVideo {
   description: string | null;
   videoUrl: string;
   posterUrl: string | null;
+  sourceUrl: string | null;
   position: number;
 }
 interface AlbumPhoto {
@@ -9956,15 +9958,26 @@ function BonusVideos({
             MP4 / MOV / WebM · up to 500 MB
           </p>
         </div>
-        {/* Advanced menu — same visual treatment as the Tracks tab. Only
-            one item today (bulk import from Dropbox), but the menu shape
-            leaves room for future bulk video actions without rewiring
-            the header. */}
-        <BulkBonusAdvancedMenu
-          label="Upload multiple videos"
-          description="Dropbox folder of .mp4 / .mov / .webm files."
-          onPick={() => setBulkOpen(true)}
-        />
+        <div className="flex items-center gap-2">
+          {/* Primary add — uses the shared `AddEntityButton` so the
+              chrome matches "Add Person" / "Add Gear" / "Add Label"
+              across admin (white outline, slate text). Don't reinvent
+              the button here — the design system has one. */}
+          <AddEntityButton
+            label="Add Video"
+            onClick={() => setSheet({ kind: "new" })}
+            testId="button-add-video"
+          />
+          {/* Advanced menu — same visual treatment as the Tracks tab. Only
+              one item today (bulk import from Dropbox), but the menu shape
+              leaves room for future bulk video actions without rewiring
+              the header. */}
+          <BulkBonusAdvancedMenu
+            label="Upload multiple videos"
+            description="Dropbox folder of .mp4 / .mov / .webm files."
+            onPick={() => setBulkOpen(true)}
+          />
+        </div>
       </div>
       <div className="p-5">
         {isLoading ? (
@@ -10001,12 +10014,6 @@ function BonusVideos({
                   busy={deleteMut.isPending}
                 />
               ))}
-            <AddTile
-              busy={false}
-              label="Add video"
-              onClick={() => setSheet({ kind: "new" })}
-              testId="button-add-video"
-            />
           </div>
         )}
       </div>
@@ -10015,8 +10022,16 @@ function BonusVideos({
           mode={sheet}
           albumId={albumId}
           onClose={() => setSheet({ kind: "closed" })}
-          onSaved={async () => {
-            setSheet({ kind: "closed" });
+          onSaved={async (created) => {
+            // Keep the sheet open in Edit mode for newly-created rows
+            // so Bill can immediately tweak the title / thumbnail
+            // without hunting for the tile and re-opening the dialog.
+            // Edits close as before.
+            if (sheet.kind === "edit" || !created) {
+              setSheet({ kind: "closed" });
+            } else {
+              setSheet({ kind: "edit", video: created });
+            }
             await qc.invalidateQueries({
               queryKey: ["/api/albums", albumId, "videos"],
             });
@@ -10783,10 +10798,12 @@ function AlbumVideoSheet({
   onSaved,
   onRequestDelete,
 }: {
-  mode: { kind: "new" } | { kind: "edit"; video: AlbumVideo };
+  mode:
+    | { kind: "new"; initialFile?: File; initialUrl?: string }
+    | { kind: "edit"; video: AlbumVideo };
   albumId: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (created?: AlbumVideo) => void;
   onRequestDelete: (v: AlbumVideo) => void;
 }) {
   const isEdit = mode.kind === "edit";
@@ -10838,11 +10855,23 @@ function AlbumVideoSheet({
     };
   }, [pickedFilePreview]);
 
+  function prettyTitleFromName(name: string): string {
+    // "tiny-desk_take.2.mov" → "Tiny Desk Take 2"
+    const stem = name.replace(/\.[^.]+$/, "");
+    const spaced = stem.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+    return spaced
+      .split(" ")
+      .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+      .join(" ") || "Untitled video";
+  }
+
   function handlePickFile(file: File) {
     if (pickedFilePreview) URL.revokeObjectURL(pickedFilePreview);
     setPickedFile(file);
     setPickedFilePreview(URL.createObjectURL(file));
-    if (!title) setTitle(file.name.replace(/\.[^.]+$/, "") || "Untitled video");
+    // Title autofill — prefer the prettifier (handles `tiny-desk.mov`
+    // → `Tiny Desk`) over a bare stem.
+    if (!title) setTitle(prettyTitleFromName(file.name));
     // Auto-grab a still frame for the Thumbnail slot when the operator
     // hasn't supplied one (or only has an earlier auto-generated frame
     // from a previously picked file). Best-effort: any failure leaves
@@ -10926,6 +10955,25 @@ function AlbumVideoSheet({
     }
   }
 
+  // Title autofill for the URL flow: as Bill pastes/types a URL, derive
+  // a pretty title from the URL's last path segment whenever the title
+  // is still empty. He can edit before save. We only run this when the
+  // form-side title is empty so we never clobber a manual edit.
+  useEffect(() => {
+    if (isEdit || source !== "url") return;
+    if (title.trim()) return;
+    const trimmed = importUrl.trim();
+    if (!trimmed) return;
+    try {
+      const u = new URL(trimmed);
+      const lastSeg = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() || "");
+      if (lastSeg) setTitle(prettyTitleFromName(lastSeg));
+    } catch {
+      /* not a parseable URL yet — leave title alone */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importUrl, source]);
+
   async function handlePickPoster(file: File) {
     // Invalidate any in-flight auto-capture so its late result can't
     // clobber the operator's manual pick.
@@ -10962,32 +11010,78 @@ function AlbumVideoSheet({
         });
       } else {
         let videoUrl = "";
+        // Resolve title + poster in locals so the create POST sees the
+        // server-extracted values for URL imports — `setTitle` /
+        // `setPosterUrl` here would only update state for the *next*
+        // render, not the request body we're about to send.
+        let resolvedTitle = title.trim();
+        let resolvedPosterUrl = posterUrl;
+        let resolvedSourceUrl: string | null = null;
         if (source === "upload" && pickedFile) {
           setProgress(0);
           videoUrl = await uploadVideoFile(pickedFile, (f) =>
             setProgress(Math.min(0.99, f)),
           );
         } else if (source === "url") {
+          const pastedUrl = importUrl.trim();
+          resolvedSourceUrl = pastedUrl;
+          // Defensive title derive — the [importUrl, source] autofill
+          // useEffect normally fires before submit, but if Bill pastes
+          // and clicks Add fast enough, or pastes into a freshly
+          // primed sheet where the effect's render hasn't committed,
+          // we still want a real title in the POST body. Same logic
+          // as the autofill effect, run once more right at submit.
+          if (!resolvedTitle && pastedUrl) {
+            try {
+              const u = new URL(pastedUrl);
+              const lastSeg = decodeURIComponent(
+                u.pathname.split("/").filter(Boolean).pop() || "",
+              );
+              if (lastSeg) resolvedTitle = prettyTitleFromName(lastSeg);
+            } catch { /* leave empty — server suggestion fills in */ }
+          }
           const res = await apiRequest(
             "POST",
             "/api/admin/upload-video/from-url",
-            { url: importUrl.trim() },
+            { url: pastedUrl },
           );
           const data = await res.json();
           videoUrl = data.url;
-          if (!title.trim() && data.suggestedTitle) {
-            setTitle(data.suggestedTitle);
+          if (!resolvedTitle && data.suggestedTitle) {
+            resolvedTitle = prettyTitleFromName(String(data.suggestedTitle));
+            setTitle(resolvedTitle);
+          }
+          // Pick up the server-extracted poster only if Bill hasn't
+          // already chosen one for this sheet session.
+          if (!resolvedPosterUrl && data.posterUrl) {
+            resolvedPosterUrl = String(data.posterUrl);
+            setPosterUrl(resolvedPosterUrl);
           }
         }
         const finalTitle =
-          title.trim() ||
+          resolvedTitle ||
           (source === "url" ? "Imported video" : "Untitled video");
-        await apiRequest("POST", `/api/admin/albums/${albumId}/videos`, {
-          videoUrl,
-          title: finalTitle,
-          description: description.trim() || null,
-          posterUrl,
-        });
+        const created = await apiRequest(
+          "POST",
+          `/api/admin/albums/${albumId}/videos`,
+          {
+            videoUrl,
+            title: finalTitle,
+            description: description.trim() || null,
+            posterUrl: resolvedPosterUrl,
+            sourceUrl: resolvedSourceUrl,
+          },
+        );
+        // Pass the just-saved row back to the parent so the sheet can
+        // transition into Edit mode instead of slamming shut — Bill
+        // wanted to be able to tweak the title / thumbnail right after
+        // a URL import without having to find the tile and re-open
+        // the sheet.
+        try {
+          const savedRow = await created.json();
+          onSaved(savedRow as AlbumVideo);
+          return;
+        } catch { /* fall through to no-arg onSaved below */ }
       }
       onSaved();
     } catch (e: any) {
@@ -11025,37 +11119,43 @@ function AlbumVideoSheet({
         <div className="flex-1 overflow-y-auto">
           <div className="p-5 pb-4">
             {isEdit ? (
-              <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
-                {existing?.posterUrl ? (
-                  <img
-                    src={existing.posterUrl}
-                    alt=""
-                    className="w-full h-full object-cover opacity-90"
+              <>
+                {/* Real inline player — the previous edit preview was a
+                    poster image with an "open in new tab" overlay,
+                    which made it impossible to confirm the video
+                    actually plays without leaving the dialog. Native
+                    controls let Bill check playback right here. */}
+                <div className="relative aspect-video rounded-xl overflow-hidden bg-black border border-slate-200">
+                  <video
+                    src={existing?.videoUrl}
+                    poster={existing?.posterUrl || undefined}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-full object-contain bg-black"
+                    data-testid="video-preview-album-video"
                   />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Play
-                      className="w-10 h-10 text-slate-600"
-                      strokeWidth={1.5}
-                    />
+                </div>
+                {existing?.sourceUrl && (
+                  <div className="mt-2 flex items-center gap-2 text-[11.5px] text-slate-500">
+                    <span className="font-medium uppercase tracking-wide text-slate-400">
+                      Imported from
+                    </span>
+                    <a
+                      href={existing.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate text-slate-600 hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors"
+                      data-testid="link-album-video-source-url"
+                    >
+                      {(() => {
+                        try { return new URL(existing.sourceUrl).hostname.replace(/^www\./, ""); }
+                        catch { return existing.sourceUrl; }
+                      })()}
+                    </a>
                   </div>
                 )}
-                <a
-                  href={existing?.videoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="absolute inset-0 flex items-center justify-center"
-                  aria-label="Open video in a new tab"
-                  data-testid="link-preview-album-video"
-                >
-                  <div className="w-14 h-14 rounded-full bg-white/95 flex items-center justify-center shadow-lg">
-                    <Play
-                      className="w-5 h-5 text-slate-900 ml-1"
-                      fill="currentColor"
-                    />
-                  </div>
-                </a>
-              </div>
+              </>
             ) : pickedFile || pickedFilePreview ? (
               <>
                 <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 border border-slate-200">

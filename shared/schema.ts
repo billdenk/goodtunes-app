@@ -130,6 +130,11 @@ export const albumVideos = pgTable("album_videos", {
   // Optional still frame for the thumbnail. When null the fan-side
   // renders a generic play-icon tile.
   posterUrl: text("poster_url"),
+  // Original URL the operator pasted when importing (Dropbox share,
+  // direct .mp4 link, etc.). NULL for direct file uploads. Surfaced
+  // in the admin Edit dialog as an "Imported from <host>" chip so
+  // Bill can copy/open the original. Never shown fan-side.
+  sourceUrl: text("source_url"),
   position: integer("position").notNull().default(0),
 });
 

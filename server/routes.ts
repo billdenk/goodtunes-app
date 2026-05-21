@@ -328,7 +328,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // playback on large audio because it can't probe metadata; even
       // Chrome stalls when it can't fetch the WAV header range.
       const [metadata] = await file.getMetadata();
-      const contentType = String(metadata.contentType || "application/octet-stream");
+      const storedCt = String(metadata.contentType || "");
+      // Safety net: if the stored content-type is missing or generic
+      // (legacy signed-PUT uploads landed as application/octet-stream
+      // because the URL didn't bind a Content-Type — see
+      // /api/admin/upload-video/finalize for the upload-time fix),
+      // derive a sensible content-type from the path extension so the
+      // browser still gets a playable media response.
+      const EXT_TO_CT: Record<string, string> = {
+        ".mp4": "video/mp4",
+        ".m4v": "video/mp4",
+        ".mov": "video/quicktime",
+        ".webm": "video/webm",
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".wav": "audio/wav",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".aiff": "audio/aiff",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".avif": "image/avif",
+      };
+      let contentType = storedCt;
+      if (!contentType || contentType === "application/octet-stream") {
+        const extMatch = id.toLowerCase().match(/\.([a-z0-9]+)$/);
+        const derived = extMatch ? EXT_TO_CT[`.${extMatch[1]}`] : undefined;
+        if (derived) contentType = derived;
+      }
+      if (!contentType) contentType = "application/octet-stream";
       const totalSize = Number(metadata.size || 0);
       const range = req.headers.range;
       const isPublic = acl.visibility === "public";
@@ -820,6 +852,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // We accept the `/objects/uploads/<id>` path the sign step returned and
   // refuse anything else to keep this route from being used to publicize
   // arbitrary objects in the bucket.
+  //
+  // The signed-PUT URL minted in step 1 does **not** bind a Content-Type
+  // header — GCS therefore stores whatever the browser happened to send
+  // (often `application/octet-stream` from XHR's heuristics). That means
+  // `/objects/uploads/<id>` later serves the bytes as a generic binary
+  // blob, and the browser refuses to play it as a video. Fix it here by
+  // re-stamping the GCS object's `contentType` based on the file
+  // extension we baked into the upload path during signing. Cheap, idempotent.
   app.post(
     "/api/admin/upload-video/finalize",
     requireAdminBearer,
@@ -830,6 +870,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return res.status(400).json({ message: "Invalid upload path" });
         }
         const file = await objectStorage.getObjectEntityFile(finalPath);
+        // Derive contentType from extension; fall back to nothing if
+        // the path somehow lacks a known video extension.
+        const extMatch = finalPath.toLowerCase().match(/\.([a-z0-9]+)$/);
+        const ext = extMatch ? `.${extMatch[1]}` : "";
+
+        // .mov (QuickTime) lands here verbatim from the browser, but
+        // Chrome / mobile Safari won't reliably play HEVC-or-otherwise
+        // .mov bytes inline even with the correct content type. So for
+        // .mov we mirror the from-URL behavior: download the object,
+        // transcode to web-friendly .mp4, re-upload as a new object,
+        // delete the original, and swap finalPath. The client picks up
+        // the new path and stores it on the row.
+        if (ext === ".mov") {
+          const fsp = await import("node:fs/promises");
+          const fs = await import("node:fs");
+          const os = await import("node:os");
+          const path = await import("node:path");
+          const { pipeline } = await import("node:stream/promises");
+          const tmpIn = path.join(os.tmpdir(), `${randomUUID()}.mov`);
+          let convOut: string | null = null;
+          let newPath = finalPath;
+          try {
+            await pipeline(file.createReadStream(), fs.createWriteStream(tmpIn));
+            const conv = await transcodeVideoToWebFriendlyMp4(tmpIn, ".mov");
+            convOut = conv.outputPath;
+            const newId = `${randomUUID()}${conv.ext}`;
+            const { bucketName, objectName } = uploadDestination(newId);
+            const f2 = objectStorageClient.bucket(bucketName).file(objectName);
+            const w = f2.createWriteStream({
+              contentType: conv.mime,
+              metadata: { cacheControl: "public, max-age=31536000, immutable" },
+              resumable: false,
+            });
+            await pipeline(fs.createReadStream(conv.outputPath), w);
+            await setObjectAclPolicy(f2, { owner: "admin", visibility: "public" });
+            try { await file.delete(); } catch (e) {
+              console.warn(`[upload-video/finalize] failed to delete original .mov ${finalPath}`, e);
+            }
+            newPath = `/objects/uploads/${newId}`;
+          } finally {
+            try { await fsp.unlink(tmpIn); } catch {}
+            if (convOut) { try { await fsp.unlink(convOut); } catch {} }
+          }
+          return res.json({ url: newPath });
+        }
+
+        const desiredCt = VIDEO_MIME_BY_EXT[ext];
+        if (desiredCt) {
+          try {
+            await file.setMetadata({ contentType: desiredCt });
+          } catch (e) {
+            console.warn(`[upload-video/finalize] setMetadata failed for ${finalPath}`, e);
+          }
+        }
         await setObjectAclPolicy(file, {
           owner: "admin",
           visibility: "public",
@@ -865,6 +959,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     requireAdminBearer,
     async (req, res) => {
       const MAX_BYTES = 500 * 1024 * 1024;
+      // Pulled out here so we can keep the tempfile path around for a
+      // post-upload ffmpeg single-frame extraction (poster).
+      const fsp = await import("node:fs/promises");
+      const fs = await import("node:fs");
+      const os = await import("node:os");
+      const path = await import("node:path");
       try {
         const raw = String(req.body?.url || "").trim();
         if (!raw) return res.status(400).json({ message: "URL is required" });
@@ -925,51 +1025,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
 
-        // Two paths from here:
-        // 1) .mp4 / .webm → stream upstream → GCS directly (existing
-        //    behavior; no disk, no CPU).
-        // 2) .mov (QuickTime) → land on a tempfile so we can remux /
-        //    transcode to a browser-playable .mp4 before uploading.
+        // Always land on a tempfile first. The .mov path already needed
+        // this for the transcode step; the .mp4/.webm path keeps the
+        // tempfile around so we can run a single-frame poster extract
+        // after the upload finishes. Memory budget is unchanged — bytes
+        // flow upstream → tempfile in ~64 KB chunks regardless.
         const needsTranscode = storedMime === "video/quicktime";
+        const { Readable } = await import("stream");
+        const { pipeline } = await import("node:stream/promises");
 
+        const tmpIn = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
+        const out = fs.createWriteStream(tmpIn);
         let received = 0;
+        const nodeReadable = Readable.fromWeb(upstream.body as any);
+        let aborted = false;
+        nodeReadable.on("data", (chunk: Buffer) => {
+          received += chunk.length;
+          if (received > MAX_BYTES && !aborted) {
+            aborted = true;
+            nodeReadable.destroy(new Error("Video exceeded 500MB import cap"));
+          }
+        });
+
         let finalId = `${randomUUID()}${ext}`;
         let finalMime = storedMime;
         let finalExt = ext;
+        // The file we'll use to extract the poster frame from (always
+        // the playback-ready file — transcoded mp4 for .mov, original
+        // otherwise). Cleaned up in `finally`.
+        let posterSourcePath: string | null = null;
+        let convOut: string | null = null;
+        try {
+          await pipeline(nodeReadable, out);
 
-        if (needsTranscode) {
-          const fsp = await import("node:fs/promises");
-          const fs = await import("node:fs");
-          const os = await import("node:os");
-          const path = await import("node:path");
-          const { Readable } = await import("stream");
-          const { pipeline } = await import("node:stream/promises");
-
-          const tmpIn = path.join(os.tmpdir(), `${randomUUID()}.mov`);
-          const out = fs.createWriteStream(tmpIn);
-          const nodeReadable = Readable.fromWeb(upstream.body as any);
-          let aborted = false;
-          nodeReadable.on("data", (chunk: Buffer) => {
-            received += chunk.length;
-            if (received > MAX_BYTES && !aborted) {
-              aborted = true;
-              nodeReadable.destroy(new Error("Video exceeded 500MB import cap"));
-            }
-          });
-          let convOut: string | null = null;
-          try {
-            await pipeline(nodeReadable, out);
+          if (needsTranscode) {
             const conv = await transcodeVideoToWebFriendlyMp4(tmpIn, ".mov");
             convOut = conv.outputPath;
             finalMime = conv.mime;
             finalExt = conv.ext;
             finalId = `${randomUUID()}${finalExt}`;
+            posterSourcePath = conv.outputPath;
             const { bucketName, objectName } = uploadDestination(finalId);
             const f2 = objectStorageClient.bucket(bucketName).file(objectName);
-            // Stream the transcoded file to GCS instead of buffering
-            // it. Music-video MP4s commonly run 100-300 MB — buffering
-            // them ahead of upload would risk OOM under concurrent
-            // imports.
             const w = f2.createWriteStream({
               contentType: finalMime,
               metadata: { cacheControl: "public, max-age=31536000, immutable" },
@@ -977,52 +1074,63 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             });
             await pipeline(fs.createReadStream(conv.outputPath), w);
             await setObjectAclPolicy(f2, { owner: "admin", visibility: "public" });
-          } finally {
-            try { await fsp.unlink(tmpIn); } catch {}
-            if (convOut) { try { await fsp.unlink(convOut); } catch {} }
-          }
-        } else {
-          const { bucketName, objectName } = uploadDestination(finalId);
-          const file = objectStorageClient.bucket(bucketName).file(objectName);
-          // Stream upstream → GCS. Abort if we cross the size cap mid-stream.
-          const writeStream = file.createWriteStream({
-            contentType: finalMime,
-            metadata: { cacheControl: "public, max-age=31536000, immutable" },
-            resumable: false,
-          });
-          const { Readable } = await import("stream");
-          const nodeReadable = Readable.fromWeb(upstream.body as any);
-
-          let aborted = false;
-          await new Promise<void>((resolve, reject) => {
-            nodeReadable.on("data", (chunk: Buffer) => {
-              received += chunk.length;
-              if (received > MAX_BYTES && !aborted) {
-                aborted = true;
-                nodeReadable.destroy();
-                writeStream.destroy(new Error("Video exceeded 500MB import cap"));
-              }
+          } else {
+            posterSourcePath = tmpIn;
+            const { bucketName, objectName } = uploadDestination(finalId);
+            const file = objectStorageClient.bucket(bucketName).file(objectName);
+            const w = file.createWriteStream({
+              contentType: finalMime,
+              metadata: { cacheControl: "public, max-age=31536000, immutable" },
+              resumable: false,
             });
-            nodeReadable.on("error", reject);
-            writeStream.on("error", reject);
-            writeStream.on("finish", resolve);
-            nodeReadable.pipe(writeStream);
+            await pipeline(fs.createReadStream(tmpIn), w);
+            await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+          }
+
+          // Best-effort poster extraction. Fall back to no poster on
+          // any failure — never block the upload result on it.
+          let posterUrl: string | null = null;
+          if (posterSourcePath) {
+            try {
+              posterUrl = await extractPosterToObjectStorage(posterSourcePath);
+            } catch (e) {
+              console.warn("[upload-video/from-url] poster extract failed", e);
+            }
+          }
+
+          // Try to recover a sensible default title from the URL path —
+          // ("Video Name.mp4" → "Video Name"). Falls back to the upstream
+          // Content-Disposition `filename=` when the URL itself has no
+          // meaningful last segment (e.g. signed-link CDNs that hide the
+          // filename in a header). The client can still override before
+          // save. Pretty-casing happens client-side in `prettyTitleFromName`.
+          function fromContentDisposition(): string | null {
+            const cd = upstream.headers.get("content-disposition") || "";
+            // RFC 5987 `filename*=UTF-8''…` wins over plain `filename=…`.
+            const star = cd.match(/filename\*\s*=\s*[^']*''([^;]+)/i);
+            const plain = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
+            const raw = (star?.[1] || plain?.[1] || "").trim();
+            if (!raw) return null;
+            try { return decodeURIComponent(raw).replace(/\.[^.]+$/, ""); }
+            catch { return raw.replace(/\.[^.]+$/, ""); }
+          }
+          const lastSeg = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "");
+          const suggestedTitle =
+            lastSeg.replace(/\.[^.]+$/, "") ||
+            fromContentDisposition() ||
+            "Imported video";
+
+          return res.json({
+            url: `/objects/uploads/${finalId}`,
+            suggestedTitle,
+            posterUrl,
+            sourceUrl: raw,
+            bytes: received,
           });
-
-          await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+        } finally {
+          try { await fsp.unlink(tmpIn); } catch {}
+          if (convOut) { try { await fsp.unlink(convOut); } catch {} }
         }
-
-        // Try to recover a sensible default title from the URL path —
-        // ("Video Name.mp4" → "Video Name"). The client can still
-        // override before save.
-        const lastSeg = decodeURIComponent(parsed.pathname.split("/").pop() || "");
-        const suggestedTitle = lastSeg.replace(/\.[^.]+$/, "") || "Imported video";
-
-        return res.json({
-          url: `/objects/uploads/${finalId}`,
-          suggestedTitle,
-          bytes: received,
-        });
       } catch (err: any) {
         console.error("Video from-URL ingest failed", err);
         return res.status(500).json({
@@ -2660,6 +2768,58 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try { await fsp.unlink(inputPath); } catch {}
 
     return { outputPath, mime: "video/mp4", ext: ".mp4", action };
+  }
+
+  // Pulls a single still ~1s into a video file (or 0s for files shorter
+  // than that), encodes it as JPEG, uploads to Object Storage, and
+  // returns the public `/objects/uploads/<id>` URL. Best-effort — callers
+  // should treat any failure as "no poster" and continue.
+  async function extractPosterToObjectStorage(videoPath: string): Promise<string | null> {
+    const { spawn } = await import("node:child_process");
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const outPath = path.join(os.tmpdir(), `${randomUUID()}.jpg`);
+    // Try a 1s seek first (skips black intro frames on most clips); if
+    // that fails — e.g. very short reels, container that doesn't seek
+    // cleanly — retry at 0s before giving up. Log stderr loudly so the
+    // operator can see why a poster didn't land instead of silently
+    // shipping a row with `posterUrl=null`.
+    async function runFfmpeg(seek: string): Promise<void> {
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn(
+          "ffmpeg",
+          [
+            "-y",
+            "-ss", seek,
+            "-i", videoPath,
+            "-frames:v", "1",
+            "-q:v", "4",
+            outPath,
+          ],
+          { stdio: ["ignore", "ignore", "pipe"] },
+        );
+        let stderr = "";
+        p.stderr.on("data", (c) => (stderr += c.toString()));
+        p.on("error", reject);
+        p.on("close", (code) => {
+          if (code === 0) return resolve();
+          reject(new Error(`ffmpeg poster failed (ss=${seek} exit ${code}): ${stderr.split("\n").slice(-6).join(" ").trim()}`));
+        });
+      });
+    }
+    try {
+      try {
+        await runFfmpeg("1");
+      } catch (firstErr) {
+        console.warn("[poster] -ss 1 failed, retrying at 0:", (firstErr as any)?.message || firstErr);
+        await runFfmpeg("0");
+      }
+      const url = await uploadFileToObjectStorage(outPath, "image/jpeg");
+      return url;
+    } finally {
+      try { await fsp.unlink(outPath); } catch {}
+    }
   }
 
   // Audio equivalent of `transcodeVideoToWebFriendlyMp4`. The common
@@ -5923,6 +6083,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       description: req.body?.description ?? null,
       videoUrl: req.body?.videoUrl,
       posterUrl: req.body?.posterUrl ?? null,
+      sourceUrl: req.body?.sourceUrl ?? null,
       position: typeof req.body?.position === "number" ? req.body.position : existing.length,
     });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -5942,6 +6103,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await storage.deleteAlbumVideo(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
+
+  // One-off backfill — scan every album_videos row, look up the GCS
+  // object behind each `videoUrl`, and re-stamp its `contentType` based
+  // on the file extension when the stored value is missing or generic
+  // (`application/octet-stream`). Fixes the cohort of videos that landed
+  // before /api/admin/upload-video/finalize started binding contentType,
+  // so they play in the browser without operators having to re-upload.
+  // Safe to run repeatedly: it skips rows whose contentType is already
+  // a real video MIME.
+  app.post("/api/admin/album-videos/backfill-content-types", requireAdminBearer, async (_req, res) => {
+    const rows = await storage.listAllAlbumVideos();
+    const results: { id: string; videoUrl: string; status: string; before?: string; after?: string }[] = [];
+    for (const row of rows) {
+      try {
+        if (!row.videoUrl || !row.videoUrl.startsWith("/objects/uploads/")) {
+          results.push({ id: row.id, videoUrl: row.videoUrl, status: "skip-non-object-url" });
+          continue;
+        }
+        const extMatch = row.videoUrl.toLowerCase().match(/\.([a-z0-9]+)$/);
+        const ext = extMatch ? `.${extMatch[1]}` : "";
+        const desiredCt = VIDEO_MIME_BY_EXT[ext];
+        if (!desiredCt) {
+          results.push({ id: row.id, videoUrl: row.videoUrl, status: "skip-unknown-ext" });
+          continue;
+        }
+        let file;
+        try {
+          file = await objectStorage.getObjectEntityFile(row.videoUrl);
+        } catch (e: any) {
+          if (e instanceof ObjectNotFoundError) {
+            results.push({ id: row.id, videoUrl: row.videoUrl, status: "skip-object-missing" });
+            continue;
+          }
+          throw e;
+        }
+        const [meta] = await file.getMetadata();
+        const before = String(meta.contentType || "");
+        if (before === desiredCt) {
+          results.push({ id: row.id, videoUrl: row.videoUrl, status: "skip-already-correct", before });
+          continue;
+        }
+        await file.setMetadata({ contentType: desiredCt });
+        console.log(`[backfill-video-ct] id=${row.id} url=${row.videoUrl} ${before || "(empty)"} -> ${desiredCt}`);
+        results.push({ id: row.id, videoUrl: row.videoUrl, status: "updated", before, after: desiredCt });
+      } catch (e: any) {
+        console.error(`[backfill-video-ct] failed for ${row.id}`, e);
+        results.push({ id: row.id, videoUrl: row.videoUrl, status: `error: ${e?.message || e}` });
+      }
+    }
+    const summary = {
+      total: results.length,
+      updated: results.filter((r) => r.status === "updated").length,
+      skipped: results.filter((r) => r.status.startsWith("skip")).length,
+      errors: results.filter((r) => r.status.startsWith("error")).length,
+    };
+    return res.json({ summary, results });
+  });
+
   app.post("/api/admin/albums/:id/photos", requireAdminBearer, async (req, res) => {
     const albumId = String(req.params.id);
     if (!(await ensureAlbumExists(albumId, res))) return;

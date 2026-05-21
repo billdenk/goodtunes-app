@@ -102,6 +102,7 @@ export interface IStorage {
   // the requested album; admin writes are scoped per-row. Cascade on
   // album delete keeps orphan rows out of the DB.
   listAlbumVideos(albumId: string): Promise<AlbumVideo[]>;
+  listAllAlbumVideos(): Promise<AlbumVideo[]>;
   createAlbumVideo(data: InsertAlbumVideo): Promise<AlbumVideo>;
   updateAlbumVideo(id: string, data: Partial<AlbumVideo>): Promise<AlbumVideo | undefined>;
   deleteAlbumVideo(id: string): Promise<void>;
@@ -522,6 +523,9 @@ export class DbStorage implements IStorage {
     return db.select().from(albumVideos)
       .where(eq(albumVideos.albumId, albumId))
       .orderBy(asc(albumVideos.position), asc(albumVideos.id));
+  }
+  async listAllAlbumVideos(): Promise<AlbumVideo[]> {
+    return db.select().from(albumVideos);
   }
   async createAlbumVideo(data: InsertAlbumVideo): Promise<AlbumVideo> {
     const [v] = await db.insert(albumVideos).values(data as any).returning();
