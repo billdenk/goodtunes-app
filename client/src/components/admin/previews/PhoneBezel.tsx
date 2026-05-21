@@ -18,10 +18,19 @@ export function PhoneBezel({
   testId,
   children,
   footer,
+  bottomNav,
 }: {
   testId?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * Optional visual-only strip rendered inside the phone bezel below the
+   * scrollable content column — used by AlbumPreviewCard to mirror the
+   * real fan-side BottomNav so the preview reads as a full phone surface
+   * rather than a card. Static; consumers should pass an `aria-hidden`
+   * div.
+   */
+  bottomNav?: ReactNode;
 }) {
   return (
     <div className="flex flex-col items-center">
@@ -48,6 +57,11 @@ export function PhoneBezel({
           <div className="flex-1 overflow-y-auto scrollbar-hide relative">
             {children}
           </div>
+          {bottomNav && (
+            <div className="flex-shrink-0" aria-hidden>
+              {bottomNav}
+            </div>
+          )}
         </div>
       </div>
       {footer && (

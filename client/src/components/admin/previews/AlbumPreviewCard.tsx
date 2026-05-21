@@ -1,4 +1,5 @@
-import { Play, Shuffle, Disc3 } from "lucide-react";
+import type { ReactNode } from "react";
+import { Play, Shuffle, Disc3, ChevronLeft, Share, MoreHorizontal } from "lucide-react";
 import { PhoneBezel } from "./PhoneBezel";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 
@@ -78,12 +79,42 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
           {totalMinutes > 0 ? ` · ${totalMinutes} min` : ""}.
         </>
       }
+      bottomNav={<PreviewBottomNav />}
     >
       <div className="px-5 pt-3 pb-6 flex flex-col items-center">
+        {/* Header chrome — mirrors the live AlbumDetail floating chrome:
+            back chip on the left, share + ⋯ connected pill on the right.
+            Static divs (visual-only); the real interactive controls live
+            on the fan-facing AlbumDetail page. Sizes match the live
+            IconButton `md` (44×44) primitive. */}
+        <div
+          className="w-full flex items-center justify-between mb-3"
+          aria-hidden
+        >
+          <div
+            className="w-11 h-11 rounded-full flex items-center justify-center text-white"
+            style={{ background: "rgba(255,255,255,0.17)" }}
+          >
+            <ChevronLeft strokeWidth={2.5} className="w-[19px] h-[19px] -translate-x-[1px]" />
+          </div>
+          <div
+            className="flex items-center rounded-full"
+            style={{ background: "rgba(255,255,255,0.17)" }}
+          >
+            <div className="w-11 h-11 flex items-center justify-center text-white">
+              <Share strokeWidth={2} className="w-[19px] h-[19px]" />
+            </div>
+            <div className="w-px h-4 bg-white/25" />
+            <div className="w-11 h-11 flex items-center justify-center text-white">
+              <MoreHorizontal strokeWidth={2} className="w-[19px] h-[19px]" />
+            </div>
+          </div>
+        </div>
+
         {/* Cover */}
         <div
-          className="w-full aspect-square rounded-2xl overflow-hidden bg-white/5"
-          style={{ boxShadow: "0 12px 40px rgba(0,0,0,0.55)" }}
+          className="w-[72%] max-w-[260px] aspect-square rounded-xl overflow-hidden bg-white/5"
+          style={{ boxShadow: "0 18px 50px rgba(0,0,0,0.55)" }}
           data-testid="img-preview-album-cover"
         >
           {album.artwork ? (
@@ -128,27 +159,35 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
           </p>
         </div>
 
-        {/* Play + shuffle row — visual-only inside the preview pane.
-            Rendered as static divs (not buttons) so screen readers and
-            keyboard users aren't told they're interactive. The real
-            controls live on the actual fan-side AlbumDetail. */}
+        {/* Transport cluster — mirrors the live AlbumDetail three-control
+            row: shuffle circle · large white Play pill · download circle.
+            Visual-only static divs; the real interactive controls live
+            on the fan-facing AlbumDetail page. */}
         <div
-          className="mt-4 w-full grid grid-cols-2 gap-2"
+          className="mt-4 flex items-center justify-center gap-3"
           aria-hidden
         >
           <div
-            className="h-10 rounded-lg inline-flex items-center justify-center gap-1.5 text-[14px] font-semibold text-white"
-            style={{ background: "rgba(255,255,255,0.10)" }}
+            className="w-12 h-12 rounded-full flex items-center justify-center text-white flex-shrink-0"
+            style={{ background: "rgba(255,255,255,0.08)" }}
           >
-            <Play className="w-4 h-4 fill-current" />
+            <Shuffle strokeWidth={2.2} className="w-5 h-5" />
+          </div>
+          <div
+            className="flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px]"
+            style={{ background: "#fff", color: "#00062B" }}
+          >
+            <Play className="w-[22px] h-[22px] fill-current" />
             Play
           </div>
           <div
-            className="h-10 rounded-lg inline-flex items-center justify-center gap-1.5 text-[14px] font-semibold text-white"
-            style={{ background: "rgba(255,255,255,0.10)" }}
+            className="w-12 h-12 rounded-full flex items-center justify-center text-white flex-shrink-0"
+            style={{ background: "rgba(255,255,255,0.08)" }}
           >
-            <Shuffle className="w-4 h-4" />
-            Shuffle
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v12" />
+              <path d="M7 12.5L12 17.5l5-5" />
+            </svg>
           </div>
         </div>
 
@@ -267,5 +306,109 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
         </div>
       </div>
     </PhoneBezel>
+  );
+}
+
+/**
+ * Visual-only mirror of the live fan-side `BottomNav` (Collection /
+ * Playlists / Chat / Account), rendered inside the phone bezel so the
+ * preview reads as a real phone surface rather than a card. Static —
+ * mirror the glyphs + glass treatment, not the interactivity. Defaults
+ * to "Collection" as the active tab since the live AlbumDetail sits
+ * under the Collection section.
+ */
+function PreviewBottomNav() {
+  const items: Array<{ label: string; active: boolean; icon: ReactNode }> = [
+    {
+      label: "Collection",
+      active: true,
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="3" y="3" width="4" height="18" rx="1" />
+          <rect x="9" y="3" width="3" height="18" rx="1" />
+          <rect x="14" y="3" width="7" height="11" rx="1" />
+          <rect x="14" y="16" width="7" height="5" rx="1" />
+        </svg>
+      ),
+    },
+    {
+      label: "Playlists",
+      active: false,
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M3 6h18M3 10h14M3 14h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M17 14v6M14 17h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      label: "Chat",
+      active: false,
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+        </svg>
+      ),
+    },
+    {
+      label: "Account",
+      active: false,
+      icon: (
+        <div
+          className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
+          style={{
+            background: "rgba(255,255,255,0.10)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            color: "rgba(255,255,255,0.75)",
+          }}
+        >
+          ?
+        </div>
+      ),
+    },
+  ];
+  return (
+    <div className="px-3 pb-3 pt-1">
+      <div
+        className="flex items-center justify-around px-2 py-2 rounded-full"
+        style={{
+          background: "rgba(28, 30, 48, 0.55)",
+          backdropFilter: "blur(36px) saturate(200%)",
+          WebkitBackdropFilter: "blur(36px) saturate(200%)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
+        }}
+      >
+        {items.map((it) => (
+          <div
+            key={it.label}
+            className="relative flex flex-col items-center gap-[2px] min-w-[60px]"
+          >
+            <span
+              className="absolute rounded-full"
+              style={{
+                background: it.active ? "rgba(49,158,216,0.18)" : "transparent",
+                left: "-4px",
+                right: "-4px",
+                top: "-3px",
+                bottom: "-4px",
+              }}
+            />
+            <div
+              className="relative w-12 h-6 flex items-center justify-center"
+              style={{ color: it.active ? "#319ED8" : "rgba(255,255,255,0.35)" }}
+            >
+              {it.icon}
+            </div>
+            <span
+              className="relative text-[9px] font-medium"
+              style={{ color: it.active ? "#319ED8" : "rgba(255,255,255,0.35)" }}
+            >
+              {it.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
