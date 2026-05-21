@@ -59,13 +59,22 @@ export function canonicalHostRedirect(req: Request, res: Response, next: NextFun
   if (process.env.NODE_ENV !== "production") return next();
   const host = (req.headers.host || "").toLowerCase().split(":")[0];
   if (host === ADMIN_HOST || host === CUSTOMER_HOST) return next();
-  // Replit's deploy health probe hits the deployment's *.replit.app URL on
-  // `/`. If we 301 it to goodtunes.music the probe sees a redirect instead
-  // of a 200 and Promote fails with "app built successfully but failed to
-  // start." Let *.replit.app (deploy URL) and *.replit.dev (preview URL)
-  // through so the probe — and direct *.replit.app access — keep working.
-  if (host.endsWith(".replit.app") || host.endsWith(".replit.dev")) return next();
   if (req.path.startsWith("/.well-known/")) return next();
+  // Only redirect hosts we explicitly want to canonicalize: the bare
+  // goodtunes.music apex, www.goodtunes.music, and any other non-canonical
+  // goodtunes.music subdomain. EVERYTHING ELSE passes through — that
+  // includes Replit's deploy health probe (which uses an internal host
+  // header, not *.replit.app), the *.replit.app deploy URL, and the
+  // *.replit.dev preview URL. Defaulting unknown hosts to "redirect" is
+  // what made the Promote stage's probe see a 301 instead of a 200 and
+  // killed every deploy after Task #31 merged.
+  const shouldCanonicalize =
+    host === "goodtunes.music" ||
+    host === "www.goodtunes.music" ||
+    (host.endsWith(".goodtunes.music") &&
+      host !== ADMIN_HOST &&
+      host !== CUSTOMER_HOST);
+  if (!shouldCanonicalize) return next();
   const target =
     req.path.startsWith("/admin") || req.path.startsWith("/api/admin")
       ? ADMIN_HOST
