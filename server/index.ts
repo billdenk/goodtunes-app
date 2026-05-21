@@ -4,9 +4,17 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedCatalog } from "./storage";
 import { prewarmSpotifyToken } from "./lib/spotify";
+import { authKindMiddleware, canonicalHostRedirect } from "./auth/host";
 
 const app = express();
 app.set("trust proxy", 1);
+
+// Tag every request with `req.authKind` (admin | customer) from the host,
+// and redirect *.replit.app traffic to the canonical subdomain in prod.
+// Both run before the body parsers so the redirect can short-circuit
+// before we read any payload.
+app.use(canonicalHostRedirect);
+app.use(authKindMiddleware);
 const httpServer = createServer(app)
 
 declare module "http" {
@@ -60,7 +68,18 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      // Never echo auth payloads — TOTP secrets, QR data URLs, recovery
+      // codes, bearer tokens, OAuth state, and password hashes all flow
+      // through /api/auth/* and /api/{login,register,logout,me}. Logging
+      // any of them defeats the auth design. We still log status + path
+      // so we can see traffic shape, just not the body.
+      const isAuthPath =
+        path.startsWith("/api/auth/") ||
+        path === "/api/login" ||
+        path === "/api/register" ||
+        path === "/api/me" ||
+        path === "/api/logout";
+      if (capturedJsonResponse && !isAuthPath) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

@@ -764,3 +764,69 @@ Replit Deployments supports custom domains directly — add the domain in the de
 6. **Phase 6 — Permissions polish** (custom roles beyond owner/admin/viewer, audit log, session revocation, SSO for labels that want it).
 
 Each phase is shippable on its own; nothing in phase N blocks phase N-1 from going live.
+
+---
+
+## Roles, fulfillment & multi-tenant admin
+
+> Captured during the **Dual auth: admin + customer** task (May 2026). The auth foundation (separate `admin_users` + `customer_users` tables, Apple/Google sign-in, host-based routing on `admin.goodtunes.music` + `my.goodtunes.music`, admin TOTP 2FA, super-admin grant/revoke) shipped in that task. This section records the larger product plan that hangs off that foundation — none of the items below are built yet.
+
+### Roles
+
+The current admin side is single-tier ("super-admin can do everything"). The next layer slices that into **role surfaces** so we can invite real partners onto `admin.goodtunes.music` with scoped visibility:
+
+- **Internal staff** — GoodTunes operators, no org filter (today's super-admin).
+- **Label** — sees the artists + albums under their label; can add/edit their roster, see roll-up reports.
+- **Artist** — sees their own albums + credits + analytics; can update bio/photos, add lyrics, request a release.
+- **Vendor** — sees the instruments + affiliate links tied to their shop; can update gear photos + descriptions; reads chat threads opened against their listings.
+- **Manufacturer** — sees vinyl/CD/merch runs they're producing; updates status, ships tracking.
+- **Non-profit** — sees GoodDeed proceeds destined for their cause; downloads receipts/statements.
+
+The grant/revoke UI shipped in Task #31 (`SuperAdminsPanel`) is the primitive that future role grants hang off — each org type adds a "memberships" row pointing user → org with role.
+
+### Fulfillment — OrderDesk
+
+Customers on `my.goodtunes.music` will eventually be able to buy physical goods (vinyl, CDs, merch). OrderDesk is the planned fulfillment broker:
+
+- Webhook in from GoodTunes when an order is placed.
+- OrderDesk routes the order to the right manufacturer/3PL (vinyl pressing plant, CD duplicator, on-demand merch).
+- Webhook back into GoodTunes for status (printed → shipped → delivered) — surfaces in the customer's "Orders" card on the profile page (stubbed today).
+
+### Publishing splits — MLC / HFA / Rumblefish
+
+When fans buy a download or stream a song on GoodTunes, the publishing-side royalties need to clear the right way:
+
+- **MLC** (Mechanical Licensing Collective) — required for US mechanical royalties on interactive streams.
+- **HFA** (Harry Fox Agency) — additional mechanical-licensing administration for digital downloads.
+- **Rumblefish** — sync + micro-licensing handler for the embed/web-player surfaces.
+
+Hook these in as outbound integrations on the song-admin surface: every track gets ISRC + UPC capture (next bullet), writer/publisher splits, and the back-end fans-out a report to each agency monthly.
+
+### ISRC + UPC capture
+
+Add ISRC (song) + UPC (album) fields to the admin Song/Album editors and to the public credits payload. Required for every external rights registration above, and for retail handoff (Apple Music / Spotify ingest).
+
+### AI press-prep
+
+For each new GoodTunes release, generate (and let the artist edit) a press kit:
+
+- One-paragraph bio rewrite tuned to the album.
+- "About this album" 3-line + 1-paragraph + 1-page variants.
+- Suggested press-quote pull from the bio + credits.
+- Pre-rendered cover assets at the dimensions every outlet asks for (Apple Music 3000×3000, Spotify Canvas, Instagram square, etc.).
+
+Lives behind the artist role; uses the existing OpenAI integration.
+
+### Localization (language + currency)
+
+- Language: ship English first, then add Spanish + Portuguese (Brazil) as the next two — that's where the artist-side outreach is pointing. UI strings already centralize in JSX; introduce an `i18n` layer before the second language ships.
+- Currency: detect from billing country + customer pref; display in customer's currency, settle in USD on the operator side.
+
+### What this affects on the auth side
+
+Nothing breaks the dual-auth model from Task #31:
+
+- Admin host (`admin.goodtunes.music`) gains a left-rail switcher for "switch org" when a user has memberships in more than one (e.g. a label exec who is also an artist they own).
+- Customer host (`my.goodtunes.music`) stays single-identity — no orgs, just the fan account.
+- The 2FA requirement on admin extends to every new role surface (anyone on admin host enrolls TOTP on first sign-in).
+- Super-admin grant/revoke generalizes into per-org membership grant/revoke; same primitive, one extra `orgId` column on the membership row.

@@ -401,6 +401,51 @@ function ArtworkPicker({
 // Collapsed by default to keep the chrome calm — admin invites are a rare
 // action and shouldn't fight the rest of the UI for attention. No revoke
 // path — by design (see /api/admin/promote comment in server/routes.ts).
+// Lists every current admin with a "Revoke" button. Pairs with the
+// PromotePanel right above it — operator can both grant and revoke
+// super-admin from a single surface. The last admin can't be revoked
+// (server enforces; UI also disables the button defensively).
+function SuperAdminsPanel() {
+  // `queryClient` isn't a module-level import in this file — get it
+  // from the hook so invalidation after a revoke actually refetches.
+  const qc = useQueryClient();
+  const { data: admins = [], isLoading } = useQuery<Array<{ id: string; username: string; email: string; displayName: string }>>({
+    queryKey: ["/api/admin/admins"],
+  });
+  const me = useAuth().user;
+  const revoke = useMutation({
+    mutationFn: async (userId: string) => apiRequest("POST", "/api/admin/admins/revoke", { userId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/admins"] }),
+  });
+  if (isLoading) return <p className="text-slate-500 text-sm">Loading admins…</p>;
+  return (
+    <div className="rounded-lg border bg-white divide-y divide-slate-100" data-testid="list-admins">
+      {admins.map((a) => {
+        const isMe = me?.id === a.id;
+        const isLast = admins.length <= 1;
+        return (
+          <div key={a.id} className="flex items-center justify-between px-3 py-2" data-testid={`row-admin-${a.id}`}>
+            <div className="min-w-0">
+              <p className="text-sm text-slate-900 truncate">{a.displayName} <span className="text-slate-400">@{a.username}</span></p>
+              <p className="text-xs text-slate-500 truncate">{a.email}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { if (window.confirm(`Revoke admin from @${a.username}?`)) revoke.mutate(a.id); }}
+              disabled={revoke.isPending || isMe || isLast}
+              title={isMe ? "You can't revoke yourself" : isLast ? "Can't revoke the last admin" : "Revoke admin"}
+              className="text-rose-600 text-xs px-2 py-1 rounded hover:bg-rose-50 disabled:text-slate-300 disabled:hover:bg-transparent"
+              data-testid={`button-revoke-${a.id}`}
+            >
+              Revoke
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PromotePanel() {
   const [expanded, setExpanded] = useState(false);
   const [username, setUsername] = useState("");
@@ -510,6 +555,11 @@ function PromotePanel() {
           {msg.text}
         </p>
       )}
+      {/* Inline list of current super-admins — expanding the "+" panel
+          now reveals the full grant/revoke surface in one place. */}
+      <div className="absolute right-0 top-full mt-6 w-72 z-30 shadow-lg">
+        <SuperAdminsPanel />
+      </div>
     </div>
   );
 }

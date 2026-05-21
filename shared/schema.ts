@@ -576,11 +576,103 @@ export const creditRoles = pgTable(
 );
 
 // Bearer token store (replaces in-memory tokenStore).
+//
+// `kind` tags the side this token belongs to. Today's tokens were minted
+// against the `users` table which is the admin table going forward, so
+// pre-existing rows are implicitly `admin`. Customer tokens reference
+// `customer_users.id` (no FK because Drizzle pgTable can't express
+// "FK to one of two tables", and we want kind to be the authoritative
+// switch anyway — the server always reads tokens through the kind+id
+// pair via the storage layer).
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull(),
+  kind: text("kind").notNull().default("admin"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Task #31 — Dual auth (admin + customer)
+//
+// `users` is the admin table going forward (existing rows = admins). A
+// separate `customer_users` table holds fan accounts. The two tables
+// NEVER share rows; the same email can exist on both sides as two
+// independent accounts. `*_identities` tables link Google/Apple OAuth
+// subjects to a user row on that same side. `admin_totp` stores the
+// admin-only second factor.
+//
+// We deliberately did NOT rename `users` → `admin_users` because doing
+// so would require migrating 7+ existing FKs (playlists, user_albums,
+// profile_photos, analytics_events, etc.) — far more invasive than the
+// product change requires. The table name stays; the role does not.
+// ──────────────────────────────────────────────────────────────────────────
+
+export const customerUsers = pgTable("customer_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  realName: text("real_name"),
+  // Nullable: OAuth-only customers never set a password.
+  password: text("password"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const adminIdentities = pgTable(
+  "admin_identities",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(), // "google" | "apple"
+    providerUserId: text("provider_user_id").notNull(),
+    email: text("email"),
+    linkedAt: timestamp("linked_at").defaultNow(),
+  },
+  (t) => ({
+    providerSubUnique: unique("admin_identities_provider_sub_unique").on(t.provider, t.providerUserId),
+  }),
+);
+
+export const customerIdentities = pgTable(
+  "customer_identities",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => customerUsers.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    providerUserId: text("provider_user_id").notNull(),
+    email: text("email"),
+    linkedAt: timestamp("linked_at").defaultNow(),
+  },
+  (t) => ({
+    providerSubUnique: unique("customer_identities_provider_sub_unique").on(t.provider, t.providerUserId),
+  }),
+);
+
+// TOTP second factor for admin sign-in. One row per admin user.
+// `secretEncrypted` is AES-256-GCM-encrypted at rest with TOTP_ENC_KEY
+// so a DB dump alone can't be used to generate codes.
+// `recoveryCodes` is an array of scrypt-hashed single-use codes; each
+// hash is removed after consumption.
+export const adminTotp = pgTable("admin_totp", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  secretEncrypted: text("secret_encrypted").notNull(),
+  recoveryCodes: text("recovery_codes").array().notNull().default(sql`'{}'::text[]`),
+  enrolledAt: timestamp("enrolled_at").defaultNow(),
+});
+
+export type CustomerUser = typeof customerUsers.$inferSelect;
+export type AdminIdentity = typeof adminIdentities.$inferSelect;
+export type CustomerIdentity = typeof customerIdentities.$inferSelect;
+export type AdminTotp = typeof adminTotp.$inferSelect;
+
+export const insertCustomerUserSchema = createInsertSchema(customerUsers).pick({
+  username: true,
+  email: true,
+  displayName: true,
+  realName: true,
+  password: true,
+});
+export type InsertCustomerUser = z.infer<typeof insertCustomerUserSchema>;
 
 // One profile photo per user. Stored inline as a data URL so we don't need
 // object storage yet — small images (5MB cap on the client). When GT object

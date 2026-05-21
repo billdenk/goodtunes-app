@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
 import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthKind } from "@/hooks/useAuthKind";
 import { Player } from "@/pages/Player";
 import { Login } from "@/pages/Login";
 import { Collection } from "@/pages/Collection";
@@ -60,6 +61,27 @@ function PlayerOverlay() {
 function Router() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
+  const kind = useAuthKind();
+
+  // Host-based gating: customer host blocks /admin* paths (redirect into
+  // /account). Admin host blocks the customer player surfaces (redirect
+  // into /admin). The *.replit.app preview is treated as dev and lets
+  // both render so we can develop without juggling hosts. Production
+  // 301s from the platform layer also enforce this at the network edge.
+  const isProdHost = typeof window !== "undefined" && /goodtunes\.music$/.test(window.location.host);
+  if (isProdHost) {
+    if (kind === "customer" && location.startsWith("/admin")) {
+      return <Redirect to="/account" />;
+    }
+    if (kind === "admin" && (
+      location.startsWith("/collection") || location.startsWith("/account") ||
+      location.startsWith("/playlists") || location.startsWith("/chat") ||
+      location.startsWith("/album") || location.startsWith("/artist") ||
+      location.startsWith("/instrument")
+    )) {
+      return <Redirect to="/admin" />;
+    }
+  }
 
   if (isLoading) {
     return (

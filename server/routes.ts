@@ -31,6 +31,10 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    kind?: "admin" | "customer";
+    // Temp marker for "password verified but TOTP not yet provided". The
+    // session is useless for everything else (requireAuth checks both).
+    pendingTotpUserId?: string;
   }
 }
 
@@ -38,31 +42,58 @@ function generateToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-async function getUserIdFromRequest(req: Request): Promise<string | undefined> {
-  if (req.session.userId) return req.session.userId;
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith("Bearer ")) {
-    const token = auth.slice(7);
-    return storage.getUserIdByAuthToken(token);
+// Resolves the {userId, kind} pair from either the session or a Bearer
+// token, then validates that kind matches the request's host-derived
+// authKind. A customer token sent on the admin host (or vice versa)
+// returns undefined — host is the authority on which side a request
+// belongs to.
+async function getAuthFromRequest(req: Request): Promise<{ userId: string; kind: "admin" | "customer" } | undefined> {
+  let found: { userId: string; kind: "admin" | "customer" } | undefined;
+  if (req.session.userId) {
+    found = { userId: req.session.userId, kind: (req.session.kind ?? "admin") };
+  } else {
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith("Bearer ")) {
+      found = await storage.getAuthBy(auth.slice(7));
+    }
   }
-  return undefined;
+  if (!found) return undefined;
+  // Enforce host/kind boundary. In dev we still respect the path-derived
+  // authKind, which is what the host middleware computed.
+  if (found.kind !== req.authKind) return undefined;
+  return found;
+}
+
+async function getUserIdFromRequest(req: Request): Promise<string | undefined> {
+  const a = await getAuthFromRequest(req);
+  return a?.userId;
 }
 
 async function requireAuth(req: Request, res: Response, next: Function) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  req.session.userId = userId;
+  const a = await getAuthFromRequest(req);
+  if (!a) return res.status(401).json({ message: "Unauthorized" });
+  req.session.userId = a.userId;
+  req.session.kind = a.kind;
   next();
 }
 
 async function requireAdmin(req: Request, res: Response, next: Function) {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return res.status(401).json({ message: "Unauthorized" });
-  const user = await storage.getUser(userId);
+  const a = await getAuthFromRequest(req);
+  if (!a || a.kind !== "admin") return res.status(401).json({ message: "Unauthorized" });
+  const user = await storage.getUser(a.userId);
   if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
-  req.session.userId = userId;
+  req.session.userId = a.userId;
+  req.session.kind = "admin";
+  next();
+}
+
+async function requireCustomer(req: Request, res: Response, next: Function) {
+  const a = await getAuthFromRequest(req);
+  if (!a || a.kind !== "customer") return res.status(401).json({ message: "Unauthorized" });
+  const c = await storage.getCustomer(a.userId);
+  if (!c) return res.status(401).json({ message: "Unauthorized" });
+  req.session.userId = a.userId;
+  req.session.kind = "customer";
   next();
 }
 
@@ -71,9 +102,9 @@ async function requireAdmin(req: Request, res: Response, next: Function) {
 // catalog routes so `?includeHidden=1` is honored for admins and silently
 // dropped for everyone else.
 async function isAdminUser(req: Request): Promise<boolean> {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) return false;
-  const user = await storage.getUser(userId);
+  const a = await getAuthFromRequest(req);
+  if (!a || a.kind !== "admin") return false;
+  const user = await storage.getUser(a.userId);
   return !!user?.isAdmin;
 }
 
@@ -141,6 +172,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })
   );
 
+  // ─── Auth (kind-aware) ─────────────────────────────────────────────
+  // Every /api/register · /api/login · /api/me · /api/logout call uses
+  // the host-derived `req.authKind` to pick the table. On the admin host
+  // (or in dev with ?kind=admin / a /admin* path), we read/write `users`
+  // and require TOTP on sign-in. On the customer host, we read/write
+  // `customer_users` and no second factor is required.
+  // Existing admin accounts (today's `users` rows) keep working because
+  // the admin login path is identical to the legacy one — same table,
+  // same scrypt hash format. Customer accounts have no rows at first.
+
+  function shapeAdmin(u: typeof storage extends any ? Awaited<ReturnType<typeof storage.getUser>> : never, photoUrl: string | null = null) {
+    if (!u) return null;
+    return { id: u.id, username: u.username, email: u.email, displayName: u.displayName, realName: u.realName, photoUrl, isAdmin: u.isAdmin, kind: "admin" as const };
+  }
+  function shapeCustomer(c: Awaited<ReturnType<typeof storage.getCustomer>>, photoUrl: string | null = null) {
+    if (!c) return null;
+    return { id: c.id, username: c.username, email: c.email, displayName: c.displayName, realName: c.realName, photoUrl, isAdmin: false, kind: "customer" as const };
+  }
+
   app.post("/api/register", async (req, res) => {
     const { username, email, displayName, realName, password } = req.body;
     if (!username || !email || !displayName || !password) {
@@ -155,46 +205,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (usernameNorm.length < 3) {
       return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
     }
-    const [existingUsername, existingEmail] = await Promise.all([
-      storage.getUserByUsername(usernameNorm),
-      storage.getUserByEmail(emailNorm),
-    ]);
-    if (existingUsername && existingEmail) {
-      return res.status(400).json({ message: "That username and email are both already taken" });
-    }
-    if (existingUsername) {
-      return res.status(400).json({ message: `Username "@${usernameNorm}" is already taken` });
-    }
-    if (existingEmail) {
-      return res.status(400).json({ message: "An account with that email already exists — try signing in" });
-    }
+    const kind = req.authKind;
+    const lookupUsername = kind === "admin" ? storage.getUserByUsername(usernameNorm) : storage.getCustomerByUsername(usernameNorm);
+    const lookupEmail = kind === "admin" ? storage.getUserByEmail(emailNorm) : storage.getCustomerByEmail(emailNorm);
+    const [existingUsername, existingEmail] = await Promise.all([lookupUsername, lookupEmail]);
+    if (existingUsername && existingEmail) return res.status(400).json({ message: "That username and email are both already taken" });
+    if (existingUsername) return res.status(400).json({ message: `Username "@${usernameNorm}" is already taken` });
+    if (existingEmail) return res.status(400).json({ message: "An account with that email already exists — try signing in" });
     const hashed = await hashPassword(password);
-    const user = await storage.createUser({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
-    req.session.userId = user.id;
-    const token = generateToken();
-    await storage.createAuthToken(token, user.id);
-    return res.status(201).json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, token });
+
+    if (kind === "admin") {
+      const user = await storage.createUser({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
+      // First admin signup on a fresh install is auto-promoted via the
+      // explicit bootstrap endpoint. We do NOT mint an authenticated
+      // session here — the admin still has to pass TOTP enrollment on
+      // their first login. Force them to /login.
+      return res.status(201).json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, requiresLogin: true, kind: "admin" });
+    } else {
+      const c = await storage.createCustomer({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
+      req.session.userId = c.id;
+      req.session.kind = "customer";
+      const token = generateToken();
+      await storage.createAuthToken(token, c.id, "customer");
+      return res.status(201).json({ ...shapeCustomer(c), token });
+    }
   });
 
   app.post("/api/login", async (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ message: "Username or email and password are required" });
-    }
+    if (!username || !password) return res.status(400).json({ message: "Username or email and password are required" });
     const raw = String(username).trim();
     const ident = (raw.startsWith("@") ? raw.slice(1) : raw).toLowerCase();
     const looksLikeEmail = ident.includes("@");
-    const lookup = looksLikeEmail
-      ? await storage.getUserByEmail(ident)
-      : await storage.getUserByUsername(ident);
-    const user = lookup ?? (looksLikeEmail ? undefined : await storage.getUserByEmail(ident));
-    if (!user || !(await comparePasswords(password, user.password))) {
+    const kind = req.authKind;
+
+    if (kind === "admin") {
+      const lookup = looksLikeEmail ? await storage.getUserByEmail(ident) : await storage.getUserByUsername(ident);
+      const user = lookup ?? (looksLikeEmail ? undefined : await storage.getUserByEmail(ident));
+      if (!user || !(await comparePasswords(password, user.password))) {
+        return res.status(401).json({ message: "Invalid username/email or password" });
+      }
+      // Admin sign-in requires TOTP. If the admin hasn't enrolled yet,
+      // tell the UI to walk them through enrollment; otherwise tell
+      // it to ask for a 6-digit code. We stash the verified userId in
+      // the session as `pendingTotpUserId` so the follow-up call can
+      // confirm it without re-checking the password.
+      const totp = await storage.getAdminTotp(user.id);
+      req.session.pendingTotpUserId = user.id;
+      if (!totp) return res.json({ requiresEnrollment: true, userId: user.id, kind: "admin" });
+      return res.json({ requires2fa: true, userId: user.id, kind: "admin" });
+    }
+
+    // Customer side — no 2FA, immediate token.
+    const lookup = looksLikeEmail ? await storage.getCustomerByEmail(ident) : await storage.getCustomerByUsername(ident);
+    const c = lookup ?? (looksLikeEmail ? undefined : await storage.getCustomerByEmail(ident));
+    if (!c || !c.password || !(await comparePasswords(password, c.password))) {
       return res.status(401).json({ message: "Invalid username/email or password" });
     }
-    req.session.userId = user.id;
+    req.session.userId = c.id;
+    req.session.kind = "customer";
     const token = generateToken();
-    await storage.createAuthToken(token, user.id);
-    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, token });
+    await storage.createAuthToken(token, c.id, "customer");
+    return res.json({ ...shapeCustomer(c), token });
   });
 
   app.post("/api/logout", async (req, res) => {
@@ -208,10 +280,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/me", requireAuth, async (req, res) => {
+    if (req.session.kind === "customer") {
+      const c = await storage.getCustomer(req.session.userId!);
+      if (!c) return res.status(404).json({ message: "User not found" });
+      const photoUrl = await storage.getProfilePhoto(c.id);
+      return res.json(shapeCustomer(c, photoUrl));
+    }
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(404).json({ message: "User not found" });
     const photoUrl = await storage.getProfilePhoto(user.id);
-    return res.json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, photoUrl, isAdmin: user.isAdmin });
+    return res.json(shapeAdmin(user, photoUrl));
   });
 
   app.put("/api/me", requireAuth, async (req, res) => {
@@ -221,19 +299,316 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (realName !== undefined) updates.realName = realName || null;
     if (username) {
       const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
-      if (usernameNorm.length < 3) {
-        return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
-      }
-      const existing = await storage.getUserByUsername(usernameNorm);
-      if (existing && existing.id !== req.session.userId) {
-        return res.status(400).json({ message: "Username already taken" });
-      }
+      if (usernameNorm.length < 3) return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
+      const existing = req.session.kind === "customer"
+        ? await storage.getCustomerByUsername(usernameNorm)
+        : await storage.getUserByUsername(usernameNorm);
+      if (existing && existing.id !== req.session.userId) return res.status(400).json({ message: "Username already taken" });
       updates.username = usernameNorm;
+    }
+    if (req.session.kind === "customer") {
+      const c = await storage.updateCustomer(req.session.userId!, updates);
+      if (!c) return res.status(404).json({ message: "User not found" });
+      const photoUrl = await storage.getProfilePhoto(c.id);
+      return res.json(shapeCustomer(c, photoUrl));
     }
     const updated = await storage.updateUser(req.session.userId!, updates);
     if (!updated) return res.status(404).json({ message: "User not found" });
     const photoUrl = await storage.getProfilePhoto(updated.id);
-    return res.json({ id: updated.id, username: updated.username, email: updated.email, displayName: updated.displayName, realName: updated.realName, photoUrl, isAdmin: updated.isAdmin });
+    return res.json(shapeAdmin(updated, photoUrl));
+  });
+
+  // ─── Apple domain-association ──────────────────────────────────────
+  // Apple's Sign-In service verifies our return URLs by fetching this
+  // file on each subdomain. We serve a `body` env var (so the user can
+  // paste in the value Apple gives them at the Developer portal step)
+  // and fall back to a friendly 404 in dev. Served on BOTH hosts.
+  app.get("/.well-known/apple-developer-domain-association.txt", (_req, res) => {
+    const body = process.env.APPLE_DOMAIN_ASSOCIATION;
+    if (!body) return res.status(404).type("text/plain").send("apple-developer-domain-association.txt is not configured yet");
+    res.type("text/plain").send(body);
+  });
+
+  // ─── OAuth: Google + Apple ─────────────────────────────────────────
+  // Start endpoints redirect to the provider; callback endpoints come
+  // back here. The `kind` (admin | customer) is taken from the host on
+  // both legs — the OAuth state token is signed/random so it survives
+  // the round-trip without us having to encode anything in the URL.
+  // OAuth STATE is stored on the session (`oauthState`) with the kind
+  // and an optional `linkToUserId` for the "link from profile" flow.
+  const {
+    GOOGLE_CONFIGURED, APPLE_CONFIGURED,
+    randomState, buildGoogleAuthUrl, exchangeGoogleCode,
+    buildAppleAuthUrl, exchangeAppleCode,
+  } = await import("./auth/oauth");
+  const { callbackOrigin } = await import("./auth/host");
+
+  // We piggyback on express-session for the OAuth state so callbacks
+  // can verify it. The session may already have an admin/customer
+  // userId; that's fine — we treat `oauthState` as orthogonal. The
+  // OAuth-related session keys (oauthState, totpEnroll) are cast via
+  // `as any` since they aren't part of the typed SessionData declared
+  // up top.
+
+  function startProvider(provider: "google" | "apple") {
+    return async (req: Request, res: Response) => {
+      const kind = req.authKind;
+      if (provider === "google" && !GOOGLE_CONFIGURED) {
+        return res.status(503).send("Google sign-in is not configured yet (GOOGLE_CLIENT_ID/SECRET missing).");
+      }
+      if (provider === "apple" && !APPLE_CONFIGURED) {
+        return res.status(503).send("Apple sign-in is not configured yet (Apple secrets missing or APPLE_PRIVATE_KEY still a placeholder).");
+      }
+      const state = randomState();
+      const linkToUserId = req.query.link === "1" ? (await getAuthFromRequest(req))?.userId : undefined;
+      (req.session as any).oauthState = { state, kind, provider, linkToUserId };
+      const redirectUri = `${callbackOrigin(req, kind)}/api/auth/${provider}/callback`;
+      const url = provider === "google"
+        ? buildGoogleAuthUrl(redirectUri, state)
+        : buildAppleAuthUrl(redirectUri, state);
+      res.redirect(url);
+    };
+  }
+
+  app.get("/api/auth/google/start", startProvider("google"));
+  app.get("/api/auth/apple/start", startProvider("apple"));
+
+  async function handleProviderCallback(provider: "google" | "apple", req: Request, res: Response) {
+    const stateBag = (req.session as any).oauthState as
+      | { state: string; kind: "admin" | "customer"; provider: string; linkToUserId?: string }
+      | undefined;
+    const incomingState = (req.body?.state as string) || (req.query.state as string);
+    if (!stateBag || stateBag.provider !== provider || stateBag.state !== incomingState) {
+      return res.status(400).send("OAuth state mismatch — please try signing in again.");
+    }
+    (req.session as any).oauthState = undefined;
+    const code = (req.body?.code as string) || (req.query.code as string);
+    if (!code) return res.status(400).send("OAuth provider did not return a code");
+
+    const kind = stateBag.kind;
+    const redirectUri = `${callbackOrigin(req, kind)}/api/auth/${provider}/callback`;
+
+    let identity: { sub: string; email: string | null; emailVerified: boolean };
+    try {
+      identity = provider === "google"
+        ? await exchangeGoogleCode(code, redirectUri)
+        : await exchangeAppleCode(code, redirectUri);
+    } catch (err: any) {
+      console.error(`[oauth] ${provider} token exchange failed`, err?.message);
+      return res.status(502).send(`Sign-in with ${provider} failed: ${err?.message ?? "unknown error"}`);
+    }
+
+    const homePath = kind === "admin" ? "/admin" : "/account";
+
+    // Link-from-profile flow: an authenticated user is attaching this
+    // provider to their existing record. We don't issue a new token,
+    // just attach + bounce back to /account (or /admin/account).
+    if (stateBag.linkToUserId) {
+      // Refuse to re-attach a sub already linked to another account.
+      const already = await storage.findIdentity(kind, provider, identity.sub);
+      if (already && already.userId !== stateBag.linkToUserId) {
+        return res.redirect(`${homePath}?link=conflict`);
+      }
+      await storage.linkIdentity(kind, {
+        userId: stateBag.linkToUserId,
+        provider,
+        providerUserId: identity.sub,
+        email: identity.email,
+      });
+      return res.redirect(`${homePath}?link=ok`);
+    }
+
+    // Sign-in / sign-up flow.
+    const existingByIdentity = await storage.findIdentity(kind, provider, identity.sub);
+    let userId = existingByIdentity?.userId;
+
+    if (!userId && identity.email) {
+      // Don't auto-merge — if an existing account with this email is on
+      // this side, surface the email to the login UI so it can prompt
+      // "We found an account with this email — sign in with password
+      // first, then link this provider from your profile." The login
+      // page shows a friendly explanation; we redirect with ?prompt=link.
+      const existing = kind === "admin"
+        ? await storage.getUserByEmail(identity.email)
+        : await storage.getCustomerByEmail(identity.email);
+      if (existing) {
+        const params = new URLSearchParams({ prompt: "link", provider, email: identity.email });
+        return res.redirect(`/login?${params.toString()}`);
+      }
+    }
+
+    if (!userId) {
+      // First-time sign-up via OAuth — create the account on the right
+      // side. Username is derived from the email local-part (or a
+      // random fallback when Apple's private-relay hides everything).
+      const baseLocal = (identity.email?.split("@")[0] || "user").toLowerCase().replace(/[^a-z0-9_]/g, "") || "user";
+      let username = baseLocal;
+      let n = 0;
+      while (true) {
+        const taken = kind === "admin"
+          ? await storage.getUserByUsername(username)
+          : await storage.getCustomerByUsername(username);
+        if (!taken) break;
+        n += 1;
+        username = `${baseLocal}${n}`;
+        if (n > 999) { username = `${baseLocal}${randomBytes(3).toString("hex")}`; break; }
+      }
+      const displayName = identity.email?.split("@")[0] || username;
+      const placeholderPwd = await hashPassword(randomBytes(16).toString("hex"));
+      if (kind === "admin") {
+        const u = await storage.createUser({
+          username,
+          email: identity.email ?? `${username}@oauth.local`,
+          displayName,
+          realName: null,
+          password: placeholderPwd,
+        });
+        userId = u.id;
+      } else {
+        const c = await storage.createCustomer({
+          username,
+          email: identity.email ?? `${username}@oauth.local`,
+          displayName,
+          realName: null,
+          password: placeholderPwd,
+        });
+        userId = c.id;
+      }
+      await storage.linkIdentity(kind, { userId, provider, providerUserId: identity.sub, email: identity.email });
+    }
+
+    // Admin side requires TOTP before we hand out the real token.
+    if (kind === "admin") {
+      req.session.pendingTotpUserId = userId;
+      const totp = await storage.getAdminTotp(userId);
+      const params = new URLSearchParams({
+        oauth: provider,
+        next: totp ? "totp" : "enroll",
+      });
+      return res.redirect(`/login?${params.toString()}`);
+    }
+
+    // Customer side — mint a token and send them home.
+    const token = generateToken();
+    await storage.createAuthToken(token, userId, "customer");
+    req.session.userId = userId;
+    req.session.kind = "customer";
+    // Pass token through URL fragment so the login page can stash it in
+    // localStorage. (Same-origin so no leak; fragment isn't sent to the
+    // server in subsequent navigations.)
+    return res.redirect(`/account#token=${encodeURIComponent(token)}`);
+  }
+
+  app.get("/api/auth/google/callback", (req, res) => handleProviderCallback("google", req, res));
+  // Apple uses form_post on the callback — express.urlencoded is already
+  // installed in server/index.ts so req.body works on this POST.
+  app.post("/api/auth/apple/callback", (req, res) => handleProviderCallback("apple", req, res));
+
+  // ─── Admin TOTP ────────────────────────────────────────────────────
+  const { encryptSecret, decryptSecret, generateRecoveryCodes, hashRecoveryCode, verifyRecoveryCode } =
+    await import("./auth/crypto");
+  const { generateTotpSecret, totpQrDataUrl, verifyTotp } = await import("./auth/totp");
+
+  // Step 1: admin asks to enroll. We generate a fresh secret + recovery
+  // codes and stash them on the session unencrypted — they only commit
+  // when the admin proves they scanned the QR (step 2). This means a
+  // page-reload mid-enrollment discards the not-yet-confirmed secret.
+  app.post("/api/auth/totp/enroll/start", async (req, res) => {
+    if (req.authKind !== "admin") return res.status(403).json({ message: "Admin only" });
+    const userId = req.session.pendingTotpUserId || (await getAuthFromRequest(req))?.userId;
+    if (!userId) return res.status(401).json({ message: "Sign in with your password first." });
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const secret = generateTotpSecret();
+    const codes = generateRecoveryCodes(10);
+    (req.session as any).totpEnroll = { userId, secret, codes };
+    const qr = await totpQrDataUrl(secret, `GoodTunes Admin (${user.username})`);
+    return res.json({ secret, qr, recoveryCodes: codes });
+  });
+
+  app.post("/api/auth/totp/enroll/verify", async (req, res) => {
+    if (req.authKind !== "admin") return res.status(403).json({ message: "Admin only" });
+    const enroll = (req.session as any).totpEnroll as { userId: string; secret: string; codes: string[] } | undefined;
+    const code = String(req.body?.code ?? "").trim();
+    if (!enroll || !code) return res.status(400).json({ message: "No enrollment in progress." });
+    if (!verifyTotp(enroll.secret, code)) return res.status(400).json({ message: "That code didn't match. Try again." });
+    const encrypted = encryptSecret(enroll.secret);
+    const hashes = await Promise.all(enroll.codes.map(hashRecoveryCode));
+    await storage.setAdminTotp(enroll.userId, encrypted, hashes);
+    (req.session as any).totpEnroll = undefined;
+    // Mint the admin token now — enrollment counts as a successful 2FA.
+    const token = generateToken();
+    await storage.createAuthToken(token, enroll.userId, "admin");
+    req.session.userId = enroll.userId;
+    req.session.kind = "admin";
+    req.session.pendingTotpUserId = undefined;
+    const u = await storage.getUser(enroll.userId);
+    const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
+    return res.json({ ...shapeAdmin(u, photoUrl), token });
+  });
+
+  // Verify a TOTP for an existing enrollment. Used during normal sign-in
+  // (the password leg has set `pendingTotpUserId` already).
+  app.post("/api/auth/totp/verify", async (req, res) => {
+    if (req.authKind !== "admin") return res.status(403).json({ message: "Admin only" });
+    const userId = req.session.pendingTotpUserId;
+    if (!userId) return res.status(401).json({ message: "Sign in with your password first." });
+    const code = String(req.body?.code ?? "").trim();
+    const recovery = String(req.body?.recovery ?? "").trim();
+    if (!code && !recovery) return res.status(400).json({ message: "Enter a code or recovery code." });
+
+    const totp = await storage.getAdminTotp(userId);
+    if (!totp) return res.status(400).json({ message: "No 2FA enrolled — start enrollment first." });
+
+    let ok = false;
+    if (code) ok = verifyTotp(decryptSecret(totp.secretEncrypted), code);
+    if (!ok && recovery) {
+      // Find which stored hash this recovery code matches, then consume it.
+      for (const h of totp.recoveryCodes) {
+        if (await verifyRecoveryCode(recovery, h)) {
+          ok = await storage.consumeRecoveryCode(userId, h);
+          break;
+        }
+      }
+    }
+    if (!ok) return res.status(400).json({ message: "Code didn't match. Try again." });
+
+    const token = generateToken();
+    await storage.createAuthToken(token, userId, "admin");
+    req.session.userId = userId;
+    req.session.kind = "admin";
+    req.session.pendingTotpUserId = undefined;
+    const u = await storage.getUser(userId);
+    const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
+    return res.json({ ...shapeAdmin(u, photoUrl), token });
+  });
+
+  // ─── Linked identities (profile) ──────────────────────────────────
+  app.get("/api/auth/identities", requireAuth, async (req, res) => {
+    const list = await storage.listIdentities(req.session.kind!, req.session.userId!);
+    return res.json(list);
+  });
+  app.delete("/api/auth/identities/:id", requireAuth, async (req, res) => {
+    const ok = await storage.unlinkIdentity(req.session.kind!, req.session.userId!, req.params.id);
+    if (!ok) return res.status(404).json({ message: "Not linked" });
+    return res.json({ ok: true });
+  });
+
+  // ─── Admin super-admin grant/revoke ───────────────────────────────
+  app.get("/api/admin/admins", requireAdminBearer, async (_req, res) => {
+    const list = await storage.listAdmins();
+    return res.json(list);
+  });
+  app.post("/api/admin/admins/revoke", requireAdminBearer, async (req, res) => {
+    const targetId = String(req.body?.userId ?? "");
+    if (!targetId) return res.status(400).json({ message: "userId required" });
+    if (targetId === req.session.userId) {
+      return res.status(400).json({ message: "You can't revoke your own admin." });
+    }
+    const count = await storage.countAdmins();
+    if (count <= 1) return res.status(400).json({ message: "Can't revoke the last admin." });
+    await storage.setUserAdmin(targetId, false);
+    return res.json({ ok: true });
   });
 
   // ----- Admin bootstrap + CMS -------------------------------------------
@@ -269,11 +644,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // pricing-page rule that the bootstrap admin can't be locked out of the
   // CMS by another admin. Use the DB directly if you need to demote.
   app.post("/api/admin/promote", requireAdminBearer, async (req, res) => {
+    // Accept either { username } or { email } — the task's role-management
+    // spec calls for grant-by-email, but the legacy admin UI still types
+    // @handles, so we handle both. Email path uses the admin-side lookup
+    // so we never cross the admin/customer boundary.
+    const emailRaw = String(req.body?.email ?? "").trim().toLowerCase();
     const raw = String(req.body?.username ?? "").trim();
     const username = (raw.startsWith("@") ? raw.slice(1) : raw).toLowerCase();
-    if (!username) return res.status(400).json({ message: "Username is required" });
-    const target = await storage.getUserByUsername(username);
-    if (!target) return res.status(404).json({ message: `No user found with username "@${username}"` });
+    let target = null as Awaited<ReturnType<typeof storage.getUserByUsername>> | null;
+    if (emailRaw) {
+      target = (await storage.getUserByEmail(emailRaw)) ?? null;
+      if (!target) return res.status(404).json({ message: `No admin found with email "${emailRaw}"` });
+    } else if (username) {
+      target = (await storage.getUserByUsername(username)) ?? null;
+      if (!target) return res.status(404).json({ message: `No user found with username "@${username}"` });
+    } else {
+      return res.status(400).json({ message: "Email or username is required" });
+    }
     if (target.isAdmin) {
       return res.status(200).json({ id: target.id, username: target.username, displayName: target.displayName, isAdmin: true, alreadyAdmin: true });
     }

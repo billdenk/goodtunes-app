@@ -1,12 +1,66 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthKind } from "@/hooks/useAuthKind";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
+
+// Linked OAuth providers for this account. Reads/writes hit the
+// kind-aware /api/auth/identities endpoint — same component works on
+// both the customer profile and (eventually) admin account chrome.
+function LinkedProvidersPanel() {
+  const kind = useAuthKind();
+  const { data: identities = [], isLoading } = useQuery<Array<{ id: string; provider: string; email: string | null }>>({
+    queryKey: ["/api/auth/identities"],
+  });
+  const unlink = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/auth/identities/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/identities"] }),
+  });
+  const linkProvider = (p: "google" | "apple") => {
+    window.location.href = `/api/auth/${p}/start?kind=${kind}&link=1`;
+  };
+  const hasGoogle = identities.some((i) => i.provider === "google");
+  const hasApple = identities.some((i) => i.provider === "apple");
+  return (
+    <>
+      <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Linked Accounts</p>
+      <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+        {isLoading ? (
+          <p className="px-4 py-3 text-white/55 text-sm">Loading…</p>
+        ) : (
+          <>
+            {identities.map((id) => (
+              <div key={id.id} className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid={`row-identity-${id.provider}`}>
+                <div>
+                  <p className="text-white text-[15px] capitalize">{id.provider}</p>
+                  {id.email && <p className="text-white/45 text-[12px]">{id.email}</p>}
+                </div>
+                <button type="button" onClick={() => unlink.mutate(id.id)} disabled={unlink.isPending} className="text-red-400 text-sm" data-testid={`button-unlink-${id.provider}`}>Unlink</button>
+              </div>
+            ))}
+            {!hasGoogle && (
+              <button type="button" onClick={() => linkProvider("google")} className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid="button-link-google">
+                Link Google
+              </button>
+            )}
+            {!hasApple && (
+              <button type="button" onClick={() => linkProvider("apple")} className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid="button-link-apple">
+                Link Apple
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
 
 /** Public privacy-policy URL. Lives on the marketing site, opened in the
  *  system browser (will become SFSafariViewController / Chrome Custom Tabs
@@ -200,6 +254,8 @@ export function Account() {
               </button>
             ))}
           </div>
+
+          <LinkedProvidersPanel />
 
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             <button

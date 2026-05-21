@@ -34,6 +34,15 @@ import {
   type CreditRole,
   type InsertCreditRole,
   users,
+  customerUsers,
+  type CustomerUser,
+  type InsertCustomerUser,
+  adminIdentities,
+  customerIdentities,
+  type AdminIdentity,
+  type CustomerIdentity,
+  adminTotp,
+  type AdminTotp,
   albums,
   songs,
   userAlbums,
@@ -309,9 +318,40 @@ export interface IStorage {
   removeSongFromPlaylist(playlistId: string, songId: string): Promise<void>;
 
   // Auth tokens (bearer)
-  createAuthToken(token: string, userId: string): Promise<void>;
+  // `kind` defaults to "admin" for back-compat with the existing route
+  // call sites — once those routes are kind-aware, every new token mint
+  // should pass the actual kind.
+  createAuthToken(token: string, userId: string, kind?: "admin" | "customer"): Promise<void>;
   getUserIdByAuthToken(token: string): Promise<string | undefined>;
+  // Kind-aware lookup: returns the row only when the token's kind matches.
+  // Used by host-routed endpoints to prevent a customer token being
+  // replayed against an admin host, or vice versa.
+  getAuthBy(token: string): Promise<{ userId: string; kind: "admin" | "customer" } | undefined>;
   deleteAuthToken(token: string): Promise<void>;
+
+  // ---- Customer side (Task #31) ------------------------------------
+  getCustomer(id: string): Promise<CustomerUser | undefined>;
+  getCustomerByUsername(username: string): Promise<CustomerUser | undefined>;
+  getCustomerByEmail(email: string): Promise<CustomerUser | undefined>;
+  createCustomer(user: InsertCustomerUser): Promise<CustomerUser>;
+  updateCustomer(id: string, data: Partial<CustomerUser>): Promise<CustomerUser | undefined>;
+
+  // ---- OAuth identities --------------------------------------------
+  findIdentity(kind: "admin" | "customer", provider: string, providerUserId: string): Promise<{ userId: string } | undefined>;
+  linkIdentity(kind: "admin" | "customer", data: { userId: string; provider: string; providerUserId: string; email: string | null }): Promise<void>;
+  listIdentities(kind: "admin" | "customer", userId: string): Promise<Array<{ id: string; provider: string; email: string | null; linkedAt: Date | null }>>;
+  unlinkIdentity(kind: "admin" | "customer", userId: string, identityId: string): Promise<boolean>;
+
+  // ---- Admin TOTP --------------------------------------------------
+  getAdminTotp(userId: string): Promise<AdminTotp | undefined>;
+  setAdminTotp(userId: string, secretEncrypted: string, recoveryCodeHashes: string[]): Promise<void>;
+  // Removes a recovery hash from the stored array. Returns true if a hash
+  // was actually removed (i.e. the supplied code matched something).
+  consumeRecoveryCode(userId: string, matchHash: string): Promise<boolean>;
+
+  // Super-admin grant/revoke (Task #31 step 9). `listAdmins` is the
+  // source of truth for the admin-only UI.
+  listAdmins(): Promise<Array<{ id: string; username: string; email: string; displayName: string }>>
 
   // Profile photo
   getProfilePhoto(userId: string): Promise<string | null>;
@@ -1472,15 +1512,101 @@ export class DbStorage implements IStorage {
       .where(and(eq(playlistSongs.playlistId, playlistId), eq(playlistSongs.songId, songId)));
   }
 
-  async createAuthToken(token: string, userId: string): Promise<void> {
-    await db.insert(authTokens).values({ token, userId }).onConflictDoNothing();
+  async createAuthToken(token: string, userId: string, kind: "admin" | "customer" = "admin"): Promise<void> {
+    await db.insert(authTokens).values({ token, userId, kind }).onConflictDoNothing();
   }
   async getUserIdByAuthToken(token: string): Promise<string | undefined> {
     const [row] = await db.select().from(authTokens).where(eq(authTokens.token, token));
     return row?.userId;
   }
+  async getAuthBy(token: string): Promise<{ userId: string; kind: "admin" | "customer" } | undefined> {
+    const [row] = await db.select().from(authTokens).where(eq(authTokens.token, token));
+    if (!row) return undefined;
+    const kind = (row.kind === "customer" ? "customer" : "admin") as "admin" | "customer";
+    return { userId: row.userId, kind };
+  }
   async deleteAuthToken(token: string): Promise<void> {
     await db.delete(authTokens).where(eq(authTokens.token, token));
+  }
+
+  // ---- Customer side (Task #31) ----------------------------------------
+  async getCustomer(id: string): Promise<CustomerUser | undefined> {
+    const [c] = await db.select().from(customerUsers).where(eq(customerUsers.id, id));
+    return c;
+  }
+  async getCustomerByUsername(username: string): Promise<CustomerUser | undefined> {
+    const [c] = await db.select().from(customerUsers).where(eq(customerUsers.username, username));
+    return c;
+  }
+  async getCustomerByEmail(email: string): Promise<CustomerUser | undefined> {
+    const [c] = await db.select().from(customerUsers).where(sql`lower(${customerUsers.email}) = ${email.toLowerCase()}`);
+    return c;
+  }
+  async createCustomer(insert: InsertCustomerUser): Promise<CustomerUser> {
+    const [c] = await db
+      .insert(customerUsers)
+      .values({ ...insert, realName: insert.realName ?? null, password: insert.password ?? null })
+      .returning();
+    return c;
+  }
+  async updateCustomer(id: string, data: Partial<CustomerUser>): Promise<CustomerUser | undefined> {
+    const { id: _i, createdAt: _c, ...rest } = data as any;
+    const [c] = await db.update(customerUsers).set(rest).where(eq(customerUsers.id, id)).returning();
+    return c;
+  }
+
+  // ---- OAuth identities -----------------------------------------------
+  async findIdentity(kind: "admin" | "customer", provider: string, providerUserId: string) {
+    const t = kind === "admin" ? adminIdentities : customerIdentities;
+    const [row] = await db.select().from(t).where(and(eq(t.provider, provider), eq(t.providerUserId, providerUserId)));
+    return row ? { userId: row.userId } : undefined;
+  }
+  async linkIdentity(kind: "admin" | "customer", data: { userId: string; provider: string; providerUserId: string; email: string | null }) {
+    const t = kind === "admin" ? adminIdentities : customerIdentities;
+    await db.insert(t).values(data).onConflictDoNothing();
+  }
+  async listIdentities(kind: "admin" | "customer", userId: string) {
+    const t = kind === "admin" ? adminIdentities : customerIdentities;
+    const rows = await db.select().from(t).where(eq(t.userId, userId));
+    return rows.map((r) => ({ id: r.id, provider: r.provider, email: r.email, linkedAt: r.linkedAt }));
+  }
+  async unlinkIdentity(kind: "admin" | "customer", userId: string, identityId: string) {
+    const t = kind === "admin" ? adminIdentities : customerIdentities;
+    const res = await db.delete(t).where(and(eq(t.id, identityId), eq(t.userId, userId))).returning();
+    return res.length > 0;
+  }
+
+  // ---- Admin TOTP -----------------------------------------------------
+  async getAdminTotp(userId: string): Promise<AdminTotp | undefined> {
+    const [row] = await db.select().from(adminTotp).where(eq(adminTotp.userId, userId));
+    return row;
+  }
+  async setAdminTotp(userId: string, secretEncrypted: string, recoveryCodeHashes: string[]) {
+    await db
+      .insert(adminTotp)
+      .values({ userId, secretEncrypted, recoveryCodes: recoveryCodeHashes })
+      .onConflictDoUpdate({
+        target: adminTotp.userId,
+        set: { secretEncrypted, recoveryCodes: recoveryCodeHashes, enrolledAt: new Date() },
+      });
+  }
+  async consumeRecoveryCode(userId: string, matchHash: string): Promise<boolean> {
+    const row = await this.getAdminTotp(userId);
+    if (!row) return false;
+    const idx = row.recoveryCodes.indexOf(matchHash);
+    if (idx < 0) return false;
+    const next = row.recoveryCodes.slice(0, idx).concat(row.recoveryCodes.slice(idx + 1));
+    await db.update(adminTotp).set({ recoveryCodes: next }).where(eq(adminTotp.userId, userId));
+    return true;
+  }
+
+  async listAdmins() {
+    const rows = await db
+      .select({ id: users.id, username: users.username, email: users.email, displayName: users.displayName })
+      .from(users)
+      .where(eq(users.isAdmin, true))
+      .orderBy(asc(users.username));
+    return rows;
   }
 
   async getProfilePhoto(userId: string): Promise<string | null> {

@@ -9,10 +9,18 @@ interface AuthUser {
   realName?: string | null;
   photoUrl?: string | null;
   isAdmin?: boolean;
+  kind?: "admin" | "customer";
 }
 
-interface AuthResponse extends AuthUser {
-  token: string;
+// Login can return one of:
+//   { ...AuthUser, token }                    — customer success (or admin OAuth post-TOTP)
+//   { requires2fa: true, userId, kind }       — admin password OK, ask for TOTP
+//   { requiresEnrollment: true, userId, kind } — admin password OK, enroll TOTP
+interface AuthResponse extends Partial<AuthUser> {
+  token?: string;
+  requires2fa?: boolean;
+  requiresEnrollment?: boolean;
+  userId?: string;
 }
 
 export function useAuth() {
@@ -49,10 +57,14 @@ export function useAuth() {
       return res.json() as Promise<AuthResponse>;
     },
     onSuccess: (data) => {
-      if (data.token) setAuthToken(data.token);
-      const { token, ...user } = data;
-      queryClient.setQueryData(["/api/me"], user);
-      queryClient.invalidateQueries();
+      // Only stash + redirect on a real token — TOTP follow-ups have no
+      // token yet and the caller (Login.tsx) handles the next step.
+      if (data.token) {
+        setAuthToken(data.token);
+        const { token, requires2fa, requiresEnrollment, userId, ...user } = data;
+        queryClient.setQueryData(["/api/me"], user);
+        queryClient.invalidateQueries();
+      }
     },
   });
 
@@ -71,10 +83,12 @@ export function useAuth() {
       return res.json() as Promise<AuthResponse>;
     },
     onSuccess: (data) => {
-      if (data.token) setAuthToken(data.token);
-      const { token, ...user } = data;
-      queryClient.setQueryData(["/api/me"], user);
-      queryClient.invalidateQueries();
+      if (data.token) {
+        setAuthToken(data.token);
+        const { token, ...user } = data;
+        queryClient.setQueryData(["/api/me"], user);
+        queryClient.invalidateQueries();
+      }
     },
   });
 
