@@ -2,8 +2,6 @@
 
 Mobile-first, Apple-Music-inspired web player.
 
-> Long-form roadmap, integration plans, and future-phase deep-dives live in **[docs/roadmap.md](./docs/roadmap.md)** — read that file when working on anything labelled "planned" or "deferred" below.
-
 ## Stack
 - React + TypeScript + Vite (frontend)
 - Express + tsx (backend)
@@ -11,181 +9,24 @@ Mobile-first, Apple-Music-inspired web player.
 - TanStack Query v5 (`staleTime: Infinity`)
 - Wouter (routing)
 - Tailwind + shadcn/ui
-- **Dual auth** (shipped in Task #31): two completely separate user tables, `users` (admin) and `customer_users` (fans), each with its own OAuth identities table (`admin_identities` / `customer_identities`) and its own `auth_tokens` row keyed by `kind`. The same human can hold both with the same email — they're independent records. Admin sign-in additionally requires TOTP (Google Authenticator / 1Password / Authy) — first sign-in enrolls via QR; recovery codes are scrypt-hashed. Apple + Google OAuth both wired (Apple is **inert until a real PKCS#8 private key replaces the placeholder secret** — `APPLE_CONFIGURED` gate in `server/auth/oauth.ts`). Host-based routing: `admin.goodtunes.music` → admin shell, `my.goodtunes.music` → customer shell; `*.replit.app` works as dev with both shells reachable. CNAMEs at the user's DNS provider point both subdomains at the deployment; Apple domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts via the `APPLE_DOMAIN_ASSOCIATION` env var. Super-admin grant/revoke UI lives on the admin Promote panel (`SuperAdminsPanel`). The current single-tier admin generalizes into per-org roles in the next phase — see "Roles, fulfillment & multi-tenant admin" in `docs/roadmap.md`.
-- **Player dock primitive** lives at `client/src/components/ui/PlayerDock.tsx` — Apple-Music-style floating pill (transport · cover/title · lyrics/volume) graduated from the admin Tracks-tab Seamless mockup. The mockup sandbox keeps a parallel inline `BottomDock` copy (the sandbox alias can't reach `client/src`); mirror polish into both files until the sandbox gains a real alias.
-  - **Reuse for the consumer player**: this same primitive should drive the fan-facing player surface (Now Playing / mini-player) once we wire lyrics, queue, and shuffle/repeat state for fans. Plan to extend rather than fork: keep the dock as-is for admin (lyrics-disabled placeholder), and pass `onLyrics`, real shuffle/repeat handlers, and a queue when consumer mounts it. Any polish landing here should automatically benefit the consumer dock.
-- **Paste-a-URL entry for shop-like entities (vendors + labels)**: both `AdminVendors.tsx` and `AdminLabels.tsx` use the same "Add" dialog — operator pastes the entity's website, the server scraper (`POST /api/admin/vendors/scrape`, `POST /api/admin/labels/scrape`) returns OG-derived `{name, domain, logoUrl, …}`, and the create POST surfaces a 409 + `{label|vendor}` payload when the domain is already in the catalog so the UI offers "open existing" instead of double-creating. `labels.domain` mirrors `vendors.domain` (lowercased, no `www.`, partial-unique on non-null). When adding a new "shop-like" admin entity, mirror this exact shape — don't invent a new dedup key.
-- Replit Object Storage for image uploads (album art, person photos, vendor logos/covers, scraped instrument images). Files live in `${PRIVATE_OBJECT_DIR}/uploads/<uuid>.<ext>` and are served via `GET /objects/uploads/<id>` (public ACL). Survives redeploys — the old local `uploads/` disk was ephemeral on Autoscale and wiped on each republish.
+- Replit Object Storage for image uploads (album art, person photos, vendor logos/covers, scraped instrument images). Files live in `${PRIVATE_OBJECT_DIR}/uploads/<uuid>.<ext>` and are served via `GET /objects/uploads/<id>` (public ACL). Survives redeploys.
 
-## Brand
+## Brand at a glance
 - Colors: `#00062B` (bg), `#319ED8` (blue), `#7F10A7` (purple), `#4AFFCA` (mint), `#FF5470` (heart pink)
 - Mobile-first single column, max width ~440px
 - Apple-Music-style large headers, 44×44 minimum touch targets
 - Songs use **heart** icon (`#FF5470`); artists use **star** icon
 
+## Documentation map
+
+Read the doc that matches your task before changing code:
+
+- **[docs/design-system.md](./docs/design-system.md)** — design system rules, brand colors, IconButton primitive, inline links, destructive actions, Player dock primitive, spelling.
+- **[docs/auth-and-dual-shell.md](./docs/auth-and-dual-shell.md)** — dual auth (admin + customer), TOTP, OAuth (Google + Apple), host-based routing, login-page provider lookup, Apple private-relay capture.
+- **[docs/admin-conventions.md](./docs/admin-conventions.md)** — dev-vs-prod debugging, streaming-row vs GoodTunes-release rule, paste-a-URL pattern, grid/list toggle, cross-section deep links, Person-sheet content guardrails.
+- **[docs/credits-and-chat.md](./docs/credits-and-chat.md)** — SuperCredits™, vendor chat demo + in-app browser, GoodSync™ lyrics, playlist covers, favorites, downloads & song row.
+- **[docs/roadmap.md](./docs/roadmap.md)** — auth plan, AWS integration, DRM ladder, mobile RN port, play analytics, artist upload portal, Micro-Sponsorships economics, streaming-service handoff, muso.ai evaluation, verified-artist outreach, lyrics data plan. Read this for anything labelled "planned" or "deferred."
+
 ## User preferences
 
-### Streaming rows vs GoodTunes releases — intentionally independent
-A streaming-imported album (Apple/Spotify-sourced, `is_goodtunes_release=false`, `mzstatic` artwork, populated `appleMusicUrl`) and a GoodTunes-original album (`is_goodtunes_release=true`, your own artwork + uploaded tracks) for the **same artist + same title** are **not** duplicates to be merged. They serve different jobs:
-- The streaming row points fans out to the existing Apple/Spotify release.
-- The GoodTunes row is the full GoodTunes edition (full tracks, bonus material, credits, lyrics, etc.) curated by us.
-Treat `(artist, lower(title))` collisions across the `is_goodtunes_release` boundary as expected. Don't propose dedupe, don't auto-claim, don't merge on import. Surface them in admin only as informational (so the operator knows both exist), never as a warning that needs action. The two-row pattern is the product design.
-
-### Debugging — always check prod alongside dev
-When diagnosing any reported failure (import jobs, audit logs, missing rows, "I don't see X in the UI"), query **both** databases before drawing conclusions. The dev DB and prod DB diverge constantly — the user does most of their real work against the deployed app, so a clean dev DB doesn't mean the bug isn't real. Use `executeSql({ environment: "production" })` (read-only SELECTs only) for the prod read; never assume a single-environment query is the full picture.
-
-### Design system (app-wide — admin + player)
-**One design system covers the entire product** — the mobile player, the admin/CMS, and every mockup. Identical concepts must look identical everywhere. No one-off colors, button sizes, hover treatments, or icon sizes outside the primitives.
-
-**Two surfaces, shared vocabulary, distinct chrome.** Mobile player and desktop admin share **icon glyphs** (Lucide for UI chrome, `react-icons/si` for company logos), **brand colors**, and **product concepts** (favorite = heart, lyrics = `Mic2`, etc.) — but they use different button treatments because they live on different backgrounds and serve different users.
-- **Mobile player (fan-facing, dark `#00062B` bg)**: follow **Apple Music**. Circular `IconButton` chips (44/48px) with the `glass` variant (white/14 scrim) for search/filter/share/back/photo-nav. Apple-Music-style segmented tabs (Albums / Songs / Artists). Rounded, generous, photo-forward.
-- **Admin desktop (operator-facing, white/slate bg)**: square h-9 buttons, slate-100 segmented controls (`ViewModeToggle`, tab underlines), tighter density. Lives on white cards over a slate page background. Apple-Mac-app-style rather than Apple-Music-style.
-When in doubt on the mobile player: Apple Music, Apple Music, Apple Music. Don't borrow admin chrome (h-9 squares, slate borders) into the player.
-
-- **Primitives home**: `client/src/components/ui/` is the canonical home. Mockups in `artifacts/mockup-sandbox/` prove a pattern first in a local `_shared.tsx`, then the primitive graduates into `client/src/components/ui/` when the pattern ships to real code.
-- **Default to Apple HIG** whenever a size/weight/spacing/radius/font isn't explicitly specified for a surface:
-  - Type: SF / system font stack. Body 17pt, secondary 15pt, footnote 13pt, caption 11pt. Headings use Apple's title scale (Title 1 / 2 / 3).
-  - Touch targets: **44×44pt minimum** on mobile surfaces (already enforced in this README).
-  - Corner radii, padding rhythm, hover/pressed states: match Apple Music / Apple-iOS conventions over inventing our own.
-- **Icons**: a single icon set per family (Lucide for UI chrome; `react-icons/si` for company logos). One play triangle, one trash can, one chevron, one pencil — used in every surface that needs that concept.
-- **Circular icon buttons** (search, filter, share, close, photo-viewer nav, send, etc.) **must use the `IconButton` primitive** at `client/src/components/ui/IconButton.tsx`. The Collection page's search + sort buttons are the canonical reference.
-  - Sizes: `md` (44×44, default — HIG floor) and `lg` (48×48, player primary controls only). No 40px buttons — bump to 44.
-  - Variants: `glass` (default — white/10 scrim on dark bgs), `dimmed` (black/45 + blur, for use over bright photos/album art), `solid` (brand blue fill, primary actions), `ghost` (no bg).
-  - Icon size auto-applied via child-SVG selector — consumers pass `<svg>` or a Lucide icon as a child without sizing it. 19px on `md`, 22px on `lg`.
-  - Press feedback is `active:scale-[0.94]` everywhere. No more mixing scale/opacity. Always.
-  - Surfaces still to migrate off ad-hoc inline circular buttons: `AlbumDetail.tsx` (back, more, photo-viewer nav, lyrics close), `Player.tsx`, `Playlists.tsx`, `ArtistDetail.tsx`, `Chat.tsx` composer send, `GoodDeedCertificate.tsx`. Migrate each time you touch the file — don't sweep all at once.
-  - **Lyrics glyph**: Lucide `Mic2` (singer's mic) — same icon Spotify uses for the same concept. Wrapped at `client/src/components/ui/LyricsIcon.tsx` so any future swap happens in one place. Used on the mobile player's Now Playing controls **and** the admin Tracks-tab BottomDock. Sandbox surfaces import `Mic2` directly from `lucide-react` since they can't reach `@/components` — both surfaces stay on `Mic2`. We tried Apple's `quote.bubble` SF Symbol; inline-SVG approximations didn't read well at 16px so we kept the mic.
-- **Color**: only the five brand colors listed above + Tailwind slate for neutrals. New colors require a discussion, not a one-off.
-- **Inline text links** — anywhere a piece of metadata in admin chrome (artist name on an album header, vendor name on an instrument row, label name, etc.) deep-links to its own CMS page, use the shared link treatment: **inherit the surrounding text color at rest, switch to brand blue `#319ED8` + underline on hover/focus.** Don't introduce per-surface accent colors. Pair with `underline-offset-2` and `transition-colors` so the underline doesn't stick to the glyph. Always gate the link on the FK actually being set (e.g. `album.primaryArtistId`) — never render a `<Link>` to `/admin/people/undefined`; fall back to plain `<span>` with the snapshot string. The canonical reference is the artist name in the AdminAlbum header (`client/src/pages/AdminAlbum.tsx` ~line 406).
-- **Destructive actions always confirm.** Any trash / delete / "remove forever" button must pop a confirmation sheet naming the thing being destroyed (e.g. "Delete *Storms*? This removes the master, snippet, lyrics, and credits.") with a rose-tinted primary action. Hide / Park / Archive are reversible and do **not** need a confirm — they just toast "Hidden — undo." Destructive buttons must also keep visual breathing room (gap + hairline divider) from any adjacent non-destructive control so a thumb can't slide between them.
-
-### Spelling
-- Use **US English** for all user-facing strings (e.g. "color", not "colour"; "favorite", not "favourite"). Code identifiers can stay as they are; only the visible UI copy needs to read American.
-
-### Admin index pages — grid / list toggle
-The five admin index pages (Albums, People, Gear, Vendors, Labels) all carry the same Apple-Music-style **Grid / List** segmented control in the header. The primitive lives at `client/src/components/admin/ViewModeToggle.tsx` and exports both the toggle and the `useViewMode(entity)` hook. Preference is persisted **per entity** (`gt:admin:view:<entity>`) so list-mode on Vendors sticks to Vendors while Gear can stay on grid.
-
-**Canonical entity tokens** — used identically for the `useViewMode(…)` key, the `testIdPrefix`, the `row-<entity>-<id>` / `list-<entity>` / `grid-<entity>` testids, and any future per-entity storage namespace: `albums`, `people`, `instruments`, `vendors`, `labels`. Note "Gear" is only the user-facing label — the data entity (and therefore the token everywhere in code) is **`instruments`**. Don't introduce a parallel `gear` token; it splits selectors and storage keys.
-
-- **Grid view**: the entity's tile/card layout (square album/instrument art, circular avatars, etc.). Density-optimized for browsing visual catalogs.
-- **List view**: a single-column compact table — `rounded-lg border bg-white divide-y divide-slate-100`, with row testids `row-<entity>-<id>`. Thumbnail 40–48px, name + secondary line on the left, meta (label / domain / type+year / vendor count) right-aligned. Density-optimized for scanning a long list.
-
-When adding a new admin index page, follow the same pattern: `useViewMode("<entity>")`, place the `<ViewModeToggle>` in the right-side header cluster, and render a per-entity `<EntityRow>` for the list branch.
-
-### Admin cross-section deep links — `?from=<entity>&<entity>Id=<id>`
-Many admin entities relate to each other (a Person plays Gear, Gear is sold by a Vendor, an Album is on a Label). When the operator pivots from one entity's detail page into a related entity's detail page (e.g. Gear → Vendor, Gear → Person, Person → Gear), the destination's first breadcrumb should swap from the canonical section root ("Vendors", "People", "Gear") to a **back-link at the origin row**, and the section-not-found error state should offer "Back to {origin name}" instead of "Back to {section}".
-
-The signal is a pair of query-string params on the destination URL:
-
-```
-/admin/<destEntity>/<destId>?from=<originEntity>&<originEntity>Id=<originId>
-```
-
-Examples:
-- Gear → Vendor: `/admin/vendors/v_123?from=instrument&instrumentId=i_77`
-- Gear → Person: `/admin/people/p_42?from=instrument&instrumentId=i_77`
-- Person → Gear: `/admin/instruments/i_77?from=person&personId=p_42`
-
-The destination consumes the params via the shared `useSmartBackCrumb()` hook at `client/src/hooks/useSmartBackCrumb.ts`, which:
-- Reads `?from=<entity>` + the matching `<entity>Id=<id>` param.
-- Fetches `/api/<entity>/{id}` so the crumb reads the row's real name (not just "Gear").
-- Returns `{ origin, id, name, href, testId }` or `null` when no origin is present.
-- Falls back to the canonical section root crumb when null — direct visits keep reading normally.
-
-**Adding a new cross-section pivot:**
-1. On the **origin** page, render the deep link with `?from=<entity>&<entity>Id=<id>` on the row that pivots. Reuse the inline-link treatment (inherit color → brand-blue + underline on hover).
-2. If your destination entity is new to the hook, add it to the `ORIGINS` map in `useSmartBackCrumb.ts` (param name + API path + admin href + testid prefix + fallback name).
-3. On the **destination** page, call `useSmartBackCrumb()` once and use the returned crumb in both the breadcrumb chain and the not-found error state. No further state is needed — refreshes and shared deep-links work because the signal lives in the URL.
-
-Currently wired: Gear ↔ Vendor, Gear ↔ Person. Album ↔ Person, Album ↔ Label, Vendor ↔ Label use the same primitive — wire them in when their cross-section tabs ship.
-
-### Person sheet — content guardrails
-The public, fan-facing Person sheet (and any artist bio surface we ingest) must **not** include legal-issue, criminal-allegation, lawsuit, or controversy content, even when the source (Wikipedia, Roon, MusicBrainz, etc.) has those sections. When ingesting biographies, filter out sections titled along the lines of "Legal issues", "Allegations", "Controversy", "Lawsuits", or any incident/court coverage — keep early life, career, discography, charity work, family, and music-related content only. This is a product rule, not a one-off Nick decision.
-
-### Playlist covers
-- Always show the actual artwork mosaic (gradient fallback only when truly empty).
-- Adapt the layout to the count of unique album artworks:
-  - 1 → single full image
-  - 2 → split in half, side-by-side
-  - 3 → one large left, two stacked right (Spotify-style)
-  - 4+ → 2×2 grid
-- Never repeat the same album in the cover.
-- Pick the **most-recent** unique artworks first so the cover shifts as new songs are added.
-- Custom uploaded covers + lock-in: deferred until friends/public sharing exists (then add reporting/moderation).
-
-### Favorites
-- "Favorites" is a virtual playlist combining favorited songs + songs by favorited artists (deduped).
-- Order: most-recently favorited first.
-- Client-only via localStorage (`gt:fav:songs`, `gt:fav:artists`) with `gt:favorites-changed` event.
-
-### Downloads & song row
-- Per-song download is **in-app only** (Apple/Spotify model) — no Transfer Rights warning, no popups. Tap the cloud-arrow icon → silent toggle, persisted in localStorage (`gt:downloaded-songs:<albumId>`).
-- The "download to your device" choice (which would burn Transfer Rights) is deferred to the desktop version. Album-level "Download Music Files" + Transfer Rights warning sheet have been removed for now.
-- Song row layout: track # · title · **download cloud-arrow** · ⋯ menu. Heart moved into the ⋯ sheet.
-- Song ⋯ sheet (Apple-trimmed): Favorite + Share (top two-up), then Add to Playlist · Play Next · Play Last · View Credits. Intentionally omitted: Pin Song, Create Station, Suggest Less, Rate Song.
-
-### SuperCredits™ (active build)
-Richer per-track credits than Apple's writer-only list. Three layers:
-
-1. **Writers** (composer / lyricist / producer) — always present.
-2. **Performers**, one per row, each with photo (or initial in a colored circle), name + role on this track, and the specific **instrument used on this track** (e.g. "1973 Martin D-28").
-3. Tapping a performer opens a song-focused sheet:
-   - **Played on this song** — the instrument(s) used on THIS track, each tappable.
-   - **Also on {album}** — other tracks on this album where they played (light-grey track numbers, album track-list style).
-   - **View artist profile** — placeholder toast today; see "Artist profile + streaming-service handoff" in roadmap.
-4. Tapping an instrument opens an InstrumentSheet with photo, artist note, tuning/setup notes, and a **"Discover more / Buy"** vendor link (affiliate — see Micro-Sponsorships in roadmap).
-
-#### Data shape (currently being built out by the admin CMS)
-- `people: { id, name, photoUrl?, bio?, accent? }`
-- `instruments: { id, name, category, photoUrl?, about?, artistNote? }`
-  - `instrument_vendors: { id, instrumentId, name, affiliateUrl, aboutUrl?, logoUrl?, tagline?, bio?, location?, coverUrl?, position }`
-- `trackWriters: { id, songId, personId?, name (snapshot), role, position }`
-- `trackPerformers: { id, songId, personId?, instrumentId?, name (snapshot), role, tuningNotes?, position }`
-- Person + instrument FKs are `SET NULL` on delete; the `name` snapshot keeps a credit renderable after a Person row is removed.
-- Public read: `GET /api/songs/:id/credits` returns writers + performers already enriched with their joined `person` and `instrument: {..., vendors: []}` so the credits sheet renders from a single fetch.
-
-#### SuperCredits™ badge (discovery)
-Apple surfaces small chips on albums/tracks for **Dolby Atmos**, **Lossless**, **Spatial Audio** — fans actively hunt for them. A `SuperCredits™` chip serves the same job: "this album took the trouble to credit every musician + show you their gear."
-
-Surfaces:
-- Small chip on album cover in library / search results.
-- Inline on the track row in the album view (not every track will always have credits, especially early on).
-- A library filter: "Albums with SuperCredits™".
-
-Same slot can later host partner-brand lockups ("Gear by Gretsch", "Strings by D'Addario") on sponsored albums. One slot, two kinds of signal — design the slot now.
-
-### Chat / vendor messaging (demo)
-
-A **Chat** tab in the bottom nav. Currently powers a single demo flow: **fan ↔ vendor about an instrument**.
-
-- Each vendor row inside an instrument sheet has a chat-bubble button. Tapping it opens (or creates) a thread with that vendor and seeds it with an Open-Graph-style preview card (instrument photo, category, name, vendor link). Fan can then ask a question without leaving GoodTunes.
-- Threads + messages are client-only via `localStorage` (`gt:chats`, `gt:chats-changed` event). One thread per vendor; additional instrument links append more cards into the same thread.
-- Composer is real (Apple Messages-style bubbles, blue for the fan, grey for the vendor). For the demo we fire a single canned vendor reply ~1.5s after the fan sends a text.
-- Bottom-nav Chat icon shows an unread badge in `#FF5470` driven by `totalUnread()`.
-
-**Why this matters**: pitch-deck-grade proof that fans can reach a brand directly inside the player. Pairs naturally with SuperCredits™ Micro-Sponsorship links.
-
-#### In-app browser (web vs. native)
-On the web, vendor sites (Reverb, Sweetwater, Shar) all send `X-Frame-Options: deny` / restrictive `frame-ancestors`, so we **cannot** iframe them. The current "preview card → Open in browser" sheet (`InAppBrowserSheet` in `AlbumDetail.tsx`) shows vendor logo + name + domain, then punts to system Safari/Chrome via `window.open`.
-
-When this ports to native: swap `window.open(url)` for **`SFSafariViewController`** (iOS) / **Chrome Custom Tabs** (Android). Both are real in-app browsers that bypass `X-Frame-Options`. Preview-card UX stays unchanged; only the handoff target changes.
-
-### Synced lyrics — GoodSync™ (line-level shipped today)
-The Lyrics overlay in `client/src/pages/Player.tsx` derives **float-second timestamps** from each song's `lyrics` string by weighted-distributing lines across `duration`. Weights: sung line = 1, blank line = 0.6 (so stanza breaks earn real time, instead of mashing the next verse up against the previous one), section header (`[Verse 1]`, `[Chorus]`, etc.) = 0 (rendered dimmed + uppercase, not timed, not seek-targets). Lead-in scales with duration (`max(1.5s, min(8s, duration × 4%))`) so longer songs allow for a longer instrumental intro; tail is `max(2s, duration × 2%)`. Auto-scrolls active line to ~28% from top of the viewport. Tap any non-header line to seek to its timestamp.
-
-**Type model (matches Apple Music):** every line is the **same large size** — 28px, weight 700 (active gets weight 800). There is **no font-size bump and no scale transform** on the active line; that would make the column "jump" as the song progresses. Differentiation is **blur + opacity only**:
-
-- Active line — 0 blur, opacity 1, weight 800, subtle text shadow.
-- Neighbors (±1) — 1.2px blur, opacity ~0.50–0.72.
-- Distance 2 — 2.8px blur.
-- Distance 3 — 4.5px blur.
-- Distance 4+ — 6px blur (still just legible).
-- Past lines fade faster than upcoming ones so the eye naturally tracks down the page.
-
-When changing the lyrics styling, keep the size uniform and adjust the blur/opacity ramps — never reintroduce size or scale variation between lines.
-
-Placeholder until real per-song timing arrives via the upload portal — at that point swap the auto-distribution for the stored `syncedLyrics: { time, text }[]` array; rendering stays the same. Word-level karaoke is a follow-up. Full lyrics data plan in roadmap.
-
----
-
-For everything below this line — auth plan, backend AWS integration, DRM ladder, mobile RN port, play analytics, artist upload portal, Micro-Sponsorships economics, streaming-service handoff, muso.ai evaluation, verified-artist outreach, lyrics data plan — see **[docs/roadmap.md](./docs/roadmap.md)**.
+Save preferences here that don't fit a topic doc. Topic-scoped preferences belong in the matching doc above (design system rules in `docs/design-system.md`, etc.).
