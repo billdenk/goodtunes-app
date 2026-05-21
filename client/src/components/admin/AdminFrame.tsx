@@ -14,6 +14,7 @@ import {
   PanelRightOpen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
@@ -192,12 +193,7 @@ export function AdminFrame({
             pages can use AdminPageHeader inside the body to render
             their own breadcrumb/title beneath this strip. */}
         <div className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-end px-4 sm:px-6">
-          <span
-            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#319ED8]/10 text-[#319ED8] text-[10.5px] font-bold uppercase tracking-wider"
-            data-testid="badge-admin"
-          >
-            Admin
-          </span>
+          <AdminUserMenu />
         </div>
         <div className="max-w-[1180px] px-6 sm:px-8 pt-6 pb-8">{children}</div>
       </main>
