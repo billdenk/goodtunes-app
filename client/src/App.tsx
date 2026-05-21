@@ -18,6 +18,7 @@ import { EditAccount } from "@/pages/EditAccount";
 import { FavoriteArtists } from "@/pages/FavoriteArtists";
 import { Bookmarks } from "@/pages/Bookmarks";
 import { ArtistDetail } from "@/pages/ArtistDetail";
+import { ArtistDashboard } from "@/pages/ArtistDashboard";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
 import { AdminAlbums } from "@/pages/AdminAlbums";
@@ -159,6 +160,13 @@ function Router() {
         <Route path="/album/:id" component={AlbumDetail} />
         <Route path="/instrument/:id">
           <ProtectedRoute component={InstrumentDetail} />
+        </Route>
+        {/* Task #75 — Artist reporting dashboard. Must be listed BEFORE
+            /artist/:slug so the no-slug `/artist` matches first.
+            ProtectedRoute gates sign-in; the page itself surfaces a
+            friendly message if the caller's role isn't artist/super_admin. */}
+        <Route path="/artist">
+          <ProtectedRoute component={ArtistDashboard} />
         </Route>
         <Route path="/artist/:slug">
           <ProtectedRoute component={ArtistDetail} />

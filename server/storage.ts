@@ -2051,6 +2051,9 @@ export class DbStorage implements IStorage {
 // existed before the column landed.
 async function ensureRuntimeMigrations(): Promise<void> {
   try {
+    // Task #75 — artist reporting indexes (no-ops if already present).
+    const { ensureArtistReportingIndexes } = await import("./artistReports");
+    await ensureArtistReportingIndexes();
     // ADD COLUMN is idempotent (IF NOT EXISTS) and cheap.
     await db.execute(sql`ALTER TABLE songs ADD COLUMN IF NOT EXISTS playlist_count INTEGER NOT NULL DEFAULT 0`);
     // One-time backfill: recompute from playlist_songs only when no song
