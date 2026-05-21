@@ -1031,13 +1031,13 @@ export function Login() {
                 session because cookies are per-host) can land in /admin
                 in one click without typing creds. The server route is
                 404 in production. */}
-            {isAdmin && import.meta.env.DEV && (
+            {import.meta.env.DEV && (
               <a
                 href="/dev-login-bill"
                 className={`${s.oauthBtn} mt-2.5 justify-center text-xs`}
                 data-testid="link-dev-login-bill"
               >
-                Dev sign-in (bill) →
+                Dev sign-in as admin (bill) →
               </a>
             )}
           </>
