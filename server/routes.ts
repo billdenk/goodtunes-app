@@ -338,15 +338,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const codeHash = await _hash(code);
       const expiresAt = new Date(Date.now() + 10 * 60_000);
       await storage.setAdminEmailOtp(user.id, codeHash, expiresAt);
-      // No transactional email infra wired yet — log the code on the
-      // server in non-prod so the admin can grab it from the workflow
-      // console. The `devCode` field is only set off-prod; production
-      // returns just the masked email and the admin reads the code from
-      // their inbox. See docs/auth-and-dual-shell.md for the seam.
+      // Always console-log so an admin can recover the code from the
+      // workflow logs if mail delivery is misconfigured. The `devCode`
+      // field is only set off-prod; production returns just the masked
+      // email and the admin reads the code from their inbox. See
+      // docs/auth-and-dual-shell.md for the seam.
       const masked = maskEmail(user.email);
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
-      }
+      console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
+      const { sendAdminOtpEmail: _sendOtp } = await import("./mail");
+      const _mailResult = await _sendOtp(user.email, code, 10);
+      if (!_mailResult.ok) console.warn(`[admin-otp] mail failed for ${user.email}: ${_mailResult.reason}`);
       return res.json({
         requiresEmailCode: true,
         userId: user.id,
@@ -791,9 +792,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const codeHash = await hashOtp(code);
     const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
     await storage.setAdminEmailOtp(userId, codeHash, expiresAt);
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
-    }
+    console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
+    const { sendAdminOtpEmail: _sendOtp } = await import("./mail");
+    const _mailResult = await _sendOtp(user.email, code, 10);
+    if (!_mailResult.ok) console.warn(`[admin-otp] mail failed for ${user.email}: ${_mailResult.reason}`);
     // `totpEnrolled` lets the login UI render the "Use authenticator
     // instead" fallback link when the OAuth-emailOtp branch boots up
     // and the session-restored response from /api/login isn't around.
