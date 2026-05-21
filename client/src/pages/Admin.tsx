@@ -7459,7 +7459,7 @@ function SocialFieldShortcuts({
               className={
                 "relative w-9 h-9 rounded-full flex items-center justify-center transition-all " +
                 (isFilled
-                  ? "bg-slate-900 text-white border border-slate-900 hover:bg-slate-800"
+                  ? "bg-[#319ED8] text-white border border-[#319ED8] hover:bg-[#2890c8]"
                   : "bg-white text-slate-400 border border-slate-200 hover:border-slate-400 hover:text-slate-600") +
                 (isActive
                   ? " ring-2 ring-[#319ED8] ring-offset-2 ring-offset-[#f7fbff]"

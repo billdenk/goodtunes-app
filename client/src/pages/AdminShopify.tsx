@@ -121,7 +121,7 @@ export function AdminShopify() {
               <code>GoodTunes redemption URL</code>. In Shopify admin → Settings → Notifications →{" "}
               <strong>Order confirmation</strong>, paste this Liquid block just above the order-summary table:
             </p>
-            <pre className="mt-2 text-[11.5px] bg-slate-900 text-slate-100 p-3 rounded-md overflow-x-auto leading-relaxed">{`{% for a in note_attributes %}{% if a.name == 'GoodTunes redemption URL' %}
+            <pre className="mt-2 text-[11.5px] bg-slate-100 text-slate-800 border border-slate-200 p-3 rounded-md overflow-x-auto leading-relaxed">{`{% for a in note_attributes %}{% if a.name == 'GoodTunes redemption URL' %}
 <table cellpadding="0" cellspacing="0" style="margin:24px 0;"><tr><td style="background:#319ED8;border-radius:999px;">
 <a href="{{ a.value }}" style="display:inline-block;padding:12px 24px;color:#fff;text-decoration:none;font-weight:600;">
 Get your music now
@@ -255,7 +255,7 @@ Get your music now
                   }`}
                   data-testid={`row-shopify-store-${s.id}`}
                 >
-                  <div className="w-9 h-9 rounded-md bg-slate-900 text-white flex items-center justify-center text-[13px] font-bold shrink-0">
+                  <div className="w-9 h-9 rounded-md bg-[#319ED8] text-white flex items-center justify-center text-[13px] font-bold shrink-0">
                     {(s.storeName ?? s.shopDomain).slice(0, 1).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">

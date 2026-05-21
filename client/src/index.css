@@ -218,6 +218,25 @@ body.gt-admin {
   background-image: none; /* drop the fan-page gradient on admin routes */
   color: #0f172a; /* slate-900 */
   color-scheme: light;
+
+  /* Override the dark shadcn theme variables so admin-context shadcn
+     primitives (Dialog, AlertDialog, Sheet, Drawer, Popover) default
+     to white card + slate text. Player routes keep the dark :root
+     values above. Anything resolving `bg-background`, `text-foreground`,
+     `bg-card`, `bg-popover`, `border-border`, etc. inherits these
+     while the admin shell is mounted. */
+  --background: 0 0% 100%;            /* white card surface */
+  --foreground: 222 47% 11%;          /* slate-900 */
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --secondary: 210 40% 96%;           /* slate-100 */
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;    /* slate-500 */
+  --border: 214 32% 91%;              /* slate-200 */
+  --input: 214 32% 91%;
 }
 
 .scrollbar-hide {

@@ -3159,7 +3159,7 @@ function AddMultipleTracksDialog({
               onClick={handleConfirmEmpty}
               disabled={running || n <= 0}
               data-testid="button-bulk-confirm"
-              className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+              className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
             >
               {running ? (
                 <>Creating…</>
@@ -3173,7 +3173,7 @@ function AddMultipleTracksDialog({
               onClick={handleConfirmDropbox}
               disabled={running || !folderUrl.trim()}
               data-testid="button-bulk-dropbox-confirm"
-              className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+              className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
             >
               {running ? <>Importing…</> : <>Import from Dropbox</>}
             </button>
@@ -3671,7 +3671,7 @@ function ImportLyricsFromDropboxDialog({
                 type="button"
                 onClick={() => onOpenChange(false)}
                 data-testid="button-lyrics-import-done"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8]"
               >
                 Done
               </button>
@@ -3692,7 +3692,7 @@ function ImportLyricsFromDropboxDialog({
                 onClick={handleConfirm}
                 disabled={running || !folderUrl.trim() || songCount === 0}
                 data-testid="button-lyrics-import-confirm"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
               >
                 {running ? (
                   <>
@@ -3985,7 +3985,7 @@ function GoodSyncAlbumDialog({
                 onClick={() => setStep("chorus")}
                 disabled={eligible.length === 0}
                 data-testid="button-goodsync-continue"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50"
               >
                 Continue
               </button>
@@ -4030,7 +4030,7 @@ function GoodSyncAlbumDialog({
                 type="button"
                 onClick={() => runSync(true)}
                 data-testid="button-goodsync-find-chorus"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-2"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] inline-flex items-center gap-2"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 Yes, find the chorus
@@ -4119,7 +4119,7 @@ function GoodSyncAlbumDialog({
                 type="button"
                 onClick={() => onOpenChange(false)}
                 data-testid="button-goodsync-done"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8]"
               >
                 Done
               </button>
@@ -10688,7 +10688,7 @@ function BulkBonusFromDropboxDialog({
             onClick={handleConfirm}
             disabled={running || !folderUrl.trim()}
             data-testid={`button-bulk-bonus-${kind}-confirm`}
-            className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-2"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
           >
             {running ? (
               <>
