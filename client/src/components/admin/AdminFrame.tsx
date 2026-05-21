@@ -38,7 +38,8 @@ export type EntityKey =
   | "labels"
   | "manufacturers"
   | "fulfillment"
-  | "reports";
+  | "reports"
+  | "none";
 
 export function AdminFrame({
   active,
