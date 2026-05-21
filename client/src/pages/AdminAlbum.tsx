@@ -1982,7 +1982,7 @@ function TracksPanel({
         open={lyricsImportOpen}
         onOpenChange={setLyricsImportOpen}
         albumId={album.id}
-        songCount={sorted.length}
+        songs={sorted}
         onSaved={invalidateAlbum}
       />
       <CreditsImportSheet
@@ -3177,16 +3177,21 @@ function ImportLyricsFromDropboxDialog({
   open,
   onOpenChange,
   albumId,
-  songCount,
+  songs,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   albumId: string;
-  songCount: number;
+  songs: SongLite[];
   onSaved: () => Promise<void> | void;
 }) {
   const { toast } = useToast();
+  const songCount = songs.length;
+  const songsRef = useRef(songs);
+  useEffect(() => {
+    songsRef.current = songs;
+  }, [songs]);
   const [folderUrl, setFolderUrl] = useState("");
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<
@@ -3196,20 +3201,27 @@ function ImportLyricsFromDropboxDialog({
       errors: Array<{ filename: string; error: string }>;
       ranAt?: string;
       songCount?: number;
+      syncDone?: { synced: number; failed: Array<{ title: string; error: string }> };
     }
   >(null);
-  // GoodSync follow-up state — after a lyrics import lands, Bill wanted
+  // GoodSync™ follow-up state — after a lyrics import lands, Bill wanted
   // the dialog to stay up and offer "Now align them to audio in one
   // pass" instead of making him reopen each track and hit Sync. We run
   // /auto-sync-lyrics serially over `summary.matched` (one ElevenLabs
   // call per track, ~5–15s each). Serial keeps backend load + ElevenLabs
   // rate-limit risk identical to the per-track button, just hands-off.
+  // The run keeps going even if the dialog closes — `syncInFlightRef`
+  // tells the open-effect to leave progress state alone on reopen.
   const [syncProgress, setSyncProgress] = useState<
     null | { current: number; total: number; currentTitle: string }
   >(null);
   const [syncDone, setSyncDone] = useState<
     null | { synced: number; failed: Array<{ title: string; error: string }> }
   >(null);
+  // "ask-chorus" appears between clicking GoodSync™ and the serial run,
+  // mirroring the standalone "GoodSync™ the whole album" wizard.
+  const [chorusPhase, setChorusPhase] = useState<"idle" | "ask-chorus">("idle");
+  const syncInFlightRef = useRef(false);
 
   // Sticky summary: persist the last result per album so reopening the
   // dialog shows what happened on the previous run instead of a blank
@@ -3217,10 +3229,15 @@ function ImportLyricsFromDropboxDialog({
   const storageKey = `gt:admin:job-summary:lyrics-import:${albumId}`;
   useEffect(() => {
     if (open) {
+      // Don't trample a sync that's still running in the background.
+      // The user closed the dialog mid-run; on reopen they should see
+      // the live progress they left behind, not a reset form.
+      if (syncInFlightRef.current) return;
       setFolderUrl("");
       setRunning(false);
       setSyncProgress(null);
       setSyncDone(null);
+      setChorusPhase("idle");
       try {
         const stored = localStorage.getItem(storageKey);
         const parsed = stored ? JSON.parse(stored) : null;
@@ -3233,6 +3250,8 @@ function ImportLyricsFromDropboxDialog({
           setSummary(null);
         } else {
           setSummary(parsed);
+          // Restore the prior sync result card if the last run finished.
+          if (parsed?.syncDone) setSyncDone(parsed.syncDone);
         }
       } catch {
         setSummary(null);
@@ -3259,6 +3278,8 @@ function ImportLyricsFromDropboxDialog({
         songCount,
       };
       setSummary(nextSummary);
+      setSyncDone(null);
+      setChorusPhase("idle");
       try {
         localStorage.setItem(storageKey, JSON.stringify(nextSummary));
       } catch {}
@@ -3280,16 +3301,28 @@ function ImportLyricsFromDropboxDialog({
     }
   };
 
-  // GoodSync follow-up: iterate the matched songs serially and POST
+  // GoodSync™ follow-up: iterate the matched songs serially and POST
   // /auto-sync-lyrics per track. Progress is exposed via syncProgress
-  // so the dialog can render "Syncing 3 of 12 · Storms…" inline; the
-  // final tally lands in syncDone for the result card. Failures don't
-  // abort the run — we collect them and surface a per-track list so
-  // Bill can re-run individual tracks afterward.
-  const goodSyncAll = async () => {
+  // so the dialog can render "GoodSyncing™ 3 of 12 · Storms…" inline;
+  // the final tally lands in syncDone for the result card. Failures
+  // don't abort the run — we collect them and surface a per-track list
+  // so Bill can re-run individual tracks afterward.
+  //
+  // The serial run is intentionally decoupled from the dialog's open
+  // state: once started it keeps going until completion, even if the
+  // dialog is closed (Done / X / backdrop). The completion toast still
+  // fires, and syncDone is mirrored into the sticky localStorage
+  // summary so a reopen still shows the result card.
+  //
+  // `wantsChorus` is passed as an argument rather than read from state
+  // so the chorus question can `setChorusPhase("idle"); goodSyncAll(t)`
+  // in one tick without losing the choice to React batching — same
+  // pattern the standalone wizard uses.
+  const goodSyncAll = async (wantsChorus: boolean) => {
     if (!summary || syncProgress) return;
     const matched = summary.matched;
     if (matched.length === 0) return;
+    syncInFlightRef.current = true;
     setSyncDone(null);
     const failed: Array<{ title: string; error: string }> = [];
     let synced = 0;
@@ -3306,18 +3339,63 @@ function ImportLyricsFromDropboxDialog({
           throw new Error(body?.message || `HTTP ${res.status}`);
         }
         synced++;
+        // Chorus follow-up — reuses findChorusStartMs (same helper the
+        // standalone "GoodSync™ the whole album" wizard uses). When the
+        // user opted in and the freshly-synced cues have a chorus line,
+        // PUT a 30s preview window starting at the chorus. Failures here
+        // are non-fatal; the lyrics sync still counts as successful.
+        if (wantsChorus) {
+          try {
+            const payload = await res.clone().json().catch(() => ({}));
+            const updated = payload?.song;
+            const cues: { timeMs: number; text: string }[] =
+              updated?.syncedLyrics ?? [];
+            const song = songsRef.current.find((s) => s.id === m.songId);
+            const lyricsText = updated?.lyrics ?? song?.lyrics ?? null;
+            if (cues.length > 0) {
+              const startMs = findChorusStartMs(lyricsText, cues);
+              if (startMs != null) {
+                const durMs = (song?.duration || 0) * 1000;
+                const endMs = Math.min(
+                  startMs + 30_000,
+                  durMs > 0 ? durMs - 1 : startMs + 30_000,
+                );
+                if (endMs > startMs) {
+                  await apiRequest("PUT", `/api/admin/songs/${m.songId}`, {
+                    previewStartMs: startMs,
+                    previewEndMs: endMs,
+                  });
+                }
+              }
+            }
+          } catch {
+            /* chorus assist failure is non-fatal */
+          }
+        }
       } catch (e: any) {
         failed.push({ title: m.title, error: e?.message || "Failed" });
       }
     }
     setSyncProgress(null);
-    setSyncDone({ synced, failed });
+    const doneState = { synced, failed };
+    setSyncDone(doneState);
+    syncInFlightRef.current = false;
+    // Mirror the result into the sticky localStorage summary so a
+    // reopen after a background-closed run still shows the result card.
+    try {
+      const stored = localStorage.getItem(storageKey);
+      const parsed = stored ? JSON.parse(stored) : null;
+      if (parsed) {
+        parsed.syncDone = doneState;
+        localStorage.setItem(storageKey, JSON.stringify(parsed));
+      }
+    } catch {}
     await onSaved();
     toast({
       title:
         failed.length === 0
-          ? `GoodSync complete · ${synced} ${synced === 1 ? "track" : "tracks"}`
-          : `GoodSync done · ${synced} synced · ${failed.length} failed`,
+          ? `GoodSync™ complete · ${synced} ${synced === 1 ? "track" : "tracks"}`
+          : `GoodSync™ done · ${synced} synced · ${failed.length} failed`,
       description:
         failed.length === 0
           ? "Open any track to scroll-test the alignment."
@@ -3327,11 +3405,47 @@ function ImportLyricsFromDropboxDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !running && !syncProgress && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-[17px] font-semibold text-slate-900">
+          <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
             Import lyrics from Dropbox
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="How to share the folder"
+                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  data-testid="button-lyrics-import-info"
+                >
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                side="bottom"
+                align="start"
+                className="w-72 text-[12px] leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+              >
+                <p className="font-semibold text-slate-900 mb-1.5">
+                  Sharing your folder
+                </p>
+                <p>
+                  Share the folder (or file) as{" "}
+                  <span className="font-medium text-slate-900">
+                    Anyone with the link
+                  </span>
+                  . Supported formats: .pdf, .docx, .txt. Name each file after
+                  the track (e.g.{" "}
+                  <span className="font-medium text-slate-900">Storms.pdf</span>)
+                  and I'll do the rest.
+                </p>
+                <p className="text-slate-500 mt-2 text-[11px]">
+                  {songCount > 0
+                    ? `This album has ${songCount} track${songCount === 1 ? "" : "s"} to match against.`
+                    : "Add tracks first, then come back here."}
+                </p>
+              </PopoverContent>
+            </Popover>
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
             Paste a Dropbox folder of lyric documents — or a single file
@@ -3339,16 +3453,6 @@ function ImportLyricsFromDropboxDialog({
             and fill in the lyrics.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-          <p className="text-[12.5px] leading-snug text-slate-600">
-            Share the folder (or file) as <span className="font-medium text-slate-700">Anyone with the link</span>. Supported
-            formats: .pdf, .docx, .txt. Name each file after the track
-            (e.g. <span className="font-medium">Storms.pdf</span>) and I'll
-            do the rest. {songCount > 0 ? `This album has ${songCount} track${songCount === 1 ? "" : "s"} to match against.` : "Add tracks first, then come back here."}
-          </p>
-        </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="lyrics-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
@@ -3412,9 +3516,11 @@ function ImportLyricsFromDropboxDialog({
           </div>
         )}
 
-        {/* GoodSync follow-up — stays visible whenever we have matched
+        {/* GoodSync™ follow-up — stays visible whenever we have matched
             tracks and we haven't already finished a sync run. Disappears
-            once syncDone is set (results card takes over below). */}
+            once syncDone is set (results card takes over below). The
+            chorus question slot mirrors the standalone "GoodSync™ the
+            whole album" wizard so behavior matches between surfaces. */}
         {summary && summary.matched.length > 0 && !syncDone && (
           <div
             className="rounded-lg border border-[#319ED8]/30 bg-[#319ED8]/5 px-3 py-2.5 space-y-2"
@@ -3424,28 +3530,68 @@ function ImportLyricsFromDropboxDialog({
               <div className="flex items-center gap-2 text-[12.5px] text-slate-700">
                 <Spinner className="w-3.5 h-3.5 animate-spin text-[#319ED8] flex-shrink-0" />
                 <span className="tabular-nums">
-                  GoodSyncing {syncProgress.current} of {syncProgress.total}
+                  GoodSyncing™ {syncProgress.current} of {syncProgress.total}
                 </span>
                 <span className="text-slate-400 truncate">· {syncProgress.currentTitle}</span>
               </div>
-            ) : (
+            ) : chorusPhase === "ask-chorus" ? (
               <>
                 <div className="text-[12.5px] text-slate-700">
-                  <span className="font-medium text-slate-900">Would you like to GoodSync these?</span>{" "}
+                  <span className="font-medium text-slate-900">
+                    One last question — set the preview to start at the chorus?
+                  </span>{" "}
                   <span className="text-slate-500">
-                    Aligns each line to the audio using ElevenLabs (~5–15s per track).
-                    You'll get a toast when it's done.
+                    I'll do my best on tracks with a{" "}
+                    <code className="px-1 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-slate-700">
+                      [Chorus]
+                    </code>{" "}
+                    marker; the rest keep their existing preview.
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={goodSyncAll}
+                    onClick={() => {
+                      setChorusPhase("idle");
+                      void goodSyncAll(true);
+                    }}
+                    data-testid="button-goodsync-find-chorus"
+                    className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Yes, find the chorus
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChorusPhase("idle");
+                      void goodSyncAll(false);
+                    }}
+                    data-testid="button-goodsync-just-sync"
+                    className="px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-slate-100"
+                  >
+                    Just sync
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-[12.5px] text-slate-700">
+                  <span className="font-medium text-slate-900">Would you like to GoodSync™ these?</span>{" "}
+                  <span className="text-slate-500">
+                    Aligns each line to the audio using ElevenLabs (~5–15s per track).
+                    You can close this dialog — I'll toast you when it's done.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChorusPhase("ask-chorus")}
                     data-testid="button-goodsync-after-import"
                     className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    GoodSync {summary.matched.length} {summary.matched.length === 1 ? "track" : "tracks"}
+                    GoodSync™ {summary.matched.length} {summary.matched.length === 1 ? "track" : "tracks"}
                   </button>
                   <button
                     type="button"
@@ -3467,7 +3613,7 @@ function ImportLyricsFromDropboxDialog({
             data-testid="card-goodsync-result"
           >
             <div className="font-medium text-slate-900">
-              GoodSync results · {syncDone.synced} synced
+              GoodSync™ results · {syncDone.synced} synced
               {syncDone.failed.length > 0 ? ` · ${syncDone.failed.length} failed` : ""}
             </div>
             {syncDone.failed.length > 0 && (
@@ -3494,8 +3640,8 @@ function ImportLyricsFromDropboxDialog({
                   try { localStorage.removeItem(storageKey); } catch {}
                   setSummary(null);
                   setFolderUrl("");
-                  setSyncProgress(null);
                   setSyncDone(null);
+                  setChorusPhase("idle");
                 }}
                 disabled={!!syncProgress}
                 data-testid="button-lyrics-import-run-again"
@@ -3506,9 +3652,8 @@ function ImportLyricsFromDropboxDialog({
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                disabled={!!syncProgress}
                 data-testid="button-lyrics-import-done"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-slate-900 text-white hover:bg-slate-800"
               >
                 Done
               </button>
