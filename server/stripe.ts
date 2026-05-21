@@ -33,10 +33,17 @@ async function getCredentials() {
   if (!item || !item.settings?.publishable || !item.settings?.secret) {
     throw new Error(`Stripe ${targetEnvironment} connection not found`);
   }
+  // Webhook secret: prefer the connector value if it ever exposes one,
+  // but the current Replit Stripe connector page only surfaces
+  // publishable + secret keys. Fall back to a plain Replit Secret
+  // (`STRIPE_WEBHOOK_SECRET`) so operators can wire the `whsec_…`
+  // value Stripe gives them after creating a webhook destination.
+  const connectorWebhookSecret = (item.settings.webhook_secret ?? item.settings.webhookSecret ?? null) as string | null;
+  const envWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() || null;
   return {
     publishableKey: item.settings.publishable as string,
     secretKey: item.settings.secret as string,
-    webhookSecret: (item.settings.webhook_secret ?? item.settings.webhookSecret ?? null) as string | null,
+    webhookSecret: connectorWebhookSecret ?? envWebhookSecret,
   };
 }
 
