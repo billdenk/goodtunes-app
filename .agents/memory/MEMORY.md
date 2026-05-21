@@ -1,2 +1,2 @@
-- [Albums query schema drift](albums-schema-drift.md) — if /api/albums returns 500 with "Failed query… price_cents" (or any column), drizzle schema has a column the live DB doesn't; the symptom in the UI is "all albums gone" + sidebar Albums=0.
+- [Prod schema drift](albums-schema-drift.md) — single admin index shows 0 + sidebar count 0 in prod only? `shared/schema.ts` declares cols the prod DB doesn't have because drizzle-kit push got stuck on a rename prompt; sweep with information_schema then ADD COLUMN IF NOT EXISTS against PROD_DATABASE_URL.
 - [Admin role columns out of pgTable](admin-roles-out-of-table.md) — users.role/role_scope_id live in the DB but not in shared/schema.ts; read/write via server/auth/roles.ts raw SQL, not drizzle.

@@ -1,38 +1,39 @@
 ---
-name: Albums query schema drift
-description: When /api/albums 500s with "Failed query… <col>", the live DB is missing a column shared/schema.ts selects. Symptom in UI is "all albums gone" + sidebar Albums=0.
+name: Prod schema drift — drizzle declares columns the prod DB doesn't have
+description: When an admin index page suddenly shows 0 rows for one entity but other entities load, the live prod table is almost certainly missing additive columns that shared/schema.ts already declares. Drizzle's SELECT * fails on the unknown column and the API responds 500/empty.
 ---
 
-If the admin reports "all our albums are gone" and `/admin/albums` shows
-0 in every tab (Prepping / Staged / Released / Sunset) AND the sidebar
-shows `Albums 0`, the data is almost certainly NOT gone. Check the
-workflow log for `GET /api/albums 500` first.
+# Prod schema drift — the "everything for one entity vanished" bug
 
-The failure mode: `shared/schema.ts` defines a column (e.g.
-`priceCents: integer("price_cents")`) that hasn't been pushed to the
-live database yet. Drizzle's `select()` lists every column from the
-schema, so the SELECT fails with `column "albums.price_cents" does not
-exist`. The frontend's `useQuery` then has no data, AdminFrame's
-sidebar count is 0, and AdminAlbums' tabs all bucket from an empty
-list.
+## Symptom
+A single admin index page (Albums, People, Vendors, Orders, etc.) shows the empty state ("No people yet", sidebar count = 0) while other entities continue to load normally. Production only; dev is fine.
 
-**Why this matters:** the user sees a catastrophic-looking data loss
-when the only actual problem is one missing nullable column. Reach for
-DB inspection before believing the seed is gone.
+## Root cause
+A recent task added columns to a table via raw `ALTER TABLE` SQL because `npm run db:push` (drizzle-kit) sits on an interactive rename-detection prompt that can't accept piped input in this environment. The dev DB got the columns; **prod did not**. `shared/schema.ts` declares the new columns, so drizzle's generated `SELECT col1, col2, …, new_col FROM …` fails with `column "new_col" does not exist` and the API returns an error or an empty list.
 
-**How to apply:**
-1. `psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM albums;"` — confirm
-   rows still exist.
-2. Grep the workflow log for `GET /api/albums` — a 500 with `Failed
-   query` in the body names the offending column.
-3. Either `npm run db:push` (preferred, handles all drift) or
-   `ALTER TABLE albums ADD COLUMN IF NOT EXISTS <col> <type>;` for a
-   quick patch.
-4. The same pattern applies to any table — when a list endpoint 500s
-   and the SQL in the error message references a column not in `\d
-   <table>`, the schema is ahead of the DB.
+## Why
+`scripts/post-merge.sh` runs `npm run db:push` after each task merges. Every merge log I've seen shows it stuck at a prompt like:
+> Is `<some_table>` table created or renamed from another table?
+> ❯ + `<some_table>` create table
+>   ~ user_sessions › `<some_table>` rename table
 
-The post-merge script (`scripts/post-merge.sh`) already runs
-`db:push`, so this shouldn't recur on merge unless db:push was killed
-mid-run (see `post-merge-db-push.md` for the rename-prompt hang that
-can cause that).
+The "rename from `user_sessions`" false positive keeps tripping the script. drizzle-kit exits without applying anything. Dev had its raw SQL applied at task time, prod never does.
+
+## How to apply (diagnosis)
+1. `psql "$PROD_DATABASE_URL" -c "SELECT COUNT(*) FROM <entity>;"` — confirm rows actually exist.
+2. `psql "$PROD_DATABASE_URL" -c "\d <entity>"` — list prod columns.
+3. `rg "<entityCamelCase> = pgTable" shared/schema.ts -A 40` — list expected columns.
+4. Diff. The columns in the schema but not in prod are the offenders.
+
+## How to fix
+`ALTER TABLE … ADD COLUMN IF NOT EXISTS …` for every drifted column, run against `PROD_DATABASE_URL`. Idempotent. Match the type drizzle expects (varchar/text/integer/timestamp/jsonb). Re-add FK references if drizzle's column declaration has `.references(...)`.
+
+## Known prod drift sweep query
+Whenever a task description mentions "applied via raw SQL / ALTER TABLE / CREATE TABLE because drizzle-kit prompt blocked", check prod immediately:
+```sql
+SELECT column_name FROM information_schema.columns WHERE table_name='<table>' ORDER BY ordinal_position;
+SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='<new_table>';
+```
+
+## Longer-term fix
+Either make `scripts/post-merge.sh` non-interactive (e.g. `echo "+" | npm run db:push` or pipe `printf '\n'`), or stop relying on drizzle-kit and always apply schema changes with explicit raw-SQL migrations that the script runs by file. Until then, every additive task needs an explicit "apply ALTERs to PROD" step before declaring done.
