@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, Search, Truck } from "lucide-react";
+import { Search, Truck } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import {
   Dialog,
   DialogContent,
@@ -79,18 +81,17 @@ export function AdminFulfillmentPartners() {
   return (
     <AdminFrame active="fulfillment">
       <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[22px] font-semibold text-slate-900">Fulfillment partners</h1>
-            <p className="text-slate-500 text-[13px]">
-              Warehouses that ship finished records to fans.
-            </p>
-          </div>
-          <Button onClick={() => setAddOpen(true)} data-testid="button-add-fulfillment">
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add partner
-          </Button>
-        </div>
+        <AdminPageHeader
+          title="Fulfillment partners"
+          subtitle="Warehouses that ship finished records to fans."
+          actions={
+            <AddEntityButton
+              label="Add partner"
+              onClick={() => setAddOpen(true)}
+              testId="button-add-fulfillment"
+            />
+          }
+        />
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />

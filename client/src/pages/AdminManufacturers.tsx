@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, Search, Factory, Clock } from "lucide-react";
+import { Search, Factory, Clock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import {
   Dialog,
   DialogContent,
@@ -84,18 +86,17 @@ export function AdminManufacturers() {
   return (
     <AdminFrame active="manufacturers">
       <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[22px] font-semibold text-slate-900">Manufacturers</h1>
-            <p className="text-slate-500 text-[13px]">
-              Pressing plants and duplication houses. Invite them to bid on print runs.
-            </p>
-          </div>
-          <Button onClick={() => setAddOpen(true)} data-testid="button-add-manufacturer">
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add manufacturer
-          </Button>
-        </div>
+        <AdminPageHeader
+          title="Manufacturers"
+          subtitle="Pressing plants and duplication houses. Invite them to bid on print runs."
+          actions={
+            <AddEntityButton
+              label="Add manufacturer"
+              onClick={() => setAddOpen(true)}
+              testId="button-add-manufacturer"
+            />
+          }
+        />
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
