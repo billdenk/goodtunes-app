@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Filter, EyeOff, X } from "lucide-react";
+import { Search, Filter, EyeOff, X, Plus } from "lucide-react";
+import {
+  Popover,
+  PopoverArrow,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,8 +18,14 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
-import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
+import { Combobox } from "@/components/admin/Combobox";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -42,11 +54,13 @@ interface AlbumLite {
   artist: string;
   artwork: string;
   year: number | null;
-  type: "Single" | "EP" | "LP";
+  type: "Single" | "Duo" | "EP" | "LP";
   description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
   isExplicit: boolean;
+  genre: string | null;
+  createdAt: string | null;
 }
 
 type TabKey = "prepping" | "staged" | "live" | "sunset";
@@ -59,6 +73,25 @@ export function AdminAlbums() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("albums");
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Filter chips cover the three GoodTunes-curated formats (LP / EP /
+  // Duo). "Single" is intentionally absent — it's a streaming-import
+  // artefact (1-track releases pulled from iTunes/Spotify), and the
+  // admin Albums tabs already exclude imports. The default set has all
+  // three on so the unfiltered grid shows everything.
+  const [typeFilter, setTypeFilter] = useState<Set<AlbumLite["type"]>>(
+    () => new Set<AlbumLite["type"]>(["LP", "EP", "Duo"]),
+  );
+  // "Date added" — single year picker (null = Any). Typeable via the
+  // input; the datalist suggests years actually present in the catalog.
+  const [dateAddedYear, setDateAddedYear] = useState<number | null>(null);
+  // Genre filter — single-select via the shared admin Combobox so it
+  // feels the same as the genre field on the album detail page. Empty
+  // string = Any.
+  const [genreFilter, setGenreFilter] = useState<string>("");
+  const [explicitFilter, setExplicitFilter] = useState<
+    "any" | "explicit" | "clean"
+  >("any");
   const { toast } = useToast();
 
   // "+" in the header — opens the "Who's the artist?" dialog first so we
@@ -67,15 +100,25 @@ export function AdminAlbums() {
   // The dialog can be skipped — that path falls back to the legacy
   // "Unknown artist" placeholder so the editor still loads.
   const [artistDialogOpen, setArtistDialogOpen] = useState(false);
+  // The format picked from the "+ Add Album" dropdown (LP / EP / Duo).
+  // Set when the operator opens the dialog and passed through to the
+  // POST so the new row lands with the right `type` instead of always
+  // defaulting to LP — the operator picks the format up-front the same
+  // way they'd pick a sleeve size at a pressing plant.
+  const [pendingAlbumType, setPendingAlbumType] =
+    useState<"LP" | "EP" | "Duo">("LP");
   const createAlbum = useMutation({
-    mutationFn: async (artist?: { name: string; id: string }) => {
+    mutationFn: async (args: {
+      artist?: { name: string; id: string };
+      type: "LP" | "EP" | "Duo";
+    }) => {
       const res = await apiRequest("POST", "/api/admin/albums", {
         title: "New album",
-        artist: artist?.name || "Unknown artist",
+        artist: args.artist?.name || "Unknown artist",
         artwork: "/album-placeholder.svg",
-        type: "LP",
+        type: args.type,
         isGoodTunesRelease: true,
-        primaryArtistId: artist?.id || null,
+        primaryArtistId: args.artist?.id || null,
       });
       return res.json() as Promise<AlbumLite>;
     },
@@ -148,7 +191,7 @@ export function AdminAlbums() {
   // just the active tab's slice — typing "f" while sitting on Prepping
   // used to filter nothing visible). Imported streaming catalog is
   // excluded everywhere on the admin, search included.
-  const filtered = useMemo(() => {
+  const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return byTab;
     return albums.filter(
@@ -158,6 +201,66 @@ export function AdminAlbums() {
           a.artist.toLowerCase().includes(q)),
     );
   }, [albums, byTab, search]);
+
+  // Distinct "date added" years derived from createdAt across the whole
+  // GoodTunes-release set (not just the active tab) so the suggestion
+  // list stays stable as the operator pivots tabs.
+  const availableDateAddedYears = useMemo(() => {
+    const years = new Set<number>();
+    for (const a of albums) {
+      if (!a.isGoodTunesRelease) continue;
+      if (!a.createdAt) continue;
+      const y = new Date(a.createdAt).getFullYear();
+      if (!Number.isFinite(y)) continue;
+      years.add(y);
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [albums]);
+
+  const isFilterActive =
+    typeFilter.size !== 3 ||
+    dateAddedYear !== null ||
+    genreFilter !== "" ||
+    explicitFilter !== "any";
+
+  const filtered = useMemo(() => {
+    const wantGenre = genreFilter.trim().toLowerCase();
+    return searched.filter((a) => {
+      if (!typeFilter.has(a.type)) return false;
+      if (dateAddedYear !== null) {
+        if (!a.createdAt) return false;
+        const y = new Date(a.createdAt).getFullYear();
+        if (y !== dateAddedYear) return false;
+      }
+      if (wantGenre) {
+        const g = (a.genre ?? "").trim().toLowerCase();
+        if (g !== wantGenre) return false;
+      }
+      if (explicitFilter === "explicit" && !a.isExplicit) return false;
+      if (explicitFilter === "clean" && a.isExplicit) return false;
+      return true;
+    });
+  }, [searched, typeFilter, dateAddedYear, genreFilter, explicitFilter]);
+
+  const resetFilters = () => {
+    setTypeFilter(new Set<AlbumLite["type"]>(["LP", "EP", "Duo"]));
+    setDateAddedYear(null);
+    setGenreFilter("");
+    setExplicitFilter("any");
+  };
+
+  const toggleType = (t: AlbumLite["type"]) => {
+    setTypeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) {
+        if (next.size === 1) return prev; // never allow empty
+        next.delete(t);
+      } else {
+        next.add(t);
+      }
+      return next;
+    });
+  };
 
   if (authLoading) {
     return (
@@ -193,7 +296,10 @@ export function AdminAlbums() {
   };
 
   const emptyCopy = (() => {
-    if (search) return "No releases match that search.";
+    if (search && searched.length === 0)
+      return "No releases match that search.";
+    if (isFilterActive && searched.length > 0)
+      return "No releases match the current filters.";
     switch (tab) {
       case "prepping":
         return "Nothing in prepping. GoodTunes releases that are still being worked on will show up here once the lifecycle enum lands.";
@@ -251,9 +357,162 @@ export function AdminAlbums() {
                 <Search className="w-4 h-4" />
               </IconBtn>
             )}
-            <IconBtn label="Filter" testId="button-filter">
-              <Filter className="w-4 h-4" />
-            </IconBtn>
+            <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Filter"
+                  title="Filter"
+                  data-testid="button-filter"
+                  className="relative w-9 h-9 inline-flex items-center justify-center rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 data-[state=open]:bg-slate-100 data-[state=open]:text-slate-900 data-[state=open]:ring-1 data-[state=open]:ring-slate-200 transition-colors"
+                >
+                  <Filter className="w-4 h-4" />
+                  {isFilterActive && (
+                    <span
+                      className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#319ED8]"
+                      data-testid="badge-filter-active"
+                    />
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                alignOffset={-8}
+                sideOffset={6}
+                className="w-[300px] p-0 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)]"
+                data-testid="popover-filter"
+              >
+                {/* Apple-style caret tying the popover to the Filter button —
+                    Radix positions the arrow at the trigger center, so with
+                    align="end" + alignOffset=-8 it lands directly under the
+                    icon. */}
+                <PopoverArrow />
+                <div className="px-4 pt-3.5 pb-4 space-y-4">
+                  {/* Type — refined chip group: slate-100 base, brand-blue
+                      ring + tint on active, no heavy saturated fill. */}
+                  <FilterSection label="Type">
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["LP", "EP", "Duo"] as const).map((t) => (
+                        <FilterChip
+                          key={t}
+                          active={typeFilter.has(t)}
+                          onClick={() => toggleType(t)}
+                          testId={`filter-type-${t}`}
+                        >
+                          {t}
+                        </FilterChip>
+                      ))}
+                    </div>
+                  </FilterSection>
+
+                  {/* Genre — single-select via the shared admin Combobox.
+                      Same primitive as the album detail page's Genre field
+                      so the picker reads identically across the two
+                      surfaces. `allowAdd={false}` because filtering by a
+                      genre that doesn't exist in the catalog would always
+                      return zero rows; `allowClear` exposes the "Any"
+                      escape hatch. */}
+                  <FilterSection label="Genre">
+                    <Combobox
+                      value={genreFilter}
+                      onChange={setGenreFilter}
+                      optionsEndpoint="/api/admin/albums/genres"
+                      placeholder="Any genre"
+                      testId="filter-genre"
+                      allowAdd={false}
+                      allowClear
+                    />
+                  </FilterSection>
+
+                  {/* Date added — typeable year picker. The datalist
+                      suggests every year that actually has albums in the
+                      catalog; the operator can also type any 4-digit
+                      year. Blank input clears the filter. */}
+                  <FilterSection label="Date added">
+                    <div className="flex items-center gap-1.5">
+                      {/* Year dropdown — GoodTunes itself shipped in 2024,
+                          so there are no admin-managed releases dated
+                          earlier. Range runs from 2024 → max(this year,
+                          latest year actually present in the catalog) so
+                          if the system clock ever drifts the list still
+                          covers every row in the grid. */}
+                      <select
+                        value={dateAddedYear ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setDateAddedYear(v ? parseInt(v, 10) : null);
+                        }}
+                        data-testid="filter-date-added-input"
+                        className="flex-1 h-8 px-2.5 text-[13px] bg-white border border-slate-200 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8] tabular-nums"
+                      >
+                        <option value="">Any year</option>
+                        {(() => {
+                          const thisYear = new Date().getFullYear();
+                          const latest = Math.max(
+                            thisYear,
+                            availableDateAddedYears[0] ?? thisYear,
+                          );
+                          const years: number[] = [];
+                          for (let y = latest; y >= 2024; y--) years.push(y);
+                          return years.map((y) => (
+                            <option
+                              key={y}
+                              value={y}
+                              data-testid={`filter-date-added-${y}`}
+                            >
+                              {y}
+                            </option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+                  </FilterSection>
+
+                  {/* Explicit — tri-state segmented control */}
+                  <FilterSection label="Explicit">
+                    <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5 w-full">
+                      {(
+                        [
+                          { v: "any", label: "Any" },
+                          { v: "explicit", label: "Explicit only" },
+                          { v: "clean", label: "Clean only" },
+                        ] as const
+                      ).map((opt) => {
+                        const active = explicitFilter === opt.v;
+                        return (
+                          <button
+                            key={opt.v}
+                            type="button"
+                            onClick={() => setExplicitFilter(opt.v)}
+                            aria-pressed={active}
+                            data-testid={`filter-explicit-${opt.v}`}
+                            className={[
+                              "flex-1 h-8 text-[12px] font-semibold rounded transition-colors",
+                              active
+                                ? "bg-white text-slate-900 shadow-sm"
+                                : "text-slate-500 hover:text-slate-900",
+                            ].join(" ")}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FilterSection>
+                </div>
+                <div className="flex items-center justify-end px-4 py-2.5 border-t border-slate-100 bg-slate-50/60">
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    disabled={!isFilterActive}
+                    data-testid="button-filter-reset"
+                    className="text-[12.5px] font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
             <div className="ml-1">
               <ViewModeToggle
                 value={view}
@@ -261,15 +520,50 @@ export function AdminAlbums() {
                 testIdPrefix="view-mode-albums"
               />
             </div>
-            <AddEntityButton
-              label="Add Album"
-              onClick={() => {
-                if (createAlbum.isPending) return;
-                setArtistDialogOpen(true);
-              }}
-              disabled={createAlbum.isPending}
-              testId="button-new-album"
-            />
+            {/* "+ Add Album" splits into a format picker. The operator
+                chooses LP / EP / Duo up-front so the new row lands with
+                the right `type` instead of always defaulting to LP and
+                making the operator re-pick on the detail page. The
+                outer button keeps `data-testid="button-new-album"` so
+                existing selectors still resolve the trigger. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={createAlbum.isPending}
+                  className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid="button-new-album"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Album
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {(
+                  [
+                    { value: "LP", label: "New LP", hint: "8+ tracks" },
+                    { value: "EP", label: "New EP", hint: "3–7 tracks" },
+                    { value: "Duo", label: "New Duo", hint: "2 tracks" },
+                  ] as const
+                ).map((opt) => (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    onSelect={() => {
+                      if (createAlbum.isPending) return;
+                      setPendingAlbumType(opt.value);
+                      setArtistDialogOpen(true);
+                    }}
+                    data-testid={`menu-new-album-${opt.value}`}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span>{opt.label}</span>
+                    <span className="text-[10.5px] text-slate-400">
+                      {opt.hint}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>)}
           belowHeader={(
             <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
@@ -325,11 +619,11 @@ export function AdminAlbums() {
         busy={createAlbum.isPending}
         onSelect={(artist) => {
           setArtistDialogOpen(false);
-          createAlbum.mutate(artist);
+          createAlbum.mutate({ artist, type: pendingAlbumType });
         }}
         onSkip={() => {
           setArtistDialogOpen(false);
-          createAlbum.mutate(undefined);
+          createAlbum.mutate({ type: pendingAlbumType });
         }}
       />
     </AdminFrame>
@@ -465,6 +759,57 @@ function TabBtn({
       {active && (
         <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
       )}
+    </button>
+  );
+}
+
+function FilterSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-slate-500 mb-2">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Filter chip — soft slate-100 pill at rest, brand-blue tint + ring +
+ * brand-blue text on active. Avoids the heavy saturated fill of the
+ * first pass; reads closer to the admin "Mac-app" chrome.
+ */
+function FilterChip({
+  active,
+  onClick,
+  testId,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  testId: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      data-testid={testId}
+      className={[
+        "h-7 px-2.5 text-[12px] font-semibold rounded-md transition-colors inline-flex items-center",
+        active
+          ? "bg-[#319ED8]/12 text-[#1f7ab4] ring-1 ring-inset ring-[#319ED8]/40"
+          : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900",
+      ].join(" ")}
+    >
+      {children}
     </button>
   );
 }

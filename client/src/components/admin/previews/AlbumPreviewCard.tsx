@@ -20,7 +20,7 @@ export interface AlbumPreviewAlbum {
   artist: string;
   artwork: string | null;
   year: number | null;
-  type: "Single" | "EP" | "LP";
+  type: "Single" | "Duo" | "EP" | "LP";
   description: string | null;
   isHidden: boolean;
   // Derived server-side from the album's songs — true if any song on the
@@ -65,9 +65,21 @@ export function AlbumPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
         ? [album.certificateNumber]
         : [];
   const ownLabel =
-    album.type === "EP" ? "EP" : album.type === "Single" ? "single" : "LP";
+    album.type === "EP"
+      ? "EP"
+      : album.type === "Single"
+        ? "single"
+        : album.type === "Duo"
+          ? "duo"
+          : "LP";
   const ownLabelPlural =
-    album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : "LPs";
+    album.type === "EP"
+      ? "EPs"
+      : album.type === "Single"
+        ? "singles"
+        : album.type === "Duo"
+          ? "duos"
+          : "LPs";
 
   return (
     <PhoneBezel

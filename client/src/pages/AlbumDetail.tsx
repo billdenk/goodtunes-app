@@ -142,7 +142,7 @@ export function AlbumDetail() {
     artist: string;
     artwork: string;
     year: number | null;
-    type: "Single" | "EP" | "LP";
+    type: "Single" | "Duo" | "EP" | "LP";
     description: string | null;
     isExplicit: boolean;
     goodTunesReleaseDate: string | null;
@@ -796,8 +796,8 @@ export function AlbumDetail() {
               {ownedNums.length > 0 && (
                 <span className="block mt-1">
                   {ownedNums.length === 1
-                    ? `You own No. ${(ownedNums[0]).toString().padStart(2, "0")} of this ${album.type === "EP" ? "EP" : album.type === "Single" ? "single" : "LP"}.`
-                    : `You own ${ownedNums.length} ${album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : "LPs"}.`}
+                    ? `You own No. ${(ownedNums[0]).toString().padStart(2, "0")} of this ${album.type === "EP" ? "EP" : album.type === "Single" ? "single" : album.type === "Duo" ? "duo" : "LP"}.`
+                    : `You own ${ownedNums.length} ${album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : album.type === "Duo" ? "duos" : "LPs"}.`}
                 </span>
               )}
             </p>

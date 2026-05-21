@@ -45,9 +45,13 @@ export const albums = pgTable("albums", {
   artist: text("artist").notNull(),
   artwork: text("artwork").notNull(),
   year: integer("year"),
-  // Release format. One of "Single" (1–2 tracks, the 7" equivalent),
-  // "EP" (3–7 tracks), "LP" (8+ tracks, the full-length record). Legacy
-  // rows used "album" — migrated to "LP" on the 2026-05 schema bump.
+  // Release format. One of "Single" (1 track — only reachable via
+  // streaming-catalog imports; GoodTunes itself never sells a single),
+  // "Duo" (2 tracks — the smallest GoodTunes-curated bundle), "EP"
+  // (3–7 tracks), "LP" (8+ tracks, the full-length record; covers
+  // Double-LPs too — the physical-pressing surface will add an
+  // `isDoubleLP` boolean when that ships). Legacy rows used "album" —
+  // migrated to "LP" on the 2026-05 schema bump.
   type: text("type").notNull().default("LP"),
   description: text("description"),
   // ISO YYYY-MM-DD. Day GoodTunes goes live with the in-app player (the

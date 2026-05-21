@@ -59,7 +59,7 @@ export interface Album {
   artist: string;
   artwork: string;
   year: number;
-  type: "Single" | "EP" | "LP";
+  type: "Single" | "Duo" | "EP" | "LP";
   description: string;
   genre?: string;
   isExplicit?: boolean;

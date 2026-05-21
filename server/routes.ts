@@ -114,14 +114,17 @@ async function isAdminUser(req: Request): Promise<boolean> {
 // Maps any incoming album-type string to the three values the player + admin
 // know about. Accepts legacy "album" payloads from older clients and rewrites
 // them to "LP" so we don't have to do a coordinated client rollout.
-function normalizeAlbumType(value: unknown): "Single" | "EP" | "LP" {
+function normalizeAlbumType(value: unknown): "Single" | "Duo" | "EP" | "LP" {
   const s = typeof value === "string" ? value.trim() : "";
   if (s === "Single") return "Single";
+  if (s === "Duo") return "Duo";
   if (s === "EP") return "EP";
   if (s === "LP") return "LP";
-  if (s.toLowerCase() === "single") return "Single";
-  if (s.toLowerCase() === "ep") return "EP";
-  if (s.toLowerCase() === "lp" || s.toLowerCase() === "album") return "LP";
+  const lower = s.toLowerCase();
+  if (lower === "single") return "Single";
+  if (lower === "duo") return "Duo";
+  if (lower === "ep") return "EP";
+  if (lower === "lp" || lower === "album") return "LP";
   return "LP";
 }
 
@@ -2608,8 +2611,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const trackCount = Number(collection.trackCount) || tracks.length || null;
     // iTunes calls everything "Album"; lean on track count to bucket EPs +
     // singles, matching the rule already in `normalizeAlbumType`'s spirit.
-    const type: "Single" | "EP" | "LP" =
-      trackCount === 1 ? "Single" : trackCount && trackCount <= 6 ? "EP" : "LP";
+    // 1 → Single (streaming-imported releases only — GoodTunes itself
+    // ships a 2-track "Duo" as the minimum bundle, but iTunes imports
+    // can absolutely be 1-track singles). 2 → Duo. 3–7 → EP. ≥8 → LP.
+    const type: "Single" | "Duo" | "EP" | "LP" =
+      trackCount === 1
+        ? "Single"
+        : trackCount === 2
+          ? "Duo"
+          : trackCount && trackCount <= 7
+            ? "EP"
+            : "LP";
 
     // Resolve the artist text → Person rows. Apple uses two very different
     // conventions in the same `artistName` field:

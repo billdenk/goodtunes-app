@@ -123,7 +123,7 @@ interface AlbumFull {
   primaryArtistId?: string | null;
   artwork: string;
   year: number | null;
-  type: "Single" | "EP" | "LP";
+  type: "Single" | "Duo" | "EP" | "LP";
   description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
@@ -999,10 +999,18 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "Type",
             type: "select",
             required: true,
+            // "Single" stays in the option list only when the album already
+            // is one — that way streaming-imported 1-track rows don't lose
+            // their type label when the operator opens the editor, but the
+            // GoodTunes picker for new/curated releases is the three-way
+            // LP / EP / Duo set (no Single — minimum sold is two tracks).
             options: [
               { value: "LP", label: "LP (8+ tracks)" },
               { value: "EP", label: "EP (3–7 tracks)" },
-              { value: "Single", label: "Single (1–2 tracks)" },
+              { value: "Duo", label: "Duo (2 tracks)" },
+              ...(album.type === "Single"
+                ? [{ value: "Single", label: "Single (legacy)" }]
+                : []),
             ],
           },
           {

@@ -42,7 +42,7 @@ interface AdminAlbum {
   artist: string;
   artwork: string;
   year: number | null;
-  type: "Single" | "EP" | "LP";
+  type: "Single" | "Duo" | "EP" | "LP";
   description: string | null;
   goodTunesReleaseDate: string | null;
   streamingReleaseDate: string | null;
@@ -946,12 +946,13 @@ function AlbumEditor({
             <select
               value={form.type}
               onChange={(e) =>
-                set("type", e.target.value as "Single" | "EP" | "LP")
+                set("type", e.target.value as "Single" | "Duo" | "EP" | "LP")
               }
               className={inputCls}
               data-testid="select-album-type"
             >
-              <option value="Single">Single</option>
+              <option value="Duo">Duo</option>
+              <option value="Single">Single (legacy / streaming import)</option>
               <option value="EP">EP</option>
               <option value="LP">LP</option>
             </select>
