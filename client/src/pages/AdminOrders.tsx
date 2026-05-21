@@ -54,6 +54,19 @@ type AdminOrderRow = {
   origin?: string;
   items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
   gift: GiftInfo | null;
+  // Task #73 — Order Desk fulfillment lifecycle.
+  skuKind?: string | null;
+  fulfillmentStatus?: string | null;
+  fulfillmentPartnerId?: string | null;
+  orderDeskOrderId?: string | null;
+  carrier?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  submittedToFulfillmentAt?: string | null;
+  inFulfillmentAt?: string | null;
+  deliveredAt?: string | null;
+  cancelledAt?: string | null;
+  returnedAt?: string | null;
 };
 
 // Small operator-facing badge surfacing where a row came from. Direct
@@ -282,6 +295,7 @@ export function AdminOrders() {
                     Payout error: {o.payoutError}
                   </div>
                 )}
+                <FulfillmentTimeline order={o} />
               </div>
               <div className="text-right">
                 <div className="text-[14px] font-semibold text-slate-900">{dollars(o.totalCents)}</div>
@@ -336,6 +350,67 @@ export function AdminOrders() {
         </div>
       </div>
     </main>
+  );
+}
+
+// Task #73 — Order Desk fulfillment lifecycle strip. Only renders for
+// physical orders (skuKind ∈ vinyl/cassette/cd/bundle). Shows the
+// submitted → in-fulfillment → shipped → delivered (or cancelled /
+// returned) progression with the inbound tracking link when OD has
+// emitted it.
+function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
+  const isPhysical = o.skuKind === "vinyl" || o.skuKind === "cassette" || o.skuKind === "cd" || o.skuKind === "bundle";
+  if (!isPhysical) return null;
+  const stages: { key: string; label: string; at: string | null | undefined }[] = [
+    { key: "submitted", label: "Submitted", at: o.submittedToFulfillmentAt },
+    { key: "in_fulfillment", label: "In fulfillment", at: o.inFulfillmentAt },
+    { key: "shipped", label: "Shipped", at: o.shippedAt },
+    { key: "delivered", label: "Delivered", at: o.deliveredAt },
+  ];
+  const status = o.fulfillmentStatus ?? "pending";
+  const tone =
+    status === "delivered" ? "bg-emerald-50 text-emerald-700" :
+    status === "shipped" ? "bg-sky-50 text-sky-700" :
+    status === "in_fulfillment" ? "bg-indigo-50 text-indigo-700" :
+    status === "submitted" ? "bg-violet-50 text-violet-700" :
+    status === "cancelled" || status === "returned" ? "bg-rose-50 text-rose-700" :
+    "bg-amber-50 text-amber-700";
+  return (
+    <div className="mt-2 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-2" data-testid={`fulfillment-timeline-${o.id}`}>
+      <div className="flex items-center gap-2 text-[11px] flex-wrap">
+        <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${tone}`} data-testid={`pill-fulfillment-${o.id}`}>
+          {status.replace("_", " ")}
+        </span>
+        {o.orderDeskOrderId && (
+          <span className="text-slate-400" data-testid={`text-od-id-${o.id}`}>OD #{o.orderDeskOrderId}</span>
+        )}
+        {(o.carrier || o.trackingNumber) && (
+          <span className="text-slate-500">
+            {o.carrier ? `${o.carrier} · ` : ""}
+            {o.trackingUrl ? (
+              <a href={o.trackingUrl} target="_blank" rel="noreferrer" className="text-[#319ED8] hover:underline" data-testid={`link-tracking-${o.id}`}>
+                {o.trackingNumber ?? "track"}
+              </a>
+            ) : (
+              <span data-testid={`text-tracking-${o.id}`}>{o.trackingNumber}</span>
+            )}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-3 mt-1.5 text-[10.5px] text-slate-500 flex-wrap">
+        {stages.map((s) => (
+          <span key={s.key} className={s.at ? "text-slate-700 font-medium" : "text-slate-400"}>
+            {s.label}{s.at ? ` · ${new Date(s.at).toLocaleDateString()}` : ""}
+          </span>
+        ))}
+        {o.cancelledAt && (
+          <span className="text-rose-600 font-medium">Cancelled · {new Date(o.cancelledAt).toLocaleDateString()}</span>
+        )}
+        {o.returnedAt && (
+          <span className="text-rose-600 font-medium">Returned · {new Date(o.returnedAt).toLocaleDateString()}</span>
+        )}
+      </div>
+    </div>
   );
 }
 

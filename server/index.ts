@@ -31,6 +31,10 @@ app.use("/api/webhooks/stripe", express.raw({ type: "*/*", limit: "1mb" }));
 // the X-Shopify-Hmac-Sha256 header verifies against the exact bytes
 // Shopify signed.
 app.use("/api/webhooks/shopify", express.raw({ type: "*/*", limit: "1mb" }));
+// Task #73 — Order Desk webhook. Same raw-body posture so the
+// X-Orderdesk-Signature header HMAC-verifies against the exact bytes
+// Order Desk signed.
+app.use("/api/webhooks/orderdesk", express.raw({ type: "*/*", limit: "1mb" }));
 
 app.use(
   express.json({

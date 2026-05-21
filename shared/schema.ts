@@ -827,7 +827,56 @@ export const orders = pgTable("orders", {
   // pull the redemption code; the buyer also has to be on their own
   // order status page (where Shopify hands them the token).
   shopifyOrderToken: text("shopify_order_token"),
+  // ─── Task #73 — Order Desk fulfillment wiring ─────────────────────
+  // Snapshot fields and lifecycle timestamps for the physical-goods
+  // path. We snapshot artistId/labelId/skuKind here (denormalized) so
+  // Stripe-dashboard metadata and reporting joins survive an album
+  // reassignment. Coarse skuKind values:
+  //   "digital" | "vinyl" | "cassette" | "cd" | "bundle" | "gift" | "gooddeed".
+  skuKind: text("sku_kind"),
+  artistSnapshotId: varchar("artist_snapshot_id"),
+  labelSnapshotId: varchar("label_snapshot_id"),
+  // Fulfillment lifecycle, separate from `status` (Stripe-side):
+  //   "pending"        → physical order materialized, awaiting OD push
+  //   "submitted"      → OD order created, awaiting warehouse pick
+  //   "in_fulfillment" → warehouse picking/packing
+  //   "shipped"        → carrier accepted, tracking present
+  //   "delivered"      → carrier reports delivered
+  //   "cancelled"      → OD/operator cancelled before ship
+  //   "returned"       → fan returned the package
+  // null = not applicable (digital-only).
+  fulfillmentStatus: text("fulfillment_status"),
+  // Operator-override warehouse selection. SET NULL on partner delete
+  // so historical orders survive.
+  fulfillmentPartnerId: varchar("fulfillment_partner_id").references(
+    (): any => fulfillmentPartners.id,
+    { onDelete: "set null" },
+  ),
+  // Order Desk's own order id. Unique → replayed webhook can't double-create.
+  orderDeskOrderId: text("order_desk_order_id").unique(),
+  // Carrier + tracking, written by the OD webhook on shipped events.
+  carrier: text("carrier"),
+  trackingNumber: text("tracking_number"),
+  trackingUrl: text("tracking_url"),
+  // Lifecycle milestones (shippedAt already exists above).
+  submittedToFulfillmentAt: timestamp("submitted_to_fulfillment_at"),
+  inFulfillmentAt: timestamp("in_fulfillment_at"),
+  deliveredAt: timestamp("delivered_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  returnedAt: timestamp("returned_at"),
+  // Last raw OD payload for admin debugging — small enough to inline.
+  fulfillmentRaw: jsonb("fulfillment_raw"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ─── Task #73 — Order Desk webhook idempotency ─────────────────────
+// One row per OD event id we've successfully processed. PK on event
+// id so replays are `onConflictDoNothing` no-ops.
+export const orderDeskWebhookEvents = pgTable("order_desk_webhook_events", {
+  eventId: varchar("event_id").primaryKey(),
+  orderId: varchar("order_id").references(() => orders.id, { onDelete: "set null" }),
+  eventType: text("event_type"),
+  receivedAt: timestamp("received_at").defaultNow(),
 });
 
 // ─── Task #49 — Shopify redemption flow ─────────────────────────────────

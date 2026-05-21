@@ -598,6 +598,27 @@ export function registerCommerceRoutes(app: Express) {
       });
     }
 
+    // Task #73 — enrich Stripe metadata so the Stripe dashboard already
+    // tells artists/labels what sold (skuKind, artistId, labelId,
+    // bundleContents) without us having to round-trip our DB on every
+    // export. `gt_order_id` is patched onto the PaymentIntent by
+    // materializeOrderFromSession once the row exists — sessions are
+    // created before we know our internal order id.
+    const { classifySkuKind } = await import("./orderDesk");
+    const skuKind = classifySkuKind(sku.format);
+    const bundleContents = addon ? `${sku.format}+signed_cert` : sku.format;
+    const enrichedMetadata: Record<string, string> = {
+      gt_customer_id: customer.id,
+      gt_album_id: album.id,
+      gt_album_title: album.title,
+      gt_artist: album.artist,
+      gt_artist_id: album.primaryArtistId ?? "",
+      gt_label_id: album.labelId ?? "",
+      gt_sku_format: sku.format,
+      gt_sku_kind: skuKind,
+      gt_bundle_contents: bundleContents,
+      gt_signed_cert: addon ? "1" : "0",
+    };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
     const session = await stripe.checkout.sessions.create({
       ui_mode: "embedded",
@@ -611,19 +632,11 @@ export function registerCommerceRoutes(app: Express) {
       return_url: returnUrl,
       payment_intent_data: {
         metadata: {
-          gt_customer_id: customer.id,
-          gt_album_id: album.id,
-          gt_sku_format: sku.format,
-          gt_signed_cert: addon ? "1" : "0",
+          ...enrichedMetadata,
           gt_signed_cert_price: addon ? String(addonPriceCents) : "0",
         },
       },
-      metadata: {
-        gt_customer_id: customer.id,
-        gt_album_id: album.id,
-        gt_sku_format: sku.format,
-        gt_signed_cert: addon ? "1" : "0",
-      },
+      metadata: enrichedMetadata,
     });
 
     res.json({ clientSecret: session.client_secret, sessionId: session.id });
@@ -909,6 +922,15 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
     throw new Error(`Stripe session ${session.id} missing GoodTunes metadata`);
   }
 
+  // Task #73 — snapshot artist/label/skuKind so reporting joins survive
+  // album reassignment, and so the Stripe→OD handoff has the routing
+  // metadata it needs even if the Stripe metadata was thin.
+  const { classifySkuKind } = await import("./orderDesk");
+  const [albumRow] = await db.select().from(albums).where(eq(albums.id, albumId));
+  const skuKind = session.metadata?.gt_sku_kind || classifySkuKind(skuFormat);
+  const artistSnapshotId = session.metadata?.gt_artist_id || albumRow?.primaryArtistId || null;
+  const labelSnapshotId = session.metadata?.gt_label_id || albumRow?.labelId || null;
+
   const stripe = await getStripe();
   // Re-fetch with expansion so addresses/phone are populated even if the
   // original event payload was thin.
@@ -978,6 +1000,10 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
         buyerName,
         buyerPhone,
         goodDeedNumber,
+        skuKind,
+        artistSnapshotId,
+        labelSnapshotId,
+        fulfillmentStatus: isPaid && skuKind !== "digital" ? "pending" : null,
       })
       .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
       .returning();
@@ -998,6 +1024,10 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
         buyerName,
         buyerPhone,
         goodDeedNumber,
+        skuKind: order.skuKind ?? skuKind,
+        artistSnapshotId: order.artistSnapshotId ?? artistSnapshotId,
+        labelSnapshotId: order.labelSnapshotId ?? labelSnapshotId,
+        fulfillmentStatus: order.fulfillmentStatus ?? (skuKind !== "digital" ? "pending" : null),
       })
       .where(eq(orders.id, order.id))
       .returning();
@@ -1019,6 +1049,36 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
         .update(albumSkus)
         .set({ stock: sql`GREATEST(${albumSkus.stock} - 1, 0)` })
         .where(and(eq(albumSkus.albumId, albumId), eq(albumSkus.format, skuFormat), sql`${albumSkus.stock} IS NOT NULL`));
+    }
+
+    // Task #73 — physical order → hand off to Order Desk and patch the
+    // PaymentIntent metadata with our internal order id so the Stripe
+    // dashboard cross-references back to our DB. Both are best-effort:
+    // OD failure leaves `fulfillment_status = "pending"` so the admin
+    // retry button surfaces; PI metadata failure is logged silently.
+    if (!wasAlreadyPaid) {
+      const { pushOrderToOrderDesk, isPhysicalSkuKind } = await import("./orderDesk");
+      if (isPhysicalSkuKind(skuKind)) {
+        await pushOrderToOrderDesk(order.id).catch((e) =>
+          console.error(`[commerce] OD handoff failed for ${order.id}`, e?.message),
+        );
+      }
+      if (piId) {
+        try {
+          await stripe.paymentIntents.update(piId, {
+            metadata: {
+              gt_order_id: order.id,
+              gt_album_id: albumId,
+              gt_artist_id: artistSnapshotId ?? "",
+              gt_label_id: labelSnapshotId ?? "",
+              gt_sku_kind: skuKind,
+              gt_good_deed_number: order.goodDeedNumber != null ? String(order.goodDeedNumber) : "",
+            },
+          });
+        } catch (e: any) {
+          console.warn(`[commerce] could not patch PI metadata for ${piId}: ${e?.message}`);
+        }
+      }
     }
   }
 

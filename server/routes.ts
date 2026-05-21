@@ -9082,6 +9082,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerShopifyRoutes } = await import("./shopify");
   registerShopifyRoutes(app);
 
+  // Task #73 — Order Desk integration. Registers the OD webhook,
+  // the admin order-detail endpoint, partner override, and retry-push.
+  const { registerOrderDeskRoutes } = await import("./orderDesk");
+  registerOrderDeskRoutes(app);
+
   // Task #46 — Gifting flow (claim links, recipient transfer).
   const { registerGiftRoutes } = await import("./gifts");
   registerGiftRoutes(app);

@@ -428,6 +428,16 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   const billing = snapshotAddress(payload.billing_address);
   const shipping = snapshotAddress(payload.shipping_address);
 
+  // Task #73 — snapshot skuKind/artist/label for OD handoff + reporting.
+  // Shopify bundles are overwhelmingly vinyl; classifySkuKind covers
+  // cassette/cd via the matched mapping if the label sets a clear sku
+  // code on their Shopify product (we use the line-item title fallback).
+  const { classifySkuKind, isPhysicalSkuKind, pushOrderToOrderDesk } = await import("./orderDesk");
+  const [albumRow] = await db.select().from(albums).where(eq(albums.id, albumId));
+  const skuKind = classifySkuKind(`shopify:${matchedLine.variant_id ?? matchedLine.product_id}`);
+  const artistSnapshotId = albumRow?.primaryArtistId ?? null;
+  const labelSnapshotId = albumRow?.labelId ?? null;
+
   const [order] = await db
     .insert(orders)
     .values({
@@ -446,6 +456,10 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
       shopifyStoreId: store.id,
       shopifyOrderId,
       shopifyOrderToken: payload.token ?? null,
+      skuKind,
+      artistSnapshotId,
+      labelSnapshotId,
+      fulfillmentStatus: isPhysicalSkuKind(skuKind) ? "pending" : null,
     })
     .onConflictDoNothing({ target: orders.shopifyOrderId })
     .returning();
@@ -495,6 +509,15 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // leak a code that can't be resolved.
   const code = generateRedemptionCode();
   await db.insert(shopifyRedemptionCodes).values({ code, orderId: order.id });
+
+  // Task #73 — physical bundles also flow through Order Desk so the
+  // label's vinyl ships from the same warehouse pool as direct orders.
+  // Best-effort: failure leaves fulfillment_status="pending" for retry.
+  if (isPhysicalSkuKind(skuKind)) {
+    await pushOrderToOrderDesk(order.id).catch((e) =>
+      console.error(`[shopify] OD handoff failed for ${order.id}`, e?.message),
+    );
+  }
 
   // Wire the confirmation-email CTA. Shopify's stock order-confirmation
   // template doesn't know about us, but it does render note_attributes
