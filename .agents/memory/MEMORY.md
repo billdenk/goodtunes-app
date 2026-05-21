@@ -1,0 +1,1 @@
+- [Dev auth-kind boundary](dev-auth-kind.md) — in dev there's no admin/customer host split; trust session.kind over path-derived authKind or every non-/admin API call 401s.
