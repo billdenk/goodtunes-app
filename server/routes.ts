@@ -58,9 +58,12 @@ async function getAuthFromRequest(req: Request): Promise<{ userId: string; kind:
     }
   }
   if (!found) return undefined;
-  // Enforce host/kind boundary. In dev we still respect the path-derived
-  // authKind, which is what the host middleware computed.
-  if (found.kind !== req.authKind) return undefined;
+  // Enforce host/kind boundary only when the host is canonical (prod). In
+  // dev there's no admin/customer host split, so path-derived authKind
+  // would reject an admin session hitting a non-/admin API path (e.g.
+  // /api/albums). Trust the session/token kind in dev; requireAdmin /
+  // requireCustomer still gate role-specific routes.
+  if (req.hostKnown && found.kind !== req.authKind) return undefined;
   return found;
 }
 

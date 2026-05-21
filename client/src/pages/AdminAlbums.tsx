@@ -107,10 +107,11 @@ export function AdminAlbums() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const { data: albums = [], isLoading } = useQuery<AlbumLite[]>({
+  const { data: albumsData, isLoading } = useQuery<AlbumLite[] | null>({
     queryKey: ["/api/albums"],
     enabled: !!user?.isAdmin,
   });
+  const albums = albumsData ?? [];
 
   const counts = useMemo(
     () => ({
