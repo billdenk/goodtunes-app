@@ -2986,8 +2986,44 @@ function AddMultipleTracksDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-[17px] font-semibold text-slate-900">
+          <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
             Upload multiple tracks
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="How upload multiple tracks works"
+                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  data-testid="button-tracks-info"
+                >
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                side="bottom"
+                align="start"
+                className="w-72 text-[12px] leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+              >
+                <p className="font-semibold text-slate-900 mb-1.5">
+                  Two ways to bulk-add
+                </p>
+                <p>
+                  <span className="font-medium text-slate-900">Empty rows</span>{" "}
+                  stamps out N placeholder rows, numbered starting from the next
+                  track number. No audio or lyrics — that's still on you.
+                </p>
+                <p className="mt-2">
+                  <span className="font-medium text-slate-900">From Dropbox</span>{" "}
+                  pulls audio from a folder (whole album) or a single file (one
+                  track), shared as{" "}
+                  <span className="font-medium text-slate-900">
+                    Anyone with the link
+                  </span>
+                  . Numbered alphabetically. Audio formats: .mp3, .wav, .flac,
+                  .m4a, .aac, .aif/.aiff, .ogg.
+                </p>
+              </PopoverContent>
+            </Popover>
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
             Stamp out a batch of empty rows, or pull audio from a Dropbox
@@ -3024,14 +3060,6 @@ function AddMultipleTracksDialog({
 
         {mode === "empty" ? (
           <>
-            <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-              <p className="text-[12.5px] leading-snug text-slate-600">
-                I'll number them {nextTrackNumber}–{nextTrackNumber + Math.max(0, n - 1)} so
-                they slot in right after your existing tracks. No audio or
-                lyrics are added — that's still on you.
-              </p>
-            </div>
             <div className="space-y-1.5">
               <Label htmlFor="bulk-track-count" className="text-[12.5px] font-medium text-slate-700">
                 How many tracks?
@@ -3053,16 +3081,6 @@ function AddMultipleTracksDialog({
           </>
         ) : (
           <>
-            <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-              <p className="text-[12.5px] leading-snug text-slate-600">
-                Share a Dropbox <span className="font-medium text-slate-700">folder</span> for a whole
-                album, or a single <span className="font-medium text-slate-700">file</span> for one track
-                — both as <span className="font-medium text-slate-700">Anyone with the link</span>.
-                I'll number them starting at {nextTrackNumber} in alphabetical
-                order. Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
-              </p>
-            </div>
             <div className="space-y-1.5">
               <Label htmlFor="bulk-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
                 Dropbox folder or file link
