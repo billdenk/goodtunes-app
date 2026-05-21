@@ -69,6 +69,8 @@ export function AdminOrders() {
   // Task #46 — operator-driven resend. The buyer can also do this from
   // their own order list, but admin support sometimes needs to do it for
   // a confused fan ("I lost the text") without making them open the app.
+  // Resend works even on expired gifts — it rotates the token and resets
+  // the 30-day claim window.
   const resendGift = useMutation({
     mutationFn: async (orderId: string) => {
       const r = await apiRequest("POST", `/api/admin/orders/${orderId}/gift/resend-as-admin`, {});
@@ -85,6 +87,37 @@ export function AdminOrders() {
     },
     onError: (e: any) => toast({ title: "Couldn't resend", description: e?.message, variant: "destructive" }),
   });
+
+  // Admin recipient change (within 24h, pre-claim) — captured via a
+  // sequence of prompt()s to keep the row dense. Fields default to the
+  // current values so a quick typo-fix is one prompt away.
+  const patchGift = useMutation({
+    mutationFn: async (args: { orderId: string; body: { firstName: string; lastName: string; email: string | null; phone: string | null } }) => {
+      const r = await apiRequest("PATCH", `/api/admin/orders/${args.orderId}/gift`, args.body);
+      return (await r.json()) as { shareUrl: string };
+    },
+    onSuccess: async (res) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      try {
+        await navigator.clipboard.writeText(res.shareUrl);
+        toast({ title: "Recipient updated · new link copied" });
+      } catch {
+        toast({ title: "Recipient updated", description: res.shareUrl });
+      }
+    },
+    onError: (e: any) => toast({ title: "Couldn't update", description: e?.message, variant: "destructive" }),
+  });
+
+  function promptChangeRecipient(o: AdminOrderRow) {
+    if (!o.gift) return;
+    const firstName = window.prompt("Recipient first name", o.gift.recipientFirstName)?.trim();
+    if (!firstName) return;
+    const lastName = window.prompt("Recipient last name", o.gift.recipientLastName)?.trim();
+    if (!lastName) return;
+    const email = window.prompt("Recipient email (blank to skip)", o.gift.recipientEmail ?? "")?.trim() || null;
+    const phone = email ? null : window.prompt("Recipient phone (required if no email)", o.gift.recipientPhone ?? "")?.trim() || null;
+    patchGift.mutate({ orderId: o.id, body: { firstName, lastName, email, phone } });
+  }
 
   const filtered = (orders ?? []).filter((o) => (filter === "all" ? true : o.status === filter));
 
@@ -189,7 +222,7 @@ export function AdminOrders() {
                     Mark shipped
                   </button>
                 )}
-                {o.gift && !o.gift.claimed && new Date(o.gift.expiresAt).getTime() > Date.now() && (
+                {o.gift && !o.gift.claimed && (
                   <button
                     type="button"
                     onClick={() => resendGift.mutate(o.id)}
@@ -197,7 +230,18 @@ export function AdminOrders() {
                     className="mt-2 ml-2 px-3 py-1 rounded-md text-[12px] font-medium bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200 disabled:opacity-50"
                     data-testid={`button-resend-gift-${o.id}`}
                   >
-                    Resend link
+                    {new Date(o.gift.expiresAt).getTime() < Date.now() ? "Recover expired link" : "Resend link"}
+                  </button>
+                )}
+                {o.gift && !o.gift.claimed && Date.now() - new Date(o.gift.createdAt).getTime() < 24 * 60 * 60 * 1000 && (
+                  <button
+                    type="button"
+                    onClick={() => promptChangeRecipient(o)}
+                    disabled={patchGift.isPending}
+                    className="mt-2 ml-2 px-3 py-1 rounded-md text-[12px] font-medium bg-violet-100 text-violet-700 hover:bg-violet-200 disabled:opacity-50"
+                    data-testid={`button-change-recipient-${o.id}`}
+                  >
+                    Change recipient
                   </button>
                 )}
               </div>

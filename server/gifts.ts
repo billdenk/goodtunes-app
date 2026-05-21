@@ -97,6 +97,9 @@ async function requireAdminLocal(req: Request, res: Response): Promise<boolean> 
 export function registerGiftRoutes(app: Express) {
   // ─── Admin-side resend (no buyer-ownership check) ──────────────────
   // Surfaces on AdminOrders so support can recover for a confused fan.
+  // Like the buyer-side resend, this rotates the token and pushes the
+  // expiry out — so support can recover an *expired* gift too without
+  // the buyer having to start over.
   app.post("/api/admin/orders/:id/gift/resend-as-admin", async (req, res) => {
     if (!(await requireAdminLocal(req, res))) return;
     const orderId = String(req.params.id);
@@ -105,14 +108,53 @@ export function registerGiftRoutes(app: Express) {
     const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
     if (!gift) return res.status(404).json({ message: "Gift not found" });
     if (gift.claimedAt) return res.status(400).json({ message: "Already claimed" });
+    const token = newToken();
+    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const [updated] = await db
       .update(gifts)
-      .set({ resendCount: gift.resendCount + 1, lastSentAt: new Date() })
+      .set({ claimToken: token, expiresAt, resendCount: gift.resendCount + 1, lastSentAt: new Date() })
       .where(eq(gifts.id, gift.id))
       .returning();
     const url = shareUrlFor(req, updated.claimToken);
     if (updated.recipientEmail) console.log(`[gift admin-resend] email=${updated.recipientEmail} url=${url}`);
     if (updated.recipientPhone) console.log(`[gift admin-resend] sms=${updated.recipientPhone} url=${url}`);
+    res.json({ gift: updated, shareUrl: url });
+  });
+
+  // ─── Admin recipient change (within 24h, pre-claim) ────────────────
+  // Mirrors PATCH /api/orders/:id/gift but skips the buyer-ownership
+  // check so support can fix typos for a fan who can't open the app.
+  app.patch("/api/admin/orders/:id/gift", async (req, res) => {
+    if (!(await requireAdminLocal(req, res))) return;
+    const orderId = String(req.params.id);
+    const parsed = parseRecipient(req.body);
+    if (!parsed.ok) return res.status(400).json({ message: parsed.message });
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order || !order.giftId) return res.status(404).json({ message: "Order isn't a gift" });
+    const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
+    if (!gift) return res.status(404).json({ message: "Gift not found" });
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed — can't change recipient" });
+    if (Date.now() - gift.createdAt.getTime() > RECIPIENT_EDIT_WINDOW_MS) {
+      return res.status(400).json({ message: "Recipient can only be changed within 24h of creating the gift" });
+    }
+    const token = newToken();
+    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const [updated] = await db
+      .update(gifts)
+      .set({
+        recipientFirstName: parsed.v.firstName,
+        recipientLastName: parsed.v.lastName,
+        recipientEmail: parsed.v.email,
+        recipientPhone: parsed.v.phone,
+        claimToken: token,
+        expiresAt,
+        lastSentAt: new Date(),
+      })
+      .where(eq(gifts.id, gift.id))
+      .returning();
+    const url = shareUrlFor(req, token);
+    if (parsed.v.email) console.log(`[gift admin-patch] email=${parsed.v.email} url=${url}`);
+    if (parsed.v.phone) console.log(`[gift admin-patch] sms=${parsed.v.phone} url=${url}`);
     res.json({ gift: updated, shareUrl: url });
   });
 
@@ -168,19 +210,23 @@ export function registerGiftRoutes(app: Express) {
     if (!parsed.ok) return res.status(400).json({ message: parsed.message });
 
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-    if (!order || order.customerId !== me.userId) return res.status(404).json({ message: "Order not found" });
-    if (!order.giftId) return res.status(400).json({ message: "Order isn't a gift" });
+    if (!order || !order.giftId) return res.status(404).json({ message: "Order not found" });
 
     const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
     if (!gift) return res.status(404).json({ message: "Gift not found" });
+    // Authorize on gifts.buyerUserId so the buyer can still patch after
+    // a previous (rolled-back) claim moved orders.customerId.
+    if (gift.buyerUserId !== me.userId) return res.status(403).json({ message: "Not your gift" });
     if (gift.claimedAt) return res.status(400).json({ message: "Already claimed — can't change recipient" });
     if (Date.now() - gift.createdAt.getTime() > RECIPIENT_EDIT_WINDOW_MS) {
       return res.status(400).json({ message: "Recipient can only be changed within 24h of creating the gift" });
     }
 
     // Rotate token so the previous one (which may have been shared with
-    // the wrong person) can't be redeemed anymore.
+    // the wrong person) can't be redeemed anymore. Also extend expiry so
+    // the new recipient gets a fresh 30-day claim window.
     const token = newToken();
+    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const [updated] = await db
       .update(gifts)
       .set({
@@ -189,6 +235,7 @@ export function registerGiftRoutes(app: Express) {
         recipientEmail: parsed.v.email,
         recipientPhone: parsed.v.phone,
         claimToken: token,
+        expiresAt,
         lastSentAt: new Date(),
       })
       .where(eq(gifts.id, gift.id))
@@ -200,21 +247,31 @@ export function registerGiftRoutes(app: Express) {
     res.json({ gift: updated, shareUrl: url });
   });
 
-  // ─── Resend (log + return current share link, bump counter) ────────
+  // ─── Resend (rotate token + push expiry, bump counter) ─────────────
+  // Resend recovers expired gifts too — it rotates the token and resets
+  // the 30-day claim window, so a buyer who realizes weeks later that
+  // the recipient never opened the link doesn't have to start over. The
+  // *only* terminal state is "claimed". The old token is invalidated by
+  // rotation, so anyone who saw the previous link can no longer redeem.
+  // Authorization: buyer of record on `gifts.buyerUserId` (this still
+  // works after a previous claim was, hypothetically, rolled back —
+  // unlike checking `order.customerId`).
   app.post("/api/orders/:id/gift/resend", async (req, res) => {
     const me = await requireCustomer(req, res);
     if (!me) return;
     const orderId = String(req.params.id);
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-    if (!order || order.customerId !== me.userId) return res.status(404).json({ message: "Order not found" });
-    if (!order.giftId) return res.status(400).json({ message: "Order isn't a gift" });
+    if (!order || !order.giftId) return res.status(404).json({ message: "Order not found" });
     const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
     if (!gift) return res.status(404).json({ message: "Gift not found" });
+    if (gift.buyerUserId !== me.userId) return res.status(403).json({ message: "Not your gift" });
     if (gift.claimedAt) return res.status(400).json({ message: "Already claimed" });
 
+    const token = newToken();
+    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const [updated] = await db
       .update(gifts)
-      .set({ resendCount: gift.resendCount + 1, lastSentAt: new Date() })
+      .set({ claimToken: token, expiresAt, resendCount: gift.resendCount + 1, lastSentAt: new Date() })
       .where(eq(gifts.id, gift.id))
       .returning();
     const url = shareUrlFor(req, updated.claimToken);
@@ -228,18 +285,19 @@ export function registerGiftRoutes(app: Express) {
     const token = String(req.params.token);
     const [gift] = await db.select().from(gifts).where(eq(gifts.claimToken, token));
     if (!gift) return res.status(404).json({ message: "This gift link is invalid or has been replaced." });
-    const [row] = await db
-      .select({ album: albums, buyer: customerUsers })
-      .from(orders)
-      .innerJoin(albums, eq(orders.albumId, albums.id))
-      .innerJoin(customerUsers, eq(orders.customerId, customerUsers.id))
-      .where(eq(orders.id, gift.orderId));
-    if (!row) return res.status(404).json({ message: "Gift not found" });
-
-    const buyerName = row.buyer.realName || row.buyer.displayName || null;
+    // Resolve buyer from gifts.buyerUserId (NOT orders.customerId) — the
+    // claim flow rewrites orders.customerId to the claimer, so after
+    // claim the "From {buyer}" line would otherwise flip to show the
+    // claimer's own name back at them.
+    const [order] = await db.select().from(orders).where(eq(orders.id, gift.orderId));
+    if (!order) return res.status(404).json({ message: "Gift not found" });
+    const [album] = await db.select().from(albums).where(eq(albums.id, order.albumId));
+    if (!album) return res.status(404).json({ message: "Gift not found" });
+    const [buyer] = await db.select().from(customerUsers).where(eq(customerUsers.id, gift.buyerUserId));
+    const buyerName = buyer ? (buyer.realName || buyer.displayName || null) : null;
     res.json(
       publicGift(gift, {
-        album: { id: row.album.id, title: row.album.title, artist: row.album.artist, artwork: row.album.artwork },
+        album: { id: album.id, title: album.title, artist: album.artist, artwork: album.artwork },
         buyerName,
       }),
     );

@@ -779,6 +779,7 @@ export function registerCommerceRoutes(app: Express) {
                 claimed: !!g.claimedAt,
                 claimedAt: g.claimedAt,
                 expiresAt: g.expiresAt,
+                createdAt: g.createdAt,
                 resendCount: g.resendCount,
                 isBuyer: g.buyerUserId === a.userId,
               }
