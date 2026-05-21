@@ -50,11 +50,14 @@ export function useAuth() {
       // kindFromRequest's query override).
       const isAdminShell = window.location.pathname.startsWith("/admin");
       const url = isAdminShell ? "/api/login?kind=admin" : "/api/login";
+      // Send `kind` in the body too — the server accepts a body-level
+      // override and it's the only signal that survives if a proxy or
+      // misconfigured route strips the query string.
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, kind: isAdminShell ? "admin" : "customer" }),
       });
       if (!res.ok) {
         const err = await res.json();

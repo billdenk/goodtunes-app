@@ -237,13 +237,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ─── Dev-only magic admin sign-in ──────────────────────────────────
+  // Hitting GET /dev-login?email=<admin email> in development mints a
+  // valid admin session + token and redirects to /admin. Used when the
+  // password form is misbehaving (autofill, cached state, etc.) so the
+  // operator can keep working. Production NEVER serves this — the
+  // NODE_ENV gate is the first thing the handler checks.
+  app.get("/dev-login", async (req, res) => {
+    if (process.env.NODE_ENV === "production") return res.status(404).send("Not found");
+    const email = String(req.query.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).send("Add ?email=<admin email>");
+    const user = await storage.getUserByEmail(email);
+    if (!user || !user.isAdmin) return res.status(404).send("No admin with that email");
+    req.session.userId = user.id;
+    req.session.kind = "admin";
+    const token = generateToken();
+    await storage.createAuthToken(token, user.id, "admin");
+    // Drop the token in localStorage via a tiny inline script so the
+    // SPA's auth hook picks it up on first load, then bounce to /admin.
+    res.send(`<!doctype html><meta charset="utf-8"><title>Signing you in…</title>
+<script>
+  try { localStorage.setItem("authToken", ${JSON.stringify(token)}); } catch {}
+  location.replace("/admin");
+</script>
+<p style="font-family:system-ui;padding:24px">Signing you in as ${user.email}…</p>`);
+  });
+
   app.post("/api/login", async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: "Username or email and password are required" });
     const raw = String(username).trim();
     const ident = (raw.startsWith("@") ? raw.slice(1) : raw).toLowerCase();
     const looksLikeEmail = ident.includes("@");
-    const kind = req.authKind;
+    // Allow body.kind to override the host/path-derived authKind. The
+    // login page knows which shell it's rendering (admin vs customer)
+    // far more reliably than the server can guess on the *.replit.app
+    // preview, where /api/login itself has no admin/customer hint. The
+    // explicit hint always wins. Production is unaffected because the
+    // canonical hosts still resolve correctly on their own.
+    const bodyKind = (req.body?.kind as string | undefined);
+    const kind: "admin" | "customer" =
+      bodyKind === "admin" || bodyKind === "customer" ? bodyKind : req.authKind;
 
     if (kind === "admin") {
       const lookup = looksLikeEmail ? await storage.getUserByEmail(ident) : await storage.getUserByUsername(ident);
