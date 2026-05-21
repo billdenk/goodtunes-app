@@ -55,6 +55,7 @@ The operator surface that powers the catalog.
 - **Grid / list toggle.** Every admin index page (Albums, People, Gear, Vendors, Labels) carries an Apple-Music-style segmented control to switch between a visual grid and a scannable list. Preference persists per section.
 - **Light admin theme.** The operator surface uses a clean white-and-slate Mac-app skin, distinct from the dark fan player — same brand vocabulary, denser layout for getting work done.
 - **2FA-protected admin sign-in.** Every admin sign-in requires a second factor — by default a one-time code emailed to the admin, with an option to switch to an authenticator-app TOTP enrollment and scrypt-hashed recovery codes. Super-admin grant and revoke are gated to existing super-admins from inside the app.
+- **Admin invitations.** A super-admin can invite a teammate by email and pre-assign their role (super admin, label, artist, manufacturer, or fulfillment partner). The invitee gets a one-shot link, sets a username and password, and lands directly in the admin shell with the right scope baked in — no shared credentials, no manual database edits. Pending invites can be revoked from the same screen.
 
 ## Integrations
 

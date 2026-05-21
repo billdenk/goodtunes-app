@@ -9090,5 +9090,198 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerPayoutRoutes } = await import("./payouts");
   registerPayoutRoutes(app);
 
+  // ─── Admin invitations ─────────────────────────────────────────
+  // A super-admin issues an invite (email + role + optional scope id),
+  // we mail a one-shot link, and the recipient sets a username + password
+  // at /invite/:token to provision their account. Tokens expire after
+  // 7 days; accepting marks the row used + records the new userId for
+  // audit. The role/scope are written straight onto the new users row
+  // via raw SQL (those columns live outside the pgTable definition —
+  // see server/auth/roles.ts).
+  const { sendAdminInviteEmail } = await import("./mail");
+  const { setUserRole, requireRole, getUserRole } = await import("./auth/roles");
+  const { adminInvites: _adminInvites, ADMIN_ROLES } = await import("@shared/schema");
+
+  const INVITE_TTL_DAYS = 7;
+  const ROLE_LABELS: Record<string, string> = {
+    super_admin: "Super Admin",
+    label: "Label",
+    artist: "Artist",
+    manufacturer: "Manufacturer",
+    fulfillment: "Fulfillment Partner",
+  };
+
+  // GET /api/me/role — small helper so the client knows what to render.
+  app.get("/api/me/role", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    res.json(info ?? { role: "super_admin", roleScopeId: null });
+  });
+
+  // List pending invites (super-admin only).
+  app.get("/api/admin/invites", requireAdmin, requireRole("super_admin"), async (_req, res) => {
+    const rows = await storage.listPendingAdminInvites();
+    res.json(rows.map((r) => ({
+      id: r.id,
+      email: r.email,
+      role: r.role,
+      roleScopeId: r.roleScopeId,
+      expiresAt: r.expiresAt,
+      createdAt: r.createdAt,
+    })));
+  });
+
+  // Create + email an invite (super-admin only).
+  app.post("/api/admin/invites", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const role = String(req.body?.role || "").trim();
+    const roleScopeId = req.body?.roleScopeId ? String(req.body.roleScopeId) : null;
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
+    if (!ADMIN_ROLES.includes(role as any)) {
+      return res.status(400).json({ message: "Pick a role" });
+    }
+    const existing = await storage.getUserByEmail(email);
+    if (existing) return res.status(400).json({ message: "An admin with that email already exists" });
+
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const inviter = await storage.getUser(req.session.userId!);
+    const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
+
+    const invite = await storage.createAdminInvite({
+      email,
+      role: role as any,
+      roleScopeId,
+      token,
+      expiresAt,
+      createdByUserId: req.session.userId!,
+    });
+
+    // Build absolute accept URL from the request host so prod uses the
+    // prod hostname and dev uses the preview host without a hard-coded
+    // env var.
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const acceptUrl = `${proto}://${host}/invite/${token}`;
+
+    const result = await sendAdminInviteEmail(
+      email,
+      acceptUrl,
+      inviterName,
+      ROLE_LABELS[role] || role,
+      INVITE_TTL_DAYS,
+    );
+    if (!result.ok) {
+      console.warn(`[invite] mail failed for ${email}: ${result.reason}`);
+    }
+    console.log(`[invite] issued ${email} role=${role} url=${acceptUrl}`);
+    res.json({
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      acceptUrl,
+      emailDelivered: result.ok,
+    });
+  });
+
+  // Revoke a pending invite (super-admin only).
+  app.delete("/api/admin/invites/:id", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    await storage.deleteAdminInvite(String(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // PUBLIC — fetch an invite by token so the accept page can render
+  // the recipient's email + role before they submit. Never returns
+  // role_scope_id or createdByUserId to keep the surface tight.
+  app.get("/api/invites/:token", async (req, res) => {
+    const invite = await storage.getAdminInviteByToken(String(req.params.token));
+    if (!invite) return res.status(404).json({ message: "Invite not found" });
+    if (invite.usedAt) return res.status(410).json({ message: "Invite already used" });
+    if (invite.expiresAt && invite.expiresAt < new Date()) {
+      return res.status(410).json({ message: "Invite expired" });
+    }
+    res.json({
+      email: invite.email,
+      role: invite.role,
+      roleLabel: ROLE_LABELS[invite.role] || invite.role,
+    });
+  });
+
+  // PUBLIC — accept an invite by setting username + display name + password.
+  // Creates the users row with is_admin=true and the role/scope baked in,
+  // marks the invite used, and mints an auth token so the recipient is
+  // signed in on the next page. Email comes from the invite — recipients
+  // can't reassign the email at accept time.
+  app.post("/api/invites/:token/accept", async (req, res) => {
+    const invite = await storage.getAdminInviteByToken(String(req.params.token));
+    if (!invite) return res.status(404).json({ message: "Invite not found" });
+    if (invite.usedAt) return res.status(410).json({ message: "Invite already used" });
+    if (invite.expiresAt && invite.expiresAt < new Date()) {
+      return res.status(410).json({ message: "Invite expired" });
+    }
+
+    const { username, displayName, password } = req.body || {};
+    if (!username || !displayName || !password) {
+      return res.status(400).json({ message: "Username, display name, and password are required" });
+    }
+    if (String(password).length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters" });
+    }
+    const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (usernameNorm.length < 3) {
+      return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
+    }
+    const [byUsername, byEmail] = await Promise.all([
+      storage.getUserByUsername(usernameNorm),
+      storage.getUserByEmail(invite.email),
+    ]);
+    if (byEmail) return res.status(400).json({ message: "An admin with that email already exists — sign in instead" });
+    if (byUsername) return res.status(400).json({ message: `Username "@${usernameNorm}" is already taken` });
+
+    const hashed = await hashPassword(String(password));
+    const user = await storage.createUser({
+      username: usernameNorm,
+      email: invite.email,
+      displayName: String(displayName).trim(),
+      realName: null,
+      password: hashed,
+    });
+    // Promote to admin + write role/scope via raw SQL (the columns live
+    // outside the pgTable so we touch them through setUserRole + a
+    // direct is_admin update).
+    await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${user.id}`);
+    await setUserRole(user.id, invite.role as any, invite.roleScopeId ?? null);
+
+    try {
+      await storage.markAdminInviteUsed(invite.id, user.id);
+    } catch (e: any) {
+      // Lost a race against another /accept POST with the same token.
+      // The other request already created an admin user; tear down the
+      // one we just inserted so we don't leak a phantom admin.
+      if (String(e?.message).includes("INVITE_ALREADY_USED")) {
+        try { await db.execute(sql`DELETE FROM users WHERE id = ${user.id}`); } catch {}
+        return res.status(410).json({ message: "Invite already used" });
+      }
+      throw e;
+    }
+
+    // Sign them in immediately — they go straight into the admin shell.
+    req.session.userId = user.id;
+    req.session.kind = "admin";
+    const token = generateToken();
+    await storage.createAuthToken(token, user.id, "admin");
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      displayName: user.displayName,
+      isAdmin: true,
+      kind: "admin",
+      role: invite.role,
+      token,
+    });
+  });
+
   return httpServer;
 }

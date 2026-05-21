@@ -1,1 +1,2 @@
 - [Albums query schema drift](albums-schema-drift.md) — if /api/albums returns 500 with "Failed query… price_cents" (or any column), drizzle schema has a column the live DB doesn't; the symptom in the UI is "all albums gone" + sidebar Albums=0.
+- [Admin role columns out of pgTable](admin-roles-out-of-table.md) — users.role/role_scope_id live in the DB but not in shared/schema.ts; read/write via server/auth/roles.ts raw SQL, not drizzle.

@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut, ShieldCheck, UserPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -64,6 +64,14 @@ export function AdminUserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-slate-200" />
+        <DropdownMenuItem
+          onClick={() => navigate("/admin/invites")}
+          data-testid="menu-item-invites"
+          className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
+        >
+          <UserPlus className="w-4 h-4 mr-2 text-slate-500" />
+          Invite teammate
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => navigate("/admin/security")}
           data-testid="menu-item-security"

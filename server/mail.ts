@@ -63,3 +63,37 @@ export async function sendAdminOtpEmail(toEmail: string, code: string, ttlMinute
   `;
   return sendViaResend(toEmail, subject, html, text);
 }
+
+// Send an admin-invite link. The link points at the public /invite/:token
+// page where the recipient sets a username + password; on submit we
+// provision their users row with the role + scope baked into the invite.
+export async function sendAdminInviteEmail(
+  toEmail: string,
+  acceptUrl: string,
+  inviterName: string,
+  roleLabel: string,
+  ttlDays: number,
+): Promise<SendResult> {
+  const subject = `${inviterName} invited you to GoodTunes`;
+  const text = [
+    `${inviterName} invited you to join GoodTunes as a ${roleLabel}.`,
+    ``,
+    `Accept the invite (expires in ${ttlDays} days):`,
+    acceptUrl,
+    ``,
+    `If you weren't expecting this email, you can ignore it.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes</div>
+      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">You're invited</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${inviterName}</strong> invited you to join GoodTunes as a <strong>${roleLabel}</strong>.</p>
+      <p style="margin: 28px 0;">
+        <a href="${acceptUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">Accept invitation</a>
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #319ED8; word-break: break-all;">${acceptUrl}</span></p>
+      <p style="font-size: 13px; color: #888; margin-top: 24px;">This link expires in <strong>${ttlDays} days</strong>. If you weren't expecting this email, you can ignore it.</p>
+    </div>
+  `;
+  return sendViaResend(toEmail, subject, html, text);
+}

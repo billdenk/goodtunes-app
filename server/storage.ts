@@ -74,6 +74,9 @@ import {
   type InsertRfq,
   type RfqReply,
   type InsertRfqReply,
+  adminInvites,
+  type AdminInvite,
+  type InsertAdminInvite,
   trackWriters,
   trackPerformers,
   creditRoles,
@@ -430,6 +433,16 @@ export interface IStorage {
   listRfqRepliesForManufacturer(manufacturerId: string): Promise<RfqReply[]>;
   upsertRfqReply(rfqId: string, manufacturerId: string, patch: Partial<RfqReply>): Promise<RfqReply>;
   acceptRfqReply(rfqId: string, replyId: string): Promise<Rfq | undefined>;
+
+  // Admin invites — outstanding tokens that bind an email + role to a
+  // one-shot signup link. Accepts on the recipient's first /invite/:token
+  // POST. We never expose the token over GET-by-id; lookups happen by
+  // token only so a leaked invite list can't be re-emailed.
+  createAdminInvite(data: InsertAdminInvite & { token: string; expiresAt: Date; createdByUserId: string }): Promise<AdminInvite>;
+  listPendingAdminInvites(): Promise<AdminInvite[]>;
+  getAdminInviteByToken(token: string): Promise<AdminInvite | undefined>;
+  markAdminInviteUsed(id: string, acceptedUserId: string): Promise<void>;
+  deleteAdminInvite(id: string): Promise<void>;
 }
 
 // Seed catalog (albums + songs). Kept inline rather than imported from the
@@ -1942,6 +1955,47 @@ export class DbStorage implements IStorage {
       .where(eq(rfqs.id, rfqId))
       .returning();
     return r;
+  }
+
+  async createAdminInvite(data: InsertAdminInvite & { token: string; expiresAt: Date; createdByUserId: string }): Promise<AdminInvite> {
+    const [row] = await db.insert(adminInvites).values({
+      email: data.email.trim().toLowerCase(),
+      role: data.role,
+      roleScopeId: data.roleScopeId ?? null,
+      token: data.token,
+      expiresAt: data.expiresAt,
+      createdByUserId: data.createdByUserId,
+    }).returning();
+    return row;
+  }
+  async listPendingAdminInvites(): Promise<AdminInvite[]> {
+    return db
+      .select()
+      .from(adminInvites)
+      .where(sql`${adminInvites.usedAt} IS NULL`)
+      .orderBy(desc(adminInvites.createdAt));
+  }
+  async getAdminInviteByToken(token: string): Promise<AdminInvite | undefined> {
+    const [row] = await db.select().from(adminInvites).where(eq(adminInvites.token, token)).limit(1);
+    return row;
+  }
+  async markAdminInviteUsed(id: string, acceptedUserId: string): Promise<void> {
+    // Conditional update — only flips usedAt when it's still NULL. Two
+    // parallel /accept calls with the same token will both pass the
+    // earlier usedAt-null check, but only the first one's UPDATE will
+    // match a row here. The route reads .rowCount to detect the loser
+    // and rolls back the duplicate user it just created.
+    const r = await db.execute(sql`
+      UPDATE admin_invites
+      SET used_at = NOW(), accepted_user_id = ${acceptedUserId}
+      WHERE id = ${id} AND used_at IS NULL
+    `);
+    if ((r as any).rowCount === 0) {
+      throw new Error("INVITE_ALREADY_USED");
+    }
+  }
+  async deleteAdminInvite(id: string): Promise<void> {
+    await db.delete(adminInvites).where(eq(adminInvites.id, id));
   }
 }
 

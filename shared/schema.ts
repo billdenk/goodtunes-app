@@ -1526,3 +1526,39 @@ export type RfqReply = typeof rfqReplies.$inferSelect;
 // written to users.role.
 export const ADMIN_ROLES = ["super_admin", "label", "artist", "manufacturer", "fulfillment"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
+
+// ─── Admin invitations ───────────────────────────────────────────────
+// One row per outstanding invite. A super-admin picks a role (+ optional
+// scope id pointing at a label / manufacturer / fulfillment partner)
+// and an email; we mint a single-use token, email it, and on accept
+// we create the users row with role + roleScopeId baked in. Tokens
+// expire so a leaked invite mail can't sit forever — 7 days is the
+// default. `usedAt` is set the moment the invite is accepted so the
+// link can't be reused; we keep the row around for audit.
+export const adminInvites = pgTable("admin_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  role: text("role").notNull(),
+  roleScopeId: varchar("role_scope_id"),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  acceptedUserId: varchar("accepted_user_id"),
+  createdByUserId: varchar("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
+  id: true,
+  token: true,
+  expiresAt: true,
+  usedAt: true,
+  acceptedUserId: true,
+  createdAt: true,
+}).extend({
+  email: z.string().email(),
+  role: z.enum(ADMIN_ROLES),
+  roleScopeId: z.string().optional().nullable(),
+});
+export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;
+export type AdminInvite = typeof adminInvites.$inferSelect;

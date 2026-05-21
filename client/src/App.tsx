@@ -38,6 +38,8 @@ import { Welcome } from "@/pages/Welcome";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import AdminSecurity from "@/pages/AdminSecurity";
+import { AdminInvites } from "@/pages/AdminInvites";
+import AcceptInvite from "@/pages/AcceptInvite";
 import { GiftClaim } from "@/pages/GiftClaim";
 import { Redeem } from "@/pages/Redeem";
 import { AdminShopify } from "@/pages/AdminShopify";
@@ -142,6 +144,12 @@ function Router() {
         <Route path="/admin/security">
           <ProtectedRoute component={AdminSecurity} />
         </Route>
+        <Route path="/admin/invites">
+          <ProtectedRoute component={AdminInvites} />
+        </Route>
+        {/* Public invite-accept page — recipient sets username + password
+            using a token-bound email + role. No auth required. */}
+        <Route path="/invite/:token" component={AcceptInvite} />
         <Route path="/collection">
           <ProtectedRoute component={Collection} />
         </Route>
