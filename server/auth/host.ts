@@ -59,6 +59,12 @@ export function canonicalHostRedirect(req: Request, res: Response, next: NextFun
   if (process.env.NODE_ENV !== "production") return next();
   const host = (req.headers.host || "").toLowerCase().split(":")[0];
   if (host === ADMIN_HOST || host === CUSTOMER_HOST) return next();
+  // Replit's deploy health probe hits the deployment's *.replit.app URL on
+  // `/`. If we 301 it to goodtunes.music the probe sees a redirect instead
+  // of a 200 and Promote fails with "app built successfully but failed to
+  // start." Let *.replit.app (deploy URL) and *.replit.dev (preview URL)
+  // through so the probe — and direct *.replit.app access — keep working.
+  if (host.endsWith(".replit.app") || host.endsWith(".replit.dev")) return next();
   if (req.path.startsWith("/.well-known/")) return next();
   const target =
     req.path.startsWith("/admin") || req.path.startsWith("/api/admin")
