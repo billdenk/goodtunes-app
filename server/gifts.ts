@@ -318,47 +318,74 @@ export function registerGiftRoutes(app: Express) {
       return res.status(400).json({ message: "You can't claim your own gift — share the link with the recipient." });
     }
 
-    // Atomic-ish transfer: order → claimer, user_albums → claimer,
-    // gift → claimed. Drizzle's pg driver doesn't expose transactions on
-    // the surface we're using here; the three writes are sequenced and
-    // each is idempotent on its own (claim guard above prevents replay).
-    await db.update(orders).set({ customerId: me.userId }).where(eq(orders.id, gift.orderId));
-    // Move the existing user_albums row, or insert if missing.
-    const [order] = await db.select().from(orders).where(eq(orders.id, gift.orderId));
-    if (order) {
-      const existing = await db
-        .select()
-        .from(userAlbums)
-        .where(and(eq(userAlbums.albumId, order.albumId), eq(userAlbums.userId, gift.buyerUserId)));
-      if (existing.length > 0) {
-        await db.update(userAlbums).set({ userId: me.userId }).where(eq(userAlbums.id, existing[0].id));
-      } else {
-        await db
-          .insert(userAlbums)
-          .values({ userId: me.userId, albumId: order.albumId })
-          .onConflictDoNothing();
+    // Atomic transfer: order → claimer, user_albums → claimer, gift →
+    // claimed. Wrapped in a single PG transaction so any failure rolls
+    // back the whole thing — without this, a unique-constraint hit on
+    // user_albums (recipient somehow already owns the album) could leave
+    // orders.customerId reassigned while gifts.claimedAt stays null,
+    // producing a half-transferred order that the buyer no longer sees
+    // and the claimer can't re-claim.
+    let albumIdOut: string | null = null;
+    try {
+      await db.transaction(async (tx) => {
+        const [order] = await tx.select().from(orders).where(eq(orders.id, gift.orderId));
+        if (!order) throw new Error("Order not found for this gift");
+        albumIdOut = order.albumId;
+
+        // Re-check claim state inside the tx to avoid a race where two
+        // tabs both pass the outer guard and try to claim simultaneously.
+        const [fresh] = await tx.select().from(gifts).where(eq(gifts.id, gift.id));
+        if (!fresh || fresh.claimedAt) throw new Error("ALREADY_CLAIMED");
+
+        await tx.update(orders).set({ customerId: me.userId }).where(eq(orders.id, gift.orderId));
+
+        // Move the buyer's existing user_albums row to the claimer. If
+        // the claimer already owns this album (rare — they bought it
+        // for themselves earlier), drop the buyer's row instead of
+        // moving it so we don't trip the (userId, albumId) unique index.
+        const [buyerRow] = await tx
+          .select()
+          .from(userAlbums)
+          .where(and(eq(userAlbums.albumId, order.albumId), eq(userAlbums.userId, gift.buyerUserId)));
+        const [claimerRow] = await tx
+          .select()
+          .from(userAlbums)
+          .where(and(eq(userAlbums.albumId, order.albumId), eq(userAlbums.userId, me.userId)));
+        if (buyerRow && claimerRow) {
+          await tx.delete(userAlbums).where(eq(userAlbums.id, buyerRow.id));
+        } else if (buyerRow) {
+          await tx.update(userAlbums).set({ userId: me.userId }).where(eq(userAlbums.id, buyerRow.id));
+        } else if (!claimerRow) {
+          await tx.insert(userAlbums).values({ userId: me.userId, albumId: order.albumId });
+        }
+
+        // Seed the claimer's realName from the gift recipient name if
+        // they haven't set one — the GoodDeed cert reads from
+        // customerUsers.realName, so without this a brand-new claimer
+        // gets their email local-part on the cert. Existing realName
+        // values are never overwritten.
+        const [claimer] = await tx.select().from(customerUsers).where(eq(customerUsers.id, me.userId));
+        if (claimer && !claimer.realName) {
+          const seeded = `${gift.recipientFirstName} ${gift.recipientLastName}`.trim();
+          if (seeded) {
+            await tx.update(customerUsers).set({ realName: seeded }).where(eq(customerUsers.id, me.userId));
+          }
+        }
+
+        await tx
+          .update(gifts)
+          .set({ claimedByUserId: me.userId, claimedAt: new Date() })
+          .where(eq(gifts.id, gift.id));
+      });
+    } catch (e: any) {
+      if (e?.message === "ALREADY_CLAIMED") {
+        return res.status(400).json({ message: "This gift has already been claimed." });
       }
+      console.error("[gift claim] transfer failed", e);
+      return res.status(500).json({ message: "Could not complete the claim. Please try again." });
     }
-    // If the claimer hasn't set a verified real name yet, seed it from
-    // the recipient name the buyer typed during gift creation. This is
-    // what makes the GoodDeed certificate print correctly on first open
-    // — without this, a brand-new claimer's cert would default to their
-    // display name (often an email local-part). Existing realName values
-    // are never overwritten; the claimer's identity wins if they already
-    // set one in their profile.
-    const [claimer] = await db.select().from(customerUsers).where(eq(customerUsers.id, me.userId));
-    if (claimer && !claimer.realName) {
-      const seeded = `${gift.recipientFirstName} ${gift.recipientLastName}`.trim();
-      if (seeded) {
-        await db.update(customerUsers).set({ realName: seeded }).where(eq(customerUsers.id, me.userId));
-      }
-    }
-    const [updated] = await db
-      .update(gifts)
-      .set({ claimedByUserId: me.userId, claimedAt: new Date() })
-      .where(eq(gifts.id, gift.id))
-      .returning();
-    res.json({ gift: updated, albumId: order?.albumId ?? null });
+    const [updated] = await db.select().from(gifts).where(eq(gifts.id, gift.id));
+    res.json({ gift: updated, albumId: albumIdOut });
   });
 }
 

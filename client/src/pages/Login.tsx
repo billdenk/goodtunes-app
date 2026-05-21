@@ -265,9 +265,25 @@ export function Login() {
     if (window.location.hash.startsWith("#token=")) {
       const token = decodeURIComponent(window.location.hash.slice("#token=".length));
       setAuthToken(token);
-      window.history.replaceState({}, "", "/account");
+      // After OAuth round-trip the URL query is gone, but GiftClaim (and
+      // any other gated flow) stashed the target in sessionStorage as
+      // `gt:postAuthNext` before kicking us to /login — consume it here
+      // so a recipient who signed in with Google lands back on the
+      // claim screen, not /account.
+      // Admin shell (host-based) lands on /admin; everything else goes
+      // to the stashed deep-link target (gift claim, buy resume, …) or
+      // /account as a fallback.
+      let dest = isAdmin ? "/admin" : "/account";
+      try {
+        const stashed = sessionStorage.getItem("gt:postAuthNext");
+        if (stashed && stashed.startsWith("/")) {
+          sessionStorage.removeItem("gt:postAuthNext");
+          dest = stashed;
+        }
+      } catch {}
+      window.history.replaceState({}, "", dest);
       queryClient.invalidateQueries();
-      navigate("/account");
+      navigate(dest);
     }
   }, []);
 
@@ -364,9 +380,30 @@ export function Login() {
     setStep(2);
   };
 
+  // Respect ?next=<path> so flows that gate on auth (gift claim, buy,
+  // playlist follow, etc.) resume where they left off. Admin shell
+  // always lands on /admin regardless — admin pages aren't valid
+  // continuation targets for customer auth. The same `next` value is
+  // also stashed in localStorage as `gt:postAuthNext` so the OAuth
+  // round-trip (which loses query params across the IdP redirect) can
+  // pick it up via the hash-token handler higher up.
+  const nextPath = (): string => {
+    if (isAdmin) return "/admin";
+    try {
+      const q = new URL(window.location.href).searchParams.get("next");
+      if (q && q.startsWith("/")) return q;
+      const stashed = sessionStorage.getItem("gt:postAuthNext");
+      if (stashed && stashed.startsWith("/")) {
+        sessionStorage.removeItem("gt:postAuthNext");
+        return stashed;
+      }
+    } catch {}
+    return "/account";
+  };
+
   const finishCustomer = () => {
     queryClient.invalidateQueries();
-    navigate(isAdmin ? "/admin" : "/account");
+    navigate(nextPath());
   };
 
   const handleRegister = async (e: React.FormEvent) => {

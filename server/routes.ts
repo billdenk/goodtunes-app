@@ -243,9 +243,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // password form is misbehaving (autofill, cached state, etc.) so the
   // operator can keep working. Production NEVER serves this — the
   // NODE_ENV gate is the first thing the handler checks.
-  app.get("/dev-login", async (req, res) => {
+  app.get(["/dev-login", "/dev-login-bill"], async (req, res) => {
     if (process.env.NODE_ENV === "production") return res.status(404).send("Not found");
-    const email = String(req.query.email || "").trim().toLowerCase();
+    const email = req.path === "/dev-login-bill"
+      ? "billdenk@mac.com"
+      : String(req.query.email || "").trim().toLowerCase();
     if (!email) return res.status(400).send("Add ?email=<admin email>");
     const user = await storage.getUserByEmail(email);
     if (!user || !user.isAdmin) return res.status(404).send("No admin with that email");
@@ -253,14 +255,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     req.session.kind = "admin";
     const token = generateToken();
     await storage.createAuthToken(token, user.id, "admin");
-    // Drop the token in localStorage via a tiny inline script so the
-    // SPA's auth hook picks it up on first load, then bounce to /admin.
-    res.send(`<!doctype html><meta charset="utf-8"><title>Signing you in…</title>
-<script>
-  try { localStorage.setItem("authToken", ${JSON.stringify(token)}); } catch {}
-  location.replace("/admin");
-</script>
-<p style="font-family:system-ui;padding:24px">Signing you in as ${user.email}…</p>`);
+    // Send the browser to /login#token=<token> — the same hash-token
+    // path the Google/Apple OAuth callback uses. Login.tsx already
+    // picks the token out of the hash, stores it in localStorage, and
+    // navigates onward. No inline <script> (Replit's preview iframe
+    // CSP blocks those), no cookie shenanigans, no extra UI.
+    res.redirect(`/login?kind=admin#token=${encodeURIComponent(token)}`);
   });
 
   app.post("/api/login", async (req, res) => {
