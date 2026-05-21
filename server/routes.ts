@@ -7741,10 +7741,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : INVALID;
   };
 
-  app.get("/api/manufacturers", async (_req, res) => {
+  // Partner records carry operational contact info (emails, phones,
+  // receiving-dock addresses) that should not be public. Gate read
+  // access behind requireAdmin today — once the manufacturer/fulfillment
+  // role middleware lands, swap to requireRole(...) + scope-by-id.
+  app.get("/api/manufacturers", requireAdmin, async (_req, res) => {
     return res.json(await storage.getManufacturers());
   });
-  app.get("/api/manufacturers/:id", async (req, res) => {
+  app.get("/api/manufacturers/:id", requireAdmin, async (req, res) => {
     const m = await storage.getManufacturerById(String(req.params.id));
     if (!m) return res.status(404).json({ message: "Manufacturer not found" });
     return res.json(m);
@@ -7806,10 +7810,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
-  app.get("/api/fulfillment-partners", async (_req, res) => {
+  app.get("/api/fulfillment-partners", requireAdmin, async (_req, res) => {
     return res.json(await storage.getFulfillmentPartners());
   });
-  app.get("/api/fulfillment-partners/:id", async (req, res) => {
+  app.get("/api/fulfillment-partners/:id", requireAdmin, async (req, res) => {
     const f = await storage.getFulfillmentPartnerById(String(req.params.id));
     if (!f) return res.status(404).json({ message: "Fulfillment partner not found" });
     return res.json(f);
