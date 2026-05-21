@@ -250,6 +250,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // it to ask for a 6-digit code. We stash the verified userId in
       // the session as `pendingTotpUserId` so the follow-up call can
       // confirm it without re-checking the password.
+      // Dev-only TOTP bypass. Production (NODE_ENV=production) always
+      // enforces 2FA; this branch only fires locally so we can iterate
+      // without the authenticator dance every session.
+      if (process.env.NODE_ENV !== "production") {
+        req.session.userId = user.id;
+        req.session.kind = "admin";
+        const token = generateToken();
+        await storage.createAuthToken(token, user.id, "admin");
+        return res.json({ ...shapeAdmin(user), token, kind: "admin", devBypass: true });
+      }
       const totp = await storage.getAdminTotp(user.id);
       req.session.pendingTotpUserId = user.id;
       if (!totp) return res.json({ requiresEnrollment: true, userId: user.id, kind: "admin" });
