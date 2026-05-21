@@ -3,4 +3,5 @@ dist
 .DS_Store
 server/public
 vite.config.ts.*
-*.tar.gzartifacts/mockup-sandbox/src/.generated/
+*.tar.gz
+artifacts/mockup-sandbox/src/.generated/
