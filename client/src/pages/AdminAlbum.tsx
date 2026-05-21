@@ -9759,23 +9759,63 @@ async function uploadAudioFile(
   // schema default.
   duration?: number | null;
 }> {
-  const fd = new FormData();
-  fd.append("file", file);
   const token = getAuthToken();
   if (!token) {
     throw new Error("Sign out and back in — your session token is missing.");
   }
-  const res = await fetch("/api/admin/upload-audio", {
+  // Direct-to-Object-Storage flow (sign → PUT to GCS → finalize). The
+  // legacy multipart POST to `/api/admin/upload-audio` still works for
+  // server-side ZIP imports, but browser uploads have to bypass
+  // Replit's ~32MB inbound proxy cap, which 413s a CD-quality WAV
+  // master long before our handler runs. Finalize returns the same
+  // shape the legacy route returned, so nothing downstream changes.
+  const contentType = file.type || "audio/mpeg";
+  const signRes = await fetch("/api/admin/upload-audio/sign", {
     method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     credentials: "include",
+    body: JSON.stringify({ contentType }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
+  if (!signRes.ok) {
+    const errBody = await signRes.json().catch(() => ({}));
+    throw new Error(errBody.message || `Upload failed (${signRes.status})`);
   }
-  const body = (await res.json()) as {
+  const { uploadUrl, finalPath, contentType: signedType } =
+    (await signRes.json()) as {
+      uploadUrl: string;
+      finalPath: string;
+      contentType: string;
+    };
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl, true);
+    xhr.setRequestHeader("Content-Type", signedType);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed — network error"));
+    xhr.send(file);
+  });
+
+  const finRes = await fetch("/api/admin/upload-audio/finalize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    credentials: "include",
+    body: JSON.stringify({ finalPath, contentType: signedType }),
+  });
+  if (!finRes.ok) {
+    const errBody = await finRes.json().catch(() => ({}));
+    throw new Error(errBody.message || `Upload finalize failed (${finRes.status})`);
+  }
+  const body = (await finRes.json()) as {
     url: string;
     sourceUrl: string | null;
     transcoded: boolean;

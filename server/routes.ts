@@ -1847,6 +1847,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       cb(null, true);
     },
   });
+  // Legacy multer-backed audio upload. Kept for the server-side ZIP
+  // importer and any other internal callers that already hand us a
+  // Buffer. Browser-originated uploads should use the direct-to-storage
+  // flow (`/api/admin/upload-audio/sign` + `.../finalize`) below — it
+  // dodges Replit's ~32MB proxy body cap that otherwise 413s on hi-res
+  // WAV / FLAC masters before this handler ever runs.
   app.post(
     "/api/admin/upload-audio",
     requireAdminBearer,
@@ -1912,6 +1918,125 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Best-effort cleanup of both tempfiles. The transcoded FLAC
         // (when present) lives at a different path than tmpIn, so try
         // both. /tmp gets reaped anyway, so failures are non-fatal.
+        try { await fsp.unlink(tmpIn); } catch {}
+        if (transcodedTmp) {
+          try { await fsp.unlink(transcodedTmp); } catch {}
+        }
+      }
+    },
+  );
+
+  // --- Direct-to-Object-Storage audio upload ----------------------------
+  //
+  // Mirrors the music-video direct-upload flow above for the exact same
+  // reason: Replit's HTTP proxy caps inbound bodies well below our 150MB
+  // multer limit, so a CD-quality WAV master (~65MB) returns 413 before
+  // ever reaching the legacy `/api/admin/upload-audio` handler. The
+  // browser PUTs the original bytes straight to GCS using a signed URL,
+  // then calls `finalize` so the server can flip the ACL, run the same
+  // `transcodeAudioToWebFriendly` + `music-metadata` pipeline the legacy
+  // route uses, and return the same `{ url, sourceUrl, transcoded,
+  // sourceBitsPerSample, duration }` shape so the client code path is
+  // identical from there on.
+  app.post(
+    "/api/admin/upload-audio/sign",
+    requireAdminBearer,
+    async (req, res) => {
+      try {
+        const contentType = String(req.body?.contentType || "");
+        if (!(contentType in AUDIO_MIME_TO_EXT)) {
+          return res.status(400).json({
+            message: "Only MP3, M4A/AAC, WAV, AIFF, FLAC, or OGG audio is allowed",
+          });
+        }
+        const id = `${randomUUID()}${AUDIO_MIME_TO_EXT[contentType]}`;
+        const { bucketName, objectName } = uploadDestination(id);
+        const uploadUrl = await signGcsUrl(bucketName, objectName, "PUT", 900);
+        return res.json({
+          uploadUrl,
+          finalPath: `/objects/uploads/${id}`,
+          contentType,
+        });
+      } catch (err) {
+        console.error("Audio sign failed", err);
+        return res.status(500).json({ message: "Could not start upload" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/upload-audio/finalize",
+    requireAdminBearer,
+    async (req, res) => {
+      const finalPath = String(req.body?.finalPath || "");
+      if (!/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(finalPath)) {
+        return res.status(400).json({ message: "Invalid upload path" });
+      }
+      const contentType = String(req.body?.contentType || "");
+      // We need the original extension to drive the transcode decision
+      // (passthrough vs 24-bit WAV → FLAC). Prefer the MIME the client
+      // declared at sign time; fall back to the extension embedded in
+      // finalPath if the client doesn't echo it back.
+      const extFromMime = contentType && AUDIO_MIME_TO_EXT[contentType];
+      const extFromPath = finalPath.slice(finalPath.lastIndexOf("."));
+      const inExt = (extFromMime || extFromPath || ".bin").toLowerCase();
+      const fsp = await import("node:fs/promises");
+      const fs = await import("node:fs");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      const { pipeline } = await import("node:stream/promises");
+      const tmpIn = path.join(os.tmpdir(), `${randomUUID()}${inExt}`);
+      let transcodedTmp: string | null = null;
+      try {
+        const file = await objectStorage.getObjectEntityFile(finalPath);
+        // Flip ACL up front so the public URL works even if the
+        // transcode branch below fails — we'd rather have a playable
+        // (if unconverted) master than a 403 on the operator's row.
+        await setObjectAclPolicy(file, {
+          owner: "admin",
+          visibility: "public",
+        });
+        // Stream the freshly-uploaded object into a tempfile so the
+        // ffprobe / ffmpeg / music-metadata helpers (which all want a
+        // path on disk) can run against it.
+        await pipeline(file.createReadStream(), fs.createWriteStream(tmpIn));
+        const conv = await transcodeAudioToWebFriendly(tmpIn, inExt);
+        if (conv.action === "transcode" && conv.outputPath !== tmpIn) {
+          transcodedTmp = conv.outputPath;
+        }
+        // When transcoded, the playback URL is the new browser-friendly
+        // file we just produced; the original bytes (already in GCS at
+        // finalPath) become the archival sourceUrl. On passthrough the
+        // operator's upload IS the playback file, so url == finalPath
+        // and sourceUrl is null — same shape as the legacy route.
+        const url = conv.action === "transcode"
+          ? await uploadFileToObjectStorage(conv.outputPath, conv.mime)
+          : finalPath;
+        const sourceUrl = conv.action === "transcode" ? finalPath : null;
+        let duration: number | null = null;
+        try {
+          const mm = await import("music-metadata");
+          const meta = await mm.parseFile(tmpIn);
+          if (meta.format.duration && isFinite(meta.format.duration)) {
+            duration = Math.round(meta.format.duration);
+          }
+        } catch { /* leave null; client probe may have already filled it */ }
+        return res.json({
+          url,
+          sourceUrl,
+          transcoded: conv.action === "transcode",
+          sourceBitsPerSample: conv.sourceBitsPerSample,
+          duration,
+        });
+      } catch (err: any) {
+        if (err instanceof ObjectNotFoundError) {
+          return res.status(404).json({ message: "Upload not found" });
+        }
+        console.error("Audio finalize failed", err);
+        return res.status(500).json({
+          message: err?.message || "Could not finalize upload",
+        });
+      } finally {
         try { await fsp.unlink(tmpIn); } catch {}
         if (transcodedTmp) {
           try { await fsp.unlink(transcodedTmp); } catch {}

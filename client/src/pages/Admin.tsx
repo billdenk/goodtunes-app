@@ -1220,26 +1220,64 @@ async function uploadVideoFile(
 }
 
 // Shared upload helper for audio files (per-song MP3/M4A/WAV/FLAC).
-// Routes through the dedicated `/api/admin/upload-audio` endpoint, which
-// has a 150MB cap and an audio-only MIME whitelist — distinct from the
-// 8MB image route and the 200MB video route.
+// Uses the same direct-to-Object-Storage flow as the video uploader
+// (sign → PUT to GCS → finalize) so hi-res WAV / FLAC masters dodge
+// Replit's ~32MB inbound proxy cap that would otherwise 413 before
+// our handler ever runs. The finalize step still produces the same
+// transcoded playback + archival `sourceUrl` shape the legacy
+// `/api/admin/upload-audio` endpoint returns.
 async function uploadAudioFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
   const token = getAuthToken();
   if (!token) throw new Error("Sign out and back in — your session token is missing.");
-  const res = await fetch("/api/admin/upload-audio", {
+
+  const contentType = file.type || "audio/mpeg";
+  const signRes = await fetch("/api/admin/upload-audio/sign", {
     method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     credentials: "include",
+    body: JSON.stringify({ contentType }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
+  if (!signRes.ok) {
+    const body = await signRes.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${signRes.status})`);
   }
-  const { url } = await res.json();
-  return url as string;
+  const { uploadUrl, finalPath, contentType: signedType } =
+    (await signRes.json()) as {
+      uploadUrl: string;
+      finalPath: string;
+      contentType: string;
+    };
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl, true);
+    xhr.setRequestHeader("Content-Type", signedType);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed — network error"));
+    xhr.send(file);
+  });
+
+  const finRes = await fetch("/api/admin/upload-audio/finalize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    credentials: "include",
+    body: JSON.stringify({ finalPath, contentType: signedType }),
+  });
+  if (!finRes.ok) {
+    const body = await finRes.json().catch(() => ({}));
+    throw new Error(body.message || `Upload finalize failed (${finRes.status})`);
+  }
+  const { url } = (await finRes.json()) as { url: string };
+  return url;
 }
 
 // Same helper but for the image-upload route (poster frames + photos).
