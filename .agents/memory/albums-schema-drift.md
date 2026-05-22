@@ -35,5 +35,5 @@ SELECT column_name FROM information_schema.columns WHERE table_name='<table>' OR
 SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='<new_table>';
 ```
 
-## Longer-term fix
-Either make `scripts/post-merge.sh` non-interactive (e.g. `echo "+" | npm run db:push` or pipe `printf '\n'`), or stop relying on drizzle-kit and always apply schema changes with explicit raw-SQL migrations that the script runs by file. Until then, every additive task needs an explicit "apply ALTERs to PROD" step before declaring done.
+## Longer-term fix (shipped)
+`scripts/post-merge.sh` now pipes `yes ""` into `npm run db:push` so every false-positive rename prompt accepts its default ("+ create"). Additive schema changes reach prod automatically on merge; no more hand-patched ALTERs. If you ever see this drift again after the script ran, the prompt default has changed — re-read the merge log before adding more raw-SQL workarounds.
