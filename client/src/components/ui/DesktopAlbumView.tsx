@@ -94,6 +94,14 @@ export type DesktopAlbumViewProps = {
   lyricsOpen?: boolean;
   lyrics?: ReactNode;
   onCloseLyrics?: () => void;
+
+  /** When true, render the medium-breakpoint (portrait-tablet) sizing
+   *  regardless of the actual viewport width. Used by the admin tablet
+   *  preview, which renders into a fixed virtual canvas that scales to
+   *  fit a bezel — viewport-based Tailwind breakpoints would otherwise
+   *  always pick `lg` on a desktop monitor. Without this, the admin
+   *  preview wouldn't actually mirror what fans see on a real iPad. */
+  compact?: boolean;
 };
 
 function formatDuration(seconds: number): string {
@@ -142,7 +150,31 @@ export function DesktopAlbumView({
   lyricsOpen,
   lyrics,
   onCloseLyrics,
+  compact = false,
 }: DesktopAlbumViewProps) {
+  /* Tailwind class buckets. When `compact` is true (admin tablet
+     preview) we force the md sizing irrespective of viewport, because
+     the preview renders inside a transform-scaled canvas where
+     viewport-based `lg:` breakpoints would otherwise pick the desktop
+     layout on a desktop monitor and the preview wouldn't actually
+     mirror what fans see on a real iPad. When false (normal fan route)
+     we use responsive `lg:` classes so the layout switches between md
+     and lg with the actual window width. */
+  const cls = compact
+    ? {
+        column: "max-w-[720px] mx-auto px-6 py-6 transition-[max-width,margin] duration-200 flex-1 min-w-0",
+        heroSection: "mt-7 flex gap-6",
+        cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px]",
+        title: "text-white font-bold tracking-[-0.015em] leading-[1.05] text-[32px]",
+        lyricsAside: "hidden",
+      }
+    : {
+        column: "max-w-[720px] lg:max-w-[960px] mx-auto px-6 lg:px-10 py-6 lg:py-8 transition-[max-width,margin] duration-200 flex-1 min-w-0",
+        heroSection: "mt-7 flex gap-6 lg:gap-8",
+        cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px] lg:w-[280px] lg:h-[280px]",
+        title: "text-white font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]",
+        lyricsAside: "hidden lg:flex flex-col flex-shrink-0 w-[360px] sticky top-0 self-start h-screen py-8 pr-10 pl-2",
+      };
   const { toast } = useToast();
   const handleCopyShareLink = async () => {
     const url = typeof window !== "undefined" ? `${window.location.origin}/album/${album.id}` : `/album/${album.id}`;
@@ -162,13 +194,13 @@ export function DesktopAlbumView({
   return (
     <div className="flex gap-6 w-full" data-testid="desktop-album-view">
       {/* Primary column. Max-width matches the prior AlbumDetailDesktop
-          shell — 960px keeps the hero artwork at 280px without stretching
-          the description block past a comfortable reading measure. */}
+          shell — 960px at lg keeps the hero artwork at 280px without
+          stretching the description block past a comfortable reading
+          measure. At md (real tablets in portrait, 768–1023) we drop to
+          720px max + tighter horizontal padding so the hero and
+          tracklist still feel intentional rather than stretched. */}
       <div
-        className={[
-          "max-w-[960px] mx-auto px-10 py-8 transition-[max-width,margin] duration-200 flex-1 min-w-0",
-          showLyrics ? "mx-0 ml-auto" : "",
-        ].join(" ")}
+        className={[cls.column, showLyrics ? "mx-0 ml-auto" : ""].join(" ")}
       >
         {/* Breadcrumb */}
         <nav
@@ -196,13 +228,13 @@ export function DesktopAlbumView({
           </span>
         </nav>
 
-        {/* Hero */}
-        <section className="mt-7 flex gap-8" data-testid="album-hero">
+        {/* Hero. Cover shrinks to 220px at md (portrait tablets) so the
+            artist/title block keeps a comfortable reading measure next
+            to it; at lg we restore the full 280px Apple-Music density. */}
+        <section className={cls.heroSection} data-testid="album-hero">
           <div
-            className="rounded-2xl overflow-hidden flex-shrink-0"
+            className={cls.cover}
             style={{
-              width: 280,
-              height: 280,
               boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
             }}
           >
@@ -235,8 +267,7 @@ export function DesktopAlbumView({
             )}
 
             <h1
-              className="text-white font-bold tracking-[-0.015em] leading-[1.05]"
-              style={{ fontSize: 40 }}
+              className={cls.title}
               data-testid="album-title"
             >
               {album.title}
@@ -448,7 +479,7 @@ export function DesktopAlbumView({
           scrollbars. */}
       {showLyrics && (
         <aside
-          className="hidden lg:flex flex-col flex-shrink-0 w-[360px] sticky top-0 self-start h-screen py-8 pr-10 pl-2"
+          className={cls.lyricsAside}
           aria-label="Lyrics"
           data-testid="panel-lyrics"
         >

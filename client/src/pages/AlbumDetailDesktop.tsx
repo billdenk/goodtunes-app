@@ -68,8 +68,12 @@ type ApiAlbumPhoto = {
 };
 
 /**
- * Desktop fan-facing Preview & Purchase shell. Rendered by `/album/:id`
- * at viewports ≥1024px (mobile branch handled by AlbumDetail.tsx).
+ * Fan-facing Preview & Purchase shell — sidebar + hero + tracklist
+ * layout. Rendered by `/album/:id` at viewports ≥768px (the mobile
+ * branch handled by AlbumDetail.tsx covers <768px). DesktopAlbumView
+ * itself reflows between md (768–1023, real portrait tablets) and lg
+ * (≥1024, true desktop): smaller cover and title at md, lyrics side
+ * panel mounted only at lg where its 360px width still leaves room.
  *
  * This page composes:
  *   • AlbumDesktopSidebar          (left nav)

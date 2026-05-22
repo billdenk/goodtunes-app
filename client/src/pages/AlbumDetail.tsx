@@ -74,13 +74,21 @@ import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
 
 /**
  * Fan-facing album route. Switches between the Apple-Music-style mobile
- * shell (`AlbumDetailMobile`, the original surface) and the desktop
- * Preview & Purchase shell (`AlbumDetailDesktop`, graduated from the
- * mockup sandbox) at the 1024px breakpoint. Both branches consume the
- * same `/api/albums/:id` cache so there's no double fetch on resize.
+ * shell (`AlbumDetailMobile`, the original surface) and the
+ * sidebar + hero + tracklist shell (`AlbumDetailDesktop`, graduated
+ * from the mockup sandbox) at the 768px breakpoint.
+ *
+ * The breakpoint sits at 768 — not 1024 — so real tablets in portrait
+ * (iPad mini 744 ≈, iPad 810, iPad Pro 11" 834) get the desktop-style
+ * surface rather than the phone column stretched across an 800px wide
+ * screen. DesktopAlbumView itself reflows internally between md
+ * (768–1023) and lg (≥1024): tighter padding, smaller cover, smaller
+ * title at md; lyrics side panel only mounts at lg where it fits.
+ * Both branches consume the same `/api/albums/:id` cache so there's no
+ * double fetch on resize.
  */
 export function AlbumDetail() {
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   if (isDesktop) return <AlbumDetailDesktop />;
   return <AlbumDetailMobile />;
 }

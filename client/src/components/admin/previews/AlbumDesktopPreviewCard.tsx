@@ -4,17 +4,20 @@ import { TabletBezel } from "./TabletBezel";
 import type { AlbumPreviewAlbum } from "./AlbumPreviewCard";
 
 /**
- * Admin-side tablet preview of the fan-facing desktop album page.
+ * Admin-side tablet preview of the fan-facing album page.
  * Wraps the shared `DesktopAlbumView` primitive inside a landscape
- * `TabletBezel` so the editor sees the same thing fans see at
- * ≥1024px — pixel-for-pixel, in a believable device frame.
+ * `TabletBezel` so the editor sees the same thing fans see on a real
+ * iPad — pixel-for-pixel, in a believable device frame.
  *
- * Why a transform-scale and not a media query? `DesktopAlbumView`'s
- * hero is sized for 1024px+ (280px cover + flexed text + 40px title).
- * Reflowing it for a smaller width would require parallel responsive
- * styles AND would still NOT show editors the real desktop layout.
- * Scaling preserves intent and stays consistent with `PhoneBezel`'s
- * approach for the mobile preview.
+ * Why a transform-scale and not a media query? `DesktopAlbumView` has
+ * a real md layout (220px cover, 32px title, tighter padding) that
+ * fans hit on iPads at 768–1023px. We render it at an 810-wide
+ * virtual canvas (a typical portrait-iPad width) and scale to fit the
+ * bezel. To make sure the *md* layout actually triggers — Tailwind
+ * `lg:` breakpoints are viewport-based, not parent-width-based, so a
+ * desktop monitor would otherwise always pick the lg styles — we pass
+ * `compact` so DesktopAlbumView force-renders its md sizing
+ * regardless of the host viewport.
  *
  * Interactivity is suppressed (`pointer-events-none`) — this is a
  * preview, not a live surface. Editors interact with the form on the
@@ -26,12 +29,13 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
   // (e.g. an admin "preview Videos tab" affordance) plug in easily.
   const [tab, setTab] = useState<DesktopAlbumTab>("music");
 
-  // TabletBezel inner display is 676×501. Render the desktop view at
-  // a 1024-wide virtual canvas and scale to fit. The scaled height
-  // (~768 * 0.66 ≈ 506) is clipped by the bezel's overflow-hidden so
-  // the editor sees the above-the-fold of the real fan layout — same
-  // contract as the PhoneBezel, which also scrolls/clips internally.
-  const VIRTUAL_W = 1024;
+  // TabletBezel inner display is 676×501. Render the album view at an
+  // 810-wide virtual canvas (representative portrait-iPad width) and
+  // scale to fit. The scaled height is clipped by the bezel's
+  // overflow-hidden so the editor sees the above-the-fold of the real
+  // fan layout — same contract as the PhoneBezel, which also
+  // scrolls/clips internally.
+  const VIRTUAL_W = 810;
   const SCALE = 676 / VIRTUAL_W;
 
   // Footer caption — mirrors AlbumPreviewCard's footer so the two
@@ -107,6 +111,7 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
           onTabChange={setTab}
           currentSongId={null}
           isPlaying={false}
+          compact
         />
       </div>
     </TabletBezel>
