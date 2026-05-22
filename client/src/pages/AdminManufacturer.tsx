@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Trash2, X, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Trash2, X, Plus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -60,6 +60,38 @@ export function AdminManufacturer() {
       toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
   });
 
+  const rescrape = useMutation({
+    mutationFn: async () => {
+      if (!m?.websiteUrl) throw new Error("No website saved");
+      const r = await apiRequest("POST", `/api/admin/manufacturers/scrape`, { url: m.websiteUrl });
+      const scraped = (await r.json()) as {
+        name: string | null;
+        logoUrl: string | null;
+        coverUrl: string | null;
+        bio: string | null;
+        location: string | null;
+      };
+      const patch: Partial<Manufacturer> = {};
+      if (scraped.name) patch.name = scraped.name;
+      if (scraped.logoUrl) patch.logoUrl = scraped.logoUrl;
+      if (scraped.coverUrl) patch.coverUrl = scraped.coverUrl;
+      if (scraped.bio) patch.bio = scraped.bio;
+      if (scraped.location) patch.location = scraped.location;
+      if (Object.keys(patch).length === 0) return null;
+      const r2 = await apiRequest("PUT", `/api/admin/manufacturers/${id}`, patch);
+      return (await r2.json()) as Manufacturer;
+    },
+    onSuccess: (row) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/manufacturers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manufacturers", id] });
+      toast({
+        title: row ? "Refreshed from website" : "Nothing new to update",
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't re-scrape", description: e?.message, variant: "destructive" }),
+  });
+
   const remove = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", `/api/admin/manufacturers/${id}`);
@@ -115,15 +147,27 @@ export function AdminManufacturer() {
           <h1 className="text-[26px] font-bold text-slate-900 truncate" data-testid="heading-manufacturer-name">
             {m.name}
           </h1>
-          <Button
-            variant="ghost"
-            onClick={() => setDeleteOpen(true)}
-            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-            data-testid="button-delete-manufacturer"
-          >
-            <Trash2 className="w-4 h-4 mr-1.5" />
-            Delete
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              onClick={() => rescrape.mutate()}
+              disabled={!m.websiteUrl || rescrape.isPending}
+              title={m.websiteUrl ? "Re-fetch logo, cover, and bio from the website" : "Add a website URL first"}
+              data-testid="button-rescrape-manufacturer"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1.5 ${rescrape.isPending ? "animate-spin" : ""}`} />
+              {rescrape.isPending ? "Refreshing…" : "Refresh from website"}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteOpen(true)}
+              className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+              data-testid="button-delete-manufacturer"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Delete
+            </Button>
+          </div>
         </div>
 
         <PartnerProfileForm
