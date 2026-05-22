@@ -278,7 +278,13 @@ export function registerPayoutRoutes(app: Express) {
 
   // ─── Settings ────────────────────────────────────────────────────
   app.get("/api/admin/payout-settings", requireAdmin, async (_req, res) => {
-    res.json(await getPayoutSettings());
+    try {
+      res.json(await getPayoutSettings());
+    } catch (err: any) {
+      const message = err?.message || "Failed to load payout settings";
+      console.error("[GET /api/admin/payout-settings]", message, err);
+      res.status(500).json({ message });
+    }
   });
   // Task #119 — write gating for platform pricing. The cert + Shopify
   // fee are platform-wide cost knobs; only super_admin can change them.

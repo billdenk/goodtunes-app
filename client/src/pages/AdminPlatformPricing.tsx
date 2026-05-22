@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import type { PayoutSettings } from "@shared/schema";
 
 type RoleInfo = { role: string; roleScopeId: string | null };
@@ -36,9 +37,17 @@ export function AdminPlatformPricing() {
     queryKey: ["/api/me/role"],
     enabled: !!user?.isAdmin,
   });
-  const { data: settings, isLoading: settingsLoading } = useQuery<PayoutSettings>({
+  const {
+    data: settings,
+    isLoading: settingsLoading,
+    isError: settingsIsError,
+    error: settingsError,
+    refetch: refetchSettings,
+    isFetching: settingsIsFetching,
+  } = useQuery<PayoutSettings>({
     queryKey: ["/api/admin/payout-settings"],
     enabled: !!user?.isAdmin,
+    retry: false,
   });
 
   const [certStr, setCertStr] = useState("");
@@ -110,8 +119,19 @@ export function AdminPlatformPricing() {
           subtitle="Platform-wide costs that drive the artist profit readout on every Sell panel."
         />
 
-        {settingsLoading || !settings ? (
+        {settingsLoading ? (
           <div className="py-10 text-slate-500 text-sm">Loading…</div>
+        ) : settingsIsError ? (
+          <ErrorState
+            error={settingsError}
+            onRetry={() => refetchSettings()}
+            title="Couldn't load platform pricing"
+            testId="admin-platform-pricing-error"
+          />
+        ) : !settings ? (
+          <div className="py-10 text-slate-500 text-sm">
+            {settingsIsFetching ? "Loading…" : "No pricing settings available."}
+          </div>
         ) : (
           <div className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-5">
             <Field
