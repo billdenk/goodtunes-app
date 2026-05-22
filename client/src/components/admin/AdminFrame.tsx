@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { isValidElement, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -17,6 +17,8 @@ import {
   LayoutDashboard,
   PanelRightClose,
   PanelRightOpen,
+  Smartphone,
+  Tablet,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
@@ -25,6 +27,21 @@ import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
+const PREVIEW_DEVICE_KEY = "gt:admin-preview-device";
+
+export type PreviewDevice = "phone" | "tablet";
+
+/**
+ * Multi-device preview content. Pages that only have a phone preview
+ * can keep passing a plain ReactNode to `preview` — the frame infers
+ * "phone-only" and hides the device toggle. Pages with both variants
+ * (today: AdminAlbum) pass `{ phone, tablet }` and get a segmented
+ * toggle in the preview pane header.
+ */
+export interface PreviewDevices {
+  phone: ReactNode;
+  tablet?: ReactNode;
+}
 
 /**
  * Shared chrome for the new admin: top bar with GoodTunes wordmark +
@@ -63,7 +80,7 @@ export function AdminFrame({
    * When omitted (list pages, loading/error states) the pane is hidden
    * entirely so the editor gets the full main column.
    */
-  preview?: React.ReactNode;
+  preview?: ReactNode | PreviewDevices;
   /**
    * Inner content cap. List/grid pages (Albums, People, Gear, Vendors,
    * Reports, Jobs) want the full 1440px main-column from Task #169 so
@@ -113,6 +130,47 @@ export function AdminFrame({
       window.localStorage.setItem(PREVIEW_OPEN_KEY, previewOpen ? "1" : "0");
     } catch {}
   }, [previewOpen]);
+
+  // Selected device for the preview pane. Persisted alongside the
+  // open/closed state so reopening (or navigating between admin pages)
+  // restores the last-chosen device. Only meaningful when the page
+  // supplies a tablet variant — phone-only pages ignore this state.
+  const [previewDevice, setPreviewDevice] = useState<PreviewDevice>(() => {
+    if (typeof window === "undefined") return "phone";
+    try {
+      const raw = window.localStorage.getItem(PREVIEW_DEVICE_KEY);
+      return raw === "tablet" ? "tablet" : "phone";
+    } catch {
+      return "phone";
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PREVIEW_DEVICE_KEY, previewDevice);
+    } catch {}
+  }, [previewDevice]);
+
+  // Normalize the `preview` prop. Legacy callers pass a single ReactNode
+  // (treated as the phone variant); new callers can pass
+  // `{ phone, tablet }` to opt into the device toggle.
+  const isDevicesPreview =
+    !!preview &&
+    typeof preview === "object" &&
+    !isValidElement(preview) &&
+    "phone" in (preview as object);
+  const devicesPreview: PreviewDevices | null = isDevicesPreview
+    ? (preview as PreviewDevices)
+    : preview
+      ? { phone: preview as ReactNode }
+      : null;
+  const hasTabletVariant = !!devicesPreview?.tablet;
+  const effectiveDevice: PreviewDevice =
+    hasTabletVariant && previewDevice === "tablet" ? "tablet" : "phone";
+  const previewNode = devicesPreview
+    ? effectiveDevice === "tablet"
+      ? devicesPreview.tablet
+      : devicesPreview.phone
+    : null;
 
   // The sidebar count mirrors what the Albums index actually shows —
   // imported streaming catalog (`!isGoodTunesRelease`) is hidden from
@@ -323,14 +381,19 @@ export function AdminFrame({
             preview content. Toggle persists in localStorage. Collapsed
             state leaves a 44px rail with the toggle so it's always one
             tap to bring the preview back. */}
-        {preview && (
+        {devicesPreview && (
           <aside
             className={[
               "border-l border-slate-200 bg-white flex-shrink-0 transition-[width] duration-200 ease-out hidden lg:flex flex-col",
-              previewOpen ? "w-[440px]" : "w-11",
+              previewOpen
+                ? effectiveDevice === "tablet"
+                  ? "w-[760px]"
+                  : "w-[440px]"
+                : "w-11",
             ].join(" ")}
             data-testid="admin-preview-pane"
             data-open={previewOpen ? "true" : "false"}
+            data-device={effectiveDevice}
           >
             <div
               className={[
@@ -354,9 +417,52 @@ export function AdminFrame({
                 )}
               </button>
               {previewOpen && (
-                <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                  Preview
-                </span>
+                <div className="flex items-center gap-2">
+                  {hasTabletVariant && (
+                    <div
+                      className="flex items-center gap-0.5 rounded-full bg-slate-100 p-0.5"
+                      role="group"
+                      aria-label="Preview device"
+                      data-testid="preview-device-toggle"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDevice("phone")}
+                        className={[
+                          "w-7 h-7 rounded-full flex items-center justify-center transition-colors",
+                          effectiveDevice === "phone"
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-500 hover:text-slate-900",
+                        ].join(" ")}
+                        title="Phone preview"
+                        aria-label="Phone preview"
+                        aria-pressed={effectiveDevice === "phone"}
+                        data-testid="button-preview-device-phone"
+                      >
+                        <Smartphone className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDevice("tablet")}
+                        className={[
+                          "w-7 h-7 rounded-full flex items-center justify-center transition-colors",
+                          effectiveDevice === "tablet"
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-500 hover:text-slate-900",
+                        ].join(" ")}
+                        title="Tablet preview"
+                        aria-label="Tablet preview"
+                        aria-pressed={effectiveDevice === "tablet"}
+                        data-testid="button-preview-device-tablet"
+                      >
+                        <Tablet className="w-4 h-4 rotate-90" />
+                      </button>
+                    </div>
+                  )}
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Preview
+                  </span>
+                </div>
               )}
             </div>
             {previewOpen && (
@@ -364,7 +470,7 @@ export function AdminFrame({
                 className="flex-1 overflow-y-auto p-6"
                 data-testid="admin-preview-content"
               >
-                {preview}
+                {previewNode}
               </div>
             )}
           </aside>

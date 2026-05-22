@@ -1,19 +1,19 @@
 import { useState } from "react";
 import { DesktopAlbumView, type DesktopAlbumTab } from "@/components/ui/DesktopAlbumView";
+import { TabletBezel } from "./TabletBezel";
 import type { AlbumPreviewAlbum } from "./AlbumPreviewCard";
 
 /**
- * Admin-side preview of the fan-facing desktop album page. Wraps the
- * shared `DesktopAlbumView` primitive at full size, then transforms it
- * down to fit the AdminFrame preview column (~440px wide). The result
- * is a true scaled-down view of what fans see at ≥1024px — instead of
- * a hand-built mock that can drift from the real page.
+ * Admin-side tablet preview of the fan-facing desktop album page.
+ * Wraps the shared `DesktopAlbumView` primitive inside a landscape
+ * `TabletBezel` so the editor sees the same thing fans see at
+ * ≥1024px — pixel-for-pixel, in a believable device frame.
  *
  * Why a transform-scale and not a media query? `DesktopAlbumView`'s
  * hero is sized for 1024px+ (280px cover + flexed text + 40px title).
- * Reflowing it for 440px would require parallel responsive styles and
- * would still NOT show editors the desktop layout. Scaling preserves
- * intent and stays consistent with `PhoneBezel`, which uses the same
+ * Reflowing it for a smaller width would require parallel responsive
+ * styles AND would still NOT show editors the real desktop layout.
+ * Scaling preserves intent and stays consistent with `PhoneBezel`'s
  * approach for the mobile preview.
  *
  * Interactivity is suppressed (`pointer-events-none`) — this is a
@@ -26,35 +26,39 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
   // (e.g. an admin "preview Videos tab" affordance) plug in easily.
   const [tab, setTab] = useState<DesktopAlbumTab>("music");
 
-  // Render at a fixed virtual width then scale to the preview pane.
-  // 1040px gives the hero its full 280-cover + 640-text breathing room
-  // and divides cleanly into the AdminFrame preview column at scale
-  // ~0.42 (≈437px on screen). Height is left to natural content.
-  const VIRTUAL_W = 1040;
-  const SCALE = 0.42;
+  // TabletBezel inner display is 676×501. Render the desktop view at
+  // a 1024-wide virtual canvas and scale to fit. The scaled height
+  // (~768 * 0.66 ≈ 506) is clipped by the bezel's overflow-hidden so
+  // the editor sees the above-the-fold of the real fan layout — same
+  // contract as the PhoneBezel, which also scrolls/clips internally.
+  const VIRTUAL_W = 1024;
+  const SCALE = 676 / VIRTUAL_W;
+
+  // Footer caption — mirrors AlbumPreviewCard's footer so the two
+  // previews read as siblings.
+  const sorted = [...(album.songs ?? [])].sort(
+    (a, b) => a.trackNumber - b.trackNumber,
+  );
+  const totalSeconds = sorted.reduce((sum, s) => sum + (s.duration || 0), 0);
+  const totalMinutes = Math.round(totalSeconds / 60);
+  const trackCount = sorted.length;
 
   return (
-    <div
-      className="w-full overflow-hidden rounded-2xl"
-      style={{
-        background: "#00062B",
-        boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
-        // Outer height tracks the scaled content so the preview pane
-        // doesn't reserve dead space. Cap so absurdly-long descriptions
-        // don't push the preview off-screen.
-        maxHeight: "min(72vh, 760px)",
-      }}
-      data-testid="preview-album-desktop"
-      aria-label={`Desktop preview of ${album.title}`}
+    <TabletBezel
+      testId="preview-album-desktop"
+      footer={
+        <>
+          Tablet preview of the in-app AlbumDetail — {trackCount}{" "}
+          {trackCount === 1 ? "track" : "tracks"}
+          {totalMinutes > 0 ? ` · ${totalMinutes} min` : ""}.
+        </>
+      }
     >
       <div
         style={{
           width: VIRTUAL_W,
           transform: `scale(${SCALE})`,
           transformOrigin: "top left",
-          // Reserve enough height after the scale so the inner column's
-          // intrinsic height isn't clipped at the top of the preview.
-          height: `${100 / SCALE}%`,
           pointerEvents: "none",
         }}
       >
@@ -94,7 +98,9 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
           photos={[]}
           // Preview always shows the owned (no Buy CTA, no locked rows)
           // variant — that's the surface fans land on after purchase,
-          // which is what editors typically want to QA against.
+          // which is what editors typically want to QA against. Also
+          // ensures the brand-blue Play pill renders instead of the
+          // rose preview pill.
           isOwned
           canPlay
           tab={tab}
@@ -103,6 +109,6 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
           isPlaying={false}
         />
       </div>
-    </div>
+    </TabletBezel>
   );
 }

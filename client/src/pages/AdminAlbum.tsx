@@ -389,12 +389,10 @@ export function AdminAlbum() {
     <AdminFrame
       active="albums"
       contentWidth="narrow"
-      preview={
-        <div className="space-y-4">
-          <AlbumPreviewCard album={album} />
-          <AlbumDesktopPreviewCard album={album} />
-        </div>
-      }
+      preview={{
+        phone: <AlbumPreviewCard album={album} />,
+        tablet: <AlbumDesktopPreviewCard album={album} />,
+      }}
     >
       <div className="space-y-6">
         {/* BREADCRUMB */}
