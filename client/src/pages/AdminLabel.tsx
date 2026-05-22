@@ -14,6 +14,7 @@ import {
   MapPin,
   Disc,
   Instagram,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -126,6 +127,32 @@ export function AdminLabel() {
   const { data: label, isLoading, error } = useQuery<Label>({
     queryKey: ["/api/labels", labelId],
     enabled: !!user?.isAdmin && !!labelId,
+  });
+
+  const rescrape = useMutation({
+    mutationFn: async () => {
+      if (!label?.websiteUrl) throw new Error("No website saved");
+      const r = await apiRequest("POST", `/api/admin/labels/scrape`, { url: label.websiteUrl });
+      const scraped = (await r.json()) as {
+        name: string | null;
+        logoUrl: string | null;
+        bio: string | null;
+      };
+      const patch: Partial<Label> = {};
+      if (scraped.name) patch.name = scraped.name;
+      if (scraped.logoUrl) patch.logoUrl = scraped.logoUrl;
+      if (scraped.bio) patch.bio = scraped.bio;
+      if (Object.keys(patch).length === 0) return null;
+      const r2 = await apiRequest("PUT", `/api/admin/labels/${labelId}`, patch);
+      return (await r2.json()) as Label;
+    },
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ["/api/labels", labelId] });
+      qc.invalidateQueries({ queryKey: ["/api/labels"] });
+      toast({ title: row ? "Refreshed from website" : "Nothing new to update" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't re-scrape", description: e?.message, variant: "destructive" }),
   });
 
   const { data: allAlbums = [] } = useQuery<AlbumLite[]>({
@@ -318,19 +345,35 @@ export function AdminLabel() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={deleteLabel.isPending}
-            aria-label="Delete label"
-            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
-            data-testid="button-delete-label"
-          >
-            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-              Delete
-            </span>
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => rescrape.mutate()}
+              disabled={!label.websiteUrl || rescrape.isPending}
+              aria-label="Refresh from website"
+              title={label.websiteUrl ? "Re-fetch logo and bio from the website" : "Add a website URL first"}
+              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+              data-testid="button-rescrape-label"
+            >
+              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                {rescrape.isPending ? "Refreshing…" : "Refresh from website"}
+              </span>
+              <RefreshCw className={`w-3.5 h-3.5 ${rescrape.isPending ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={deleteLabel.isPending}
+              aria-label="Delete label"
+              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+              data-testid="button-delete-label"
+            >
+              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                Delete
+              </span>
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {tab === "overview" && <OverviewPanel label={label} />}
