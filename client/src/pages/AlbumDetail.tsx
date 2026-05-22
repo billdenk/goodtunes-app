@@ -3000,77 +3000,71 @@ function VendorSheet({
           className="sticky top-0 z-20 flex items-center justify-between px-3 pb-2"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
         >
-          <button
-            type="button"
+          {/* Bumped from raw 36px circles to 44px IconButton (dimmed) so
+              the chrome matches the rest of the player shell (Artist /
+              Album hero use the same primitive at the same size). 44px
+              is the Apple HIG floor and the design-system rule. */}
+          <IconButton
+            variant="dimmed"
+            label="Back"
             onClick={onClose}
-            aria-label="Back"
-            className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
             data-testid="button-vendor-close"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M15 6l-6 6 6 6" />
             </svg>
-          </button>
+          </IconButton>
           <div className="flex items-center gap-2">
             {/* Bookmark — saves the vendor to the user's bookmark list
                 (localStorage). Filled when active. */}
-            <button
-              type="button"
-              onClick={onToggleBookmark}
-              aria-label={isBookmarked ? "Remove bookmark" : "Bookmark vendor"}
+            <IconButton
+              variant="dimmed"
+              label={isBookmarked ? "Remove bookmark" : "Bookmark vendor"}
               aria-pressed={isBookmarked}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
+              onClick={onToggleBookmark}
               data-testid="button-vendor-bookmark"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill={isBookmarked ? "#4AFFCA" : "none"} stroke={isBookmarked ? "#4AFFCA" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill={isBookmarked ? "#4AFFCA" : "none"} stroke={isBookmarked ? "#4AFFCA" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
               </svg>
-            </button>
-            <button
-              type="button"
+            </IconButton>
+            <IconButton
+              variant="dimmed"
+              label="Share"
               onClick={handleShare}
-              aria-label="Share"
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
               data-testid="button-vendor-share"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 3v12" />
                 <path d="M7 8l5-5 5 5" />
                 <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
               </svg>
-            </button>
+            </IconButton>
             {/* Website — opens in-app browser to the vendor homepage.
                 Replaces the old "Visit website" pill so we don't compete
                 with the tabs below for vertical space. */}
-            <button
-              type="button"
+            <IconButton
+              variant="dimmed"
+              label={`Visit ${vendor.name} website`}
               onClick={() => onOpenInAppBrowser({ url: websiteUrl, title: vendor.name, logoUrl: vendor.logoUrl })}
-              aria-label={`Visit ${vendor.name} website`}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
               data-testid="button-vendor-website"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="9" />
                 <path d="M3 12h18" />
                 <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
               </svg>
-            </button>
-            <button
-              type="button"
+            </IconButton>
+            <IconButton
+              variant="dimmed"
+              label={`Message ${vendor.name}`}
               onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
-              aria-label={`Message ${vendor.name}`}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-              style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)" }}
               data-testid="button-vendor-chat"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
-            </button>
+            </IconButton>
           </div>
         </div>
 
@@ -3078,10 +3072,10 @@ function VendorSheet({
             Pulled up under the sticky bar with a negative margin so the bar floats
             over it. The pull-up MUST match the toolbar's real height, which
             includes the device safe-area inset (`env(safe-area-inset-top) + 12px`
-            padding-top + 36px button + 8px padding-bottom = inset + 56px). A
-            hardcoded 60px left a visible navy strip above the hero on notched
+            padding-top + 44px IconButton + 8px padding-bottom = inset + 64px). A
+            hardcoded constant left a visible navy strip above the hero on notched
             iPhones where the inset is ~50px. */}
-        <div className="relative w-full" style={{ aspectRatio: "1 / 1.05", marginTop: "calc((env(safe-area-inset-top, 0px) + 56px) * -1)" }}>
+        <div className="relative w-full" style={{ aspectRatio: "1 / 1.05", marginTop: "calc((env(safe-area-inset-top, 0px) + 64px) * -1)" }}>
           {vendor.coverUrl ? (
             <img src={vendor.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
           ) : (

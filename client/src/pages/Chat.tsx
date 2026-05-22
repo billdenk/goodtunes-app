@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
-import { BottomNav } from "@/components/BottomNav";
+import { BottomNav, NAV_CLEARANCE } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   getMessages,
   getThread,
@@ -79,7 +80,10 @@ export function Chat() {
   const [, navigate] = useLocation();
 
   return (
-    <main className="relative min-h-screen w-full max-w-[390px] mx-auto pb-[110px]">
+    <main
+      className="relative min-h-screen w-full max-w-[390px] mx-auto"
+      style={{ paddingBottom: NAV_CLEARANCE }}
+    >
       <header className="relative z-10 flex items-end px-5 pt-14 pb-3">
         <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Chat</h1>
       </header>
@@ -254,19 +258,17 @@ export function ChatThreadPage() {
   if (!thread) {
     return (
       <main className="relative min-h-screen w-full max-w-[390px] mx-auto flex flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 px-3 py-3" style={{ background: "rgba(0,6,43,0.92)", backdropFilter: "blur(24px) saturate(180%)" }}>
-          <button
-            type="button"
+        <header className="sticky top-0 z-30 flex items-center gap-3 px-3 py-2.5" style={{ background: "rgba(0,6,43,0.92)", backdropFilter: "blur(24px) saturate(180%)" }}>
+          <IconButton
+            variant="glass"
+            label="Back"
             onClick={() => navigate("/chat")}
-            aria-label="Back"
-            className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-            style={{ background: "rgba(255,255,255,0.10)" }}
             data-testid="button-chat-back"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M15 6l-6 6 6 6" />
             </svg>
-          </button>
+          </IconButton>
           <h1 className="text-white text-[17px] font-semibold">Conversation</h1>
         </header>
         <div className="flex-1 flex items-center justify-center px-8 text-center">
@@ -303,18 +305,16 @@ export function ChatThreadPage() {
         className="flex-shrink-0 flex items-center gap-3 px-3 py-2.5 border-b border-white/8"
         style={{ background: "rgba(0,6,43,0.92)", backdropFilter: "blur(24px) saturate(180%)" }}
       >
-        <button
-          type="button"
+        <IconButton
+          variant="glass"
+          label="Back"
           onClick={() => navigate("/chat")}
-          aria-label="Back"
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0"
-          style={{ background: "rgba(255,255,255,0.10)" }}
           data-testid="button-chat-back"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M15 6l-6 6 6 6" />
           </svg>
-        </button>
+        </IconButton>
         <VendorAvatar logoUrl={thread.vendorLogoUrl} name={thread.vendorName} size={36} />
         <div className="flex-1 min-w-0">
           <p className="text-white text-[15px] font-semibold truncate leading-tight">{thread.vendorName}</p>

@@ -24,6 +24,10 @@ export function useScrollHideNav(ref: RefObject<HTMLElement>) {
     if (!el) return;
     let lastY = el.scrollTop;
     let ticking = false;
+    // Wider hysteresis (12px each way) than the original 6px so tiny
+    // rubber-band wobbles and trackpad/inertia jitters don't flip the
+    // nav between hidden/visible mid-scroll. Apple Music uses ~10–14px
+    // for the same reason.
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
@@ -31,8 +35,8 @@ export function useScrollHideNav(ref: RefObject<HTMLElement>) {
         const y = el.scrollTop;
         const dy = y - lastY;
         if (y < 80) setHidden(false);
-        else if (dy > 6) setHidden(true);
-        else if (dy < -6) setHidden(false);
+        else if (dy > 12) setHidden(true);
+        else if (dy < -12) setHidden(false);
         lastY = y;
         ticking = false;
       });

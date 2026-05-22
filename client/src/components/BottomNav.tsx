@@ -4,6 +4,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
 
+/**
+ * Bottom padding every customer-shell scroll container must reserve so
+ * content never slides under the floating nav + mini-player stack.
+ *
+ * The nav itself sits at `bottom-3` (12px), is ~64px tall (py-2 + pill),
+ * and the mini-player floats ~79px above the bar. Together they occupy
+ * ~155px of the viewport bottom — we round to 170px for a safe gutter
+ * plus haptic breathing room on devices with a chunky home indicator.
+ *
+ * Use this constant (Tailwind: `pb-[170px]` or inline `paddingBottom: NAV_CLEARANCE`)
+ * on the *scroll container*, not the page. Pages whose only scroller IS
+ * the page can pad their `<main>` instead.
+ */
+export const NAV_CLEARANCE = 170;
+
 const NavItem = ({
   label,
   icon,

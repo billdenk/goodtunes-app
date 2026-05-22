@@ -237,7 +237,7 @@ export function ArtistDetail() {
           variant="dimmed"
           label="Back to collection"
           onClick={() => navigate("/collection")}
-          className="absolute top-12 left-4 z-50"
+          className="absolute top-14 left-4 z-50"
           data-testid="button-back-artist"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -251,7 +251,7 @@ export function ArtistDetail() {
           label={isFav ? "Unfavorite artist" : "Favorite artist"}
           aria-pressed={isFav}
           onClick={() => favArtists.toggle(artistName)}
-          className="absolute top-12 right-4 z-50"
+          className="absolute top-14 right-4 z-50"
           data-testid="button-favorite-artist"
         >
           <svg viewBox="0 0 24 24" fill={isFav ? "#FF5470" : "none"} stroke={isFav ? "#FF5470" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
