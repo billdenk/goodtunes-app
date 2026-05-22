@@ -5,3 +5,18 @@ server/public
 vite.config.ts.*
 *.tar.gz
 artifacts/mockup-sandbox/src/.generated/
+
+# Capacitor native projects — scaffolded on a Mac via `npx cap add ios/android`.
+# Build artifacts inside them are ignored; the project files themselves are
+# committed (Capacitor convention) once they exist.
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/release/
+*.keystore
+*.jks
+
