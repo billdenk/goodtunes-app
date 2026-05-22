@@ -63,13 +63,36 @@ function rangeBounds(key: RangeKey): { from: Date; to: Date } {
 function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
-function fmtUsd(cents: number): string {
+// Em-dash placeholder is used everywhere a numeric tile has no value
+// yet (loading, or — critically — when the KPIs endpoint returns a
+// partial response in prod). See Task #153: a single undefined field
+// used to crash the whole dashboard via `.toLocaleString` on undefined.
+const DASH = "—";
+// Hardened JSON fetcher for the admin dashboard's parameterised
+// endpoints. The default queryClient fetcher joins queryKey segments
+// with "/", which would mangle the `?from=…&to=…` query string, so the
+// dashboard has to use a custom queryFn. Task #153: the previous version
+// silently `.json()`'d non-2xx responses, so a 401/500/HTML reply in
+// prod became a truthy-but-empty object that crashed render via
+// `undefined.toLocaleString`. We now throw on non-ok so React Query
+// surfaces the page-level error boundary instead.
+async function fetchAdminJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    const text = (await res.text().catch(() => "")) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return (await res.json()) as T;
+}
+function fmtUsd(cents: number | null | undefined): string {
+  if (typeof cents !== "number" || !Number.isFinite(cents)) return DASH;
   if (Math.abs(cents) >= 100_000_00) {
     return `$${(cents / 100_000).toFixed(1)}k`;
   }
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-function fmtNum(n: number): string {
+function fmtNum(n: number | null | undefined): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return DASH;
   return n.toLocaleString("en-US");
 }
 function fmtRel(date: Date): string {
@@ -170,8 +193,7 @@ export function AdminDashboard() {
 
   const { data: kpis, isLoading: kpisLoading } = useQuery<KpisData>({
     queryKey: ["/api/admin/reports/kpis", qs],
-    queryFn: () =>
-      fetch(`/api/admin/reports/kpis?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchAdminJson<KpisData>(`/api/admin/reports/kpis?${qs}`),
   });
 
   // Second fetch for the prior-period daily series. The KPIs endpoint
@@ -180,14 +202,12 @@ export function AdminDashboard() {
   // re-query the same endpoint over the prior window.
   const { data: priorKpis } = useQuery<KpisData>({
     queryKey: ["/api/admin/reports/kpis", priorQs],
-    queryFn: () =>
-      fetch(`/api/admin/reports/kpis?${priorQs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchAdminJson<KpisData>(`/api/admin/reports/kpis?${priorQs}`),
   });
 
   const { data: ops } = useQuery<OpsData>({
     queryKey: ["/api/admin/reports/ops", qs],
-    queryFn: () =>
-      fetch(`/api/admin/reports/ops?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchAdminJson<OpsData>(`/api/admin/reports/ops?${qs}`),
   });
 
   const { data: recentOrders } = useQuery<OrderRow[]>({
@@ -275,11 +295,11 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4" data-testid="dashboard-kpi-grid">
       <KpiTile
         label="Gross sales"
-        value={kpis ? fmtUsd(kpis.gmvCents) : "—"}
+        value={kpis ? fmtUsd(kpis.gmvCents) : DASH}
         prior={prior.gmvCents}
         current={kpis?.gmvCents}
         format={fmtUsd}
-        spark={series.map((s) => s.gmvCents)}
+        spark={series.map((s) => s?.gmvCents ?? 0)}
         color={BLUE}
         loading={loading}
         testId="tile-gmv"
@@ -287,7 +307,7 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
       />
       <KpiTile
         label="Net revenue"
-        value={kpis ? fmtUsd(kpis.netCents) : "—"}
+        value={kpis ? fmtUsd(kpis.netCents) : DASH}
         prior={prior.netCents}
         current={kpis?.netCents}
         format={fmtUsd}
@@ -299,11 +319,11 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
       />
       <KpiTile
         label="Orders"
-        value={kpis ? fmtNum(kpis.orderCount) : "—"}
+        value={kpis ? fmtNum(kpis.orderCount) : DASH}
         prior={prior.orderCount}
         current={kpis?.orderCount}
         format={fmtNum}
-        spark={series.map((s) => s.orders)}
+        spark={series.map((s) => s?.orders ?? 0)}
         color={PURPLE}
         loading={loading}
         testId="tile-orders"
@@ -311,11 +331,11 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
       />
       <KpiTile
         label="New fans"
-        value={kpis ? fmtNum(kpis.newSignups) : "—"}
+        value={kpis ? fmtNum(kpis.newSignups) : DASH}
         prior={prior.newSignups}
         current={kpis?.newSignups}
         format={fmtNum}
-        spark={series.map((s) => s.signups)}
+        spark={series.map((s) => s?.signups ?? 0)}
         color={PINK}
         loading={loading}
         testId="tile-signups"
@@ -323,11 +343,11 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
       />
       <KpiTile
         label="Plays"
-        value={kpis ? fmtNum(kpis.plays ?? 0) : "—"}
+        value={kpis ? fmtNum(kpis.plays) : DASH}
         prior={prior.plays}
         current={kpis?.plays}
         format={fmtNum}
-        spark={series.map((s) => s.plays ?? 0)}
+        spark={series.map((s) => s?.plays ?? 0)}
         color={BLUE}
         loading={loading}
         testId="tile-plays"
@@ -534,10 +554,12 @@ function PrimaryChart({
     return series.map((s, i) => {
       const p = priorSeries[i];
       const key = metric === "gmv" ? "gmvCents" : metric === "orders" ? "orders" : metric === "signups" ? "signups" : "plays";
+      const currentVal = (s as any)?.[key];
+      const priorVal = p ? (p as any)[key] : undefined;
       return {
-        date: s.date,
-        current: (s as any)[key] as number,
-        prior: p ? ((p as any)[key] as number) : null,
+        date: s?.date ?? "",
+        current: typeof currentVal === "number" ? currentVal : 0,
+        prior: typeof priorVal === "number" ? priorVal : null,
       };
     });
   }, [series, priorSeries, metric]);
@@ -594,7 +616,7 @@ function PrimaryChart({
               tickFormatter={(v: number) => (isCurrency ? `$${(v / 100).toFixed(0)}` : `${v}`)}
             />
             <Tooltip
-              formatter={(v: number) => (isCurrency ? fmtUsd(v) : v.toLocaleString())}
+              formatter={(v: number) => (isCurrency ? fmtUsd(v) : fmtNum(v))}
               labelStyle={{ color: "#0f172a" }}
             />
             <Line

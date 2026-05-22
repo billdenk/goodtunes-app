@@ -26,6 +26,19 @@ function dateBucket(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Task #153 — coerce any DB/aggregate value to a finite number, falling
+// back to 0. SQL aggregates come back as strings ("12") or null when
+// the underlying table is empty; without this the dashboard JSON can
+// contain NaN or null and the client crashes on `.toLocaleString`.
+function safeNum(v: unknown): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
 function emptySeries(from: Date, to: Date): Record<string, number> {
   const out: Record<string, number> = {};
   const cur = new Date(from); cur.setUTCHours(0, 0, 0, 0);
@@ -63,14 +76,14 @@ export async function platformKpis(ctx: AdminReportContext) {
     const signups = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM customer_users WHERE created_at >= ${from} AND created_at <= ${to}`);
     const plays = await db.execute<{ plays: string; listeners: string }>(sql`SELECT COUNT(*) AS plays, COUNT(DISTINCT COALESCE(user_id, session_id)) AS listeners FROM analytics_events WHERE name = 'play_start' AND ts >= ${from} AND ts <= ${to}`);
     return {
-      gmvCents: gmv,
-      netCents: net,
-      orderCount: paid.length,
-      uniqueBuyers: buyers.size,
+      gmvCents: safeNum(gmv),
+      netCents: safeNum(net),
+      orderCount: safeNum(paid.length),
+      uniqueBuyers: safeNum(buyers.size),
       avgOrderCents: paid.length ? Math.round(gmv / paid.length) : 0,
-      newSignups: Number((signups as any).rows?.[0]?.c ?? 0),
-      plays: Number((plays as any).rows?.[0]?.plays ?? 0),
-      uniqueListeners: Number((plays as any).rows?.[0]?.listeners ?? 0),
+      newSignups: safeNum((signups as any).rows?.[0]?.c),
+      plays: safeNum((plays as any).rows?.[0]?.plays),
+      uniqueListeners: safeNum((plays as any).rows?.[0]?.listeners),
     };
   }
 
@@ -144,30 +157,34 @@ export async function platformKpis(ctx: AdminReportContext) {
   const firstPurchaseRow = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM (SELECT customer_id, MIN(created_at) AS first_paid FROM orders WHERE status = 'paid' GROUP BY customer_id) f WHERE f.first_paid >= ${ctx.from} AND f.first_paid <= ${ctx.to}`);
   const firstPurchases = Number((firstPurchaseRow as any).rows?.[0]?.c ?? 0);
 
+  // Task #153 — every series entry must contain every numeric field so
+  // the dashboard never receives `undefined` for a metric value. Even
+  // though emptySeries() pre-fills every day with 0, defensively coerce
+  // each lookup in case future code paths build the dicts differently.
   const series = Object.keys(dailyGmv).sort().map((d) => ({
     date: d,
-    gmvCents: dailyGmv[d],
-    orders: dailyOrders[d],
-    signups: dailySignups[d],
-    plays: dailyPlays[d] ?? 0,
+    gmvCents: safeNum(dailyGmv[d]),
+    orders: safeNum(dailyOrders[d]),
+    signups: safeNum(dailySignups[d]),
+    plays: safeNum(dailyPlays[d]),
   }));
 
   return {
-    gmvCents,
-    netCents,
-    orderCount: paid.length,
-    uniqueBuyers: buyerSet.size,
+    gmvCents: safeNum(gmvCents),
+    netCents: safeNum(netCents),
+    orderCount: safeNum(paid.length),
+    uniqueBuyers: safeNum(buyerSet.size),
     avgOrderCents: paid.length ? Math.round(gmvCents / paid.length) : 0,
-    newSignups: newCustomers.length,
-    refundedCount: refundedRows.length,
+    newSignups: safeNum(newCustomers.length),
+    refundedCount: safeNum(refundedRows.length),
     refundRate: paid.length ? refundedRows.length / paid.length : 0,
     dau,
     wau,
     mau,
-    plays,
-    uniqueListeners,
-    visits,
-    firstPurchases,
+    plays: safeNum(plays),
+    uniqueListeners: safeNum(uniqueListeners),
+    visits: safeNum(visits),
+    firstPurchases: safeNum(firstPurchases),
     conversionRate: visits ? firstPurchases / visits : 0,
     series,
     prior: {
