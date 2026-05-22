@@ -41,6 +41,9 @@ type BuyOptions = {
   currency: string;
   skus: Sku[];
   addons: Addon[];
+  // Task #122 — true when the signed_cert add-on has a fixed planned
+  // quantity and that many paid certs already exist for this album.
+  signedCertSoldOut?: boolean;
 };
 
 const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -98,7 +101,14 @@ export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () =>
 
   const selectedSku = options?.skus.find((s) => s.format === format) ?? null;
   const addon = options?.addons.find((a) => a.kind === "signed_cert") ?? null;
-  const totalCents = (selectedSku?.priceCents ?? 0) + (signedCert && addon ? addon.priceCents : 0);
+  const signedCertSoldOut = !!options?.signedCertSoldOut;
+  // If the run got exhausted between page-load and toggle (or by another
+  // tab), defensively flip the local toggle off so the displayed total
+  // matches what we'll actually charge.
+  useEffect(() => {
+    if (signedCertSoldOut && signedCert) setSignedCert(false);
+  }, [signedCertSoldOut, signedCert]);
+  const totalCents = (selectedSku?.priceCents ?? 0) + (signedCert && addon && !signedCertSoldOut ? addon.priceCents : 0);
 
   const beginCheckout = async () => {
     if (!selectedSku) return;
@@ -219,23 +229,28 @@ export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () =>
                 {addon && (
                   <button
                     type="button"
-                    onClick={() => setSignedCert((v) => !v)}
+                    onClick={() => !signedCertSoldOut && setSignedCert((v) => !v)}
+                    disabled={signedCertSoldOut}
                     className={[
                       "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left mb-5",
-                      signedCert
-                        ? "border-[#FF5470] bg-[#FF5470]/10"
-                        : "border-white/10 hover:border-white/30",
+                      signedCertSoldOut
+                        ? "border-white/10 opacity-50 cursor-not-allowed"
+                        : signedCert
+                          ? "border-[#FF5470] bg-[#FF5470]/10"
+                          : "border-white/10 hover:border-white/30",
                     ].join(" ")}
                     data-testid="button-toggle-signed-cert"
                   >
                     <div className="flex flex-col flex-1 min-w-0 pr-2">
                       <span className="text-[14px] font-medium">{addon.label}</span>
                       <span className="text-[12px] text-white/55 leading-snug mt-0.5">
-                        Numbered, printed, and signed by the artist. Mailed with your record.
+                        {signedCertSoldOut
+                          ? "All signed copies claimed"
+                          : "Numbered, printed, and signed by the artist. Mailed with your record."}
                       </span>
                     </div>
                     <span className="text-[14px] font-semibold whitespace-nowrap">
-                      + {dollars(addon.priceCents)}
+                      {signedCertSoldOut ? "Sold out" : `+ ${dollars(addon.priceCents)}`}
                     </span>
                   </button>
                 )}

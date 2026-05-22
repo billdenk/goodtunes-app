@@ -21,6 +21,7 @@ import {
   albumAddons,
   orders,
   orderItems,
+  signedCertReservations,
   customerUsers,
   emailVerifications,
   userAlbums,
@@ -173,6 +174,46 @@ async function upsertAddon(input: {
   return row;
 }
 
+// Task #122 — Count signed certificates already claimed for an album.
+// "Claimed" = paid (or shipped) order_items + active pending reservations
+// (Stripe Checkout sessions we minted in the last 30 minutes that haven't
+// resolved yet). Refunded orders flip status to "refunded" so they
+// naturally drop out — the slot frees back up for the next buyer.
+// Powers the soft cap on the Buy sheet and the race-tight check at
+// session creation; counting *active* reservations is what closes the
+// boundary race between two simultaneous buyers.
+//
+// Pass an optional Drizzle transaction so the session-creation path can
+// run the count inside the same advisory-locked transaction it'll use
+// to insert its own reservation.
+async function countSignedCertsClaimed(
+  albumId: string,
+  tx: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
+): Promise<number> {
+  const [paidRow] = await tx
+    .select({ n: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)` })
+    .from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .where(
+      and(
+        eq(orders.albumId, albumId),
+        inArray(orders.status, ["paid", "shipped"]),
+        eq(orderItems.kind, "addon"),
+        eq(orderItems.sku, "signed_cert"),
+      ),
+    );
+  const [pendingRow] = await tx
+    .select({ n: sql<number>`COUNT(*)` })
+    .from(signedCertReservations)
+    .where(
+      and(
+        eq(signedCertReservations.albumId, albumId),
+        sql`${signedCertReservations.expiresAt} > NOW()`,
+      ),
+    );
+  return Number(paidRow?.n ?? 0) + Number(pendingRow?.n ?? 0);
+}
+
 async function getOrderBySessionId(sessionId: string): Promise<Order | undefined> {
   const [row] = await db.select().from(orders).where(eq(orders.stripeCheckoutSessionId, sessionId));
   return row;
@@ -236,6 +277,15 @@ export function registerCommerceRoutes(app: Express) {
       listActiveSkus(album.id),
       listActiveAddons(album.id),
     ]);
+    // Task #122 — soft cap: if the signed_cert add-on has a fixed planned
+    // quantity and that many paid certs already exist, flip the
+    // signedCertSoldOut flag so the Buy sheet disables the toggle.
+    const signedCert = addons.find((a) => a.kind === "signed_cert") ?? null;
+    let signedCertSoldOut = false;
+    if (signedCert && signedCert.plannedQuantity != null) {
+      const claimed = await countSignedCertsClaimed(album.id);
+      signedCertSoldOut = claimed >= signedCert.plannedQuantity;
+    }
     res.json({
       albumId: album.id,
       title: album.title,
@@ -257,6 +307,7 @@ export function registerCommerceRoutes(app: Express) {
         priceCents: a.priceCents,
         minPriceCents: a.minPriceCents,
       })),
+      signedCertSoldOut,
     });
   });
 
@@ -579,6 +630,11 @@ export function registerCommerceRoutes(app: Express) {
 
     let addon: AlbumAddon | null = null;
     let addonPriceCents = 0;
+    // Task #122 — Reservation id we mint inside the cap-check transaction
+    // below. Stamped with the Stripe session id right after the session
+    // is created so the webhook can resolve and delete it on payment, and
+    // released eagerly if Stripe itself fails.
+    let reservationId: string | null = null;
     if (parsed.data.signedCert) {
       const addons = await listActiveAddons(album.id);
       addon = addons.find((x) => x.kind === "signed_cert") ?? null;
@@ -586,6 +642,37 @@ export function registerCommerceRoutes(app: Express) {
       addonPriceCents = parsed.data.signedCertPriceCents ?? addon.priceCents;
       if (addonPriceCents < addon.minPriceCents) {
         return res.status(400).json({ message: `Signed certificate must be at least $${(addon.minPriceCents / 100).toFixed(2)}` });
+      }
+      // Task #122 — Close the race between two simultaneous buyers at
+      // the planned-quantity boundary. Two requests reading "99 sold,
+      // planned 100" would both pass a naive check and both ultimately
+      // pay. Inside a single transaction we:
+      //   1) take a per-album advisory lock keyed off (albumId,
+      //      'signed_cert') — serializes only contending buyers, never
+      //      blocks unrelated work,
+      //   2) re-count paid order_items + active pending reservations,
+      //   3) insert a 30-min reservation row if there's still a slot.
+      // Concurrent contenders queue on the lock; the second one sees
+      // the first reservation in the count and gets the 409.
+      if (addon.plannedQuantity != null) {
+        const planned = addon.plannedQuantity;
+        const outcome = await db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtextextended(${`signed_cert:${album.id}`}, 0))`,
+          );
+          const claimed = await countSignedCertsClaimed(album.id, tx);
+          if (claimed >= planned) return { ok: false as const };
+          const [row] = await tx
+            .insert(signedCertReservations)
+            .values({
+              albumId: album.id,
+              expiresAt: new Date(Date.now() + 30 * 60_000),
+            })
+            .returning({ id: signedCertReservations.id });
+          return { ok: true as const, id: row.id };
+        });
+        if (!outcome.ok) return res.status(409).json({ message: "All signed copies claimed" });
+        reservationId = outcome.id;
       }
     }
 
@@ -654,24 +741,44 @@ export function registerCommerceRoutes(app: Express) {
       gt_signed_cert: addon ? "1" : "0",
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
-    const session = await stripe.checkout.sessions.create({
-      ui_mode: "embedded",
-      mode: "payment",
-      customer: stripeCustomerId,
-      line_items: lineItems,
-      shipping_address_collection: { allowed_countries: ["US", "CA", "GB", "AU", "DE", "FR", "NL", "IE", "JP"] },
-      billing_address_collection: "required",
-      phone_number_collection: { enabled: true },
-      automatic_tax: { enabled: false },
-      return_url: returnUrl,
-      payment_intent_data: {
-        metadata: {
-          ...enrichedMetadata,
-          gt_signed_cert_price: addon ? String(addonPriceCents) : "0",
+    let session: Stripe.Checkout.Session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        ui_mode: "embedded",
+        mode: "payment",
+        customer: stripeCustomerId,
+        line_items: lineItems,
+        shipping_address_collection: { allowed_countries: ["US", "CA", "GB", "AU", "DE", "FR", "NL", "IE", "JP"] },
+        billing_address_collection: "required",
+        phone_number_collection: { enabled: true },
+        automatic_tax: { enabled: false },
+        return_url: returnUrl,
+        payment_intent_data: {
+          metadata: {
+            ...enrichedMetadata,
+            gt_signed_cert_price: addon ? String(addonPriceCents) : "0",
+          },
         },
-      },
-      metadata: enrichedMetadata,
-    });
+        metadata: enrichedMetadata,
+      });
+    } catch (e) {
+      // Task #122 — Stripe failed to mint the session: release the
+      // reservation we just took so its slot returns to the pool
+      // immediately instead of waiting 30 min to expire.
+      if (reservationId) {
+        await db.delete(signedCertReservations).where(eq(signedCertReservations.id, reservationId));
+      }
+      throw e;
+    }
+    // Task #122 — Attach the Stripe session id to the reservation now
+    // that we have one. The webhook deletes by session id when the
+    // order is materialized as paid; abandoned sessions just expire.
+    if (reservationId) {
+      await db
+        .update(signedCertReservations)
+        .set({ stripeCheckoutSessionId: session.id })
+        .where(eq(signedCertReservations.id, reservationId));
+    }
 
     res.json({ clientSecret: session.client_secret, sessionId: session.id });
   });
@@ -1069,6 +1176,13 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
   }
 
   if (order && order.status === "paid") {
+    // Task #122 — Reservation served its purpose: the order_items now
+    // carry the signed_cert line, so the cap counter switches from
+    // "pending reservation" to "paid order item" without a moment of
+    // under-counting. Idempotent — delete-if-exists.
+    await db
+      .delete(signedCertReservations)
+      .where(eq(signedCertReservations.stripeCheckoutSessionId, full.id));
     // Unlock the album for the fan. Idempotent via unique (userId,albumId).
     // The user_albums.user_id FK to users(id) was dropped at Task #44 so
     // this column holds either an admin user id or a customer_user id.

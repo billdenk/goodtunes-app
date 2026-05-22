@@ -785,6 +785,24 @@ export const albumAddons = pgTable(
   }),
 );
 
+// Task #122 — Pending signed-certificate reservations. Created the
+// moment we mint a Stripe Checkout Session that includes the
+// signed_cert add-on, expires 30 minutes later if the buyer abandons.
+// Counted alongside paid+shipped order_items so two simultaneous
+// buyers at the planned-quantity boundary can't both pass the cap
+// check. The row is deleted once the matching order is materialized
+// as paid (paid orders are then counted via order_items directly).
+export const signedCertReservations = pgTable(
+  "signed_cert_reservations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id").unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+);
+
 // Orders. One row per Stripe Checkout Session that completed payment.
 // Idempotent writes are keyed on `stripeCheckoutSessionId` (and also
 // `stripePaymentIntentId` once Stripe attaches one) so webhook replays
