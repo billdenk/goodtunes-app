@@ -1,5 +1,15 @@
 # Admin Conventions
 
+## Platform pricing — snapshot, don't recompute
+
+Platform-wide costs (today: the certificate cost on `payout_settings.cert_cost_cents`, the Shopify fee on `payout_settings.shopify_fee_cents`) drive the artist's per-unit profit on every Sell panel. The Platform Pricing page at `/admin/platform-pricing` is super-admin-only and writes the singleton row. Other admin roles can still **read** the settings (the GET is open to admin) so the SellPanel can render its profit readout.
+
+When an artist saves the `signed_cert` add-on, we **snapshot** the live `cert_cost_cents` onto `album_addons.cost_cents_snapshot`. The Sell panel's "You earn $X.XX per unit" readout subtracts that snapshot, not the live setting. Re-saving the add-on picks up the new platform price. This price-lock rule is the contract: a super-admin raising the platform cost must not silently turn an already-sold artist add-on into a loss in the readout — they only see the new number on their next save.
+
+**Why:** so the artist's understanding of their margin is stable until they explicitly re-confirm it, and so changes to platform cost can propagate via deliberate re-save instead of being applied retroactively.
+
+**How to apply:** any new platform-wide cost that participates in an artist-facing profit readout must (a) be editable only on the Platform Pricing page, (b) be snapshot onto the artist-controlled row at save time, and (c) be read from the snapshot in the readout — falling back to the live value only when the row predates the snapshot column.
+
 ## Debugging — always check prod alongside dev
 
 When diagnosing any reported failure (import jobs, audit logs, missing rows, "I don't see X in the UI"), query **both** databases before drawing conclusions. The dev DB and prod DB diverge constantly — the user does most of their real work against the deployed app, so a clean dev DB doesn't mean the bug isn't real. Use `executeSql({ environment: "production" })` (read-only SELECTs only) for the prod read; never assume a single-environment query is the full picture.

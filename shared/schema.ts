@@ -764,6 +764,13 @@ export const albumAddons = pgTable(
     kind: text("kind").notNull(),
     priceCents: integer("price_cents").notNull(),
     minPriceCents: integer("min_price_cents").notNull().default(0),
+    // Task #119 — platform-cost price lock. When the artist saves the
+    // signed_cert add-on we snapshot the live `payout_settings.cert_cost_cents`
+    // onto this row, so admin's "You earn $X.XX per unit" readout stays
+    // stable until the artist re-saves at a new platform price. Nullable
+    // because pre-Task-#119 rows have no snapshot — the SellPanel falls
+    // back to the live platform setting in that case.
+    costCentsSnapshot: integer("cost_cents_snapshot"),
     active: boolean("active").notNull().default(true),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow(),
@@ -1049,7 +1056,15 @@ export const payoutAccounts = pgTable(
 export const payoutSettings = pgTable("payout_settings", {
   id: varchar("id").primaryKey().default("default"),
   platformFeePct: integer("platform_fee_pct").notNull().default(10),
-  certCostCents: integer("cert_cost_cents").notNull().default(500),
+  // Task #119 — platform's wholesale cost of a printed & signed
+  // GoodDeed certificate. Default bumped to $12.00 to reflect real
+  // print + ship cost. Editable on the super-admin Platform Pricing
+  // page; per-album overrides still live on `albums.payoutCertCentsOverride`.
+  certCostCents: integer("cert_cost_cents").notNull().default(1200),
+  // Task #119 — platform's per-order Shopify checkout fee (in cents).
+  // Surfaced on the Platform Pricing page; payout math wiring is
+  // tracked separately on the roadmap.
+  shopifyFeeCents: integer("shopify_fee_cents").notNull().default(350),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -1369,11 +1384,12 @@ export const insertAlbumAddonSchema = createInsertSchema(albumAddons)
   .extend({
     kind: z.enum(ALBUM_ADDON_KINDS),
     priceCents: z.number().int().min(0),
-    minPriceCents: z.number().int().min(0),
-  })
-  .refine((d) => d.priceCents >= d.minPriceCents, {
-    message: "Price must be at or above the per-album minimum",
-    path: ["priceCents"],
+    // Task #119 — min floor is being phased out of the artist Sell panel,
+    // but the column stays for the Shopify-bundle webhook (server/shopify.ts)
+    // until that path is also retired. Optional on the insert schema so
+    // new callers can omit it.
+    minPriceCents: z.number().int().min(0).optional(),
+    costCentsSnapshot: z.number().int().min(0).nullable().optional(),
   });
 export type InsertAlbumAddon = z.infer<typeof insertAlbumAddonSchema>;
 export type AlbumAddon = typeof albumAddons.$inferSelect;

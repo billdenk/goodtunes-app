@@ -41,7 +41,7 @@ export async function getPayoutSettings(): Promise<PayoutSettings> {
   if (row) return row;
   const [inserted] = await db
     .insert(payoutSettings)
-    .values({ id: "default", platformFeePct: 10, certCostCents: 500 })
+    .values({ id: "default", platformFeePct: 10, certCostCents: 1200, shopifyFeeCents: 350 })
     .onConflictDoNothing()
     .returning();
   if (inserted) return inserted;
@@ -280,17 +280,31 @@ export function registerPayoutRoutes(app: Express) {
   app.get("/api/admin/payout-settings", requireAdmin, async (_req, res) => {
     res.json(await getPayoutSettings());
   });
+  // Task #119 — write gating for platform pricing. The cert + Shopify
+  // fee are platform-wide cost knobs; only super_admin can change them.
+  // Other admin roles still GET so the SellPanel can render the
+  // "You earn $X.XX per unit" readout against the live platform cost.
   const settingsSchema = z.object({
-    platformFeePct: z.number().int().min(0).max(50),
-    certCostCents: z.number().int().min(0).max(10000),
+    platformFeePct: z.number().int().min(0).max(50).optional(),
+    certCostCents: z.number().int().min(0).max(10000).optional(),
+    shopifyFeeCents: z.number().int().min(0).max(10000).optional(),
   });
   app.put("/api/admin/payout-settings", requireAdmin, async (req, res) => {
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole((req as any).adminUserId);
+    if (info && info.role !== "super_admin") {
+      return res.status(403).json({ message: "Super admin only" });
+    }
     const parsed = settingsSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid settings" });
     await getPayoutSettings(); // ensure seeded
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (parsed.data.platformFeePct !== undefined) patch.platformFeePct = parsed.data.platformFeePct;
+    if (parsed.data.certCostCents !== undefined) patch.certCostCents = parsed.data.certCostCents;
+    if (parsed.data.shopifyFeeCents !== undefined) patch.shopifyFeeCents = parsed.data.shopifyFeeCents;
     const [row] = await db
       .update(payoutSettings)
-      .set({ ...parsed.data, updatedAt: new Date() })
+      .set(patch as any)
       .where(eq(payoutSettings.id, "default"))
       .returning();
     res.json(row);

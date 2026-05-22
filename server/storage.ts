@@ -2056,6 +2056,46 @@ async function ensureRuntimeMigrations(): Promise<void> {
     await ensureArtistReportingIndexes();
     // ADD COLUMN is idempotent (IF NOT EXISTS) and cheap.
     await db.execute(sql`ALTER TABLE songs ADD COLUMN IF NOT EXISTS playlist_count INTEGER NOT NULL DEFAULT 0`);
+    // Task #119 — platform-cost pricing + artist profit readout.
+    // 1. payout_settings.shopify_fee_cents — new platform-cost knob shown
+    //    on the super-admin Platform Pricing page. Default $3.50.
+    // 2. album_addons.cost_cents_snapshot — per-addon snapshot of the
+    //    platform's cert cost taken at the moment the artist saved the
+    //    add-on, so the "You earn $X.XX" readout in the Sell panel is
+    //    stable until the artist re-saves at a new platform price.
+    // Guard each ALTER with `to_regclass` so first-boot dev DBs (where
+    // drizzle-kit push hasn't yet created `payout_settings` / `album_addons`)
+    // don't crash the migration runner. Once the tables land, subsequent
+    // boots run the ADD COLUMN + backfill normally.
+    await db.execute(sql`
+      DO $$
+      BEGIN
+        IF to_regclass('public.payout_settings') IS NOT NULL THEN
+          ALTER TABLE payout_settings ADD COLUMN IF NOT EXISTS shopify_fee_cents INTEGER NOT NULL DEFAULT 350;
+          -- Make sure the singleton row exists *before* we use its
+          -- cert_cost_cents to backfill addon snapshots. Without this,
+          -- a fresh DB where getPayoutSettings() hasn't run yet would
+          -- leave existing signed_cert rows with a NULL snapshot, and
+          -- a later platform-cost change would retroactively shift the
+          -- artist's "You earn" readout — the exact thing the
+          -- price-lock rule (docs/admin-conventions.md) forbids.
+          INSERT INTO payout_settings (id, platform_fee_pct, cert_cost_cents, shopify_fee_cents)
+          VALUES ('default', 10, 1200, 350)
+          ON CONFLICT (id) DO NOTHING;
+        END IF;
+        IF to_regclass('public.album_addons') IS NOT NULL THEN
+          ALTER TABLE album_addons ADD COLUMN IF NOT EXISTS cost_cents_snapshot INTEGER;
+          IF to_regclass('public.payout_settings') IS NOT NULL THEN
+            UPDATE album_addons
+            SET cost_cents_snapshot = (
+              SELECT cert_cost_cents FROM payout_settings WHERE id = 'default'
+            )
+            WHERE kind = 'signed_cert' AND cost_cents_snapshot IS NULL;
+          END IF;
+        END IF;
+      END
+      $$;
+    `);
     // One-time backfill: recompute from playlist_songs only when no song
     // currently carries a non-zero count. The first boot after the
     // column lands fills it; subsequent boots short-circuit cheaply.

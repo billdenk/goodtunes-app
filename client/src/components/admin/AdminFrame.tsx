@@ -11,6 +11,7 @@ import {
   Truck,
   ArrowLeft,
   BarChart3,
+  DollarSign,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
@@ -39,6 +40,7 @@ export type EntityKey =
   | "manufacturers"
   | "fulfillment"
   | "reports"
+  | "platform-pricing"
   | "none";
 
 export function AdminFrame({
@@ -111,6 +113,14 @@ export function AdminFrame({
     queryKey: ["/api/fulfillment-partners"],
     enabled: !!user?.isAdmin,
   });
+  // Task #119 — Platform Pricing is super-admin-only; we hide the
+  // sidebar link entirely for other roles so they don't see a tab
+  // that 403s when they click it.
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const isSuperAdmin = roleInfo?.role === "super_admin";
 
   return (
     <div className="h-screen bg-slate-50 font-sans antialiased flex">
@@ -196,6 +206,16 @@ export function AdminFrame({
               onClick={() => navigate("/admin/reports")}
               testId="nav-reports"
             />
+            {isSuperAdmin && (
+              <SidebarLink
+                icon={DollarSign}
+                label="Platform pricing"
+                count={-1}
+                active={active === "platform-pricing"}
+                onClick={() => navigate("/admin/platform-pricing")}
+                testId="nav-platform-pricing"
+              />
+            )}
           </nav>
         </aside>
 

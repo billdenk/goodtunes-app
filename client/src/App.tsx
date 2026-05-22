@@ -48,6 +48,7 @@ import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
+import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -247,6 +248,12 @@ function Router() {
         {/* Task #80 — Partner reporting v1. */}
         <Route path="/admin/reports">
           <ProtectedRoute component={AdminReports} />
+        </Route>
+        {/* Task #119 — super-admin platform pricing. Page itself
+            short-circuits with a "Super admin only" message when the
+            caller's role isn't super_admin. */}
+        <Route path="/admin/platform-pricing">
+          <ProtectedRoute component={AdminPlatformPricing} />
         </Route>
         {/* Bare /admin used to render the legacy 3-column monolith. We now
             redirect straight into the new Albums index so anyone who lands

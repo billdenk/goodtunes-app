@@ -147,13 +147,25 @@ async function upsertSku(input: { albumId: string; format: AlbumFormat; priceCen
     .returning();
   return row;
 }
-async function upsertAddon(input: { albumId: string; kind: AlbumAddonKind; priceCents: number; minPriceCents: number; active: boolean }): Promise<AlbumAddon> {
+async function upsertAddon(input: {
+  albumId: string;
+  kind: AlbumAddonKind;
+  priceCents: number;
+  minPriceCents: number;
+  active: boolean;
+  costCentsSnapshot: number | null;
+}): Promise<AlbumAddon> {
   const [row] = await db
     .insert(albumAddons)
     .values(input)
     .onConflictDoUpdate({
       target: [albumAddons.albumId, albumAddons.kind],
-      set: { priceCents: input.priceCents, minPriceCents: input.minPriceCents, active: input.active },
+      set: {
+        priceCents: input.priceCents,
+        minPriceCents: input.minPriceCents,
+        active: input.active,
+        costCentsSnapshot: input.costCentsSnapshot,
+      },
     })
     .returning();
   return row;
@@ -304,28 +316,43 @@ export function registerCommerceRoutes(app: Express) {
     res.json({ ok: true });
   });
 
-  const addonBodySchema = z
-    .object({
-      kind: z.enum(ALBUM_ADDON_KINDS),
-      priceCents: z.number().int().min(0),
-      minPriceCents: z.number().int().min(0),
-      active: z.boolean().default(true),
-    })
-    .refine((d) => d.priceCents >= d.minPriceCents, {
-      message: "Price must be at or above the per-album minimum",
-      path: ["priceCents"],
-    });
+  // Task #119 — `minPriceCents` is no longer sent by the SellPanel; we
+  // keep it accepted (and optional) so the Shopify-bundle webhook
+  // (server/shopify.ts) and any other older caller keep working. New
+  // saves snapshot the current platform `cert_cost_cents` onto
+  // `costCentsSnapshot` so the artist profit readout is stable until
+  // they re-save.
+  const addonBodySchema = z.object({
+    kind: z.enum(ALBUM_ADDON_KINDS),
+    priceCents: z.number().int().min(0),
+    minPriceCents: z.number().int().min(0).optional(),
+    active: z.boolean().default(true),
+  });
   app.put("/api/admin/albums/:id/addons/:kind", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const parsed = addonBodySchema.safeParse({ ...req.body, kind: String(req.params.kind) });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid add-on" });
+    const { getPayoutSettings } = await import("./payouts");
+    const settings = await getPayoutSettings();
+    const costSnapshot =
+      parsed.data.kind === "signed_cert"
+        ? (album.payoutCertCentsOverride ?? settings.certCostCents)
+        : null;
+    // Preserve any existing minPriceCents so the Shopify path keeps
+    // its per-album floor; default 0 on first save.
+    const [existing] = await db
+      .select({ minPriceCents: albumAddons.minPriceCents })
+      .from(albumAddons)
+      .where(and(eq(albumAddons.albumId, album.id), eq(albumAddons.kind, parsed.data.kind)));
+    const minPriceCents = parsed.data.minPriceCents ?? existing?.minPriceCents ?? 0;
     const row = await upsertAddon({
       albumId: album.id,
       kind: parsed.data.kind,
       priceCents: parsed.data.priceCents,
-      minPriceCents: parsed.data.minPriceCents,
+      minPriceCents,
       active: parsed.data.active,
+      costCentsSnapshot: costSnapshot,
     });
     res.json(row);
   });
