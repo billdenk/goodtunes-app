@@ -26,6 +26,11 @@ interface PlayerState {
   autoplay: boolean;
   favorites: Set<string>;
   recentAlbums: Album[];
+  /** When true, playback auto-advances to the next queued song after 30
+   *  seconds — used by the desktop Preview & Purchase route to audition
+   *  the album without playing through full songs. Independent of the
+   *  per-song `isPreviewable` flag; the host decides when to switch on. */
+  previewMode: boolean;
 }
 
 interface PlayerContextValue extends PlayerState {
@@ -48,7 +53,13 @@ interface PlayerContextValue extends PlayerState {
   addToQueue: (song: PlayerSong) => void;
   playNext: (song: PlayerSong) => void;
   playLast: (song: PlayerSong) => void;
+  setPreviewMode: (on: boolean) => void;
 }
+
+/** Hard cap on a single preview clip, in seconds. Apple/Spotify/etc all
+ *  use 30 — long enough to recognize a song, short enough that the fan
+ *  can't substitute it for the purchase. */
+export const PREVIEW_CAP_SECONDS = 30;
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 
@@ -65,6 +76,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
+  const [previewMode, setPreviewModeState] = useState(false);
   const favSongs = useFavoriteSongs();
   const favorites = favSongs.set;
   const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
@@ -274,6 +286,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false);
     }
   }, [currentIndex, queue.length, repeat, shuffle, hasRealAudio, songMeta, beginPlayInstance]);
+
+  // Preview-mode cap. When the host flips on previewMode (desktop
+  // Preview & Purchase route), playback auto-advances at 30s per track
+  // instead of running through full songs. We mark the milestone as
+  // completed so handleNext doesn't classify the cut as a skip, then
+  // delegate to the natural advance path so shuffle/repeat/end-of-queue
+  // behave the same as a real song ending.
+  useEffect(() => {
+    if (!previewMode) return;
+    if (!isPlaying) return;
+    if (currentTime < PREVIEW_CAP_SECONDS) return;
+    milestonesRef.current.completed = true;
+    const a = audioRef.current;
+    if (a && hasRealAudio) {
+      try { a.pause(); } catch {}
+    }
+    handleNext(false);
+  }, [previewMode, isPlaying, currentTime, hasRealAudio, handleNext]);
+
+  // Exiting preview mode while paused at the cap shouldn't trap the
+  // dock at 30s — leave currentTime where it is so the song resumes
+  // from there (host typically stops playback on toggle-off anyway).
+  const setPreviewMode = useCallback((on: boolean) => {
+    setPreviewModeState(on);
+  }, []);
 
   const handlePrev = useCallback(() => {
     const ct = currentTimeRef.current;
@@ -666,6 +703,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         addToQueue,
         playNext,
         playLast,
+        previewMode,
+        setPreviewMode,
       }}
     >
       {children}

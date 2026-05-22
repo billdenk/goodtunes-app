@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usePlayer } from "@/context/PlayerContext";
+import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
+import { BuySheet } from "@/components/checkout/BuySheet";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -85,6 +86,10 @@ export function AlbumDetailDesktop() {
   const { user } = useAuth();
   const player = usePlayer();
   const [tab, setTab] = useState<DesktopAlbumTab>("music");
+  const [showBuySheet, setShowBuySheet] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URL(window.location.href).searchParams.get("buy") === "1";
+  });
 
   const isOwned = useAlbumOwnership(id);
 
@@ -109,6 +114,15 @@ export function AlbumDetailDesktop() {
 
   const hasPreviews = songs.some((s) => s.isPreviewable);
   const canPlay = isOwned || hasPreviews;
+
+  // Is the player currently auditioning a song from this album under
+  // preview-mode? Used by the rose Play pill to switch into its Pause
+  // affordance + by the dock to render the PREVIEW badge.
+  const previewActive =
+    !isOwned &&
+    player.previewMode &&
+    !!player.currentSong &&
+    player.currentSong.albumId === album?.id;
 
   // Songs eligible to play given current ownership state. Locked songs
   // never enter the queue — preview-only sessions are filtered to the
@@ -142,13 +156,34 @@ export function AlbumDetailDesktop() {
 
   const handlePlayAll = () => {
     if (playableSongs.length === 0) return;
+    // Owned playback — full song. Make sure preview-mode is off so a
+    // prior preview session doesn't bleed into post-purchase listening.
+    if (player.previewMode) player.setPreviewMode(false);
     player.playSong(playableSongs[0], playableSongs);
   };
   const handleShuffle = () => {
     if (playableSongs.length === 0) return;
+    if (player.previewMode) player.setPreviewMode(false);
     const shuffled = [...playableSongs].sort(() => Math.random() - 0.5);
     player.playSong(shuffled[0], shuffled);
   };
+
+  // Album-level Preview play pill. Three intents fold into one handler:
+  //   1. Already auditioning this album → toggle play/pause.
+  //   2. No queue yet (or queue is for a different album) → start a
+  //      30-sec-per-track preview session from track 1.
+  //   3. Resume a previously-started preview session that was paused
+  //      (queue still loaded with this album's previewables) → toggle.
+  const handlePlayPreview = () => {
+    if (playableSongs.length === 0) return;
+    if (previewActive) {
+      player.togglePlay();
+      return;
+    }
+    player.setPreviewMode(true);
+    player.playSong(playableSongs[0], playableSongs);
+  };
+
   const handlePlayTrack = (song: DesktopAlbumSong) => {
     const playable = playableSongs.find((p) => p.id === song.id);
     if (!playable) return;
@@ -156,14 +191,36 @@ export function AlbumDetailDesktop() {
       player.togglePlay();
       return;
     }
+    // When the album is not owned, per-row taps audition that row's
+    // 30-second preview rather than starting full playback. Mirror the
+    // album-level pill so behavior stays consistent.
+    if (!isOwned) {
+      player.setPreviewMode(true);
+    } else if (player.previewMode) {
+      player.setPreviewMode(false);
+    }
     player.playSong(playable, playableSongs);
   };
   const handleAddTrack = () => {
     toast({ title: "Added to playlist (coming next)" });
   };
   const handleBuyBundle = () => {
-    toast({ title: "Checkout coming next" });
+    setShowBuySheet(true);
   };
+
+  // Turn preview mode off when the route unmounts so a navigation away
+  // from Preview & Purchase doesn't leave the 30-sec cap armed for
+  // subsequent full-track playback elsewhere in the app. Use a ref so
+  // the cleanup always calls the *latest* setter (the player context
+  // value identity changes on every render — closing over the initial
+  // snapshot would no-op).
+  const setPreviewModeRef = useRef(player.setPreviewMode);
+  setPreviewModeRef.current = player.setPreviewMode;
+  useEffect(() => {
+    return () => {
+      setPreviewModeRef.current(false);
+    };
+  }, []);
 
   if (!album && !isLoading) {
     return (
@@ -281,6 +338,8 @@ export function AlbumDetailDesktop() {
             isPlaying={player.isPlaying}
             onPlayAll={handlePlayAll}
             onShuffle={handleShuffle}
+            onPlayPreview={handlePlayPreview}
+            previewActive={previewActive}
             onPlayTrack={handlePlayTrack}
             onMoreTrack={() => toast({ title: "Track menu coming next" })}
             onAddTrack={handleAddTrack}
@@ -303,16 +362,39 @@ export function AlbumDetailDesktop() {
             track={dockTrack}
             hasSelection={!!player.currentSong}
             playing={player.isPlaying}
-            progress={
-              player.duration > 0
+            previewMode={player.previewMode}
+            progress={(() => {
+              // Under preview-mode the scrubber denominator is the 30-sec
+              // cap, not the song's true duration — so the bar fills to
+              // 100% right as PlayerContext auto-advances to the next
+              // preview, mirroring Apple Music's preview behavior.
+              if (player.previewMode) {
+                return Math.min(
+                  100,
+                  (player.currentTime / PREVIEW_CAP_SECONDS) * 100,
+                );
+              }
+              return player.duration > 0
                 ? Math.min(100, (player.currentTime / player.duration) * 100)
-                : 0
+                : 0;
+            })()}
+            totalSeconds={
+              player.previewMode
+                ? PREVIEW_CAP_SECONDS
+                : player.duration
             }
-            totalSeconds={player.duration}
             onTogglePlay={player.togglePlay}
             onPrev={player.prev}
             onNext={player.next}
-            onSeek={(s) => player.seekTo(s)}
+            onSeek={(s) => {
+              // Clamp seeks during preview-mode so dragging the scrubber
+              // past the 30-sec cap doesn't desync the auto-advance.
+              if (player.previewMode) {
+                player.seekTo(Math.min(s, PREVIEW_CAP_SECONDS - 0.1));
+              } else {
+                player.seekTo(s);
+              }
+            }}
             onLyrics={() => player.setShowLyrics(!player.showLyrics)}
             coverNode={dockCover}
           />
@@ -321,6 +403,13 @@ export function AlbumDetailDesktop() {
 
       {import.meta.env.DEV && id && (
         <DevOwnershipToggle albumId={id} isOwned={isOwned} />
+      )}
+
+      {showBuySheet && album && (
+        <BuySheet
+          albumId={album.id}
+          onClose={() => setShowBuySheet(false)}
+        />
       )}
     </div>
   );

@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ChevronRight, Play, Shuffle, MoreHorizontal, Lock, X, Link2 } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Link2 } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
@@ -69,6 +69,13 @@ export type DesktopAlbumViewProps = {
   onPlayAll?: () => void;
   onShuffle?: () => void;
   onBuyBundle?: () => void;
+  /** Owned=false only. Toggles a 30-sec-per-track preview session that
+   *  walks the album. Host wires this into PlayerContext.setPreviewMode +
+   *  playSong; the view just renders the rose outline pill. */
+  onPlayPreview?: () => void;
+  /** When true, the Preview pill renders in its "Pause" state because a
+   *  preview session is currently auditing this album. */
+  previewActive?: boolean;
 
   // Per-row CTAs. `state` is computed inside; the row handlers receive the
   // raw song so callers can dispatch into PlayerContext / toast / etc.
@@ -126,6 +133,8 @@ export function DesktopAlbumView({
   onPlayAll,
   onShuffle,
   onBuyBundle,
+  onPlayPreview,
+  previewActive = false,
   onPlayTrack,
   onMoreTrack,
   onAddTrack,
@@ -252,38 +261,47 @@ export function DesktopAlbumView({
             )}
 
             <div className="mt-6 flex items-center gap-3">
-              {canPlay && (
-                <button
-                  type="button"
-                  onClick={onPlayAll}
-                  data-testid="button-play-album"
-                  className="h-11 pl-5 pr-7 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] transition-colors active:scale-[0.97] hover:opacity-90"
-                  style={{ background: BRAND_BLUE }}
-                >
-                  <Play className="w-4 h-4 fill-current" strokeWidth={0} />
-                  Play
-                </button>
-              )}
-              {canPlay && isOwned && (
-                <button
-                  type="button"
-                  onClick={onShuffle}
-                  data-testid="button-shuffle-album"
-                  className="h-11 w-11 rounded-full inline-flex items-center justify-center text-white border border-white/85 hover:bg-white hover:text-[#00062B] transition-colors active:scale-[0.94]"
-                  aria-label="Shuffle"
-                >
-                  <Shuffle className="w-4 h-4" strokeWidth={2} />
-                </button>
-              )}
-              {!isOwned && album.priceCents != null && (
-                <button
-                  type="button"
-                  onClick={onBuyBundle}
-                  data-testid="button-buy-bundle"
-                  className="h-11 px-5 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] border border-white/85 hover:bg-white hover:text-[#00062B] transition-colors active:scale-[0.97]"
-                >
-                  Buy {formatPrice(album.priceCents)}
-                </button>
+              {isOwned ? (
+                <>
+                  {canPlay && (
+                    <button
+                      type="button"
+                      onClick={onPlayAll}
+                      data-testid="button-play-album"
+                      className="h-11 pl-5 pr-7 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] transition-colors active:scale-[0.97] hover:opacity-90"
+                      style={{ background: BRAND_BLUE }}
+                    >
+                      <Play className="w-4 h-4 fill-current" strokeWidth={0} />
+                      Play
+                    </button>
+                  )}
+                  {canPlay && (
+                    <button
+                      type="button"
+                      onClick={onShuffle}
+                      data-testid="button-shuffle-album"
+                      className="h-11 w-11 rounded-full inline-flex items-center justify-center text-white border border-white/85 hover:bg-white hover:text-[#00062B] transition-colors active:scale-[0.94]"
+                      aria-label="Shuffle"
+                    >
+                      <Shuffle className="w-4 h-4" strokeWidth={2} />
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <PreviewPlayPill
+                    canPlay={canPlay}
+                    active={previewActive}
+                    isPlaying={!!isPlaying}
+                    onClick={canPlay ? onPlayPreview : undefined}
+                  />
+                  {album.priceCents != null && (
+                    <BuyPricePill
+                      priceLabel={formatPrice(album.priceCents)}
+                      onClick={onBuyBundle}
+                    />
+                  )}
+                </>
               )}
 
               <button
@@ -462,6 +480,100 @@ export function DesktopAlbumView({
         </aside>
       )}
     </div>
+  );
+}
+
+/* Rose accent — matches the per-row triangle/equalizer in
+   AlbumDesktopTrackRow so the album-level Play pill and the row-level
+   "now previewing" indicator speak the same color story. */
+const ROSE = "#FF5470";
+
+/**
+ * Rose-outline Play pill for the not-owned (Preview & Purchase) state.
+ * • At rest with previews available → rose outline, rose triangle, "Play".
+ * • While a preview session is auditioning this album → swaps to a Pause
+ *   glyph + "Pause" label (preserves the same button as the toggle).
+ * • When no previews exist (`canPlay=false`) → disabled with a tooltip.
+ */
+function PreviewPlayPill({
+  canPlay,
+  active,
+  isPlaying,
+  onClick,
+}: {
+  canPlay: boolean;
+  active: boolean;
+  isPlaying: boolean;
+  onClick?: () => void;
+}) {
+  const disabled = !canPlay || !onClick;
+  const showPause = active && isPlaying;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={
+        disabled
+          ? "Previews aren't available for this album yet"
+          : showPause
+            ? "Pause preview"
+            : "Play 30-second preview"
+      }
+      data-testid="button-play-preview"
+      aria-label={showPause ? "Pause preview" : "Play 30-second preview"}
+      className={[
+        "h-11 pl-4 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[14px] transition-colors",
+        disabled
+          ? "border border-white/20 text-white/35 cursor-not-allowed"
+          : "border-2 border-[#FF5470] text-[#FF5470] hover:bg-[#FF5470]/12 active:scale-[0.97]",
+      ].join(" ")}
+    >
+      {showPause ? (
+        <Pause className="w-4 h-4 fill-current" strokeWidth={0} />
+      ) : (
+        <Play className="w-4 h-4 fill-current" strokeWidth={0} />
+      )}
+      <span>{showPause ? "Pause" : "Play"}</span>
+    </button>
+  );
+}
+
+/**
+ * Rose-filled Buy pill. Shows the album price at rest
+ * ("Buy Bundle — $14.99") and flips to "Buy Now" on hover. Price hides
+ * during the hover swap so the label sits cleanly in the same pill.
+ */
+function BuyPricePill({
+  priceLabel,
+  onClick,
+}: {
+  priceLabel: string;
+  onClick?: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      data-testid="button-buy-bundle"
+      data-hover={hover ? "true" : "false"}
+      className="h-11 px-6 rounded-full inline-flex items-center justify-center text-white font-semibold text-[14px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]"
+      style={{
+        background: ROSE,
+        boxShadow: hover
+          ? "0 8px 22px rgba(255,84,112,0.45)"
+          : "0 4px 12px rgba(255,84,112,0.25)",
+      }}
+    >
+      <span className="whitespace-nowrap" data-testid="text-buy-label">
+        {hover ? "Buy Now" : `Buy Bundle — ${priceLabel}`}
+      </span>
+    </button>
   );
 }
 

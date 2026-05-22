@@ -115,6 +115,13 @@ export interface PlayerDockProps {
    * of the responsive `compact` (width-based) auto-switch.
    */
   density?: "default" | "compact";
+  /**
+   * When true, render a small rose "PREVIEW" pill next to the title so
+   * fans know they're auditioning 30-sec snippets, not full playback.
+   * Host is responsible for clamping `progress` + `totalSeconds` to the
+   * 30-second cap; this prop is the visible badge only.
+   */
+  previewMode?: boolean;
 }
 
 /** Width-in-pixels below which the dock auto-switches to compact (edge-to-
@@ -141,6 +148,7 @@ export function PlayerDock({
   defaultMuted = false,
   forceCompact,
   density = "default",
+  previewMode = false,
 }: PlayerDockProps) {
   const playable = track.playable;
   const isCompactDensity = density === "compact";
@@ -599,10 +607,19 @@ export function PlayerDock({
               </div>
               {track.subtitle && hasSelection && (
                 <div
-                  className={`${D.subtitleSize} text-slate-400 truncate leading-tight mt-0.5`}
+                  className={`${D.subtitleSize} text-slate-400 truncate leading-tight mt-0.5 flex items-center gap-1.5`}
                   data-testid="text-track-subtitle"
                 >
-                  {track.subtitle}
+                  {previewMode && (
+                    <span
+                      className="inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0"
+                      style={{ background: "rgba(255,84,112,0.18)", color: "#FF5470" }}
+                      data-testid="badge-preview-mode"
+                    >
+                      Preview
+                    </span>
+                  )}
+                  <span className="truncate">{track.subtitle}</span>
                 </div>
               )}
             </div>
