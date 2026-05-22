@@ -2613,6 +2613,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "sequential.com": "Sequential",
   };
 
+  // Centralized UA strings + header builders for outbound vendor scrapes.
+  // Many vendor sites (PRS Guitars, etc.) 403 obvious bot UAs at their
+  // CDN edge, so we lead with a current desktop Chrome UA and only fall
+  // back to the polite bot UA on 401/403/429 (sites that *prefer* an
+  // identified crawler). Centralized so the instrument scrape, vendor
+  // scrape, and image rehost paths share one source of truth.
+  const BROWSER_UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+  const BOT_UA = "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)";
+  function browserScrapeHeaders(): Record<string, string> {
+    return {
+      "User-Agent": BROWSER_UA,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    };
+  }
+  function botScrapeHeaders(): Record<string, string> {
+    return {
+      "User-Agent": BOT_UA,
+      "Accept": "text/html,application/xhtml+xml",
+    };
+  }
+  // Fetch with a browser UA first; on 401/403/429 retry once with the
+  // bot UA. Returns the final Response (caller checks .ok).
+  async function safeFetchWithUaFallback(
+    url: string,
+    init: RequestInit,
+  ): Promise<globalThis.Response> {
+    const first = await safeFetch(url, {
+      ...init,
+      headers: { ...browserScrapeHeaders(), ...(init.headers as any) },
+    });
+    if (first.status === 401 || first.status === 403 || first.status === 429) {
+      try { await first.body?.cancel(); } catch { /* ignore */ }
+      return safeFetch(url, {
+        ...init,
+        headers: { ...botScrapeHeaders(), ...(init.headers as any) },
+      });
+    }
+    return first;
+  }
+
   function decodeEntities(s: string) {
     return s
       .replace(/&amp;/g, "&")
@@ -2678,14 +2720,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 10_000);
-      const html = await safeFetch(url, {
+      const html = await safeFetchWithUaFallback(url, {
         signal: ctrl.signal,
-        headers: {
-          // Some shops 403 the default undici UA. A polite browser-like UA
-          // gets through Carter Vintage, Reverb, Gibson, Martin, etc.
-          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
-          "Accept": "text/html,application/xhtml+xml",
-        },
       }).then((r) => {
         if (!r.ok) throw new Error(`Vendor page returned ${r.status}`);
         return r.text();
