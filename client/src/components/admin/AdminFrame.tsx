@@ -297,7 +297,7 @@ export function AdminFrame({
             the page-content max-width wrapper so it spans uniformly
             across every admin page without each page having to opt in. */}
         <AutoSyncAlertBanner />
-        <div className="max-w-[1180px] px-6 sm:px-8 pt-6 pb-8">
+        <div className="max-w-[1440px] mx-auto w-full px-6 sm:px-8 pt-6 pb-8">
           <AdminErrorBoundary>{children}</AdminErrorBoundary>
         </div>
       </main>
