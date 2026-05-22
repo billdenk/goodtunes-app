@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { seedCatalog } from "./storage";
 import { prewarmSpotifyToken } from "./lib/spotify";
 import { authKindMiddleware, canonicalHostRedirect } from "./auth/host";
+import { forwardToPostHog, geoFromRequest } from "./analytics";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -97,6 +98,43 @@ app.use((req, res, next) => {
       }
 
       log(logLine);
+
+      // Task #151 — Admin list error alarm. When a GET on an admin endpoint
+      // returns 5xx, emit a structured log line and (in prod) a PostHog
+      // event so schema drift / handler crashes surface the moment they
+      // land — instead of waiting for Nick to open the affected page.
+      if (
+        res.statusCode >= 500 &&
+        req.method === "GET" &&
+        path.startsWith("/api/admin/")
+      ) {
+        const errorMessage =
+          (capturedJsonResponse && typeof capturedJsonResponse.message === "string"
+            ? capturedJsonResponse.message
+            : null) || "unknown error";
+        const logPayload = {
+          route: path,
+          method: req.method,
+          status: res.statusCode,
+          durationMs: duration,
+          message: errorMessage,
+        };
+        console.error("[admin-list-error]", JSON.stringify(logPayload));
+
+        if (process.env.NODE_ENV === "production") {
+          const geo = geoFromRequest(req);
+          // Fire-and-forget — never block the response on PostHog.
+          void forwardToPostHog([
+            {
+              name: "admin_list_error",
+              payload: logPayload,
+              ts: new Date(),
+              country: geo.country,
+              region: geo.region,
+            },
+          ]);
+        }
+      }
     }
   });
 

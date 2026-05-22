@@ -74,6 +74,10 @@ Forwarding is fire-and-forget — a PostHog outage never blocks `/api/events`, a
 
 Because PostHog is called server-side, ad-blockers can't drop events, and we still own the raw data.
 
+### `admin_list_error` (server-only)
+
+Fired from `server/index.ts` whenever a `GET /api/admin/*` response finishes with a 5xx status. Payload: `{ route, method, status, durationMs, message }`. A structured `[admin-list-error]` log line is always emitted; the PostHog forward is gated on `NODE_ENV=production` so dev/preview noise stays out of the project. This is the early-warning signal for schema drift and admin handler crashes — Nick shouldn't be the one who finds them by opening the page.
+
 ## "Song in N playlists" denorm
 
 `songs.playlist_count` is a denormalized integer column kept in sync by `addSongToPlaylist`, `removeSongFromPlaylist`, and `deletePlaylist` (which decrements every row that was in the deleted playlist). The counter never goes negative — decrements use `GREATEST(playlist_count - 1, 0)`.
