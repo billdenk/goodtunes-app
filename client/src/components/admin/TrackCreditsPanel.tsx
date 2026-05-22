@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "wouter";
 import { ExpandedPanelHeaderSlotContext } from "@/pages/AdminAlbum";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -112,40 +113,72 @@ type PersonCard = {
 
 function PersonColumn({
   p,
+  albumId,
   armed,
   editing,
   busy,
   onRemove,
 }: {
   p: PersonCard;
+  albumId: string;
   armed: boolean;
   editing: boolean;
   busy: boolean;
   onRemove: () => void;
 }) {
+  // Cross-section deep link: tapping a credited person jumps to their
+  // /admin/people/:id page with `?from=album&albumId=…` so the smart
+  // back crumb (see useSmartBackCrumb) returns to this album. Mirrors
+  // the same pattern used from gear and vendors. Unlinked snapshot
+  // rows (personId === null) stay as plain text — there's no record
+  // to land on.
+  const linkHref = p.personId
+    ? `/admin/people/${p.personId}?from=album&albumId=${albumId}`
+    : null;
   return (
     <div
       className="flex w-[96px] shrink-0 flex-col items-center text-center"
       data-testid={`person-card-${p.key}`}
     >
       <div className="relative">
-        <div
-          className={[
-            "flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-[13px] font-semibold transition",
-            armed ? "ring-2 ring-rose-400" : "",
-            p.photoUrl ? "bg-slate-100" : "bg-slate-200 text-slate-600",
-          ].join(" ")}
-        >
-          {p.photoUrl ? (
-            <img
-              src={p.photoUrl}
-              alt={p.name}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            initials(p.name)
-          )}
-        </div>
+        {linkHref && !editing ? (
+          <Link
+            href={linkHref}
+            className={[
+              "flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-[13px] font-semibold transition hover:ring-2 hover:ring-slate-300",
+              p.photoUrl ? "bg-slate-100" : "bg-slate-200 text-slate-600",
+            ].join(" ")}
+            data-testid={`link-person-avatar-${p.key}`}
+          >
+            {p.photoUrl ? (
+              <img
+                src={p.photoUrl}
+                alt={p.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              initials(p.name)
+            )}
+          </Link>
+        ) : (
+          <div
+            className={[
+              "flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-[13px] font-semibold transition",
+              armed ? "ring-2 ring-rose-400" : "",
+              p.photoUrl ? "bg-slate-100" : "bg-slate-200 text-slate-600",
+            ].join(" ")}
+          >
+            {p.photoUrl ? (
+              <img
+                src={p.photoUrl}
+                alt={p.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              initials(p.name)
+            )}
+          </div>
+        )}
         {editing && (
           <button
             type="button"
@@ -171,9 +204,19 @@ function PersonColumn({
           </button>
         )}
       </div>
-      <div className="mt-2 text-[12.5px] font-semibold leading-tight text-slate-900">
-        {p.name}
-      </div>
+      {linkHref && !editing ? (
+        <Link
+          href={linkHref}
+          className="mt-2 text-[12.5px] font-semibold leading-tight text-slate-900 hover:underline"
+          data-testid={`link-person-name-${p.key}`}
+        >
+          {p.name}
+        </Link>
+      ) : (
+        <div className="mt-2 text-[12.5px] font-semibold leading-tight text-slate-900">
+          {p.name}
+        </div>
+      )}
       <div className="mt-0.5 space-y-0 text-[11.5px] leading-snug text-slate-500">
         {p.rows.map((r) => {
           const hasExtra = !!r.instrument || !!r.tuningNotes;
@@ -834,6 +877,7 @@ function Section({
           <PersonColumn
             key={c.key}
             p={c}
+            albumId={albumId}
             armed={pendingRemoveKey === c.key}
             editing={editing}
             busy={delMut.isPending}
