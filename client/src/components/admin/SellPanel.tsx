@@ -5,6 +5,11 @@
 // readout against the platform's certificate cost — Task #119).
 //
 // Mounted as the Sell tab on `AdminAlbum.tsx`.
+//
+// Visual: Stripe-style neutral row. Save is a quiet ghost-link sitting
+// at the row's right edge — it activates (brand blue) only when the row
+// has unsaved edits. A row of 5 enabled formats no longer reads as 5
+// loud blue pills; only the dirty one calls for attention.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
@@ -103,14 +108,14 @@ export function SellPanel({ albumId }: { albumId: string }) {
             Toggle a format on and set its price. Only enabled formats appear on the fan's Buy sheet.
           </p>
           {configuredFormats.length === 0 && liveDrafts.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center">
+            <div className="rounded-md border border-dashed border-slate-200 bg-white p-8 text-center">
               <div className="text-slate-700 text-[13.5px] font-medium">No physical formats yet</div>
               <div className="text-slate-500 text-[12.5px] mt-1">
                 Add a vinyl, cassette, or CD to start selling.
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
+            <div className="rounded-md border border-slate-200 bg-white divide-y divide-slate-100">
               {configuredFormats.map((f) => {
                 const existing = skuByFormat.get(f)!;
                 return (
@@ -149,7 +154,7 @@ export function SellPanel({ albumId }: { albumId: string }) {
             Your per-unit earnings are computed live against the platform's certificate cost — the
             platform price locks in when you Save.
           </p>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="rounded-md border border-slate-200 bg-white p-4">
             <AddonForm
               existing={signedAddon ?? null}
               livePlatformCostCents={payoutSettings?.certCostCents ?? null}
@@ -159,6 +164,41 @@ export function SellPanel({ albumId }: { albumId: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Shared form-control styling so every input on this panel matches
+// the admin token set (hairline border, brand-blue focus ring).
+const fieldClass =
+  "h-8 rounded-md border border-slate-200 bg-white px-2 text-[13px] text-slate-900 " +
+  "focus:outline-none focus:border-[color:var(--brand-blue)] focus:ring-1 focus:ring-[color:var(--brand-blue)]";
+
+// Quiet "Save" affordance. At rest: slate-500 link. When the row has
+// unsaved edits: brand-blue link + faint pill. No bouncy fill.
+function SaveLink({
+  dirty,
+  onClick,
+  testId,
+}: {
+  dirty: boolean;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!dirty}
+      className={
+        "h-8 px-2.5 rounded-md text-[12px] font-medium transition-colors " +
+        (dirty
+          ? "text-[color:var(--brand-blue)] hover:bg-[color:var(--brand-blue-soft)]"
+          : "text-slate-400 cursor-default")
+      }
+      data-testid={testId}
+    >
+      Save
+    </button>
   );
 }
 
@@ -230,6 +270,14 @@ function SkuRow({
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
   const [stockStr, setStockStr] = useState(existing?.stock?.toString() ?? "");
 
+  // Row is dirty if any field diverges from the stored value (or no
+  // stored value exists yet but the operator typed something).
+  const storedActive = existing?.active ?? false;
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "";
+  const storedStock = existing?.stock?.toString() ?? "";
+  const dirty =
+    active !== storedActive || priceStr !== storedPrice || stockStr !== storedStock;
+
   const submit = () => {
     const cents = parseDollars(priceStr);
     if (cents === null) return;
@@ -250,7 +298,7 @@ function SkuRow({
           type="checkbox"
           checked={active}
           onChange={(e) => setActive(e.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-[#319ED8] focus:ring-[#319ED8]"
+          className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
           data-testid={`toggle-sku-${format}`}
         />
         <span className="text-[13.5px] font-medium text-slate-900">{ALBUM_FORMAT_LABEL[format]}</span>
@@ -263,7 +311,7 @@ function SkuRow({
           onChange={(e) => setPriceStr(e.target.value)}
           placeholder="0.00"
           inputMode="decimal"
-          className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[#319ED8]"
+          className={`w-24 ${fieldClass}`}
           data-testid={`input-price-${format}`}
         />
       </div>
@@ -275,24 +323,17 @@ function SkuRow({
           onChange={(e) => setStockStr(e.target.value.replace(/[^0-9]/g, ""))}
           placeholder="∞"
           inputMode="numeric"
-          className="w-16 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[#319ED8]"
+          className={`w-16 ${fieldClass}`}
           data-testid={`input-stock-${format}`}
         />
       </div>
-      <div className="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          onClick={submit}
-          className="h-8 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-medium hover:bg-[#2a8cc1]"
-          data-testid={`button-save-sku-${format}`}
-        >
-          Save
-        </button>
+      <div className="ml-auto flex items-center gap-1">
+        <SaveLink dirty={dirty} onClick={submit} testId={`button-save-sku-${format}`} />
         <button
           type="button"
           onClick={onDelete}
-          className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"
-          aria-label="Remove format"
+          className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors"
+          aria-label={isDraft ? "Discard draft" : "Remove format"}
           data-testid={`button-delete-sku-${format}`}
         >
           <X className="w-3.5 h-3.5" />
@@ -313,6 +354,7 @@ function AddonForm({
 }) {
   const [active, setActive] = useState(existing?.active ?? false);
   const [price, setPrice] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "12.99");
+  const [floor, setFloor] = useState(existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99");
 
   // Cost to use for the readout: prefer the snapshot the artist locked
   // in at last save, fall back to the live platform cost when the addon
@@ -323,6 +365,11 @@ function AddonForm({
 
   const priceCents = useMemo(() => parseDollars(price), [price]);
   const earnsCents = priceCents !== null && readoutCost !== null ? priceCents - readoutCost : null;
+
+  const storedActive = existing?.active ?? false;
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "9.99";
+  const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
+  const dirty = active !== storedActive || price !== storedPrice || floor !== storedFloor;
 
   const submit = () => {
     const cents = parseDollars(price);
@@ -338,7 +385,7 @@ function AddonForm({
             type="checkbox"
             checked={active}
             onChange={(e) => setActive(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-[#319ED8] focus:ring-[#319ED8]"
+            className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
             data-testid="toggle-addon-signed_cert"
           />
           <span className="text-[13.5px] font-medium text-slate-900">Offer signed certificate</span>
@@ -350,18 +397,24 @@ function AddonForm({
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             inputMode="decimal"
-            className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[#319ED8]"
+            className={`w-24 ${fieldClass}`}
             data-testid="input-addon-price"
           />
         </div>
-        <button
-          type="button"
-          onClick={submit}
-          className="h-8 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-medium hover:bg-[#2a8cc1]"
-          data-testid="button-save-addon"
-        >
-          Save
-        </button>
+        <div className="flex items-center gap-1.5">
+          <span className="text-slate-500 text-[12px]">Min floor $</span>
+          <input
+            type="text"
+            value={floor}
+            onChange={(e) => setFloor(e.target.value)}
+            inputMode="decimal"
+            className={`w-24 ${fieldClass}`}
+            data-testid="input-addon-floor"
+          />
+        </div>
+        <div className="ml-auto">
+          <SaveLink dirty={dirty} onClick={submit} testId="button-save-addon" />
+        </div>
       </div>
 
       {/* Live profit readout. Mint = profit, heart-pink = loss. */}
@@ -377,7 +430,7 @@ function AddonForm({
           <span
             className={[
               "tabular-nums font-semibold",
-              earnsCents < 0 ? "text-[#FF5470]" : "text-slate-900",
+              earnsCents < 0 ? "text-[color:var(--brand-pink)]" : "text-slate-900",
             ].join(" ")}
           >
             You earn {earnsCents < 0 ? `-${dollars(Math.abs(earnsCents))}` : dollars(earnsCents)} per unit

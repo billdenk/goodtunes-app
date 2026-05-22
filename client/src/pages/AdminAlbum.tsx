@@ -343,7 +343,7 @@ export function AdminAlbum() {
     return (
       <AdminFrame active="albums">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -366,7 +366,7 @@ export function AdminAlbum() {
           </h1>
           <Link
             href="/admin/albums"
-            className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+            className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
             data-testid="link-back-to-albums"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -421,7 +421,7 @@ export function AdminAlbum() {
           <button
             type="button"
             onClick={() => setArtworkEditorOpen(true)}
-            className="group relative w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8] focus-visible:ring-offset-2"
+            className="group relative w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
             aria-label="Edit album artwork"
             data-testid="button-edit-album-cover"
           >
@@ -467,7 +467,7 @@ export function AdminAlbum() {
                 {album.primaryArtistId ? (
                   <Link
                     href={`/admin/people/${album.primaryArtistId}`}
-                    className="text-slate-400 hover:text-[#319ED8] hover:underline underline-offset-2 focus-visible:text-[#319ED8] focus-visible:underline focus-visible:outline-none rounded-sm transition-colors"
+                    className="text-slate-400 hover:text-[var(--brand-blue)] hover:underline underline-offset-2 focus-visible:text-[var(--brand-blue)] focus-visible:underline focus-visible:outline-none rounded-sm transition-colors"
                     data-testid={`link-album-artist-${album.primaryArtistId}`}
                   >
                     {album.artist}
@@ -543,7 +543,7 @@ export function AdminAlbum() {
               >
                 {t.label}
                 {tab === t.key && (
-                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
                 )}
               </button>
             ))}
@@ -1601,10 +1601,10 @@ function TracksPanel({
         <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
           <button
             onClick={() => setAdding(true)}
-            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[var(--brand-blue)] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
             data-testid="button-add-first-track"
           >
-            <div className="w-8 h-8 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center">
+            <div className="w-8 h-8 rounded-md bg-[var(--brand-blue)]/10 text-[var(--brand-blue)] inline-flex items-center justify-center">
               <Plus className="w-4 h-4" />
             </div>
             <div className="mt-2.5 text-[13px] font-semibold text-slate-900">
@@ -1616,10 +1616,10 @@ function TracksPanel({
           </button>
           <button
             onClick={() => setBulkAddOpen(true)}
-            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[#319ED8] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[var(--brand-blue)] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
             data-testid="button-bulk-add-tracks-empty"
           >
-            <div className="w-8 h-8 rounded-md bg-[#319ED8]/10 text-[#319ED8] inline-flex items-center justify-center">
+            <div className="w-8 h-8 rounded-md bg-[var(--brand-blue)]/10 text-[var(--brand-blue)] inline-flex items-center justify-center">
               <ListPlus className="w-4 h-4" />
             </div>
             <div className="mt-2.5 text-[13px] font-semibold text-slate-900">
@@ -2505,8 +2505,8 @@ function AddTrackForm({
       className={[
         "border-t border-slate-200 px-5 py-3.5 transition-colors",
         dragOver
-          ? "bg-[#319ED8]/15 ring-2 ring-inset ring-[#319ED8]/40"
-          : "bg-[#319ED8]/5",
+          ? "bg-[var(--brand-blue)]/15 ring-2 ring-inset ring-[var(--brand-blue)]/40"
+          : "bg-[var(--brand-blue)]/5",
       ].join(" ")}
       data-testid="form-add-track"
       onKeyDown={(e) => {
@@ -2594,7 +2594,7 @@ function AddTrackForm({
               : "Track title — or drop an audio file"
           }
           disabled={createMut.isPending}
-          className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
           data-testid="input-new-track-title"
         />
         <input
@@ -2607,7 +2607,7 @@ function AddTrackForm({
           placeholder="3:00"
           disabled={createMut.isPending}
           aria-label="Track duration in mm:ss"
-          className="w-20 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          className="w-20 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
           data-testid="input-new-track-duration"
         />
         <button
@@ -2620,7 +2620,7 @@ function AddTrackForm({
           data-testid="button-attach-new-track-audio"
         >
           {uploading ? (
-            <Spinner className="w-3.5 h-3.5 animate-spin text-[#319ED8]" />
+            <Spinner className="w-3.5 h-3.5 animate-spin text-[var(--brand-blue)]" />
           ) : (
             <Upload className="w-3.5 h-3.5" />
           )}
@@ -2629,7 +2629,7 @@ function AddTrackForm({
           type="button"
           onClick={submit}
           disabled={createMut.isPending || uploading}
-          className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+          className="px-3 h-8 rounded-md bg-[var(--brand-blue)] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
           data-testid="button-save-new-track"
         >
           {createMut.isPending ? (
@@ -2656,7 +2656,7 @@ function AddTrackForm({
           className="mt-1.5 ml-9 inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600"
           data-testid="chip-new-track-audio"
         >
-          <Music className="w-3 h-3 text-[#319ED8]" />
+          <Music className="w-3 h-3 text-[var(--brand-blue)]" />
           <span className="truncate max-w-[260px]">{audioFilename}</span>
           {uploading ? (
             <span className="text-slate-400">· uploading…</span>
@@ -3002,7 +3002,7 @@ function AddMultipleTracksDialog({
                 <button
                   type="button"
                   aria-label="How upload multiple tracks works"
-                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
                   data-testid="button-tracks-info"
                 >
                   <Info className="w-3.5 h-3.5" />
@@ -3442,7 +3442,7 @@ function ImportLyricsFromDropboxDialog({
                 <button
                   type="button"
                   aria-label="How to share the folder"
-                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
                   data-testid="button-lyrics-import-info"
                 >
                   <Info className="w-3.5 h-3.5" />
@@ -3550,12 +3550,12 @@ function ImportLyricsFromDropboxDialog({
             whole album" wizard so behavior matches between surfaces. */}
         {summary && summary.matched.length > 0 && !syncDone && (
           <div
-            className="rounded-lg border border-[#319ED8]/30 bg-[#319ED8]/5 px-3 py-2.5 space-y-2"
+            className="rounded-lg border border-[var(--brand-blue)]/30 bg-[var(--brand-blue)]/5 px-3 py-2.5 space-y-2"
             data-testid="card-goodsync-prompt"
           >
             {syncProgress ? (
               <div className="flex items-center gap-2 text-[12.5px] text-slate-700">
-                <Spinner className="w-3.5 h-3.5 animate-spin text-[#319ED8] flex-shrink-0" />
+                <Spinner className="w-3.5 h-3.5 animate-spin text-[var(--brand-blue)] flex-shrink-0" />
                 <span className="tabular-nums">
                   GoodSyncing™ {syncProgress.current} of {syncProgress.total}
                 </span>
@@ -3583,7 +3583,7 @@ function ImportLyricsFromDropboxDialog({
                       void goodSyncAll(true);
                     }}
                     data-testid="button-goodsync-find-chorus"
-                    className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+                    className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     Yes, find the chorus
@@ -3615,7 +3615,7 @@ function ImportLyricsFromDropboxDialog({
                     type="button"
                     onClick={() => setChorusPhase("ask-chorus")}
                     data-testid="button-goodsync-after-import"
-                    className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
+                    className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     GoodSync™ {summary.matched.length} {summary.matched.length === 1 ? "track" : "tracks"}
@@ -4299,7 +4299,7 @@ function StatusChip({
 }) {
   const tone =
     state === "auto"
-      ? "bg-[#319ED8] text-white"
+      ? "bg-[var(--brand-blue)] text-white"
       : state === "manual"
         ? "bg-white text-slate-900 ring-1 ring-inset ring-slate-300"
         : "bg-slate-100 text-slate-300";
@@ -4357,7 +4357,7 @@ function ExpandedPanel({
   return (
     <div
       data-testid={testId}
-      className="rounded-xl border border-[#319ED8]/50 bg-white shadow-sm overflow-hidden"
+      className="rounded-xl border border-[var(--brand-blue)]/50 bg-white shadow-sm overflow-hidden"
     >
       <div className="relative flex items-center gap-2.5 px-4 py-2.5 hover:bg-slate-50">
         {/* Invisible click target covering the whole header. Sits
@@ -4371,8 +4371,8 @@ function ExpandedPanel({
           className="absolute inset-0 z-0 focus:outline-none focus:bg-slate-50/0"
           data-testid={testId ? `${testId}-collapse` : undefined}
         />
-        <span className="relative z-0 w-8 h-8 rounded-md bg-[#319ED8]/10 inline-flex items-center justify-center flex-shrink-0">
-          <Icon className="w-4 h-4 text-[#319ED8]" />
+        <span className="relative z-0 w-8 h-8 rounded-md bg-[var(--brand-blue)]/10 inline-flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-[var(--brand-blue)]" />
         </span>
         <span className="relative z-0 flex-1 min-w-0 pointer-events-none">
           <span className="block text-[12.5px] font-semibold text-slate-900 leading-tight">
@@ -4446,14 +4446,14 @@ function StatusBadge({
   const notOkIcon =
     severity === "required"
       ? "bg-amber-50 text-amber-600"
-      : "bg-[#319ED8]/10 text-[#319ED8]";
+      : "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]";
   const emphasized = size === "emphasized";
   // Active = "you've opened this tile's editor." Apple's pattern for
   // a selected cell: tinted background + brand-color ring, not just a
   // heavier border. Ring sits OUTSIDE the existing border so the
   // tile doesn't shift by 1px when it becomes active.
   const activeCls = active
-    ? "border-[#319ED8] bg-[#319ED8]/5 ring-2 ring-[#319ED8]/30 hover:bg-[#319ED8]/5 hover:border-[#319ED8]"
+    ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 ring-2 ring-[var(--brand-blue)]/30 hover:bg-[var(--brand-blue)]/5 hover:border-[var(--brand-blue)]"
     : "border-slate-200 hover:border-slate-300 hover:bg-slate-50";
   if (compact) {
     // Compact tile = miniature of the ExpandedPanel header: icon on
@@ -4468,7 +4468,7 @@ function StatusBadge({
         data-testid={testId}
         aria-pressed={active}
         className={[
-          "group/card flex items-center gap-2.5 px-3 py-3 rounded-lg bg-white border text-left w-full transition-all relative focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
+          "group/card flex items-center gap-2.5 px-3 py-3 rounded-lg bg-white border text-left w-full transition-all relative focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40",
           activeCls,
         ].join(" ")}
       >
@@ -4502,7 +4502,7 @@ function StatusBadge({
       data-testid={testId}
       aria-pressed={active}
       className={[
-        "group/card flex items-center justify-between gap-2 rounded-lg bg-white border text-left w-full transition-all focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40",
+        "group/card flex items-center justify-between gap-2 rounded-lg bg-white border text-left w-full transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40",
         emphasized ? "px-4 py-3" : "px-3 py-2",
         activeCls,
       ].join(" ")}
@@ -4674,7 +4674,7 @@ function TrackRow({
   const liCls = [
     "group relative flex flex-col transition-colors",
     withBorder && "border-b border-slate-100",
-    mode !== "view" ? "bg-[#319ED8]/5" : "",
+    mode !== "view" ? "bg-[var(--brand-blue)]/5" : "",
     isDragging ? "opacity-40" : "",
   ]
     .filter(Boolean)
@@ -4694,7 +4694,7 @@ function TrackRow({
       {isDropTarget && (
         <span
           aria-hidden="true"
-          className="absolute left-0 right-0 -top-px h-0.5 bg-[#319ED8] z-10"
+          className="absolute left-0 right-0 -top-px h-0.5 bg-[var(--brand-blue)] z-10"
           data-testid={`indicator-drop-${song.id}`}
         />
       )}
@@ -4723,7 +4723,7 @@ function TrackRow({
             aria-label={selected ? "Deselect track" : "Select track"}
             aria-pressed={selected}
             className={[
-              "w-4 h-4 -ml-1 inline-flex items-center justify-center rounded-[4px] border transition-colors flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+              "w-4 h-4 -ml-1 inline-flex items-center justify-center rounded-[4px] border transition-colors flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40",
               selected
                 ? "bg-rose-600 border-rose-600 text-white hover:bg-rose-700"
                 : "bg-white border-slate-300 hover:border-slate-500",
@@ -4740,7 +4740,7 @@ function TrackRow({
             aria-label="Drag to reorder"
             title="Drag to reorder"
             className={[
-              "w-3.5 h-5 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 rounded transition-opacity",
+              "w-3.5 h-5 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 rounded transition-opacity",
               !expanded
                 ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
                 : "opacity-0 pointer-events-none",
@@ -4767,7 +4767,7 @@ function TrackRow({
           <span
             className={[
               "absolute inset-0 inline-flex items-center justify-center text-[12px] tabular-nums font-medium transition-opacity",
-              isCurrent ? "text-[#319ED8]" : "text-slate-400",
+              isCurrent ? "text-[var(--brand-blue)]" : "text-slate-400",
               song.audioUrl
                 ? expanded
                   ? "group-hover:opacity-0"
@@ -4814,14 +4814,14 @@ function TrackRow({
                 }
                 data-testid={`button-play-track-${song.id}`}
                 className={[
-                  "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+                  "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40",
                   muxEncoding
                     ? "opacity-100 text-slate-400 cursor-wait"
                     : expanded
-                      ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]"
+                      ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[var(--brand-blue)]"
                       : isCurrent
-                        ? "opacity-100 text-[#319ED8]"
-                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[#319ED8]",
+                        ? "opacity-100 text-[var(--brand-blue)]"
+                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[var(--brand-blue)]",
                 ].join(" ")}
               >
                 {muxEncoding ? (
@@ -4896,7 +4896,7 @@ function TrackRow({
                   <div
                     className={[
                       "text-[13.5px] font-medium truncate",
-                      isCurrent ? "text-[#319ED8]" : "text-slate-900",
+                      isCurrent ? "text-[var(--brand-blue)]" : "text-slate-900",
                     ].join(" ")}
                     data-testid={`text-track-title-${song.id}`}
                   >
@@ -4997,7 +4997,7 @@ function TrackRow({
                     ? "partial"
                     : "empty";
               const chipBtn =
-                "inline-flex items-center justify-center rounded-[5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 transition-transform active:scale-[0.94]";
+                "inline-flex items-center justify-center rounded-[5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 transition-transform active:scale-[0.94]";
               return (
                 <div
                   className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-60 transition-opacity"
@@ -5123,7 +5123,7 @@ function TrackRow({
           aria-expanded={expanded}
           aria-label={expanded ? "Collapse track" : "Expand track"}
           title={expanded ? "Collapse" : "Expand"}
-          className="flex-shrink-0 w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+          className="flex-shrink-0 w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40"
           data-testid={`button-expand-track-${song.id}`}
         >
           <ChevronDown
@@ -5946,7 +5946,7 @@ function GoodSyncPanel({
   const header = (
     <div className="flex items-center justify-between gap-2 h-7">
       <div className="flex items-center gap-2 min-w-0">
-        <span className="w-5 h-5 rounded-full bg-[#319ED8] inline-flex items-center justify-center flex-shrink-0">
+        <span className="w-5 h-5 rounded-full bg-[var(--brand-blue)] inline-flex items-center justify-center flex-shrink-0">
           <WaveArrowGlyph className="w-3 h-3" />
         </span>
         <h4 className="text-[13px] font-semibold text-slate-800 truncate">
@@ -5957,7 +5957,7 @@ function GoodSyncPanel({
             <button
               type="button"
               aria-label="What is GoodSync™?"
-              className="w-5 h-5 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+              className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
               data-testid={`button-goodsync-info-${song.id}`}
             >
               <Info className="w-3.5 h-3.5" />
@@ -5969,7 +5969,7 @@ function GoodSyncPanel({
             className="w-72 text-[12px] leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
           >
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-6 h-6 rounded-full bg-[#319ED8] inline-flex items-center justify-center">
+              <span className="w-6 h-6 rounded-full bg-[var(--brand-blue)] inline-flex items-center justify-center">
                 <WaveArrowGlyph className="w-3.5 h-3.5" />
               </span>
               <p className="font-semibold text-slate-900">
@@ -6006,7 +6006,7 @@ function GoodSyncPanel({
               type="button"
               onClick={() => saveCueEdits.mutate()}
               disabled={saveCueEdits.isPending}
-              className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#319ED8]/90 disabled:opacity-50"
+              className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-[var(--brand-blue)] text-white text-[11px] font-semibold hover:bg-[var(--brand-blue)]/90 disabled:opacity-50"
               data-testid={`button-save-cue-edit-${song.id}`}
             >
               {saveCueEdits.isPending ? (
@@ -6028,7 +6028,7 @@ function GoodSyncPanel({
                 onClick={handleSyncClick}
                 disabled={syncing}
                 title="Sync with audio — uses ElevenLabs to time each line to the master"
-                className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[#319ED8]/40 bg-white text-[#319ED8] text-[10.5px] font-semibold hover:bg-[#319ED8]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md border border-[var(--brand-blue)]/40 bg-white text-[var(--brand-blue)] text-[10.5px] font-semibold hover:bg-[var(--brand-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid={`button-sync-audio-${song.id}`}
               >
                 {syncing ? (
@@ -6050,7 +6050,7 @@ function GoodSyncPanel({
                 disabled={syncing}
                 aria-label="Re-sync with audio"
                 title="Re-sync with audio — replaces the existing GoodSync cues with a fresh alignment"
-                className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid={`button-sync-audio-${song.id}`}
               >
                 {syncing ? (
@@ -6069,7 +6069,7 @@ function GoodSyncPanel({
                 onClick={enterEdit}
                 aria-label="Edit cue text"
                 title="Edit cue text — fix words STT misheard. Timings stay put."
-                className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center"
                 data-testid={`button-edit-cues-${song.id}`}
               >
                 <Pencil className="w-3.5 h-3.5" />
@@ -6083,7 +6083,7 @@ function GoodSyncPanel({
                 disabled={previewCues.length === 0}
                 aria-label={playing ? "Pause preview" : "Play preview"}
                 title={playing ? "Pause preview" : "Play preview"}
-                className="w-6 h-6 rounded-full text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid={`button-play-goodsync-header-${song.id}`}
               >
                 {playing ? (
@@ -6127,7 +6127,7 @@ function GoodSyncPanel({
             className="flex-1 flex flex-col items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10 gap-2"
             data-testid={`status-syncing-${song.id}`}
           >
-            <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
+            <Spinner className="w-5 h-5 text-[var(--brand-blue)] animate-spin" />
             <span>
               Listening to the master and lining up every word…
               <br />
@@ -6142,7 +6142,7 @@ function GoodSyncPanel({
             data-testid={`status-not-synced-${song.id}`}
           >
             Tap{" "}
-            <span className="font-semibold text-[#319ED8] mx-1">
+            <span className="font-semibold text-[var(--brand-blue)] mx-1">
               Sync with audio
             </span>{" "}
             and we'll transcribe the master line-by-line.
@@ -6192,7 +6192,7 @@ function GoodSyncPanel({
                       }}
                       disabled={saveCueEdits.isPending}
                       aria-label={`Cue at ${fmt(cue.timeMs / 1000)} — edit text`}
-                      className="flex-1 min-w-0 h-7 rounded-md border border-slate-200 bg-white px-2 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="flex-1 min-w-0 h-7 rounded-md border border-slate-200 bg-white px-2 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
                       data-testid={`input-cue-text-${song.id}-${i}`}
                     />
                   </div>
@@ -6319,7 +6319,7 @@ function GoodSyncPanel({
                   data-testid={`progress-goodsync-${song.id}`}
                 >
                   <div
-                    className="absolute inset-y-0 left-0 bg-[#319ED8] rounded-full"
+                    className="absolute inset-y-0 left-0 bg-[var(--brand-blue)] rounded-full"
                     style={{
                       width: `${
                         song.duration
@@ -6785,7 +6785,7 @@ function LyricsEditor({
                     <button
                       type="button"
                       title="What is Editable Lyrics?"
-                      className="inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-400 hover:text-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+                      className="inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40"
                       data-testid={`button-editable-lyrics-info-${song.id}`}
                     >
                       <Info className="w-3.5 h-3.5" />
@@ -6822,7 +6822,7 @@ function LyricsEditor({
               {!song.instrumental && (
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    className="inline-flex items-center gap-1 text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded data-[state=open]:underline disabled:opacity-50 flex-shrink-0"
+                    className="inline-flex items-center gap-1 text-[10.5px] text-[var(--brand-blue)] hover:text-[var(--brand-blue)]/80 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40 rounded data-[state=open]:underline disabled:opacity-50 flex-shrink-0"
                     disabled={uploadLyricMut.isPending || fetchLrclibMut.isPending}
                     data-testid={`button-lyric-options-${song.id}`}
                     aria-label="Lyric options"
@@ -6832,7 +6832,7 @@ function LyricsEditor({
                       : uploadLyricMut.isPending
                         ? "Importing…"
                         : "Lyric options"}
-                    <ChevronDown className="w-3 h-3 -mr-0.5 text-[#319ED8]/70" />
+                    <ChevronDown className="w-3 h-3 -mr-0.5 text-[var(--brand-blue)]/70" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
@@ -6940,7 +6940,7 @@ function LyricsEditor({
                     lyricUrl.trim() && uploadLyricMut.mutate({ url: lyricUrl.trim() })
                   }
                   disabled={!lyricUrl.trim() || uploadLyricMut.isPending || fetchLrclibMut.isPending}
-                  className="text-[11px] font-semibold text-[#319ED8] hover:underline disabled:opacity-40"
+                  className="text-[11px] font-semibold text-[var(--brand-blue)] hover:underline disabled:opacity-40"
                   data-testid={`button-fetch-lyric-url-${song.id}`}
                 >
                   {uploadLyricMut.isPending ? "Fetching…" : "Fetch"}
@@ -7010,7 +7010,7 @@ function LyricsEditor({
                     placeholder={
                       "V1\nFirst line of the verse\nSecond line of the verse\n\nCHORUS\nFirst line of the chorus\n\n— or drop a .pdf / .docx / .txt here —"
                     }
-                    className="w-full h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                    className="w-full h-[200px] rounded-md border border-slate-300 bg-white px-3 py-2 text-[12.5px] leading-relaxed text-slate-900 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
                     data-testid={`textarea-lyrics-${song.id}`}
                   />
                 )}
@@ -7018,7 +7018,7 @@ function LyricsEditor({
                     being dragged across the textarea. Sits above the
                     textarea so the drop target is unambiguous. */}
                 {dragOver && (
-                  <div className="pointer-events-none absolute inset-0 rounded-md border-2 border-dashed border-[#319ED8] bg-[#319ED8]/10 flex items-center justify-center text-[12px] font-semibold text-[#319ED8]">
+                  <div className="pointer-events-none absolute inset-0 rounded-md border-2 border-dashed border-[var(--brand-blue)] bg-[var(--brand-blue)]/10 flex items-center justify-center text-[12px] font-semibold text-[var(--brand-blue)]">
                     Drop to import lyrics
                   </div>
                 )}
@@ -7027,7 +7027,7 @@ function LyricsEditor({
                     something is happening. */}
                 {uploadLyricMut.isPending && (
                   <div className="pointer-events-none absolute inset-0 rounded-md bg-white/70 flex items-center justify-center gap-2 text-[12px] text-slate-600">
-                    <Spinner className="w-4 h-4 animate-spin text-[#319ED8]" />
+                    <Spinner className="w-4 h-4 animate-spin text-[var(--brand-blue)]" />
                     Importing lyrics…
                   </div>
                 )}
@@ -7045,15 +7045,15 @@ function LyricsEditor({
                   type="button"
                   onClick={() => setShowOriginal((v) => !v)}
                   aria-pressed={showOriginal}
-                  className="text-[10.5px] text-[#319ED8] hover:text-[#319ED8]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40 rounded inline-flex items-center gap-1"
+                  className="text-[10.5px] text-[var(--brand-blue)] hover:text-[var(--brand-blue)]/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40 rounded inline-flex items-center gap-1"
                   data-testid={`button-view-original-lyrics-${song.id}`}
                 >
                   <span
                     className={
                       "inline-block w-3.5 h-3.5 rounded-full border " +
                       (showOriginal
-                        ? "bg-[#319ED8] border-[#319ED8]"
-                        : "border-[#319ED8]/60 bg-white")
+                        ? "bg-[var(--brand-blue)] border-[var(--brand-blue)]"
+                        : "border-[var(--brand-blue)]/60 bg-white")
                     }
                     aria-hidden="true"
                   />
@@ -7217,7 +7217,7 @@ function SyncedLyricsEditor({
         className={[
           "rounded-xl border-2 border-dashed px-4 py-3 space-y-3 transition-colors",
           dragOver
-            ? "border-[#319ED8] bg-[#319ED8]/10"
+            ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/10"
             : "border-slate-200 bg-slate-50/60",
         ].join(" ")}
         data-testid={`dropzone-vtt-${song.id}`}
@@ -7228,7 +7228,7 @@ function SyncedLyricsEditor({
               <>
                 {cueCount} cue{cueCount === 1 ? "" : "s"}
                 {dirty && origCount !== cueCount && (
-                  <span className="text-[#319ED8]">
+                  <span className="text-[var(--brand-blue)]">
                     {" "}
                     (was {origCount})
                   </span>
@@ -7259,7 +7259,7 @@ function SyncedLyricsEditor({
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={parsing || saveMut.isPending}
-            className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-40 font-semibold"
+            className="text-[12px] text-[var(--brand-blue)] hover:underline disabled:opacity-40 font-semibold"
             data-testid={`button-choose-vtt-${song.id}`}
           >
             {cueCount > 0 ? "Replace .vtt" : "Upload .vtt"}
@@ -7297,7 +7297,7 @@ function SyncedLyricsEditor({
             "Or paste WebVTT text here:\nWEBVTT\n\n00:00:12.000 --> 00:00:15.500\nFirst line of lyric"
           }
           disabled={parsing || saveMut.isPending}
-          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[11.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[11.5px] leading-relaxed text-slate-900 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
           data-testid={`textarea-vtt-raw-${song.id}`}
         />
 
@@ -7356,7 +7356,7 @@ function SyncedLyricsEditor({
             type="button"
             onClick={() => saveMut.mutate()}
             disabled={!dirty || parsing || saveMut.isPending}
-            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+            className="px-3 h-8 rounded-md bg-[var(--brand-blue)] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
             data-testid={`button-save-vtt-${song.id}`}
           >
             {saveMut.isPending && (
@@ -7686,7 +7686,7 @@ function CreditRowItem({
   if (editing) {
     return (
       <li
-        className="rounded-md bg-white border border-[#319ED8]/40 px-2.5 py-2 space-y-1.5"
+        className="rounded-md bg-white border border-[var(--brand-blue)]/40 px-2.5 py-2 space-y-1.5"
         data-testid={`row-credit-edit-${row.id}`}
         onKeyDown={(e) => {
           // Escape cancels the row edit. Stop propagation so the parent
@@ -7736,7 +7736,7 @@ function CreditRowItem({
               value={tuningNotes}
               onChange={(e) => setTuningNotes(e.target.value)}
               placeholder="Tuning / setup notes…"
-              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
               data-testid={`input-tuning-${row.id}`}
             />
           </div>
@@ -7755,7 +7755,7 @@ function CreditRowItem({
             type="button"
             onClick={() => save.mutate()}
             disabled={save.isPending || !role}
-            className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+            className="px-2.5 h-7 rounded-md bg-[var(--brand-blue)] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
             data-testid={`button-save-credit-${row.id}`}
           >
             {save.isPending && <Spinner className="w-3 h-3 animate-spin" />}
@@ -7896,7 +7896,7 @@ function AddCreditForm({
 
   return (
     <div
-      className="rounded-md bg-white border border-[#319ED8]/40 px-2.5 py-2 space-y-1.5"
+      className="rounded-md bg-white border border-[var(--brand-blue)]/40 px-2.5 py-2 space-y-1.5"
       data-testid={`form-add-credit-${kind}`}
       onKeyDown={(e) => {
         if (e.key === "Escape" && !create.isPending) {
@@ -7905,7 +7905,7 @@ function AddCreditForm({
         }
       }}
     >
-      <div className="text-[10.5px] uppercase tracking-wider font-semibold text-[#319ED8]">
+      <div className="text-[10.5px] uppercase tracking-wider font-semibold text-[var(--brand-blue)]">
         Add {kind}
       </div>
       <div className="grid grid-cols-[1fr_1fr] gap-1.5">
@@ -7938,7 +7938,7 @@ function AddCreditForm({
             value={tuningNotes}
             onChange={(e) => setTuningNotes(e.target.value)}
             placeholder="Tuning / setup notes…"
-            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
             data-testid={`input-tuning-new-${kind}`}
           />
         </div>
@@ -7957,7 +7957,7 @@ function AddCreditForm({
           type="button"
           onClick={() => create.mutate()}
           disabled={create.isPending || !personId || !role}
-          className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+          className="px-2.5 h-7 rounded-md bg-[var(--brand-blue)] text-white text-[11px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
           data-testid={`button-save-add-${kind}`}
         >
           {create.isPending && <Spinner className="w-3 h-3 animate-spin" />}
@@ -7992,7 +7992,7 @@ function PersonSelect({
       ref={selectRef}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value || null)}
-      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
       data-testid={testId}
     >
       <option value="">— Pick a person —</option>
@@ -8021,7 +8021,7 @@ function InstrumentSelect({
     <select
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value || null)}
-      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
       data-testid={testId}
     >
       <option value="">— No gear —</option>
@@ -8062,7 +8062,7 @@ function RoleSelect({
         const [k, ...rest] = e.target.value.split(":");
         onChange(k as "writer" | "performer", rest.join(":"));
       }}
-      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[12px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
       data-testid={testId}
     >
       {(lockKind ? kind === "writer" : true) && writerRoles.length > 0 && (
@@ -8110,7 +8110,7 @@ function PersonAvatar({
     );
   }
   return (
-    <span className="w-5 h-5 rounded-full bg-[#319ED8]/15 text-[#319ED8] text-[10px] font-bold inline-flex items-center justify-center flex-shrink-0">
+    <span className="w-5 h-5 rounded-full bg-[var(--brand-blue)]/15 text-[var(--brand-blue)] text-[10px] font-bold inline-flex items-center justify-center flex-shrink-0">
       {initial}
     </span>
   );
@@ -8235,7 +8235,7 @@ function PinpointLyricsButton({
           type="button"
           onClick={(e) => e.stopPropagation()}
           title="Search lyrics — jump the preview window to a line"
-          className="inline-flex items-center justify-center w-6 h-6 rounded-md text-slate-500 hover:text-[#319ED8] hover:bg-[#319ED8]/10 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/40"
+          className="inline-flex items-center justify-center w-6 h-6 rounded-md text-slate-500 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40"
           data-testid={`button-pinpoint-lyrics-${songId}`}
         >
           <Search className="w-3.5 h-3.5" />
@@ -8262,7 +8262,7 @@ function PinpointLyricsButton({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search lyrics…"
               autoFocus
-              className="w-full h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+              className="w-full h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
               data-testid={`input-pinpoint-search-${songId}`}
             />
           </div>
@@ -8285,7 +8285,7 @@ function PinpointLyricsButton({
                     body = (
                       <>
                         {cue.text.slice(0, idx)}
-                        <mark className="bg-[#319ED8]/20 text-slate-900 rounded px-0.5">
+                        <mark className="bg-[var(--brand-blue)]/20 text-slate-900 rounded px-0.5">
                           {cue.text.slice(idx, idx + q.length)}
                         </mark>
                         {cue.text.slice(idx + q.length)}
@@ -8686,7 +8686,7 @@ function RichPreviewEditor({
           className={[
             "w-11 h-11 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors",
             playing
-              ? "bg-[#319ED8] text-white hover:bg-[#319ED8]/90"
+              ? "bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue)]/90"
               : "bg-slate-100 text-slate-700 hover:bg-slate-200",
           ].join(" ")}
           data-testid={`button-preview-play-${song.id}`}
@@ -9015,7 +9015,7 @@ function PreviewWindowEditor({
             );
             setOpen(true);
           }}
-          className="text-[11.5px] text-[#319ED8] hover:underline font-semibold"
+          className="text-[11.5px] text-[var(--brand-blue)] hover:underline font-semibold"
           data-testid={`button-edit-preview-${song.id}`}
         >
           {hasCustom ? "Edit" : "Pick custom"}
@@ -9056,7 +9056,7 @@ function PreviewWindowEditor({
             else setOpen(false);
           }
         }}
-        className="w-16 h-7 rounded-md border border-slate-300 bg-white px-2 text-[12.5px] text-slate-900 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+        className="w-16 h-7 rounded-md border border-slate-300 bg-white px-2 text-[12.5px] text-slate-900 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
         data-testid={`input-preview-start-${song.id}`}
       />
       <span className="text-[10.5px] text-slate-400">→ ends 30s later</span>
@@ -9087,7 +9087,7 @@ function PreviewWindowEditor({
         type="button"
         onClick={handleSave}
         disabled={saveMut.isPending}
-        className="px-2.5 h-7 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
+        className="px-2.5 h-7 rounded-md bg-[var(--brand-blue)] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1"
         data-testid={`button-save-preview-${song.id}`}
       >
         {saveMut.isPending ? (
@@ -9316,7 +9316,7 @@ function AudioEditor({
           draftUrl
             ? "border border-slate-200 bg-white space-y-2.5"
             : dragOver
-              ? "border-2 border-dashed border-[#319ED8] bg-[#319ED8]/10"
+              ? "border-2 border-dashed border-[var(--brand-blue)] bg-[var(--brand-blue)]/10"
               : "border-2 border-dashed border-slate-200 bg-slate-50/60",
         ].join(" ")}
         data-testid={`dropzone-audio-${song.id}`}
@@ -9336,7 +9336,7 @@ function AudioEditor({
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading || saveMut.isPending}
-                className="text-[#319ED8] font-semibold hover:underline disabled:opacity-40"
+                className="text-[var(--brand-blue)] font-semibold hover:underline disabled:opacity-40"
                 data-testid={`button-choose-audio-${song.id}`}
               >
                 choose one
@@ -9361,7 +9361,7 @@ function AudioEditor({
               }}
               placeholder="or paste a URL"
               disabled={uploading || saveMut.isPending}
-              className="mt-1.5 w-full max-w-sm h-8 rounded-md border border-slate-200 bg-white px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 text-center focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+              className="mt-1.5 w-full max-w-sm h-8 rounded-md border border-slate-200 bg-white px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 text-center focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
               data-testid={`input-audio-url-${song.id}`}
             />
           </div>
@@ -9385,7 +9385,7 @@ function AudioEditor({
                   setLocalError(null);
                 }}
                 disabled={uploading || saveMut.isPending}
-                className="flex-1 min-w-0 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+                className="flex-1 min-w-0 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[12.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
                 data-testid={`input-audio-url-${song.id}`}
               />
               {/* Quiet download anchor — same pattern as the per-row
@@ -9534,9 +9534,9 @@ function TrackChip({
       className={[
         "inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-semibold uppercase tracking-wide",
         ok
-          ? "bg-[#4AFFCA]/15 text-emerald-700"
+          ? "bg-[var(--brand-mint)]/15 text-emerald-700"
           : "bg-slate-100 text-slate-400",
-        interactive && "hover:ring-1 hover:ring-[#319ED8]/40 transition-shadow",
+        interactive && "hover:ring-1 hover:ring-[var(--brand-blue)]/40 transition-shadow",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -9778,7 +9778,7 @@ function ArtworkPanel({
             )}
             {uploadMut.isPending && (
               <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-                <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
+                <Spinner className="w-6 h-6 text-[var(--brand-blue)] animate-spin" />
                 <span className="text-[12px] text-slate-700 font-semibold">
                   Uploading…
                 </span>
@@ -9811,7 +9811,7 @@ function ArtworkPanel({
             className={[
               "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
               dragging
-                ? "border-[#319ED8] bg-[#319ED8]/5"
+                ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
                 : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
               busy && "opacity-60 cursor-not-allowed",
             ]
@@ -9821,7 +9821,7 @@ function ArtworkPanel({
             <Upload
               className={[
                 "w-7 h-7",
-                dragging ? "text-[#319ED8]" : "text-slate-400",
+                dragging ? "text-[var(--brand-blue)]" : "text-slate-400",
               ].join(" ")}
             />
             <div className="text-slate-700 text-[13px] font-semibold">
@@ -9867,13 +9867,13 @@ function ArtworkPanel({
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://example.com/cover.jpg"
               disabled={busy}
-              className="flex-1 h-9 px-3 rounded-md border border-slate-200 bg-white text-[12.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-60"
+              className="flex-1 h-9 px-3 rounded-md border border-slate-200 bg-white text-[12.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-60"
               data-testid="input-artwork-url"
             />
             <button
               type="submit"
               disabled={busy || !urlInput.trim()}
-              className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               data-testid="button-artwork-url-fetch"
             >
               {urlMut.isPending ? (
@@ -9923,7 +9923,7 @@ function ArtworkPanel({
                 type="button"
                 onClick={() => removeMut.mutate()}
                 disabled={busy}
-                className="h-7 px-2.5 rounded-md bg-[#FF5470] text-white text-[12px] font-semibold hover:bg-[#e64863] inline-flex items-center gap-1.5 disabled:opacity-60"
+                className="h-7 px-2.5 rounded-md bg-[var(--brand-pink)] text-white text-[12px] font-semibold hover:bg-[#e64863] inline-flex items-center gap-1.5 disabled:opacity-60"
                 data-testid="button-remove-artwork-confirm"
               >
                 {removeMut.isPending ? (
@@ -9939,7 +9939,7 @@ function ArtworkPanel({
               type="button"
               onClick={() => setConfirmRemove(true)}
               disabled={busy}
-              className="h-8 px-3 rounded-md text-[#FF5470] text-[12px] font-semibold hover:bg-[#FF5470]/8 inline-flex items-center gap-1.5"
+              className="h-8 px-3 rounded-md text-[var(--brand-pink)] text-[12px] font-semibold hover:bg-[var(--brand-pink)]/8 inline-flex items-center gap-1.5"
               data-testid="button-remove-artwork"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -9964,7 +9964,7 @@ function ArtworkPanel({
             type="button"
             onClick={exitEdit}
             disabled={busy}
-            className="h-8 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
+            className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
             data-testid="button-done-artwork"
           >
             <Check className="w-3.5 h-3.5" />
@@ -10874,7 +10874,7 @@ function BonusVideoDropzone({
         className={[
           "w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center px-6 py-12 transition-colors",
           dragActive
-            ? "border-[#319ED8] bg-[#319ED8]/5"
+            ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
             : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300",
         ].join(" ")}
         data-testid="dropzone-bonus-video"
@@ -10882,7 +10882,7 @@ function BonusVideoDropzone({
         <Film
           className={[
             "w-9 h-9 mb-3 transition-colors",
-            dragActive ? "text-[#319ED8]" : "text-slate-400",
+            dragActive ? "text-[var(--brand-blue)]" : "text-slate-400",
           ].join(" ")}
           strokeWidth={1.5}
         />
@@ -10926,14 +10926,14 @@ function BonusVideoDropzone({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://www.dropbox.com/scl/… or https://…/video.mp4"
-            className="w-full h-9 pl-9 pr-3 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+            className="w-full h-9 pl-9 pr-3 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
             data-testid="input-bonus-video-url"
           />
         </div>
         <button
           type="submit"
           disabled={!url.trim()}
-          className="h-9 px-4 rounded-lg bg-[#319ED8] text-white text-[13px] font-semibold hover:bg-[#2a8ac0] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+          className="h-9 px-4 rounded-lg bg-[var(--brand-blue)] text-white text-[13px] font-semibold hover:bg-[#2a8ac0] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
           data-testid="button-bonus-video-import"
         >
           Import
@@ -10976,7 +10976,7 @@ function BonusPhotoDropzone({
         className={[
           "w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center px-6 py-12 transition-colors",
           dragActive
-            ? "border-[#319ED8] bg-[#319ED8]/5"
+            ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
             : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300",
         ].join(" ")}
         data-testid="dropzone-bonus-photo"
@@ -10984,7 +10984,7 @@ function BonusPhotoDropzone({
         <ImagePlus
           className={[
             "w-9 h-9 mb-3 transition-colors",
-            dragActive ? "text-[#319ED8]" : "text-slate-400",
+            dragActive ? "text-[var(--brand-blue)]" : "text-slate-400",
           ].join(" ")}
           strokeWidth={1.5}
         />
@@ -11030,7 +11030,7 @@ function AddTile({
         "aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 text-slate-400 transition-colors",
         busy
           ? "border-slate-200 bg-slate-50 cursor-not-allowed"
-          : "border-slate-200 hover:border-[#319ED8] hover:text-[#319ED8] hover:bg-[#319ED8]/5",
+          : "border-slate-200 hover:border-[var(--brand-blue)] hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/5",
       ].join(" ")}
     >
       {busy ? (
@@ -11057,7 +11057,7 @@ function LifecyclePill({
 }) {
   const cls =
     tone === "mint"
-      ? "bg-[#4AFFCA]/15 text-emerald-700"
+      ? "bg-[var(--brand-mint)]/15 text-emerald-700"
       : tone === "amber"
         ? "bg-amber-50 text-amber-700"
         : "bg-slate-100 text-slate-600";
@@ -11436,7 +11436,7 @@ function AlbumVideoSheet({
                       href={existing.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="truncate text-slate-600 hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors"
+                      className="truncate text-slate-600 hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
                       data-testid="link-album-video-source-url"
                     >
                       {(() => {
@@ -11472,7 +11472,7 @@ function AlbumVideoSheet({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={busy}
-                    className="absolute top-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                    className="absolute top-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[var(--brand-blue)] shadow-sm border border-black/5 disabled:opacity-50"
                     data-testid="button-replace-video-file"
                   >
                     Replace video
@@ -11547,7 +11547,7 @@ function AlbumVideoSheet({
                     className={
                       "w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors " +
                       (dragActive
-                        ? "border-[#319ED8] bg-blue-50"
+                        ? "border-[var(--brand-blue)] bg-blue-50"
                         : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
                     }
                     data-testid="button-video-dropzone"
@@ -11555,7 +11555,7 @@ function AlbumVideoSheet({
                     <svg
                       className={
                         "w-8 h-8 mb-3 transition-colors " +
-                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                        (dragActive ? "text-[var(--brand-blue)]" : "text-slate-400")
                       }
                       viewBox="0 0 24 24"
                       fill="none"
@@ -11599,7 +11599,7 @@ function AlbumVideoSheet({
                       placeholder="https://www.dropbox.com/scl/fi/… or https://…/video.mp4"
                       value={importUrl}
                       onChange={(e) => setImportUrl(e.target.value)}
-                      className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                      className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
                       data-testid="input-video-import-url"
                     />
                     <p className="text-[11px] text-slate-400 mt-2 text-center">
@@ -11636,7 +11636,7 @@ function AlbumVideoSheet({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Live at the Troubadour — 2019"
-                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
                 data-testid="input-album-video-title"
               />
             </div>
@@ -11657,7 +11657,7 @@ function AlbumVideoSheet({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="A short note that shows under the video on the album page."
                 rows={2}
-                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30 resize-none"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30 resize-none"
                 data-testid="input-album-video-description"
               />
             </div>
@@ -11677,7 +11677,7 @@ function AlbumVideoSheet({
                   <Plus className="w-5 h-5" />
                 </button>
                 {posterUrl ? (
-                  <div className="relative aspect-video w-28 rounded-lg overflow-hidden border-2 border-[#319ED8] flex-shrink-0">
+                  <div className="relative aspect-video w-28 rounded-lg overflow-hidden border-2 border-[var(--brand-blue)] flex-shrink-0">
                     <img
                       src={posterUrl}
                       alt=""
@@ -11779,7 +11779,7 @@ function AlbumVideoSheet({
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit || busy}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 text-sm font-medium text-white bg-[var(--brand-blue)] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
               data-testid="button-submit-album-video-sheet"
             >
               {busy ? (
@@ -11971,14 +11971,14 @@ function AlbumPhotoSheet({
                 />
                 {uploadingImage && (
                   <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                    <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
+                    <Spinner className="w-5 h-5 text-[var(--brand-blue)] animate-spin" />
                   </div>
                 )}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingImage || busy}
-                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[var(--brand-blue)] shadow-sm border border-black/5 disabled:opacity-50"
                   data-testid="button-replace-album-photo"
                 >
                   Replace photo
@@ -12038,14 +12038,14 @@ function AlbumPhotoSheet({
                     className={
                       "w-full block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
                       (dragActive
-                        ? "border-[#319ED8] bg-blue-50"
+                        ? "border-[var(--brand-blue)] bg-blue-50"
                         : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
                     }
                     data-testid="button-photo-dropzone"
                   >
                     {uploadingImage ? (
                       <>
-                        <Spinner className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                        <Spinner className="w-7 h-7 text-[var(--brand-blue)] animate-spin mb-3" />
                         <p className="text-sm font-medium text-slate-700">
                           Uploading…
                         </p>
@@ -12055,7 +12055,7 @@ function AlbumPhotoSheet({
                         <ImagePlus
                           className={
                             "w-8 h-8 mb-3 transition-colors " +
-                            (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                            (dragActive ? "text-[var(--brand-blue)]" : "text-slate-400")
                           }
                           strokeWidth={1.75}
                         />
@@ -12072,7 +12072,7 @@ function AlbumPhotoSheet({
                   <div className="w-full aspect-square rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6">
                     {uploadingImage ? (
                       <>
-                        <Spinner className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                        <Spinner className="w-7 h-7 text-[var(--brand-blue)] animate-spin mb-3" />
                         <p className="text-sm font-medium text-slate-700">
                           Fetching…
                         </p>
@@ -12107,14 +12107,14 @@ function AlbumPhotoSheet({
                               handleImportUrl();
                             }
                           }}
-                          className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                          className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
                           data-testid="input-photo-import-url"
                         />
                         <button
                           type="button"
                           onClick={handleImportUrl}
                           disabled={!importUrl.trim() || uploadingImage}
-                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-xs font-semibold hover:bg-[#319ED8]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[var(--brand-blue)]/90 disabled:opacity-50 disabled:cursor-not-allowed"
                           data-testid="button-photo-import-url-submit"
                         >
                           Fetch image
@@ -12157,7 +12157,7 @@ function AlbumPhotoSheet({
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
                 placeholder="e.g. Nick on stage — Brooklyn Steel, 2024"
-                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
                 data-testid="input-album-photo-caption"
               />
             </div>
@@ -12203,7 +12203,7 @@ function AlbumPhotoSheet({
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 text-sm font-medium text-white bg-[var(--brand-blue)] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
               data-testid="button-submit-album-photo-sheet"
             >
               {busy ? (

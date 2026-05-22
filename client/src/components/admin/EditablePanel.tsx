@@ -242,13 +242,13 @@ export function EditablePanel({
     return (
       <form
         onSubmit={handleSave}
-        className="rounded-2xl bg-white border border-[#319ED8]/40 shadow-sm p-6 space-y-5"
+        className="rounded-2xl bg-white border border-[var(--brand-blue)]/40 shadow-sm p-6 space-y-5"
         data-testid={panelTestId}
         data-mode="edit"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-          <span className="text-[11px] text-[#319ED8] font-semibold uppercase tracking-wider">
+          <span className="text-[11px] text-[var(--brand-blue)] font-semibold uppercase tracking-wider">
             Editing
           </span>
         </div>
@@ -309,7 +309,7 @@ export function EditablePanel({
           <button
             type="submit"
             disabled={mut.isPending}
-            className="h-8 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
+            className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
             data-testid={`button-save-${slug}`}
           >
             {mut.isPending ? (
@@ -397,7 +397,7 @@ function ReadField({
               href={value}
               target="_blank"
               rel="noreferrer"
-              className="text-[#319ED8] font-medium hover:underline flex items-center gap-1 min-w-0 max-w-full"
+              className="text-[var(--brand-blue)] font-medium hover:underline flex items-center gap-1 min-w-0 max-w-full"
             >
               {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
               <span className="truncate min-w-0 flex-1">
@@ -496,7 +496,7 @@ function EditInput({
     <label className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1">
       {field.label}
       {field.required && (
-        <span className="ml-1 text-[#FF5470] normal-case">·  required</span>
+        <span className="ml-1 text-[var(--brand-pink)] normal-case">·  required</span>
       )}
     </label>
   );
@@ -511,7 +511,7 @@ function EditInput({
           onChange={(e) => onChange(e.target.value)}
           rows={5}
           placeholder={field.placeholder}
-          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent resize-y leading-relaxed"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent resize-y leading-relaxed"
           data-testid={testId}
         />
       </div>
@@ -541,7 +541,7 @@ function EditInput({
           ref={inputRef as React.RefObject<HTMLInputElement> | undefined as any}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+          className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
           data-testid={testId}
         >
           {!field.required && <option value="">—</option>}
@@ -573,7 +573,7 @@ function EditInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={field.placeholder}
-        className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+        className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
         data-testid={testId}
       />
     </div>

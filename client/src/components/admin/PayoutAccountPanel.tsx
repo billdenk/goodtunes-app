@@ -118,7 +118,7 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail }
             type="button"
             onClick={() => create.mutate()}
             disabled={create.isPending}
-            className="mt-3 h-9 px-4 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60 inline-flex items-center gap-2"
+            className="mt-3 h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60 inline-flex items-center gap-2"
             data-testid="button-create-payout-account"
           >
             {create.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <SiStripe className="w-3.5 h-3.5" />}
@@ -225,7 +225,7 @@ function AccountDetails({
           type="button"
           onClick={() => onboard.mutate(account.id)}
           disabled={onboard.isPending}
-          className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] disabled:opacity-60 inline-flex items-center gap-1.5"
+          className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[#2890c8] disabled:opacity-60 inline-flex items-center gap-1.5"
           data-testid="button-continue-onboarding"
         >
           {onboard.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}

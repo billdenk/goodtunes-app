@@ -196,7 +196,7 @@ export function AdminPerson() {
     return (
       <AdminFrame active="people">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -220,7 +220,7 @@ export function AdminPerson() {
           {backCrumb ? (
             <Link
               href={backCrumb.href}
-              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
               data-testid={backCrumb.testId}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -229,7 +229,7 @@ export function AdminPerson() {
           ) : (
             <Link
               href="/admin/people"
-              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
               data-testid="link-back-to-people"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -258,7 +258,7 @@ export function AdminPerson() {
           {backCrumb ? (
             <Link
               href={backCrumb.href}
-              className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+              className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
               data-testid={backCrumb.testId}
             >
               {backCrumb.name}
@@ -285,7 +285,7 @@ export function AdminPerson() {
           <button
             type="button"
             onClick={() => setPhotoEditorOpen(true)}
-            className="group relative rounded-full overflow-hidden flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8] focus-visible:ring-offset-2"
+            className="group relative rounded-full overflow-hidden flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
             style={{ width: 96, height: 96 }}
             aria-label="Edit artist photo"
             data-testid="button-edit-person-photo"
@@ -348,7 +348,7 @@ export function AdminPerson() {
               >
                 {t.label}
                 {tab === t.key && (
-                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
                 )}
               </button>
             ))}
@@ -450,7 +450,7 @@ function PersonAvatar({
 }) {
   return (
     <div
-      className="rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200 shadow-sm flex-shrink-0"
+      className="rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm flex-shrink-0"
       style={{ width: size, height: size }}
     >
       {photoUrl ? (
@@ -860,9 +860,9 @@ function ImageUploadPanel({
                   : "Unlocked \u2014 automated refreshes may update this field"
               }
               className={[
-                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40",
+                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40",
                 locked
-                  ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                  ? "text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10"
                   : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
                 lockMut.isPending && "opacity-50",
               ]
@@ -898,7 +898,7 @@ function ImageUploadPanel({
               <ImageIcon className="w-10 h-10" />
             </div>
           ) : (
-            <div className="w-full h-full bg-[#319ED8] flex items-center justify-center">
+            <div className="w-full h-full bg-[var(--brand-blue)] flex items-center justify-center">
               <span className="text-white text-5xl font-bold">
                 {(person.name.trim().charAt(0) || "?").toUpperCase()}
               </span>
@@ -906,7 +906,7 @@ function ImageUploadPanel({
           )}
           {busy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-              <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
+              <Spinner className="w-6 h-6 text-[var(--brand-blue)] animate-spin" />
               <span className="text-[12px] text-slate-700 font-semibold">
                 Uploading…
               </span>
@@ -952,7 +952,7 @@ function ImageUploadPanel({
           className={[
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
-              ? "border-[#319ED8] bg-[#319ED8]/5"
+              ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
               : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
             busy && "opacity-60 cursor-not-allowed",
             locked && "opacity-40 cursor-not-allowed hover:border-slate-200 hover:bg-transparent",
@@ -975,7 +975,7 @@ function ImageUploadPanel({
               <Upload
                 className={[
                   "w-7 h-7",
-                  dragging ? "text-[#319ED8]" : "text-slate-400",
+                  dragging ? "text-[var(--brand-blue)]" : "text-slate-400",
                 ].join(" ")}
               />
               <div className="text-slate-700 text-[13px] font-semibold">
@@ -1407,7 +1407,7 @@ function GearPanel({ person }: { person: PersonFull }) {
   if (isLoading) {
     return (
       <div className="py-10 flex items-center justify-center" data-testid="gear-panel-loading">
-        <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
+        <Spinner className="w-5 h-5 text-[var(--brand-blue)] animate-spin" />
       </div>
     );
   }
@@ -1498,7 +1498,7 @@ function GearPanel({ person }: { person: PersonFull }) {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[#319ED8] group-hover:underline underline-offset-2 transition-colors">
+              <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] group-hover:underline underline-offset-2 transition-colors">
                 {r.instrumentName}
               </div>
               <div className="text-[11.5px] text-slate-400 truncate">

@@ -75,7 +75,7 @@ export function AdminManufacturer() {
     return (
       <AdminFrame active="manufacturers">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -92,7 +92,7 @@ export function AdminManufacturer() {
       <AdminFrame active="manufacturers">
         <div className="py-20 text-center">
           <h1 className="text-slate-900 text-lg font-semibold">Manufacturer not found</h1>
-          <Link href="/admin/manufacturers" className="text-[#319ED8] text-sm hover:underline">
+          <Link href="/admin/manufacturers" className="text-[var(--brand-blue)] text-sm hover:underline">
             Back to manufacturers
           </Link>
         </div>
@@ -259,14 +259,14 @@ function PartnerProfileForm({
             {specialties.map((s) => (
               <span
                 key={s}
-                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded bg-[#319ED8]/10 text-[#266a93] text-[11.5px] font-medium"
+                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded bg-[var(--brand-blue)]/10 text-[#266a93] text-[11.5px] font-medium"
                 data-testid={`chip-spec-${s}`}
               >
                 {s}
                 <button
                   type="button"
                   onClick={() => setSpecialties(specialties.filter((x) => x !== s))}
-                  className="w-4 h-4 inline-flex items-center justify-center hover:bg-[#319ED8]/20 rounded"
+                  className="w-4 h-4 inline-flex items-center justify-center hover:bg-[var(--brand-blue)]/20 rounded"
                   aria-label={`Remove ${s}`}
                 >
                   <X className="w-3 h-3" />
@@ -321,7 +321,7 @@ function PartnerProfileForm({
 }
 
 const INPUT =
-  "w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8] bg-white";
+  "w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)] bg-white";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

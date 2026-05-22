@@ -138,7 +138,7 @@ Get your music now
               value={shop}
               onChange={(e) => setShop(e.target.value)}
               placeholder="example.myshopify.com"
-              className="flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[#319ED8]"
+              className="flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="input-shopify-shop"
             />
             <button
@@ -211,7 +211,7 @@ Get your music now
                     href={`/redeem/${mintedCode}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-[12.5px] text-[#319ED8] truncate hover:underline"
+                    className="font-mono text-[12.5px] text-[var(--brand-blue)] truncate hover:underline"
                     data-testid="link-mint-redeem"
                   >
                     {mintedUrl}
@@ -251,7 +251,7 @@ Get your music now
                 <div
                   key={s.id}
                   className={`rounded-lg border bg-white px-4 py-3 flex items-center gap-3 ${
-                    s.id === justInstalledId ? "border-[#4AFFCA] bg-emerald-50/40" : "border-slate-200"
+                    s.id === justInstalledId ? "border-[var(--brand-mint)] bg-emerald-50/40" : "border-slate-200"
                   }`}
                   data-testid={`row-shopify-store-${s.id}`}
                 >

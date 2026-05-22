@@ -42,7 +42,7 @@ import { useToast } from "@/hooks/use-toast";
  * the album.
  *
  * Design conformance: white admin chrome, h-9 buttons, brand blue
- * `#319ED8` primary, slate-300 borders, 13.5px input text, 12.5px
+ * `var(--brand-blue)` primary, slate-300 borders, 13.5px input text, 12.5px
  * button text. Avatar fallback uses the same blue-circle-with-initial
  * treatment as the People grid.
  */
@@ -158,7 +158,7 @@ function Avatar({ name, photoUrl, size = 56 }: { name: string; photoUrl: string 
   return (
     <div
       style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
-      className="rounded-full bg-[#319ED8] text-white font-semibold inline-flex items-center justify-center flex-shrink-0"
+      className="rounded-full bg-[var(--brand-blue)] text-white font-semibold inline-flex items-center justify-center flex-shrink-0"
     >
       {initial}
     </div>
@@ -579,7 +579,7 @@ export function NewAlbumArtistDialog({
                     }
                   }}
                   placeholder="Start typing an artist…"
-                  className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#319ED8] focus:border-transparent"
+                  className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-blue)] focus:border-transparent"
                   data-testid="input-artist-name"
                 />
                 <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
@@ -716,7 +716,7 @@ export function NewAlbumArtistDialog({
                     type="button"
                     onClick={handleManual}
                     disabled={busy}
-                    className="h-9 px-3 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
                     data-testid="button-enter-manually-fallback"
                   >
                     {createPersonMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}
@@ -760,7 +760,7 @@ export function NewAlbumArtistDialog({
                         handlePick(c);
                       }
                     }}
-                    className="flex flex-col items-center gap-2 p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-center active:scale-[0.98] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]"
+                    className="flex flex-col items-center gap-2 p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-center active:scale-[0.98] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]"
                     data-testid={`option-spotify-${c.id}`}
                   >
                     <Avatar name={c.name} photoUrl={c.photoUrl} size={64} />
@@ -834,7 +834,7 @@ export function NewAlbumArtistDialog({
                     type="checkbox"
                     checked={linkApple}
                     onChange={(e) => setLinkApple(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-[#319ED8] focus:ring-[#319ED8]"
+                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
                     data-testid="checkbox-link-apple"
                   />
                   <div className="flex-1 min-w-0">
@@ -876,7 +876,7 @@ export function NewAlbumArtistDialog({
                 onClick={handleConfirm}
                 disabled={busy || !appleLooked}
                 title={!appleLooked ? "Checking Apple Music…" : undefined}
-                className="h-9 px-4 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 data-testid="button-confirm-artist"
               >
                 {busy || !appleLooked ? (

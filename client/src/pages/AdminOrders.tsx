@@ -268,7 +268,7 @@ export function AdminOrders() {
                   </div>
                 )}
                 <div className="text-[14px] font-medium text-slate-900 mt-1">
-                  <Link href={`/admin/albums/${o.albumId}`} className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors">
+                  <Link href={`/admin/albums/${o.albumId}`} className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors">
                     {o.albumTitle}
                   </Link>
                   <span className="text-slate-400"> · </span>
@@ -304,7 +304,7 @@ export function AdminOrders() {
                     type="button"
                     onClick={() => ship.mutate(o.id)}
                     disabled={ship.isPending}
-                    className="mt-2 px-3 py-1 rounded-md text-[12px] font-medium bg-[#319ED8] text-white hover:bg-[#2a8cc1] disabled:opacity-50"
+                    className="mt-2 px-3 py-1 rounded-md text-[12px] font-medium bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)] disabled:opacity-50"
                     data-testid={`button-ship-${o.id}`}
                   >
                     Mark shipped
@@ -528,7 +528,7 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
               placeholder={String(currentFee)}
               value={feePct}
               onChange={(e) => setFeePct(e.target.value)}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="input-platform-fee-pct"
             />
             <p className="text-slate-400 text-[11px] mt-1">Currently {currentFee}%. Applied off the top of every paid order.</p>
@@ -541,7 +541,7 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
               placeholder={String(currentCert)}
               value={certCents}
               onChange={(e) => setCertCents(e.target.value)}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="input-cert-cost-cents"
             />
             <p className="text-slate-400 text-[11px] mt-1">Currently {dollars(currentCert)}. Subtracted before the artist split when a signed cert is in the order.</p>
@@ -553,7 +553,7 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
           type="button"
           onClick={() => save.mutate()}
           disabled={save.isPending || (feePct === "" && certCents === "")}
-          className="h-9 px-4 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60"
+          className="h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60"
           data-testid="button-save-payout-settings"
         >
           {save.isPending ? "Saving…" : "Save"}

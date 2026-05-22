@@ -104,7 +104,7 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
         <p className="text-[13px] text-slate-500 mb-4 leading-snug">
           Paste a Shopify product URL from a connected store and we'll bundle GoodTunes digital access into every paid
           order on that product. Manage connected stores at{" "}
-          <a className="text-[#319ED8] underline underline-offset-2" href="/admin/shopify">
+          <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
             /admin/shopify
           </a>
           .
@@ -152,7 +152,7 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://store.myshopify.com/products/album-vinyl"
-              className="flex-1 h-9 border border-slate-300 rounded-md px-3 text-[13px] focus:outline-none focus:border-[#319ED8]"
+              className="flex-1 h-9 border border-slate-300 rounded-md px-3 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="input-shopify-product-url"
             />
             <button
@@ -194,7 +194,7 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
                     type="checkbox"
                     checked={offerCert}
                     onChange={(e) => setOfferCert(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#319ED8] focus:ring-[#319ED8]"
+                    className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
                     data-testid="toggle-shopify-cert"
                   />
                   <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
@@ -207,7 +207,7 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
                       value={certPrice}
                       onChange={(e) => setCertPrice(e.target.value)}
                       inputMode="decimal"
-                      className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[#319ED8]"
+                      className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
                       data-testid="input-shopify-cert-price"
                     />
                     <span className="text-[11.5px] text-slate-400">Must be ≥ the album's per-album minimum floor.</span>
@@ -219,7 +219,7 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
                   type="button"
                   onClick={() => save.mutate()}
                   disabled={save.isPending}
-                  className="h-8 px-3 rounded-md bg-[#319ED8] text-white text-[12px] font-medium hover:bg-[#2a8cc1] disabled:opacity-50"
+                  className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50"
                   data-testid="button-shopify-save-mapping"
                 >
                   {save.isPending ? "Saving…" : "Save mapping"}

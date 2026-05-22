@@ -66,7 +66,7 @@ export function AdminManufacturers() {
     return (
       <AdminFrame active="manufacturers">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -104,7 +104,7 @@ export function AdminManufacturers() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or location"
-            className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+            className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
             data-testid="input-search-manufacturers"
           />
         </div>
@@ -179,7 +179,7 @@ export function AdminManufacturers() {
             value={draftName}
             onChange={(e) => setDraftName(e.target.value)}
             placeholder="e.g. Pirates Press"
-            className="w-full h-10 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+            className="w-full h-10 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
             data-testid="input-new-manufacturer-name"
           />
           <DialogFooter>

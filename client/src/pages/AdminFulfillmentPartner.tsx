@@ -65,7 +65,7 @@ export function AdminFulfillmentPartner() {
     return (
       <AdminFrame active="fulfillment">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -82,7 +82,7 @@ export function AdminFulfillmentPartner() {
       <AdminFrame active="fulfillment">
         <div className="py-20 text-center">
           <h1 className="text-slate-900 text-lg font-semibold">Partner not found</h1>
-          <Link href="/admin/fulfillment-partners" className="text-[#319ED8] text-sm hover:underline">
+          <Link href="/admin/fulfillment-partners" className="text-[var(--brand-blue)] text-sm hover:underline">
             Back to fulfillment partners
           </Link>
         </div>
@@ -227,7 +227,7 @@ function FpForm({
 }
 
 const INPUT =
-  "w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8] bg-white";
+  "w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)] bg-white";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

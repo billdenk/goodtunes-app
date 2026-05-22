@@ -308,14 +308,14 @@ function SidebarLink({
       className={[
         "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors",
         active
-          ? "bg-[#319ED8]/10 text-[#319ED8]"
+          ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
           : "text-slate-700 hover:bg-slate-100",
       ].join(" ")}
     >
       <Icon
         className={[
           "w-4 h-4 flex-shrink-0",
-          active ? "text-[#319ED8]" : "text-slate-400",
+          active ? "text-[var(--brand-blue)]" : "text-slate-400",
         ].join(" ")}
       />
       <span className="flex-1 text-left">{label}</span>
@@ -323,7 +323,7 @@ function SidebarLink({
         <span
           className={[
             "tabular-nums text-[11.5px] font-bold",
-            active ? "text-[#319ED8]" : "text-slate-400",
+            active ? "text-[var(--brand-blue)]" : "text-slate-400",
           ].join(" ")}
         >
           {count}

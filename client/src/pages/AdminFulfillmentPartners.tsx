@@ -61,7 +61,7 @@ export function AdminFulfillmentPartners() {
     return (
       <AdminFrame active="fulfillment">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -99,7 +99,7 @@ export function AdminFulfillmentPartners() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or location"
-            className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+            className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
             data-testid="input-search-fulfillment"
           />
         </div>
@@ -157,7 +157,7 @@ export function AdminFulfillmentPartners() {
             value={draftName}
             onChange={(e) => setDraftName(e.target.value)}
             placeholder="e.g. Northern Music Fulfillment"
-            className="w-full h-10 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[#319ED8]"
+            className="w-full h-10 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
             data-testid="input-new-fulfillment-name"
           />
           <DialogFooter>

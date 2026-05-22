@@ -222,7 +222,7 @@ export function AdminLabels() {
     return (
       <AdminFrame active="labels">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -296,7 +296,7 @@ export function AdminLabels() {
 
       {isLoading ? (
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
@@ -367,7 +367,7 @@ export function AdminLabels() {
               placeholder="https://www.bluenote.com/"
               autoFocus
               disabled={createLabel.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-label-url"
             />
             {duplicateLabel && (
@@ -383,7 +383,7 @@ export function AdminLabels() {
                     setAddOpen(false);
                     openLabel(duplicateLabel.id);
                   }}
-                  className="underline underline-offset-2 hover:text-[#319ED8] transition-colors font-semibold"
+                  className="underline underline-offset-2 hover:text-[var(--brand-blue)] transition-colors font-semibold"
                   data-testid="button-open-existing-label"
                 >
                   Open it →
@@ -445,7 +445,7 @@ function LabelCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#319ED8]/30 transition-all p-4 flex items-center gap-3.5"
+      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
       data-testid={`card-label-${label.id}`}
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
@@ -503,7 +503,7 @@ function LabelRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-label-name-${label.id}`}
         >
           {label.name}
@@ -550,7 +550,7 @@ function EmptyState({
         <button
           type="button"
           onClick={onAdd}
-          className="mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[#319ED8] text-white hover:bg-[#2789bf] transition-colors"
+          className="mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2789bf] transition-colors"
           data-testid="button-empty-add-label"
         >
           Add your first label

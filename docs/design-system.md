@@ -53,6 +53,16 @@ Any trash / delete / "remove forever" button must pop a confirmation sheet namin
 
 **Reuse for the consumer player**: this same primitive should drive the fan-facing player surface (Now Playing / mini-player) once we wire lyrics, queue, and shuffle/repeat state for fans. Plan to extend rather than fork: keep the dock as-is for admin (lyrics-disabled placeholder), and pass `onLyrics`, real shuffle/repeat handlers, and a queue when consumer mounts it. Any polish landing here should automatically benefit the consumer dock.
 
+## Admin tokens — reach brand colors through CSS vars, not hex
+
+The admin (`body.gt-admin`) is a Stripe-leaning light surface and lives off a tokenized palette, not one-off hex codes.
+
+- The four brand hexes (`#319ED8`, `#7F10A7`, `#4AFFCA`, `#FF5470`) are exposed as `--brand-blue`, `--brand-purple`, `--brand-mint`, `--brand-pink` in `client/src/index.css`. Reach them from Tailwind as `bg-[color:var(--brand-blue)]`, `text-[color:var(--brand-pink)]`, `border-[color:var(--brand-blue)]`, etc. — **never inline `bg-[#319ED8]` again**.
+- `body.gt-admin` retunes `--brand-blue` to a slightly darker, less candy-bright shade (`#1f7fb8`) so a single Save button reads "Stripe action" rather than "alert pill". The fan-facing player keeps the original `#319ED8`.
+- `body.gt-admin` also overrides the shadcn semantic tokens (`--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--border`, `--input`, `--ring`, `--destructive`, `--radius` → ~6px). That means every `<Button>`, `<Input>`, `<Select>`, `<Checkbox>`, `<Card>`, dialog, popover, and toast auto-picks up the light admin palette without per-page styling. Pages should prefer the shadcn primitives over hand-rolled `bg-white border-slate-200` cards.
+- **Accent restraint**: at most one filled primary action per row/section. Repeated row-level Save affordances (Formats list, Printed & Signed GoodDeed, per-row edit panels) use a quiet ghost-link Save that activates (brand blue text + faint soft pill) only when the row is dirty. The canonical reference is `client/src/components/admin/SellPanel.tsx`'s `SaveLink`.
+- Admin buttons keep crisp ~6px corners (not pills) and `h-8`/`h-9` density. No scale-bounce on press — that's a fan-IconButton-only motion.
+
 ## Spelling
 
 Use **US English** for all user-facing strings (e.g. "color", not "colour"; "favorite", not "favourite"). Code identifiers can stay as they are; only the visible UI copy needs to read American.

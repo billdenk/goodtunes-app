@@ -301,7 +301,7 @@ function AddInstrumentFromUrl({
             }
           }}
           placeholder="Paste a product URL…"
-          className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+          className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
           disabled={busy}
           aria-label="Product URL to scrape into gear"
           data-testid="input-add-gear-url"
@@ -310,7 +310,7 @@ function AddInstrumentFromUrl({
           type="button"
           onClick={go}
           disabled={busy || !url.trim()}
-          className="rounded-md bg-[#319ED8] px-2 py-1 text-[12px] font-semibold text-white shadow-sm hover:bg-[#2789bd] disabled:opacity-40 inline-flex items-center gap-1"
+          className="rounded-md bg-[var(--brand-blue)] px-2 py-1 text-[12px] font-semibold text-white shadow-sm hover:bg-[#2789bd] disabled:opacity-40 inline-flex items-center gap-1"
           data-testid="button-add-gear-url"
         >
           <Plus className="h-3 w-3" strokeWidth={2.5} />
@@ -431,7 +431,7 @@ function AddPicker({
       onClick={(e) => e.stopPropagation()}
       data-testid="add-credit-picker"
     >
-      <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white border border-[#319ED8] ring-2 ring-[#319ED8]/20">
+      <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white border border-[var(--brand-blue)] ring-2 ring-[var(--brand-blue)]/20">
         <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
         <input
           autoFocus
@@ -471,7 +471,7 @@ function AddPicker({
                 setPicked(p);
                 setQuery("");
               }}
-              className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[12.5px] text-slate-700 hover:bg-[#319ED8]/5"
+              className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[12.5px] text-slate-700 hover:bg-[var(--brand-blue)]/5"
               data-testid={`button-pick-person-${p.id}`}
             >
               <span className="inline-flex items-center gap-2">
@@ -500,7 +500,7 @@ function AddPicker({
                 onClick={() => {
                   setPicked(null);
                 }}
-                className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50 px-2.5 py-1.5 text-left text-[12px] font-medium text-[#319ED8]"
+                className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50 px-2.5 py-1.5 text-left text-[12px] font-medium text-[var(--brand-blue)]"
                 disabled
               >
                 <Plus className="h-3 w-3" strokeWidth={2.5} />
@@ -518,7 +518,7 @@ function AddPicker({
         <select
           value={pickedRoleId}
           onChange={(e) => setPickedRoleId(e.target.value)}
-          className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+          className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
           data-testid="select-credit-role"
         >
           {validRoles.map((r) => (
@@ -548,7 +548,7 @@ function AddPicker({
             <select
               value={instrumentId}
               onChange={(e) => setInstrumentId(e.target.value)}
-              className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
               data-testid="select-credit-instrument"
             >
               <option value="">— None on file —</option>
@@ -568,7 +568,7 @@ function AddPicker({
               value={tuningNotes}
               onChange={(e) => setTuningNotes(e.target.value)}
               placeholder='e.g. Open D, capo II'
-              className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
               data-testid="input-credit-tuning"
             />
           </div>
@@ -741,7 +741,7 @@ function Section({
           {BUCKET_TITLE[bucket]}
         </h2>
         {editing && (
-          <span className="text-[10.5px] uppercase tracking-wider font-semibold text-[#319ED8]">
+          <span className="text-[10.5px] uppercase tracking-wider font-semibold text-[var(--brand-blue)]">
             · Editing
           </span>
         )}
@@ -754,12 +754,12 @@ function Section({
             aria-label={`Edit ${BUCKET_TITLE[bucket]} credits`}
             className={[
               "h-7 w-7 rounded-md inline-flex items-center justify-center transition",
-              "text-slate-500 hover:text-[#319ED8] hover:bg-[#319ED8]/5",
+              "text-slate-500 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/5",
               "focus-visible:opacity-100 transition-opacity",
               triggerVisible
                 ? "opacity-100"
                 : "opacity-0 group-hover/section:opacity-100",
-              editing ? "bg-[#319ED8]/10 text-[#319ED8]" : "",
+              editing ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]" : "",
             ].join(" ")}
             data-testid={`button-section-menu-${bucket}`}
           >
@@ -791,7 +791,7 @@ function Section({
               >
                 {editing ? (
                   <>
-                    <Check className="h-3.5 w-3.5 text-[#319ED8] flex-shrink-0" />
+                    <Check className="h-3.5 w-3.5 text-[var(--brand-blue)] flex-shrink-0" />
                     <span className="flex-1">Done editing</span>
                   </>
                 ) : (

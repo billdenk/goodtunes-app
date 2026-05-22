@@ -211,13 +211,13 @@ export function ArtistPickerField({
         <label className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
           {label}
           {required && (
-            <span className="ml-1 text-[#FF5470] normal-case">·  required</span>
+            <span className="ml-1 text-[var(--brand-pink)] normal-case">·  required</span>
           )}
         </label>
         {idValue && (
           <Link
             href={`/admin/people/${idValue}`}
-            className="text-[10.5px] font-semibold text-[#319ED8] hover:underline inline-flex items-center gap-1"
+            className="text-[10.5px] font-semibold text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1"
             data-testid="link-edit-artist"
           >
             <Pencil className="w-3 h-3" />
@@ -230,7 +230,7 @@ export function ArtistPickerField({
           <button
             ref={triggerRef}
             type="button"
-            className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-left text-slate-900 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent inline-flex items-center gap-2"
+            className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-left text-slate-900 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent inline-flex items-center gap-2"
             data-testid="input-artist"
             aria-haspopup="listbox"
             aria-expanded={open}
@@ -298,7 +298,7 @@ export function ArtistPickerField({
                       }
                     }}
                     placeholder="https://music.apple.com/us/artist/…"
-                    className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                    className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
                     data-testid="input-artist-apple-url"
                   />
                 </div>
@@ -317,7 +317,7 @@ export function ArtistPickerField({
                       }
                     }}
                     placeholder="https://open.spotify.com/artist/…"
-                    className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+                    className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
                     data-testid="input-artist-spotify-url"
                   />
                 </div>
@@ -326,7 +326,7 @@ export function ArtistPickerField({
                 type="button"
                 onClick={handleCreateFromUrl}
                 disabled={(!appleUrl.trim() && !spotifyUrl.trim()) || busy}
-                className="w-full h-9 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                className="w-full h-9 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
                 data-testid="button-import-artist-url"
               >
                 {busy ? (
@@ -398,7 +398,7 @@ export function ArtistPickerField({
                               )}
                               <span className="flex-1 truncate">{p.name}</span>
                               {selected && (
-                                <Check className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
+                                <Check className="w-3.5 h-3.5 text-[var(--brand-blue)] flex-shrink-0" />
                               )}
                             </CommandItem>
                           );
@@ -418,7 +418,7 @@ export function ArtistPickerField({
                             {busy ? (
                               <Spinner className="w-3.5 h-3.5 animate-spin text-slate-400 flex-shrink-0" />
                             ) : (
-                              <Plus className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
+                              <Plus className="w-3.5 h-3.5 text-[var(--brand-blue)] flex-shrink-0" />
                             )}
                             <span className="flex-1 truncate">
                               Create "{trimmed}" (name only)
@@ -439,7 +439,7 @@ export function ArtistPickerField({
                   data-testid="button-create-artist-url"
                   className="w-full rounded-sm px-2 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-100 inline-flex items-center gap-2"
                 >
-                  <Link2 className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
+                  <Link2 className="w-3.5 h-3.5 text-[var(--brand-blue)] flex-shrink-0" />
                   <span className="flex-1 truncate font-medium">
                     Add artist from Apple Music or Spotify URL…
                   </span>

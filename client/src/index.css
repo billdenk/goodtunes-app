@@ -165,6 +165,16 @@
   --white: rgba(255, 255, 255, 1);
   --radius: 0.5rem;
 
+  /* Brand colors as variables. Reach the four brand hexes through
+     these vars (or the admin-scoped overrides below) instead of
+     hardcoding `#319ED8` etc. everywhere. */
+  --brand-blue: #319ED8;
+  --brand-blue-hover: #2a8cc1;
+  --brand-blue-soft: rgba(49, 158, 216, 0.10);
+  --brand-purple: #7F10A7;
+  --brand-mint: #4AFFCA;
+  --brand-pink: #FF5470;
+
   --background: 223 89% 8%;
   --foreground: 0 0% 100%;
   --card: 223 89% 12%;
@@ -219,24 +229,47 @@ body.gt-admin {
   color: #0f172a; /* slate-900 */
   color-scheme: light;
 
-  /* Override the dark shadcn theme variables so admin-context shadcn
-     primitives (Dialog, AlertDialog, Sheet, Drawer, Popover) default
+  /* Admin tokens — Stripe-leaning light surface. Overrides the shadcn
+     semantic tokens so admin-context primitives (Button, Input, Select,
+     Checkbox, Card, Dialog, AlertDialog, Sheet, Drawer, Popover) default
      to white card + slate text. Player routes keep the dark :root
      values above. Anything resolving `bg-background`, `text-foreground`,
-     `bg-card`, `bg-popover`, `border-border`, etc. inherits these
-     while the admin shell is mounted. */
-  --background: 0 0% 100%;            /* white card surface */
-  --foreground: 222 47% 11%;          /* slate-900 */
+     `bg-card`, `bg-popover`, `border-border`, `bg-primary`,
+     `focus:ring-ring`, etc. inherits these while the admin shell is
+     mounted. */
+  --radius: 0.375rem; /* ~6px, slightly crisper than the fan player's 8px */
+
+  --background: 0 0% 100%;             /* white cards/surfaces */
+  --foreground: 222 47% 11%;           /* slate-900 */
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
-  --secondary: 210 40% 96%;           /* slate-100 */
+
+  /* Primary accent = brand blue, tuned slightly darker so a single
+     button isn't candy-bright against neutral chrome. */
+  --primary: 204 64% 46%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 14% 96%;            /* slate-100 */
   --secondary-foreground: 222 47% 11%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;    /* slate-500 */
-  --border: 214 32% 91%;              /* slate-200 */
-  --input: 214 32% 91%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 215 16% 47%;     /* slate-500 */
+  --accent: 220 14% 96%;
+  --accent-foreground: 222 47% 11%;
+
+  --destructive: 350 89% 60%;          /* rose-500-ish, brand pink-adjacent */
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 13% 91%;               /* slate-200, hairline */
+  --input: 220 13% 91%;
+  --ring: 204 64% 46%;                 /* matches --primary */
+
+  /* Admin-tuned accents. Slightly desaturated brand blue so it reads
+     "Stripe button" not "alert pill". Other brand roles unchanged. */
+  --brand-blue: #1f7fb8;
+  --brand-blue-hover: #1a6ea0;
+  --brand-blue-soft: rgba(31, 127, 184, 0.10);
 }
 
 .scrollbar-hide {

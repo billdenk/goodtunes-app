@@ -265,7 +265,7 @@ export function AdminAlbums() {
   if (authLoading) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
       </main>
     );
   }
@@ -280,7 +280,7 @@ export function AdminAlbums() {
           </p>
           <button
             onClick={() => navigate("/collection")}
-            className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-sm font-medium"
+            className="px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-sm font-medium"
             data-testid="button-back-to-app"
           >
             Back to the app
@@ -369,7 +369,7 @@ export function AdminAlbums() {
                   <Filter className="w-4 h-4" />
                   {isFilterActive && (
                     <span
-                      className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#319ED8]"
+                      className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[var(--brand-blue)]"
                       data-testid="badge-filter-active"
                     />
                   )}
@@ -443,7 +443,7 @@ export function AdminAlbums() {
                           setDateAddedYear(v ? parseInt(v, 10) : null);
                         }}
                         data-testid="filter-date-added-input"
-                        className="flex-1 h-8 px-2.5 text-[13px] bg-white border border-slate-200 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 focus:border-[#319ED8] tabular-nums"
+                        className="flex-1 h-8 px-2.5 text-[13px] bg-white border border-slate-200 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30 focus:border-[var(--brand-blue)] tabular-nums"
                       >
                         <option value="">Any year</option>
                         {(() => {
@@ -586,7 +586,7 @@ export function AdminAlbums() {
         {/* GRID */}
         {isLoading ? (
           <div className="py-20 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-20 text-center text-slate-500 text-sm max-w-md mx-auto">
@@ -658,7 +658,7 @@ function AlbumTile({ album }: { album: AlbumLite }) {
       </div>
       <div className="mt-2 px-0.5">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-album-title-${album.id}`}
         >
           {album.title}
@@ -695,7 +695,7 @@ function AlbumRow({ album }: { album: AlbumLite }) {
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold group-hover:text-[#319ED8] transition-colors flex items-center gap-2.5"
+          className="text-slate-900 text-[13.5px] font-semibold group-hover:text-[var(--brand-blue)] transition-colors flex items-center gap-2.5"
           data-testid={`text-album-title-${album.id}`}
         >
           <span className="min-w-0 flex-1 truncate">{album.title}</span>
@@ -757,7 +757,7 @@ function TabBtn({
         {count}
       </span>
       {active && (
-        <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+        <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
       )}
     </button>
   );
@@ -805,7 +805,7 @@ function FilterChip({
       className={[
         "h-7 px-2.5 text-[12px] font-semibold rounded-md transition-colors inline-flex items-center",
         active
-          ? "bg-[#319ED8]/12 text-[#1f7ab4] ring-1 ring-inset ring-[#319ED8]/40"
+          ? "bg-[var(--brand-blue)]/12 text-[#1f7ab4] ring-1 ring-inset ring-[var(--brand-blue)]/40"
           : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900",
       ].join(" ")}
     >

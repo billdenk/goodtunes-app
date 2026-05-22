@@ -535,13 +535,13 @@ function PromotePanel() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="@username"
-          className="w-44 px-2.5 py-1 text-xs rounded-md border border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#319ED8]"
+          className="w-44 px-2.5 py-1 text-xs rounded-md border border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[var(--brand-blue)]"
           data-testid="input-promote-username"
         />
         <button
           type="submit"
           disabled={promote.isPending || !username.trim()}
-          className="px-2.5 py-1 rounded-md bg-[#319ED8] text-white text-xs font-medium hover:bg-[#319ED8]/90 disabled:opacity-40"
+          className="px-2.5 py-1 rounded-md bg-[var(--brand-blue)] text-white text-xs font-medium hover:bg-[var(--brand-blue)]/90 disabled:opacity-40"
           data-testid="button-promote-admin"
         >
           {promote.isPending ? "…" : "Add"}
@@ -549,7 +549,7 @@ function PromotePanel() {
       </form>
       {msg && (
         <p
-          className={`absolute right-0 top-full mt-1 text-[11px] whitespace-nowrap ${msg.kind === "ok" ? "text-[#319ED8]" : "text-red-600"}`}
+          className={`absolute right-0 top-full mt-1 text-[11px] whitespace-nowrap ${msg.kind === "ok" ? "text-[var(--brand-blue)]" : "text-red-600"}`}
           data-testid="text-promote-result"
         >
           {msg.text}
@@ -834,7 +834,7 @@ function AlbumEditor({
             onClick={() => set("isHidden", !form.isHidden)}
             className={`px-3 py-1.5 text-[12px] rounded-md border ${
               form.isHidden
-                ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
+                ? "border-[var(--brand-pink)]/40 bg-[var(--brand-pink)]/10 text-[var(--brand-pink)]"
                 : "border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
             title={
@@ -850,7 +850,7 @@ function AlbumEditor({
             type="button"
             onClick={() => saveAlbum.mutate(form)}
             disabled={!dirty || saveAlbum.isPending}
-            className="px-4 py-1.5 text-[13px] font-medium rounded-md bg-[#319ED8] text-white hover:bg-[#319ED8]/90 disabled:opacity-40"
+            className="px-4 py-1.5 text-[13px] font-medium rounded-md bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue)]/90 disabled:opacity-40"
             data-testid="button-save-album"
           >
             {saveAlbum.isPending ? "Saving…" : dirty ? "Save" : "Saved"}
@@ -888,7 +888,7 @@ function AlbumEditor({
                 )}
               </span>
               {active && (
-                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "var(--brand-blue)" }} />
               )}
             </button>
           );
@@ -1119,7 +1119,7 @@ function AlbumEditor({
           <h3 className="text-slate-900 text-sm font-semibold mb-1">Songwriters &amp; performers</h3>
           <p className="text-slate-500 text-[13px] leading-relaxed">
             Per-song writers (composer / lyricist / producer) and performers
-            are configured today from each song row in the <button type="button" onClick={() => setTab("content")} className="text-[#319ED8] hover:underline">Content</button> tab.
+            are configured today from each song row in the <button type="button" onClick={() => setTab("content")} className="text-[var(--brand-blue)] hover:underline">Content</button> tab.
             An album-level roll-up — with writer splits — lands here next.
           </p>
         </div>
@@ -1130,7 +1130,7 @@ function AlbumEditor({
           <h3 className="text-slate-900 text-sm font-semibold mb-1">Gear used on this album</h3>
           <p className="text-slate-500 text-[13px] leading-relaxed">
             Instruments are attached to each performer credit on a per-song
-            basis (see the credits sheet inside each row in the <button type="button" onClick={() => setTab("content")} className="text-[#319ED8] hover:underline">Content</button> tab).
+            basis (see the credits sheet inside each row in the <button type="button" onClick={() => setTab("content")} className="text-[var(--brand-blue)] hover:underline">Content</button> tab).
             An album-level "all gear on this record" summary lands here next.
           </p>
         </div>
@@ -1379,7 +1379,7 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
         <button
           type="button"
           onClick={() => setSheet({ kind: "new" })}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-[#319ED8] hover:text-[#2a8ac0]"
+          className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--brand-blue)] hover:text-[#2a8ac0]"
           data-testid="button-add-album-video"
         >
           Add video
@@ -1394,8 +1394,8 @@ function AlbumVideosSection({ albumId }: { albumId: string }) {
           className="w-full aspect-[16/9] max-h-64 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors flex flex-col items-center justify-center group"
           data-testid="button-empty-add-video"
         >
-          <div className="w-12 h-12 rounded-full bg-white border border-slate-200 group-hover:border-[#319ED8]/30 flex items-center justify-center mb-3 transition-colors shadow-sm">
-            <Plus className="w-5 h-5 text-slate-400 group-hover:text-[#319ED8] transition-colors" />
+          <div className="w-12 h-12 rounded-full bg-white border border-slate-200 group-hover:border-[var(--brand-blue)]/30 flex items-center justify-center mb-3 transition-colors shadow-sm">
+            <Plus className="w-5 h-5 text-slate-400 group-hover:text-[var(--brand-blue)] transition-colors" />
           </div>
           <p className="text-sm font-medium text-slate-700">
             Click to add your first video
@@ -1530,7 +1530,7 @@ function AlbumVideoTile({
             onClick={onEdit}
             aria-label={`Edit ${video.title}`}
             title="Edit video"
-            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-[#319ED8] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-[var(--brand-blue)] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
             data-testid={`button-edit-album-video-${video.id}`}
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -1552,10 +1552,10 @@ function AlbumVideoTile({
       <button
         type="button"
         onClick={onEdit}
-        className="group/title flex items-start justify-between gap-3 text-left px-0.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+        className="group/title flex items-start justify-between gap-3 text-left px-0.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
         data-testid={`button-title-album-video-${video.id}`}
       >
-        <span className="text-sm font-medium line-clamp-2 text-slate-900 group-hover/title:text-[#319ED8] transition-colors">
+        <span className="text-sm font-medium line-clamp-2 text-slate-900 group-hover/title:text-[var(--brand-blue)] transition-colors">
           {video.title}
         </span>
         <Pencil className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover/title:opacity-100 shrink-0 mt-0.5" />
@@ -1776,7 +1776,7 @@ function AlbumVideoSheet({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={busy}
-                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[var(--brand-blue)] shadow-sm border border-black/5 disabled:opacity-50"
                   data-testid="button-replace-video-file"
                 >
                   Replace video
@@ -1831,7 +1831,7 @@ function AlbumVideoSheet({
                     className={
                       "w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors " +
                       (dragActive
-                        ? "border-[#319ED8] bg-blue-50"
+                        ? "border-[var(--brand-blue)] bg-blue-50"
                         : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
                     }
                     data-testid="button-video-dropzone"
@@ -1842,7 +1842,7 @@ function AlbumVideoSheet({
                     <svg
                       className={
                         "w-8 h-8 mb-3 transition-colors " +
-                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                        (dragActive ? "text-[var(--brand-blue)]" : "text-slate-400")
                       }
                       viewBox="0 0 24 24"
                       fill="none"
@@ -1886,7 +1886,7 @@ function AlbumVideoSheet({
                       placeholder="https://www.dropbox.com/scl/fi/… or https://…/video.mp4"
                       value={importUrl}
                       onChange={(e) => setImportUrl(e.target.value)}
-                      className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                      className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
                       data-testid="input-video-import-url"
                     />
                     <p className="text-[11px] text-slate-400 mt-2 text-center">
@@ -1924,7 +1924,7 @@ function AlbumVideoSheet({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Live at the Troubadour — 2019"
-                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
                 data-testid="input-album-video-title"
               />
             </div>
@@ -1945,7 +1945,7 @@ function AlbumVideoSheet({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="A short note that shows under the video on the album page."
                 rows={2}
-                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30 resize-none"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30 resize-none"
                 data-testid="input-album-video-description"
               />
             </div>
@@ -1965,7 +1965,7 @@ function AlbumVideoSheet({
                   <Plus className="w-5 h-5" />
                 </button>
                 {posterUrl ? (
-                  <div className="relative aspect-video w-28 rounded-lg overflow-hidden border-2 border-[#319ED8] flex-shrink-0">
+                  <div className="relative aspect-video w-28 rounded-lg overflow-hidden border-2 border-[var(--brand-blue)] flex-shrink-0">
                     <img
                       src={posterUrl}
                       alt=""
@@ -2058,7 +2058,7 @@ function AlbumVideoSheet({
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit || busy}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 text-sm font-medium text-white bg-[var(--brand-blue)] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
               data-testid="button-submit-album-video-sheet"
             >
               {busy ? (
@@ -2132,7 +2132,7 @@ function AlbumPhotosSection({ albumId }: { albumId: string }) {
         <button
           type="button"
           onClick={() => setSheet({ kind: "new" })}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-[#319ED8] hover:text-[#2a8ac0]"
+          className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--brand-blue)] hover:text-[#2a8ac0]"
           data-testid="button-add-album-photo"
         >
           Add photo
@@ -2147,9 +2147,9 @@ function AlbumPhotosSection({ albumId }: { albumId: string }) {
           className="w-full aspect-square max-h-64 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors flex flex-col items-center justify-center group"
           data-testid="button-empty-add-photo"
         >
-          <div className="w-12 h-12 rounded-full bg-white border border-slate-200 group-hover:border-[#319ED8]/30 flex items-center justify-center mb-3 transition-colors shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-white border border-slate-200 group-hover:border-[var(--brand-blue)]/30 flex items-center justify-center mb-3 transition-colors shadow-sm">
             <ImagePlus
-              className="w-5 h-5 text-slate-400 group-hover:text-[#319ED8] transition-colors"
+              className="w-5 h-5 text-slate-400 group-hover:text-[var(--brand-blue)] transition-colors"
               strokeWidth={1.75}
             />
           </div>
@@ -2268,7 +2268,7 @@ function AlbumPhotoTile({
               photo.caption ? `Edit ${photo.caption}` : "Edit photo"
             }
             title="Edit photo"
-            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-[#319ED8] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+            className="p-1.5 bg-white/90 backdrop-blur-md rounded-md shadow-sm border border-black/5 text-slate-600 hover:text-[var(--brand-blue)] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
             data-testid={`button-edit-album-photo-${photo.id}`}
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -2291,14 +2291,14 @@ function AlbumPhotoTile({
       <button
         type="button"
         onClick={onEdit}
-        className="group/caption flex items-start justify-between gap-3 text-left px-0.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40"
+        className="group/caption flex items-start justify-between gap-3 text-left px-0.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
         data-testid={`button-caption-album-photo-${photo.id}`}
       >
         <span
           className={
             "text-sm line-clamp-2 transition-colors " +
             (photo.caption
-              ? "font-medium text-slate-900 group-hover/caption:text-[#319ED8]"
+              ? "font-medium text-slate-900 group-hover/caption:text-[var(--brand-blue)]"
               : "text-slate-400 italic group-hover/caption:text-slate-600")
           }
         >
@@ -2421,14 +2421,14 @@ function AlbumPhotoSheet({
                 />
                 {uploadingImage && (
                   <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                    <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
+                    <Spinner className="w-5 h-5 text-[var(--brand-blue)] animate-spin" />
                   </div>
                 )}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingImage || busy}
-                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[#319ED8] shadow-sm border border-black/5 disabled:opacity-50"
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[var(--brand-blue)] shadow-sm border border-black/5 disabled:opacity-50"
                   data-testid="button-replace-album-photo"
                 >
                   Replace photo
@@ -2453,14 +2453,14 @@ function AlbumPhotoSheet({
                 className={
                   "w-full max-w-sm mx-auto block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
                   (dragActive
-                    ? "border-[#319ED8] bg-blue-50"
+                    ? "border-[var(--brand-blue)] bg-blue-50"
                     : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
                 }
                 data-testid="button-photo-dropzone"
               >
                 {uploadingImage ? (
                   <>
-                    <Spinner className="w-7 h-7 text-[#319ED8] animate-spin mb-3" />
+                    <Spinner className="w-7 h-7 text-[var(--brand-blue)] animate-spin mb-3" />
                     <p className="text-sm font-medium text-slate-700">
                       Uploading…
                     </p>
@@ -2470,7 +2470,7 @@ function AlbumPhotoSheet({
                     <ImagePlus
                       className={
                         "w-8 h-8 mb-3 transition-colors " +
-                        (dragActive ? "text-[#319ED8]" : "text-slate-400")
+                        (dragActive ? "text-[var(--brand-blue)]" : "text-slate-400")
                       }
                       strokeWidth={1.75}
                     />
@@ -2513,7 +2513,7 @@ function AlbumPhotoSheet({
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
                 placeholder="e.g. Nick on stage — Brooklyn Steel, 2024"
-                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]/30"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
                 data-testid="input-album-photo-caption"
               />
             </div>
@@ -2559,7 +2559,7 @@ function AlbumPhotoSheet({
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#319ED8] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 text-sm font-medium text-white bg-[var(--brand-blue)] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
               data-testid="button-submit-album-photo-sheet"
             >
               {busy ? (
@@ -2722,7 +2722,7 @@ function SongCreditsEditor({ songId }: { songId: string }) {
           type="button"
           onClick={() => addCredit.mutate()}
           disabled={addCredit.isPending}
-          className="text-[11px] text-[#319ED8] hover:underline disabled:opacity-40"
+          className="text-[11px] text-[var(--brand-blue)] hover:underline disabled:opacity-40"
           data-testid={`button-add-credit-${songId}`}
         >
           + Credit
@@ -2877,7 +2877,7 @@ function CreditRow({
           type="button"
           disabled={!dirty || save.isPending}
           onClick={() => save.mutate()}
-          className="px-2 py-1 rounded bg-[#319ED8] text-white text-[11px] disabled:opacity-40"
+          className="px-2 py-1 rounded bg-[var(--brand-blue)] text-white text-[11px] disabled:opacity-40"
           data-testid={`button-save-credit-${row.id}`}
         >
           {save.isPending ? "…" : "Save"}
@@ -3068,7 +3068,7 @@ function PersonPicker({
                   setCreating(true);
                   setOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[#319ED8] hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[var(--brand-blue)] hover:bg-slate-50"
                 data-testid="button-create-new-person"
               >
                 + Create new person{query.trim() ? ` "${query.trim()}"` : ""}
@@ -3107,7 +3107,7 @@ function PersonPicker({
               type="button"
               disabled={createBusy}
               onClick={handleCreate}
-              className="px-2.5 py-1 text-[11px] rounded bg-[#319ED8] text-white font-medium disabled:opacity-40"
+              className="px-2.5 py-1 text-[11px] rounded bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
               data-testid="button-save-new-person"
             >
               {createBusy ? "Creating…" : "Create"}
@@ -3203,7 +3203,7 @@ function RolePicker({
           <button
             type="button"
             onClick={() => setNewKind("writer")}
-            className={`px-2 py-0.5 rounded ${newKind === "writer" ? "bg-[#319ED8] text-white" : "bg-slate-100 text-slate-600"}`}
+            className={`px-2 py-0.5 rounded ${newKind === "writer" ? "bg-[var(--brand-blue)] text-white" : "bg-slate-100 text-slate-600"}`}
             data-testid="button-new-role-kind-writer"
           >
             Writer
@@ -3211,7 +3211,7 @@ function RolePicker({
           <button
             type="button"
             onClick={() => setNewKind("performer")}
-            className={`px-2 py-0.5 rounded ${newKind === "performer" ? "bg-[#319ED8] text-white" : "bg-slate-100 text-slate-600"}`}
+            className={`px-2 py-0.5 rounded ${newKind === "performer" ? "bg-[var(--brand-blue)] text-white" : "bg-slate-100 text-slate-600"}`}
             data-testid="button-new-role-kind-performer"
           >
             Performer
@@ -3234,7 +3234,7 @@ function RolePicker({
             type="button"
             disabled={createBusy}
             onClick={handleCreate}
-            className="px-2.5 py-1 text-[11px] rounded bg-[#319ED8] text-white font-medium disabled:opacity-40"
+            className="px-2.5 py-1 text-[11px] rounded bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
             data-testid="button-save-new-role"
           >
             {createBusy ? "Creating…" : "Create"}
@@ -3259,7 +3259,7 @@ function RolePicker({
           {role || <span className="text-slate-400">Select role…</span>}
         </span>
         <span
-          className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${kind === "writer" ? "bg-[#7F10A7]/10 text-[#7F10A7]" : "bg-[#319ED8]/10 text-[#319ED8]"}`}
+          className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${kind === "writer" ? "bg-[var(--brand-purple)]/10 text-[var(--brand-purple)]" : "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"}`}
         >
           {kind}
         </span>
@@ -3296,7 +3296,7 @@ function RolePicker({
                 {r.name}
               </span>
               <span
-                className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded ${r.kind === "writer" ? "bg-[#7F10A7]/10 text-[#7F10A7]" : "bg-[#319ED8]/10 text-[#319ED8]"}`}
+                className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded ${r.kind === "writer" ? "bg-[var(--brand-purple)]/10 text-[var(--brand-purple)]" : "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"}`}
               >
                 {r.kind}
               </span>
@@ -3311,7 +3311,7 @@ function RolePicker({
               setCreating(true);
               setOpen(false);
             }}
-            className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[#319ED8] hover:bg-slate-50"
+            className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[var(--brand-blue)] hover:bg-slate-50"
             data-testid="button-create-new-role"
           >
             + Create new role{query.trim() ? ` "${query.trim()}"` : ""}
@@ -3353,7 +3353,7 @@ type ChipState = "untouched" | "manual" | "auto";
 function StatusChip({ letter, state }: { letter: "P" | "L" | "C"; state: ChipState }) {
   const tone =
     state === "auto"
-      ? "bg-[#319ED8] text-white"
+      ? "bg-[var(--brand-blue)] text-white"
       : state === "manual"
         ? "bg-white text-slate-900 ring-1 ring-inset ring-slate-300"
         : "bg-slate-100 text-slate-300";
@@ -3504,7 +3504,7 @@ function SongRow({
       className={
         "border-b border-slate-200 last:border-b-0 transition-opacity " +
         (isDragging ? "opacity-40 " : "") +
-        (isDropTarget ? "border-t-2 border-t-[#319ED8] " : "")
+        (isDropTarget ? "border-t-2 border-t-[var(--brand-blue)] " : "")
       }
       // Row-level drag wiring. The whole row is draggable so the user can
       // grab anywhere along the resting (un-expanded) bar; the open-edit
@@ -3597,7 +3597,7 @@ function SongRow({
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={
-            "p-1 -mr-1 rounded-md text-slate-400 hover:text-[#319ED8] hover:bg-slate-100 transition-opacity flex-shrink-0 focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 " +
+            "p-1 -mr-1 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 transition-opacity flex-shrink-0 focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 " +
             (open
               ? "opacity-100"
               : // Hidden until hover/focus on pointer-fine devices, but
@@ -3669,7 +3669,7 @@ function SongRow({
             className={
               "rounded-md border px-3 py-2.5 space-y-1.5 transition-colors " +
               (audioDragOver
-                ? "border-[#319ED8] bg-[#319ED8]/10"
+                ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/10"
                 : "border-slate-200 bg-slate-50/60")
             }
           >
@@ -3698,7 +3698,7 @@ function SongRow({
                 type="button"
                 onClick={() => audioInputRef.current?.click()}
                 disabled={audioUploading}
-                className="text-[12px] text-[#319ED8] hover:underline disabled:opacity-40"
+                className="text-[12px] text-[var(--brand-blue)] hover:underline disabled:opacity-40"
                 data-testid={`button-upload-audio-${song.id}`}
               >
                 {draft.audioUrl ? "Replace file" : "Choose file"}
@@ -3769,7 +3769,7 @@ function SongRow({
             className={
               "rounded-md border px-3 py-2.5 space-y-1.5 transition-colors " +
               (vttDragOver
-                ? "border-[#319ED8] bg-[#319ED8]/10"
+                ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/10"
                 : "border-slate-200 bg-slate-50/60")
             }
           >
@@ -3798,7 +3798,7 @@ function SongRow({
               <button
                 type="button"
                 onClick={() => vttInputRef.current?.click()}
-                className="text-[12px] text-[#319ED8] hover:underline"
+                className="text-[12px] text-[var(--brand-blue)] hover:underline"
                 data-testid={`button-upload-vtt-${song.id}`}
               >
                 {draft.syncedLyrics && draft.syncedLyrics.length > 0 ? "Replace .vtt" : "Upload .vtt"}
@@ -3873,7 +3873,7 @@ function SongRow({
                   syncedLyrics: draft.syncedLyrics,
                 })
               }
-              className="px-3 py-1 text-[12px] rounded bg-[#319ED8] text-white disabled:opacity-40"
+              className="px-3 py-1 text-[12px] rounded bg-[var(--brand-blue)] text-white disabled:opacity-40"
               data-testid={`button-save-song-${song.id}`}
             >
               Save song
@@ -3889,7 +3889,7 @@ function SongRow({
 }
 
 const inputCls =
-  "w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 transition";
+  "w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 transition";
 
 function Field({
   label,
@@ -4013,7 +4013,7 @@ function DiscographyRow({
             "text-[11px] font-medium px-2 py-1 rounded transition-colors disabled:opacity-40 " +
             (hoverRemove
               ? "text-[#C8102E] bg-[#C8102E]/10"
-              : "text-[#319ED8] bg-[#319ED8]/10")
+              : "text-[var(--brand-blue)] bg-[var(--brand-blue)]/10")
           }
           data-testid={`button-remove-album-${album.collectionId}`}
           aria-label={`Remove ${album.name} from library`}
@@ -4025,7 +4025,7 @@ function DiscographyRow({
           type="button"
           onClick={() => add.mutate()}
           disabled={add.isPending || bulkPending}
-          className="text-[12px] text-[#319ED8] font-medium hover:underline disabled:opacity-40"
+          className="text-[12px] text-[var(--brand-blue)] font-medium hover:underline disabled:opacity-40"
           data-testid={`button-add-album-${album.collectionId}`}
         >
           {add.isPending ? "Adding…" : bulkPending ? "…" : "+ Add"}
@@ -4503,7 +4503,7 @@ function AddGearPanel({
                     <button
                       type="button"
                       onClick={toggleAll}
-                      className="text-[11px] text-[#319ED8] hover:underline"
+                      className="text-[11px] text-[var(--brand-blue)] hover:underline"
                       data-testid={`button-toggle-album-${a.albumId}`}
                     >
                       {allSelected ? "Clear" : "Select all"}
@@ -4528,7 +4528,7 @@ function AddGearPanel({
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleSong(t.songId)}
-                            className="h-3.5 w-3.5 accent-[#319ED8]"
+                            className="h-3.5 w-3.5 accent-[var(--brand-blue)]"
                             data-testid={`checkbox-add-gear-track-${t.songId}`}
                           />
                           <span className="text-slate-400 text-[11px] w-6 text-right tabular-nums">
@@ -4574,7 +4574,7 @@ function AddGearPanel({
           type="button"
           disabled={!canSave}
           onClick={handleSave}
-          className="px-3 py-1.5 text-[12px] rounded-md bg-[#319ED8] text-white font-medium disabled:opacity-40"
+          className="px-3 py-1.5 text-[12px] rounded-md bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
           data-testid="button-save-gear"
         >
           {saving
@@ -4725,7 +4725,7 @@ function InstrumentPicker({
                   setCreating(true);
                   setOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[#319ED8] hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[var(--brand-blue)] hover:bg-slate-50"
                 data-testid="button-create-new-instrument"
               >
                 + Create new gear{query.trim() ? ` "${query.trim()}"` : ""}
@@ -4766,7 +4766,7 @@ function InstrumentPicker({
               type="button"
               disabled={createBusy}
               onClick={handleCreate}
-              className="px-2.5 py-1 text-[11px] rounded bg-[#319ED8] text-white font-medium disabled:opacity-40"
+              className="px-2.5 py-1 text-[11px] rounded bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
               data-testid="button-save-new-instrument"
             >
               {createBusy ? "Creating…" : "Create"}
@@ -5092,7 +5092,7 @@ function PersonEditor({
         ) : (
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-semibold text-white"
-            style={{ background: "#319ED8" }}
+            style={{ background: "var(--brand-blue)" }}
           >
             {form.name.slice(0, 1).toUpperCase()}
           </div>
@@ -5137,7 +5137,7 @@ function PersonEditor({
                 )}
               </span>
               {active && (
-                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "var(--brand-blue)" }} />
               )}
             </button>
           );
@@ -5184,7 +5184,7 @@ function PersonEditor({
                           {[a.type, a.year].filter(Boolean).join(" · ")}
                         </div>
                       </div>
-                      <span className="text-[11px] font-medium px-2 py-1 rounded text-[#319ED8] bg-[#319ED8]/10">
+                      <span className="text-[11px] font-medium px-2 py-1 rounded text-[var(--brand-blue)] bg-[var(--brand-blue)]/10">
                         In library
                       </span>
                     </div>
@@ -5197,8 +5197,8 @@ function PersonEditor({
           {/* "+ New release" — creates a fresh album pre-linked to this
               person and jumps the shell straight into the album editor. */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex items-center gap-3" data-testid="row-person-new-release">
-            <div className="w-10 h-10 rounded-full bg-[#319ED8]/10 grid place-items-center shrink-0">
-              <Disc3 className="w-5 h-5 text-[#319ED8]" />
+            <div className="w-10 h-10 rounded-full bg-[var(--brand-blue)]/10 grid place-items-center shrink-0">
+              <Disc3 className="w-5 h-5 text-[var(--brand-blue)]" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-slate-900 text-sm font-medium">New release for {form.name || "this artist"}</div>
@@ -5228,7 +5228,7 @@ function PersonEditor({
                   console.error("Couldn't create release", e);
                 }
               }}
-              className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-sm font-medium hover:bg-[#2A89BD]"
+              className="px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-sm font-medium hover:bg-[#2A89BD]"
               data-testid="button-person-new-release"
             >
               + New release
@@ -5529,7 +5529,7 @@ function PersonEditor({
                     type="button"
                     onClick={() => runScrape(activeValue)}
                     disabled={scrapeBusy || !activeValue.trim()}
-                    className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40 shrink-0"
+                    className="px-3 py-2 rounded-md bg-[var(--brand-blue)] text-white text-sm font-medium disabled:opacity-40 shrink-0"
                     data-testid="button-artist-scrape-url"
                   >
                     {scrapeBusy ? "Reading…" : "Engage"}
@@ -5612,7 +5612,7 @@ function PersonEditor({
           type="button"
           disabled={!dirty || save.isPending}
           onClick={() => save.mutate()}
-          className="px-4 py-2 rounded-md bg-[#319ED8] text-white font-medium disabled:opacity-40"
+          className="px-4 py-2 rounded-md bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
           data-testid="button-save-person"
         >
           {save.isPending ? "Saving…" : "Save changes"}
@@ -5647,7 +5647,7 @@ function OpenUrlButton({ url, testId }: { url: string; testId?: string }) {
       disabled={!href}
       aria-label="Open URL in a new tab"
       title={href ? `Open ${href}` : "Enter a valid URL to open"}
-      className="w-9 h-9 rounded-md border border-slate-200 bg-white text-slate-500 hover:text-[#319ED8] hover:border-[#319ED8] flex items-center justify-center disabled:opacity-40 disabled:hover:text-slate-500 disabled:hover:border-slate-200 shrink-0"
+      className="w-9 h-9 rounded-md border border-slate-200 bg-white text-slate-500 hover:text-[var(--brand-blue)] hover:border-[var(--brand-blue)] flex items-center justify-center disabled:opacity-40 disabled:hover:text-slate-500 disabled:hover:border-slate-200 shrink-0"
       data-testid={testId}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -5760,7 +5760,7 @@ function ScrapeBar({
           type="button"
           onClick={go}
           disabled={busy || !url.trim()}
-          className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40"
+          className="px-3 py-2 rounded-md bg-[var(--brand-blue)] text-white text-sm font-medium disabled:opacity-40"
           data-testid="button-scrape-url"
         >
           {busy ? "Reading…" : "Pull"}
@@ -5772,7 +5772,7 @@ function ScrapeBar({
       </p>
       {msg && (
         <p
-          className={`text-[12px] ${msg.kind === "ok" ? "text-[#319ED8]" : "text-red-600"}`}
+          className={`text-[12px] ${msg.kind === "ok" ? "text-[var(--brand-blue)]" : "text-red-600"}`}
           data-testid="text-scrape-result"
         >
           {msg.text}
@@ -5994,7 +5994,7 @@ function InstrumentEditor({
                 )}
               </span>
               {active && (
-                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "var(--brand-blue)" }} />
               )}
             </button>
           );
@@ -6322,7 +6322,7 @@ function InstrumentEditor({
           type="button"
           disabled={!dirty || save.isPending}
           onClick={() => save.mutate()}
-          className="px-4 py-2 rounded-md bg-[#319ED8] text-white font-medium disabled:opacity-40"
+          className="px-4 py-2 rounded-md bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
           data-testid="button-save-instrument"
         >
           {save.isPending ? "Saving…" : "Save changes"}
@@ -6461,7 +6461,7 @@ function VendorRow({
             </span>
           )}
           {draft.isHidden && (
-            <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">
+            <span className="text-[10px] uppercase tracking-wider text-[var(--brand-pink)] bg-[var(--brand-pink)]/10 border border-[var(--brand-pink)]/30 rounded px-1.5 py-0.5">
               Hidden
             </span>
           )}
@@ -6590,7 +6590,7 @@ function VendorRow({
               onClick={() => setDraft({ ...draft, isHidden: !draft.isHidden })}
               className={`px-3 py-1 text-[12px] rounded border ${
                 draft.isHidden
-                  ? "border-[#FF5470]/40 bg-[#FF5470]/10 text-[#FF5470]"
+                  ? "border-[var(--brand-pink)]/40 bg-[var(--brand-pink)]/10 text-[var(--brand-pink)]"
                   : "border-slate-200 text-slate-600 hover:bg-slate-50"
               } mr-auto`}
               title={
@@ -6621,7 +6621,7 @@ function VendorRow({
               type="button"
               disabled={!dirty || save.isPending}
               onClick={() => save.mutate()}
-              className="px-3 py-1 text-[12px] rounded bg-[#319ED8] text-white disabled:opacity-40"
+              className="px-3 py-1 text-[12px] rounded bg-[var(--brand-blue)] text-white disabled:opacity-40"
               data-testid={`button-save-vendor-${vendor.id}`}
             >
               Save
@@ -6781,7 +6781,7 @@ function VendorPaneEditor({
                 )}
               </span>
               {active && (
-                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "#319ED8" }} />
+                <span className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full" style={{ background: "var(--brand-blue)" }} />
               )}
             </button>
           );
@@ -6826,7 +6826,7 @@ function VendorPaneEditor({
                       )}
                     </span>
                     {a.isHidden && (
-                      <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5">
+                      <span className="text-[10px] uppercase tracking-wider text-[var(--brand-pink)] bg-[var(--brand-pink)]/10 border border-[var(--brand-pink)]/30 rounded px-1.5 py-0.5">
                         Hidden
                       </span>
                     )}
@@ -6867,7 +6867,7 @@ function VendorPaneEditor({
                   ) : (
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[12px] font-semibold"
-                      style={{ background: "#319ED8" }}
+                      style={{ background: "var(--brand-blue)" }}
                     >
                       {p.name.charAt(0).toUpperCase()}
                     </div>
@@ -7011,7 +7011,7 @@ function VendorPaneEditor({
           type="button"
           disabled={!dirty || save.isPending}
           onClick={() => save.mutate()}
-          className="px-4 py-1.5 text-[13px] rounded bg-[#319ED8] text-white disabled:opacity-40"
+          className="px-4 py-1.5 text-[13px] rounded bg-[var(--brand-blue)] text-white disabled:opacity-40"
           data-testid="button-save-vendor-pane"
         >
           {save.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
@@ -7229,7 +7229,7 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
             <div className="px-5 pb-3">
               <p
                 className="text-[11px] font-medium uppercase tracking-wider mb-1"
-                style={{ color: "#4AFFCA" }}
+                style={{ color: "var(--brand-mint)" }}
               >
                 {data?.shortCategory || data?.category || "Instrument"}
               </p>
@@ -7256,7 +7256,7 @@ function InstrumentPreviewCard({ instrumentId }: { instrumentId: string }) {
               >
                 <p
                   className="text-[10px] font-medium uppercase tracking-wider mb-1"
-                  style={{ color: "#4AFFCA" }}
+                  style={{ color: "var(--brand-mint)" }}
                 >
                   Artist note
                 </p>
@@ -7462,7 +7462,7 @@ function SocialFieldShortcuts({
                   ? "bg-[#319ED8] text-white border border-[#319ED8] hover:bg-[#2890c8]"
                   : "bg-white text-slate-400 border border-slate-200 hover:border-slate-400 hover:text-slate-600") +
                 (isActive
-                  ? " ring-2 ring-[#319ED8] ring-offset-2 ring-offset-[#f7fbff]"
+                  ? " ring-2 ring-[var(--brand-blue)] ring-offset-2 ring-offset-[#f7fbff]"
                   : "")
               }
               data-testid={`button-shortcut-${key}`}
@@ -7470,7 +7470,7 @@ function SocialFieldShortcuts({
               <Icon size={15} />
               {isFilled && (
                 <span
-                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#4AFFCA] flex items-center justify-center ring-2 ring-white"
+                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[var(--brand-mint)] flex items-center justify-center ring-2 ring-white"
                   aria-hidden="true"
                 >
                   <Check size={9} className="text-slate-900" strokeWidth={3} />
@@ -7760,7 +7760,7 @@ function VendorPreviewCard({
                 className="flex-shrink-0 w-[72px] h-[72px] rounded-full p-[3px]"
                 style={{
                   background:
-                    "linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)",
+                    "linear-gradient(135deg, var(--brand-mint) 0%, var(--brand-blue) 50%, var(--brand-purple) 100%)",
                 }}
                 data-testid="preview-vendor-avatar"
               >
@@ -7845,7 +7845,7 @@ function VendorPreviewCard({
                         <span
                           aria-hidden
                           className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
-                          style={{ background: "#319ED8" }}
+                          style={{ background: "var(--brand-blue)" }}
                         />
                       )}
                     </button>
@@ -7884,7 +7884,7 @@ function VendorPreviewCard({
                           type="button"
                           onClick={() => setBioExpanded((v) => !v)}
                           className="mt-1.5 text-[13px] font-semibold active:opacity-70"
-                          style={{ color: "#319ED8" }}
+                          style={{ color: "var(--brand-blue)" }}
                           data-testid="button-preview-vendor-bio-toggle"
                         >
                           {bioExpanded ? "less" : "more"}
@@ -7908,7 +7908,7 @@ function VendorPreviewCard({
                     <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
                       Web
                     </p>
-                    <p className="text-[14px]" style={{ color: "#319ED8" }}>
+                    <p className="text-[14px]" style={{ color: "var(--brand-blue)" }}>
                       {domain}
                     </p>
                   </div>
@@ -8236,7 +8236,7 @@ function LabelPreviewCard({
                 className="flex-shrink-0 w-[72px] h-[72px] rounded-full p-[3px]"
                 style={{
                   background:
-                    "linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)",
+                    "linear-gradient(135deg, var(--brand-mint) 0%, var(--brand-blue) 50%, var(--brand-purple) 100%)",
                 }}
                 data-testid="preview-label-avatar"
               >
@@ -8305,7 +8305,7 @@ function LabelPreviewCard({
                           <span
                             aria-hidden
                             className="absolute left-0 right-0 -bottom-[9px] h-[2px] rounded-full"
-                            style={{ background: "#319ED8" }}
+                            style={{ background: "var(--brand-blue)" }}
                           />
                         )}
                       </span>
@@ -8347,7 +8347,7 @@ function LabelPreviewCard({
                           type="button"
                           onClick={() => setBioExpanded((v) => !v)}
                           className="mt-1.5 text-[13px] font-semibold active:opacity-70"
-                          style={{ color: "#319ED8" }}
+                          style={{ color: "var(--brand-blue)" }}
                           data-testid="button-preview-label-bio-toggle"
                         >
                           {bioExpanded ? "less" : "more"}
@@ -8371,7 +8371,7 @@ function LabelPreviewCard({
                     <p className="text-[12px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>
                       Web
                     </p>
-                    <p className="text-[14px]" style={{ color: "#319ED8" }} data-testid="text-preview-label-website">
+                    <p className="text-[14px]" style={{ color: "var(--brand-blue)" }} data-testid="text-preview-label-website">
                       {domain}
                     </p>
                   </div>
@@ -8480,7 +8480,7 @@ function LabelPreviewCard({
                               style={{
                                 width: "100%",
                                 aspectRatio: "1 / 1",
-                                background: "#319ED8",
+                                background: "var(--brand-blue)",
                                 fontSize: 32,
                                 boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
                               }}
@@ -8678,7 +8678,7 @@ function LabelEditor({
             type="button"
             onClick={() => saveLabel.mutate(form)}
             disabled={!dirty || saveLabel.isPending}
-            className="px-4 py-1.5 text-[13px] font-medium rounded-md bg-[#319ED8] text-white hover:bg-[#319ED8]/90 disabled:opacity-40"
+            className="px-4 py-1.5 text-[13px] font-medium rounded-md bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue)]/90 disabled:opacity-40"
             data-testid="button-save-label"
           >
             {saveLabel.isPending ? "Saving…" : dirty ? "Save" : "Saved"}
@@ -8708,7 +8708,7 @@ function LabelEditor({
               type="button"
               onClick={runScrape}
               disabled={scrapeBusy || !scrapeUrl.trim()}
-              className="px-3 py-2 rounded-md bg-[#319ED8] text-white text-sm font-medium disabled:opacity-40 shrink-0"
+              className="px-3 py-2 rounded-md bg-[var(--brand-blue)] text-white text-sm font-medium disabled:opacity-40 shrink-0"
               data-testid="button-label-scrape"
             >
               {scrapeBusy ? "Reading…" : "Engage"}
@@ -8723,7 +8723,7 @@ function LabelEditor({
           <p
             role="status"
             aria-live="polite"
-            className={`text-[12px] min-h-[1em] ${scrapeMsg?.kind === "err" ? "text-red-600" : "text-[#319ED8]"}`}
+            className={`text-[12px] min-h-[1em] ${scrapeMsg?.kind === "err" ? "text-red-600" : "text-[var(--brand-blue)]"}`}
             data-testid="text-label-scrape-result"
           >
             {scrapeMsg?.text ?? ""}
@@ -8836,7 +8836,7 @@ function AdminAlbumFromUrlPanel({ onCreated }: { onCreated: (albumId: string) =>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-full px-4 py-2 flex items-center gap-2 text-left text-[12px] text-[#319ED8] hover:bg-slate-50"
+          className="w-full px-4 py-2 flex items-center gap-2 text-left text-[12px] text-[var(--brand-blue)] hover:bg-slate-50"
           data-testid="button-album-from-url-open"
         >
           <SiApplemusic className="w-3.5 h-3.5" />
@@ -8870,7 +8870,7 @@ function AdminAlbumFromUrlPanel({ onCreated }: { onCreated: (albumId: string) =>
               type="button"
               onClick={seed}
               disabled={busy || !url.trim()}
-              className="px-3 py-1.5 rounded text-sm bg-[#319ED8] text-white disabled:opacity-50 shrink-0"
+              className="px-3 py-1.5 rounded text-sm bg-[var(--brand-blue)] text-white disabled:opacity-50 shrink-0"
               data-testid="button-album-from-url-seed"
             >
               {busy ? "Importing…" : "Import"}
@@ -8993,7 +8993,7 @@ function AlbumArtistPicker({
                 ) : (
                   <span
                     className="w-7 h-7 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[11px] font-semibold text-slate-500"
-                    style={{ background: "#319ED8", color: "white" }}
+                    style={{ background: "var(--brand-blue)", color: "white" }}
                   >
                     {linked.name.charAt(0).toUpperCase()}
                   </span>
@@ -9074,7 +9074,7 @@ function AlbumArtistPicker({
                   ) : (
                     <span
                       className="w-6 h-6 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500"
-                      style={{ background: "#319ED8", color: "white" }}
+                      style={{ background: "var(--brand-blue)", color: "white" }}
                     >
                       {p.name.charAt(0).toUpperCase()}
                     </span>
@@ -9094,7 +9094,7 @@ function AlbumArtistPicker({
                       setCreating(true);
                       setNewName(query.trim());
                     }}
-                    className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-[#319ED8] hover:bg-slate-50 rounded"
+                    className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-[var(--brand-blue)] hover:bg-slate-50 rounded"
                     data-testid="button-album-artist-create"
                   >
                     <Plus className="w-4 h-4" />
@@ -9150,7 +9150,7 @@ function AlbumArtistPicker({
                       type="button"
                       onClick={createPersonFromUrl}
                       disabled={createBusy || (!newName.trim() && !newAppleUrl.trim())}
-                      className="px-3 py-1.5 rounded text-sm bg-[#319ED8] text-white disabled:opacity-50"
+                      className="px-3 py-1.5 rounded text-sm bg-[var(--brand-blue)] text-white disabled:opacity-50"
                       data-testid="button-album-artist-new-save"
                     >
                       {createBusy ? "Linking…" : "Create & link"}
@@ -9367,7 +9367,7 @@ function AlbumLabelPicker({
                     setCreating(true);
                     setNewName(query.trim());
                   }}
-                  className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-[#319ED8] hover:bg-slate-50 rounded"
+                  className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-[var(--brand-blue)] hover:bg-slate-50 rounded"
                   data-testid="button-album-label-create"
                 >
                   <Plus className="w-4 h-4" />
@@ -9407,7 +9407,7 @@ function AlbumLabelPicker({
                       type="button"
                       onClick={createLabelFromUrl}
                       disabled={createBusy || (!newName.trim() && !newWebsiteUrl.trim())}
-                      className="px-3 py-1.5 rounded text-sm bg-[#319ED8] text-white disabled:opacity-50"
+                      className="px-3 py-1.5 rounded text-sm bg-[var(--brand-blue)] text-white disabled:opacity-50"
                       data-testid="button-album-label-new-save"
                     >
                       {createBusy ? "Linking…" : "Create & link"}
@@ -9899,7 +9899,7 @@ export function Admin() {
             type="button"
             onClick={() => bootstrap.mutate()}
             disabled={bootstrap.isPending}
-            className="px-4 py-2 rounded-md bg-[#319ED8] text-white font-medium hover:bg-[#319ED8]/90 disabled:opacity-50"
+            className="px-4 py-2 rounded-md bg-[var(--brand-blue)] text-white font-medium hover:bg-[var(--brand-blue)]/90 disabled:opacity-50"
             data-testid="button-bootstrap-admin"
           >
             {bootstrap.isPending
@@ -9986,10 +9986,10 @@ export function Admin() {
                   key={t.key}
                   type="button"
                   onClick={() => setEntity(t.key)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left ${active ? "bg-[#eff4ff] text-[#319ED8] font-medium" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left ${active ? "bg-[#eff4ff] text-[var(--brand-blue)] font-medium" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
                   data-testid={`nav-${t.key}`}
                 >
-                  <Icon size={16} className={active ? "text-[#319ED8]" : "text-slate-400"} aria-hidden="true" />
+                  <Icon size={16} className={active ? "text-[var(--brand-blue)]" : "text-slate-400"} aria-hidden="true" />
                   <span className="flex-1">{t.label}</span>
                   <span className="text-[11px] text-slate-400">{t.count}</span>
                 </button>
@@ -10042,7 +10042,7 @@ export function Admin() {
                       return { ...prev, [entity]: next };
                     });
                   }}
-                  className={`p-1 rounded ${isSearchOpen ? "text-[#319ED8]" : "text-slate-400 hover:text-slate-600"}`}
+                  className={`p-1 rounded ${isSearchOpen ? "text-[var(--brand-blue)]" : "text-slate-400 hover:text-slate-600"}`}
                   aria-label={`Search ${entity}`}
                   aria-expanded={isSearchOpen}
                   title={`Search ${entity}`}
@@ -10065,7 +10065,7 @@ export function Admin() {
                     createInstrument.isPending ||
                     createLabel.isPending
                   }
-                  className={`w-8 h-8 inline-flex items-center justify-center rounded ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[#319ED8] hover:bg-slate-50"}`}
+                  className={`w-8 h-8 inline-flex items-center justify-center rounded ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[var(--brand-blue)] hover:bg-slate-50"}`}
                   aria-label={`New ${entity.slice(0, -1)}`}
                   title={
                     entity === "vendors"
@@ -10096,7 +10096,7 @@ export function Admin() {
                       }
                     }}
                     placeholder={`Search ${entity}…`}
-                    className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#319ED8] focus:bg-white"
+                    className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[var(--brand-blue)] focus:bg-white"
                     data-testid={`input-search-${entity}`}
                   />
                   {search && (
@@ -10148,7 +10148,7 @@ export function Admin() {
                       </div>
                     </div>
                     {a.isHidden && (
-                      <span className="text-[10px] uppercase tracking-wider text-[#FF5470] bg-[#FF5470]/10 border border-[#FF5470]/30 rounded px-1.5 py-0.5 shrink-0">
+                      <span className="text-[10px] uppercase tracking-wider text-[var(--brand-pink)] bg-[var(--brand-pink)]/10 border border-[var(--brand-pink)]/30 rounded px-1.5 py-0.5 shrink-0">
                         Hidden
                       </span>
                     )}
@@ -10173,7 +10173,7 @@ export function Admin() {
                     ) : (
                       <div
                         className="w-10 h-10 rounded-full flex items-center justify-center text-slate-900 text-sm font-semibold shrink-0"
-                        style={{ background: "#319ED8" }}
+                        style={{ background: "var(--brand-blue)" }}
                       >
                         {p.name.slice(0, 1).toUpperCase()}
                       </div>
@@ -10300,7 +10300,7 @@ export function Admin() {
                         toast({ title: "Backfill failed", description: String(e?.message || e), variant: "destructive" });
                       }
                     }}
-                    className="text-[#319ED8] hover:underline text-sm font-medium"
+                    className="text-[var(--brand-blue)] hover:underline text-sm font-medium"
                     data-testid="button-backfill-originals"
                   >
                     Mark the 5 originals as GoodTunes releases

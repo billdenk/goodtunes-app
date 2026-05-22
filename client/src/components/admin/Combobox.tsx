@@ -159,7 +159,7 @@ export function Combobox({
         onBlur={onBlur}
         onKeyDown={onKeyDown}
         placeholder={placeholder ?? "Search or add new…"}
-        className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 pr-8 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent"
+        className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 pr-8 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
         data-testid={testId}
         autoComplete="off"
         role="combobox"
@@ -204,7 +204,7 @@ export function Combobox({
               className={[
                 "w-full text-left px-3 py-1.5 text-[13.5px] flex items-center justify-between gap-2",
                 i === highlight
-                  ? "bg-[#319ED8]/10 text-slate-900"
+                  ? "bg-[var(--brand-blue)]/10 text-slate-900"
                   : "text-slate-700 hover:bg-slate-50",
               ].join(" ")}
               data-testid={`${testId}-option-${opt
@@ -213,7 +213,7 @@ export function Combobox({
             >
               <span className="truncate">{opt}</span>
               {opt.toLowerCase() === value.toLowerCase() && (
-                <Check className="w-3.5 h-3.5 text-[#319ED8] flex-shrink-0" />
+                <Check className="w-3.5 h-3.5 text-[var(--brand-blue)] flex-shrink-0" />
               )}
             </button>
           ))}
@@ -231,8 +231,8 @@ export function Combobox({
               className={[
                 "w-full text-left px-3 py-1.5 text-[13.5px] flex items-center gap-2 border-t border-slate-100",
                 highlight === filtered.length
-                  ? "bg-[#319ED8]/10 text-[#319ED8]"
-                  : "text-[#319ED8] hover:bg-slate-50",
+                  ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+                  : "text-[var(--brand-blue)] hover:bg-slate-50",
               ].join(" ")}
               data-testid={`${testId}-option-add`}
             >

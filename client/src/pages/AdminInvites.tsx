@@ -111,7 +111,7 @@ export function AdminInvites() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="name@example.com"
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="input-invite-email"
               />
             </div>
@@ -120,7 +120,7 @@ export function AdminInvites() {
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="select-invite-role"
               >
                 {ROLE_OPTIONS.map((o) => (
@@ -131,7 +131,7 @@ export function AdminInvites() {
             <button
               type="submit"
               disabled={createMutation.isPending || !email.trim()}
-              className="bg-[#319ED8] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg px-4 py-2 transition-colors"
+              className="bg-[var(--brand-blue)] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg px-4 py-2 transition-colors"
               data-testid="button-send-invite"
             >
               {createMutation.isPending ? "Sending…" : "Send invite"}
@@ -145,7 +145,7 @@ export function AdminInvites() {
                 <button
                   type="button"
                   onClick={copyUrl}
-                  className="text-xs font-semibold text-[#319ED8] hover:underline flex items-center gap-1"
+                  className="text-xs font-semibold text-[var(--brand-blue)] hover:underline flex items-center gap-1"
                   data-testid="button-copy-url"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}

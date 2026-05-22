@@ -177,7 +177,7 @@ export function AdminInstrument() {
     return (
       <AdminFrame active="gear">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -201,7 +201,7 @@ export function AdminInstrument() {
           {backCrumb ? (
             <Link
               href={backCrumb.href}
-              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
               data-testid={backCrumb.testId}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -210,7 +210,7 @@ export function AdminInstrument() {
           ) : (
             <Link
               href="/admin/instruments"
-              className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+              className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
               data-testid="link-back-to-instruments"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -235,7 +235,7 @@ export function AdminInstrument() {
           {backCrumb ? (
             <Link
               href={backCrumb.href}
-              className="hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+              className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
               data-testid={backCrumb.testId}
             >
               {backCrumb.name}
@@ -309,7 +309,7 @@ export function AdminInstrument() {
               >
                 {t.label}
                 {tab === t.key && (
-                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
                 )}
               </button>
             ))}
@@ -584,7 +584,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
           )}
           {busy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-              <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
+              <Spinner className="w-6 h-6 text-[var(--brand-blue)] animate-spin" />
               <span className="text-[12px] text-slate-700 font-semibold">
                 Uploading…
               </span>
@@ -619,7 +619,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
           className={[
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
-              ? "border-[#319ED8] bg-[#319ED8]/5"
+              ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
               : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
             busy && "opacity-60 cursor-not-allowed",
           ]
@@ -629,7 +629,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
           <Upload
             className={[
               "w-7 h-7",
-              dragging ? "text-[#319ED8]" : "text-slate-400",
+              dragging ? "text-[var(--brand-blue)]" : "text-slate-400",
             ].join(" ")}
           />
           <div className="text-slate-700 text-[13px] font-semibold">
@@ -898,7 +898,7 @@ function AddVendorForm({
 
   return (
     <div
-      className="border-b border-slate-200 bg-[#319ED8]/5 px-6 py-4 space-y-3"
+      className="border-b border-slate-200 bg-[var(--brand-blue)]/5 px-6 py-4 space-y-3"
       data-testid="form-add-vendor"
       onKeyDown={(e) => {
         if (e.key === "Enter") {
@@ -930,7 +930,7 @@ function AddVendorForm({
           }}
           placeholder="https://reverb.com/item/12345-some-guitar"
           disabled={createMut.isPending}
-          className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+          className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
           data-testid="input-add-vendor-url"
         />
         {domain && (
@@ -960,7 +960,7 @@ function AddVendorForm({
               }}
               placeholder="Reverb"
               disabled={createMut.isPending}
-              className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+              className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
               data-testid="input-add-vendor-name"
             />
           </div>
@@ -978,7 +978,7 @@ function AddVendorForm({
               onChange={(e) => setLogoUrl(e.target.value)}
               placeholder="https://…/logo.svg"
               disabled={createMut.isPending}
-              className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50"
+              className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
               data-testid="input-add-vendor-logo"
             />
           </div>
@@ -1043,7 +1043,7 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
         className="py-10 flex items-center justify-center"
         data-testid="people-panel-loading"
       >
-        <Spinner className="w-5 h-5 text-[#319ED8] animate-spin" />
+        <Spinner className="w-5 h-5 text-[var(--brand-blue)] animate-spin" />
       </div>
     );
   }
@@ -1108,7 +1108,7 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[#319ED8] group-hover:underline underline-offset-2 transition-colors">
+              <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] group-hover:underline underline-offset-2 transition-colors">
                 {a.name}
               </div>
               <div className="text-[11.5px] text-slate-400">
@@ -1153,7 +1153,7 @@ function VendorRow({
       <div
         className={[
           "flex items-center gap-4 px-6 py-3.5",
-          editing ? "bg-[#319ED8]/5" : "hover:bg-slate-50/50",
+          editing ? "bg-[var(--brand-blue)]/5" : "hover:bg-slate-50/50",
         ].join(" ")}
       >
         {/* Logo */}
@@ -1177,7 +1177,7 @@ function VendorRow({
                 href={`/admin/vendors/${vendor.vendorId}?from=instrument&instrumentId=${instrumentId}`}
                 onClick={(e) => e.stopPropagation()}
                 className={[
-                  "text-[13.5px] font-semibold truncate hover:text-[#319ED8] hover:underline underline-offset-2 transition-colors",
+                  "text-[13.5px] font-semibold truncate hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors",
                   vendor.isHidden ? "text-slate-500" : "text-slate-900",
                 ].join(" ")}
                 data-testid={`link-vendor-${vendor.vendorId}`}
@@ -1212,7 +1212,7 @@ function VendorRow({
           href={vendor.affiliateUrl}
           target="_blank"
           rel="noreferrer"
-          className="hidden md:inline-flex items-center gap-1 text-[11.5px] text-slate-400 hover:text-[#319ED8] truncate max-w-[280px]"
+          className="hidden md:inline-flex items-center gap-1 text-[11.5px] text-slate-400 hover:text-[var(--brand-blue)] truncate max-w-[280px]"
           data-testid={`link-affiliate-${vendor.id}`}
           onClick={(e) => {
             // Don't follow the link from inside the row hover — the row
@@ -1261,7 +1261,7 @@ function VendorRow({
             className={
               "w-7 h-7 rounded-full inline-flex items-center justify-center " +
               (editing
-                ? "bg-[#319ED8] text-white hover:bg-[#2890c8]"
+                ? "bg-[var(--brand-blue)] text-white hover:bg-[#2890c8]"
                 : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900")
             }
             data-testid={`button-edit-vendor-${vendor.id}`}
@@ -1399,7 +1399,7 @@ function VendorEditForm({
 
   return (
     <div
-      className="border-t border-slate-200 bg-[#319ED8]/5 px-6 py-4"
+      className="border-t border-slate-200 bg-[var(--brand-blue)]/5 px-6 py-4"
       data-testid={`form-edit-vendor-${vendor.id}`}
       onKeyDown={(e) => {
         // Ctrl/Cmd+Enter saves; Escape cancels.
@@ -1537,7 +1537,7 @@ function VendorEditForm({
             type="button"
             onClick={() => saveMut.mutate()}
             disabled={!anyDirty || saveMut.isPending || !!uploading}
-            className="px-3 h-8 rounded-md bg-[#319ED8] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
+            className="px-3 h-8 rounded-md bg-[var(--brand-blue)] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1.5"
             data-testid={`button-save-edit-vendor-${vendor.id}`}
           >
             {saveMut.isPending ? (
@@ -1555,7 +1555,7 @@ function VendorEditForm({
 /* ─── Tiny field + image-picker helpers used by VendorEditForm ─────── */
 
 const vendorInputCls =
-  "w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8] focus:border-transparent disabled:opacity-50";
+  "w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50";
 
 function Field({
   label,

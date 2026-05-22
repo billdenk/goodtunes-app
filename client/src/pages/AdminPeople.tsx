@@ -123,7 +123,7 @@ export function AdminPeople() {
     return (
       <AdminFrame active="people">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -203,7 +203,7 @@ export function AdminPeople() {
       {/* Grid */}
       {isLoading ? (
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
@@ -339,7 +339,7 @@ function PersonCard({
       data-testid={`card-person-${person.id}`}
     >
       <div className="relative w-full aspect-square">
-        <div className="w-full h-full rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[#319ED8]/30 transition-all">
+        <div className="w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
           {person.photoUrl ? (
             <img
               src={person.photoUrl}
@@ -386,7 +386,7 @@ function PersonRow({
       data-testid={`row-person-${person.id}`}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
-        <div className="w-full h-full rounded-full overflow-hidden bg-[#319ED8] ring-1 ring-slate-200">
+        <div className="w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200">
           {person.photoUrl ? (
             <img
               src={person.photoUrl}
@@ -405,7 +405,7 @@ function PersonRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-person-name-${person.id}`}
         >
           {person.name}

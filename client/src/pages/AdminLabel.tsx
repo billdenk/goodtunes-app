@@ -165,7 +165,7 @@ export function AdminLabel() {
     return (
       <AdminFrame active="labels">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -188,7 +188,7 @@ export function AdminLabel() {
           </h1>
           <Link
             href="/admin/labels"
-            className="text-[#319ED8] text-sm hover:underline inline-flex items-center gap-1"
+            className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
             data-testid="link-back-to-labels"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -279,7 +279,7 @@ export function AdminLabel() {
                   href={label.websiteUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 hover:text-[#319ED8]"
+                  className="inline-flex items-center gap-1 hover:text-[var(--brand-blue)]"
                   data-testid="link-label-website"
                 >
                   Visit
@@ -311,7 +311,7 @@ export function AdminLabel() {
               >
                 {t.label}
                 {tab === t.key && (
-                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#319ED8] rounded-full" />
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
                 )}
               </button>
             ))}
@@ -623,9 +623,9 @@ function ImageUploadPanel({
                   : "Unlocked \u2014 automated refreshes may update this logo"
               }
               className={[
-                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8]/40 active:scale-[0.94]",
+                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 active:scale-[0.94]",
                 locked
-                  ? "text-[#319ED8] hover:bg-[#319ED8]/10"
+                  ? "text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10"
                   : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
                 lockMut.isPending && "opacity-50",
               ]
@@ -661,7 +661,7 @@ function ImageUploadPanel({
           )}
           {busy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-              <Spinner className="w-6 h-6 text-[#319ED8] animate-spin" />
+              <Spinner className="w-6 h-6 text-[var(--brand-blue)] animate-spin" />
               <span className="text-[12px] text-slate-700 font-semibold">
                 Uploading…
               </span>
@@ -707,7 +707,7 @@ function ImageUploadPanel({
           className={[
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
-              ? "border-[#319ED8] bg-[#319ED8]/5"
+              ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
               : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
             busy && "opacity-60 cursor-not-allowed",
             locked && "opacity-40 cursor-not-allowed hover:border-slate-200 hover:bg-transparent",
@@ -730,7 +730,7 @@ function ImageUploadPanel({
               <Upload
                 className={[
                   "w-7 h-7",
-                  dragging ? "text-[#319ED8]" : "text-slate-400",
+                  dragging ? "text-[var(--brand-blue)]" : "text-slate-400",
                 ].join(" ")}
               />
               <div className="text-slate-700 text-[13px] font-semibold">

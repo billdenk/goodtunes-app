@@ -235,7 +235,7 @@ export function AdminInstruments() {
     return (
       <AdminFrame active="gear">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -313,7 +313,7 @@ export function AdminInstruments() {
       {/* Grid */}
       {isLoading ? (
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
@@ -387,7 +387,7 @@ export function AdminInstruments() {
               placeholder="https://…"
               autoFocus
               disabled={createInstrument.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-gear-url"
             />
             {pasteError && (
@@ -448,7 +448,7 @@ function InstrumentCard({
       className="group text-left flex flex-col"
       data-testid={`card-instrument-${instrument.id}`}
     >
-      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[#319ED8]/30 transition-all">
+      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
         {instrument.photoUrl ? (
           <img
             src={instrument.photoUrl}
@@ -511,7 +511,7 @@ function InstrumentRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[#319ED8] transition-colors"
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-instrument-name-${instrument.id}`}
         >
           {instrument.name}

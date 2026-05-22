@@ -45,7 +45,7 @@ export function AdminUserMenu() {
           type="button"
           aria-label="Account menu"
           data-testid="button-admin-user-menu"
-          className="w-8 h-8 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold flex items-center justify-center tracking-wide hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#319ED8] focus-visible:ring-offset-2"
+          className="w-8 h-8 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold flex items-center justify-center tracking-wide hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
         >
           {initials}
         </button>
