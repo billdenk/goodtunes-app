@@ -53,6 +53,7 @@ import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
+import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -274,6 +275,10 @@ function Router() {
         {/* Task #80 — Partner reporting v1. */}
         <Route path="/admin/reports">
           <ProtectedRoute component={AdminReports} />
+        </Route>
+        {/* Task #136 — Auto-sync-lyrics job history. */}
+        <Route path="/admin/jobs">
+          <ProtectedRoute component={AdminJobs} />
         </Route>
         {/* Task #119 — super-admin platform pricing. Page itself
             short-circuits with a "Super admin only" message when the

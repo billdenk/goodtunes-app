@@ -12,6 +12,7 @@ import {
   Users,
   ArrowLeft,
   BarChart3,
+  Activity,
   DollarSign,
   PanelRightClose,
   PanelRightOpen,
@@ -42,6 +43,7 @@ export type EntityKey =
   | "fulfillment"
   | "customers"
   | "reports"
+  | "jobs"
   | "platform-pricing"
   | "none";
 
@@ -227,6 +229,16 @@ export function AdminFrame({
               active={active === "reports"}
               onClick={() => navigate("/admin/reports")}
               testId="nav-reports"
+            />
+            {/* Task #136 — Auto-sync-lyrics job history. Tool, not a CRUD
+                list, so we pass -1 to suppress the count. */}
+            <SidebarLink
+              icon={Activity}
+              label="Jobs"
+              count={-1}
+              active={active === "jobs"}
+              onClick={() => navigate("/admin/jobs")}
+              testId="nav-jobs"
             />
             {isSuperAdmin && (
               <SidebarLink

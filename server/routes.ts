@@ -6751,6 +6751,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       wordCount: words.length,
       backfilledPlainLyrics: plainDraft !== undefined,
       hallucinatedCuesDropped: droppedCount,
+      // Task #136 — persist the same source-MB / transcoded-MB /
+      // transcode-ms / STT-ms numbers we already return in the
+      // response so a slow-creep against the 120s ElevenLabs timeout
+      // (or a transcode that fails to shrink a big WAV) is queryable
+      // from /admin/jobs without tailing the server log.
+      sourceBytes,
+      transcodedBytes,
+      transcodeMs,
+      sttMs,
     };
     return res.json({
       song: updated,
