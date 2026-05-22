@@ -10,6 +10,13 @@ import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { normalizeAudioUrl } from "@shared/audioUrl";
+import {
+  evaluateAutoSyncRun,
+  ALERT_LOOKBACK_DAYS,
+  STT_WARN_MS,
+  SOURCE_CAP_BYTES,
+  SOURCE_WARN_MARGIN_BYTES,
+} from "@shared/jobAlerts";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
@@ -5275,6 +5282,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .json({ message: "Job not found or expired. It may have finished — refresh to see the result." });
     }
     return res.json(state);
+  });
+
+  // Auto-sync-lyrics "creeping toward timeout" alert feed. Scans the
+  // last `ALERT_LOOKBACK_DAYS` of auto-sync runs and returns just the
+  // tripped ones (STT wall-clock past the warn threshold, or master
+  // bytes within the warn margin of the download cap). The admin banner
+  // polls this and surfaces a dismissible warning across every admin
+  // page so a regression toward the 120 s ElevenLabs cap is noticed
+  // without anyone having to open Jobs.
+  app.get("/api/admin/job-runs/alerts", requireAdminBearer, async (_req, res) => {
+    try {
+      const rows = await storage.listJobRuns({ jobType: "auto-sync-lyrics", limit: 200 });
+      const cutoff = Date.now() - ALERT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+      const alerts = rows
+        .filter((r) => r.finishedAt && new Date(r.finishedAt as any).getTime() >= cutoff)
+        .map((r) => evaluateAutoSyncRun({
+          id: r.id,
+          jobType: r.jobType,
+          status: r.status,
+          summary: r.summary as any,
+          finishedAt: (r.finishedAt as any) ?? new Date(),
+          songId: r.songId,
+          albumId: r.albumId,
+        }))
+        .filter((a): a is NonNullable<typeof a> => a !== null);
+      return res.json({
+        alerts,
+        thresholds: {
+          sttWarnMs: STT_WARN_MS,
+          sourceCapBytes: SOURCE_CAP_BYTES,
+          sourceWarnMarginBytes: SOURCE_WARN_MARGIN_BYTES,
+          lookbackDays: ALERT_LOOKBACK_DAYS,
+        },
+      });
+    } catch (e: any) {
+      return res.status(500).json({ message: e?.message || "Failed to load job alerts." });
+    }
   });
 
   // Audit-log read endpoint. Bill's "did it notify you?" workflow — when

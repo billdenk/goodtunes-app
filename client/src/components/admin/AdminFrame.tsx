@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
+import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
@@ -262,6 +263,10 @@ export function AdminFrame({
         <div className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-end px-4 sm:px-6">
           <AdminUserMenu />
         </div>
+        {/* Task #138 — Passive STT-creep alert banner. Lives outside
+            the page-content max-width wrapper so it spans uniformly
+            across every admin page without each page having to opt in. */}
+        <AutoSyncAlertBanner />
         <div className="max-w-[1180px] px-6 sm:px-8 pt-6 pb-8">{children}</div>
       </main>
 
