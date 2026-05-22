@@ -21,6 +21,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
+import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
@@ -280,7 +281,9 @@ export function AdminFrame({
             the page-content max-width wrapper so it spans uniformly
             across every admin page without each page having to opt in. */}
         <AutoSyncAlertBanner />
-        <div className="max-w-[1180px] px-6 sm:px-8 pt-6 pb-8">{children}</div>
+        <div className="max-w-[1180px] px-6 sm:px-8 pt-6 pb-8">
+          <AdminErrorBoundary>{children}</AdminErrorBoundary>
+        </div>
       </main>
 
         {/* RIGHT PREVIEW PANE — rendered only when the page passes

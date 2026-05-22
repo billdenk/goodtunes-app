@@ -6,6 +6,7 @@ import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
@@ -91,7 +92,13 @@ export function AdminPeople() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const { data: people = [], isLoading } = useQuery<PersonLite[]>({
+  const {
+    data: people = [],
+    isLoading,
+    isError: peopleError,
+    error: peopleErrorObj,
+    refetch: refetchPeople,
+  } = useQuery<PersonLite[]>({
     queryKey: ["/api/people"],
     enabled: !!user?.isAdmin,
   });
@@ -205,6 +212,13 @@ export function AdminPeople() {
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : peopleError ? (
+        <ErrorState
+          error={peopleErrorObj}
+          onRetry={() => refetchPeople()}
+          title="Couldn't load people"
+          testId="admin-people-error"
+        />
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
       ) : view === "grid" ? (

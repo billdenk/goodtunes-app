@@ -10,6 +10,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 
 type QueueRow = {
   id: string;
@@ -46,10 +47,24 @@ const STATUS_PILL: Record<QueueRow["nameStatus"], string> = {
 };
 
 export function AdminPrintQueue() {
+  return (
+    <AdminErrorBoundary title="Print queue failed to render">
+      <AdminPrintQueueInner />
+    </AdminErrorBoundary>
+  );
+}
+
+function AdminPrintQueueInner() {
   const { toast } = useToast();
   const [tab, setTab] = useState<QueueRow["nameStatus"]>("confirmed");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const { data: rows, isLoading } = useQuery<QueueRow[]>({
+  const {
+    data: rows,
+    isLoading,
+    isError: rowsError,
+    error: rowsErrorObj,
+    refetch: refetchRows,
+  } = useQuery<QueueRow[]>({
     queryKey: ["/api/admin/print-queue", { status: tab }],
     queryFn: async () => {
       const token = getAuthToken();
@@ -57,7 +72,14 @@ export function AdminPrintQueue() {
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!r.ok) throw new Error("Failed");
+      if (!r.ok) {
+        let msg = `Request failed (${r.status})`;
+        try {
+          const body = await r.json();
+          if (body?.message) msg = body.message;
+        } catch {}
+        throw new Error(msg);
+      }
       return r.json();
     },
   });
@@ -220,7 +242,15 @@ export function AdminPrintQueue() {
         )}
 
         {isLoading && <div className="text-white/55 text-sm" data-testid="loading">Loading…</div>}
-        {!isLoading && visible.length === 0 && (
+        {rowsError && (
+          <ErrorState
+            error={rowsErrorObj}
+            onRetry={() => refetchRows()}
+            title="Couldn't load the print queue"
+            testId="print-queue-error"
+          />
+        )}
+        {!isLoading && !rowsError && visible.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white/55" data-testid="empty">
             Nothing here.
           </div>

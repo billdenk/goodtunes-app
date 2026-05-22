@@ -1,6 +1,12 @@
-import { Component, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import {
+  AdminErrorBoundary,
+  ErrorState,
+  LoadingState,
+  fetchJson,
+} from "@/components/admin/AdminErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -181,7 +187,7 @@ export function AdminReports() {
           </div>
         )}
 
-        <ReportsErrorBoundary>
+        <AdminErrorBoundary title="Reports failed to render">
         <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="bg-white border border-slate-200 p-1 h-auto flex-wrap">
             <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
@@ -217,7 +223,7 @@ export function AdminReports() {
           {isSuper && <TabsContent value="recon"><ReconciliationTab qs={qs} /></TabsContent>}
           {isSuper && <TabsContent value="events"><RawEventsTab qs={qs} /></TabsContent>}
         </Tabs>
-        </ReportsErrorBoundary>
+        </AdminErrorBoundary>
       </div>
     </AdminFrame>
   );
@@ -307,90 +313,6 @@ function EmptyState({ message }: { message: string }) {
       {message}
     </div>
   );
-}
-
-// Throw on non-OK so React Query flips into isError; this is what
-// keeps tabs from rendering against an error-shaped JSON body and
-// blanking the page.
-async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url, { credentials: "include" });
-  if (!res.ok) {
-    let msg = `Request failed (${res.status})`;
-    try {
-      const body = await res.json();
-      if (body?.message) msg = body.message;
-    } catch {}
-    throw new Error(msg);
-  }
-  return res.json();
-}
-
-function ErrorState({ error, onRetry, testId }: { error: unknown; onRetry: () => void; testId?: string }) {
-  const message = error instanceof Error ? error.message : "Something went wrong loading this report.";
-  return (
-    <div
-      className="rounded-xl border border-rose-200 bg-rose-50/60 p-5 text-sm"
-      data-testid={testId ?? "error-state"}
-    >
-      <div className="font-medium text-rose-900">Couldn't load this report</div>
-      <div className="text-rose-800/80 mt-1 break-words">{message}</div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={onRetry}
-        className="mt-3 h-8 border-rose-300 text-rose-900 hover:bg-rose-100"
-        data-testid="button-retry-report"
-      >
-        Try again
-      </Button>
-    </div>
-  );
-}
-
-function LoadingState({ testId }: { testId?: string }) {
-  return <div className="py-12 text-slate-500 text-sm" data-testid={testId ?? "loading-state"}>Loading…</div>;
-}
-
-class ReportsErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { error: null };
-  }
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-  componentDidCatch(error: Error) {
-    // Log so a future investigator can find it; the UI already shows
-    // a recoverable error card.
-    console.error("[AdminReports] render error:", error);
-  }
-  render() {
-    if (this.state.error) {
-      return (
-        <div
-          className="rounded-xl border border-rose-200 bg-rose-50/60 p-6 text-sm"
-          data-testid="reports-error-boundary"
-        >
-          <div className="font-semibold text-rose-900">Reports failed to render</div>
-          <div className="text-rose-800/80 mt-1 break-words">
-            {this.state.error.message || "An unexpected error occurred."}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => this.setState({ error: null })}
-            className="mt-3 h-8 border-rose-300 text-rose-900 hover:bg-rose-100"
-            data-testid="button-reset-error-boundary"
-          >
-            Try again
-          </Button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
 }
 
 function SalesTab({ qs }: { qs: string }) {

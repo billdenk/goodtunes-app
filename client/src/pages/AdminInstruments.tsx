@@ -6,6 +6,7 @@ import { Search, X, Guitar, Store, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
@@ -86,7 +87,13 @@ export function AdminInstruments() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const { data: instruments = [], isLoading } = useQuery<InstrumentLite[]>({
+  const {
+    data: instruments = [],
+    isLoading,
+    isError: instrumentsError,
+    error: instrumentsErrorObj,
+    refetch: refetchInstruments,
+  } = useQuery<InstrumentLite[]>({
     queryKey: ["/api/instruments"],
     enabled: !!user?.isAdmin,
   });
@@ -315,6 +322,13 @@ export function AdminInstruments() {
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : instrumentsError ? (
+        <ErrorState
+          error={instrumentsErrorObj}
+          onRetry={() => refetchInstruments()}
+          title="Couldn't load gear"
+          testId="admin-instruments-error"
+        />
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
       ) : view === "grid" ? (

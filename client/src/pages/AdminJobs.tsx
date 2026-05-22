@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 interface AlbumPick {
@@ -262,7 +263,13 @@ export function AdminJobs() {
     return `/api/admin/job-runs?${params.toString()}`;
   }, [jobType, albumPick, songPick]);
 
-  const { data = [], isLoading } = useQuery<JobRun[]>({ queryKey: [queryUrl] });
+  const {
+    data = [],
+    isLoading,
+    isError: jobsError,
+    error: jobsErrorObj,
+    refetch: refetchJobs,
+  } = useQuery<JobRun[]>({ queryKey: [queryUrl] });
 
   // Open the album combobox dropdown when the search input has focus
   // *and* user has typed something (or no album is picked yet).
@@ -460,6 +467,13 @@ export function AdminJobs() {
 
         {isLoading ? (
           <div className="text-sm text-slate-500" data-testid="loading-jobs">Loading…</div>
+        ) : jobsError ? (
+          <ErrorState
+            error={jobsErrorObj}
+            onRetry={() => refetchJobs()}
+            title="Couldn't load job runs"
+            testId="admin-jobs-error"
+          />
         ) : sorted.length === 0 ? (
           <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center" data-testid="empty-jobs">
             No runs recorded for this filter yet.

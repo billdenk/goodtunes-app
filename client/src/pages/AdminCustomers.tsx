@@ -5,6 +5,7 @@ import { Search, Users, ArrowUp, ArrowDown } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import type { CustomerUser } from "@shared/schema";
 
@@ -75,7 +76,13 @@ export function AdminCustomers() {
     setOffset(0);
   }, [debounced]);
 
-  const { isLoading, isFetching } = useQuery<{ rows: CustomerRow[]; total: number }>({
+  const {
+    isLoading,
+    isFetching,
+    isError: customersError,
+    error: customersErrorObj,
+    refetch: refetchCustomers,
+  } = useQuery<{ rows: CustomerRow[]; total: number }>({
     queryKey: ["/api/admin/customers", { q: debounced, offset }],
     enabled: !!user?.isAdmin,
     queryFn: async () => {
@@ -185,6 +192,13 @@ export function AdminCustomers() {
 
         {isLoading ? (
           <div className="py-10 text-slate-500 text-sm">Loading…</div>
+        ) : customersError ? (
+          <ErrorState
+            error={customersErrorObj}
+            onRetry={() => refetchCustomers()}
+            title="Couldn't load customers"
+            testId="admin-customers-error"
+          />
         ) : rows.length === 0 ? (
           <div
             className="rounded-lg border border-slate-200 bg-white p-10 text-center"

@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
@@ -166,7 +167,13 @@ export function AdminLabels() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const { data: labels = [], isLoading } = useQuery<LabelLite[]>({
+  const {
+    data: labels = [],
+    isLoading,
+    isError: labelsError,
+    error: labelsErrorObj,
+    refetch: refetchLabels,
+  } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
     enabled: !!user?.isAdmin,
   });
@@ -298,6 +305,13 @@ export function AdminLabels() {
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : labelsError ? (
+        <ErrorState
+          error={labelsErrorObj}
+          onRetry={() => refetchLabels()}
+          title="Couldn't load labels"
+          testId="admin-labels-error"
+        />
       ) : filtered.length === 0 ? (
         <EmptyState
           searching={search.trim().length > 0}

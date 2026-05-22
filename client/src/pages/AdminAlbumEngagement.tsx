@@ -3,6 +3,7 @@
 // reached, plays-per-fan, and top played songs for one album.
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 
 type Engagement = {
   redemptions: { paid: number; refunded: number; direct: number; shopify: number };
@@ -26,12 +27,26 @@ function Stat({ label, value, sub }: { label: string; value: string | number; su
 }
 
 export function AdminAlbumEngagement() {
+  return (
+    <AdminErrorBoundary title="Engagement failed to render">
+      <AdminAlbumEngagementInner />
+    </AdminErrorBoundary>
+  );
+}
+
+function AdminAlbumEngagementInner() {
   const [, params] = useRoute<{ id: string }>("/admin/albums/:id/engagement");
   const albumId = params?.id ?? "";
 
   const { data: album } = useQuery<Album>({ queryKey: ["/api/albums", albumId] });
   const { data: songs } = useQuery<Song[]>({ queryKey: ["/api/albums", albumId, "songs"] });
-  const { data, isLoading } = useQuery<Engagement>({ queryKey: ["/api/admin/albums", albumId, "engagement"] });
+  const {
+    data,
+    isLoading,
+    isError: engagementError,
+    error: engagementErrorObj,
+    refetch: refetchEngagement,
+  } = useQuery<Engagement>({ queryKey: ["/api/admin/albums", albumId, "engagement"] });
 
   const songTitle = (id: string) => songs?.find((s) => s.id === id)?.title ?? id.slice(0, 8);
 
@@ -50,7 +65,15 @@ export function AdminAlbumEngagement() {
         </div>
 
         {isLoading && <div className="text-slate-400 text-sm">Loading engagement…</div>}
-        {data && (
+        {engagementError && (
+          <ErrorState
+            error={engagementErrorObj}
+            onRetry={() => refetchEngagement()}
+            title="Couldn't load engagement"
+            testId="album-engagement-error"
+          />
+        )}
+        {data && !engagementError && (
           <>
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
               <Stat

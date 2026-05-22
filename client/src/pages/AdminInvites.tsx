@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Copy, Check } from "lucide-react";
 
@@ -33,7 +34,13 @@ export function AdminInvites() {
   const [lastUrl, setLastUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const { data: invites = [], isLoading } = useQuery<PendingInvite[]>({
+  const {
+    data: invites = [],
+    isLoading,
+    isError: invitesError,
+    error: invitesErrorObj,
+    refetch: refetchInvites,
+  } = useQuery<PendingInvite[]>({
     queryKey: ["/api/admin/invites"],
   });
 
@@ -160,6 +167,13 @@ export function AdminInvites() {
         <h2 className="text-sm font-semibold text-slate-900 mb-3">Pending</h2>
         {isLoading ? (
           <div className="text-sm text-slate-500">Loading…</div>
+        ) : invitesError ? (
+          <ErrorState
+            error={invitesErrorObj}
+            onRetry={() => refetchInvites()}
+            title="Couldn't load invites"
+            testId="admin-invites-error"
+          />
         ) : invites.length === 0 ? (
           <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center" data-testid="empty-invites">
             No pending invites.

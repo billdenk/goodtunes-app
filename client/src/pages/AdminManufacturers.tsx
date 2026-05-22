@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import {
@@ -42,7 +43,13 @@ export function AdminManufacturers() {
   const [draftName, setDraftName] = useState("");
   const { toast } = useToast();
 
-  const { data: rows = [], isLoading } = useQuery<Manufacturer[]>({
+  const {
+    data: rows = [],
+    isLoading,
+    isError: rowsError,
+    error: rowsErrorObj,
+    refetch: refetchRows,
+  } = useQuery<Manufacturer[]>({
     queryKey: ["/api/manufacturers"],
     enabled: !!user?.isAdmin,
   });
@@ -111,6 +118,13 @@ export function AdminManufacturers() {
 
         {isLoading ? (
           <div className="py-10 text-slate-500 text-sm">Loading…</div>
+        ) : rowsError ? (
+          <ErrorState
+            error={rowsErrorObj}
+            onRetry={() => refetchRows()}
+            title="Couldn't load manufacturers"
+            testId="admin-manufacturers-error"
+          />
         ) : filtered.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center">
             <Factory className="w-8 h-8 mx-auto text-slate-300 mb-2" strokeWidth={1.5} />

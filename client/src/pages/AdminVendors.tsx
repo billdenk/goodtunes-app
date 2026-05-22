@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
@@ -152,7 +153,13 @@ export function AdminVendors() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const { data: vendors = [], isLoading } = useQuery<VendorLite[]>({
+  const {
+    data: vendors = [],
+    isLoading,
+    isError: vendorsError,
+    error: vendorsErrorObj,
+    refetch: refetchVendors,
+  } = useQuery<VendorLite[]>({
     queryKey: ["/api/vendors"],
     enabled: !!user?.isAdmin,
   });
@@ -281,6 +288,13 @@ export function AdminVendors() {
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : vendorsError ? (
+        <ErrorState
+          error={vendorsErrorObj}
+          onRetry={() => refetchVendors()}
+          title="Couldn't load vendors"
+          testId="admin-vendors-error"
+        />
       ) : filtered.length === 0 ? (
         <EmptyState searching={search.trim().length > 0} />
       ) : view === "grid" ? (

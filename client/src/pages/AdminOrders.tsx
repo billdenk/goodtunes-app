@@ -14,6 +14,7 @@ import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
+import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AlertTriangle, Settings2, RefreshCw, Loader2 } from "lucide-react";
 import type { PayoutSettings } from "@shared/schema";
 
@@ -98,10 +99,24 @@ type StatusFilter = (typeof STATUSES)[number];
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 export function AdminOrders() {
+  return (
+    <AdminErrorBoundary title="Orders failed to render">
+      <AdminOrdersInner />
+    </AdminErrorBoundary>
+  );
+}
+
+function AdminOrdersInner() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
-  const { data: orders, isLoading } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/orders"] });
+  const {
+    data: orders,
+    isLoading,
+    isError: ordersError,
+    error: ordersErrorObj,
+    refetch: refetchOrders,
+  } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/orders"] });
   const { data: stuck } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/payouts/stuck"] });
 
   const ship = useMutation({
@@ -263,7 +278,15 @@ export function AdminOrders() {
         )}
 
         {isLoading && <div className="text-slate-500 text-sm" data-testid="admin-orders-loading">Loading…</div>}
-        {!isLoading && filtered.length === 0 && (
+        {ordersError && (
+          <ErrorState
+            error={ordersErrorObj}
+            onRetry={() => refetchOrders()}
+            title="Couldn't load orders"
+            testId="admin-orders-error"
+          />
+        )}
+        {!isLoading && !ordersError && filtered.length === 0 && (
           <Card className="rounded-lg shadow-none p-8 text-center" data-testid="admin-orders-empty">
             <div className="text-slate-700 font-medium">No orders</div>
             <div className="text-slate-500 text-[13px] mt-1">When fans buy, they'll show up here.</div>

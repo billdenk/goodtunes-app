@@ -12,6 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
@@ -150,7 +151,13 @@ export function AdminAlbums() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const { data: albumsData, isLoading } = useQuery<AlbumLite[] | null>({
+  const {
+    data: albumsData,
+    isLoading,
+    isError: albumsError,
+    error: albumsErrorObj,
+    refetch: refetchAlbums,
+  } = useQuery<AlbumLite[] | null>({
     queryKey: ["/api/albums"],
     enabled: !!user?.isAdmin,
   });
@@ -588,6 +595,13 @@ export function AdminAlbums() {
           <div className="py-20 flex items-center justify-center">
             <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : albumsError ? (
+          <ErrorState
+            error={albumsErrorObj}
+            onRetry={() => refetchAlbums()}
+            title="Couldn't load albums"
+            testId="admin-albums-error"
+          />
         ) : filtered.length === 0 ? (
           <div className="py-20 text-center text-slate-500 text-sm max-w-md mx-auto">
             {emptyCopy}

@@ -8,6 +8,7 @@ import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check } from "lucide-react";
+import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 
 type Store = {
   id: string;
@@ -21,6 +22,14 @@ type Store = {
 type AlbumLite = { id: string; title: string; artist: string };
 
 export function AdminShopify() {
+  return (
+    <AdminErrorBoundary title="Shopify admin failed to render">
+      <AdminShopifyInner />
+    </AdminErrorBoundary>
+  );
+}
+
+function AdminShopifyInner() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [shop, setShop] = useState("");
@@ -28,7 +37,13 @@ export function AdminShopify() {
   const { data: cfg } = useQuery<{ configured: boolean; apiKey: string | null; scopes: string }>({
     queryKey: ["/api/admin/shopify/config"],
   });
-  const { data: stores, isLoading } = useQuery<Store[]>({ queryKey: ["/api/admin/shopify/stores"] });
+  const {
+    data: stores,
+    isLoading,
+    isError: storesError,
+    error: storesErrorObj,
+    refetch: refetchStores,
+  } = useQuery<Store[]>({ queryKey: ["/api/admin/shopify/stores"] });
 
   // Highlight the just-installed store via the ?installed=<id> param the
   // OAuth callback redirects with.
@@ -239,7 +254,15 @@ Get your music now
         <section data-testid="shopify-stores-list">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-3">Connected stores</h2>
           {isLoading && <div className="text-slate-400 text-sm">Loading…</div>}
-          {!isLoading && (stores?.length ?? 0) === 0 && (
+          {storesError && (
+            <ErrorState
+              error={storesErrorObj}
+              onRetry={() => refetchStores()}
+              title="Couldn't load connected stores"
+              testId="shopify-stores-error"
+            />
+          )}
+          {!isLoading && !storesError && (stores?.length ?? 0) === 0 && (
             <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-400 text-[13.5px]">
               No stores connected yet.
             </div>
