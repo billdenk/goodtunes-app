@@ -107,6 +107,14 @@ export interface PlayerDockProps {
    *  Production callers leave this undefined and let the resize listener
    *  drive layout. */
   forceCompact?: boolean;
+  /**
+   * Visual density. `default` is the admin Tracks-tab size; `compact`
+   * tightens the pill, transport buttons, cover, and type ~6–10% so the
+   * dock reads at Apple-Music desktop density on the fan-facing surface.
+   * Compact also drops the wide-pill width from 760 → 660. Independent
+   * of the responsive `compact` (width-based) auto-switch.
+   */
+  density?: "default" | "compact";
 }
 
 /** Width-in-pixels below which the dock auto-switches to compact (edge-to-
@@ -132,8 +140,50 @@ export function PlayerDock({
   defaultVolume = 65,
   defaultMuted = false,
   forceCompact,
+  density = "default",
 }: PlayerDockProps) {
   const playable = track.playable;
+  const isCompactDensity = density === "compact";
+
+  // Token map — every dimension that flexes between admin (default) and
+  // fan-facing desktop (compact). Keeps the JSX downstream readable.
+  const D = isCompactDensity
+    ? {
+        pillPy: "py-2.5",
+        transportBtn: "w-8 h-8",
+        playBtn: "w-9 h-9",
+        playIcon: "w-[22px] h-[22px]",
+        pauseIcon: "w-[20px] h-[20px]",
+        prevNextIcon: "w-4 h-4",
+        smallIcon: "w-[14px] h-[14px]",
+        cover: "w-8 h-8",
+        utilityBtn: "w-9 h-9",
+        utilityIcon: 18,
+        titleSize: "text-[12.5px]",
+        subtitleSize: "text-[10.5px]",
+        wideWidth: "min(660px, calc(100% - 32px))",
+        // Inset scrubber bounds adapt to the smaller LEFT / RIGHT clusters.
+        // LEFT  = 5 transport (8+8+9+8+8) + 4 gaps@2 + divider 8 + padL 12 ≈ 49+44? Empirically tuned below.
+        scrubLeft: "left-[206px]",
+        scrubRight: "right-[138px]",
+      }
+    : {
+        pillPy: "py-4",
+        transportBtn: "w-9 h-9",
+        playBtn: "w-11 h-11",
+        playIcon: "w-7 h-7",
+        pauseIcon: "w-6 h-6",
+        prevNextIcon: "w-[18px] h-[18px]",
+        smallIcon: "w-4 h-4",
+        cover: "w-10 h-10",
+        utilityBtn: "w-10 h-10",
+        utilityIcon: 20,
+        titleSize: "text-[13px]",
+        subtitleSize: "text-[11px]",
+        wideWidth: "min(760px, calc(100% - 32px))",
+        scrubLeft: "left-[237px]",
+        scrubRight: "right-[156px]",
+      };
 
   // ── Internal control state ──────────────────────────────────────────
   // Volume cluster mirrors Apple's anatomy: speaker icon always visible,
@@ -392,7 +442,7 @@ export function PlayerDock({
   //     inside a 1280px iframe).
   const edgeToEdge = compact && forceCompact !== true;
   const wrapperStyle = !compact
-    ? { width: "min(760px, calc(100% - 32px))" }
+    ? { width: D.wideWidth }
     : forceCompact === true
     ? { width: "min(640px, calc(100% - 32px))" }
     : undefined;
@@ -417,7 +467,7 @@ export function PlayerDock({
           the pill is 76px tall — matches Apple's mini-player proportions
           and leaves room for the inset scrubber along the bottom edge. */}
       <div className="relative bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden rounded-full">
-        <div className="flex items-center gap-1.5 px-3 py-4">
+        <div className={`flex items-center gap-1.5 px-3 ${D.pillPy}`}>
           {/* ── LEFT · transport ───────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
             <button
@@ -428,7 +478,7 @@ export function PlayerDock({
               onClick={toggleShuffle}
               data-testid="button-shuffle"
               className={[
-                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 !hasSelection
                   ? "text-slate-500 cursor-default"
                   : shuffleOn
@@ -436,7 +486,7 @@ export function PlayerDock({
                   : "text-slate-300 hover:text-white hover:bg-white/10",
               ].join(" ")}
             >
-              <Shuffle className="w-4 h-4" />
+              <Shuffle className={D.smallIcon} />
             </button>
             <button
               type="button"
@@ -444,13 +494,13 @@ export function PlayerDock({
               aria-label="Previous track"
               data-testid="button-prev"
               className={[
-                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 hasSelection
                   ? "text-slate-300 hover:text-white hover:bg-white/10"
                   : "text-slate-500 cursor-default",
               ].join(" ")}
             >
-              <SkipBack className="w-[18px] h-[18px] fill-current" />
+              <SkipBack className={`${D.prevNextIcon} fill-current`} />
             </button>
             <button
               type="button"
@@ -459,7 +509,7 @@ export function PlayerDock({
               aria-label={playing ? "Pause" : "Play"}
               data-testid="button-play"
               className={[
-                "w-11 h-11 rounded-full inline-flex items-center justify-center transition-colors",
+                `${D.playBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 playable
                   ? "text-white hover:bg-white/10"
                   : "text-slate-500 cursor-not-allowed",
@@ -469,9 +519,9 @@ export function PlayerDock({
                 // Pause sized down vs Play so the two glyphs read at the
                 // same optical weight — Lucide's pause bars are heavier
                 // than the Play triangle at equal nominal size.
-                <Pause className="w-6 h-6 fill-current" />
+                <Pause className={`${D.pauseIcon} fill-current`} />
               ) : (
-                <Play className="w-7 h-7 translate-x-[1.5px] fill-current" />
+                <Play className={`${D.playIcon} translate-x-[1.5px] fill-current`} />
               )}
             </button>
             <button
@@ -480,13 +530,13 @@ export function PlayerDock({
               aria-label="Next track"
               data-testid="button-next"
               className={[
-                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 hasSelection
                   ? "text-slate-300 hover:text-white hover:bg-white/10"
                   : "text-slate-500 cursor-default",
               ].join(" ")}
             >
-              <SkipForward className="w-[18px] h-[18px] fill-current" />
+              <SkipForward className={`${D.prevNextIcon} fill-current`} />
             </button>
             <button
               type="button"
@@ -507,7 +557,7 @@ export function PlayerDock({
               onClick={cycleRepeat}
               data-testid="button-repeat"
               className={[
-                "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
+                `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 !hasSelection
                   ? "text-slate-500 cursor-default"
                   : repeatMode === "off"
@@ -515,7 +565,7 @@ export function PlayerDock({
                   : "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20",
               ].join(" ")}
             >
-              <RepeatGlyph className="w-4 h-4" />
+              <RepeatGlyph className={D.smallIcon} />
             </button>
           </div>
 
@@ -535,17 +585,21 @@ export function PlayerDock({
             ].join(" ")}
             aria-hidden={scrubHover}
           >
-            {cover}
+            <div className={`${D.cover} flex-shrink-0 rounded-md overflow-hidden`}>
+              {coverNode ?? (
+                <div className="w-full h-full bg-slate-700/60" aria-hidden />
+              )}
+            </div>
             <div className="min-w-0 flex-1">
               <div
-                className="text-[13px] font-semibold truncate leading-tight"
+                className={`${D.titleSize} font-semibold truncate leading-tight`}
                 data-testid="text-track-title"
               >
                 {track.title}
               </div>
               {track.subtitle && hasSelection && (
                 <div
-                  className="text-[11px] text-slate-400 truncate leading-tight mt-0.5"
+                  className={`${D.subtitleSize} text-slate-400 truncate leading-tight mt-0.5`}
                   data-testid="text-track-subtitle"
                 >
                   {track.subtitle}
@@ -572,13 +626,13 @@ export function PlayerDock({
               disabled={!onLyrics || !hasSelection}
               data-testid="button-lyrics"
               className={[
-                "w-10 h-10 rounded-full inline-flex items-center justify-center transition-colors",
+                `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 onLyrics && hasSelection
                   ? "text-slate-300 hover:text-white hover:bg-white/10"
                   : "text-slate-500 cursor-default",
               ].join(" ")}
             >
-              <LyricsIcon size={20} />
+              <LyricsIcon size={D.utilityIcon} />
             </button>
             {/* Volume cluster — slider slides out left on hover.
                 Hidden in compact: Apple drops volume from its narrow
@@ -616,13 +670,13 @@ export function PlayerDock({
                   onClick={toggleMute}
                   data-testid="button-mute"
                   className={[
-                    "w-10 h-10 rounded-full inline-flex items-center justify-center transition-colors",
+                    `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                     hasSelection
                       ? "text-slate-300 hover:text-white hover:bg-white/10"
                       : "text-slate-500",
                   ].join(" ")}
                 >
-                  <VolumeGlyph className="w-5 h-5" />
+                  <VolumeGlyph className={isCompactDensity ? "w-[18px] h-[18px]" : "w-5 h-5"} />
                 </button>
               </div>
             )}
@@ -638,9 +692,9 @@ export function PlayerDock({
               title="Minimize player"
               onClick={() => setDockHidden(true)}
               data-testid="button-minimize-player"
-              className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+              className={`${D.utilityBtn} rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10`}
             >
-              <ChevronDown className="w-5 h-5" />
+              <ChevronDown className={isCompactDensity ? "w-[18px] h-[18px]" : "w-5 h-5"} />
             </button>
           </div>
         </div>
@@ -657,19 +711,19 @@ export function PlayerDock({
           <>
             <div
               className={[
-                "absolute left-[237px] right-[156px] inset-y-0 flex items-center justify-between pointer-events-none z-10",
+                `absolute ${D.scrubLeft} ${D.scrubRight} inset-y-0 flex items-center justify-between pointer-events-none z-10`,
                 "transition-opacity duration-150",
                 scrubHover && hasSelection ? "opacity-100" : "opacity-0",
               ].join(" ")}
             >
               <span
-                className="text-[13px] tabular-nums text-slate-300 whitespace-nowrap"
+                className={`${D.titleSize} tabular-nums text-slate-300 whitespace-nowrap`}
                 data-testid="text-elapsed"
               >
                 {fmt(elapsedSeconds)}
               </span>
               <span
-                className="text-[13px] tabular-nums text-slate-300 whitespace-nowrap"
+                className={`${D.titleSize} tabular-nums text-slate-300 whitespace-nowrap`}
                 data-testid="text-remaining"
               >
                 −{fmt(remainingSeconds)}
@@ -677,7 +731,7 @@ export function PlayerDock({
             </div>
             <div
               className={[
-                "group/scrub absolute left-[237px] right-[156px] bottom-1.5 h-3 flex items-center touch-none select-none",
+                `group/scrub absolute ${D.scrubLeft} ${D.scrubRight} bottom-1.5 h-3 flex items-center touch-none select-none`,
                 hasSelection ? "cursor-pointer" : "cursor-default pointer-events-none",
               ].join(" ")}
               onMouseEnter={() => setScrubHover(true)}

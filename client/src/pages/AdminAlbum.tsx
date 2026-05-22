@@ -73,6 +73,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
+import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDesktopPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
@@ -384,7 +385,15 @@ export function AdminAlbum() {
       : { label: "Released", tone: "mint" as const };
 
   return (
-    <AdminFrame active="albums" preview={<AlbumPreviewCard album={album} />}>
+    <AdminFrame
+      active="albums"
+      preview={
+        <div className="space-y-4">
+          <AlbumPreviewCard album={album} />
+          <AlbumDesktopPreviewCard album={album} />
+        </div>
+      }
+    >
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">

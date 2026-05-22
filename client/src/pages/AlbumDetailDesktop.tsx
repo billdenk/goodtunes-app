@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
-import { useParams, useLocation, Link } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Play, Shuffle, MoreHorizontal, Lock } from "lucide-react";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -12,16 +11,17 @@ import {
 import {
   AlbumDesktopSidebar,
   BRAND_BG,
-  BRAND_BLUE,
 } from "@/components/ui/AlbumDesktopSidebar";
 import { AlbumTopNowPlayingStrip } from "@/components/ui/AlbumTopNowPlayingStrip";
-import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
+import { PlayerDock } from "@/components/ui/PlayerDock";
+import {
+  DesktopAlbumView,
+  type DesktopAlbumSong,
+  type DesktopAlbumTab,
+} from "@/components/ui/DesktopAlbumView";
 import type { PlayerSong } from "@/context/PlayerContext";
 import type { Album as PlayerAlbum } from "@/data/musicData";
 
-/* Album shape served by GET /api/albums/:id (admin returns isHidden,
-   the consumer endpoint omits it). Only the fields we read on this
-   surface are pinned — extra fields are ignored. */
 type ApiSong = {
   id: string;
   albumId: string;
@@ -66,34 +66,25 @@ type ApiAlbumPhoto = {
   caption?: string | null;
 };
 
-type TabKey = "music" | "videos" | "photos";
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function formatPrice(cents: number): string {
-  const dollars = cents / 100;
-  return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
-}
-
 /**
  * Desktop fan-facing Preview & Purchase shell. Rendered by `/album/:id`
  * at viewports ≥1024px (mobile branch handled by AlbumDetail.tsx).
  *
- * Wires the graduated mockup primitives (sidebar + top strip + track
- * row) to real album data, real PlayerContext, and a dev-only ownership
- * toggle. Real purchase flow (cart, Stripe, OrderDesk, GoodDeed) lands
- * in subsequent tasks — Buy Bundle is a stub toast for now.
+ * This page composes:
+ *   • AlbumDesktopSidebar          (left nav)
+ *   • AlbumTopNowPlayingStrip      (header strip)
+ *   • DesktopAlbumView             (hero + tabs + tracklist + bonus + lyrics panel)
+ *   • PlayerDock density="compact" (Apple-Music-density bottom chrome)
+ *
+ * The DesktopAlbumView primitive is shared with the admin album preview
+ * so editors see the same surface fans see, pixel-for-pixel.
  */
 export function AlbumDetailDesktop() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const player = usePlayer();
-  const [tab, setTab] = useState<TabKey>("music");
+  const [tab, setTab] = useState<DesktopAlbumTab>("music");
 
   const isOwned = useAlbumOwnership(id);
 
@@ -158,7 +149,7 @@ export function AlbumDetailDesktop() {
     const shuffled = [...playableSongs].sort(() => Math.random() - 0.5);
     player.playSong(shuffled[0], shuffled);
   };
-  const handlePlayTrack = (song: ApiSong) => {
+  const handlePlayTrack = (song: DesktopAlbumSong) => {
     const playable = playableSongs.find((p) => p.id === song.id);
     if (!playable) return;
     if (player.currentSong?.id === song.id) {
@@ -166,6 +157,9 @@ export function AlbumDetailDesktop() {
       return;
     }
     player.playSong(playable, playableSongs);
+  };
+  const handleAddTrack = () => {
+    toast({ title: "Added to playlist (coming next)" });
   };
   const handleBuyBundle = () => {
     toast({ title: "Checkout coming next" });
@@ -202,10 +196,51 @@ export function AlbumDetailDesktop() {
     );
   }
 
-  const meta = [album.genre, album.type === "LP" ? "LP" : album.type, album.year]
-    .filter(Boolean)
-    .map((s) => String(s).toUpperCase())
-    .join(" · ");
+  // Lyrics panel body — pulled from the currently-playing song. Falls
+  // back to a placeholder so the panel still reads as intentional when
+  // the user opens it before picking a track. GoodSync (timed) lyrics
+  // get the karaoke pass in a follow-up — for now the panel renders the
+  // plain `lyrics` text line by line.
+  const lyricsBody = (() => {
+    const cs = player.currentSong;
+    if (!cs) {
+      return (
+        <p className="text-white/55 italic">
+          Pick a track to see its lyrics here.
+        </p>
+      );
+    }
+    if (!cs.lyrics || cs.lyrics.trim().length === 0) {
+      return (
+        <p className="text-white/55 italic">
+          No lyrics yet for "{cs.title}".
+        </p>
+      );
+    }
+    return (
+      <div className="whitespace-pre-line">{cs.lyrics}</div>
+    );
+  })();
+
+  // PlayerDock track adapter. Dock shows the artwork as the cover slot
+  // when something is playing; otherwise the dock's idle placeholder
+  // takes over. Title falls back to a friendly "Not playing" so the
+  // pill still reads cleanly while idle on the desktop surface.
+  const dockTrack = player.currentSong
+    ? {
+        title: player.currentSong.title,
+        subtitle: player.currentSong.album.artist,
+        playable: true,
+      }
+    : { title: "Not playing", subtitle: undefined, playable: false };
+  const dockCover = player.currentSong ? (
+    <img
+      src={player.currentSong.album.artwork}
+      alt=""
+      className="w-full h-full object-cover"
+      draggable={false}
+    />
+  ) : undefined;
 
   return (
     <div
@@ -233,314 +268,60 @@ export function AlbumDetailDesktop() {
         <AlbumTopNowPlayingStrip />
 
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[960px] mx-auto px-10 py-8">
-            {/* Breadcrumb */}
-            <nav
-              className="flex items-center gap-2 text-[13px]"
-              aria-label="Breadcrumb"
-              data-testid="breadcrumb"
-            >
-              <Link
-                href="/collection"
-                className="text-white/55 hover:text-white transition-colors"
-                data-testid="link-breadcrumb-discover"
-              >
-                Discover
-              </Link>
-              <ChevronRight className="w-3.5 h-3.5 text-white/35" strokeWidth={2.2} />
-              <span
-                className="text-white font-semibold truncate"
-                data-testid="text-breadcrumb-title"
-              >
-                {album.title}
-              </span>
-            </nav>
-
-            {/* Hero */}
-            <section className="mt-7 flex gap-8" data-testid="album-hero">
-              <div
-                className="rounded-2xl overflow-hidden flex-shrink-0"
-                style={{
-                  width: 280,
-                  height: 280,
-                  boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
-                }}
-              >
-                <img src={album.artwork} alt="" className="w-full h-full object-cover" />
-              </div>
-
-              <div className="flex-1 min-w-0 flex flex-col pt-2">
-                {album.primaryArtistId ? (
-                  <Link
-                    href={`/admin/people/${album.primaryArtistId}`}
-                    data-testid="link-artist"
-                    className="group inline-flex items-center gap-2 self-start mb-3"
-                  >
-                    <div className="w-7 h-7 rounded-full bg-white/10 flex-shrink-0" />
-                    <span
-                      className="text-white text-[13.5px] font-semibold tracking-[-0.005em] transition-colors group-hover:text-[#319ED8] group-hover:underline underline-offset-4"
-                      style={{ textDecorationColor: BRAND_BLUE }}
-                    >
-                      {album.artist}
-                    </span>
-                  </Link>
-                ) : (
-                  <span
-                    className="inline-flex items-center gap-2 self-start mb-3 text-white text-[13.5px] font-semibold"
-                    data-testid="text-artist"
-                  >
-                    <span className="w-7 h-7 rounded-full bg-white/10 flex-shrink-0" />
-                    {album.artist}
-                  </span>
-                )}
-
-                <h1
-                  className="text-white font-bold tracking-[-0.015em] leading-[1.05]"
-                  style={{ fontSize: 40 }}
-                  data-testid="album-title"
-                >
-                  {album.title}
-                </h1>
-
-                {meta && (
-                  <div
-                    className="mt-3 text-white/55 text-[11.5px] font-semibold uppercase tracking-[0.14em]"
-                    data-testid="album-meta"
-                  >
-                    {meta}
-                  </div>
-                )}
-
-                {album.description && (
-                  <p
-                    className="mt-4 text-white/72 text-[14px] leading-[1.55] max-w-[640px] line-clamp-3"
-                    data-testid="album-description"
-                  >
-                    {album.description}
-                  </p>
-                )}
-
-                <div className="mt-6 flex items-center gap-3">
-                  {canPlay && (
-                    <button
-                      type="button"
-                      onClick={handlePlayAll}
-                      data-testid="button-play-album"
-                      className="h-11 pl-5 pr-7 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] transition-colors active:scale-[0.97] hover:opacity-90"
-                      style={{ background: BRAND_BLUE }}
-                    >
-                      <Play className="w-4 h-4 fill-current" strokeWidth={0} />
-                      Play
-                    </button>
-                  )}
-                  {canPlay && (
-                    <button
-                      type="button"
-                      onClick={handleShuffle}
-                      data-testid="button-shuffle-album"
-                      className="h-11 w-11 rounded-full inline-flex items-center justify-center text-white border border-white/85 hover:bg-white hover:text-[#00062B] transition-colors active:scale-[0.94]"
-                      aria-label="Shuffle"
-                    >
-                      <Shuffle className="w-4 h-4" strokeWidth={2} />
-                    </button>
-                  )}
-                  {!isOwned && album.priceCents != null && (
-                    <button
-                      type="button"
-                      onClick={handleBuyBundle}
-                      data-testid="button-buy-bundle"
-                      className="h-11 pl-5 pr-4 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] border border-white/85 hover:bg-white hover:text-[#00062B] transition-colors active:scale-[0.97]"
-                    >
-                      Buy Bundle · {formatPrice(album.priceCents)}
-                      <ChevronRight className="w-4 h-4" strokeWidth={2.2} />
-                    </button>
-                  )}
-
-                  <div className="flex-1" />
-
-                  <button
-                    type="button"
-                    aria-label="More options"
-                    data-testid="button-album-more"
-                    className="w-11 h-11 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/8 transition-colors active:scale-[0.94]"
-                  >
-                    <MoreHorizontal className="w-5 h-5" strokeWidth={2} />
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Tabs */}
-            <div className="mt-10 border-b border-white/8 pb-1">
-              <div
-                className="w-full flex items-center justify-center gap-10"
-                role="tablist"
-                data-testid="hero-tabs"
-              >
-                {(
-                  [
-                    { key: "music", label: "Music", count: songs.length },
-                    { key: "videos", label: "Videos", count: videos.length },
-                    { key: "photos", label: "Photos", count: photos.length },
-                  ] as { key: TabKey; label: string; count: number }[]
-                ).map((it) => {
-                  const on = it.key === tab;
-                  return (
-                    <button
-                      key={it.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={on}
-                      data-testid={`tab-${it.key}`}
-                      onClick={() => setTab(it.key)}
-                      className="relative h-11 px-2 inline-flex items-center gap-1.5 text-[15px] font-semibold transition-colors"
-                      style={{ color: on ? "#fff" : "rgba(255,255,255,0.5)" }}
-                    >
-                      {it.label}
-                      {it.key !== "music" && it.count > 0 && (
-                        <span className="text-[12px] text-white/45 font-medium">
-                          ({it.count})
-                        </span>
-                      )}
-                      <span
-                        aria-hidden
-                        className="absolute left-1/2 -translate-x-1/2 bottom-1 w-7 h-[2.5px] rounded-full transition-opacity"
-                        style={{ background: BRAND_BLUE, opacity: on ? 1 : 0 }}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Tab content */}
-            <div className="mt-6">
-              {tab === "music" && (
-                <div className="flex flex-col gap-1.5" data-testid="track-list">
-                  {songs.map((s) => {
-                    const state: "locked" | "preview" | "full" = isOwned
-                      ? "full"
-                      : s.isPreviewable
-                        ? "preview"
-                        : "locked";
-                    const isCurrent = player.currentSong?.id === s.id;
-                    return (
-                      <AlbumDesktopTrackRow
-                        key={s.id}
-                        trackNumber={s.trackNumber}
-                        title={s.title}
-                        duration={formatDuration(s.duration)}
-                        isCurrent={isCurrent}
-                        isPlaying={isCurrent && player.isPlaying}
-                        isExplicit={!!s.isExplicit}
-                        state={state}
-                        onPlay={state === "locked" ? undefined : () => handlePlayTrack(s)}
-                        onMore={
-                          state === "locked"
-                            ? undefined
-                            : () => toast({ title: "Track menu coming next" })
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              )}
-
-              {tab === "videos" && (
-                <BonusGrid
-                  items={videos.map((v) => ({
-                    id: v.id,
-                    thumb: v.posterUrl ?? album.artwork,
-                    label: v.title ?? "Untitled",
-                  }))}
-                  locked={!isOwned}
-                  kind="video"
-                />
-              )}
-
-              {tab === "photos" && (
-                <BonusGrid
-                  items={photos.map((p) => ({
-                    id: p.id,
-                    thumb: p.photoUrl,
-                    label: p.caption ?? "",
-                  }))}
-                  locked={!isOwned}
-                  kind="photo"
-                />
-              )}
-            </div>
-
-            <div className="h-16" aria-hidden />
-          </div>
+          <DesktopAlbumView
+            album={album}
+            songs={songs}
+            videos={videos}
+            photos={photos}
+            isOwned={isOwned}
+            canPlay={canPlay}
+            tab={tab}
+            onTabChange={setTab}
+            currentSongId={player.currentSong?.id ?? null}
+            isPlaying={player.isPlaying}
+            onPlayAll={handlePlayAll}
+            onShuffle={handleShuffle}
+            onPlayTrack={handlePlayTrack}
+            onMoreTrack={() => toast({ title: "Track menu coming next" })}
+            onAddTrack={handleAddTrack}
+            onBuyBundle={handleBuyBundle}
+            lyricsOpen={player.showLyrics}
+            lyrics={lyricsBody}
+            onCloseLyrics={() => player.setShowLyrics(false)}
+          />
         </main>
+      </div>
+
+      {/* Bottom-fixed compact PlayerDock. Centered above the content area
+          (left:0/right:0 + flex justify-center) so it sits in the same
+          horizontal band as the tracklist, matching Apple Music's desktop
+          dock placement. */}
+      <div className="fixed left-0 right-0 bottom-4 z-40 flex justify-center pointer-events-none">
+        <div className="pointer-events-auto">
+          <PlayerDock
+            density="compact"
+            track={dockTrack}
+            hasSelection={!!player.currentSong}
+            playing={player.isPlaying}
+            progress={
+              player.duration > 0
+                ? Math.min(100, (player.currentTime / player.duration) * 100)
+                : 0
+            }
+            totalSeconds={player.duration}
+            onTogglePlay={player.togglePlay}
+            onPrev={player.prev}
+            onNext={player.next}
+            onSeek={(s) => player.seekTo(s)}
+            onLyrics={() => player.setShowLyrics(!player.showLyrics)}
+            coverNode={dockCover}
+          />
+        </div>
       </div>
 
       {import.meta.env.DEV && id && (
         <DevOwnershipToggle albumId={id} isOwned={isOwned} />
       )}
-    </div>
-  );
-}
-
-function BonusGrid({
-  items,
-  locked,
-  kind,
-}: {
-  items: { id: string; thumb: string; label: string }[];
-  locked: boolean;
-  kind: "video" | "photo";
-}) {
-  if (items.length === 0) {
-    return (
-      <div
-        className="w-full rounded-2xl flex items-center justify-center text-white/45 text-[14px]"
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px dashed rgba(255,255,255,0.12)",
-          minHeight: 220,
-        }}
-        data-testid={`empty-${kind}s`}
-      >
-        No {kind}s yet
-      </div>
-    );
-  }
-  return (
-    <div
-      className="grid grid-cols-3 gap-4"
-      data-testid={`grid-${kind}s`}
-      data-locked={locked ? "true" : "false"}
-    >
-      {items.map((it) => (
-        <div
-          key={it.id}
-          className="relative aspect-square rounded-2xl overflow-hidden bg-white/5"
-          style={{ cursor: locked ? "default" : "pointer" }}
-          data-testid={`thumb-${kind}-${it.id}`}
-        >
-          <img
-            src={it.thumb}
-            alt=""
-            className="w-full h-full object-cover"
-            style={{ filter: locked ? "brightness(0.55) saturate(0.85)" : undefined }}
-            draggable={false}
-          />
-          {locked && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
-                <Lock className="w-4 h-4 text-white" strokeWidth={2.2} />
-              </div>
-            </div>
-          )}
-          {it.label && (
-            <div className="absolute left-3 right-3 bottom-3 text-white text-[12.5px] font-semibold truncate">
-              {it.label}
-            </div>
-          )}
-        </div>
-      ))}
     </div>
   );
 }
