@@ -57,7 +57,12 @@ export function SellPanel({ albumId }: { albumId: string }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] }),
   });
   const upsertAddon = useMutation({
-    mutationFn: async (body: { priceCents: number; active: boolean }) => {
+    mutationFn: async (body: {
+      priceCents: number;
+      active: boolean;
+      minPriceCents: number;
+      plannedQuantity: number | null;
+    }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/addons/signed_cert`, body);
       return r.json();
     },
@@ -350,97 +355,259 @@ function AddonForm({
 }: {
   existing: AlbumAddon | null;
   livePlatformCostCents: number | null;
-  onSave: (b: { priceCents: number; active: boolean }) => void;
+  onSave: (b: {
+    priceCents: number;
+    active: boolean;
+    minPriceCents: number;
+    plannedQuantity: number | null;
+  }) => void;
 }) {
   const [active, setActive] = useState(existing?.active ?? false);
   const [price, setPrice] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "12.99");
   const [floor, setFloor] = useState(existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99");
+  // Task #121 — quantity mode. Existing rows without a planned quantity
+  // (everything pre-#121) default to "unlimited" so we don't invent a
+  // number on their behalf. Fixed mode defaults to 100 the first time
+  // the artist switches into it.
+  const initialMode: "fixed" | "unlimited" =
+    existing?.plannedQuantity != null ? "fixed" : "unlimited";
+  const [qtyMode, setQtyMode] = useState<"fixed" | "unlimited">(initialMode);
+  const [qtyInput, setQtyInput] = useState<string>(
+    existing?.plannedQuantity != null ? String(existing.plannedQuantity) : "100",
+  );
 
-  // Cost to use for the readout: prefer the snapshot the artist locked
-  // in at last save, fall back to the live platform cost when the addon
-  // has never been saved yet. Null means we genuinely don't know (settings
-  // still loading) — render a muted placeholder.
   const lockedCost = existing?.costCentsSnapshot ?? null;
   const readoutCost = lockedCost ?? livePlatformCostCents;
 
   const priceCents = useMemo(() => parseDollars(price), [price]);
   const earnsCents = priceCents !== null && readoutCost !== null ? priceCents - readoutCost : null;
 
+  const parsedQty = useMemo(() => {
+    const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [qtyInput]);
+
+  const totalCents =
+    qtyMode === "fixed" && earnsCents !== null && parsedQty !== null
+      ? earnsCents * parsedQty
+      : null;
+
   const storedActive = existing?.active ?? false;
-  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "9.99";
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "12.99";
   const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
-  const dirty = active !== storedActive || price !== storedPrice || floor !== storedFloor;
+  const storedMode: "fixed" | "unlimited" = initialMode;
+  const storedQty = existing?.plannedQuantity ?? null;
+  const dirty =
+    active !== storedActive ||
+    price !== storedPrice ||
+    floor !== storedFloor ||
+    qtyMode !== storedMode ||
+    (qtyMode === "fixed" && parsedQty !== storedQty);
 
   const submit = () => {
     const cents = parseDollars(price);
     if (cents === null) return;
-    onSave({ priceCents: cents, active });
+    const minCents = parseDollars(floor) ?? 0;
+    const plannedQuantity = qtyMode === "fixed" ? parsedQty : null;
+    if (qtyMode === "fixed" && plannedQuantity === null) return;
+    onSave({ priceCents: cents, active, minPriceCents: minCents, plannedQuantity });
   };
 
+  const lossColor = earnsCents !== null && earnsCents < 0;
+  const earnsLabel =
+    earnsCents === null
+      ? "—"
+      : earnsCents < 0
+        ? `-${dollars(Math.abs(earnsCents))}`
+        : dollars(earnsCents);
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-4">
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={(e) => setActive(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
-            data-testid="toggle-addon-signed_cert"
-          />
-          <span className="text-[13.5px] font-medium text-slate-900">Offer signed certificate</span>
-        </label>
-        <div className="flex items-center gap-1.5">
-          <span className="text-slate-500 text-[12px]">Price $</span>
-          <input
-            type="text"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            inputMode="decimal"
-            className={`w-24 ${fieldClass}`}
-            data-testid="input-addon-price"
-          />
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold pt-1">
+          Price · Cost · Profit
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-slate-500 text-[12px]">Min floor $</span>
-          <input
-            type="text"
-            value={floor}
-            onChange={(e) => setFloor(e.target.value)}
-            inputMode="decimal"
-            className={`w-24 ${fieldClass}`}
-            data-testid="input-addon-floor"
-          />
+        <SaveLink dirty={dirty} onClick={submit} testId="button-save-addon" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+        {/* Left column — Price / Cost / Profit */}
+        <div className="space-y-3">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+              data-testid="toggle-addon-signed_cert"
+            />
+            <span className="text-[13.5px] font-medium text-slate-900">
+              Offer signed GoodDeed® Certificate
+            </span>
+          </label>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px]">Price $</span>
+            <input
+              type="text"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              inputMode="decimal"
+              className={`w-28 ${fieldClass}`}
+              data-testid="input-addon-price"
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px]">
+              Cost ${" "}
+              <span className="text-slate-400 text-[11px]">
+                ({lockedCost === null ? "live" : "locked at last save"})
+              </span>
+            </span>
+            <span
+              className="w-28 text-right tabular-nums text-[13.5px] text-slate-700"
+              data-testid="text-addon-cost"
+            >
+              {readoutCost === null ? "—" : dollars(readoutCost)}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px]">
+              Profit ${" "}
+              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+            </span>
+            <span
+              className={[
+                "w-28 text-right tabular-nums text-[13.5px] font-semibold",
+                lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-900",
+              ].join(" ")}
+              data-testid="text-addon-profit"
+            >
+              {earnsLabel}
+            </span>
+          </div>
         </div>
-        <div className="ml-auto">
-          <SaveLink dirty={dirty} onClick={submit} testId="button-save-addon" />
+
+        {/* Right column — Quantity / Total */}
+        <div className="space-y-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+            Quantity
+          </div>
+          <div
+            className="flex flex-col gap-2"
+            role="radiogroup"
+            data-testid="picker-addon-quantity-mode"
+          >
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="addon-qty-mode"
+                checked={qtyMode === "fixed"}
+                onChange={() => setQtyMode("fixed")}
+                className="h-4 w-4 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+                data-testid="radio-addon-qty-fixed"
+              />
+              <input
+                type="text"
+                value={qtyInput}
+                onChange={(e) => {
+                  setQtyInput(e.target.value);
+                  if (qtyMode !== "fixed") setQtyMode("fixed");
+                }}
+                onFocus={() => setQtyMode("fixed")}
+                disabled={qtyMode !== "fixed"}
+                inputMode="numeric"
+                className={`w-24 ${fieldClass} ${qtyMode !== "fixed" ? "opacity-50" : ""}`}
+                data-testid="input-addon-quantity"
+              />
+              <span className="text-[12.5px] text-slate-500">units</span>
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="addon-qty-mode"
+                checked={qtyMode === "unlimited"}
+                onChange={() => setQtyMode("unlimited")}
+                className="h-4 w-4 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+                data-testid="radio-addon-qty-unlimited"
+              />
+              <span className="text-[13px] text-slate-700">As many as will sell</span>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span className="text-slate-500 text-[12px]">
+              Profit ${" "}
+              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+            </span>
+            <span
+              className={[
+                "w-28 text-right tabular-nums text-[13.5px]",
+                lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-700",
+              ].join(" ")}
+              data-testid="text-addon-profit-echo"
+            >
+              {earnsLabel}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px]">Total $</span>
+            {qtyMode === "unlimited" ? (
+              <span
+                className="w-28 text-right tabular-nums text-[15px] font-semibold text-slate-400"
+                data-testid="text-addon-total-tbd"
+              >
+                TBD
+              </span>
+            ) : (
+              <span
+                className={[
+                  "w-28 text-right tabular-nums text-[15px] font-semibold",
+                  totalCents !== null && totalCents < 0
+                    ? "text-[color:var(--brand-pink)]"
+                    : "text-slate-900",
+                ].join(" ")}
+                data-testid="text-addon-total"
+              >
+                {totalCents === null
+                  ? "—"
+                  : totalCents < 0
+                    ? `-${dollars(Math.abs(totalCents))}`
+                    : dollars(totalCents)}
+              </span>
+            )}
+          </div>
+
+          {qtyMode === "fixed" && parsedQty !== null && (
+            <div
+              className="text-[11.5px] text-slate-400 text-right"
+              data-testid="text-addon-total-caveat"
+            >
+              Only if all {parsedQty} sell.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Live profit readout. Mint = profit, heart-pink = loss. */}
-      {readoutCost === null ? (
-        <div className="text-[12px] text-slate-400" data-testid="text-addon-earnings-loading">
-          Loading platform cost…
-        </div>
-      ) : earnsCents === null ? null : (
-        <div
-          className="text-[12.5px] inline-flex items-center gap-2"
-          data-testid="text-addon-earnings"
-        >
-          <span
-            className={[
-              "tabular-nums font-semibold",
-              earnsCents < 0 ? "text-[color:var(--brand-pink)]" : "text-slate-900",
-            ].join(" ")}
-          >
-            You earn {earnsCents < 0 ? `-${dollars(Math.abs(earnsCents))}` : dollars(earnsCents)} per unit
-          </span>
-          <span className="text-slate-400 text-[11.5px]">
-            (price {dollars(priceCents ?? 0)} − platform cost {dollars(readoutCost)}
-            {lockedCost === null ? ", live" : ", locked at last save"})
-          </span>
-        </div>
-      )}
+      {/* Min floor — preserved as a quiet advanced row for the Shopify
+          bundle floor logic; not in the new mockup but still required. */}
+      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+        <span className="text-slate-400 text-[11.5px]">Min floor $</span>
+        <input
+          type="text"
+          value={floor}
+          onChange={(e) => setFloor(e.target.value)}
+          inputMode="decimal"
+          className={`w-20 ${fieldClass} text-[12px]`}
+          data-testid="input-addon-floor"
+        />
+        <span className="text-slate-400 text-[11px]">
+          (advanced — per-album floor used by Shopify bundles)
+        </span>
+      </div>
     </div>
   );
 }

@@ -154,6 +154,7 @@ async function upsertAddon(input: {
   minPriceCents: number;
   active: boolean;
   costCentsSnapshot: number | null;
+  plannedQuantity: number | null;
 }): Promise<AlbumAddon> {
   const [row] = await db
     .insert(albumAddons)
@@ -165,6 +166,7 @@ async function upsertAddon(input: {
         minPriceCents: input.minPriceCents,
         active: input.active,
         costCentsSnapshot: input.costCentsSnapshot,
+        plannedQuantity: input.plannedQuantity,
       },
     })
     .returning();
@@ -327,6 +329,10 @@ export function registerCommerceRoutes(app: Express) {
     priceCents: z.number().int().min(0),
     minPriceCents: z.number().int().min(0).optional(),
     active: z.boolean().default(true),
+    // Task #121 — null/omitted = "as many as will sell"; positive int =
+    // fixed planned quantity. Hard-rejects 0 or negatives so the UI's
+    // "Fixed" mode can't silently round down to nothing.
+    plannedQuantity: z.number().int().min(1).nullable().optional(),
   });
   app.put("/api/admin/albums/:id/addons/:kind", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
@@ -353,6 +359,7 @@ export function registerCommerceRoutes(app: Express) {
       minPriceCents,
       active: parsed.data.active,
       costCentsSnapshot: costSnapshot,
+      plannedQuantity: parsed.data.plannedQuantity ?? null,
     });
     res.json(row);
   });

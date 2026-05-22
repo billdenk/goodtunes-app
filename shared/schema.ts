@@ -771,6 +771,11 @@ export const albumAddons = pgTable(
     // because pre-Task-#119 rows have no snapshot — the SellPanel falls
     // back to the live platform setting in that case.
     costCentsSnapshot: integer("cost_cents_snapshot"),
+    // Task #121 — planned-quantity for the signed_cert add-on. NULL means
+    // "as many as will sell" (uncapped); a positive integer is the
+    // artist's committed planned print run. This is a *planning* value
+    // only (drives the admin Total readout); it does not hard-cap sales.
+    plannedQuantity: integer("planned_quantity"),
     active: boolean("active").notNull().default(true),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow(),
@@ -1390,6 +1395,9 @@ export const insertAlbumAddonSchema = createInsertSchema(albumAddons)
     // new callers can omit it.
     minPriceCents: z.number().int().min(0).optional(),
     costCentsSnapshot: z.number().int().min(0).nullable().optional(),
+    // Task #121 — null = "as many as will sell"; positive int = fixed
+    // planned quantity for the signed_cert print run.
+    plannedQuantity: z.number().int().min(1).nullable().optional(),
   });
 export type InsertAlbumAddon = z.infer<typeof insertAlbumAddonSchema>;
 export type AlbumAddon = typeof albumAddons.$inferSelect;
