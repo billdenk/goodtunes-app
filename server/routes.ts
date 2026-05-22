@@ -8279,23 +8279,176 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!b.name) return res.status(400).json({ message: "name is required" });
     const ta = intOrNull(b.turnaroundDays);
     if (ta === INVALID) return res.status(400).json({ message: "turnaroundDays must be a number" });
-    const m = await storage.createManufacturer({
-      name: String(b.name),
-      domain: normDomain(b.domain),
-      logoUrl: strOrNull(b.logoUrl),
-      coverUrl: strOrNull(b.coverUrl),
-      bio: strOrNull(b.bio),
-      location: strOrNull(b.location),
-      websiteUrl: strOrNull(b.websiteUrl),
-      contactEmail: strOrNull(b.contactEmail),
-      contactPhone: strOrNull(b.contactPhone),
-      turnaroundDays: ta,
-      specialties: Array.isArray(b.specialties)
-        ? b.specialties.map((s: unknown) => String(s)).filter(Boolean)
-        : [],
-      defaultFulfillmentPartnerId: strOrNull(b.defaultFulfillmentPartnerId),
-    });
-    return res.status(201).json(m);
+    const dom = normDomain(b.domain);
+    // Mirror vendors/labels: when a domain is supplied, surface an existing
+    // manufacturer with that domain as a 409 (+ the row), so the admin UI
+    // can offer "open existing" instead of silently double-creating.
+    if (dom) {
+      const existing = await storage.getManufacturerByDomain(dom);
+      if (existing) {
+        return res.status(409).json({
+          message: "A manufacturer with that domain already exists",
+          manufacturer: existing,
+        });
+      }
+    }
+    try {
+      const m = await storage.createManufacturer({
+        name: String(b.name),
+        domain: dom,
+        logoUrl: strOrNull(b.logoUrl),
+        coverUrl: strOrNull(b.coverUrl),
+        bio: strOrNull(b.bio),
+        location: strOrNull(b.location),
+        websiteUrl: strOrNull(b.websiteUrl),
+        contactEmail: strOrNull(b.contactEmail),
+        contactPhone: strOrNull(b.contactPhone),
+        turnaroundDays: ta,
+        specialties: Array.isArray(b.specialties)
+          ? b.specialties.map((s: unknown) => String(s)).filter(Boolean)
+          : [],
+        defaultFulfillmentPartnerId: strOrNull(b.defaultFulfillmentPartnerId),
+      });
+      return res.status(201).json(m);
+    } catch (err: any) {
+      // Map the postgres unique-violation on `manufacturers.domain` to a
+      // real 409 — same shape as labels/vendors — so the client can show a
+      // clean dup message instead of a generic 500.
+      if (err?.code === "23505") {
+        return res.status(409).json({ message: "Another manufacturer is already using that domain" });
+      }
+      throw err;
+    }
+  });
+
+  // Paste-a-URL scrape for the "Add manufacturer" modal — mirrors the
+  // labels/vendors scrapers (same OG-meta extraction + apple-touch-icon
+  // logo preference). Pressing-plant sites (Memphis Record Pressing,
+  // Physical Music Products, Hellbender, Pressing Business) are plain
+  // marketing pages with usable OG tags, so we get name/logo/cover/bio
+  // back from a single fetch. Logo + cover are rehosted to object
+  // storage so they survive the source site redesigning.
+  app.post("/api/admin/manufacturers/scrape", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// manufacturer URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)facebook\.com$/.test(host)) {
+      return res.status(400).json({
+        message: "Instagram/Facebook pages can't be scraped — paste the plant's website instead.",
+      });
+    }
+    // Surface an existing manufacturer with that domain as a 409 (+ the row)
+    // *before* fetching, so paste-of-a-dup never wastes a network round-trip
+    // and the admin sees the dup notice immediately.
+    const existing = await storage.getManufacturerByDomain(host);
+    if (existing) {
+      return res.status(409).json({
+        message: "A manufacturer with that domain already exists",
+        manufacturer: existing,
+      });
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) {
+        const key = m[1].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[2]);
+      }
+      while ((m = re2.exec(html))) {
+        const key = m[2].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[1]);
+      }
+
+      // Logo: prefer apple-touch-icon (clean square brand mark), fall back
+      // to favicon. og:image goes to cover, not logo.
+      let logoUrl: string | null = null;
+      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+      if (touchA) logoUrl = touchA[1];
+      else if (touchB) logoUrl = touchB[1];
+      if (!logoUrl) {
+        const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
+        if (iconA) logoUrl = iconA[1];
+        else if (iconB) logoUrl = iconB[1];
+      }
+      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
+      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+
+      // Cover: og:image is usually a wide hero — perfect for the cover band.
+      let coverUrl: string | null =
+        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      if (coverUrl?.startsWith("//")) coverUrl = `https:${coverUrl}`;
+      if (coverUrl?.startsWith("/")) coverUrl = `${parsed.origin}${coverUrl}`;
+
+      // Name: og:site_name first (usually clean), then og:title — strip
+      // common trailing service tags so the admin sees a clean name they
+      // don't have to re-edit.
+      let name = meta["og:site_name"] || meta["og:title"] || meta["twitter:title"] || null;
+      if (name) {
+        name = name
+          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|records|music|pressing|vinyl|the\s+official\s+site).*$/i, "")
+          .trim();
+      }
+      const bio =
+        meta["og:description"] ||
+        meta["twitter:description"] ||
+        meta["description"] ||
+        null;
+      // Location: most plants put their city in the OG description or a
+      // dedicated meta tag. We don't try too hard — the admin can fill it
+      // in by hand on the detail page if it's missing.
+      const location =
+        meta["business:contact_data:locality"] ||
+        meta["og:locality"] ||
+        meta["geo.placename"] ||
+        null;
+
+      // Rehost both images to object storage so the manufacturer card
+      // doesn't break when the source site redesigns. Fall back to the
+      // raw URL (hot-link) when rehost fails — better than no logo.
+      let logoRehosted: string | null = logoUrl;
+      if (logoUrl) {
+        try { logoRehosted = await rehostRemoteImage(logoUrl); }
+        catch { logoRehosted = logoUrl; }
+      }
+      let coverRehosted: string | null = coverUrl;
+      if (coverUrl) {
+        try { coverRehosted = await rehostRemoteImage(coverUrl); }
+        catch { coverRehosted = coverUrl; }
+      }
+
+      return res.json({
+        name,
+        domain: host,
+        logoUrl: logoRehosted,
+        coverUrl: coverRehosted,
+        bio,
+        location,
+        websiteUrl: meta["og:url"] || url,
+      });
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Failed to read page" });
+    }
   });
   app.put("/api/admin/manufacturers/:id", requireAdmin, async (req, res) => {
     const b = req.body ?? {};

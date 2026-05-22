@@ -452,6 +452,7 @@ export interface IStorage {
   // the Label entity shape (one row per partner, edit propagates).
   getManufacturers(): Promise<Manufacturer[]>;
   getManufacturerById(id: string): Promise<Manufacturer | undefined>;
+  getManufacturerByDomain(domain: string): Promise<Manufacturer | undefined>;
   createManufacturer(data: InsertManufacturer & { id?: string }): Promise<Manufacturer>;
   updateManufacturer(id: string, data: Partial<Manufacturer>): Promise<Manufacturer | undefined>;
   deleteManufacturer(id: string): Promise<void>;
@@ -2065,6 +2066,10 @@ export class DbStorage implements IStorage {
   }
   async getManufacturerById(id: string): Promise<Manufacturer | undefined> {
     const [m] = await db.select().from(manufacturers).where(eq(manufacturers.id, id));
+    return m;
+  }
+  async getManufacturerByDomain(domain: string): Promise<Manufacturer | undefined> {
+    const [m] = await db.select().from(manufacturers).where(eq(manufacturers.domain, domain));
     return m;
   }
   async createManufacturer(data: InsertManufacturer & { id?: string }): Promise<Manufacturer> {

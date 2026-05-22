@@ -23,11 +23,11 @@ A streaming-imported album (Apple/Spotify-sourced, `is_goodtunes_release=false`,
 
 Treat `(artist, lower(title))` collisions across the `is_goodtunes_release` boundary as expected. Don't propose dedupe, don't auto-claim, don't merge on import. Surface them in admin only as informational (so the operator knows both exist), never as a warning that needs action. The two-row pattern is the product design.
 
-## Paste-a-URL entry for shop-like entities (vendors + labels)
+## Paste-a-URL entry for shop-like entities (vendors, gear, labels, manufacturers)
 
-Both `AdminVendors.tsx` and `AdminLabels.tsx` use the same "Add" dialog — operator pastes the entity's website, the server scraper (`POST /api/admin/vendors/scrape`, `POST /api/admin/labels/scrape`) returns OG-derived `{name, domain, logoUrl, …}`, and the create POST surfaces a 409 + `{label|vendor}` payload when the domain is already in the catalog so the UI offers "open existing" instead of double-creating.
+`AdminVendors.tsx`, `AdminInstruments.tsx`, `AdminLabels.tsx`, and `AdminManufacturers.tsx` all use the same "Add" dialog — operator pastes the entity's website, the server scraper (`POST /api/admin/vendors/scrape`, `/api/admin/instruments/scrape`, `/api/admin/labels/scrape`, `/api/admin/manufacturers/scrape`) returns OG-derived `{name, domain, logoUrl, …}`, and the create POST surfaces a 409 + `{label|vendor|manufacturer}` payload when the domain is already in the catalog so the UI offers "open existing" instead of double-creating.
 
-`labels.domain` mirrors `vendors.domain` (lowercased, no `www.`, partial-unique on non-null). When adding a new "shop-like" admin entity, mirror this exact shape — don't invent a new dedup key.
+`labels.domain`, `vendors.domain`, and `manufacturers.domain` are all lowercased / no-`www.` / partial-unique on non-null. When adding a new "shop-like" admin entity, mirror this exact shape — don't invent a new dedup key.
 
 ## Admin index pages — grid / list toggle
 

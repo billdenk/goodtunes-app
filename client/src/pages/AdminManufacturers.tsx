@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Factory, Clock } from "lucide-react";
+import { Search, Factory, Clock, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,16 +20,55 @@ import {
 import { Button } from "@/components/ui/button";
 import type { Manufacturer } from "@shared/schema";
 
+// apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
+// the status prefix and unwrap the JSON `message` so inline dialog errors
+// read like English. Mirrors AdminLabels / AdminVendors.
+function humanizeApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  if (!raw) {
+    return "Couldn't read that page. Try the URL again, or use a plant name to create a blank entry.";
+  }
+  const m = raw.match(/^\d{3}:\s*(.*)$/);
+  const body = m ? m[1] : raw;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return body.trim() || raw;
+}
+
+// Recover the duplicate-manufacturer payload the backend returns on 409
+// so the "already added" inline notice can deep-link to the existing
+// plant instead of just showing a generic error. Mirrors AdminLabels.
+function extractDuplicateManufacturer(err: unknown): Manufacturer | null {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const m = raw.match(/^409:\s*(.*)$/);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1]);
+    if (parsed && parsed.manufacturer && typeof parsed.manufacturer.id === "string") {
+      return parsed.manufacturer as Manufacturer;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return null;
+}
+
 /**
  * Admin · Manufacturers (Task #69). One row per pressing plant. Each
  * manufacturer can be invited to bid on RFQs (see AdminAlbum.RFQ
  * section, follow-up) and is the awarded plant for any album whose
  * print run was assigned to them.
  *
- * Mirrors AdminLabels structurally but intentionally lighter: no
- * paste-URL scrape (operator-entered today), no logo curation lock
- * (these aren't fan-facing brands), no view-mode toggle (a manageable
- * 1-2 dozen partners doesn't need a grid view).
+ * "Add manufacturer" accepts either a plant name *or* a website URL —
+ * pasting a URL triggers the server scraper (mirrors Labels/Vendors/Gear)
+ * so the record lands with name, domain, logo, cover, bio, and location
+ * already filled in.
  */
 export function AdminManufacturers() {
   useEffect(() => {
@@ -40,7 +79,9 @@ export function AdminManufacturers() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [draftName, setDraftName] = useState("");
+  const [draftInput, setDraftInput] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<Manufacturer | null>(null);
   const { toast } = useToast();
 
   const {
@@ -55,19 +96,73 @@ export function AdminManufacturers() {
   });
 
   const create = useMutation({
-    mutationFn: async (name: string) => {
-      const r = await apiRequest("POST", "/api/admin/manufacturers", { name });
-      return (await r.json()) as Manufacturer;
+    mutationFn: async (input: string) => {
+      const trimmed = input.trim();
+      let payload: Record<string, unknown> = { name: trimmed };
+      let scrapedName: string | null = null;
+      if (/^https?:\/\//i.test(trimmed)) {
+        const sr = await apiRequest("POST", "/api/admin/manufacturers/scrape", { url: trimmed });
+        const scraped = (await sr.json()) as {
+          name: string | null;
+          domain: string | null;
+          logoUrl: string | null;
+          coverUrl: string | null;
+          bio: string | null;
+          location: string | null;
+          websiteUrl: string | null;
+        };
+        scrapedName = scraped.name;
+        payload = {
+          name: scraped.name || new URL(trimmed).hostname.replace(/^www\./, ""),
+          ...(scraped.domain ? { domain: scraped.domain } : {}),
+          ...(scraped.logoUrl ? { logoUrl: scraped.logoUrl } : {}),
+          ...(scraped.coverUrl ? { coverUrl: scraped.coverUrl } : {}),
+          ...(scraped.bio ? { bio: scraped.bio } : {}),
+          ...(scraped.location ? { location: scraped.location } : {}),
+          ...(scraped.websiteUrl ? { websiteUrl: scraped.websiteUrl } : {}),
+        };
+      }
+      const r = await apiRequest("POST", "/api/admin/manufacturers", payload);
+      const m = (await r.json()) as Manufacturer;
+      return { m, scrapedName };
     },
-    onSuccess: (m) => {
+    onSuccess: ({ m, scrapedName }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/manufacturers"] });
       setAddOpen(false);
-      setDraftName("");
+      setDraftInput("");
+      setPasteError(null);
+      setDuplicate(null);
+      if (scrapedName) {
+        toast({
+          title: `Pulled "${scrapedName}"`,
+          description: "Review and edit on the detail page.",
+        });
+      }
       navigate(`/admin/manufacturers/${m.id}`);
     },
-    onError: (e: any) =>
-      toast({ title: "Couldn't add manufacturer", description: e?.message, variant: "destructive" }),
+    onError: (err: any) => {
+      const dup = extractDuplicateManufacturer(err);
+      if (dup) {
+        setDuplicate(dup);
+        setPasteError(null);
+      } else {
+        setDuplicate(null);
+        setPasteError(humanizeApiError(err));
+      }
+    },
   });
+
+  const submit = () => {
+    if (create.isPending) return;
+    const trimmed = draftInput.trim();
+    if (!trimmed) {
+      setPasteError("Enter a plant name or paste their website URL.");
+      return;
+    }
+    setPasteError(null);
+    setDuplicate(null);
+    create.mutate(trimmed);
+  };
 
   if (authLoading) {
     return (
@@ -89,6 +184,8 @@ export function AdminManufacturers() {
   const filtered = rows.filter((r) =>
     search ? (r.name + " " + (r.location ?? "")).toLowerCase().includes(search.toLowerCase()) : true,
   );
+
+  const inputLooksLikeUrl = /^https?:\/\//i.test(draftInput.trim());
 
   return (
     <AdminFrame active="manufacturers">
@@ -180,32 +277,103 @@ export function AdminManufacturers() {
         )}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add manufacturer</DialogTitle>
-            <DialogDescription>
-              Start with the plant's name — you can fill in the rest on the detail page.
+      <Dialog
+        open={addOpen}
+        onOpenChange={(o) => {
+          if (create.isPending) return;
+          setAddOpen(o);
+          if (!o) {
+            setDraftInput("");
+            setPasteError(null);
+            setDuplicate(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-add-manufacturer"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Add manufacturer
+            </DialogTitle>
+            <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
+              Paste the plant's website — we'll prefill name, domain, logo,
+              cover, and bio from the page's Open Graph metadata. Or just
+              type the name to create a blank entry.
             </DialogDescription>
           </DialogHeader>
-          <input
-            autoFocus
-            value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            placeholder="e.g. Pirates Press"
-            className="w-full h-10 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-            data-testid="input-new-manufacturer-name"
-          />
+          <div className="space-y-2 pt-1">
+            <input
+              autoFocus
+              value={draftInput}
+              onChange={(e) => {
+                setDraftInput(e.target.value);
+                if (pasteError) setPasteError(null);
+                if (duplicate) setDuplicate(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder="https://memphisrecordpressing.com  or  Pirates Press"
+              disabled={create.isPending}
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              data-testid="input-new-manufacturer-name"
+            />
+            {duplicate && (
+              <div
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
+                data-testid="text-add-manufacturer-duplicate"
+              >
+                <span className="font-semibold">{duplicate.name}</span> is
+                already in your Manufacturers list.{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddOpen(false);
+                    navigate(`/admin/manufacturers/${duplicate.id}`);
+                  }}
+                  className="underline underline-offset-2 hover:text-[var(--brand-blue)] transition-colors font-semibold"
+                  data-testid="button-open-existing-manufacturer"
+                >
+                  Open it →
+                </button>
+              </div>
+            )}
+            {pasteError && (
+              <p
+                className="text-[12px] text-red-600"
+                data-testid="text-add-manufacturer-error"
+              >
+                {pasteError}
+              </p>
+            )}
+            <p className="text-[11.5px] text-slate-400">
+              {inputLooksLikeUrl
+                ? "Reads the page's Open Graph metadata and rehosts the logo + cover."
+                : "Paste an https:// URL to auto-fill, or enter a name to create blank."}
+            </p>
+          </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setAddOpen(false)}>
+            <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={create.isPending}>
               Cancel
             </Button>
             <Button
-              onClick={() => draftName.trim() && create.mutate(draftName.trim())}
-              disabled={!draftName.trim() || create.isPending}
+              onClick={submit}
+              disabled={!draftInput.trim() || create.isPending}
               data-testid="button-confirm-add-manufacturer"
             >
-              {create.isPending ? "Adding…" : "Add"}
+              {create.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {create.isPending
+                ? inputLooksLikeUrl
+                  ? "Reading…"
+                  : "Adding…"
+                : inputLooksLikeUrl
+                  ? "Pull from URL"
+                  : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>
