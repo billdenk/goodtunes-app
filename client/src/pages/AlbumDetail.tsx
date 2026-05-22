@@ -14,6 +14,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { ChevronLeft, Share, MoreHorizontal, X as XIcon } from "lucide-react";
 import { startVendorChatAboutInstrument } from "@/lib/chatStore";
+import { chatEnabled, nativeDownloadsEnabled } from "@/lib/platform";
+import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
@@ -327,22 +329,24 @@ function AlbumDetailMobile() {
     setInstrumentSheet(null);
     setShowDescription(false);
     if (album) {
-      try {
-        const raw = localStorage.getItem(`gt:downloaded-songs:${album.id}`);
-        setDownloadedSongs(new Set(raw ? (JSON.parse(raw) as string[]) : []));
-      } catch { setDownloadedSongs(new Set()); }
+      setDownloadedSongs(listDownloadedSongs(album.id));
     }
   }, [id, album]);
 
-  const toggleSongDownload = (songId: string) => {
+  const toggleSongDownload = async (songId: string) => {
     if (!album) return;
-    setDownloadedSongs((prev) => {
-      const next = new Set(prev);
-      if (next.has(songId)) next.delete(songId);
-      else next.add(songId);
-      try { localStorage.setItem(`gt:downloaded-songs:${album.id}`, JSON.stringify(Array.from(next))); } catch {}
-      return next;
-    });
+    const wasDownloaded = downloadedSongs.has(songId);
+    const song = songs.find((s) => s.id === songId);
+    try {
+      if (wasDownloaded) {
+        await removeDownload(album.id, songId, song?.audioUrl ?? undefined);
+      } else {
+        await downloadSong(album.id, songId, song?.audioUrl ?? undefined);
+      }
+      setDownloadedSongs(listDownloadedSongs(album.id));
+    } catch (e) {
+      toast({ title: "Download failed", description: (e as Error).message });
+    }
   };
 
   if (!album) {
@@ -655,17 +659,21 @@ function AlbumDetailMobile() {
               </svg>
               Play
             </button>
-            {(() => {
+            {nativeDownloadsEnabled && (() => {
               const allDownloaded = songs.length > 0 && songs.every((s) => downloadedSongs.has(s.id));
               return (
                 <button
                   type="button"
-                  onClick={() => {
-                    const next = new Set(downloadedSongs);
-                    if (allDownloaded) songs.forEach((s) => next.delete(s.id));
-                    else songs.forEach((s) => next.add(s.id));
-                    setDownloadedSongs(next);
-                    try { localStorage.setItem(`gt:downloaded-songs:${album.id}`, JSON.stringify(Array.from(next))); } catch {}
+                  onClick={async () => {
+                    try {
+                      for (const s of songs) {
+                        if (allDownloaded) await removeDownload(album.id, s.id, s.audioUrl ?? undefined);
+                        else if (!downloadedSongs.has(s.id)) await downloadSong(album.id, s.id, s.audioUrl ?? undefined);
+                      }
+                      setDownloadedSongs(listDownloadedSongs(album.id));
+                    } catch (e) {
+                      toast({ title: "Download failed", description: (e as Error).message });
+                    }
                   }}
                   aria-label={allDownloaded ? "Remove album downloads" : "Download album"}
                   aria-pressed={allDownloaded}
@@ -758,6 +766,7 @@ function AlbumDetailMobile() {
                       )}
                     </div>
                   </button>
+                  {nativeDownloadsEnabled && (
                   <button
                     type="button"
                     onClick={() => toggleSongDownload(song.id)}
@@ -781,6 +790,7 @@ function AlbumDetailMobile() {
                       </svg>
                     )}
                   </button>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => setSongMenuFor({ song, rect: e.currentTarget.getBoundingClientRect() })}
@@ -2821,19 +2831,22 @@ function InstrumentSheet({
                     <p className="text-white text-[15px] font-medium truncate">{v.name}</p>
                   </div>
                 </button>
-                {/* Chat bubble — opens a chat with this vendor seeded with the current instrument as an OG-style preview card. */}
-                <button
-                  type="button"
-                  onClick={() => onMessageVendor({ name: v.name, logoUrl: v.logoUrl, affiliateUrl: v.affiliateUrl })}
-                  aria-label={`Message ${v.name}`}
-                  className="w-9 h-9 ml-1 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
-                  style={{ background: "rgba(49,158,216,0.16)" }}
-                  data-testid={`button-vendor-message-${i}`}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                </button>
+                {/* Chat bubble — opens a chat with this vendor seeded with the current instrument as an OG-style preview card.
+                    Web-only for v1 (see `client/src/lib/platform.ts`). */}
+                {chatEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => onMessageVendor({ name: v.name, logoUrl: v.logoUrl, affiliateUrl: v.affiliateUrl })}
+                    aria-label={`Message ${v.name}`}
+                    className="w-9 h-9 ml-1 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
+                    style={{ background: "rgba(49,158,216,0.16)" }}
+                    data-testid={`button-vendor-message-${i}`}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </button>
+                )}
                 {/* "Opens in browser" indicator — circle with external-link arrow, matches the chat-bubble button style on the left */}
                 <button
                   type="button"
@@ -3055,16 +3068,18 @@ function VendorSheet({
                 <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
               </svg>
             </IconButton>
-            <IconButton
-              variant="dimmed"
-              label={`Message ${vendor.name}`}
-              onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
-              data-testid="button-vendor-chat"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </IconButton>
+            {chatEnabled && (
+              <IconButton
+                variant="dimmed"
+                label={`Message ${vendor.name}`}
+                onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
+                data-testid="button-vendor-chat"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </IconButton>
+            )}
           </div>
         </div>
 
@@ -3284,18 +3299,20 @@ function VendorSheet({
                         this specific instrument. Mirrors the chat button in
                         the InstrumentSheet vendor list so fans get the same
                         affordance from either entry point. */}
-                    <button
-                      type="button"
-                      onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
-                      aria-label={`Message ${vendor.name} about ${inst.name}`}
-                      className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
-                      style={{ background: "rgba(49,158,216,0.16)" }}
-                      data-testid={`button-vendor-instrument-chat-${inst.id}`}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </button>
+                    {chatEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
+                        aria-label={`Message ${vendor.name} about ${inst.name}`}
+                        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
+                        style={{ background: "rgba(49,158,216,0.16)" }}
+                        data-testid={`button-vendor-instrument-chat-${inst.id}`}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                      </button>
+                    )}
                     {/* Chevron — Apple-style "this row is tappable" indicator. */}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/35 flex-shrink-0" aria-hidden="true">
                       <path d="M9 6l6 6-6 6" />

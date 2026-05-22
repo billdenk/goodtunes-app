@@ -5,6 +5,7 @@ import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { track } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
+import { offlineSrcFor } from "@/lib/nativeDownloads";
 
 export interface PlayerSong extends Song {
   album: Album;
@@ -432,13 +433,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
       })();
     } else if (currentSong.audioUrl) {
-      // Same-URL guard: avoid resetting an already-loaded progressive src.
-      if (a.src !== currentSong.audioUrl) {
-        // NOTE: do NOT set crossOrigin — Dropbox shared-link CDNs don't
-        // send Access-Control-Allow-Origin, so requesting CORS would
-        // fail the load. We don't need pixel access to the audio.
-        attachSrc(currentSong.audioUrl);
-      }
+      // On native, prefer a Capacitor-Filesystem copy when one exists so
+      // the song plays in airplane mode. Falls back to the network URL on
+      // web (offlineSrcFor returns null) or when the file is missing.
+      (async () => {
+        const offline = await offlineSrcFor(currentSong.id, currentSong.audioUrl);
+        const src = offline ?? currentSong.audioUrl!;
+        if (srcTokenRef.current !== token) return;
+        if (a.src !== src) attachSrc(src);
+      })();
     }
   }, [currentSong?.id, currentSong?.audioUrl, currentSong?.muxPlaybackId, currentSong?.muxStatus]);
 

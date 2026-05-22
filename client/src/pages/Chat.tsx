@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { BottomNav, NAV_CLEARANCE } from "@/components/BottomNav";
+import { chatEnabled } from "@/lib/platform";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -78,6 +79,13 @@ function VendorAvatar({ logoUrl, name, size = 44 }: { logoUrl?: string; name: st
 export function Chat() {
   const threads = useChatThreads();
   const [, navigate] = useLocation();
+
+  // Native (Capacitor) shells have Chat hidden from the nav for v1; if a
+  // user lands on /chat via a stale deep link, bounce them home.
+  useEffect(() => {
+    if (!chatEnabled) navigate("/collection");
+  }, [navigate]);
+  if (!chatEnabled) return null;
 
   return (
     <main
@@ -216,6 +224,10 @@ function MessageBubble({ msg, onOpenLink }: { msg: ChatMessage; onOpenLink: (url
 export function ChatThreadPage() {
   const [, params] = useRoute<{ id: string }>("/chat/:id");
   const [, navigate] = useLocation();
+  useEffect(() => {
+    if (!chatEnabled) navigate("/collection");
+  }, [navigate]);
+  if (!chatEnabled) return null;
   const threadId = params?.id ? decodeURIComponent(params.id) : "";
   const thread = threadId ? getThread(threadId) : undefined;
   const messages = useChatMessages(threadId);

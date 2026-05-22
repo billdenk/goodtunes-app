@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
+import { chatEnabled } from "@/lib/platform";
 
 /**
  * Bottom padding every customer-shell scroll container must reserve so
@@ -162,7 +163,7 @@ export function BottomNav() {
     let activeIcon = collectionIcon;
     let activeLabel = "Collection";
     if (isPlaylists) { activeIcon = playlistsIcon; activeLabel = "Playlists"; }
-    else if (isChat) { activeIcon = chatIcon; activeLabel = "Chat"; }
+    else if (isChat && chatEnabled) { activeIcon = chatIcon; activeLabel = "Chat"; }
     else if (isAccount) { activeIcon = youIcon; activeLabel = "Account"; }
 
     return (
@@ -197,7 +198,10 @@ export function BottomNav() {
       >
         <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} />
         <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} />
-        <NavItem label="Chat" active={isChat} onClick={() => navigate("/chat")} testId="nav-chat" icon={chatIcon} />
+        {/* Chat is web-only for v1 — see `client/src/lib/platform.ts`. */}
+        {chatEnabled && (
+          <NavItem label="Chat" active={isChat} onClick={() => navigate("/chat")} testId="nav-chat" icon={chatIcon} />
+        )}
         <NavItem label="Account" active={isAccount} onClick={() => navigate("/account")} testId="nav-you" icon={youIcon} align="right" />
       </nav>
     </div>
