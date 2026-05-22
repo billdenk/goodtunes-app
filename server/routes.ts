@@ -5327,9 +5327,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/job-runs", requireAdminBearer, async (req, res) => {
     try {
       const albumId = req.query.albumId ? String(req.query.albumId) : undefined;
+      const songId = req.query.songId ? String(req.query.songId) : undefined;
       const jobType = req.query.jobType ? String(req.query.jobType) : undefined;
       const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(String(req.query.limit), 10) || 50)) : 50;
-      const rows = await storage.listJobRuns({ albumId, jobType, limit });
+      const rows = await storage.listJobRuns({ albumId, songId, jobType, limit });
       return res.json(rows);
     } catch (e: any) {
       return res.status(500).json({ message: e?.message || "Failed to load job runs." });

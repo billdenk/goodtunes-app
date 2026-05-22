@@ -445,7 +445,7 @@ export interface IStorage {
 
   // Job-run audit log (Dropbox imports, GoodSync, etc.).
   recordJobRun(data: InsertJobRun): Promise<JobRun>;
-  listJobRuns(opts?: { limit?: number; albumId?: string; jobType?: string }): Promise<JobRun[]>;
+  listJobRuns(opts?: { limit?: number; albumId?: string; songId?: string; jobType?: string }): Promise<JobRun[]>;
 
   // Task #69 — Manufacturer + fulfillment partner entity CRUD. Mirrors
   // the Label entity shape (one row per partner, edit propagates).
@@ -2042,9 +2042,10 @@ export class DbStorage implements IStorage {
     const [row] = await db.insert(jobRuns).values(data).returning();
     return row;
   }
-  async listJobRuns(opts?: { limit?: number; albumId?: string; jobType?: string }): Promise<JobRun[]> {
+  async listJobRuns(opts?: { limit?: number; albumId?: string; songId?: string; jobType?: string }): Promise<JobRun[]> {
     const conds: any[] = [];
     if (opts?.albumId) conds.push(eq(jobRuns.albumId, opts.albumId));
+    if (opts?.songId) conds.push(eq(jobRuns.songId, opts.songId));
     if (opts?.jobType) conds.push(eq(jobRuns.jobType, opts.jobType));
     let q = db.select().from(jobRuns).$dynamic();
     if (conds.length) q = q.where(conds.length === 1 ? conds[0] : and(...conds));

@@ -3,6 +3,23 @@ import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
+interface AlbumPick {
+  id: string;
+  title: string;
+  artist: string;
+}
+
+interface SongPick {
+  id: string;
+  title: string;
+  trackNumber: number;
+}
+
+interface AlbumFullLite {
+  id: string;
+  songs: SongPick[];
+}
+
 type JobSummary = Record<string, any> | null;
 
 interface JobRun {
@@ -161,15 +178,55 @@ function SongLink({ row }: { row: JobRun }) {
 export function AdminJobs() {
   const [jobType, setJobType] = useState<JobType>("all");
   const [sort, setSort] = useState<SortKey>("recent");
+  const [albumPick, setAlbumPick] = useState<AlbumPick | null>(null);
+  const [songPick, setSongPick] = useState<SongPick | null>(null);
+  const [albumSearch, setAlbumSearch] = useState("");
 
-  // Query key includes the filter so each tab maintains its own cache
-  // entry — switching tabs doesn't refetch the previous one.
-  const queryKey =
-    jobType === "all"
-      ? ["/api/admin/job-runs?limit=100"]
-      : [`/api/admin/job-runs?jobType=${jobType}&limit=100`];
+  // Album list — load once, search/filter client-side. Same list the
+  // rest of /admin uses, so already cached when navigating from there.
+  const { data: allAlbums = [] } = useQuery<AlbumPick[]>({
+    queryKey: ["/api/albums"],
+  });
 
-  const { data = [], isLoading } = useQuery<JobRun[]>({ queryKey });
+  // Songs for the picked album — only fetched once an album is chosen.
+  const { data: albumFull } = useQuery<AlbumFullLite>({
+    queryKey: ["/api/albums", albumPick?.id],
+    enabled: !!albumPick,
+  });
+
+  // Build the job-runs URL from all active filters. Including filters
+  // in the queryKey keeps each combination cached separately.
+  const queryUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (jobType !== "all") params.set("jobType", jobType);
+    if (albumPick) params.set("albumId", albumPick.id);
+    if (songPick) params.set("songId", songPick.id);
+    params.set("limit", "100");
+    return `/api/admin/job-runs?${params.toString()}`;
+  }, [jobType, albumPick, songPick]);
+
+  const { data = [], isLoading } = useQuery<JobRun[]>({ queryKey: [queryUrl] });
+
+  // Open the album combobox dropdown when the search input has focus
+  // *and* user has typed something (or no album is picked yet).
+  const [albumFocused, setAlbumFocused] = useState(false);
+  const filteredAlbums = useMemo(() => {
+    if (!albumSearch.trim()) return allAlbums.slice(0, 12);
+    const q = albumSearch.trim().toLowerCase();
+    return allAlbums
+      .filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          (a.artist ?? "").toLowerCase().includes(q),
+      )
+      .slice(0, 12);
+  }, [allAlbums, albumSearch]);
+
+  const clearTarget = () => {
+    setAlbumPick(null);
+    setSongPick(null);
+    setAlbumSearch("");
+  };
 
   const sorted = useMemo(() => {
     const rows = [...data];
@@ -213,6 +270,96 @@ export function AdminJobs() {
               {t.label}
             </button>
           ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mb-3" data-testid="target-pickers">
+          <div className="relative">
+            {albumPick ? (
+              <div
+                className="inline-flex items-center gap-2 bg-[var(--brand-blue)] text-white text-xs font-semibold rounded-full pl-3 pr-1.5 py-1"
+                data-testid="pill-album-pick"
+              >
+                <span className="truncate max-w-[260px]">
+                  {albumPick.artist ? `${albumPick.artist} — ` : ""}
+                  {albumPick.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearTarget}
+                  className="rounded-full w-5 h-5 inline-flex items-center justify-center bg-white/20 hover:bg-white/30"
+                  aria-label="Clear album filter"
+                  data-testid="button-clear-album"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={albumSearch}
+                  onChange={(e) => setAlbumSearch(e.target.value)}
+                  onFocus={() => setAlbumFocused(true)}
+                  onBlur={() => setTimeout(() => setAlbumFocused(false), 150)}
+                  placeholder="Filter by album or artist…"
+                  className="text-xs border border-slate-200 rounded-full px-3 py-1.5 w-[280px] focus:outline-none focus:border-[var(--brand-blue)]"
+                  data-testid="input-album-search"
+                />
+                {albumFocused && filteredAlbums.length > 0 && (
+                  <div
+                    className="absolute z-10 mt-1 w-[320px] max-h-[280px] overflow-auto bg-white border border-slate-200 rounded-lg shadow-lg"
+                    data-testid="list-album-options"
+                  >
+                    {filteredAlbums.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setAlbumPick(a);
+                          setAlbumSearch("");
+                          setAlbumFocused(false);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 text-xs"
+                        data-testid={`button-album-option-${a.id}`}
+                      >
+                        <div className="font-semibold text-slate-900 truncate">{a.title}</div>
+                        {a.artist && (
+                          <div className="text-slate-500 truncate">{a.artist}</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {albumPick && albumFull && albumFull.songs.length > 0 && (
+            <select
+              value={songPick?.id ?? ""}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (!id) {
+                  setSongPick(null);
+                  return;
+                }
+                const found = albumFull.songs.find((s) => s.id === id);
+                setSongPick(found ?? null);
+              }}
+              className="text-xs border border-slate-200 rounded-full px-3 py-1.5 bg-white focus:outline-none focus:border-[var(--brand-blue)]"
+              data-testid="select-song"
+            >
+              <option value="">All songs in album</option>
+              {[...albumFull.songs]
+                .sort((a, b) => a.trackNumber - b.trackNumber)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.trackNumber}. {s.title}
+                  </option>
+                ))}
+            </select>
+          )}
         </div>
 
         {jobType === "auto-sync-lyrics" && (
