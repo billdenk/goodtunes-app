@@ -1695,3 +1695,67 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
 });
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;
 export type AdminInvite = typeof adminInvites.$inferSelect;
+
+// ─── Task #128 — Printable GoodDeed certificates ───────────────────────
+// One row per paid order that carries a `signed_cert` add-on. The fan
+// confirms the name on their printed certificate before we'll cut the
+// PDF; the admin print queue locks the row, batches the PDFs into a
+// ZIP/merged file, then flips it to `printed` after download. The QR on
+// every certificate encodes a per-deed short URL — `shortId` is the
+// path component, public (signed-out fans can hit it), and is the
+// primary join key for the provenance view.
+//
+// State machine for `nameStatus`:
+//   awaiting          ← created on `orders/paid` (or backfilled)
+//   confirmed         ← fan picked + confirmed the name in /orders
+//   locked_for_print  ← admin added it to a print batch (no more fan edits)
+//   printed           ← batch was downloaded by admin
+//
+// `paperSize` is letter for US/CA/MX shipping addresses, A4 otherwise.
+// Admin can override (`paperSizeOverridden = true`) without un-locking.
+export const signedCertCertificates = pgTable("signed_cert_certificates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }).unique(),
+  shortId: varchar("short_id").notNull().unique(),
+  nameStatus: text("name_status").notNull().default("awaiting"),
+  confirmedIdentityKind: text("confirmed_identity_kind"),
+  confirmedName: text("confirmed_name"),
+  paperSize: text("paper_size").notNull().default("letter"),
+  paperSizeOverridden: boolean("paper_size_overridden").notNull().default(false),
+  printBatchId: varchar("print_batch_id"),
+  lockedAt: timestamp("locked_at"),
+  printedAt: timestamp("printed_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SignedCertCertificate = typeof signedCertCertificates.$inferSelect;
+
+// One row per ZIP/merged-PDF batch the admin downloads from the print
+// queue. We snapshot the format + count so the admin "Print history"
+// list (future) doesn't have to recount via join.
+export const certPrintBatches = pgTable("cert_print_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  format: text("format").notNull(), // "zip" | "merged_pdf"
+  certCount: integer("cert_count").notNull(),
+  downloadedByAdminId: varchar("downloaded_by_admin_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CertPrintBatch = typeof certPrintBatches.$inferSelect;
+
+// Audit trail for name edits. Both fans (re-picking before lock) and
+// admins (override after lock) create entries. Lets us answer "who
+// changed the name on this certificate" without an event log.
+export const certNameAudits = pgTable("cert_name_audits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  certId: varchar("cert_id").notNull().references(() => signedCertCertificates.id, { onDelete: "cascade" }),
+  changedByKind: text("changed_by_kind").notNull(), // "fan" | "admin"
+  changedByUserId: varchar("changed_by_user_id"),
+  fromIdentityKind: text("from_identity_kind"),
+  fromName: text("from_name"),
+  toIdentityKind: text("to_identity_kind").notNull(),
+  toName: text("to_name").notNull(),
+  at: timestamp("at").defaultNow().notNull(),
+});

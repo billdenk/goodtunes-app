@@ -41,6 +41,8 @@ import { AdminFulfillmentPartner } from "@/pages/AdminFulfillmentPartner";
 import { Welcome } from "@/pages/Welcome";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
+import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
+import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
 import AcceptInvite from "@/pages/AcceptInvite";
@@ -158,6 +160,13 @@ function Router() {
         <Route path="/admin/customers">
           <ProtectedRoute component={AdminCustomers} />
         </Route>
+        {/* Task #128 — Printable GoodDeed certificate print queue. */}
+        <Route path="/admin/print-queue">
+          <ProtectedRoute component={AdminPrintQueue} />
+        </Route>
+        {/* Task #128 — Public per-deed provenance page (QR target).
+            No auth — the short id is the secret. */}
+        <Route path="/g/:shortId" component={CertProvenance} />
         <Route path="/admin/security">
           <ProtectedRoute component={AdminSecurity} />
         </Route>

@@ -219,6 +219,13 @@ export function AdminOrders() {
             <p className="text-slate-500 text-[13px]">Physical fulfillment + refund tracking.</p>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/admin/print-queue"
+              className="h-8 px-3 rounded-md border border-slate-200 bg-white text-slate-700 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
+              data-testid="link-print-queue"
+            >
+              Print queue
+            </Link>
             <button
               type="button"
               onClick={() => setShowSettings((v) => !v)}

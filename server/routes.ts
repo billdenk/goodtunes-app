@@ -9533,6 +9533,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerGiftRoutes } = await import("./gifts");
   registerGiftRoutes(app);
 
+  // Task #128 — Printable GoodDeed certificates. Mounts the public
+  // /g/:shortId provenance endpoint, the fan name-confirmation routes,
+  // and the admin print queue + batch download. Also runs a one-shot
+  // backfill so every existing paid signed_cert order has a row in
+  // `awaiting` ready for the fan to confirm.
+  const { registerCertificateRoutes, backfillCertificates } = await import("./certificates");
+  registerCertificateRoutes(app);
+  setTimeout(() => {
+    backfillCertificates().catch((e) => console.error("[certificates] backfill failed", e?.message));
+  }, 5_000);
+
   // ─── Task #48 — Stripe Connect payouts ─────────────────────────
   const { registerPayoutRoutes } = await import("./payouts");
   registerPayoutRoutes(app);

@@ -923,15 +923,25 @@ export function registerCommerceRoutes(app: Express) {
       ? await db.select().from(gifts).where(inArray(gifts.orderId, orderIds))
       : [];
     const giftByOrder = new Map(giftRows.map((g) => [g.orderId, g]));
+    // Task #128 — also surface the signed_cert certificate row so the
+    // fan-side Orders page can render the name-confirmation card without
+    // a second roundtrip.
+    const { signedCertCertificates } = await import("@shared/schema");
+    const certRows = orderIds.length > 0
+      ? await db.select().from(signedCertCertificates).where(inArray(signedCertCertificates.orderId, orderIds))
+      : [];
+    const certByOrder = new Map(certRows.map((c) => [c.orderId, c]));
     // Flat shape matches client/src/pages/Orders.tsx OrderRow.
     const out = await Promise.all(
       rows.map(async (r) => {
         const g = giftByOrder.get(r.order.id);
+        const cert = certByOrder.get(r.order.id) ?? null;
         return {
           ...r.order,
           albumTitle: r.album.title,
           albumArtist: r.album.artist,
           albumArtwork: r.album.artwork,
+          cert,
           items: await getOrderItems(r.order.id),
           gift: g
             ? {
@@ -1197,6 +1207,17 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
         .update(albumSkus)
         .set({ stock: sql`GREATEST(${albumSkus.stock} - 1, 0)` })
         .where(and(eq(albumSkus.albumId, albumId), eq(albumSkus.format, skuFormat), sql`${albumSkus.stock} IS NOT NULL`));
+    }
+
+    // Task #128 — if this order carries a signed_cert add-on, mint
+    // (idempotent) the certificate row that drives the fan's name-
+    // confirmation card and the admin print queue. Paper size is
+    // inferred from the shipping country at this point.
+    try {
+      const { ensureCertificateForOrder } = await import("./certificates");
+      await ensureCertificateForOrder(order.id);
+    } catch (e: any) {
+      console.error(`[commerce] cert row mint failed for ${order.id}`, e?.message);
     }
 
     // Task #73 — physical order → hand off to Order Desk and patch the

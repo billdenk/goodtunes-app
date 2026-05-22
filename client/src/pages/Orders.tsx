@@ -14,8 +14,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Check, Truck, Package, MapPin, ExternalLink } from "lucide-react";
+import { Check, Truck, Package, MapPin, ExternalLink, Award } from "lucide-react";
 import type { StripeAddressSnapshot } from "@shared/schema";
+import { useAuth } from "@/hooks/useAuth";
 
 // Task #46 — gift block on each row exposes the buyer's self-serve
 // gifting controls (copy share link, resend, change recipient within
@@ -37,6 +38,15 @@ type GiftInfo = {
   isBuyer: boolean;
 };
 
+type CertInfo = {
+  id: string;
+  shortId: string;
+  nameStatus: "awaiting" | "confirmed" | "locked_for_print" | "printed";
+  confirmedIdentityKind: "display" | "username" | "real" | null;
+  confirmedName: string | null;
+  paperSize: "letter" | "a4";
+};
+
 type OrderRow = {
   id: string;
   albumId: string;
@@ -46,6 +56,7 @@ type OrderRow = {
   status: string;
   totalCents: number;
   goodDeedNumber: number | null;
+  cert?: CertInfo | null;
   shippedAt: string | null;
   refundedAt: string | null;
   createdAt: string;
@@ -312,6 +323,10 @@ export function Orders() {
                   <span aria-hidden className="text-white/35">›</span>
                 </button>
 
+                {o.cert && (
+                  <CertConfirmationCard order={o} cert={o.cert} />
+                )}
+
                 {g && g.isBuyer && (
                   <div className="mt-3 pt-3 border-t border-white/10" data-testid={`gift-controls-${o.id}`}>
                     <div className="text-[12px] text-white/65 leading-snug">
@@ -371,6 +386,206 @@ export function Orders() {
 
       <OrderDetailSheet order={openOrder} onClose={() => setOpenOrderId(null)} />
     </main>
+  );
+}
+
+// ─────────────────────── Cert confirmation card ───────────────────────
+// Task #128 — renders inside each order row that has a signed_cert
+// add-on. Walks the fan through picking the name they want on the
+// printed certificate (display / @username / real) using the same
+// identity-picker logic as the digital share sheet, then flips the row
+// to `confirmed` so the admin print queue can batch it.
+function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [showPicker, setShowPicker] = useState(false);
+  const [showRealNameInput, setShowRealNameInput] = useState(false);
+  const [realNameDraft, setRealNameDraft] = useState("");
+  const updateProfile = useMutation({
+    mutationFn: async (body: { realName: string }) => {
+      const r = await apiRequest("PATCH", "/api/me", body);
+      return r.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/me"] }),
+  });
+  const confirm = useMutation({
+    mutationFn: async (identityKind: "display" | "username" | "real") => {
+      const r = await apiRequest("POST", `/api/orders/${order.id}/cert/confirm`, { identityKind });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Name confirmed", description: "Your certificate is queued for printing." });
+      setShowPicker(false);
+    },
+    onError: (e: any) => toast({ title: "Couldn't confirm", description: e?.message, variant: "destructive" }),
+  });
+
+  const locked = cert.nameStatus === "locked_for_print" || cert.nameStatus === "printed";
+  const confirmed = cert.nameStatus === "confirmed" || locked;
+
+  async function pickIdentity(kind: "display" | "username" | "real") {
+    if (kind === "real" && !user?.realName) {
+      setShowRealNameInput(true);
+      return;
+    }
+    confirm.mutate(kind);
+  }
+
+  async function saveRealName() {
+    const v = realNameDraft.trim();
+    if (!v) return;
+    await updateProfile.mutateAsync({ realName: v });
+    confirm.mutate("real");
+  }
+
+  return (
+    <div
+      className="mt-3 pt-3 border-t border-white/10"
+      data-testid={`cert-card-${order.id}`}
+    >
+      <div className="flex items-start gap-3">
+        <Award className="w-5 h-5 text-[#4AFFCA] mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold text-white">
+            Printed GoodDeed certificate
+          </div>
+          {confirmed ? (
+            <>
+              <div className="text-[12px] text-white/65 mt-0.5">
+                Name to print:{" "}
+                <span className="text-white font-medium" data-testid={`cert-name-${order.id}`}>
+                  {cert.confirmedName}
+                </span>
+              </div>
+              <div className="text-[11px] text-white/45 mt-0.5">
+                {locked
+                  ? cert.nameStatus === "printed"
+                    ? "Printed and on its way."
+                    : "Locked for the next print run."
+                  : `Paper: ${cert.paperSize === "a4" ? "A4" : "US Letter"} · You can change the name until it's locked for printing.`}
+              </div>
+              {!locked && !showPicker && (
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="mt-2 text-[12px] text-[#319ED8] font-semibold active:opacity-70"
+                  data-testid={`button-cert-change-${order.id}`}
+                >
+                  Change name
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="text-[12px] text-white/65 mt-0.5">
+                Confirm the name to print on your certificate before it goes to print.
+              </div>
+              {!showPicker && (
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="mt-2 inline-flex items-center px-3 py-1.5 rounded-full bg-[#4AFFCA] text-[#00062B] text-[12px] font-semibold active:opacity-80"
+                  data-testid={`button-cert-confirm-${order.id}`}
+                >
+                  Confirm name
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {showPicker && !locked && user && (
+        <div className="mt-3 flex flex-col gap-2" data-testid={`cert-picker-${order.id}`}>
+          <IdentityOption
+            label="Display name"
+            value={user.displayName}
+            selected={cert.confirmedIdentityKind === "display"}
+            onClick={() => pickIdentity("display")}
+            testId={`cert-pick-display-${order.id}`}
+          />
+          <IdentityOption
+            label="Username"
+            value={`@${user.username}`}
+            selected={cert.confirmedIdentityKind === "username"}
+            onClick={() => pickIdentity("username")}
+            testId={`cert-pick-username-${order.id}`}
+          />
+          {showRealNameInput ? (
+            <div className="flex flex-col gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
+              <label className="text-[11px] text-white/55 uppercase tracking-wider">Your real name</label>
+              <input
+                type="text"
+                value={realNameDraft}
+                onChange={(e) => setRealNameDraft(e.target.value)}
+                placeholder="e.g. Jane Doe"
+                className="bg-white/10 text-white text-[14px] rounded-lg px-3 py-2 outline-none focus:bg-white/15"
+                data-testid={`cert-real-input-${order.id}`}
+              />
+              <button
+                type="button"
+                onClick={saveRealName}
+                disabled={!realNameDraft.trim() || confirm.isPending}
+                className="mt-1 px-3 py-1.5 rounded-full bg-[#4AFFCA] text-[#00062B] text-[12px] font-semibold disabled:opacity-50"
+                data-testid={`cert-real-save-${order.id}`}
+              >
+                Save and use real name
+              </button>
+            </div>
+          ) : (
+            <IdentityOption
+              label="Real name"
+              value={user.realName || "Add real name…"}
+              selected={cert.confirmedIdentityKind === "real" && !!user.realName}
+              ghost={!user.realName}
+              onClick={() => pickIdentity("real")}
+              testId={`cert-pick-real-${order.id}`}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => { setShowPicker(false); setShowRealNameInput(false); }}
+            className="text-[12px] text-white/45 self-start mt-1 active:opacity-70"
+            data-testid={`cert-picker-cancel-${order.id}`}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IdentityOption({
+  label, value, selected, onClick, testId, ghost,
+}: {
+  label: string;
+  value: string;
+  selected: boolean;
+  onClick: () => void;
+  testId: string;
+  ghost?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-left border transition-colors active:opacity-80 ${
+        selected
+          ? "border-[#4AFFCA] bg-[#4AFFCA]/10"
+          : "border-white/10 bg-white/5 hover:bg-white/10"
+      }`}
+      data-testid={testId}
+    >
+      <div className="flex flex-col min-w-0">
+        <span className="text-[11px] uppercase tracking-wider text-white/45">{label}</span>
+        <span className={`text-[14px] font-medium truncate ${ghost ? "text-white/45 italic" : "text-white"}`}>
+          {value}
+        </span>
+      </div>
+      {selected && <Check className="w-4 h-4 text-[#4AFFCA] flex-shrink-0" />}
+    </button>
   );
 }
 
