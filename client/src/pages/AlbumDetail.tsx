@@ -659,6 +659,27 @@ function AlbumDetailMobile() {
               </svg>
               Play
             </button>
+            {/* Buy CTA — visible only when the fan doesn't already own a copy
+                (Collection = ownership). Sits to the right of Play, same
+                height, label shows the album's real price from
+                `albums.price_cents`. Falls back to a label-only "Buy" if
+                price is unset (back-catalog / non-GoodTunes rows). */}
+            {ownedNums.length === 0 && (album as any).priceCents != null && (
+              <button
+                type="button"
+                onClick={() => setShowBuySheet(true)}
+                className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0"
+                style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                data-testid="button-open-buy-sheet"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="21" r="1" />
+                  <circle cx="20" cy="21" r="1" />
+                  <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+                </svg>
+                Buy ${(((album as any).priceCents as number) / 100).toFixed(2)}
+              </button>
+            )}
             {nativeDownloadsEnabled && (() => {
               const allDownloaded = songs.length > 0 && songs.every((s) => downloadedSongs.has(s.id));
               return (
@@ -694,27 +715,6 @@ function AlbumDetailMobile() {
                 </button>
               );
             })()}
-          </div>
-
-          {/* Buy this album — Task #44. Sits below the play/shuffle row
-              and above the tracklist; opens the Buy bottom sheet
-              (format picker → signed-cert toggle → embedded Stripe
-              Checkout inside GoodTunes). */}
-          <div className="px-5 mt-2 mb-4 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setShowBuySheet(true)}
-              className="inline-flex items-center gap-2 h-11 px-5 rounded-full text-[14px] font-semibold text-white active:scale-[0.98] transition-transform"
-              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
-              data-testid="button-open-buy-sheet"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="9" cy="21" r="1" />
-                <circle cx="20" cy="21" r="1" />
-                <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
-              </svg>
-              Buy this album
-            </button>
           </div>
 
           {/* Tracks */}
