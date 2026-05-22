@@ -14,6 +14,7 @@ import {
   BarChart3,
   Activity,
   DollarSign,
+  LayoutDashboard,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
  * set their own focus keys.
  */
 export type EntityKey =
+  | "dashboard"
   | "albums"
   | "people"
   | "gear"
@@ -145,7 +147,7 @@ export function AdminFrame({
             from sidebar → main → preview pane. */}
         <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
           <Link
-            href="/admin/albums"
+            href="/admin/dashboard"
             className="flex items-center"
             data-testid="link-admin-home"
           >
@@ -153,6 +155,17 @@ export function AdminFrame({
           </Link>
         </div>
         <nav className="flex-1 px-2 pt-2 space-y-0.5 border-r border-slate-200" data-testid="nav-admin-entities">
+            {/* Task #140 — Dashboard sits above Albums as the admin's
+                at-a-glance home. No count (it's a surface, not a CRUD
+                list) so we pass -1 to suppress the badge. */}
+            <SidebarLink
+              icon={LayoutDashboard}
+              label="Dashboard"
+              count={-1}
+              active={active === "dashboard"}
+              onClick={() => navigate("/admin/dashboard")}
+              testId="nav-dashboard"
+            />
             <SidebarLink
               icon={Disc3}
               label="Albums"

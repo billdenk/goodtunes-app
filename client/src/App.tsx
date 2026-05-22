@@ -55,6 +55,7 @@ import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
+import { AdminDashboard } from "@/pages/AdminDashboard";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -294,8 +295,13 @@ function Router() {
         <Route path="/admin/classic">
           <ProtectedRoute component={Admin} />
         </Route>
+        {/* Task #140 — Stripe-style admin dashboard is the new /admin
+            landing. Albums stays one click away in the sidebar. */}
+        <Route path="/admin/dashboard">
+          <ProtectedRoute component={AdminDashboard} />
+        </Route>
         <Route path="/admin">
-          <Redirect to="/admin/albums" />
+          <Redirect to="/admin/dashboard" />
         </Route>
         <Route path="/">
           {user ? <Redirect to="/admin" /> : <Redirect to="/login" />}
