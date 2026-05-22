@@ -9759,14 +9759,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(info ?? { role: "super_admin", roleScopeId: null });
   });
 
-  // List pending invites (super-admin only).
+  // List pending invites (super-admin only). For scoped roles
+  // (artist/label/manufacturer/fulfillment) we hydrate the scope
+  // entity's name + thumbnail so the row can render "Artist · Garry
+  // Tallent" without the client doing a second fetch per row.
   app.get("/api/admin/invites", requireAdmin, requireRole("super_admin"), async (_req, res) => {
     const rows = await storage.listPendingAdminInvites();
+    const need = (kind: string) =>
+      Array.from(new Set(rows.filter((r) => r.role === kind && r.roleScopeId).map((r) => r.roleScopeId!)));
+    const [peopleNeeded, labelsNeeded, mfgNeeded, ffNeeded] = [
+      need("artist"), need("label"), need("manufacturer"), need("fulfillment"),
+    ];
+    const [people, labels, mfgs, ffs] = await Promise.all([
+      peopleNeeded.length ? Promise.all(peopleNeeded.map((id) => storage.getPersonById(id))) : [],
+      labelsNeeded.length ? Promise.all(labelsNeeded.map((id) => storage.getLabelById(id))) : [],
+      mfgNeeded.length ? Promise.all(mfgNeeded.map((id) => storage.getManufacturerById(id))) : [],
+      ffNeeded.length ? Promise.all(ffNeeded.map((id) => storage.getFulfillmentPartnerById(id))) : [],
+    ]);
+    const idx = (arr: any[]) => new Map(arr.filter(Boolean).map((r: any) => [r.id, r]));
+    const peopleIdx = idx(people), labelsIdx = idx(labels), mfgIdx = idx(mfgs), ffIdx = idx(ffs);
+    function scopeMeta(role: string, scopeId: string | null) {
+      if (!scopeId) return { scopeName: null as string | null, scopeThumbUrl: null as string | null };
+      let row: any = null;
+      if (role === "artist") row = peopleIdx.get(scopeId);
+      else if (role === "label") row = labelsIdx.get(scopeId);
+      else if (role === "manufacturer") row = mfgIdx.get(scopeId);
+      else if (role === "fulfillment") row = ffIdx.get(scopeId);
+      if (!row) return { scopeName: null, scopeThumbUrl: null };
+      return {
+        scopeName: row.name ?? null,
+        scopeThumbUrl: row.photoUrl ?? row.logoUrl ?? null,
+      };
+    }
     res.json(rows.map((r) => ({
       id: r.id,
       email: r.email,
       role: r.role,
       roleScopeId: r.roleScopeId,
+      ...scopeMeta(r.role, r.roleScopeId),
       expiresAt: r.expiresAt,
       createdAt: r.createdAt,
     })));
@@ -9776,11 +9806,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/invites", requireAdmin, requireRole("super_admin"), async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const role = String(req.body?.role || "").trim();
-    const roleScopeId = req.body?.roleScopeId ? String(req.body.roleScopeId) : null;
+    let roleScopeId = req.body?.roleScopeId ? String(req.body.roleScopeId) : null;
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
     if (!ADMIN_ROLES.includes(role as any)) {
       return res.status(400).json({ message: "Pick a role" });
+    }
+    // Roles that bind to a specific entity: validate the scope id
+    // exists in the matching table. Unscoped roles ignore the field
+    // entirely (we null it out so a stray client value can't get
+    // persisted and confuse later code paths).
+    const SCOPED_ROLES: Record<string, () => Promise<any>> = {
+      artist: () => storage.getPersonById(roleScopeId!),
+      label: () => storage.getLabelById(roleScopeId!),
+      manufacturer: () => storage.getManufacturerById(roleScopeId!),
+      fulfillment: () => storage.getFulfillmentPartnerById(roleScopeId!),
+    };
+    const SCOPE_LABEL: Record<string, string> = {
+      artist: "an artist",
+      label: "a label",
+      manufacturer: "a manufacturer",
+      fulfillment: "a fulfillment partner",
+    };
+    if (SCOPED_ROLES[role]) {
+      if (!roleScopeId) {
+        return res.status(400).json({ message: `Pick ${SCOPE_LABEL[role]} for this invite` });
+      }
+      const exists = await SCOPED_ROLES[role]();
+      if (!exists) {
+        return res.status(400).json({ message: `That ${role} doesn't exist anymore — pick another.` });
+      }
+    } else {
+      roleScopeId = null;
     }
     const existing = await storage.getUserByEmail(email);
     if (existing) return res.status(400).json({ message: "An admin with that email already exists" });
@@ -9879,6 +9936,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ]);
     if (byEmail) return res.status(400).json({ message: "An admin with that email already exists — sign in instead" });
     if (byUsername) return res.status(400).json({ message: `Username "@${usernameNorm}" is already taken` });
+
+    // Re-validate the scoped entity still exists. We already checked at
+    // invite-create time, but the operator could have deleted the
+    // Person/Label/Manufacturer/FulfillmentPartner row in the days
+    // between sending and accepting — without this check we'd happily
+    // mint an admin pointing at a dead scope id and they'd hit a blank
+    // dashboard on first login. 410 + a clear message so the super-admin
+    // knows to re-issue.
+    if (invite.roleScopeId) {
+      const stillExists: Record<string, () => Promise<any>> = {
+        artist: () => storage.getPersonById(invite.roleScopeId!),
+        label: () => storage.getLabelById(invite.roleScopeId!),
+        manufacturer: () => storage.getManufacturerById(invite.roleScopeId!),
+        fulfillment: () => storage.getFulfillmentPartnerById(invite.roleScopeId!),
+      };
+      const checker = stillExists[invite.role];
+      if (checker) {
+        const row = await checker();
+        if (!row) {
+          return res.status(410).json({
+            message: "The artist/label this invite was for has been removed. Ask for a new invite.",
+          });
+        }
+      }
+    }
 
     const hashed = await hashPassword(String(password));
     const user = await storage.createUser({
