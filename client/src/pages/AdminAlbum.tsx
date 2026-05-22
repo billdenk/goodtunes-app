@@ -6553,6 +6553,10 @@ function LyricsEditor({
         lineCount: number;
         wordCount: number;
         song?: { lyrics?: string | null };
+        sourceBytes?: number;
+        transcodedBytes?: number | null;
+        transcodeMs?: number | null;
+        sttMs?: number;
       };
     },
     onSuccess: async (data) => {
@@ -6574,13 +6578,30 @@ function LyricsEditor({
       // has served its purposes and is replaced with a play button."
       // The header swap is automatic once the refetched song has the
       // new syncedLyrics.
+      // Live-test instrumentation (Task #95): when the server reports
+      // transcode + STT timings, append a compact footer so the operator
+      // can sanity-check shrink ratio + wall-clock without tailing logs.
+      const stats: string[] = [];
+      if (typeof data.sourceBytes === "number") {
+        const srcMB = (data.sourceBytes / 1024 / 1024).toFixed(1);
+        if (data.transcodedBytes && data.transcodeMs != null) {
+          const outMB = (data.transcodedBytes / 1024 / 1024).toFixed(2);
+          stats.push(`${srcMB}MB → ${outMB}MB in ${(data.transcodeMs / 1000).toFixed(1)}s`);
+        } else {
+          stats.push(`${srcMB}MB passthrough`);
+        }
+      }
+      if (typeof data.sttMs === "number") {
+        stats.push(`STT ${(data.sttMs / 1000).toFixed(1)}s`);
+      }
+      const base = backfilled
+        ? `${data.lineCount} lines transcribed · review the Words for any STT mishears.`
+        : `${data.lineCount} lines · ${data.wordCount} words aligned`;
       toast({
         title: backfilled
           ? "Lyrics pulled from the master"
           : "Synced with audio",
-        description: backfilled
-          ? `${data.lineCount} lines transcribed · review the Words for any STT mishears.`
-          : `${data.lineCount} lines · ${data.wordCount} words aligned`,
+        description: stats.length ? `${base} · ${stats.join(" · ")}` : base,
       });
     },
     onError: (e: any) =>

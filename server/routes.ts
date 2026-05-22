@@ -6502,12 +6502,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let fileToSendMime = audioMime || "audio/wav";
       let fileToSendExt = `.${srcExt}`;
       const sourceStat = await fsp.stat(sourceTmpPath);
+      const sourceBytes = sourceStat.size;
+      let transcodedBytes: number | null = null;
+      let transcodeMs: number | null = null;
       const needsTranscode =
         sourceStat.size > FA_DIRECT_MAX_BYTES ||
         !FA_PASSTHROUGH_EXTS.has(`.${srcExt}`);
       if (needsTranscode) {
         try {
+          const tStart = Date.now();
           const conv = await transcodeAudioForAlignment(sourceTmpPath);
+          transcodeMs = Date.now() - tStart;
+          transcodedBytes = conv.bytes;
+          // Live sanity-test instrumentation (Task #95): log the shrink
+          // ratio + wall-clock so the operator can confirm long masters
+          // stay well under ElevenLabs's 120s timeout and 150MB ceiling.
+          console.log(
+            `auto-sync transcode: src=${(sourceBytes / 1024 / 1024).toFixed(1)}MB ` +
+            `(.${srcExt}) → opus=${(conv.bytes / 1024 / 1024).toFixed(2)}MB in ${transcodeMs}ms`,
+          );
           // `transcodeAudioForAlignment` best-effort-unlinks its input
           // on success — clear our handle so the finally doesn't double-
           // unlink and surface a noisy ENOENT.
@@ -6538,6 +6551,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), FA_TIMEOUT_MS);
+      const sttStart = Date.now();
+      let sttMs = 0;
       try {
         const form = new FormData();
         const fileBuf = await fsp.readFile(fileToSendPath);
@@ -6576,6 +6591,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
       stt = (await upstream.json()) as typeof stt;
+      sttMs = Date.now() - sttStart;
+      console.log(
+        `auto-sync STT: scribe_v1 finished in ${sttMs}ms ` +
+        `(payload=${(fileBuf.length / 1024 / 1024).toFixed(2)}MB)`,
+      );
     } catch (err: any) {
       if (err?.name === "AbortError") {
         console.error("auto-sync: ElevenLabs STT timed out");
@@ -6738,6 +6758,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       wordCount: words.length,
       hallucinatedCuesDropped: droppedCount,
       transcript: stt.text ?? "",
+      // Live-test instrumentation (Task #95) — lets the operator confirm
+      // shrink ratio + timing against ElevenLabs's 150MB / 120s limits
+      // without tailing the server log.
+      sourceBytes,
+      transcodedBytes,
+      transcodeMs,
+      sttMs,
     });
     } finally {
       // Always clean up both tempfiles — source download and the
