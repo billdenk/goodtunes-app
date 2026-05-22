@@ -5667,6 +5667,214 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // PER-TRACK credits importer — operator pastes a Dropbox link from the
+  // track's Credits panel "From Dropbox link" menu. We fetch the file
+  // (or, for a folder share, pick the single file whose basename best
+  // matches the song title), extract text + run the same credits LLM,
+  // and return parsed writer/performer rows pre-matched against the
+  // People table. NOTHING is saved here — the panel renders the rows in
+  // a review dialog and POSTs the kept ones via the existing
+  // /api/admin/songs/:id/writers and /performers endpoints.
+  app.post(
+    "/api/admin/songs/:id/import-credits-from-dropbox",
+    requireAdminBearer,
+    async (req, res) => {
+      const startedAt = new Date();
+      const songId = String(req.params.id);
+      const logRun = async (
+        status: "success" | "partial" | "failed",
+        summary: any,
+        errorMessage: string | null,
+      ) => {
+        try {
+          await storage.recordJobRun({
+            jobType: "import-track-credits-from-dropbox",
+            albumId: null,
+            songId,
+            status,
+            summary,
+            errorMessage,
+            startedAt,
+          });
+        } catch (logErr) {
+          console.error("[track-credits-dropbox] failed to record job run", logErr);
+        }
+      };
+      try {
+        const song = await storage.getSongById(songId);
+        if (!song) {
+          await logRun("failed", null, "Song not found.");
+          return res.status(404).json({ message: "Song not found." });
+        }
+        const dropboxUrl = String(req.body?.dropboxUrl || "").trim();
+        if (!dropboxUrl) {
+          await logRun("failed", null, "Missing Dropbox link.");
+          return res.status(400).json({ message: "Paste a Dropbox link." });
+        }
+
+        const dropboxHelpers = await import("./lib/dropboxCreditsImport");
+        const credits = await import("./lib/credits");
+
+        // SSRF / host validation up front so a bad URL fails fast with a
+        // clear message instead of bombing out inside the fetcher.
+        try {
+          dropboxHelpers.normalizeDropboxDownloadUrl(dropboxUrl);
+        } catch (urlErr: any) {
+          await logRun("failed", null, urlErr?.message || "Invalid Dropbox link.");
+          return res.status(400).json({ message: urlErr?.message || "Invalid Dropbox link." });
+        }
+
+        const CREDIT_EXTENSIONS = new Set([".pdf", ".docx", ".doc", ".txt", ".md"]);
+
+        let buf: Buffer;
+        let filename: string;
+        let pickedReason: "single-file" | "exact" | "substring" = "single-file";
+
+        if (dropboxHelpers.isDropboxFolderUrl(dropboxUrl)) {
+          // Folder share: list, pick the single best-matching file by
+          // basename vs. the song title. Refuse rather than guess on
+          // ambiguity so the wrong song's credits don't get attributed.
+          const { entries: tmpEntries, cleanup } = await streamDropboxEntries(
+            dropboxUrl,
+            (name) => CREDIT_EXTENSIONS.has(extOf(name)),
+          );
+          try {
+            if (tmpEntries.length === 0) {
+              const msg = "No PDF, Word, .txt, or .md files in that folder.";
+              await logRun("failed", { fileCount: 0 }, msg);
+              return res.status(400).json({ message: msg });
+            }
+            const match = dropboxHelpers.pickBestFilenameMatch(song.title, tmpEntries);
+            if (match.kind === "none") {
+              const msg = `No file in that folder matches "${song.title}". Rename a file to the song title and retry.`;
+              await logRun("failed", {
+                fileCount: tmpEntries.length,
+                candidates: tmpEntries.map((e) => e.filename),
+              }, msg);
+              return res.status(400).json({ message: msg });
+            }
+            if (match.kind === "ambiguous") {
+              const names = match.candidates.map((c) => `"${c.filename}"`).join(", ");
+              const msg = `Multiple files could match "${song.title}": ${names}. Rename to disambiguate.`;
+              await logRun("failed", {
+                fileCount: tmpEntries.length,
+                ambiguous: match.candidates.map((c) => c.filename),
+              }, msg);
+              return res.status(400).json({ message: msg });
+            }
+            pickedReason = match.kind;
+            const fsp = await import("node:fs/promises");
+            buf = await fsp.readFile(match.hit.tmpPath);
+            filename = match.hit.filename;
+          } finally {
+            await cleanup();
+          }
+        } else {
+          // Single-file share. fetchDropboxFileBytes does its own
+          // normalization + SSRF guard + 25 MB cap.
+          const got = await fetchDropboxFileBytes(dropboxUrl);
+          buf = got.buf;
+          filename = got.filename;
+        }
+
+        const format = credits.detectCreditsFormat(filename);
+        if (!format) {
+          const msg = `Unsupported file type for "${filename}". Use PDF, .docx, .txt, or .md.`;
+          await logRun("failed", { filename }, msg);
+          return res.status(400).json({ message: msg });
+        }
+
+        const text = await credits.extractCreditsText(buf, format);
+        if (!text || text.length < 20) {
+          const msg = `Couldn't read any text from "${filename}".`;
+          await logRun("failed", { filename }, msg);
+          return res.status(400).json({ message: msg });
+        }
+
+        const album = await storage.getAlbumById(song.albumId, { includeHidden: true });
+        const openai = await getOpenAI();
+        // Scope the LLM to ONE track title so it returns only this
+        // song's rows. Album context is still passed so "all tracks"
+        // boilerplate doesn't confuse it.
+        const proposal = await credits.proposeCreditsFromText(
+          {
+            text,
+            albumTitle: album?.title ?? "",
+            trackTitles: [song.title],
+          },
+          openai,
+        );
+
+        // Pre-match each proposed person against the People table so
+        // the dialog can render "matched" badges and pre-select the
+        // right personId. Ambiguous matches drop into the picker.
+        const allPeople = await storage.getPeople();
+        const candidates = allPeople.map((p) => ({ id: p.id, name: p.name, photoUrl: p.photoUrl }));
+        const personByTag = new Map(proposal.people.map((p) => [p.tag, p] as const));
+
+        type Row = {
+          kind: "writer" | "performer";
+          name: string;
+          personId: string | null;
+          matchStatus: "exact" | "ambiguous" | "new";
+          role: string;
+          instrumentHint: string | null;
+        };
+        const rows: Row[] = [];
+
+        for (const w of proposal.writers) {
+          const person = personByTag.get(w.personTag);
+          if (!person) continue;
+          const match = credits.matchPersonByName(person.name, candidates);
+          rows.push({
+            kind: "writer",
+            name: person.name,
+            personId: match.status === "exact" && match.candidates.length === 1
+              ? match.candidates[0].id
+              : null,
+            matchStatus: match.status,
+            role: w.role,
+            instrumentHint: null,
+          });
+        }
+        for (const p of proposal.performers) {
+          const person = personByTag.get(p.personTag);
+          if (!person) continue;
+          const match = credits.matchPersonByName(person.name, candidates);
+          rows.push({
+            kind: "performer",
+            name: person.name,
+            personId: match.status === "exact" && match.candidates.length === 1
+              ? match.candidates[0].id
+              : null,
+            matchStatus: match.status,
+            role: p.role,
+            instrumentHint: p.instrumentHint ?? null,
+          });
+        }
+
+        await logRun(rows.length > 0 ? "success" : "partial", {
+          filename,
+          pickedReason,
+          rowCount: rows.length,
+          writers: proposal.writers.length,
+          performers: proposal.performers.length,
+        }, null);
+
+        return res.json({
+          filename,
+          pickedReason,
+          rows,
+        });
+      } catch (err: any) {
+        console.error("[track-credits-dropbox]", err);
+        const msg = err?.message || "Dropbox credits import failed.";
+        await logRun("failed", null, msg);
+        return res.status(400).json({ message: msg });
+      }
+    },
+  );
+
   app.post("/api/admin/albums/:id/import-credits/commit", requireAdminBearer, async (req, res) => {
     try {
       const albumId = String(req.params.id);

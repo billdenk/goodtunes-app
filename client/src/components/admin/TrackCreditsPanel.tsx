@@ -4,18 +4,32 @@ import { Link } from "wouter";
 import { ExpandedPanelHeaderSlotContext } from "@/pages/AdminAlbum";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   Download,
   Pencil,
   Plus,
   Search,
+  Trash2,
   UserPlus,
   X,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/Spinner";
 
 // Per-track Credits panel.
 //
@@ -894,15 +908,508 @@ function Section({
   );
 }
 
-/* ─── Import dropdown (Muso.ai placeholder, more sources later) ───── */
+/* ─── Dropbox credits importer dialog ──────────────────────────────── */
+
+type ParsedRow = {
+  kind: "writer" | "performer";
+  name: string;
+  personId: string | null;
+  matchStatus: "exact" | "ambiguous" | "new";
+  role: string;
+  instrumentHint: string | null;
+};
+
+type EditableRow = ParsedRow & {
+  // Stable local id so React keys stay stable as the operator
+  // edits/removes rows before saving.
+  _key: string;
+  instrumentId: string | null;
+  tuningNotes: string;
+  // What bucket this row will land in once saved (computed from role).
+  bucket: Bucket;
+};
+
+function DropboxCreditsImportDialog({
+  open,
+  onOpenChange,
+  songId,
+  albumId,
+  people,
+  roles,
+  instruments,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  songId: string;
+  albumId: string;
+  people: AdminPersonLite[];
+  roles: AdminCreditRole[];
+  instruments: AdminInstrumentLite[];
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [url, setUrl] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [filename, setFilename] = useState<string | null>(null);
+  const [rows, setRows] = useState<EditableRow[] | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Reset state whenever the dialog closes so opening it again is a
+  // clean slate. Keeps the URL field empty between sessions.
+  useEffect(() => {
+    if (!open) {
+      setUrl("");
+      setParsing(false);
+      setParseError(null);
+      setFilename(null);
+      setRows(null);
+      setSaving(false);
+    }
+  }, [open]);
+
+  const writerRoleNames = useMemo(
+    () => roles.filter((r) => r.kind === "writer").map((r) => r.name),
+    [roles],
+  );
+  const performerRoleNames = useMemo(
+    () => roles.filter((r) => r.kind === "performer").map((r) => r.name),
+    [roles],
+  );
+
+  async function runParse() {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setParsing(true);
+    setParseError(null);
+    setRows(null);
+    setFilename(null);
+    try {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/songs/${songId}/import-credits-from-dropbox`,
+        { dropboxUrl: trimmed },
+      );
+      const data = (await res.json()) as {
+        filename: string;
+        rows: ParsedRow[];
+      };
+      setFilename(data.filename);
+      // Snap each LLM-emitted name to an existing Person when one
+      // matches exactly — the backend already did this, but if a new
+      // role appears for a person whose name spelling is in the People
+      // list we also catch it client-side.
+      const byNameLower = new Map(
+        people.map((p) => [p.name.toLowerCase(), p] as const),
+      );
+      const editable: EditableRow[] = data.rows.map((r, i) => {
+        const localMatch =
+          r.personId == null
+            ? byNameLower.get(r.name.toLowerCase()) ?? null
+            : null;
+        return {
+          ...r,
+          _key: `r${i}`,
+          personId: r.personId ?? localMatch?.id ?? null,
+          matchStatus: localMatch ? "exact" : r.matchStatus,
+          instrumentId: null,
+          tuningNotes: "",
+          bucket: bucketFor(r.kind, r.role),
+        };
+      });
+      setRows(editable);
+      if (editable.length === 0) {
+        setParseError("The AI didn't find any credit rows in that file.");
+      }
+    } catch (e: any) {
+      const raw = e?.message || "Couldn't read that link.";
+      let msg = raw;
+      const m = raw.match(/^\d+:\s*(.+)$/s);
+      if (m) {
+        try {
+          const parsed = JSON.parse(m[1]);
+          if (parsed?.message) msg = String(parsed.message);
+        } catch {
+          msg = m[1];
+        }
+      }
+      setParseError(msg);
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function updateRow(key: string, patch: Partial<EditableRow>) {
+    setRows((prev) =>
+      (prev ?? []).map((r) => {
+        if (r._key !== key) return r;
+        const next = { ...r, ...patch };
+        // Re-bucket if role changed.
+        if (patch.role !== undefined) {
+          next.bucket = bucketFor(next.kind, next.role);
+        }
+        return next;
+      }),
+    );
+  }
+
+  function removeRow(key: string) {
+    setRows((prev) => (prev ?? []).filter((r) => r._key !== key));
+  }
+
+  async function saveAll() {
+    if (!rows || rows.length === 0) return;
+    setSaving(true);
+    const saved: number[] = [];
+    const failed: string[] = [];
+    // Sequential POSTs so the per-bucket `position` count from the
+    // server stays consistent — concurrent inserts would race on
+    // position and reorder rows unpredictably.
+    for (const r of rows) {
+      try {
+        const url =
+          r.kind === "writer"
+            ? `/api/admin/songs/${songId}/writers`
+            : `/api/admin/songs/${songId}/performers`;
+        const body: Record<string, unknown> = {
+          personId: r.personId,
+          name: r.name,
+          role: r.role,
+        };
+        if (r.kind === "performer") {
+          body.instrumentId = r.instrumentId;
+          body.tuningNotes = r.tuningNotes.trim() ? r.tuningNotes.trim() : null;
+        }
+        await apiRequest("POST", url, body);
+        saved.push(1);
+      } catch (e: any) {
+        failed.push(`${r.name} (${r.role}): ${e?.message || "save failed"}`);
+      }
+    }
+    await qc.invalidateQueries({
+      queryKey: ["/api/albums", albumId, "credits"],
+    });
+    setSaving(false);
+    if (failed.length === 0) {
+      toast({
+        title: `Saved ${saved.length} credit${saved.length === 1 ? "" : "s"}`,
+        description: filename ? `Imported from ${filename}` : undefined,
+      });
+      onOpenChange(false);
+    } else {
+      toast({
+        title: `${saved.length} saved · ${failed.length} failed`,
+        description: failed.slice(0, 3).join(" • "),
+        variant: "destructive",
+      });
+    }
+  }
+
+  const rowsByBucket = useMemo(() => {
+    const out: Record<Bucket, EditableRow[]> = {
+      song: [],
+      performance: [],
+      production: [],
+    };
+    for (const r of rows ?? []) out[r.bucket].push(r);
+    return out;
+  }, [rows]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="sm:max-w-2xl max-h-[85vh] overflow-y-auto"
+        data-testid="dialog-import-credits-dropbox"
+      >
+        <DialogHeader>
+          <DialogTitle>Import credits from Dropbox</DialogTitle>
+          <DialogDescription>
+            Paste a Dropbox link to a credits doc (PDF, Word, .txt, .md) or to a
+            folder of per-track docs. For a folder we'll pick the file whose
+            name matches this song's title. Nothing saves until you click{" "}
+            <strong>Save credits</strong> below.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <Label htmlFor="dropbox-credits-url">Dropbox link</Label>
+          <div className="flex gap-2">
+            <Input
+              id="dropbox-credits-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !parsing && url.trim()) {
+                  e.preventDefault();
+                  runParse();
+                }
+              }}
+              placeholder="https://www.dropbox.com/…"
+              disabled={parsing || saving}
+              data-testid="input-dropbox-credits-url"
+            />
+            <Button
+              type="button"
+              onClick={runParse}
+              disabled={parsing || saving || !url.trim()}
+              data-testid="button-parse-dropbox-credits"
+            >
+              {parsing ? <Spinner className="h-4 w-4" /> : "Read"}
+            </Button>
+          </div>
+          {filename && !parsing && (
+            <p
+              className="text-[12px] text-slate-500"
+              data-testid="text-dropbox-credits-filename"
+            >
+              Reading <span className="font-medium text-slate-700">{filename}</span>
+            </p>
+          )}
+          {parseError && (
+            <div
+              className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700"
+              role="alert"
+              data-testid="text-dropbox-credits-error"
+            >
+              <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+              <span>{parseError}</span>
+            </div>
+          )}
+        </div>
+
+        {rows && rows.length > 0 && (
+          <div className="space-y-4">
+            {(["song", "performance", "production"] as Bucket[]).map((b) => {
+              const bucketRows = rowsByBucket[b];
+              if (bucketRows.length === 0) return null;
+              const optionsForBucket = roles
+                .filter((r) => bucketFor(r.kind, r.name) === b)
+                .map((r) => r.name);
+              return (
+                <section
+                  key={b}
+                  data-testid={`dropbox-credits-bucket-${b}`}
+                  className="rounded-md border border-slate-200 bg-slate-50/50"
+                >
+                  <header className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    {BUCKET_TITLE[b]} ({bucketRows.length})
+                  </header>
+                  <ul className="divide-y divide-slate-200">
+                    {bucketRows.map((r) => (
+                      <DropboxRowEditor
+                        key={r._key}
+                        row={r}
+                        people={people}
+                        instruments={instruments}
+                        roleOptions={
+                          optionsForBucket.length > 0
+                            ? optionsForBucket
+                            : r.kind === "writer"
+                              ? writerRoleNames
+                              : performerRoleNames
+                        }
+                        onChange={(patch) => updateRow(r._key, patch)}
+                        onRemove={() => removeRow(r._key)}
+                        disabled={saving}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+            data-testid="button-cancel-import-dropbox"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={saveAll}
+            disabled={saving || !rows || rows.length === 0}
+            data-testid="button-save-import-dropbox"
+          >
+            {saving ? (
+              <span className="inline-flex items-center gap-2">
+                <Spinner className="h-4 w-4" /> Saving…
+              </span>
+            ) : (
+              `Save ${rows?.length ?? 0} credit${(rows?.length ?? 0) === 1 ? "" : "s"}`
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DropboxRowEditor({
+  row,
+  people,
+  instruments,
+  roleOptions,
+  onChange,
+  onRemove,
+  disabled,
+}: {
+  row: EditableRow;
+  people: AdminPersonLite[];
+  instruments: AdminInstrumentLite[];
+  roleOptions: string[];
+  onChange: (patch: Partial<EditableRow>) => void;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
+  // Person picker is a datalist-backed input: typing snaps to an
+  // existing Person when the spelling matches, otherwise the name is
+  // stored verbatim and the backend creates it as a guest credit.
+  const matchedPerson = row.personId
+    ? people.find((p) => p.id === row.personId) ?? null
+    : null;
+
+  function onNameChange(next: string) {
+    const hit = people.find(
+      (p) => p.name.toLowerCase() === next.trim().toLowerCase(),
+    );
+    onChange({
+      name: next,
+      personId: hit ? hit.id : null,
+      matchStatus: hit ? "exact" : "new",
+    });
+  }
+
+  return (
+    <li
+      className="px-3 py-2.5 grid gap-2 sm:grid-cols-[1fr,140px,auto] items-start"
+      data-testid={`dropbox-credit-row-${row._key}`}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            list={`people-list-${row._key}`}
+            value={row.name}
+            onChange={(e) => onNameChange(e.target.value)}
+            disabled={disabled}
+            placeholder="Person's name"
+            className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12.5px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+            data-testid={`input-credit-name-${row._key}`}
+          />
+          <datalist id={`people-list-${row._key}`}>
+            {people.map((p) => (
+              <option key={p.id} value={p.name} />
+            ))}
+          </datalist>
+        </div>
+        <div className="mt-1 text-[10.5px] leading-tight">
+          {matchedPerson ? (
+            <span className="text-emerald-700">
+              ✓ Matched {matchedPerson.name}
+            </span>
+          ) : row.matchStatus === "ambiguous" ? (
+            <span className="text-amber-700">
+              Multiple matches — confirm or retype
+            </span>
+          ) : (
+            <span className="text-slate-500">
+              Will add as guest "{row.name}"
+            </span>
+          )}
+        </div>
+        {row.kind === "performer" && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <select
+              value={row.instrumentId ?? ""}
+              onChange={(e) =>
+                onChange({ instrumentId: e.target.value || null })
+              }
+              disabled={disabled}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              data-testid={`select-credit-instrument-${row._key}`}
+            >
+              <option value="">
+                {row.instrumentHint
+                  ? `Instrument — hint: ${row.instrumentHint}`
+                  : "Instrument — none on file"}
+              </option>
+              {instruments.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}
+                  {i.category ? ` · ${i.category}` : ""}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={row.tuningNotes}
+              onChange={(e) => onChange({ tuningNotes: e.target.value })}
+              disabled={disabled}
+              placeholder="Tuning / setup (optional)"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              data-testid={`input-credit-tuning-${row._key}`}
+            />
+          </div>
+        )}
+      </div>
+      <select
+        value={row.role}
+        onChange={(e) => onChange({ role: e.target.value })}
+        disabled={disabled}
+        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+        data-testid={`select-credit-role-${row._key}`}
+      >
+        {roleOptions.includes(row.role) ? null : (
+          <option value={row.role}>{row.role}</option>
+        )}
+        {roleOptions.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={disabled}
+        className="h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+        aria-label="Remove this row"
+        data-testid={`button-remove-credit-row-${row._key}`}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </li>
+  );
+}
+
+/* ─── Import dropdown (Dropbox + Muso.ai placeholder) ──────────────── */
 
 /* Renders the Import dropdown INTO the ExpandedPanel header slot (left
    of the chevron), matching the same portal pattern PreviewTrim's Reset
    button uses. Falls back to nothing if rendered outside an
    ExpandedPanel context. */
-function ImportMenu() {
+function ImportMenu({
+  songId,
+  albumId,
+  people,
+  roles,
+  instruments,
+}: {
+  songId: string;
+  albumId: string;
+  people: AdminPersonLite[];
+  roles: AdminCreditRole[];
+  instruments: AdminInstrumentLite[];
+}) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [dropboxOpen, setDropboxOpen] = useState(false);
   const headerSlot = useContext(ExpandedPanelHeaderSlotContext);
 
   useEffect(() => {
@@ -917,42 +1424,66 @@ function ImportMenu() {
 
   if (!headerSlot) return null;
 
-  return createPortal(
-    <div className="relative" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-        data-testid="button-import-credits-menu"
-      >
-        <Download className="h-3.5 w-3.5" />
-        Import
-        <ChevronDown className="h-3 w-3 text-slate-400" />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-md border border-slate-200 bg-white shadow-md py-1">
+  return (
+    <>
+      {createPortal(
+        <div className="relative" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            onClick={() => {
-              setOpen(false);
-              toast({
-                title: "Muso.ai import — coming soon",
-                description:
-                  "Connect a Muso.ai project and pull writers, performers, and aliases.",
-              });
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
             }}
-            className="w-full text-left px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
-            data-testid="button-import-muso"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            data-testid="button-import-credits-menu"
           >
-            From Muso.ai
+            <Download className="h-3.5 w-3.5" />
+            Import
+            <ChevronDown className="h-3 w-3 text-slate-400" />
           </button>
-        </div>
+          {open && (
+            <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-md border border-slate-200 bg-white shadow-md py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setDropboxOpen(true);
+                }}
+                className="w-full text-left px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+                data-testid="button-import-dropbox"
+              >
+                From Dropbox link
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  toast({
+                    title: "Muso.ai import — coming soon",
+                    description:
+                      "Connect a Muso.ai project and pull writers, performers, and aliases.",
+                  });
+                }}
+                className="w-full text-left px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+                data-testid="button-import-muso"
+              >
+                From Muso.ai
+              </button>
+            </div>
+          )}
+        </div>,
+        headerSlot,
       )}
-    </div>,
-    headerSlot,
+      <DropboxCreditsImportDialog
+        open={dropboxOpen}
+        onOpenChange={setDropboxOpen}
+        songId={songId}
+        albumId={albumId}
+        people={people}
+        roles={roles}
+        instruments={instruments}
+      />
+    </>
   );
 }
 
@@ -1033,7 +1564,13 @@ export default function TrackCreditsPanel({
 
   return (
     <div className="px-5 pt-4 pb-4" data-testid={`panel-track-credits-${songId}`}>
-      <ImportMenu />
+      <ImportMenu
+        songId={songId}
+        albumId={albumId}
+        people={people}
+        roles={roles}
+        instruments={instruments}
+      />
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
         <div className="divide-y divide-slate-100">
           {(["song", "performance", "production"] as Bucket[]).map(
