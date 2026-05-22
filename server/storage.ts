@@ -249,6 +249,27 @@ export interface IStorage {
     instrumentPhotoUrl: string | null;
   }>>;
 
+  // Admin-only: every GoodTunes-release track for a person, with a flag
+  // indicating whether this person+instrument is already credited on it.
+  // Mode "credited" filters to tracks where the person already has any
+  // performer credit (any instrument/role); mode "all" returns every
+  // GoodTunes-release track in the catalog as a fallback search.
+  getPersonTracksForInstrument(
+    personId: string,
+    instrumentId: string,
+    mode: "credited" | "all",
+  ): Promise<Array<{
+    songId: string;
+    songTitle: string;
+    trackNumber: number;
+    albumId: string;
+    albumTitle: string;
+    albumArtwork: string;
+    albumYear: number | null;
+    alreadyCreditedHere: boolean;
+    existingRole: string | null;
+  }>>;
+
   // Admin-only: every track the gear flow can attach this person to, plus
   // whatever credits they already have on each. "Assignable" means tracks
   // on albums where this person is the primary artist OR tracks where
@@ -1033,6 +1054,58 @@ export class DbStorage implements IStorage {
       instrumentCategory: r.i?.category ?? null,
       instrumentPhotoUrl: r.i?.photoUrl ?? null,
     }));
+  }
+
+  async getPersonTracksForInstrument(
+    personId: string,
+    instrumentId: string,
+    mode: "credited" | "all",
+  ) {
+    // Pull every existing performer row for this person up front — used
+    // for both the mode='credited' filter and the per-track flags.
+    const personRows = await db
+      .select()
+      .from(trackPerformers)
+      .where(eq(trackPerformers.personId, personId));
+    const songIdsWithCredit = new Set(personRows.map((r) => r.songId));
+
+    if (mode === "credited" && songIdsWithCredit.size === 0) return [];
+
+    const whereExpr =
+      mode === "credited"
+        ? and(
+            eq(albums.isGoodTunesRelease, true),
+            inArray(songs.id, Array.from(songIdsWithCredit)),
+          )
+        : eq(albums.isGoodTunesRelease, true);
+
+    const rows = await db
+      .select({ s: songs, a: albums })
+      .from(songs)
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .where(whereExpr)
+      .orderBy(asc(albums.year), asc(albums.title), asc(songs.trackNumber));
+
+    return rows.map((r) => {
+      const onSong = personRows.filter((p) => p.songId === r.s.id);
+      const alreadyCreditedHere = onSong.some(
+        (p) => p.instrumentId === instrumentId,
+      );
+      // Pick the most-stable role: prefer the first row by `position`.
+      const sortedOnSong = onSong.sort((a, b) => a.position - b.position);
+      const existingRole = sortedOnSong[0]?.role ?? null;
+      return {
+        songId: r.s.id,
+        songTitle: r.s.title,
+        trackNumber: r.s.trackNumber,
+        albumId: r.a.id,
+        albumTitle: r.a.title,
+        albumArtwork: r.a.artwork,
+        albumYear: r.a.year,
+        alreadyCreditedHere,
+        existingRole,
+      };
+    });
   }
 
   async getPersonGearContext(personId: string) {

@@ -8428,6 +8428,79 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!person) return res.status(404).json({ message: "Person not found" });
     return res.json(await storage.getPersonGearContext(id));
   });
+  // Admin-only: GoodTunes-release tracks for a person, with per-track
+  // flags powering the Gear → People credit picker. `mode=credited`
+  // (default) returns only tracks where the person already has any
+  // performer credit; `mode=all` returns every GoodTunes-release track
+  // as a fallback search.
+  app.get("/api/admin/instruments/:id/people-context", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const personId = String(req.query.personId ?? "").trim();
+    const mode = req.query.mode === "all" ? "all" : "credited";
+    if (!personId) return res.status(400).json({ message: "personId is required" });
+    const instrument = await storage.getInstrumentById(id);
+    if (!instrument) return res.status(404).json({ message: "Instrument not found" });
+    const person = await storage.getPersonById(personId);
+    if (!person) return res.status(404).json({ message: "Person not found" });
+    const tracks = await storage.getPersonTracksForInstrument(personId, id, mode);
+    return res.json({ person, tracks });
+  });
+
+  // Admin-only: bulk-create track_performer rows tying a person + this
+  // instrument + a set of GoodTunes-release tracks. Role is copied from
+  // the person's existing credit on each track when present; otherwise
+  // taken from the request body. Duplicates and non-GoodTunes tracks
+  // are silently skipped so the picker can fire and forget.
+  app.post("/api/admin/instruments/:id/credits", requireAdmin, async (req, res) => {
+    const schema = z.object({
+      personId: z.string().min(1).nullable(),
+      name: z.string().min(1),
+      songIds: z.array(z.string().min(1)).min(1),
+      role: z.string().min(1).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid", issues: parsed.error.issues });
+    const instrumentId = String(req.params.id);
+    const inst = await storage.getInstrumentById(instrumentId);
+    if (!inst) return res.status(404).json({ message: "Instrument not found" });
+    const { personId, name, songIds, role: requestedRole } = parsed.data;
+
+    const created: any[] = [];
+    const skipped: Array<{ songId: string; reason: string }> = [];
+    for (const songId of songIds) {
+      const song = await storage.getSongById(songId);
+      if (!song) { skipped.push({ songId, reason: "not_found" }); continue; }
+      const album = await storage.getAlbumById(song.albumId, { includeHidden: true });
+      if (!album?.isGoodTunesRelease) { skipped.push({ songId, reason: "not_goodtunes" }); continue; }
+      const existing = await storage.getSongCredits(songId);
+      const samePersonRows = personId
+        ? existing.performers.filter((p) => p.personId === personId)
+        : [];
+      const dupe = samePersonRows.find(
+        (p) => p.instrumentId === instrumentId && (!requestedRole || p.role === requestedRole),
+      );
+      if (dupe) { skipped.push({ songId, reason: "already_credited" }); continue; }
+      const role = requestedRole ?? samePersonRows[0]?.role ?? null;
+      if (!role) { skipped.push({ songId, reason: "role_required" }); continue; }
+      try {
+        const p = await storage.createTrackPerformer({
+          songId,
+          personId: personId ?? null,
+          instrumentId,
+          name,
+          role,
+          tuningNotes: null,
+          position: existing.performers.length + created.filter((c) => c.songId === songId).length,
+        } as any);
+        created.push(p);
+      } catch (e) {
+        if (isFkViolation(e)) { skipped.push({ songId, reason: "fk_violation" }); continue; }
+        throw e;
+      }
+    }
+    return res.status(201).json({ created, skipped });
+  });
+
   app.get("/api/instruments/:id/profile", async (req, res) => {
     const id = String(req.params.id);
     const instrument = await storage.getInstrumentById(id);

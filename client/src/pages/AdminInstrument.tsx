@@ -16,6 +16,9 @@ import {
   ExternalLink,
   Plus,
   Users,
+  Search,
+  X,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -1028,7 +1031,24 @@ function AddVendorForm({
 
 /* ─── People tab — read-and-pivot view of credited artists ────────── */
 
+type PersonLite = { id: string; name: string; photoUrl?: string | null };
+type CreditRole = { id: string; kind: "writer" | "performer"; name: string };
+type ContextTrack = {
+  songId: string;
+  songTitle: string;
+  trackNumber: number;
+  albumId: string;
+  albumTitle: string;
+  albumArtwork: string;
+  albumYear: number | null;
+  alreadyCreditedHere: boolean;
+  existingRole: string | null;
+};
+
 function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
   // Reuses the existing public profile endpoint — `artists` is already
   // the dedup'd Person list with a per-person `trackCount`. No new
   // server endpoint needed (see Task #17).
@@ -1036,6 +1056,187 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
     queryKey: ["/api/instruments", instrument.id, "profile"],
     enabled: !!instrument.id,
   });
+
+  // Picker state — sits above the list (and above the empty state) so
+  // crediting a person to this gear is always one tap away.
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickedPerson, setPickedPerson] = useState<PersonLite | null>(null);
+  const [allTracksMode, setAllTracksMode] = useState(false);
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [trackSearch, setTrackSearch] = useState("");
+  const [roleChoice, setRoleChoice] = useState<string>("");
+
+  const { data: people = [] } = useQuery<PersonLite[]>({
+    queryKey: ["/api/people"],
+  });
+  const { data: roles = [] } = useQuery<CreditRole[]>({
+    queryKey: ["/api/admin/credit-roles"],
+  });
+  const performerRoles = roles.filter((r) => r.kind === "performer");
+
+  // Tracks for the picked person, filtered by mode.
+  const { data: context, isLoading: contextLoading } = useQuery<{
+    person: PersonLite;
+    tracks: ContextTrack[];
+  }>({
+    queryKey: [
+      "/api/admin/instruments",
+      instrument.id,
+      "people-context",
+      pickedPerson?.id ?? "",
+      allTracksMode ? "all" : "credited",
+    ],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/admin/instruments/${instrument.id}/people-context?personId=${encodeURIComponent(
+          pickedPerson!.id,
+        )}&mode=${allTracksMode ? "all" : "credited"}`,
+        {
+          credentials: "include",
+          headers: getAuthToken()
+            ? { Authorization: `Bearer ${getAuthToken()}` }
+            : undefined,
+        },
+      );
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: !!pickedPerson,
+  });
+
+  // Whether any selected track needs a role chosen (i.e. the person has
+  // no existing performer credit on it). When all picks have a role to
+  // copy, we don't show the role selector at all.
+  const tracks = context?.tracks ?? [];
+  const selectedTracks = tracks.filter((t) => selectedSongIds.has(t.songId));
+  const needsRole = selectedTracks.some((t) => !t.existingRole);
+
+  const createPerson = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/admin/people", { name });
+      return (await res.json()) as PersonLite;
+    },
+    onSuccess: (p) => {
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      setPickedPerson(p);
+      setPickerQuery("");
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't add person",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const addCredit = useMutation({
+    mutationFn: async () => {
+      if (!pickedPerson) throw new Error("Pick a person first");
+      const songIds = Array.from(selectedSongIds);
+      if (songIds.length === 0) throw new Error("Pick at least one track");
+      const body: Record<string, unknown> = {
+        personId: pickedPerson.id,
+        name: pickedPerson.name,
+        songIds,
+      };
+      if (needsRole) {
+        if (!roleChoice) throw new Error("Pick a role");
+        body.role = roleChoice;
+      }
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/instruments/${instrument.id}/credits`,
+        body,
+      );
+      return (await res.json()) as {
+        created: any[];
+        skipped: Array<{ songId: string; reason: string }>;
+      };
+    },
+    onSuccess: (result) => {
+      const n = result.created.length;
+      const dupe = result.skipped.filter(
+        (s) => s.reason === "already_credited",
+      ).length;
+      qc.invalidateQueries({
+        queryKey: ["/api/instruments", instrument.id, "profile"],
+      });
+      qc.invalidateQueries({
+        queryKey: ["/api/admin/instruments", instrument.id, "people-context"],
+      });
+      // Track credits live under ["/api/albums", albumId, "credits"] and
+      // ["/api/songs", songId, "credits"] — invalidate by predicate so
+      // any open credits surface picks up the new rows.
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) && q.queryKey[2] === "credits",
+      });
+      if (n > 0) {
+        toast({
+          title: `Credited ${pickedPerson?.name} on ${n} track${n === 1 ? "" : "s"}`,
+          description:
+            dupe > 0
+              ? `${dupe} already had this gear credited and were skipped.`
+              : undefined,
+        });
+      } else if (dupe > 0) {
+        toast({
+          title: "Already credited",
+          description: `${dupe} track${dupe === 1 ? " was" : "s were"} already credited with this gear.`,
+        });
+      } else {
+        toast({ title: "Nothing to add" });
+      }
+      // Reset selection but keep the picked person so the admin can
+      // continue layering credits without re-searching.
+      setSelectedSongIds(new Set());
+      setRoleChoice("");
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't add credits",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const personMatches = (() => {
+    const q = pickerQuery.trim().toLowerCase();
+    if (!q) return people.slice(0, 6);
+    return people
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 6);
+  })();
+
+  const filteredTracks = (() => {
+    const q = trackSearch.trim().toLowerCase();
+    if (!q) return tracks;
+    return tracks.filter(
+      (t) =>
+        t.songTitle.toLowerCase().includes(q) ||
+        t.albumTitle.toLowerCase().includes(q),
+    );
+  })();
+
+  const toggleSong = (id: string) => {
+    setSelectedSongIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const resetPicker = () => {
+    setPickedPerson(null);
+    setPickerQuery("");
+    setSelectedSongIds(new Set());
+    setTrackSearch("");
+    setRoleChoice("");
+    setAllTracksMode(false);
+  };
 
   if (isLoading) {
     return (
@@ -1061,65 +1262,309 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
 
   const artists = data?.artists ?? [];
 
-  if (artists.length === 0) {
-    return (
-      <div
-        className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center"
-        data-testid="people-panel-empty"
-      >
-        <Users className="w-7 h-7 text-slate-300 mx-auto mb-2" />
-        <p className="text-[13.5px] text-slate-500">
-          No one's been credited on this instrument yet.
-        </p>
-        <p className="text-[11.5px] text-slate-400 mt-1">
-          Credits added on an album's Tracks tab will show up here.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <ul
-      className="rounded-lg border bg-white divide-y divide-slate-100"
-      data-testid="list-instrument-people"
-    >
-      {artists.map((a) => (
-        <li
-          key={a.id}
-          className="group hover:bg-slate-50/50 transition-colors"
-          data-testid={`row-person-${a.id}`}
-        >
-          <Link
-            href={`/admin/people/${a.id}?from=instrument&instrumentId=${instrument.id}`}
-            className="flex items-center gap-4 px-6 py-3.5"
-            data-testid={`link-person-${a.id}`}
-          >
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
-              {a.photoUrl ? (
-                <img
-                  src={a.photoUrl}
-                  alt={a.name}
-                  className="w-full h-full object-cover"
+    <div className="space-y-4">
+      {/* Add-credit picker */}
+      <div
+        className="rounded-lg border border-slate-200 bg-white p-4 space-y-3"
+        data-testid="add-instrument-credit"
+      >
+        <div className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
+          Credit a person to this gear
+        </div>
+
+        {!pickedPerson ? (
+          <>
+            <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
+              <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+              <input
+                value={pickerQuery}
+                onChange={(e) => setPickerQuery(e.target.value)}
+                placeholder="Search a person or type a new name…"
+                className="flex-1 min-w-0 bg-transparent text-[13px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                data-testid="input-instrument-credit-person"
+              />
+            </label>
+            {(pickerQuery || personMatches.length > 0) && (
+              <div className="rounded-md border border-slate-200 bg-white shadow-sm overflow-hidden">
+                {personMatches.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setPickedPerson(p);
+                      setPickerQuery("");
+                    }}
+                    className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[12.5px] text-slate-700 hover:bg-[#319ED8]/5"
+                    data-testid={`button-pick-person-${p.id}`}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-[10px] font-semibold text-slate-600">
+                        {p.photoUrl ? (
+                          <img
+                            src={p.photoUrl}
+                            alt={p.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          p.name.charAt(0).toUpperCase()
+                        )}
+                      </span>
+                      {p.name}
+                    </span>
+                    <Plus className="h-3.5 w-3.5 text-slate-400" />
+                  </button>
+                ))}
+                {pickerQuery.trim() &&
+                  !people.some(
+                    (p) =>
+                      p.name.toLowerCase() ===
+                      pickerQuery.trim().toLowerCase(),
+                  ) && (
+                    <button
+                      type="button"
+                      disabled={createPerson.isPending}
+                      onClick={() => createPerson.mutate(pickerQuery.trim())}
+                      className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50 px-2.5 py-1.5 text-left text-[12.5px] font-medium text-[#319ED8] hover:bg-[#319ED8]/10 disabled:opacity-50"
+                      data-testid="button-add-new-person"
+                    >
+                      <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                      Add Person "{pickerQuery.trim()}"
+                    </button>
+                  )}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#319ED8]/5 border border-[#319ED8]/30">
+              <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-[10px] font-semibold text-slate-600">
+                {pickedPerson.photoUrl ? (
+                  <img
+                    src={pickedPerson.photoUrl}
+                    alt={pickedPerson.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  pickedPerson.name.charAt(0).toUpperCase()
+                )}
+              </span>
+              <span className="flex-1 text-[13px] font-semibold text-slate-800">
+                {pickedPerson.name}
+              </span>
+              <button
+                type="button"
+                onClick={resetPicker}
+                className="text-slate-400 hover:text-slate-700"
+                aria-label="Clear picked person"
+                data-testid="button-clear-picked-person"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Track multi-select */}
+            <div className="rounded-md border border-slate-200 bg-white">
+              <div className="flex items-center gap-2 border-b border-slate-100 px-2.5 py-1.5">
+                <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                <input
+                  value={trackSearch}
+                  onChange={(e) => setTrackSearch(e.target.value)}
+                  placeholder={
+                    allTracksMode
+                      ? "Search all GoodTunes tracks…"
+                      : "Search this person's tracks…"
+                  }
+                  className="flex-1 min-w-0 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                  data-testid="input-track-search"
                 />
+                <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allTracksMode}
+                    onChange={(e) => {
+                      setAllTracksMode(e.target.checked);
+                      setSelectedSongIds(new Set());
+                    }}
+                    className="h-3 w-3"
+                    data-testid="checkbox-all-tracks-mode"
+                  />
+                  All GoodTunes tracks
+                </label>
+              </div>
+              {contextLoading ? (
+                <div className="px-3 py-6 text-center text-[12px] text-slate-400">
+                  Loading tracks…
+                </div>
+              ) : filteredTracks.length === 0 ? (
+                <div className="px-3 py-6 text-center text-[12px] text-slate-400">
+                  {allTracksMode
+                    ? "No tracks match."
+                    : `${pickedPerson.name} isn't credited on any GoodTunes track yet. Toggle "All GoodTunes tracks" to pick from the full catalog.`}
+                </div>
               ) : (
-                <span className="text-[12px] font-bold text-slate-400">
-                  {a.name.charAt(0).toUpperCase()}
-                </span>
+                <ul
+                  className="max-h-72 overflow-y-auto divide-y divide-slate-100"
+                  data-testid="list-context-tracks"
+                >
+                  {filteredTracks.map((t) => {
+                    const checked = selectedSongIds.has(t.songId);
+                    return (
+                      <li key={t.songId}>
+                        <label
+                          className={[
+                            "flex items-center gap-3 px-2.5 py-1.5 cursor-pointer text-[12.5px]",
+                            t.alreadyCreditedHere
+                              ? "opacity-50 cursor-not-allowed"
+                              : "hover:bg-[#319ED8]/5",
+                          ].join(" ")}
+                          data-testid={`row-context-track-${t.songId}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked || t.alreadyCreditedHere}
+                            disabled={t.alreadyCreditedHere}
+                            onChange={() => toggleSong(t.songId)}
+                            className="h-3.5 w-3.5"
+                            data-testid={`checkbox-track-${t.songId}`}
+                          />
+                          <img
+                            src={t.albumArtwork}
+                            alt={t.albumTitle}
+                            className="h-7 w-7 rounded object-cover bg-slate-100 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-slate-800 truncate">
+                              {t.songTitle}
+                            </div>
+                            <div className="text-[11px] text-slate-400 truncate">
+                              {t.albumTitle}
+                              {t.existingRole ? ` · ${t.existingRole}` : ""}
+                            </div>
+                          </div>
+                          {t.alreadyCreditedHere && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-600">
+                              <Check className="h-3 w-3" />
+                              Credited
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] group-hover:underline underline-offset-2 transition-colors">
-                {a.name}
+
+            {needsRole && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 flex-shrink-0">
+                  Role
+                </span>
+                <select
+                  value={roleChoice}
+                  onChange={(e) => setRoleChoice(e.target.value)}
+                  className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+                  data-testid="select-credit-role"
+                >
+                  <option value="">— Pick a role —</option>
+                  {performerRoles.map((r) => (
+                    <option key={r.id} value={r.name}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="text-[11.5px] text-slate-400">
-                {a.trackCount} {a.trackCount === 1 ? "track" : "tracks"} on this instrument
-              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={resetPicker}
+                className="text-[12px] text-slate-500 hover:text-slate-700 px-2 py-1"
+                data-testid="button-cancel-credit"
+              >
+                Cancel
+              </button>
+              <AddEntityButton
+                label={
+                  selectedSongIds.size > 0
+                    ? `Credit on ${selectedSongIds.size} track${
+                        selectedSongIds.size === 1 ? "" : "s"
+                      }`
+                    : "Pick tracks"
+                }
+                onClick={() => addCredit.mutate()}
+                disabled={
+                  addCredit.isPending ||
+                  selectedSongIds.size === 0 ||
+                  (needsRole && !roleChoice)
+                }
+                testId="button-commit-credit"
+              />
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
-          </Link>
-        </li>
-      ))}
-    </ul>
+          </>
+        )}
+      </div>
+
+      {/* Existing list (or empty-state hint) */}
+      {artists.length === 0 ? (
+        <div
+          className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center"
+          data-testid="people-panel-empty"
+        >
+          <Users className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+          <p className="text-[13.5px] text-slate-500">
+            No one's been credited on this instrument yet.
+          </p>
+          <p className="text-[11.5px] text-slate-400 mt-1">
+            Use the picker above, or credit someone from the album's Tracks tab.
+          </p>
+        </div>
+      ) : (
+        <ul
+          className="rounded-lg border bg-white divide-y divide-slate-100"
+          data-testid="list-instrument-people"
+        >
+          {artists.map((a) => (
+            <li
+              key={a.id}
+              className="group hover:bg-slate-50/50 transition-colors"
+              data-testid={`row-person-${a.id}`}
+            >
+              <Link
+                href={`/admin/people/${a.id}?from=instrument&instrumentId=${instrument.id}`}
+                className="flex items-center gap-4 px-6 py-3.5"
+                data-testid={`link-person-${a.id}`}
+              >
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  {a.photoUrl ? (
+                    <img
+                      src={a.photoUrl}
+                      alt={a.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-[12px] font-bold text-slate-400">
+                      {a.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] group-hover:underline underline-offset-2 transition-colors">
+                    {a.name}
+                  </div>
+                  <div className="text-[11.5px] text-slate-400">
+                    {a.trackCount} {a.trackCount === 1 ? "track" : "tracks"} on this instrument
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
