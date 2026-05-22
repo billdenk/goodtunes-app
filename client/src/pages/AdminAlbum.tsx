@@ -77,6 +77,7 @@ import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDesktopPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
+import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import Hls from "hls.js";
@@ -7672,6 +7673,20 @@ function CreditRowItem({
       }
     },
     onSuccess: async () => {
+      // Feed the session-scoped recents store consumed by the rail in
+      // the per-track AddPicker, the Gear "Credit a person" picker, and
+      // the legacy /admin song-row credits sheet. Touching a credit
+      // here counts as "just credited them" for that session.
+      if (personId) {
+        const p = people.find((pp) => pp.id === personId);
+        if (p) {
+          pushRecentPerson({
+            id: p.id,
+            name: p.name,
+            photoUrl: p.photoUrl ?? null,
+          });
+        }
+      }
       await onInvalidate();
       setEditing(false);
       toast({ title: "Credit saved" });
@@ -7904,6 +7919,17 @@ function AddCreditForm({
       await apiRequest("POST", url, body);
     },
     onSuccess: async () => {
+      // See EditCreditRow.save — same rail-feeding rationale.
+      if (personId) {
+        const p = people.find((pp) => pp.id === personId);
+        if (p) {
+          pushRecentPerson({
+            id: p.id,
+            name: p.name,
+            photoUrl: p.photoUrl ?? null,
+          });
+        }
+      }
       await onSaved();
       toast({ title: `${kind === "writer" ? "Writer" : "Performer"} added` });
     },
@@ -7992,7 +8018,16 @@ function AddCreditForm({
 /* ─── Credit pickers (simple selects backed by /api/people, /api/instruments,
        /api/admin/credit-roles). Searchable comboboxes + inline-create
        live in classic admin — admins can add people / instruments there
-       and they appear here on next refetch. ──────────────────────── */
+       and they appear here on next refetch.
+
+       Intentionally NOT wired to the shared `RecentsRail` /
+       `usePersonCreditRecents` pattern: these are native `<select>`s,
+       not search-driven comboboxes. The rail's contract — "rail on
+       empty state, dropdown only when typing" — only makes sense for a
+       text-input picker. A native select already shows the full list
+       on tap; layering a rail on top would just add noise. The save
+       handlers above DO push to the recents store so the rail in the
+       per-track AddPicker still benefits when admins use this surface. */
 
 function PersonSelect({
   people,

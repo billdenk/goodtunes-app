@@ -72,6 +72,13 @@ interface ScrapeResponse {
   albums?: ScrapedAlbum[];
 }
 
+// Intentionally NOT wired to the shared `RecentsRail` /
+// `usePersonCreditRecents` pattern used by the song-credit pickers
+// (Gear, per-track Add credit, legacy /admin credits sheet). This is
+// the People *index* — a navigation grid, not a credit picker — and
+// the default expectation is "show me everyone, alphabetised". An
+// empty-on-open rail-only state would hide the very list the page
+// exists to surface.
 export function AdminPeople() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();

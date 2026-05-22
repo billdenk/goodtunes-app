@@ -81,6 +81,15 @@ export function ArtistPickerField({
   });
 
   // Sort alphabetically; cmdk handles fuzzy filtering on top.
+  //
+  // Intentionally NOT wired to the shared `RecentsRail` /
+  // `usePersonCreditRecents` pattern used by the song-credit pickers
+  // (Gear, per-track Add credit, legacy /admin credits sheet). This
+  // field picks an album's *primary artist* — a header property, not a
+  // per-song credit — and the dominant flow is "scan the full roster
+  // alphabetically for the right artist", not "credit the same person
+  // I just credited". Empty-on-open with a session-scoped recents rail
+  // would actively get in the way here.
   const sorted = useMemo(
     () => [...people].sort((a, b) => a.name.localeCompare(b.name)),
     [people],

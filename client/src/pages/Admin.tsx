@@ -35,6 +35,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { RecentsRail } from "@/components/admin/RecentsRail";
+import {
+  pushRecentPerson,
+  usePersonCreditRecents,
+} from "@/hooks/usePersonCreditRecents";
 
 interface AdminAlbum {
   id: string;
@@ -2813,7 +2818,23 @@ function CreditRow({
           : `/api/admin/performers/${row.id}`;
       await apiRequest("DELETE", deleteUrl);
     },
-    onSuccess: onChanged,
+    onSuccess: () => {
+      // Feed the shared session-scoped recents store so the rail in this
+      // and the other admin person pickers (Gear, per-track Add credit)
+      // surfaces who the admin just credited.
+      const s = snapshot();
+      if (s.personId) {
+        const p = people.find((pp) => pp.id === s.personId) ?? draft.person;
+        if (p) {
+          pushRecentPerson({
+            id: p.id,
+            name: p.name,
+            photoUrl: p.photoUrl,
+          });
+        }
+      }
+      onChanged();
+    },
   });
   const del = useMutation({
     mutationFn: async () => {
@@ -2946,12 +2967,20 @@ function PersonPicker({
   const [newName, setNewName] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
   const [createErr, setCreateErr] = useState<string | null>(null);
+  const recents = usePersonCreditRecents();
 
+  // Empty-state contract (shared with the Gear and per-track Add-credit
+  // pickers): no default alphabetical list — rail when recents exist,
+  // dropdown matches only when typing. Keeps the picker calm by default
+  // and surfaces the "credit them again" path one tap away.
+  const trimmed = query.trim();
   const matches = (() => {
-    if (!query.trim()) return people.slice(0, 25);
-    const q = query.toLowerCase();
+    if (!trimmed) return [] as AdminPerson[];
+    const q = trimmed.toLowerCase();
     return people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 25);
   })();
+  const showRail = open && !trimmed && recents.length > 0;
+  const showDropdown = open && trimmed.length > 0;
 
   async function handleCreate() {
     const name = newName.trim();
@@ -3026,7 +3055,35 @@ function PersonPicker({
             className={inputCls + " py-1.5 text-xs"}
             data-testid="input-person-search"
           />
-          {open && (
+          {showRail && (
+            <div
+              className="absolute z-10 left-0 right-0 mt-1 rounded-md border border-slate-200 bg-white shadow-lg p-2"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <RecentsRail
+                recents={recents}
+                onPick={(rp) => {
+                  const existing = people.find((pp) => pp.id === rp.id);
+                  if (existing) {
+                    onChange(existing);
+                  } else {
+                    // Recent person is no longer in the people cache
+                    // (deleted, or cache stale). Synthesize a minimal
+                    // AdminPerson so the row still commits.
+                    onChange({
+                      id: rp.id,
+                      name: rp.name,
+                      photoUrl: rp.photoUrl,
+                    } as AdminPerson);
+                  }
+                  setOpen(false);
+                  setQuery("");
+                }}
+                testIdPrefix="recent-credit-person"
+              />
+            </div>
+          )}
+          {showDropdown && (
             <div className="absolute z-10 left-0 right-0 mt-1 rounded-md border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto">
               {matches.length === 0 && (
                 <p className="px-3 py-2 text-slate-400 text-[12px]">
