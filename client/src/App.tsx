@@ -19,6 +19,7 @@ import { FavoriteArtists } from "@/pages/FavoriteArtists";
 import { Bookmarks } from "@/pages/Bookmarks";
 import { ArtistDetail } from "@/pages/ArtistDetail";
 import { ArtistDashboard } from "@/pages/ArtistDashboard";
+import { LabelDashboard } from "@/pages/LabelDashboard";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
 import { AdminAlbums } from "@/pages/AdminAlbums";
@@ -171,6 +172,11 @@ function Router() {
         </Route>
         <Route path="/artist/:slug">
           <ProtectedRoute component={ArtistDetail} />
+        </Route>
+        {/* Task #76 — Label rollup reporting dashboard. Customer hosts
+            never see /label* (no host-rewrite); admin/dev hosts can. */}
+        <Route path="/label">
+          <ProtectedRoute component={LabelDashboard} />
         </Route>
         <Route path="/playlists">
           <ProtectedRoute component={Playlists} />

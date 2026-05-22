@@ -75,17 +75,44 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
   } else if (info.role === "artist") {
     personId = info.roleScopeId;
     if (!personId) return { error: "Artist account has no person scope", status: 403 };
+  } else if (info.role === "label") {
+    // Task #76 — label users can drill from the rollup dashboard into a
+    // specific artist on their roster (label → artist → album → song).
+    // They must pass ?personId=, and the personId must either be tagged
+    // with this label OR be the primary artist on an album released by
+    // this label. Anything else gets 403 so a label can't read a
+    // competitor's numbers by guessing person ids.
+    if (!info.roleScopeId) return { error: "Label account has no label scope", status: 403 };
+    personId = (req.query.personId as string) || null;
+    if (!personId) return { error: "Label must pass ?personId= to drill into a roster artist", status: 400 };
+    const okRow = await db.execute<{ ok: boolean }>(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM people WHERE id = ${personId} AND label_id = ${info.roleScopeId}
+        UNION
+        SELECT 1 FROM albums WHERE primary_artist_id = ${personId} AND label_id = ${info.roleScopeId}
+      ) AS ok
+    `);
+    const ok = ((okRow as any).rows?.[0]?.ok) === true;
+    if (!ok) return { error: "Artist is not on this label", status: 403 };
   } else {
     return { error: "Insufficient role", status: 403 };
   }
 
-  // Owned albums = primary artist OR payout owner (albums table has
-  // both columns in live DB; orders table doesn't have payout_owner_*
-  // yet so the orders-side filter sticks to album_id IN scope).
+  // Tenant isolation for label drill-through: when the caller is a label
+  // user, narrow album scope to albums released on THIS label. Without
+  // this clause an artist with a cross-label catalog (signed to label A
+  // for one record, label B for another) would leak label B's revenue
+  // and orders to a label A operator. The roster-membership check above
+  // gates entry; this clause gates the data set.
+  const isLabelCaller = info.role === "label";
+  const labelClause = isLabelCaller
+    ? sql`AND label_id = ${info.roleScopeId}`
+    : sql``;
   const albumRows = await db.execute<{ id: string }>(sql`
     SELECT id FROM albums
-    WHERE primary_artist_id = ${personId}
-       OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId})
+    WHERE (primary_artist_id = ${personId}
+           OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId}))
+    ${labelClause}
   `);
   const albumIds = ((albumRows as any).rows || []).map((r: any) => r.id);
 
@@ -96,12 +123,18 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
     : ({ rows: [] } as any);
   const ownedSongIds = ((ownedSongRows as any).rows || []).map((r: any) => r.id);
 
-  const creditRows = await db.execute<{ song_id: string }>(sql`
-    SELECT DISTINCT song_id FROM track_performers WHERE person_id = ${personId}
-    UNION
-    SELECT DISTINCT song_id FROM track_writers WHERE person_id = ${personId}
-  `);
-  const credited = ((creditRows as any).rows || []).map((r: any) => r.song_id);
+  // Credits union pulls in performer/writer guest appearances on other
+  // artists' albums. For label callers we drop the union so the song
+  // scope can never include a song from an album the label doesn't own.
+  let credited: string[] = [];
+  if (!isLabelCaller) {
+    const creditRows = await db.execute<{ song_id: string }>(sql`
+      SELECT DISTINCT song_id FROM track_performers WHERE person_id = ${personId}
+      UNION
+      SELECT DISTINCT song_id FROM track_writers WHERE person_id = ${personId}
+    `);
+    credited = ((creditRows as any).rows || []).map((r: any) => r.song_id);
+  }
 
   const songIds = Array.from(new Set([...ownedSongIds, ...credited]));
   return { personId, albumIds, songIds, ownedSongIds };
@@ -598,7 +631,10 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   // requireRole already 401s without a session and 403s non-admin
   // users (it checks isAdmin via storage.getUser) before evaluating
   // the role, so no separate requireAdmin is needed.
-  const gate = requireRole("artist", "super_admin");
+  // Task #76 — label users may drill into a roster artist via ?personId=.
+  // resolveArtistScope above verifies the personId is on their roster
+  // before returning anything, so role-level inclusion is safe.
+  const gate = requireRole("artist", "label", "super_admin");
 
   app.get("/api/artist/me", gate, meHandler);
   app.get("/api/artist/summary", gate, summaryHandler);
