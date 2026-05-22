@@ -14,7 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Check, Truck, Package, MapPin, ExternalLink, Award } from "lucide-react";
+import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printer } from "lucide-react";
 import type { StripeAddressSnapshot } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -124,6 +124,20 @@ const FULFILLMENT_PILL: Record<string, { label: string; cls: string }> = {
 };
 
 const RECIPIENT_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Task #130 — friendly status surface for the signed-cert lifecycle. The
+// fan confirms the name (awaiting → confirmed), the admin batches it
+// into a print run (locked_for_print), then ships (printed). Mirrors the
+// fulfillment pill palette so the two strips read as a pair.
+const CERT_STATUS_PILL: Record<
+  CertInfo["nameStatus"],
+  { label: string; cls: string; Icon: typeof Clock }
+> = {
+  awaiting: { label: "Awaiting your name", cls: "bg-white/10 text-white/70", Icon: Clock },
+  confirmed: { label: "Queued for next print run", cls: "bg-violet-500/20 text-violet-200", Icon: Clock },
+  locked_for_print: { label: "Locked for printing", cls: "bg-indigo-500/20 text-indigo-200", Icon: Lock },
+  printed: { label: "Printed & on its way", cls: "bg-[#4AFFCA]/15 text-[#4AFFCA]", Icon: Printer },
+};
 
 export function Orders() {
   const { data: orders, isLoading } = useQuery<OrderRow[]>({ queryKey: ["/api/orders"] });
@@ -423,6 +437,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
 
   const locked = cert.nameStatus === "locked_for_print" || cert.nameStatus === "printed";
   const confirmed = cert.nameStatus === "confirmed" || locked;
+  const statusPill = CERT_STATUS_PILL[cert.nameStatus];
 
   async function pickIdentity(kind: "display" | "username" | "real") {
     if (kind === "real" && !user?.realName) {
@@ -447,24 +462,43 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
       <div className="flex items-start gap-3">
         <Award className="w-5 h-5 text-[#4AFFCA] mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold text-white">
-            Printed GoodDeed certificate
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-[13px] font-semibold text-white">
+              Printed GoodDeed certificate
+            </div>
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${statusPill.cls}`}
+              data-testid={`cert-status-${order.id}`}
+            >
+              <statusPill.Icon className="w-3 h-3" />
+              {statusPill.label}
+            </span>
           </div>
           {confirmed ? (
             <>
-              <div className="text-[12px] text-white/65 mt-0.5">
+              <div className="text-[12px] text-white/65 mt-1">
                 Name to print:{" "}
                 <span className="text-white font-medium" data-testid={`cert-name-${order.id}`}>
                   {cert.confirmedName}
                 </span>
               </div>
               <div className="text-[11px] text-white/45 mt-0.5">
-                {locked
-                  ? cert.nameStatus === "printed"
-                    ? "Printed and on its way."
-                    : "Locked for the next print run."
+                {cert.nameStatus === "printed"
+                  ? "Your certificate has been printed and shipped."
+                  : cert.nameStatus === "locked_for_print"
+                  ? "Locked for the next print run — name can no longer be changed."
                   : `Paper: ${cert.paperSize === "a4" ? "A4" : "US Letter"} · You can change the name until it's locked for printing.`}
               </div>
+              {cert.nameStatus === "printed" && (
+                <Link
+                  href={`/g/${cert.shortId}`}
+                  className="mt-2 inline-flex items-center gap-1 text-[12px] text-[#4AFFCA] font-semibold active:opacity-70"
+                  data-testid={`link-cert-view-${order.id}`}
+                >
+                  View certificate
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
+              )}
               {!locked && !showPicker && (
                 <button
                   type="button"
