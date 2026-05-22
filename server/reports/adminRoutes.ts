@@ -68,8 +68,8 @@ export function registerAdminReportRoutes(app: Express) {
   app.get("/api/admin/reports/kpis.csv", adminGuard, wrap(async (req, res) => {
     const data = await platformKpis(ctxFromReq(req));
     sendCsv(res, "platform-kpis.csv", toCsv(
-      data.series.map((r) => ({ date: r.date, gmv: dollarsFromCents(r.gmvCents), orders: r.orders, signups: r.signups })),
-      ["date", "gmv", "orders", "signups"],
+      data.series.map((r) => ({ date: r.date, gmv: dollarsFromCents(r.gmvCents), orders: r.orders, signups: r.signups, plays: r.plays })),
+      ["date", "gmv", "orders", "signups", "plays"],
     ));
   }));
 

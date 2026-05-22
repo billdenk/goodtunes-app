@@ -103,6 +103,14 @@ export async function platformKpis(ctx: AdminReportContext) {
   const plays = Number((playsRow as any).rows?.[0]?.plays ?? 0);
   const uniqueListeners = Number((playsRow as any).rows?.[0]?.listeners ?? 0);
 
+  // Daily plays — same `play_start` definition as the headline, bucketed
+  // by UTC day so the dashboard can sparkline/trend-chart it.
+  const dailyPlays = emptySeries(ctx.from, ctx.to);
+  const dailyPlaysRows = await db.execute<{ d: string; c: string }>(sql`SELECT to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS d, COUNT(*) AS c FROM analytics_events WHERE name = 'play_start' AND ts >= ${ctx.from} AND ts <= ${ctx.to} GROUP BY 1`);
+  for (const r of (dailyPlaysRows as any).rows ?? []) {
+    if (r.d in dailyPlays) dailyPlays[r.d] = Number(r.c);
+  }
+
   // Prior-period comparison.
   const prior = await headline(priorFrom, priorTo);
 
@@ -141,6 +149,7 @@ export async function platformKpis(ctx: AdminReportContext) {
     gmvCents: dailyGmv[d],
     orders: dailyOrders[d],
     signups: dailySignups[d],
+    plays: dailyPlays[d] ?? 0,
   }));
 
   return {

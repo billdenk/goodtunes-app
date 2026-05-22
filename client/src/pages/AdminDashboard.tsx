@@ -91,7 +91,7 @@ interface KpisData {
   orderCount: number;
   newSignups: number;
   plays: number;
-  series: Array<{ date: string; gmvCents: number; orders: number; signups: number }>;
+  series: Array<{ date: string; gmvCents: number; orders: number; signups: number; plays: number }>;
   prior?: {
     from?: string;
     to?: string;
@@ -319,7 +319,7 @@ function KpiGrid({ kpis, loading }: { kpis?: KpisData; loading: boolean }) {
         prior={prior.plays}
         current={kpis?.plays}
         format={fmtNum}
-        spark={null}
+        spark={series.map((s) => s.plays ?? 0)}
         color={BLUE}
         loading={loading}
         testId="tile-plays"
@@ -484,7 +484,7 @@ function OpsHealthStrip({ ops }: { ops: OpsData }) {
 
 // ─── Primary chart ─────────────────────────────────────────────────────
 
-type ChartMetric = "gmv" | "orders" | "signups";
+type ChartMetric = "gmv" | "orders" | "signups" | "plays";
 
 function PrimaryChart({
   kpis,
@@ -504,7 +504,7 @@ function PrimaryChart({
   const merged = useMemo(() => {
     return series.map((s, i) => {
       const p = priorSeries[i];
-      const key = metric === "gmv" ? "gmvCents" : metric === "orders" ? "orders" : "signups";
+      const key = metric === "gmv" ? "gmvCents" : metric === "orders" ? "orders" : metric === "signups" ? "signups" : "plays";
       return {
         date: s.date,
         current: (s as any)[key] as number,
@@ -518,6 +518,7 @@ function PrimaryChart({
     { v: "gmv", label: "GMV" },
     { v: "orders", label: "Orders" },
     { v: "signups", label: "New fans" },
+    { v: "plays", label: "Plays" },
   ];
 
   return (
