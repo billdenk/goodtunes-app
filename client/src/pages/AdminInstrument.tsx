@@ -34,6 +34,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { RecentsRail } from "@/components/admin/RecentsRail";
+import {
+  pushRecentPerson,
+  usePersonCreditRecents,
+} from "@/hooks/usePersonCreditRecents";
 import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { SHORT_CATEGORIES } from "@shared/categories";
@@ -1191,6 +1196,15 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
       } else {
         toast({ title: "Nothing to add" });
       }
+      // Push onto the session-scoped Recents rail so the next picker
+      // open surfaces this person as a one-tap re-credit.
+      if (pickedPerson) {
+        pushRecentPerson({
+          id: pickedPerson.id,
+          name: pickedPerson.name,
+          photoUrl: pickedPerson.photoUrl ?? null,
+        });
+      }
       // Reset selection but keep the picked person so the admin can
       // continue layering credits without re-searching.
       setSelectedSongIds(new Set());
@@ -1206,11 +1220,12 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
 
   const personMatches = (() => {
     const q = pickerQuery.trim().toLowerCase();
-    if (!q) return people.slice(0, 6);
+    if (!q) return [] as PersonLite[];
     return people
       .filter((p) => p.name.toLowerCase().includes(q))
       .slice(0, 6);
   })();
+  const recents = usePersonCreditRecents();
 
   const filteredTracks = (() => {
     const q = trackSearch.trim().toLowerCase();
@@ -1271,12 +1286,28 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
         className="rounded-lg border border-slate-200 bg-white p-4 space-y-3"
         data-testid="add-instrument-credit"
       >
-        <div className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
-          Credit a person to this gear
-        </div>
+        {(pickedPerson || recents.length === 0 || pickerQuery) && (
+          <div className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
+            Credit a person to this gear
+          </div>
+        )}
 
         {!pickedPerson ? (
           <>
+            {!pickerQuery && recents.length > 0 && (
+              <RecentsRail
+                recents={recents}
+                onPick={(p) => {
+                  setPickedPerson({
+                    id: p.id,
+                    name: p.name,
+                    photoUrl: p.photoUrl,
+                  } as PersonLite);
+                  setPickerQuery("");
+                }}
+                testIdPrefix="recent-instrument-person"
+              />
+            )}
             <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20">
               <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
               <input
@@ -1287,7 +1318,7 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
                 data-testid="input-instrument-credit-person"
               />
             </label>
-            {(pickerQuery || personMatches.length > 0) && (
+            {pickerQuery && (
               <div className="rounded-md border border-slate-200 bg-white shadow-sm overflow-hidden">
                 {personMatches.map((p) => (
                   <button

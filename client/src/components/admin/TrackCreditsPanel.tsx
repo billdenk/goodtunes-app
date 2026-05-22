@@ -18,6 +18,11 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { RecentsRail } from "@/components/admin/RecentsRail";
+import {
+  pushRecentPerson,
+  usePersonCreditRecents,
+} from "@/hooks/usePersonCreditRecents";
 import {
   Dialog,
   DialogContent,
@@ -446,11 +451,12 @@ function AddPicker({
   // (e.g. Composer + Lyricist in Song). Pick them again to add another role.
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return people.slice(0, 6);
+    if (!q) return [] as AdminPersonLite[];
     return people
       .filter((p) => p.name.toLowerCase().includes(q))
       .slice(0, 6);
   }, [people, query]);
+  const recents = usePersonCreditRecents();
 
   const commit = async () => {
     const role = validRoles.find((r) => r.id === pickedRoleId);
@@ -488,6 +494,25 @@ function AddPicker({
       onClick={(e) => e.stopPropagation()}
       data-testid="add-credit-picker"
     >
+      {!picked && !query && recents.length > 0 && (
+        <div className="mb-2">
+          <RecentsRail
+            recents={recents}
+            onPick={(p) => {
+              const existing = people.find((person) => person.id === p.id);
+              setPicked(
+                existing ?? ({
+                  id: p.id,
+                  name: p.name,
+                  photoUrl: p.photoUrl,
+                } as AdminPersonLite),
+              );
+              setQuery("");
+            }}
+            testIdPrefix="recent-track-person"
+          />
+        </div>
+      )}
       <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white border border-[var(--brand-blue)] ring-2 ring-[var(--brand-blue)]/20">
         <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
         <input
@@ -518,7 +543,7 @@ function AddPicker({
         </button>
       </label>
 
-      {!picked && (query || matches.length > 0) && (
+      {!picked && query && (
         <div className="mt-1.5 rounded-md border border-slate-200 bg-white shadow-sm overflow-hidden">
           {matches.map((p) => (
             <button
@@ -722,9 +747,32 @@ function Section({
         body.instrumentId = args.instrumentId;
         body.tuningNotes = args.tuningNotes;
       }
-      await apiRequest("POST", url, body);
+      const res = await apiRequest("POST", url, body);
+      let created: any = null;
+      try {
+        created = await res.json();
+      } catch {
+        // some endpoints may return no body
+      }
+      return created;
     },
-    onSuccess: async () => {
+    onSuccess: async (created, args) => {
+      // Push onto the session-scoped Recents rail so the next picker
+      // open surfaces this person as a one-tap re-credit. Use the
+      // server-assigned id for guest names (personId was null on input).
+      const id =
+        args.personId ??
+        created?.personId ??
+        created?.person?.id ??
+        created?.id ??
+        null;
+      if (id) {
+        pushRecentPerson({
+          id,
+          name: args.name,
+          photoUrl: created?.person?.photoUrl ?? null,
+        });
+      }
       await invalidate();
       setAdding(false);
       toast({ title: "Credit added" });
