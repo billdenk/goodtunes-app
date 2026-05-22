@@ -49,3 +49,8 @@ integrations = ["javascript_object_storage:2.0.0", "javascript_openai_ai_integra
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+MAIL_FROM = "GoodTunes <noreply@send.goodtunes.music>"
