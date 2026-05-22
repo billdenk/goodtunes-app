@@ -1,14 +1,18 @@
 #!/bin/bash
 set -e
-npm install
 
-# drizzle-kit push interactively asks "is this table/column created or renamed
-# from <other>?" whenever it thinks it sees a rename. Its detection produces
-# false positives often enough that the prompt has silently stalled production
-# schema updates multiple times (see .agents/memory/albums-schema-drift.md).
-# In each prompt the default highlighted option is "+ create" — exactly what
-# we want for additive schema changes — so we feed newlines to accept the
-# default for every prompt. `yes ""` keeps emitting blank lines until db:push
-# exits; SIGPIPE on `yes` is harmless and `set -e` still surfaces a real
-# db:push failure as the script's exit code.
-yes "" | npm run db:push
+# Post-merge runs with stdin closed and a tight timeout. Anything that prompts
+# (drizzle-kit's false-positive rename detector, in particular) gets EOF and
+# fails the merge.
+#
+# We intentionally do NOT run `npm run db:push` here. Two reasons:
+#   1. drizzle-kit's rename prompt has historically stalled the step, so
+#      additive schema changes silently never reached prod (see
+#      .agents/memory/albums-schema-drift.md).
+#   2. Auto-answering every prompt with "+ create" also has drizzle-kit DROP
+#      the orphan side of each false rename (e.g. user_sessions), which can
+#      log everyone out or worse.
+#
+# Schema reaches production through the Publish flow, which shows the diff for
+# explicit admin approval. Dev DB drift is fixed manually with additive SQL.
+npm install
