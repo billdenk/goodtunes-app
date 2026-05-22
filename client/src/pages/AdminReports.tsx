@@ -107,6 +107,21 @@ export function AdminReports() {
   const isOrg = scope?.role === "org";
   const showReferrals = isOrg || scope?.role === "artist" || isSuper;
 
+  // Task #145 — Dashboard KPI tiles deep-link here as
+  // `/admin/reports?tab=<name>&from=…&to=…`. We read `tab` once on
+  // mount to pick the initial active tab; the date range is already
+  // picked up by useDateRange() above.
+  const initialTab = useMemo(() => {
+    if (typeof window === "undefined") return "sales";
+    const t = new URLSearchParams(window.location.search).get("tab");
+    const allowed = new Set([
+      "sales", "plays", "payouts", "redemption", "fans", "map",
+      "referrals", "overview", "revenue", "engagement", "funnels",
+      "ops", "recon", "events",
+    ]);
+    return t && allowed.has(t) ? t : "sales";
+  }, []);
+
   return (
     <AdminFrame active="reports">
       <div className="space-y-6">
@@ -167,7 +182,7 @@ export function AdminReports() {
         )}
 
         <ReportsErrorBoundary>
-        <Tabs defaultValue="sales" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="bg-white border border-slate-200 p-1 h-auto flex-wrap">
             <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
             <TabsTrigger value="plays" data-testid="tab-plays">Plays & GoodSync</TabsTrigger>

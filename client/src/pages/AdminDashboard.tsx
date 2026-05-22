@@ -210,7 +210,7 @@ export function AdminDashboard() {
 
         {ops && <OpsHealthStrip ops={ops} />}
 
-        <KpiGrid kpis={kpis} loading={kpisLoading} />
+        <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
@@ -264,9 +264,13 @@ function RangeSwitcher({ value, onChange }: { value: RangeKey; onChange: (v: Ran
 
 // ─── KPI tiles ─────────────────────────────────────────────────────────
 
-function KpiGrid({ kpis, loading }: { kpis?: KpisData; loading: boolean }) {
+function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs: string }) {
   const prior = kpis?.prior ?? {};
   const series = kpis?.series ?? [];
+  // Task #145 — each tile drills into the matching detailed report
+  // with the dashboard's selected date range carried through in the
+  // query string. `/admin/reports` reads `?tab=` to pick the right
+  // pane and `?from=…&to=…` for the date filter.
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4" data-testid="dashboard-kpi-grid">
       <KpiTile
@@ -279,6 +283,7 @@ function KpiGrid({ kpis, loading }: { kpis?: KpisData; loading: boolean }) {
         color={BLUE}
         loading={loading}
         testId="tile-gmv"
+        href={`/admin/reports?tab=sales&${qs}`}
       />
       <KpiTile
         label="Net revenue"
@@ -290,6 +295,7 @@ function KpiGrid({ kpis, loading }: { kpis?: KpisData; loading: boolean }) {
         color={MINT}
         loading={loading}
         testId="tile-net"
+        href={`/admin/reports?tab=revenue&${qs}`}
       />
       <KpiTile
         label="Orders"
@@ -301,6 +307,7 @@ function KpiGrid({ kpis, loading }: { kpis?: KpisData; loading: boolean }) {
         color={PURPLE}
         loading={loading}
         testId="tile-orders"
+        href={`/admin/orders?${qs}`}
       />
       <KpiTile
         label="New fans"
@@ -312,6 +319,7 @@ function KpiGrid({ kpis, loading }: { kpis?: KpisData; loading: boolean }) {
         color={PINK}
         loading={loading}
         testId="tile-signups"
+        href={`/admin/customers?${qs}`}
       />
       <KpiTile
         label="Plays"
@@ -323,6 +331,7 @@ function KpiGrid({ kpis, loading }: { kpis?: KpisData; loading: boolean }) {
         color={BLUE}
         loading={loading}
         testId="tile-plays"
+        href={`/admin/reports?tab=plays&${qs}`}
       />
     </div>
   );
@@ -338,6 +347,7 @@ function KpiTile({
   color,
   loading,
   testId,
+  href,
 }: {
   label: string;
   value: React.ReactNode;
@@ -348,15 +358,16 @@ function KpiTile({
   color: string;
   loading: boolean;
   testId: string;
+  href?: string;
 }) {
-  return (
-    <div
-      className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px]"
-      data-testid={testId}
-    >
+  const inner = (
+    <>
       <div>
-        <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+        <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
           {label}
+          {href && (
+            <ArrowUpRight className="w-3 h-3 text-slate-300 group-hover:text-[#319ED8] transition-colors" />
+          )}
         </div>
         <div className="text-[22px] font-semibold text-slate-900 mt-1 tabular-nums">
           {loading ? <span className="text-slate-300">—</span> : value}
@@ -366,7 +377,25 @@ function KpiTile({
         <Delta current={current} prior={prior} format={format} />
         {spark && spark.length > 1 && <Sparkline points={spark} color={color} />}
       </div>
-    </div>
+    </>
+  );
+  const base =
+    "rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px]";
+  if (!href) {
+    return (
+      <div className={base} data-testid={testId}>
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      className={`${base} group cursor-pointer hover:border-slate-300 hover:shadow-sm hover:-translate-y-0.5 transition-all`}
+      data-testid={testId}
+    >
+      {inner}
+    </Link>
   );
 }
 
