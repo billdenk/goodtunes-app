@@ -445,6 +445,7 @@ export interface IStorage {
 
   // Job-run audit log (Dropbox imports, GoodSync, etc.).
   recordJobRun(data: InsertJobRun): Promise<JobRun>;
+  getJobRunById(id: string): Promise<JobRun | undefined>;
   listJobRuns(opts?: { limit?: number; albumId?: string; songId?: string; jobType?: string }): Promise<JobRun[]>;
 
   // Task #69 — Manufacturer + fulfillment partner entity CRUD. Mirrors
@@ -2042,6 +2043,12 @@ export class DbStorage implements IStorage {
     const [row] = await db.insert(jobRuns).values(data).returning();
     return row;
   }
+
+  async getJobRunById(id: string): Promise<JobRun | undefined> {
+    const [row] = await db.select().from(jobRuns).where(eq(jobRuns.id, id));
+    return row;
+  }
+
   async listJobRuns(opts?: { limit?: number; albumId?: string; songId?: string; jobType?: string }): Promise<JobRun[]> {
     const conds: any[] = [];
     if (opts?.albumId) conds.push(eq(jobRuns.albumId, opts.albumId));

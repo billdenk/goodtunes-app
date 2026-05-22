@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, useSearch } from "wouter";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
@@ -19,6 +21,28 @@ interface AlbumFullLite {
   id: string;
   songs: SongPick[];
 }
+
+// Context so each table's <tr> can open the detail sheet without us
+// threading a callback through every per-job-type table component.
+const OpenRunContext = createContext<(id: string) => void>(() => {});
+function useRowProps(id: string) {
+  const open = useContext(OpenRunContext);
+  return {
+    onClick: () => open(id),
+    role: "button" as const,
+    tabIndex: 0,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        open(id);
+      }
+    },
+  };
+}
+// Inner interactive elements (SongLink) need to stop propagation so a
+// click on an album/song link still navigates instead of opening the
+// sheet over the row.
+const stop = (e: React.MouseEvent) => e.stopPropagation();
 
 type JobSummary = Record<string, any> | null;
 
@@ -143,6 +167,7 @@ function SongLink({ row }: { row: JobRun }) {
     return (
       <a
         href={`/admin/albums/${row.albumId}#song-${row.songId}`}
+        onClick={stop}
         className="text-[var(--brand-blue)] hover:underline font-mono text-xs"
         data-testid={`link-song-${row.id}`}
       >
@@ -154,6 +179,7 @@ function SongLink({ row }: { row: JobRun }) {
     return (
       <a
         href={`/admin/albums/${row.albumId}`}
+        onClick={stop}
         className="text-[var(--brand-blue)] hover:underline font-mono text-xs"
         data-testid={`link-album-${row.id}`}
       >
@@ -162,6 +188,19 @@ function SongLink({ row }: { row: JobRun }) {
     );
   }
   return <span className="text-slate-400">—</span>;
+}
+
+function JobRow({ row, children }: { row: JobRun; children: React.ReactNode }) {
+  const rowProps = useRowProps(row.id);
+  return (
+    <tr
+      {...rowProps}
+      className="hover:bg-slate-50 cursor-pointer focus:outline-none focus:bg-slate-50"
+      data-testid={`row-job-${row.id}`}
+    >
+      {children}
+    </tr>
+  );
 }
 
 /**
@@ -181,6 +220,24 @@ export function AdminJobs() {
   const [albumPick, setAlbumPick] = useState<AlbumPick | null>(null);
   const [songPick, setSongPick] = useState<SongPick | null>(null);
   const [albumSearch, setAlbumSearch] = useState("");
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const selectedRunId = useMemo(() => {
+    const p = new URLSearchParams(search);
+    return p.get("run");
+  }, [search]);
+
+  const openRun = (id: string) => {
+    const p = new URLSearchParams(search);
+    p.set("run", id);
+    navigate(`/admin/jobs?${p.toString()}`);
+  };
+  const closeRun = () => {
+    const p = new URLSearchParams(search);
+    p.delete("run");
+    const qs = p.toString();
+    navigate(qs ? `/admin/jobs?${qs}` : `/admin/jobs`);
+  };
 
   // Album list — load once, search/filter client-side. Same list the
   // rest of /admin uses, so already cached when navigating from there.
@@ -245,9 +302,24 @@ export function AdminJobs() {
       ? AUTO_SYNC_SORTS.find((s) => s.value === sort)?.help ?? ""
       : "";
 
+  // Resolve the selected run: prefer the row already in `data` (no
+  // extra fetch when the operator just clicked it), fall back to a
+  // single-row fetch for deep links to older rows that have rotated
+  // off the listing.
+  const selectedFromList = useMemo(
+    () => (selectedRunId ? data.find((r) => r.id === selectedRunId) ?? null : null),
+    [data, selectedRunId],
+  );
+  const { data: selectedFetched } = useQuery<JobRun>({
+    queryKey: ["/api/admin/job-runs", selectedRunId],
+    enabled: !!selectedRunId && !selectedFromList,
+  });
+  const selected = selectedFromList ?? selectedFetched ?? null;
+
   return (
     <AdminFrame active="jobs">
       <AdminPageHeader title="Jobs" />
+      <OpenRunContext.Provider value={openRun}>
       <div className="max-w-[1100px]">
         <p className="text-sm text-slate-600 mb-4">
           Background jobs from the last 100 runs. Pick a job type to see the columns that matter for it, or stay on All for a unified timeline.
@@ -412,6 +484,8 @@ export function AdminJobs() {
           </div>
         )}
       </div>
+      <JobDetailSheet run={selected} open={!!selectedRunId} onClose={closeRun} />
+      </OpenRunContext.Provider>
     </AdminFrame>
   );
 }
@@ -436,7 +510,7 @@ function AutoSyncTable({ rows }: { rows: JobRun[] }) {
           const sttMs = s.sttMs ?? null;
           const sttHot = sttMs != null && sttMs >= 90_000;
           return (
-            <tr key={row.id} className="hover:bg-slate-50" data-testid={`row-job-${row.id}`}>
+            <JobRow key={row.id} row={row}>
               <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2 whitespace-nowrap"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-right tabular-nums text-slate-700">{fmtMB(s.sourceBytes)}</td>
@@ -456,7 +530,7 @@ function AutoSyncTable({ rows }: { rows: JobRun[] }) {
                   </div>
                 )}
               </td>
-            </tr>
+            </JobRow>
           );
         })}
       </tbody>
@@ -481,7 +555,7 @@ function ImportTracksTable({ rows }: { rows: JobRun[] }) {
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
-            <tr key={row.id} className="hover:bg-slate-50" data-testid={`row-job-${row.id}`}>
+            <JobRow key={row.id} row={row}>
               <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-right tabular-nums text-emerald-700">{len(s.created)}</td>
@@ -493,7 +567,7 @@ function ImportTracksTable({ rows }: { rows: JobRun[] }) {
                   <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
-            </tr>
+            </JobRow>
           );
         })}
       </tbody>
@@ -519,7 +593,7 @@ function ImportLyricsTable({ rows }: { rows: JobRun[] }) {
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
-            <tr key={row.id} className="hover:bg-slate-50" data-testid={`row-job-${row.id}`}>
+            <JobRow key={row.id} row={row}>
               <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-right tabular-nums text-emerald-700">{len(s.matched)}</td>
@@ -532,7 +606,7 @@ function ImportLyricsTable({ rows }: { rows: JobRun[] }) {
                   <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
-            </tr>
+            </JobRow>
           );
         })}
       </tbody>
@@ -560,7 +634,7 @@ function FindMissingLyricsTable({ rows }: { rows: JobRun[] }) {
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
-            <tr key={row.id} className="hover:bg-slate-50" data-testid={`row-job-${row.id}`}>
+            <JobRow key={row.id} row={row}>
               <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-right tabular-nums text-slate-700">{s.scanned ?? 0}</td>
@@ -575,7 +649,7 @@ function FindMissingLyricsTable({ rows }: { rows: JobRun[] }) {
                   <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
-            </tr>
+            </JobRow>
           );
         })}
       </tbody>
@@ -600,7 +674,7 @@ function LrclibTable({ rows }: { rows: JobRun[] }) {
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
-            <tr key={row.id} className="hover:bg-slate-50" data-testid={`row-job-${row.id}`}>
+            <JobRow key={row.id} row={row}>
               <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-slate-700">
@@ -615,7 +689,7 @@ function LrclibTable({ rows }: { rows: JobRun[] }) {
                   <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
-            </tr>
+            </JobRow>
           );
         })}
       </tbody>
@@ -638,7 +712,7 @@ function CreditsTable({ rows }: { rows: JobRun[] }) {
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
-            <tr key={row.id} className="hover:bg-slate-50" data-testid={`row-job-${row.id}`}>
+            <JobRow key={row.id} row={row}>
               <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-slate-700 truncate max-w-[320px]" data-testid={`file-${row.id}`}>
@@ -650,7 +724,7 @@ function CreditsTable({ rows }: { rows: JobRun[] }) {
                   <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
-            </tr>
+            </JobRow>
           );
         })}
       </tbody>
@@ -672,7 +746,7 @@ function AllTimelineTable({ rows }: { rows: JobRun[] }) {
       </thead>
       <tbody className="divide-y divide-slate-100">
         {rows.map((row) => (
-          <tr key={row.id} className="hover:bg-slate-50" data-testid={`row-job-${row.id}`}>
+          <JobRow key={row.id} row={row}>
             <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
             <td className="px-4 py-2 text-slate-700 whitespace-nowrap" data-testid={`type-${row.id}`}>
               {TYPE_LABEL[row.jobType] ?? row.jobType}
@@ -685,9 +759,240 @@ function AllTimelineTable({ rows }: { rows: JobRun[] }) {
               )}
             </td>
             <td className="px-4 py-2"><SongLink row={row} /></td>
-          </tr>
+          </JobRow>
         ))}
       </tbody>
     </table>
   );
+}
+
+// -----------------------------------------------------------------------
+// JobDetailSheet — full per-run breakdown.
+//
+// The one-line summary in each table is intentionally lossy; the
+// underlying `summary` JSON often carries lists that an operator needs
+// to act on (which Dropbox filenames failed to match, which tracks
+// errored during import, the Genius URL we *almost* matched, etc.).
+// This side sheet renders those lists with a renderer chosen by
+// jobType, and falls back to a pretty-printed JSON block for anything
+// we don't have a bespoke layout for yet — so a freshly-added job type
+// is still inspectable.
+// -----------------------------------------------------------------------
+
+function JobDetailSheet({
+  run,
+  open,
+  onClose,
+}: {
+  run: JobRun | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto" data-testid="sheet-job-detail">
+        {run ? (
+          <>
+            <SheetHeader>
+              <SheetTitle data-testid="text-job-title">
+                {TYPE_LABEL[run.jobType] ?? run.jobType}
+              </SheetTitle>
+              <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                <StatusPill status={run.status} id={`detail-${run.id}`} />
+                <span>{fmtWhen(run.finishedAt)}</span>
+                <span className="font-mono">{run.id}</span>
+              </div>
+            </SheetHeader>
+            <div className="mt-4 space-y-4">
+              <div className="text-xs text-slate-500" data-testid="text-target">
+                Target: <SongLink row={run} />
+              </div>
+              {run.errorMessage && (
+                <DetailSection title="Error">
+                  <pre
+                    className="text-xs bg-rose-50 text-rose-800 rounded-lg p-3 whitespace-pre-wrap break-words"
+                    data-testid="text-error-message"
+                  >
+                    {run.errorMessage}
+                  </pre>
+                </DetailSection>
+              )}
+              <SummaryRenderer run={run} />
+              <DetailSection title="Raw summary">
+                <pre
+                  className="text-[11px] bg-slate-50 text-slate-700 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words"
+                  data-testid="text-raw-summary"
+                >
+                  {JSON.stringify(run.summary ?? {}, null, 2)}
+                </pre>
+              </DetailSection>
+            </div>
+          </>
+        ) : (
+          <div className="text-sm text-slate-500" data-testid="loading-job-detail">Loading…</div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function StringList({ items, tone, testId }: { items: any[]; tone: "good" | "warn" | "bad" | "muted"; testId: string }) {
+  const toneClass =
+    tone === "good"
+      ? "text-emerald-700"
+      : tone === "warn"
+        ? "text-amber-700"
+        : tone === "bad"
+          ? "text-rose-700"
+          : "text-slate-600";
+  return (
+    <ul className={`text-xs ${toneClass} space-y-0.5`} data-testid={testId}>
+      {items.map((it, i) => {
+        const label =
+          typeof it === "string"
+            ? it
+            : it && typeof it === "object"
+              ? it.filename ?? it.file ?? it.name ?? it.title ?? it.path ?? it.message ?? it.error ?? JSON.stringify(it)
+              : String(it);
+        const extra =
+          it && typeof it === "object" && (it.error || it.reason || it.message) && (it.filename || it.file || it.name)
+            ? ` — ${it.error ?? it.reason ?? it.message}`
+            : "";
+        return (
+          <li key={i} className="font-mono break-all">
+            {label}
+            {extra && <span className="text-slate-500">{extra}</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function SummaryRenderer({ run }: { run: JobRun }) {
+  const s = run.summary ?? {};
+  const sections: React.ReactNode[] = [];
+
+  const list = (key: string, title: string, tone: "good" | "warn" | "bad" | "muted") => {
+    const arr = s[key];
+    if (Array.isArray(arr) && arr.length > 0) {
+      sections.push(
+        <DetailSection key={key} title={`${title} (${arr.length})`}>
+          <StringList items={arr} tone={tone} testId={`list-${key}`} />
+        </DetailSection>,
+      );
+    }
+  };
+
+  switch (run.jobType) {
+    case "import-lyrics-from-dropbox":
+    case "import-track-credits-from-dropbox": {
+      list("matched", "Matched", "good");
+      list("unmatched", "Unmatched", "warn");
+      list("errors", "Errors", "bad");
+      list("skipped", "Skipped", "muted");
+      if (s.fileCount != null) {
+        sections.push(
+          <DetailSection key="filecount" title="Files scanned">
+            <div className="text-xs text-slate-600" data-testid="text-file-count">{s.fileCount}</div>
+          </DetailSection>,
+        );
+      }
+      break;
+    }
+    case "import-tracks-from-dropbox": {
+      list("created", "Created", "good");
+      list("errors", "Errors", "bad");
+      list("skipped", "Skipped", "muted");
+      break;
+    }
+    case "find-missing-lyrics": {
+      const stats: Array<[string, any]> = [
+        ["Scanned", s.scanned], ["Synced", s.synced], ["Plain", s.plain],
+        ["Instrumental", s.instrumental], ["Not found", s.notFound], ["Failed", s.failed],
+      ];
+      sections.push(
+        <DetailSection key="stats" title="Counts">
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            {stats.map(([k, v]) => (
+              <div key={k} className="bg-slate-50 rounded-lg px-2 py-1.5">
+                <div className="text-[10px] uppercase text-slate-500">{k}</div>
+                <div className="text-slate-800 tabular-nums">{v ?? 0}</div>
+              </div>
+            ))}
+          </div>
+        </DetailSection>,
+      );
+      list("notFoundSongs", "Not-found songs", "warn");
+      list("failedSongs", "Failed songs", "bad");
+      break;
+    }
+    case "fetch-lyrics-from-lrclib": {
+      const lines: Array<[string, any]> = [
+        ["Source", s.source],
+        ["Has synced", s.hasSynced == null ? null : s.hasSynced ? "yes" : "no"],
+        ["Cues", s.cueCount],
+        ["Characters", s.charCount],
+        ["Lookup URL", s.url ?? s.lookupUrl ?? s.geniusUrl],
+      ].filter(([, v]) => v != null && v !== "") as Array<[string, any]>;
+      if (lines.length > 0) {
+        sections.push(
+          <DetailSection key="lrclib" title="Lookup">
+            <dl className="text-xs space-y-1">
+              {lines.map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <dt className="w-28 text-slate-500">{k}</dt>
+                  <dd className="text-slate-800 break-all">
+                    {typeof v === "string" && /^https?:\/\//.test(v) ? (
+                      <a href={v} target="_blank" rel="noreferrer" className="text-[var(--brand-blue)] hover:underline">
+                        {v}
+                      </a>
+                    ) : (
+                      String(v)
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </DetailSection>,
+        );
+      }
+      break;
+    }
+    case "auto-sync-lyrics": {
+      const lines: Array<[string, any]> = [
+        ["Source", fmtMB(s.sourceBytes)],
+        ["Transcoded", fmtMB(s.transcodedBytes)],
+        ["Transcode time", fmtMs(s.transcodeMs)],
+        ["STT time", fmtMs(s.sttMs)],
+        ["Line count", s.lineCount],
+        ["Source format", s.sourceFormat ?? s.sourceMimeType],
+      ].filter(([, v]) => v != null && v !== "" && v !== "—") as Array<[string, any]>;
+      sections.push(
+        <DetailSection key="autosync" title="Timings">
+          <dl className="text-xs space-y-1">
+            {lines.map(([k, v]) => (
+              <div key={k} className="flex gap-2">
+                <dt className="w-28 text-slate-500">{k}</dt>
+                <dd className="text-slate-800 tabular-nums">{String(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </DetailSection>,
+      );
+      break;
+    }
+  }
+
+  if (sections.length === 0) return null;
+  return <>{sections}</>;
 }

@@ -5337,6 +5337,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Single job-run lookup — backs the /admin/jobs?run=<id> deep-link
+  // detail sheet (Task #143). Lets an operator paste a job-run URL from
+  // Slack/email and land directly on its full summary even if the row
+  // has rotated past the listing's 100-item limit.
+  app.get("/api/admin/job-runs/:id", requireAdminBearer, async (req, res) => {
+    try {
+      const row = await storage.getJobRunById(String(req.params.id));
+      if (!row) return res.status(404).json({ message: "Job run not found." });
+      return res.json(row);
+    } catch (e: any) {
+      return res.status(500).json({ message: e?.message || "Failed to load job run." });
+    }
+  });
+
   app.post("/api/admin/albums/:id/import-lyrics-from-dropbox", requireAdminBearer, async (req, res) => {
     const startedAt = new Date();
     const albumId = String(req.params.id);
