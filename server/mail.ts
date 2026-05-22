@@ -9,13 +9,21 @@
 //   - sending FROM `onboarding@resend.dev` and TO the email the Resend
 //     account was registered with, OR
 //   - a verified sending domain (e.g. mail.goodtunes.music).
-// We default to the first; flip MAIL_FROM in Secrets when a domain is
-// verified.
+// We default to the first; once a domain is verified in Resend, set:
+//   - MAIL_FROM       e.g. `GoodTunes <invites@goodtunes.music>`
+//   - MAIL_REPLY_TO   e.g. `bill@gogoods.com` so replies route to a human
+// in Secrets and no redeploy is required. MAIL_REPLY_TO is optional —
+// if unset, recipients reply directly to MAIL_FROM.
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 function getFromAddress(): string {
   return process.env.MAIL_FROM || "GoodTunes <onboarding@resend.dev>";
+}
+
+function getReplyTo(): string | null {
+  const v = (process.env.MAIL_REPLY_TO || "").trim();
+  return v.length > 0 ? v : null;
 }
 
 type SendResult = { ok: true } | { ok: false; reason: string };
@@ -24,10 +32,13 @@ async function sendViaResend(to: string, subject: string, html: string, text: st
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, reason: "RESEND_API_KEY not set" };
   try {
+    const replyTo = getReplyTo();
+    const body: Record<string, unknown> = { from: getFromAddress(), to, subject, html, text };
+    if (replyTo) body.reply_to = replyTo;
     const r = await fetch(RESEND_ENDPOINT, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: getFromAddress(), to, subject, html, text }),
+      body: JSON.stringify(body),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
