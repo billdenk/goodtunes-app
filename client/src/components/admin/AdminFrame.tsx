@@ -68,6 +68,22 @@ export function AdminFrame({
   const { user } = useAuth();
   const [, navigate] = useLocation();
 
+  // Opt every admin route that uses this frame into the light theme by
+  // tagging <body>. The matching `body.gt-admin` rule in index.css
+  // overrides the global dark body bg AND retunes the shadcn semantic
+  // tokens (--background, --primary, --border, --input, --ring, etc.)
+  // to the Stripe-leaning light palette so every <Button>, <Input>,
+  // <Select>, <Tabs> primitive auto-picks up the admin look. Without
+  // this, pages like Reports/Jobs that don't add the class themselves
+  // fall back to the fan-player dark tokens and render with a black
+  // active tab pill, dark date inputs, and a dark "Try again" button.
+  useEffect(() => {
+    document.body.classList.add("gt-admin");
+    return () => {
+      document.body.classList.remove("gt-admin");
+    };
+  }, []);
+
   // Toggle state for the right preview pane. Persisted so once you tuck
   // it away it stays tucked across navigations / refreshes — matches
   // the macOS Mail / VS Code sidebar pattern.

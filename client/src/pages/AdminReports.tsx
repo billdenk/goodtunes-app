@@ -159,7 +159,7 @@ export function AdminReports() {
                 id="as-kind"
                 value={asKind}
                 onChange={(e) => setAsKind(e.target.value as any)}
-                className="h-9 rounded-md border border-slate-200 px-2 text-sm"
+                className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-[var(--brand-blue)]"
                 data-testid="select-as-partner-kind"
               >
                 <option value="label">Label</option>
@@ -189,7 +189,7 @@ export function AdminReports() {
 
         <AdminErrorBoundary title="Reports failed to render">
         <Tabs defaultValue={initialTab} className="w-full">
-          <TabsList className="bg-white border border-slate-200 p-1 h-auto flex-wrap">
+          <TabsList className="bg-slate-100 border border-slate-200 p-1 h-auto flex-wrap">
             <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
             <TabsTrigger value="plays" data-testid="tab-plays">Plays & GoodSync</TabsTrigger>
             <TabsTrigger value="payouts" data-testid="tab-payouts">Payouts</TabsTrigger>
