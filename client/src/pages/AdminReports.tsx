@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Component, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Button } from "@/components/ui/button";
@@ -95,8 +95,7 @@ export function AdminReports() {
 
   const { data: scope } = useQuery<ScopeInfo>({
     queryKey: ["/api/partner/reports/scope", asPartner, asKind],
-    queryFn: () =>
-      fetch(`/api/partner/reports/scope?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/scope?${qs}`),
   });
 
   const isSuper = scope?.role === "super_admin" && !scope.viewAs;
@@ -167,6 +166,7 @@ export function AdminReports() {
           </div>
         )}
 
+        <ReportsErrorBoundary>
         <Tabs defaultValue="sales" className="w-full">
           <TabsList className="bg-white border border-slate-200 p-1 h-auto flex-wrap">
             <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
@@ -202,6 +202,7 @@ export function AdminReports() {
           {isSuper && <TabsContent value="recon"><ReconciliationTab qs={qs} /></TabsContent>}
           {isSuper && <TabsContent value="events"><RawEventsTab qs={qs} /></TabsContent>}
         </Tabs>
+        </ReportsErrorBoundary>
       </div>
     </AdminFrame>
   );
@@ -293,12 +294,97 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+// Throw on non-OK so React Query flips into isError; this is what
+// keeps tabs from rendering against an error-shaped JSON body and
+// blanking the page.
+async function fetchJson(url: string): Promise<any> {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.message) msg = body.message;
+    } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+function ErrorState({ error, onRetry, testId }: { error: unknown; onRetry: () => void; testId?: string }) {
+  const message = error instanceof Error ? error.message : "Something went wrong loading this report.";
+  return (
+    <div
+      className="rounded-xl border border-rose-200 bg-rose-50/60 p-5 text-sm"
+      data-testid={testId ?? "error-state"}
+    >
+      <div className="font-medium text-rose-900">Couldn't load this report</div>
+      <div className="text-rose-800/80 mt-1 break-words">{message}</div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onRetry}
+        className="mt-3 h-8 border-rose-300 text-rose-900 hover:bg-rose-100"
+        data-testid="button-retry-report"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+
+function LoadingState({ testId }: { testId?: string }) {
+  return <div className="py-12 text-slate-500 text-sm" data-testid={testId ?? "loading-state"}>Loading…</div>;
+}
+
+class ReportsErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error) {
+    // Log so a future investigator can find it; the UI already shows
+    // a recoverable error card.
+    console.error("[AdminReports] render error:", error);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div
+          className="rounded-xl border border-rose-200 bg-rose-50/60 p-6 text-sm"
+          data-testid="reports-error-boundary"
+        >
+          <div className="font-semibold text-rose-900">Reports failed to render</div>
+          <div className="text-rose-800/80 mt-1 break-words">
+            {this.state.error.message || "An unexpected error occurred."}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => this.setState({ error: null })}
+            className="mt-3 h-8 border-rose-300 text-rose-900 hover:bg-rose-100"
+            data-testid="button-reset-error-boundary"
+          >
+            Try again
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function SalesTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/partner/reports/sales", qs],
-    queryFn: () => fetch(`/api/partner/reports/sales?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/sales?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm" data-testid="loading-sales">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState testId="loading-sales" />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -336,11 +422,12 @@ function SalesTab({ qs }: { qs: string }) {
 }
 
 function PlaysTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/partner/reports/plays", qs],
-    queryFn: () => fetch(`/api/partner/reports/plays?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/plays?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   const t = data.totals;
   return (
     <div className="space-y-4">
@@ -376,11 +463,12 @@ function PlaysTab({ qs }: { qs: string }) {
 }
 
 function PayoutsTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/partner/reports/payouts", qs],
-    queryFn: () => fetch(`/api/partner/reports/payouts?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/payouts?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -414,11 +502,12 @@ function PayoutsTab({ qs }: { qs: string }) {
 }
 
 function RedemptionTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/partner/reports/redemption", qs],
-    queryFn: () => fetch(`/api/partner/reports/redemption?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/redemption?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -448,11 +537,12 @@ function RedemptionTab({ qs }: { qs: string }) {
 }
 
 function TopFansTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/partner/reports/top-fans", qs],
-    queryFn: () => fetch(`/api/partner/reports/top-fans?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/top-fans?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
@@ -496,11 +586,12 @@ function TopFansTab({ qs }: { qs: string }) {
  * world land masses; dots scale by `orders` count.
  */
 function FanMapTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/partner/reports/fan-map", qs],
-    queryFn: () => fetch(`/api/partner/reports/fan-map?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/fan-map?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading map…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
@@ -566,11 +657,12 @@ function WorldMap({ points }: { points: Array<{ lat: number; lon: number; orders
 }
 
 function ReferralsTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/partner/reports/referrals", qs],
-    queryFn: () => fetch(`/api/partner/reports/referrals?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/partner/reports/referrals?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -624,11 +716,12 @@ function deltaSub(curr: number, prior: number, formatter: (n: number) => string 
 }
 
 function OverviewTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/admin/reports/kpis", qs],
-    queryFn: () => fetch(`/api/admin/reports/kpis?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/admin/reports/kpis?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm" data-testid="loading-overview">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState testId="loading-overview" />;
   const p = data.prior ?? {};
   return (
     <div className="space-y-4">
@@ -677,11 +770,12 @@ function OverviewTab({ qs }: { qs: string }) {
 }
 
 function RevenueTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/admin/reports/revenue", qs],
-    queryFn: () => fetch(`/api/admin/reports/revenue?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/admin/reports/revenue?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <div className="space-y-4">
       <BreakdownTable title="Revenue by SKU kind" rows={data.bySku.map((r: any) => ({ key: r.kind, name: r.kind, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=sku&${qs}`} />
@@ -726,11 +820,12 @@ function BreakdownTable({ title, rows, csv }: { title: string; rows: Array<{ key
 }
 
 function EngagementTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/admin/reports/top-content", qs],
-    queryFn: () => fetch(`/api/admin/reports/top-content?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/admin/reports/top-content?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <div className="space-y-4">
       <TopList title="Top tracks" rows={data.songs} columns={[{ label: "Title", key: "title" }, { label: "Artist", key: "artist" }]} csv={`/api/admin/reports/top-content.csv?dim=songs&${qs}`} testIdPrefix="row-track" idKey="songId" />
@@ -777,7 +872,7 @@ function TopList({ title, rows, columns, csv, testIdPrefix, idKey }: { title: st
 function FunnelsTab() {
   const { data } = useQuery<{ funnelUrl: string | null; retentionUrl: string | null; host: string }>({
     queryKey: ["/api/admin/reports/posthog"],
-    queryFn: () => fetch(`/api/admin/reports/posthog`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/admin/reports/posthog`),
   });
   return (
     <div className="space-y-4">
@@ -822,11 +917,12 @@ function PosthogPlaceholder({ envVar, host }: { envVar: string; host?: string })
 }
 
 function OpsTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/admin/reports/ops", qs],
-    queryFn: () => fetch(`/api/admin/reports/ops?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/admin/reports/ops?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -907,11 +1003,12 @@ function OpsTab({ qs }: { qs: string }) {
 }
 
 function ReconciliationTab({ qs }: { qs: string }) {
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/admin/reports/reconciliation", qs],
-    queryFn: () => fetch(`/api/admin/reports/reconciliation?${qs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/admin/reports/reconciliation?${qs}`),
   });
-  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
@@ -970,9 +1067,9 @@ function RawEventsTab({ qs }: { qs: string }) {
     if (sessionId) p.set("sessionId", sessionId);
     return p.toString();
   }, [qs, name, userId, sessionId]);
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/admin/reports/events", filterQs],
-    queryFn: () => fetch(`/api/admin/reports/events?${filterQs}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () => fetchJson(`/api/admin/reports/events?${filterQs}`),
   });
   return (
     <Card>
@@ -991,8 +1088,10 @@ function RawEventsTab({ qs }: { qs: string }) {
         </div>
         <ExportLink href={`/api/admin/reports/events.csv?${filterQs}`} label="CSV" />
       </div>
-      {isLoading || !data ? (
-        <div className="py-12 text-slate-500 text-sm">Loading…</div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading || !data ? (
+        <LoadingState />
       ) : data.rows.length === 0 ? (
         <EmptyState message="No events match these filters." />
       ) : (
