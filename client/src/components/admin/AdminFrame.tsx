@@ -54,6 +54,7 @@ export type EntityKey =
 export function AdminFrame({
   active,
   preview,
+  contentWidth = "wide",
   children,
 }: {
   active: EntityKey;
@@ -63,6 +64,17 @@ export function AdminFrame({
    * entirely so the editor gets the full main column.
    */
   preview?: React.ReactNode;
+  /**
+   * Inner content cap. List/grid pages (Albums, People, Gear, Vendors,
+   * Reports, Jobs) want the full 1440px main-column from Task #169 so
+   * 4K monitors can fit more rows/cards per row — that's `"wide"` and
+   * the default. Single-record edit/detail forms (Album edit, Person
+   * detail, Vendor edit, etc.) opt in to `"narrow"` (~960px) so a row
+   * of label + input stays comfortable to scan instead of stretching
+   * the eye across 1440px. Opt-in per page (not a shell-wide flip) so
+   * a new list page doesn't accidentally inherit the narrow cap.
+   */
+  contentWidth?: "wide" | "narrow";
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
@@ -297,7 +309,12 @@ export function AdminFrame({
             the page-content max-width wrapper so it spans uniformly
             across every admin page without each page having to opt in. */}
         <AutoSyncAlertBanner />
-        <div className="max-w-[1440px] mx-auto w-full px-6 sm:px-8 pt-6 pb-8">
+        <div
+          className={[
+            "mx-auto w-full px-6 sm:px-8 pt-6 pb-8",
+            contentWidth === "narrow" ? "max-w-[960px]" : "max-w-[1440px]",
+          ].join(" ")}
+        >
           <AdminErrorBoundary>{children}</AdminErrorBoundary>
         </div>
       </main>

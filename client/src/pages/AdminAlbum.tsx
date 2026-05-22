@@ -388,6 +388,7 @@ export function AdminAlbum() {
   return (
     <AdminFrame
       active="albums"
+      contentWidth="narrow"
       preview={
         <div className="space-y-4">
           <AlbumPreviewCard album={album} />

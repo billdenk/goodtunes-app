@@ -207,6 +207,7 @@ export function AdminVendor() {
   return (
     <AdminFrame
       active="vendors"
+      contentWidth="narrow"
       preview={
         <VendorPreviewCard vendor={vendor} instruments={instruments} />
       }

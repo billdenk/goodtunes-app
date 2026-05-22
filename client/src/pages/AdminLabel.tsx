@@ -215,6 +215,7 @@ export function AdminLabel() {
   return (
     <AdminFrame
       active="labels"
+      contentWidth="narrow"
       preview={
         <LabelPreviewCard
           label={label}

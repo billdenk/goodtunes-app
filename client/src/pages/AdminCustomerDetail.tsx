@@ -123,7 +123,7 @@ export function AdminCustomerDetail() {
     .reduce((sum, o) => sum + o.totalCents, 0);
 
   return (
-    <AdminFrame active="customers">
+    <AdminFrame active="customers" contentWidth="narrow">
       <div className="space-y-6">
         <Link
           href="/admin/customers"

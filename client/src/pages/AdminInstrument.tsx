@@ -231,6 +231,7 @@ export function AdminInstrument() {
   return (
     <AdminFrame
       active="gear"
+      contentWidth="narrow"
       preview={<InstrumentPreviewCard instrument={instrument} />}
     >
       <div className="space-y-6">

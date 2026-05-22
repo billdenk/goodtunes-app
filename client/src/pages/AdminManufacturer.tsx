@@ -101,7 +101,7 @@ export function AdminManufacturer() {
   }
 
   return (
-    <AdminFrame active="manufacturers">
+    <AdminFrame active="manufacturers" contentWidth="narrow">
       <div className="space-y-5">
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           <Link href="/admin/manufacturers" className="hover:text-slate-700">

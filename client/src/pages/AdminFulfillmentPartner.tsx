@@ -91,7 +91,7 @@ export function AdminFulfillmentPartner() {
   }
 
   return (
-    <AdminFrame active="fulfillment">
+    <AdminFrame active="fulfillment" contentWidth="narrow">
       <div className="space-y-5">
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           <Link href="/admin/fulfillment-partners" className="hover:text-slate-700">
