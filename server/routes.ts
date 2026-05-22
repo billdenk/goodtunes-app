@@ -3836,6 +3836,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     };
   }
 
+  // ─── transcodeForAlignment ────────────────────────────────────────
+  // Produces a small, lossy, alignment-only copy of a source audio
+  // file for upload to ElevenLabs' forced-alignment / Scribe STT.
+  // Mono, 16 kHz, MP3 64 kbps — a 20-minute song lands at ~9 MB, so
+  // any realistic master fits comfortably under FA_MAX_AUDIO_BYTES.
+  // The timeline is preserved 1:1 (no -ss / -t / atempo), so cues
+  // returned by ElevenLabs apply directly to the real master.
+  // MP3 is the most universally-accepted container in ElevenLabs'
+  // supported-format list. Caller is responsible for unlinking the
+  // returned tempfile.
+  async function transcodeForAlignment(
+    inputPath: string,
+  ): Promise<{ outputPath: string; mime: string; ext: string }> {
+    const { spawn } = await import("node:child_process");
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const outputPath = path.join(os.tmpdir(), `${randomUUID()}.mp3`);
+    const args = [
+      "-y",
+      "-i", inputPath,
+      "-vn",
+      "-ac", "1",
+      "-ar", "16000",
+      "-c:a", "libmp3lame",
+      "-b:a", "64k",
+      outputPath,
+    ];
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+        let stderr = "";
+        p.stderr.on("data", (c) => (stderr += c.toString()));
+        p.on("error", reject);
+        p.on("close", (code) => {
+          if (code === 0) return resolve();
+          const tail = stderr.split("\n").slice(-6).join("\n").trim();
+          reject(new Error(`ffmpeg alignment-copy transcode failed (exit ${code}): ${tail || "no stderr"}`));
+        });
+      });
+    } catch (err) {
+      try { await fsp.unlink(outputPath); } catch {}
+      throw err;
+    }
+    return { outputPath, mime: "audio/mpeg", ext: ".mp3" };
+  }
+
   const IMAGE_MIME_BY_EXT: Record<string, string> = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -6113,14 +6160,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     //      cap to bail out if the body grows past FA_MAX_AUDIO_BYTES.
     let audioMime = "audio/wav";
     let audioBuf: Buffer;
+    let audioExt: string | null = null;
     const isExternalUrl = /^https?:\/\//i.test(song.audioUrl);
+    // Upper bound on what we'll pull into memory for an alignment
+    // attempt. Bigger than FA_MAX_AUDIO_BYTES because we may need to
+    // transcode an over-cap master down to the alignment copy before
+    // shipping. 2 GB covers a ~30-minute 24-bit/96 kHz stereo WAV.
+    const FA_SOURCE_FETCH_CAP = 2 * 1024 * 1024 * 1024;
     try {
       if (isExternalUrl) {
         // 4-minute deadline covers the redirect chain AND the body
         // stream. SSRF/protocol/private-IP checks run on every hop
         // inside `safeStreamFetch`; the streaming reader enforces the
         // size cap so a chunked-transfer source (no Content-Length)
-        // still can't blow past `FA_MAX_AUDIO_BYTES`.
+        // can't fill memory unbounded.
         const handle = await safeStreamFetch(song.audioUrl, {
           totalTimeoutMs: 4 * 60_000,
         });
@@ -6133,19 +6186,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
           const ct = upstream.headers.get("content-type");
           if (ct) audioMime = ct.split(";")[0].trim();
-          // Honor Content-Length preflight when the server provides it.
-          const cl = Number(upstream.headers.get("content-length") ?? 0);
-          if (cl && cl > FA_MAX_AUDIO_BYTES) {
-            return res.status(413).json({
-              message: `Master is too large for auto-sync (${(cl / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
-            });
-          }
           try {
-            audioBuf = await readBodyWithCap(upstream, handle.ac, FA_MAX_AUDIO_BYTES);
+            audioBuf = await readBodyWithCap(upstream, handle.ac, FA_SOURCE_FETCH_CAP);
           } catch (e: any) {
             if (/exceeded/.test(String(e?.message))) {
               return res.status(413).json({
-                message: `Master is too large for auto-sync (cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
+                message: `Master is too large to fetch for auto-sync (cap ${FA_SOURCE_FETCH_CAP / 1024 / 1024 / 1024} GB).`,
               });
             }
             throw e;
@@ -6157,18 +6203,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const file = await objectStorage.getObjectEntityFile(song.audioUrl);
         const [meta] = await file.getMetadata();
         if (meta?.contentType) audioMime = String(meta.contentType);
-        const size = Number(meta?.size ?? 0);
-        if (size && size > FA_MAX_AUDIO_BYTES) {
-          return res.status(413).json({
-            message: `Master is too large for auto-sync (${(size / 1024 / 1024).toFixed(0)}MB; cap ${FA_MAX_AUDIO_BYTES / 1024 / 1024}MB). Try a FLAC.`,
-          });
-        }
         const [buf] = await file.download();
         audioBuf = buf;
       }
     } catch (err) {
       console.error("auto-sync: failed to fetch master audio", err);
       return res.status(502).json({ message: "Could not read master audio from storage" });
+    }
+
+    // ─── Alignment-copy fallback ───────────────────────────────────────
+    // ElevenLabs Scribe enforces its own 150 MB hard cap on the file
+    // we POST. When the master is comfortably under that, ship it
+    // as-is (no behaviour change for small files). When it's over,
+    // transcode a throwaway alignment-only copy (mono / 16 kHz / 64
+    // kbps MP3) and ship that instead. The high-quality master is
+    // untouched on disk; only the bytes shipped to ElevenLabs change.
+    // The alignment copy preserves the original timeline, so the
+    // word-level cues returned apply 1:1 to the real master.
+    let alignmentTmp: string | null = null;
+    let alignmentSourceTmp: string | null = null;
+    if (audioBuf.length > FA_MAX_AUDIO_BYTES) {
+      const fsp = await import("node:fs/promises");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      // Write the source to disk so ffmpeg can read it. Use the
+      // extension we can infer from the audio_url (helps ffmpeg pick
+      // the right demuxer when the mime is generic).
+      const srcExt = (song.audioUrl.match(/\.(\w+)$/)?.[1] || "bin").toLowerCase();
+      alignmentSourceTmp = path.join(os.tmpdir(), `${randomUUID()}.${srcExt}`);
+      try {
+        await fsp.writeFile(alignmentSourceTmp, audioBuf);
+        const out = await transcodeForAlignment(alignmentSourceTmp);
+        alignmentTmp = out.outputPath;
+        audioBuf = await fsp.readFile(alignmentTmp);
+        audioMime = out.mime;
+        audioExt = out.ext.replace(/^\./, "");
+      } catch (err: any) {
+        const detail = String(err?.message || err || "unknown").slice(0, 500);
+        console.error("auto-sync: alignment-copy transcode failed", err);
+        runErrorMessage = `Alignment-copy transcode failed: ${detail}`;
+        // Best-effort tempfile cleanup before bailing.
+        if (alignmentSourceTmp) { try { await fsp.unlink(alignmentSourceTmp); } catch {} }
+        if (alignmentTmp) { try { await fsp.unlink(alignmentTmp); } catch {} }
+        return res.status(500).json({
+          message: `Couldn't shrink master for auto-sync: ${detail}`,
+        });
+      }
+    }
+    // Schedule tempfile cleanup once the response is sent. The audit
+    // `res.on("finish")` listener above doesn't unlink, so we hang
+    // our own listener here.
+    if (alignmentSourceTmp || alignmentTmp) {
+      const fspMod = await import("node:fs/promises");
+      res.on("finish", async () => {
+        if (alignmentSourceTmp) { try { await fspMod.unlink(alignmentSourceTmp); } catch {} }
+        if (alignmentTmp) { try { await fspMod.unlink(alignmentTmp); } catch {} }
+      });
     }
 
     // Call ElevenLabs Speech-to-Text (Scribe v1). We deliberately do NOT
@@ -6185,7 +6275,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const timer = setTimeout(() => ctl.abort(), FA_TIMEOUT_MS);
     try {
       const form = new FormData();
-      const ext = (song.audioUrl.match(/\.(\w+)$/)?.[1] || "wav").toLowerCase();
+      const ext = audioExt || (song.audioUrl.match(/\.(\w+)$/)?.[1] || "wav").toLowerCase();
       form.append("file", new Blob([audioBuf], { type: audioMime }), `song-${id}.${ext}`);
       form.append("model_id", "scribe_v1");
       form.append("timestamps_granularity", "word");

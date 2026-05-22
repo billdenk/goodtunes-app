@@ -70,6 +70,10 @@ When changing the lyrics styling, keep the size uniform and adjust the blur/opac
 
 Placeholder until real per-song timing arrives via the upload portal — at that point swap the auto-distribution for the stored `syncedLyrics: { time, text }[]` array; rendering stays the same. Word-level karaoke is a follow-up. Full lyrics data plan in roadmap.
 
+### Large-master alignment copy
+
+ElevenLabs' forced-alignment / Scribe endpoint enforces its own 150 MB hard cap on whatever we POST it. Long 24-bit/96 kHz masters routinely exceed that even after Task #32's FLAC shrink. The auto-sync route handles this transparently: when the source bytes are over the cap, the server transcodes a throwaway *alignment-only* copy on the fly — mono, 16 kHz, MP3 64 kbps — via the `transcodeForAlignment` helper, and ships those bytes to ElevenLabs instead. The stored `audio_url` / `audio_source_url` / playback are unchanged; only the bytes sent to ElevenLabs change. The alignment copy preserves the original timeline (no `-ss` / `-t` / `atempo`), so word-level cues map 1:1 back to the real master and the existing refinement + hallucination filter runs exactly as before. If the alignment-copy transcode itself fails (ffmpeg error, corrupt source), the operator sees the actual ffmpeg stderr tail in the error — not the misleading "Try a FLAC" message it used to return.
+
 ## Playlist covers
 
 - Always show the actual artwork mosaic (gradient fallback only when truly empty).
