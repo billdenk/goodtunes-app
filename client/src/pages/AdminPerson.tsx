@@ -16,6 +16,8 @@ import {
   LockOpen,
   Disc3,
   Guitar,
+  Search,
+  X,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
@@ -1045,18 +1047,63 @@ function ReleasesPanel({
       ? "No GoodTunes\u00AE releases for this artist yet."
       : `${visibleCount} ${visibleCount === 1 ? "release" : "releases"} fans can play in-app${hiddenCount ? ` · ${hiddenCount} hidden` : ""}`;
 
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery("");
+  };
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? releases.filter((r) => r.title.toLowerCase().includes(q))
+    : releases;
+
   return (
     <section
       className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
       data-testid="panel-releases"
     >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-        <div>
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+        <div className="min-w-0">
           <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
             <Disc3 className="w-4 h-4 text-slate-400" />
             GoodTunes&reg; Releases
           </h2>
           <p className="text-slate-400 text-[11.5px]">{subline}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {searchOpen && (
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") closeSearch();
+              }}
+              placeholder="Search releases…"
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-slate-300 w-44"
+              data-testid="input-search-releases"
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+            disabled={releases.length === 0}
+            title={searchOpen ? "Close search" : "Search releases"}
+            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
+            data-testid="button-search-releases"
+          >
+            {searchOpen ? (
+              <X className="w-3.5 h-3.5" />
+            ) : (
+              <Search className="w-3.5 h-3.5" />
+            )}
+          </button>
         </div>
       </div>
       <div className="p-6">
@@ -1067,9 +1114,13 @@ function ReleasesPanel({
             matches their name), the release will appear here. Streaming-only
             Apple/Spotify rows for this artist live in the Streaming tab.
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-10 text-center text-slate-500 text-[12.5px] max-w-md mx-auto">
+            No releases match &ldquo;{query}&rdquo;
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {releases.map((r) => (
+            {filtered.map((r) => (
               <Link
                 key={r.id}
                 href={`/admin/albums/${r.id}`}
@@ -1207,41 +1258,86 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
     ? `${rows.length} ${rows.length === 1 ? "release" : "releases"} cached from Apple Music · streaming links only, not in-app playback`
     : "Set the Apple Music URL on the Overview tab to enable the pull";
 
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery("");
+  };
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? rows.filter((r) => r.name.toLowerCase().includes(q))
+    : rows;
+
   return (
     <section
       className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
       data-testid="panel-discography"
     >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-        <div>
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+        <div className="min-w-0">
           <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
             <MusicIcon className="w-4 h-4 text-slate-400" />
             Streaming
           </h2>
           <p className="text-slate-400 text-[11.5px]">{subline}</p>
         </div>
-        <button
-          onClick={() => pullMut.mutate()}
-          disabled={!hasAppleUrl || pullMut.isPending}
-          title={
-            hasAppleUrl
-              ? "Pull the latest discography from Apple Music"
-              : "Set the Apple Music URL on the Overview tab first"
-          }
-          className="px-3 py-1.5 rounded-md bg-[#319ED8] text-white text-[12px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 disabled:hover:bg-[#319ED8] inline-flex items-center gap-1.5"
-          data-testid="button-pull-discography"
-        >
-          {pullMut.isPending ? (
-            <Spinner className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {searchOpen && (
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") closeSearch();
+              }}
+              placeholder="Search releases…"
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-slate-300 w-44"
+              data-testid="input-search-streaming"
+            />
           )}
-          {pullMut.isPending
-            ? "Pulling…"
-            : rows.length === 0
-              ? "Pull from Apple Music"
-              : "Refresh from Apple Music"}
-        </button>
+          <button
+            type="button"
+            onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+            disabled={rows.length === 0}
+            title={searchOpen ? "Close search" : "Search releases"}
+            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
+            data-testid="button-search-streaming"
+          >
+            {searchOpen ? (
+              <X className="w-3.5 h-3.5" />
+            ) : (
+              <Search className="w-3.5 h-3.5" />
+            )}
+          </button>
+          <button
+            onClick={() => pullMut.mutate()}
+            disabled={!hasAppleUrl || pullMut.isPending}
+            title={
+              hasAppleUrl
+                ? "Pull the latest discography from Apple Music"
+                : "Set the Apple Music URL on the Overview tab first"
+            }
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5"
+            data-testid="button-pull-discography"
+          >
+            {pullMut.isPending ? (
+              <Spinner className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            {pullMut.isPending
+              ? "Pulling…"
+              : rows.length === 0
+                ? "Pull from Apple Music"
+                : "Refresh Streaming"}
+          </button>
+        </div>
       </div>
       <div className="p-6">
         {isLoading ? (
@@ -1254,9 +1350,13 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
               ? 'No discography pulled yet. Click "Pull from Apple Music" above to import this artist\'s full release list.'
               : "Paste this artist's Apple Music URL on the Overview tab, then come back to pull their discography."}
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-10 text-center text-slate-500 text-[12.5px] max-w-sm mx-auto">
+            No releases match &ldquo;{query}&rdquo;
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {rows.map((r) => (
+            {filtered.map((r) => (
               <div
                 key={r.collectionId}
                 className="text-left"
