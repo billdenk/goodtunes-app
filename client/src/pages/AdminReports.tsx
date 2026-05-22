@@ -33,12 +33,43 @@ function fmtPct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+// Saved date ranges — persist to URL (?from=…&to=…) so the operator
+// can share a link to a specific window, and to localStorage so the
+// next visit restores their last view even without query params.
+const DATE_LS_KEY = "admin-reports:dateRange";
 function useDateRange() {
   const today = new Date();
   const monthAgo = new Date(today.getTime() - 29 * 86400_000);
-  const [from, setFrom] = useState(isoDay(monthAgo));
-  const [to, setTo] = useState(isoDay(today));
-  return { from, to, setFrom, setTo };
+  // Single state object so setters always see the latest paired value
+  // (avoids the stale-closure bug where setFrom(...) followed by
+  // setTo(...) would persist the old `from` from a frozen render).
+  const [range, setRange] = useState<{ from: string; to: string }>(() => {
+    const defaults = { from: isoDay(monthAgo), to: isoDay(today) };
+    if (typeof window === "undefined") return defaults;
+    const url = new URLSearchParams(window.location.search);
+    if (url.get("from") && url.get("to")) {
+      return { from: url.get("from")!, to: url.get("to")! };
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(DATE_LS_KEY) || "null");
+      if (saved?.from && saved?.to) return { from: saved.from, to: saved.to };
+    } catch {}
+    return defaults;
+  });
+  function persist(next: { from: string; to: string }) {
+    try {
+      localStorage.setItem(DATE_LS_KEY, JSON.stringify(next));
+    } catch {}
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("from", next.from);
+      url.searchParams.set("to", next.to);
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
+  const setFrom = (v: string) => setRange((prev) => { const next = { ...prev, from: v }; persist(next); return next; });
+  const setTo = (v: string) => setRange((prev) => { const next = { ...prev, to: v }; persist(next); return next; });
+  return { from: range.from, to: range.to, setFrom, setTo };
 }
 
 function buildQs(from: string, to: string, asPartner: string, asKind: string): string {
@@ -51,7 +82,7 @@ function buildQs(from: string, to: string, asPartner: string, asKind: string): s
 }
 
 interface ScopeInfo {
-  role: "super_admin" | "label" | "artist" | "org" | "manufacturer" | "fulfillment";
+  role: "super_admin" | "admin" | "label" | "artist" | "org" | "manufacturer" | "fulfillment";
   roleScopeId: string | null;
   viewAs: { kind: "label" | "artist"; id: string } | null;
 }
@@ -69,6 +100,11 @@ export function AdminReports() {
   });
 
   const isSuper = scope?.role === "super_admin" && !scope.viewAs;
+  // Admin tier (non-sensitive god-view): super_admin + plain admin, both
+  // when not impersonating a partner. Sees KPIs, revenue, engagement,
+  // funnels, ops health, PostHog embeds — but NOT payout reconciliation
+  // or the raw event explorer (super_admin only).
+  const isAdmin = (scope?.role === "super_admin" || scope?.role === "admin") && !scope.viewAs;
   const isOrg = scope?.role === "org";
   const showReferrals = isOrg || scope?.role === "artist" || isSuper;
 
@@ -142,6 +178,13 @@ export function AdminReports() {
             {showReferrals && (
               <TabsTrigger value="referrals" data-testid="tab-referrals">Referrals</TabsTrigger>
             )}
+            {isAdmin && <TabsTrigger value="overview" data-testid="tab-overview">Overview (god-view)</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="revenue" data-testid="tab-revenue">Revenue breakdown</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="engagement" data-testid="tab-engagement">Engagement</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="funnels" data-testid="tab-funnels">Funnels & cohorts</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="ops" data-testid="tab-ops">Ops health</TabsTrigger>}
+            {isSuper && <TabsTrigger value="recon" data-testid="tab-reconciliation">Payout reconciliation</TabsTrigger>}
+            {isSuper && <TabsTrigger value="events" data-testid="tab-events">Raw events</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="sales"><SalesTab qs={qs} /></TabsContent>
@@ -151,6 +194,13 @@ export function AdminReports() {
           <TabsContent value="fans"><TopFansTab qs={qs} /></TabsContent>
           <TabsContent value="map"><FanMapTab qs={qs} /></TabsContent>
           {showReferrals && <TabsContent value="referrals"><ReferralsTab qs={qs} /></TabsContent>}
+          {isAdmin && <TabsContent value="overview"><OverviewTab qs={qs} /></TabsContent>}
+          {isAdmin && <TabsContent value="revenue"><RevenueTab qs={qs} /></TabsContent>}
+          {isAdmin && <TabsContent value="engagement"><EngagementTab qs={qs} /></TabsContent>}
+          {isAdmin && <TabsContent value="funnels"><FunnelsTab /></TabsContent>}
+          {isAdmin && <TabsContent value="ops"><OpsTab qs={qs} /></TabsContent>}
+          {isSuper && <TabsContent value="recon"><ReconciliationTab qs={qs} /></TabsContent>}
+          {isSuper && <TabsContent value="events"><RawEventsTab qs={qs} /></TabsContent>}
         </Tabs>
       </div>
     </AdminFrame>
@@ -559,6 +609,422 @@ function ReferralsTab({ qs }: { qs: string }) {
         </p>
       </Card>
     </div>
+  );
+}
+
+// ─── Task #77 — Super-admin god-view tabs ─────────────────────────────
+
+function deltaSub(curr: number, prior: number, formatter: (n: number) => string = (n) => n.toLocaleString()): string {
+  if (prior === 0 && curr === 0) return "vs prior: —";
+  const delta = curr - prior;
+  const pct = prior === 0 ? null : delta / prior;
+  const sign = delta > 0 ? "+" : "";
+  const pctStr = pct === null ? "n/a" : `${sign}${(pct * 100).toFixed(1)}%`;
+  return `vs prior ${formatter(prior)} (${pctStr})`;
+}
+
+function OverviewTab({ qs }: { qs: string }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/reports/kpis", qs],
+    queryFn: () => fetch(`/api/admin/reports/kpis?${qs}`, { credentials: "include" }).then((r) => r.json()),
+  });
+  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm" data-testid="loading-overview">Loading…</div>;
+  const p = data.prior ?? {};
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card><Stat label="GMV" value={fmtUsd(data.gmvCents)} sub={deltaSub(data.gmvCents, p.gmvCents ?? 0, fmtUsd)} /></Card>
+        <Card><Stat label="Net (platform)" value={fmtUsd(data.netCents)} sub={deltaSub(data.netCents, p.netCents ?? 0, fmtUsd)} /></Card>
+        <Card><Stat label="Paid orders" value={data.orderCount.toLocaleString()} sub={deltaSub(data.orderCount, p.orderCount ?? 0)} /></Card>
+        <Card><Stat label="Unique buyers" value={data.uniqueBuyers.toLocaleString()} sub={deltaSub(data.uniqueBuyers, p.uniqueBuyers ?? 0)} /></Card>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card><Stat label="New signups" value={data.newSignups.toLocaleString()} sub={deltaSub(data.newSignups, p.newSignups ?? 0)} /></Card>
+        <Card><Stat label="Plays" value={(data.plays ?? 0).toLocaleString()} sub={deltaSub(data.plays ?? 0, p.plays ?? 0)} /></Card>
+        <Card><Stat label="Unique listeners" value={(data.uniqueListeners ?? 0).toLocaleString()} sub={deltaSub(data.uniqueListeners ?? 0, p.uniqueListeners ?? 0)} /></Card>
+        <Card><Stat label="Conversion" value={fmtPct(data.conversionRate)} sub={`${data.firstPurchases} of ${data.visits} visitor sessions`} /></Card>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card><Stat label="DAU" value={data.dau.toLocaleString()} sub="last 24h sessions" /></Card>
+        <Card><Stat label="WAU" value={data.wau.toLocaleString()} sub="last 7d sessions" /></Card>
+        <Card><Stat label="MAU" value={data.mau.toLocaleString()} sub="last 30d sessions" /></Card>
+        <Card><Stat label="Refund rate" value={fmtPct(data.refundRate)} sub={`${data.refundedCount} refunded`} /></Card>
+      </div>
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-700">GMV & signups over time</h3>
+          <ExportLink href={`/api/admin/reports/kpis.csv?${qs}`} label="CSV" />
+        </div>
+        {data.orderCount === 0 && data.newSignups === 0 ? (
+          <EmptyState message="No activity in this range yet." />
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={data.series}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
+              <YAxis yAxisId="left" stroke="#94a3b8" fontSize={11} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
+              <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" fontSize={11} />
+              <Tooltip formatter={(v: number, name: string) => name === "gmvCents" ? fmtUsd(v) : v.toLocaleString()} />
+              <Line yAxisId="left" type="monotone" dataKey="gmvCents" stroke={BLUE} strokeWidth={2} dot={false} name="GMV" />
+              <Line yAxisId="right" type="monotone" dataKey="signups" stroke={MINT} strokeWidth={2} dot={false} name="Signups" />
+              <Line yAxisId="right" type="monotone" dataKey="orders" stroke={PURPLE} strokeWidth={2} dot={false} name="Orders" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function RevenueTab({ qs }: { qs: string }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/reports/revenue", qs],
+    queryFn: () => fetch(`/api/admin/reports/revenue?${qs}`, { credentials: "include" }).then((r) => r.json()),
+  });
+  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  return (
+    <div className="space-y-4">
+      <BreakdownTable title="Revenue by SKU kind" rows={data.bySku.map((r: any) => ({ key: r.kind, name: r.kind, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=sku&${qs}`} />
+      <BreakdownTable title="Top labels by revenue" rows={data.byLabel.map((r: any) => ({ key: r.id, name: r.name, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=label&${qs}`} />
+      <BreakdownTable title="Top artists by revenue" rows={data.byArtist.map((r: any) => ({ key: r.id, name: r.name, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=artist&${qs}`} />
+      <BreakdownTable title="Revenue by country" rows={data.byCountry.map((r: any) => ({ key: r.country, name: r.country, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=country&${qs}`} />
+    </div>
+  );
+}
+
+function BreakdownTable({ title, rows, csv }: { title: string; rows: Array<{ key: string; name: string; units: number; cents: number }>; csv: string }) {
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+        <ExportLink href={csv} label="CSV" />
+      </div>
+      {rows.length === 0 ? (
+        <EmptyState message="No data in this range." />
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <th className="py-2 font-bold">Name</th>
+              <th className="py-2 font-bold text-right">Units</th>
+              <th className="py-2 font-bold text-right">Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-b border-slate-100" data-testid={`row-breakdown-${r.key}`}>
+                <td className="py-2.5 text-slate-900 font-medium">{r.name || "—"}</td>
+                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.units.toLocaleString()}</td>
+                <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}
+
+function EngagementTab({ qs }: { qs: string }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/reports/top-content", qs],
+    queryFn: () => fetch(`/api/admin/reports/top-content?${qs}`, { credentials: "include" }).then((r) => r.json()),
+  });
+  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  return (
+    <div className="space-y-4">
+      <TopList title="Top tracks" rows={data.songs} columns={[{ label: "Title", key: "title" }, { label: "Artist", key: "artist" }]} csv={`/api/admin/reports/top-content.csv?dim=songs&${qs}`} testIdPrefix="row-track" idKey="songId" />
+      <TopList title="Top albums" rows={data.albums} columns={[{ label: "Album", key: "title" }, { label: "Artist", key: "artist" }]} csv={`/api/admin/reports/top-content.csv?dim=albums&${qs}`} testIdPrefix="row-album" idKey="albumId" />
+      <TopList title="Top artists" rows={data.artists} columns={[{ label: "Artist", key: "name" }]} csv={`/api/admin/reports/top-content.csv?dim=artists&${qs}`} testIdPrefix="row-artist" idKey="artistId" />
+      <TopList title="Top labels" rows={data.labels} columns={[{ label: "Label", key: "name" }]} csv={`/api/admin/reports/top-content.csv?dim=labels&${qs}`} testIdPrefix="row-label" idKey="labelId" />
+    </div>
+  );
+}
+
+function TopList({ title, rows, columns, csv, testIdPrefix, idKey }: { title: string; rows: any[]; columns: Array<{ label: string; key: string }>; csv: string; testIdPrefix: string; idKey: string }) {
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+        <ExportLink href={csv} label="CSV" />
+      </div>
+      {rows.length === 0 ? (
+        <EmptyState message="No plays in this range." />
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              {columns.map((c) => <th key={c.key} className="py-2 font-bold">{c.label}</th>)}
+              <th className="py-2 font-bold text-right">Plays</th>
+              <th className="py-2 font-bold text-right">Listeners</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r[idKey]} className="border-b border-slate-100" data-testid={`${testIdPrefix}-${r[idKey]}`}>
+                {columns.map((c) => <td key={c.key} className="py-2.5 text-slate-900 font-medium">{r[c.key] || "—"}</td>)}
+                <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{r.plays.toLocaleString()}</td>
+                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.listeners.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}
+
+function FunnelsTab() {
+  const { data } = useQuery<{ funnelUrl: string | null; retentionUrl: string | null; host: string }>({
+    queryKey: ["/api/admin/reports/posthog"],
+    queryFn: () => fetch(`/api/admin/reports/posthog`, { credentials: "include" }).then((r) => r.json()),
+  });
+  return (
+    <div className="space-y-4">
+      <Card>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Funnel — visit → play → checkout</h3>
+        {data?.funnelUrl ? (
+          <iframe
+            src={data.funnelUrl}
+            className="w-full h-[520px] rounded-md border border-slate-200 bg-slate-50"
+            data-testid="iframe-posthog-funnel"
+            title="PostHog funnel"
+          />
+        ) : (
+          <PosthogPlaceholder envVar="POSTHOG_FUNNEL_EMBED_URL" host={data?.host} />
+        )}
+      </Card>
+      <Card>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Cohort retention</h3>
+        {data?.retentionUrl ? (
+          <iframe
+            src={data.retentionUrl}
+            className="w-full h-[520px] rounded-md border border-slate-200 bg-slate-50"
+            data-testid="iframe-posthog-retention"
+            title="PostHog retention"
+          />
+        ) : (
+          <PosthogPlaceholder envVar="POSTHOG_RETENTION_EMBED_URL" host={data?.host} />
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function PosthogPlaceholder({ envVar, host }: { envVar: string; host?: string }) {
+  return (
+    <div className="py-10 text-center text-sm text-slate-500 bg-slate-50 rounded-md border border-dashed border-slate-200" data-testid={`empty-${envVar.toLowerCase()}`}>
+      <p className="font-medium text-slate-700">PostHog embed not configured.</p>
+      <p className="mt-2">Set <code className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[12px]">{envVar}</code> to a PostHog shared-dashboard iframe URL.</p>
+      {host && <p className="text-[11px] text-slate-400 mt-1">Detected host: {host}</p>}
+    </div>
+  );
+}
+
+function OpsTab({ qs }: { qs: string }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/reports/ops", qs],
+    queryFn: () => fetch(`/api/admin/reports/ops?${qs}`, { credentials: "include" }).then((r) => r.json()),
+  });
+  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <Card><Stat label="Stuck fulfillments" value={data.stuckFulfillments.count.toLocaleString()} sub={`older than ${data.stuckFulfillments.threshold}`} /></Card>
+        <Card><Stat label="Failed checkouts · 24h" value={(data.failedCheckouts.last24hCount ?? 0).toLocaleString()} sub="abandoned / never paid" /></Card>
+        <Card><Stat label="Failed checkouts · 7d" value={(data.failedCheckouts.last7dCount ?? 0).toLocaleString()} sub="abandoned / never paid" /></Card>
+        <Card><Stat label="Refund rate" value={fmtPct(data.refunds.rate)} sub={`${data.refunds.refundedInRange} of ${data.refunds.paidInRange}`} /></Card>
+        <Card><Stat label="Chargeback rate" value={data.chargebackRate == null ? "—" : fmtPct(data.chargebackRate)} sub={data.chargebackRate == null ? "dispute webhook not ingested" : "from Stripe disputes"} /></Card>
+        <Card><Stat label="Stuck payouts" value={data.stuckPayoutCount.toLocaleString()} sub="shipped, not transferred" /></Card>
+      </div>
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-700">Stuck OD fulfillments</h3>
+          <ExportLink href={`/api/admin/reports/ops/stuck.csv?${qs}`} label="CSV" />
+        </div>
+        {data.stuckFulfillments.rows.length === 0 ? (
+          <EmptyState message="No stuck fulfillments — Order Desk is keeping up." />
+        ) : (
+          <table className="w-full text-sm" data-testid="table-stuck-fulfillments">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                <th className="py-2 font-bold">Order</th>
+                <th className="py-2 font-bold">Buyer</th>
+                <th className="py-2 font-bold">Status</th>
+                <th className="py-2 font-bold">OD id</th>
+                <th className="py-2 font-bold text-right">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.stuckFulfillments.rows.map((r: any) => (
+                <tr key={r.id} className="border-b border-slate-100" data-testid={`row-stuck-${r.id}`}>
+                  <td className="py-2.5 text-slate-900 font-mono text-[12px]">{r.id.slice(0, 8)}</td>
+                  <td className="py-2.5 text-slate-700">{r.buyerName || r.buyerEmail || "—"}</td>
+                  <td className="py-2.5 text-slate-700">{r.fulfillmentStatus}</td>
+                  <td className="py-2.5 text-slate-500 font-mono text-[12px]">{r.orderDeskOrderId || "—"}</td>
+                  <td className="py-2.5 text-slate-500 text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-700">Pending checkouts (never advanced)</h3>
+          <ExportLink href={`/api/admin/reports/ops/failed.csv?${qs}`} label="CSV" />
+        </div>
+        {data.failedCheckouts.rows.length === 0 ? (
+          <EmptyState message="No abandoned checkouts in this range." />
+        ) : (
+          <table className="w-full text-sm" data-testid="table-failed-checkouts">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                <th className="py-2 font-bold">Order</th>
+                <th className="py-2 font-bold">Buyer</th>
+                <th className="py-2 font-bold text-right">Amount</th>
+                <th className="py-2 font-bold text-right">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.failedCheckouts.rows.map((r: any) => (
+                <tr key={r.id} className="border-b border-slate-100" data-testid={`row-failed-${r.id}`}>
+                  <td className="py-2.5 text-slate-900 font-mono text-[12px]">{r.id.slice(0, 8)}</td>
+                  <td className="py-2.5 text-slate-700">{r.buyerEmail || "—"}</td>
+                  <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.totalCents)}</td>
+                  <td className="py-2.5 text-slate-500 text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="text-[11px] text-slate-400 mt-3">
+          {data.failedCheckouts.proxyNote || "Counts include abandoned Checkout Sessions that never advanced to paid."} Cross-check disputes at <code className="px-1 py-0.5 bg-slate-50 border border-slate-200 rounded">stripe.com/dashboard/payments/disputes</code>.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+function ReconciliationTab({ qs }: { qs: string }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/reports/reconciliation", qs],
+    queryFn: () => fetch(`/api/admin/reports/reconciliation?${qs}`, { credentials: "include" }).then((r) => r.json()),
+  });
+  if (isLoading || !data) return <div className="py-12 text-slate-500 text-sm">Loading…</div>;
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-slate-700">Payout reconciliation by owner</h3>
+        <ExportLink href={`/api/admin/reports/reconciliation.csv?${qs}`} label="CSV" />
+      </div>
+      {data.rows.length === 0 ? (
+        <EmptyState message="No shipped orders in this range." />
+      ) : (
+        <table className="w-full text-sm" data-testid="table-reconciliation">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <th className="py-2 font-bold">Owner</th>
+              <th className="py-2 font-bold">Stripe acct</th>
+              <th className="py-2 font-bold text-right">Shipped</th>
+              <th className="py-2 font-bold text-right">Transferred</th>
+              <th className="py-2 font-bold text-right">Computed</th>
+              <th className="py-2 font-bold text-right">Δ Delta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((r: any) => (
+              <tr key={`${r.kind}:${r.id}`} className="border-b border-slate-100" data-testid={`row-recon-${r.id}`}>
+                <td className="py-2.5">
+                  <div className="text-slate-900 font-medium">{r.ownerName}</div>
+                  <div className="text-[11px] text-slate-400">{r.kind}</div>
+                </td>
+                <td className="py-2.5 text-slate-500 font-mono text-[12px]">
+                  {r.stripeAccountId || <span className="text-[#FF5470]">not connected</span>}
+                  {r.stripeAccountId && !r.payoutsEnabled && <div className="text-[10px] text-[#FF5470]">payouts disabled</div>}
+                </td>
+                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.shippedCount}</td>
+                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.transferredCount} · {fmtUsd(r.transferredCents)}</td>
+                <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.computedCents)}</td>
+                <td className={`py-2.5 text-right tabular-nums font-medium ${r.deltaCents > 0 ? "text-[#FF5470]" : "text-slate-500"}`}>{fmtUsd(r.deltaCents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="text-[11px] text-slate-400 mt-3">
+        Δ Delta = computed (snapshot at ship) − transferred via Stripe Connect. Non-zero deltas surface owners with skipped/failed transfers that need a retry from the Payouts admin.
+      </p>
+    </Card>
+  );
+}
+
+function RawEventsTab({ qs }: { qs: string }) {
+  const [name, setName] = useState("");
+  const [userId, setUserId] = useState("");
+  const [sessionId, setSessionId] = useState("");
+  const filterQs = useMemo(() => {
+    const p = new URLSearchParams(qs);
+    if (name) p.set("name", name);
+    if (userId) p.set("userId", userId);
+    if (sessionId) p.set("sessionId", sessionId);
+    return p.toString();
+  }, [qs, name, userId, sessionId]);
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/reports/events", filterQs],
+    queryFn: () => fetch(`/api/admin/reports/events?${filterQs}`, { credentials: "include" }).then((r) => r.json()),
+  });
+  return (
+    <Card>
+      <div className="flex flex-wrap items-end gap-3 mb-4">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ev-name" className="text-[11px] text-slate-500">Event name</Label>
+          <Input id="ev-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="play_start" className="h-9 w-[180px]" data-testid="input-event-name" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ev-user" className="text-[11px] text-slate-500">User id</Label>
+          <Input id="ev-user" value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="uuid…" className="h-9 w-[220px]" data-testid="input-event-user" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ev-session" className="text-[11px] text-slate-500">Session id</Label>
+          <Input id="ev-session" value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="session…" className="h-9 w-[220px]" data-testid="input-event-session" />
+        </div>
+        <ExportLink href={`/api/admin/reports/events.csv?${filterQs}`} label="CSV" />
+      </div>
+      {isLoading || !data ? (
+        <div className="py-12 text-slate-500 text-sm">Loading…</div>
+      ) : data.rows.length === 0 ? (
+        <EmptyState message="No events match these filters." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-raw-events">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                <th className="py-2 font-bold">Time</th>
+                <th className="py-2 font-bold">Event</th>
+                <th className="py-2 font-bold">User</th>
+                <th className="py-2 font-bold">Session</th>
+                <th className="py-2 font-bold">Payload</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r: any) => (
+                <tr key={r.id} className="border-b border-slate-100 align-top" data-testid={`row-event-${r.id}`}>
+                  <td className="py-2 text-slate-500 text-[12px] whitespace-nowrap">{r.ts ? new Date(r.ts).toLocaleString() : ""}</td>
+                  <td className="py-2 text-slate-900 font-medium whitespace-nowrap">{r.name}</td>
+                  <td className="py-2 text-slate-500 font-mono text-[11px]">{r.userId ? r.userId.slice(0, 8) : "—"}</td>
+                  <td className="py-2 text-slate-500 font-mono text-[11px]">{r.sessionId ? r.sessionId.slice(0, 10) : "—"}</td>
+                  <td className="py-2 text-slate-600 font-mono text-[11px] max-w-[400px] truncate">{r.payload ? JSON.stringify(r.payload) : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-400 mt-3">
+        Showing up to {data?.limit ?? 200} most-recent matching events. Use filters to drill down; download a 1,000-row CSV for analysis in a spreadsheet.
+      </p>
+    </Card>
   );
 }
 

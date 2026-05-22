@@ -9171,6 +9171,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerReportRoutes } = await import("./reports/routes");
   registerReportRoutes(app);
 
+  // ─── Task #77 — Admin & super-admin god-view reporting ─────────
+  const { registerAdminReportRoutes } = await import("./reports/adminRoutes");
+  registerAdminReportRoutes(app);
+
   // ─── Task #75 — Artist reporting dashboard ────────────────────
   const { registerArtistReportRoutes } = await import("./artistReports");
   await registerArtistReportRoutes(app);

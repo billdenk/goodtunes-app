@@ -1626,7 +1626,12 @@ export type RfqReply = typeof rfqReplies.$inferSelect;
 
 // Closed enum used by route + middleware code. Mirrors the values
 // written to users.role.
-export const ADMIN_ROLES = ["super_admin", "label", "artist", "manufacturer", "fulfillment"] as const;
+// `admin` = privileged non-super, non-partner tier. Sees the unscoped
+// god-view reports (KPIs, revenue breakdown, top content, ops, funnels)
+// but NOT the super-admin-only sensitive cuts (payout reconciliation,
+// raw event explorer). Partner roles (label/artist/manufacturer/
+// fulfillment) only see their own scoped reports via /api/partner/*.
+export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 // ─── Admin invitations ───────────────────────────────────────────────
