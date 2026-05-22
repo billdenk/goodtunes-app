@@ -21,6 +21,7 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -565,8 +566,8 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6"
+      <Card
+        className="rounded-2xl shadow-sm p-6"
         data-testid="panel-photo-current"
       >
         <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
@@ -594,10 +595,10 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
             </div>
           )}
         </div>
-      </section>
+      </Card>
 
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 flex flex-col"
+      <Card
+        className="rounded-2xl shadow-sm p-6 flex flex-col"
         data-testid="panel-photo-upload"
       >
         <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
@@ -659,7 +660,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
           Square works best — used in the fan-side InstrumentSheet and in the
           credits surface when a performer played this on a track.
         </p>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -718,8 +719,8 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
   });
 
   return (
-    <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+    <Card
+      className="rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-vendors"
     >
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
@@ -795,7 +796,7 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }
 

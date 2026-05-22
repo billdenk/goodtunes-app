@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
@@ -813,8 +814,8 @@ function ImageUploadPanel({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6"
+      <Card
+        className="rounded-2xl shadow-sm p-6"
         data-testid={`panel-${field}-current`}
       >
         <div className="flex items-start justify-between mb-3">
@@ -913,10 +914,10 @@ function ImageUploadPanel({
             </div>
           )}
         </div>
-      </section>
+      </Card>
 
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 flex flex-col"
+      <Card
+        className="rounded-2xl shadow-sm p-6 flex flex-col"
         data-testid={`panel-${field}-upload`}
       >
         <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
@@ -1003,7 +1004,7 @@ function ImageUploadPanel({
         <p className="mt-4 text-[11.5px] text-slate-500 leading-relaxed">
           {helperCopy}
         </p>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -1063,8 +1064,8 @@ function ReleasesPanel({
     : releases;
 
   return (
-    <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+    <Card
+      className="rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-releases"
     >
       <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
@@ -1159,7 +1160,7 @@ function ReleasesPanel({
           </div>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -1274,8 +1275,8 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
     : rows;
 
   return (
-    <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+    <Card
+      className="rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-discography"
     >
       <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
@@ -1387,7 +1388,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
           </div>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 

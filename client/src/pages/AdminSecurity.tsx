@@ -106,7 +106,7 @@ export default function AdminSecurity() {
       <AdminFrame active="none">
         <div className="space-y-5">
           {header}
-          <Card className="p-5 bg-white border-slate-200">
+          <Card className="p-5">
             <p className="text-[13px] text-rose-600" data-testid="text-security-error">
               Couldn't load security settings{error instanceof Error && error.message ? `: ${error.message}` : "."}
             </p>
@@ -132,7 +132,7 @@ export default function AdminSecurity() {
       <div className="space-y-5">
         {header}
 
-        <Card className="p-5 space-y-4 bg-white border-slate-200">
+        <Card className="p-5 space-y-4">
           <div>
             <h2 className="text-[15px] font-semibold text-slate-900">Second factor</h2>
             <p className="text-[12.5px] text-slate-500 mt-1">
@@ -177,7 +177,7 @@ export default function AdminSecurity() {
         </Card>
 
         {data.totpEnrolled && (
-          <Card className="p-5 space-y-3 bg-white border-slate-200" data-testid="card-recovery-codes">
+          <Card className="p-5 space-y-3" data-testid="card-recovery-codes">
             <h2 className="text-[15px] font-semibold text-slate-900">Recovery codes</h2>
             <p className="text-[12.5px] text-slate-500">
               {data.recoveryCodesRemaining} code{data.recoveryCodesRemaining === 1 ? "" : "s"} remaining. Regenerate if you've lost the printed list or used most of them — old codes stop working immediately.
@@ -213,7 +213,7 @@ export default function AdminSecurity() {
         )}
 
         {!data.totpEnrolled && (
-          <Card className="p-5 space-y-3 bg-white border-slate-200">
+          <Card className="p-5 space-y-3">
             <h2 className="text-[15px] font-semibold text-slate-900">Add an authenticator app</h2>
             <p className="text-[12.5px] text-slate-500">Scan the QR with Google Authenticator, 1Password, Authy, etc., then enter the 6-digit code to confirm.</p>
             {!enrollData ? (

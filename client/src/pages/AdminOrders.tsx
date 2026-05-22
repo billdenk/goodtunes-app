@@ -13,6 +13,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Card } from "@/components/ui/card";
 import { AlertTriangle, Settings2, RefreshCw, Loader2 } from "lucide-react";
 import type { PayoutSettings } from "@shared/schema";
 
@@ -263,13 +264,13 @@ export function AdminOrders() {
 
         {isLoading && <div className="text-slate-500 text-sm" data-testid="admin-orders-loading">Loading…</div>}
         {!isLoading && filtered.length === 0 && (
-          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center" data-testid="admin-orders-empty">
+          <Card className="rounded-lg shadow-none p-8 text-center" data-testid="admin-orders-empty">
             <div className="text-slate-700 font-medium">No orders</div>
             <div className="text-slate-500 text-[13px] mt-1">When fans buy, they'll show up here.</div>
-          </div>
+          </Card>
         )}
 
-        <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+        <Card className="rounded-lg shadow-none divide-y divide-slate-100 overflow-hidden">
           {filtered.map((o) => {
             const isFocus = focusOrderId === o.id;
             return (
@@ -409,7 +410,7 @@ export function AdminOrders() {
             </div>
             );
           })}
-        </div>
+        </Card>
       </div>
     </main>
   );
@@ -572,7 +573,7 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
   const currentCert = settings?.certCostCents ?? 500;
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 mb-4 space-y-3" data-testid="panel-payout-settings">
+    <Card className="rounded-lg shadow-none p-4 mb-4 space-y-3" data-testid="panel-payout-settings">
       <div className="flex items-center justify-between">
         <h2 className="text-slate-900 text-[13px] font-bold">Payout settings</h2>
         <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 text-[12px]">Close</button>
@@ -621,6 +622,6 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
           {save.isPending ? "Saving…" : "Save"}
         </button>
       </div>
-    </section>
+    </Card>
   );
 }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { createPortal } from "react-dom";
+import { Card } from "@/components/ui/card";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -1590,8 +1591,8 @@ function TracksPanel({
   if (sorted.length === 0 && !adding) {
     return (
       <>
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-8"
+      <Card
+        className="rounded-2xl shadow-sm p-8"
         data-testid="panel-tracks-empty"
       >
         <div className="flex items-center gap-2 text-slate-500 text-[13px]">
@@ -1630,7 +1631,7 @@ function TracksPanel({
             </div>
           </button>
         </div>
-      </section>
+      </Card>
       {/* No lyrics-import dialog mount in the empty state — lyrics
           matching needs existing tracks to match against, so the
           entry point only lives on the Advanced menu once tracks
@@ -1647,8 +1648,8 @@ function TracksPanel({
   }
 
   return (
-    <section
-      className="relative rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden mb-32"
+    <Card
+      className="relative rounded-2xl shadow-sm overflow-hidden mb-32"
       data-testid="panel-tracks"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -1999,7 +2000,7 @@ function TracksPanel({
         open={creditsImportOpen}
         onOpenChange={setCreditsImportOpen}
       />
-    </section>
+    </Card>
   );
 }
 
@@ -10234,8 +10235,8 @@ function BonusVideos({
   });
 
   return (
-    <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+    <Card
+      className="rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-bonus-videos"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -10347,7 +10348,7 @@ function BonusVideos({
           qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "videos"] })
         }
       />
-    </section>
+    </Card>
   );
 }
 
@@ -10387,8 +10388,8 @@ function BonusPhotos({
   });
 
   return (
-    <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+    <Card
+      className="rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-bonus-photos"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -10480,7 +10481,7 @@ function BonusPhotos({
           qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "photos"] })
         }
       />
-    </section>
+    </Card>
   );
 }
 

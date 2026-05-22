@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
@@ -631,8 +632,8 @@ function ImageUploadPanel({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6"
+      <Card
+        className="rounded-2xl shadow-sm p-6"
         data-testid={`panel-${field}-current`}
       >
         <div className="flex items-start justify-between mb-3">
@@ -699,10 +700,10 @@ function ImageUploadPanel({
             </div>
           )}
         </div>
-      </section>
+      </Card>
 
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 flex flex-col"
+      <Card
+        className="rounded-2xl shadow-sm p-6 flex flex-col"
         data-testid={`panel-${field}-upload`}
       >
         <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
@@ -789,7 +790,7 @@ function ImageUploadPanel({
         <p className="mt-4 text-[11.5px] text-slate-500 leading-relaxed">
           {description}
         </p>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -864,8 +865,8 @@ function InstrumentsPanel({
 }) {
   if (instruments.length === 0) {
     return (
-      <section
-        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-10 text-center"
+      <Card
+        className="rounded-2xl shadow-sm p-10 text-center"
         data-testid="panel-instruments-empty"
       >
         <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
@@ -878,12 +879,12 @@ function InstrumentsPanel({
           Attach a product URL to any instrument and this vendor will
           appear here.
         </p>
-      </section>
+      </Card>
     );
   }
   return (
-    <section
-      className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden"
+    <Card
+      className="rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-instruments"
     >
       <div className="px-6 py-4 border-b border-slate-100">
@@ -928,7 +929,7 @@ function InstrumentsPanel({
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }
 
