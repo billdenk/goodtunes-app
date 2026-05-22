@@ -2668,28 +2668,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // JSON-LD blocks can be a Product directly, an array of nodes, or a
   // `@graph` wrapper. Walk everything and return the first Product.
   // Depth-bounded so a maliciously-nested blob can't blow the stack.
-  function findProduct(node: any, depth = 0): any {
-    if (depth > 8 || !node || typeof node !== "object") return null;
+  // Collect every @type:Product node we can reach. We then filter out
+  // brand-identity cards (PRS, some other manufacturer sites embed a
+  // Product for the *company itself* — same name as og:site_name, an
+  // @id anchored at "#identity"/"#organization", and no offers/sku/mpn).
+  // Walking every object value (not just @graph) lets us find Products
+  // wrapped in WebPage.mainEntity, which Martin/Gibson use. Bounded by
+  // depth so a maliciously deep blob can't blow the stack.
+  function collectProducts(node: any, out: any[] = [], depth = 0): any[] {
+    if (depth > 8 || !node || typeof node !== "object") return out;
     if (Array.isArray(node)) {
-      for (const n of node) { const r = findProduct(n, depth + 1); if (r) return r; }
-      return null;
+      for (const n of node) collectProducts(n, out, depth + 1);
+      return out;
     }
     const t = node["@type"];
-    if (t === "Product" || (Array.isArray(t) && t.includes("Product"))) return node;
-    // Walk every object value, not just @graph. Manufacturer sites
-    // (Martin, Gibson) wrap the Product inside a WebPage node via
-    // `mainEntity`, so a strict @graph-only walk misses it entirely and
-    // we fall back to OG/Twitter for everything — losing the JSON-LD
-    // image array, description, brand, etc. Bounded by depth so a
-    // maliciously deep blob can't blow the stack.
+    if (t === "Product" || (Array.isArray(t) && t.includes("Product"))) out.push(node);
     for (const key of Object.keys(node)) {
       const v = (node as any)[key];
-      if (v && typeof v === "object") {
-        const r = findProduct(v, depth + 1);
-        if (r) return r;
-      }
+      if (v && typeof v === "object") collectProducts(v, out, depth + 1);
     }
-    return null;
+    return out;
+  }
+
+  function isBrandIdentityProduct(p: any, siteName: string | null): boolean {
+    const id = typeof p?.["@id"] === "string" ? p["@id"] : "";
+    if (/#(identity|organization|brand|company)\b/i.test(id)) return true;
+    const hasProductSignals = !!(
+      p?.offers || p?.sku || p?.mpn || p?.gtin || p?.gtin13 || p?.gtin12 ||
+      (Array.isArray(p?.additionalProperty) && p.additionalProperty.length)
+    );
+    const name = typeof p?.name === "string" ? p.name.trim().toLowerCase() : "";
+    const site = (siteName || "").trim().toLowerCase();
+    // No real product signals AND the name is just the shop name = brand card.
+    return !hasProductSignals && !!site && name === site;
+  }
+
+  function pickProduct(html: string, siteName: string | null): any {
+    const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    const candidates: any[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = ldRe.exec(html))) {
+      try { collectProducts(JSON.parse(m[1].trim()), candidates); }
+      catch { /* malformed JSON-LD — keep walking */ }
+    }
+    return candidates.find((p) => !isBrandIdentityProduct(p, siteName)) || null;
   }
 
   async function rehostRemoteImage(src: string): Promise<string> {
@@ -2744,15 +2766,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!(key in meta)) meta[key] = decodeEntities(m[1]);
       }
 
-      let product: any = null;
-      const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-      while ((m = ldRe.exec(html))) {
-        try {
-          const node = JSON.parse(m[1].trim());
-          const found = findProduct(node);
-          if (found) { product = found; break; }
-        } catch { /* malformed JSON-LD — keep walking */ }
-      }
+      // Pick a real Product node, skipping brand-identity cards (PRS embeds
+      // a Product for "Paul Reed Smith Guitars" on every model page; without
+      // this filter we'd import the brand-as-gear with the logo as the photo).
+      const product = pickProduct(html, meta["og:site_name"] || null);
 
       const name = product?.name || meta["og:title"] || meta["twitter:title"] || null;
       const brand = (typeof product?.brand === "object" ? product.brand?.name : product?.brand) || null;
