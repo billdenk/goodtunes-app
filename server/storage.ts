@@ -82,6 +82,7 @@ import {
   creditRoles,
   albumVideos,
   albumPhotos,
+  orders,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -352,6 +353,22 @@ export interface IStorage {
   getCustomerByEmail(email: string): Promise<CustomerUser | undefined>;
   createCustomer(user: InsertCustomerUser): Promise<CustomerUser>;
   updateCustomer(id: string, data: Partial<CustomerUser>): Promise<CustomerUser | undefined>;
+
+  // ---- Admin customers directory (Task #131) -----------------------
+  // Read-only directory of fan accounts for the admin Customers section.
+  // List returns each customer's row plus a roll-up (order count + lifetime
+  // spend on paid/shipped orders + last activity timestamp). Profile
+  // returns the customer + orders + collection items + playlist summaries.
+  listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number }): Promise<{
+    rows: Array<CustomerUser & { orderCount: number; lifetimeSpendCents: number; lastActivityAt: Date | null }>;
+    total: number;
+  }>;
+  getAdminCustomerProfile(id: string): Promise<{
+    customer: CustomerUser;
+    orders: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; totalCents: number; status: string; goodDeedNumber: number | null; createdAt: Date | null; shippedAt: Date | null }>;
+    collection: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; albumArtwork: string; certificateNumber: number | null; acquiredAt: Date | null }>;
+    playlists: Array<{ id: string; name: string; songCount: number; createdAt: Date | null }>;
+  } | undefined>;
 
   // ---- OAuth identities --------------------------------------------
   findIdentity(kind: "admin" | "customer", provider: string, providerUserId: string): Promise<{ userId: string } | undefined>;
@@ -1688,6 +1705,112 @@ export class DbStorage implements IStorage {
     const { id: _i, createdAt: _c, ...rest } = data as any;
     const [c] = await db.update(customerUsers).set(rest).where(eq(customerUsers.id, id)).returning();
     return c;
+  }
+
+  // ---- Admin customers directory (Task #131) -------------------------
+  async listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number }) {
+    const q = (opts?.q ?? "").trim().toLowerCase();
+    const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 500);
+    const offset = Math.max(opts?.offset ?? 0, 0);
+    const like = `%${q}%`;
+    // Per-customer roll-up: order count + lifetime spend on paid/shipped
+    // orders (refunded orders are excluded from spend but still counted
+    // in orderCount so the admin can see refund activity). lastActivity
+    // is max(orders.createdAt, customer.createdAt) — gives a meaningful
+    // "last seen" even before a customer has placed any orders.
+    const whereExpr = q
+      ? sql`(lower(${customerUsers.displayName}) LIKE ${like}
+             OR lower(${customerUsers.email}) LIKE ${like}
+             OR lower(${customerUsers.username}) LIKE ${like}
+             OR lower(coalesce(${customerUsers.realName}, '')) LIKE ${like})`
+      : sql`true`;
+
+    const rows = await db
+      .select({
+        customer: customerUsers,
+        orderCount: sql<number>`coalesce(count(${orders.id}), 0)::int`,
+        lifetimeSpendCents: sql<number>`coalesce(sum(case when ${orders.status} in ('paid','shipped') then ${orders.totalCents} else 0 end), 0)::int`,
+        lastOrderAt: sql<Date | null>`max(${orders.createdAt})`,
+      })
+      .from(customerUsers)
+      .leftJoin(orders, eq(orders.customerId, customerUsers.id))
+      .where(whereExpr)
+      .groupBy(customerUsers.id)
+      .orderBy(desc(customerUsers.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(customerUsers)
+      .where(whereExpr);
+
+    return {
+      rows: rows.map((r) => ({
+        ...r.customer,
+        orderCount: r.orderCount,
+        lifetimeSpendCents: r.lifetimeSpendCents,
+        lastActivityAt: r.lastOrderAt ?? r.customer.createdAt ?? null,
+      })),
+      total,
+    };
+  }
+
+  async getAdminCustomerProfile(id: string) {
+    const [c] = await db.select().from(customerUsers).where(eq(customerUsers.id, id));
+    if (!c) return undefined;
+
+    const orderRows = await db
+      .select({
+        id: orders.id,
+        albumId: orders.albumId,
+        albumTitle: albums.title,
+        albumArtist: albums.artist,
+        totalCents: orders.totalCents,
+        status: orders.status,
+        goodDeedNumber: orders.goodDeedNumber,
+        createdAt: orders.createdAt,
+        shippedAt: orders.shippedAt,
+      })
+      .from(orders)
+      .innerJoin(albums, eq(orders.albumId, albums.id))
+      .where(eq(orders.customerId, id))
+      .orderBy(desc(orders.createdAt));
+
+    const collectionRows = await db
+      .select({
+        id: userAlbums.id,
+        albumId: userAlbums.albumId,
+        albumTitle: albums.title,
+        albumArtist: albums.artist,
+        albumArtwork: albums.artwork,
+        certificateNumber: userAlbums.certificateNumber,
+        acquiredAt: userAlbums.acquiredAt,
+      })
+      .from(userAlbums)
+      .innerJoin(albums, eq(userAlbums.albumId, albums.id))
+      .where(eq(userAlbums.userId, id))
+      .orderBy(desc(userAlbums.acquiredAt));
+
+    const playlistRows = await db
+      .select({
+        id: playlists.id,
+        name: playlists.name,
+        createdAt: playlists.createdAt,
+        songCount: sql<number>`coalesce(count(${playlistSongs.id}), 0)::int`,
+      })
+      .from(playlists)
+      .leftJoin(playlistSongs, eq(playlistSongs.playlistId, playlists.id))
+      .where(eq(playlists.userId, id))
+      .groupBy(playlists.id)
+      .orderBy(desc(playlists.createdAt));
+
+    return {
+      customer: c,
+      orders: orderRows,
+      collection: collectionRows,
+      playlists: playlistRows,
+    };
   }
 
   // ---- OAuth identities -----------------------------------------------

@@ -9,6 +9,7 @@ import {
   Tag,
   Factory,
   Truck,
+  Users,
   ArrowLeft,
   BarChart3,
   DollarSign,
@@ -39,6 +40,7 @@ export type EntityKey =
   | "labels"
   | "manufacturers"
   | "fulfillment"
+  | "customers"
   | "reports"
   | "platform-pricing"
   | "none";
@@ -113,6 +115,14 @@ export function AdminFrame({
     queryKey: ["/api/fulfillment-partners"],
     enabled: !!user?.isAdmin,
   });
+  // Task #131 — Customers directory. The list payload is { rows, total }
+  // so the sidebar count uses `total` (full unfiltered fan count) rather
+  // than rows.length (capped to the page).
+  const { data: customersResp } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/customers"],
+    enabled: !!user?.isAdmin,
+  });
+  const customerCount = customersResp?.total ?? 0;
   // Task #119 — Platform Pricing is super-admin-only; we hide the
   // sidebar link entirely for other roles so they don't see a tab
   // that 403s when they click it.
@@ -195,6 +205,18 @@ export function AdminFrame({
               active={active === "fulfillment"}
               onClick={() => navigate("/admin/fulfillment-partners")}
               testId="nav-fulfillment"
+            />
+            {/* Task #131 — Customers (fan-account directory). Sits
+                between Fulfillment/Orders and Reports so the sales
+                side of the sidebar reads as Fulfillment → Customers
+                → Reports. */}
+            <SidebarLink
+              icon={Users}
+              label="Customers"
+              count={customerCount}
+              active={active === "customers"}
+              onClick={() => navigate("/admin/customers")}
+              testId="nav-customers"
             />
             {/* Task #80 — Reports surface. No count here (it's a tool,
                 not a CRUD list) so we pass -1 and special-case below. */}

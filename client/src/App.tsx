@@ -22,6 +22,8 @@ import { ArtistDashboard } from "@/pages/ArtistDashboard";
 import { LabelDashboard } from "@/pages/LabelDashboard";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
+import { AdminCustomers } from "@/pages/AdminCustomers";
+import { AdminCustomerDetail } from "@/pages/AdminCustomerDetail";
 import { AdminAlbums } from "@/pages/AdminAlbums";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { AdminPeople } from "@/pages/AdminPeople";
@@ -146,6 +148,15 @@ function Router() {
         </Route>
         <Route path="/admin/orders">
           <ProtectedRoute component={AdminOrders} />
+        </Route>
+        {/* Task #131 — Admin Customers directory. Detail route is
+            registered before the index so the `:id` param doesn't
+            shadow the index page. */}
+        <Route path="/admin/customers/:id">
+          <ProtectedRoute component={AdminCustomerDetail} />
+        </Route>
+        <Route path="/admin/customers">
+          <ProtectedRoute component={AdminCustomers} />
         </Route>
         <Route path="/admin/security">
           <ProtectedRoute component={AdminSecurity} />

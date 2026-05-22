@@ -9746,5 +9746,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // ─── Admin Customers directory (Task #131) ──────────────────────────
+  // Read-only fan-account browser. Search matches display/real name,
+  // email, and username. Each row carries an order count + lifetime
+  // spend roll-up so the index can sort visually without a second
+  // round-trip per row. Detail endpoint returns the customer's full
+  // profile (orders, owned albums, playlists) in one payload.
+  app.get("/api/admin/customers", requireAdmin, async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q : "";
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const result = await storage.listAdminCustomers({ q, limit, offset });
+    res.json(result);
+  });
+  app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {
+    const profile = await storage.getAdminCustomerProfile(String(req.params.id));
+    if (!profile) return res.status(404).json({ message: "Customer not found" });
+    res.json(profile);
+  });
+
   return httpServer;
 }

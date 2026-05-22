@@ -8,7 +8,7 @@
 //   driven by GET /api/admin/payouts/stuck — operator sees every shipped
 //   order whose Connect transfer hasn't landed.
 // - Inline settings popover for platformFeePct + certCostCents.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -181,6 +181,35 @@ export function AdminOrders() {
 
   const filtered = (orders ?? []).filter((o) => (filter === "all" ? true : o.status === filter));
 
+  // Task #131 — Deep-link focus. When AdminCustomerDetail (or any
+  // other admin page) links here as `/admin/orders?orderId=<id>` we
+  // scroll the matching row into view and flash a focus ring so the
+  // operator can see exactly which order the link landed on. We force
+  // the filter back to "all" so the requested order is never hidden
+  // by the active status filter.
+  const focusOrderId = (() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return new URLSearchParams(window.location.search).get("orderId");
+    } catch {
+      return null;
+    }
+  })();
+  const focusedRef = useRef<HTMLDivElement | null>(null);
+  const [didFocus, setDidFocus] = useState(false);
+  useEffect(() => {
+    if (focusOrderId && filter !== "all") setFilter("all");
+  }, [focusOrderId, filter]);
+  useEffect(() => {
+    if (!focusOrderId || didFocus) return;
+    if (!filtered.some((o) => o.id === focusOrderId)) return;
+    const t = setTimeout(() => {
+      focusedRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setDidFocus(true);
+    }, 50);
+    return () => clearTimeout(t);
+  }, [filtered, focusOrderId, didFocus]);
+
   return (
     <main className="min-h-screen bg-slate-50" data-testid="page-admin-orders">
       <div className="max-w-5xl mx-auto px-6 py-8">
@@ -234,8 +263,19 @@ export function AdminOrders() {
         )}
 
         <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-          {filtered.map((o) => (
-            <div key={o.id} className="px-4 py-4 flex items-center gap-4" data-testid={`row-admin-order-${o.id}`}>
+          {filtered.map((o) => {
+            const isFocus = focusOrderId === o.id;
+            return (
+            <div
+              key={o.id}
+              ref={isFocus ? focusedRef : undefined}
+              className={[
+                "px-4 py-4 flex items-center gap-4 transition-colors",
+                isFocus ? "bg-[var(--brand-blue)]/5 ring-2 ring-inset ring-[var(--brand-blue)]/40" : "",
+              ].join(" ")}
+              data-testid={`row-admin-order-${o.id}`}
+              data-focused={isFocus ? "true" : undefined}
+            >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-[11px] flex-wrap">
                   <span className={[
@@ -274,8 +314,22 @@ export function AdminOrders() {
                   <span className="text-slate-400"> · </span>
                   <span className="text-slate-600">{o.albumArtist}</span>
                 </div>
+                {/* Task #131 — Cross-link into the Customers directory.
+                    Only orders with a real customerId get the link;
+                    guest / orphan orders keep their snapshot text as
+                    plain copy so we don't navigate to a 404. */}
                 <div className="text-[12.5px] text-slate-500 mt-0.5">
-                  {(o.customerName || o.customerEmail) + (o.customerName && o.customerEmail ? ` · ${o.customerEmail}` : "")}
+                  {o.customerId ? (
+                    <Link
+                      href={`/admin/customers/${o.customerId}`}
+                      className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+                      data-testid={`link-customer-${o.id}`}
+                    >
+                      {(o.customerName || o.customerEmail) + (o.customerName && o.customerEmail ? ` · ${o.customerEmail}` : "")}
+                    </Link>
+                  ) : (
+                    (o.customerName || o.customerEmail) + (o.customerName && o.customerEmail ? ` · ${o.customerEmail}` : "")
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {o.items.map((it) => (
@@ -346,7 +400,8 @@ export function AdminOrders() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </main>
