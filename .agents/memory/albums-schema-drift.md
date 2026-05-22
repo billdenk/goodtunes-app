@@ -1,39 +1,51 @@
 ---
-name: Prod schema drift — drizzle declares columns the prod DB doesn't have
-description: When an admin index page suddenly shows 0 rows for one entity but other entities load, the live prod table is almost certainly missing additive columns that shared/schema.ts already declares. Drizzle's SELECT * fails on the unknown column and the API responds 500/empty.
+name: Prod schema drift — drizzle declares columns/tables the prod DB doesn't have
+description: When admin pages 500 or render empty in prod only (Sell tab stuck loading, Shopify/Reports panels error), shared/schema.ts is ahead of the prod DB because drizzle-kit push silently bailed on a rename prompt. Sweep prod against information_schema and ADD COLUMN/CREATE TABLE IF NOT EXISTS.
 ---
 
-# Prod schema drift — the "everything for one entity vanished" bug
+# Prod schema drift — the "everything for one entity vanished" / "panel 500s" bug
 
 ## Symptom
-A single admin index page (Albums, People, Vendors, Orders, etc.) shows the empty state ("No people yet", sidebar count = 0) while other entities continue to load normally. Production only; dev is fine.
+Either (a) a single admin index page shows the empty state ("No people yet", sidebar count = 0) while other entities load normally, or (b) a panel/tab on a working entity 500s or stays stuck on "Loading…" (Sell tab, Shopify tab, Reports KPIs, Platform pricing). Production only; dev is fine. Logs show `column "X" does not exist` or `relation "Y" does not exist`.
 
 ## Root cause
-A recent task added columns to a table via raw `ALTER TABLE` SQL because `npm run db:push` (drizzle-kit) sits on an interactive rename-detection prompt that can't accept piped input in this environment. The dev DB got the columns; **prod did not**. `shared/schema.ts` declares the new columns, so drizzle's generated `SELECT col1, col2, …, new_col FROM …` fails with `column "new_col" does not exist` and the API returns an error or an empty list.
+Tasks add columns/tables to dev via raw `ALTER TABLE` / `CREATE TABLE` SQL because `npm run db:push` (drizzle-kit) sits on interactive rename-detection prompts that can't accept piped input in this environment. Dev DB gets the changes; **prod doesn't**. `shared/schema.ts` declares them, so drizzle's generated SQL fails on prod.
 
-## Why
-`scripts/post-merge.sh` runs `npm run db:push` after each task merges. Every merge log I've seen shows it stuck at a prompt like:
+## Why drizzle-kit gets stuck (still happens despite `yes ""` in post-merge.sh)
+Every merge log shows the prompt:
 > Is `<some_table>` table created or renamed from another table?
 > ❯ + `<some_table>` create table
 >   ~ user_sessions › `<some_table>` rename table
 
-The "rename from `user_sessions`" false positive keeps tripping the script. drizzle-kit exits without applying anything. Dev had its raw SQL applied at task time, prod never does.
+`scripts/post-merge.sh` now pipes `yes ""` into `npm run db:push`, which **should** accept the default. In practice, prod still drifts across many tables (one recent sweep found 9 missing tables and ~14 missing columns on the orders/album_addons tables alone). Don't assume the post-merge auto-apply worked — verify against `PROD_DATABASE_URL` whenever a task touched schema.
 
-## How to apply (diagnosis)
-1. `psql "$PROD_DATABASE_URL" -c "SELECT COUNT(*) FROM <entity>;"` — confirm rows actually exist.
-2. `psql "$PROD_DATABASE_URL" -c "\d <entity>"` — list prod columns.
-3. `rg "<entityCamelCase> = pgTable" shared/schema.ts -A 40` — list expected columns.
-4. Diff. The columns in the schema but not in prod are the offenders.
-
-## How to fix
-`ALTER TABLE … ADD COLUMN IF NOT EXISTS …` for every drifted column, run against `PROD_DATABASE_URL`. Idempotent. Match the type drizzle expects (varchar/text/integer/timestamp/jsonb). Re-add FK references if drizzle's column declaration has `.references(...)`.
-
-## Known prod drift sweep query
-Whenever a task description mentions "applied via raw SQL / ALTER TABLE / CREATE TABLE because drizzle-kit prompt blocked", check prod immediately:
-```sql
-SELECT column_name FROM information_schema.columns WHERE table_name='<table>' ORDER BY ordinal_position;
-SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='<new_table>';
+## Diagnosis sweep (run BEFORE assuming anything)
+Don't trust the first error in the logs — fix one column and the next request will hit a different missing one. Sweep all suspect tables in one pass:
+```bash
+psql "$PROD_DATABASE_URL" -c "\d <table>"          # actual columns
+rg "<entityCamelCase> = pgTable" shared/schema.ts -A 60   # expected columns
 ```
+Then check missing tables in a single query:
+```sql
+SELECT table_name FROM information_schema.tables
+ WHERE table_schema='public'
+   AND table_name IN ('shopify_stores','shopify_product_mappings', …);
+```
+The drifted set typically clusters by feature area (Shopify, payouts, signed-cert) because tasks land related tables together.
 
-## Longer-term fix (shipped)
-`scripts/post-merge.sh` now pipes `yes ""` into `npm run db:push` so every false-positive rename prompt accepts its default ("+ create"). Additive schema changes reach prod automatically on merge; no more hand-patched ALTERs. If you ever see this drift again after the script ran, the prompt default has changed — re-read the merge log before adding more raw-SQL workarounds.
+## Fix
+Write one SQL file with `BEGIN; …; COMMIT;` containing `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for every missing column and `CREATE TABLE IF NOT EXISTS` for every missing table, then `psql "$PROD_DATABASE_URL" -f` it. Idempotent — safe to re-run. Match the drizzle definition exactly (type, default, nullability, FK references, unique constraints).
+
+## Gotchas surfaced by past sweeps
+- **Partial indexes living only in schema comments.** `shopify_product_mappings` documents two partial unique indexes in a code comment but they were never written anywhere as SQL — `shared/schema.ts` can't model partial indexes via drizzle-kit. They have to be created by hand alongside the table:
+  ```sql
+  CREATE UNIQUE INDEX shopify_mapping_unique_with_variant
+    ON shopify_product_mappings (store_id, shopify_product_id, shopify_variant_id)
+    WHERE shopify_variant_id IS NOT NULL;
+  CREATE UNIQUE INDEX shopify_mapping_unique_product_wide
+    ON shopify_product_mappings (store_id, shopify_product_id)
+    WHERE shopify_variant_id IS NULL;
+  ```
+- **Singleton settings rows.** `payout_settings` ships an `id='default'` row. After `CREATE TABLE`, also `INSERT … VALUES ('default') ON CONFLICT DO NOTHING` or `getPayoutSettings()` returns undefined and the Sell-tab profit readout shows `—`.
+- **Unique constraints aren't column defaults.** Drizzle's `.unique()` on a column (e.g. `orders.shopifyOrderId`) needs an explicit `ALTER TABLE … ADD CONSTRAINT … UNIQUE` after a late `ADD COLUMN` — otherwise the column exists but the Shopify webhook's `ON CONFLICT (shopify_order_id) DO NOTHING` will throw. Guard with `IF NOT EXISTS` via a `DO $$ … pg_constraint … $$` block.
+- **`origin text NOT NULL DEFAULT 'direct'` is safe to add to a populated `orders` table** — existing rows get backfilled to `'direct'` by the default, which matches the schema intent.
