@@ -165,8 +165,10 @@ export interface IStorage {
   // reads always pass false so hidden vendor buttons don't render in the
   // fan-side InstrumentSheet. Returned `vendors` are flat-enriched (vendor
   // metadata joined onto the attachment) so the client sees one shape.
-  getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] })[]>;
-  getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] }) | undefined>;
+  // `maker` is the joined vendor row referenced by makerVendorId (Task
+  // #174) — null when the gear hasn't been linked to a builder yet.
+  getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null })[]>;
+  getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null }) | undefined>;
   createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument>;
   updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined>;
   deleteInstrument(id: string): Promise<void>;
@@ -199,6 +201,23 @@ export interface IStorage {
   // track_performers → instruments → instrument_vendors, so any artist
   // credited as having played one of the vendor's instruments shows up.
   getVendorInstruments(vendorId: string): Promise<Instrument[]>;
+  // Task #174 — every instrument whose headline maker (FK
+  // instruments.makerVendorId) is this vendor. Used by the Maker profile
+  // page in the admin so a Maker entity sees the gear it builds.
+  getMakerInstruments(vendorId: string): Promise<Instrument[]>;
+  getMakerInstrumentsWithResellers(vendorId: string): Promise<
+    Array<
+      Instrument & {
+        resellers: Array<{
+          id: string;
+          name: string;
+          domain: string | null;
+          logoUrl: string | null;
+          affiliateUrl: string | null;
+        }>;
+      }
+    >
+  >;
   getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>>;
 
   // Symmetric to the vendor version, but anchored on an instrument:
@@ -867,20 +886,49 @@ export class DbStorage implements IStorage {
     return byInstrument;
   }
 
-  async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] })[]> {
+  // Task #174 — bulk-load the headline Maker (vendor) for a set of
+  // instruments in one round trip. Returns a map keyed by instrument id;
+  // entries are absent when the instrument has no makerVendorId.
+  private async loadMakers(instrumentRows: Instrument[]): Promise<Map<string, Vendor>> {
+    const out = new Map<string, Vendor>();
+    const makerIds = Array.from(
+      new Set(
+        instrumentRows
+          .map((i) => (i as any).makerVendorId as string | null)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    if (makerIds.length === 0) return out;
+    const rows = await db.select().from(vendors).where(inArray(vendors.id, makerIds));
+    const byId = new Map(rows.map((v) => [v.id, v]));
+    for (const i of instrumentRows) {
+      const mid = (i as any).makerVendorId as string | null;
+      if (mid && byId.has(mid)) out.set(i.id, byId.get(mid)!);
+    }
+    return out;
+  }
+
+  async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null })[]> {
     const all = await db.select().from(instruments).orderBy(asc(instruments.name));
     if (all.length === 0) return [];
-    const byInstrument = await this.loadEnrichedAttachments(
-      all.map((i) => i.id),
-      !!opts?.includeHiddenVendors,
-    );
-    return all.map((i) => ({ ...i, vendors: byInstrument.get(i.id) ?? [] }));
+    const [byInstrument, makers] = await Promise.all([
+      this.loadEnrichedAttachments(all.map((i) => i.id), !!opts?.includeHiddenVendors),
+      this.loadMakers(all),
+    ]);
+    return all.map((i) => ({
+      ...i,
+      vendors: byInstrument.get(i.id) ?? [],
+      maker: makers.get(i.id) ?? null,
+    }));
   }
-  async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[] }) | undefined> {
+  async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null }) | undefined> {
     const [i] = await db.select().from(instruments).where(eq(instruments.id, id));
     if (!i) return undefined;
-    const byInstrument = await this.loadEnrichedAttachments([id], !!opts?.includeHiddenVendors);
-    return { ...i, vendors: byInstrument.get(id) ?? [] };
+    const [byInstrument, makers] = await Promise.all([
+      this.loadEnrichedAttachments([id], !!opts?.includeHiddenVendors),
+      this.loadMakers([i]),
+    ]);
+    return { ...i, vendors: byInstrument.get(id) ?? [], maker: makers.get(id) ?? null };
   }
   async createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument> {
     const [i] = await db.insert(instruments).values(data as any).returning();
@@ -1017,6 +1065,79 @@ export class DbStorage implements IStorage {
       out.push(r.i);
     }
     return out;
+  }
+
+  async getMakerInstruments(vendorId: string): Promise<Instrument[]> {
+    return await db
+      .select()
+      .from(instruments)
+      .where(eq(instruments.makerVendorId, vendorId))
+      .orderBy(asc(instruments.name));
+  }
+
+  // Task #174 — Maker-profile bundle. Returns every instrument whose
+  // headline maker is this vendor, each row hydrated with the resellers
+  // (non-hidden join rows) carrying it. The maker himself could be one
+  // of the resellers (Gibson sells Les Pauls direct), so the array
+  // routinely contains the maker's own row too.
+  async getMakerInstrumentsWithResellers(
+    vendorId: string,
+  ): Promise<
+    Array<
+      Instrument & {
+        resellers: Array<{
+          id: string;
+          name: string;
+          domain: string | null;
+          logoUrl: string | null;
+          affiliateUrl: string | null;
+        }>;
+      }
+    >
+  > {
+    const built = await db
+      .select()
+      .from(instruments)
+      .where(eq(instruments.makerVendorId, vendorId))
+      .orderBy(asc(instruments.name));
+    if (built.length === 0) return [];
+    const ids = built.map((i) => i.id);
+    const joins = await db
+      .select({ iv: instrumentVendors, v: vendors })
+      .from(instrumentVendors)
+      .innerJoin(vendors, eq(instrumentVendors.vendorId, vendors.id))
+      .where(
+        and(
+          inArray(instrumentVendors.instrumentId, ids),
+          eq(instrumentVendors.isHidden, false),
+        ),
+      )
+      .orderBy(asc(instrumentVendors.position));
+    const byInstrument = new Map<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        domain: string | null;
+        logoUrl: string | null;
+        affiliateUrl: string | null;
+      }>
+    >();
+    for (const row of joins) {
+      const list = byInstrument.get(row.iv.instrumentId) ?? [];
+      list.push({
+        id: row.v.id,
+        name: row.v.name,
+        domain: row.v.domain,
+        logoUrl: row.v.logoUrl,
+        affiliateUrl: row.iv.affiliateUrl,
+      });
+      byInstrument.set(row.iv.instrumentId, list);
+    }
+    return built.map((i) => ({
+      ...i,
+      resellers: byInstrument.get(i.id) ?? [],
+    }));
   }
 
   async getPersonTracks(personId: string) {

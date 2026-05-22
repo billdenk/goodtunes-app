@@ -29,6 +29,20 @@ Treat `(artist, lower(title))` collisions across the `is_goodtunes_release` boun
 
 `labels.domain`, `vendors.domain`, and `manufacturers.domain` are all lowercased / no-`www.` / partial-unique on non-null. When adding a new "shop-like" admin entity, mirror this exact shape — don't invent a new dedup key.
 
+## Vendors carry two role flags — Maker + Reseller (one row, both flags)
+
+The `vendors` table carries `is_maker` and `is_reseller` booleans (both default-true on insert via the admin "Add" dialog, but the surface you create from decides which flag the new row gets set to — the other defaults off). A single row can carry **both** flags: Gibson is a Maker (builds the gear) *and* a Reseller (sells it direct), and that's the expected shape — don't split the row.
+
+- `AdminVendors.tsx` is mode-aware via two `useRoute` calls (`/admin/vendors` → reseller mode, `/admin/makers` → maker mode). The same component renders both index pages. The list query embeds the filter in the URL string (`/api/vendors?role=maker`) so the default `queryKey.join("/")` fetcher works without a custom `queryFn`.
+- The detail page (`AdminVendor.tsx`) is shared too, and shows a **Roles panel** below Overview with two toggles. PUT `/api/admin/vendors/:id` accepts partial `{ isMaker, isReseller }` patches and the UI refuses to land in the zero-role state (toast + revert) — a vendor must always be at least one of the two.
+- The Gear page (`AdminInstrument.tsx`) Overview gets a **MakerPickerPanel** typeahead that writes `instruments.makerVendorId` via PUT `/api/admin/instruments/:id`. The "Resellers" tab (key still `vendors` so deep links don't break) drives the legacy reseller join table.
+
+If you add a new vendor-adjacent admin surface, follow the same shape: route on `/admin/makers/...` for Maker context, keep the URL-string `?role=` filter, and never invent a third role token.
+
+## Pressing plants are "Presses", not "Manufacturers"
+
+The vinyl/CD pressing-plant entity (`AdminManufacturers.tsx`, route `/admin/manufacturers`, sidebar key `manufacturers`) is **labelled "Presses"** everywhere user-facing — page titles, "Add press" button, empty/error states, delete-confirm copy. URL + sidebar key + filename stay as `manufacturers` so backlinks don't break, but every visible string reads "Press" / "Presses". The rename exists so the word "Manufacturer" doesn't blur with instrument Makers (a Maker builds the gear; a Press stamps the vinyl).
+
 ## Admin index pages — grid / list toggle
 
 The five admin index pages (Albums, People, Gear, Vendors, Labels) all carry the same Apple-Music-style **Grid / List** segmented control in the header. The primitive lives at `client/src/components/admin/ViewModeToggle.tsx` and exports both the toggle and the `useViewMode(entity)` hook. Preference is persisted **per entity** (`gt:admin:view:<entity>`) so list-mode on Vendors sticks to Vendors while Gear can stay on grid.

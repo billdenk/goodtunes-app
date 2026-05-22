@@ -1,7 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { INSTRUMENTS, type Instrument, type InstrumentVendor } from "@/data/musicData";
+
+// Task #174 — fan-side gear page still hangs off the static
+// INSTRUMENTS catalog (the same shape the rest of the demo content
+// uses), but we now hydrate the Maker headline from the live admin
+// API when the id is one a logged-in admin has edited. Missing /
+// 401 / 404 just leaves the maker chip off; the static body still
+// renders.
+interface LiveMakerProfile {
+  instrument?: {
+    maker?: {
+      id: string;
+      name: string;
+      domain: string;
+      logoUrl: string | null;
+    } | null;
+  };
+}
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { track } from "@/lib/analytics";
@@ -153,6 +171,7 @@ export function InstrumentDetail() {
           <div className="px-5 pb-4">
             <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(235,235,245,0.55)" }} data-testid="text-instrument-category">{instrument.category}</p>
             <h1 className="text-white text-[26px] font-bold leading-tight tracking-tight" data-testid="text-instrument-name">{instrument.name}</h1>
+            <MakerLine instrumentId={instrument.id} />
           </div>
 
           {/* About prose */}
@@ -194,10 +213,12 @@ export function InstrumentDetail() {
             </section>
           )}
 
-          {/* Where to buy */}
+          {/* Available at — resellers (Task #174). Was "Where to buy";
+              renamed so the section heading reads cleanly alongside the
+              Maker chip above the title. */}
           {instrument.vendors && instrument.vendors.length > 0 && (
             <section className="pt-3 pb-2">
-              <h2 className="px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Where to buy</h2>
+              <h2 className="px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Available at</h2>
               <div className="pb-1">
                 {instrument.vendors.map((v, i) => (
                   <button
@@ -242,5 +263,35 @@ export function InstrumentDetail() {
         <BottomNav />
       </section>
     </main>
+  );
+}
+
+function MakerLine({ instrumentId }: { instrumentId: string }) {
+  // Lightweight live fetch of the Maker for this gear id. Endpoint is
+  // public (read), so it works for signed-out fans too; we just hide
+  // the chip when no maker is set or the id doesn't exist in the live
+  // DB (some demo INSTRUMENTS are static-only).
+  const { data } = useQuery<LiveMakerProfile>({
+    queryKey: [`/api/instruments/${instrumentId}/profile`],
+    enabled: !!instrumentId,
+  });
+  const maker = data?.instrument?.maker;
+  if (!maker) return null;
+  return (
+    <p
+      className="mt-1.5 text-[13px] font-medium inline-flex items-center gap-1.5"
+      style={{ color: "rgba(235,235,245,0.65)" }}
+      data-testid="text-instrument-maker"
+    >
+      {maker.logoUrl && (
+        <img
+          src={maker.logoUrl}
+          alt=""
+          className="w-4 h-4 rounded-sm object-cover bg-white/90"
+          aria-hidden="true"
+        />
+      )}
+      <span>By {maker.name}</span>
+    </p>
   );
 }

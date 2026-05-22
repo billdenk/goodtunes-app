@@ -191,11 +191,11 @@ export function AdminManufacturers() {
     <AdminFrame active="manufacturers">
       <div className="space-y-5">
         <AdminPageHeader
-          title="Manufacturers"
-          subtitle="Pressing plants and duplication houses. Invite them to bid on print runs."
+          title="Presses"
+          subtitle="Vinyl pressing plants and duplication houses. Invite them to bid on print runs."
           actions={
             <AddEntityButton
-              label="Add manufacturer"
+              label="Add press"
               onClick={() => setAddOpen(true)}
               testId="button-add-manufacturer"
             />
@@ -219,13 +219,13 @@ export function AdminManufacturers() {
           <ErrorState
             error={rowsErrorObj}
             onRetry={() => refetchRows()}
-            title="Couldn't load manufacturers"
+            title="Couldn't load presses"
             testId="admin-manufacturers-error"
           />
         ) : filtered.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center">
             <Factory className="w-8 h-8 mx-auto text-slate-300 mb-2" strokeWidth={1.5} />
-            <div className="text-slate-700 font-medium">No manufacturers yet</div>
+            <div className="text-slate-700 font-medium">No presses yet</div>
             <div className="text-slate-500 text-[13px] mt-1">
               Add your first pressing plant to start collecting quotes.
             </div>
@@ -295,7 +295,7 @@ export function AdminManufacturers() {
         >
           <DialogHeader className="text-left space-y-1">
             <DialogTitle className="text-[17px] font-semibold text-slate-900">
-              Add manufacturer
+              Add press
             </DialogTitle>
             <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
               Paste the plant's website — we'll prefill name, domain, logo,
@@ -329,7 +329,7 @@ export function AdminManufacturers() {
                 data-testid="text-add-manufacturer-duplicate"
               >
                 <span className="font-semibold">{duplicate.name}</span> is
-                already in your Manufacturers list.{" "}
+                already in your Presses list.{" "}
                 <button
                   type="button"
                   onClick={() => {

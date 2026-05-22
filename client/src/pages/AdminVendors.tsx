@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, X, Store, Loader2 } from "lucide-react";
+import { Search, X, Store, Hammer, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -67,6 +67,44 @@ interface VendorLite {
 export function AdminVendors() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  // Task #174 — same component serves both /admin/vendors (resellers,
+  // the default) and /admin/makers (gear builders). The DB row is the
+  // same vendor entity; mode just narrows which flag we filter on,
+  // which sidebar key activates, and which label appears in the page
+  // chrome. Detect mode from the URL so deep links stay shareable.
+  const [matchMakers] = useRoute("/admin/makers");
+  const mode: "maker" | "reseller" = matchMakers ? "maker" : "reseller";
+  const copy = mode === "maker"
+    ? {
+        active: "makers" as const,
+        title: "Makers",
+        subtitle:
+          "Brands that build the gear — guitar makers, amp builders, microphone manufacturers. A row can also sell direct; flip Reseller on its detail page.",
+        addLabel: "Add maker",
+        addDialogTitle: "Add maker",
+        listRoute: "/admin/makers",
+        Icon: Hammer,
+        searchPlaceholder: "Search makers",
+        emptyTitle: "No makers yet",
+        emptyHint:
+          "Add a builder the first time you attach them to a piece of gear.",
+        emptySearchHint: "Try a different name or domain.",
+      }
+    : {
+        active: "vendors" as const,
+        title: "Resellers",
+        subtitle:
+          "Shops that sell the gear — Reverb, Sweetwater, Carter Vintage. Edit here once and it propagates to every instrument attachment.",
+        addLabel: "Add reseller",
+        addDialogTitle: "Add reseller",
+        listRoute: "/admin/vendors",
+        Icon: Store,
+        searchPlaceholder: "Search resellers",
+        emptyTitle: "No resellers yet",
+        emptyHint:
+          "Add a shop the first time you attach one of their listings to a piece of gear.",
+        emptySearchHint: "Try a different name or domain.",
+      };
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +124,15 @@ export function AdminVendors() {
       let payload: Record<string, unknown> = {
         name: "New vendor",
         domain: `new-vendor-${Date.now()}.example`,
+        // Task #174 — POST role flags reflect which surface the operator
+        // created the row from. The Maker surface defaults isReseller
+        // false (most builders don't sell direct); the Resellers surface
+        // keeps the legacy default (isReseller=true). The server's
+        // domain-collision branch promotes existing rows by OR'ing the
+        // requested flag on, so adding a Maker for an existing reseller
+        // domain (Gibson, Steinway) lights up both flags on the same row.
+        isMaker: mode === "maker",
+        isReseller: mode !== "maker",
       };
       let scrapedName: string | null = null;
       const trimmedUrl = (opts.url ?? "").trim();
@@ -105,6 +152,7 @@ export function AdminVendors() {
         };
         scrapedName = scraped.name;
         payload = {
+          ...payload,
           name: scraped.name || "New vendor",
           // Fall back to a unique placeholder so the unique-domain
           // constraint never blocks the create when scrape returns null.
@@ -122,9 +170,6 @@ export function AdminVendors() {
       return { vendor, scrapedName };
     },
     onSuccess: ({ vendor, scrapedName }) => {
-      queryClient.setQueryData<VendorLite[]>(["/api/vendors"], (old) =>
-        old ? (old.some((x) => x.id === vendor.id) ? old : [...old, vendor]) : [vendor],
-      );
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
       setAddOpen(false);
       setPasteUrl("");
@@ -135,7 +180,7 @@ export function AdminVendors() {
           description: "Review and edit on the detail page.",
         });
       }
-      navigate(`/admin/vendors/${vendor.id}`);
+      navigate(`${copy.listRoute}/${vendor.id}`);
     },
     onError: (err: any) => {
       setPasteError(humanizeApiError(err));
@@ -153,6 +198,11 @@ export function AdminVendors() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
+  // Task #174 — server filters with ?role=maker | reseller on the same
+  // GET /api/vendors endpoint. The default queryFn does queryKey.join("/")
+  // so the role lives in the URL string (not a separate key segment),
+  // which also keeps the Maker list and Reseller list in separate caches.
+  const vendorsUrl = `/api/vendors?role=${mode}`;
   const {
     data: vendors = [],
     isLoading,
@@ -160,7 +210,7 @@ export function AdminVendors() {
     error: vendorsErrorObj,
     refetch: refetchVendors,
   } = useQuery<VendorLite[]>({
-    queryKey: ["/api/vendors"],
+    queryKey: [vendorsUrl],
     enabled: !!user?.isAdmin,
   });
 
@@ -178,7 +228,7 @@ export function AdminVendors() {
     return rows;
   }, [vendors, search]);
 
-  const openVendor = (id: string) => navigate(`/admin/vendors/${id}`);
+  const openVendor = (id: string) => navigate(`${copy.listRoute}/${id}`);
 
   const openNewVendor = () => {
     if (createVendor.isPending) return;
@@ -210,7 +260,7 @@ export function AdminVendors() {
 
   if (authLoading) {
     return (
-      <AdminFrame active="vendors">
+      <AdminFrame active={copy.active}>
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
@@ -220,7 +270,7 @@ export function AdminVendors() {
 
   if (!user?.isAdmin) {
     return (
-      <AdminFrame active="vendors">
+      <AdminFrame active={copy.active}>
         <div className="py-20 text-center text-slate-500">
           You need to be signed in as an admin to view this page.
         </div>
@@ -229,11 +279,11 @@ export function AdminVendors() {
   }
 
   return (
-    <AdminFrame active="vendors">
+    <AdminFrame active={copy.active}>
       <div className="space-y-5">
       <AdminPageHeader
-        title="Vendors"
-        subtitle="One row per real-world shop. Edit here once and it propagates everywhere that vendor is attached."
+        title={copy.title}
+        subtitle={copy.subtitle}
         actions={(<>
           {searchOpen ? (
             <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
@@ -243,7 +293,7 @@ export function AdminVendors() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search vendors"
+                placeholder={copy.searchPlaceholder}
                 className="w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400"
                 data-testid="input-search-vendors"
               />
@@ -276,7 +326,7 @@ export function AdminVendors() {
             testIdPrefix="view-mode-vendors"
           />
           <AddEntityButton
-            label="Add Vendor"
+            label={copy.addLabel}
             onClick={openNewVendor}
             disabled={createVendor.isPending}
             testId="button-new-vendor"
@@ -292,11 +342,17 @@ export function AdminVendors() {
         <ErrorState
           error={vendorsErrorObj}
           onRetry={() => refetchVendors()}
-          title="Couldn't load vendors"
+          title={`Couldn't load ${copy.title.toLowerCase()}`}
           testId="admin-vendors-error"
         />
       ) : filtered.length === 0 ? (
-        <EmptyState searching={search.trim().length > 0} />
+        <EmptyState
+          searching={search.trim().length > 0}
+          title={copy.emptyTitle}
+          hint={copy.emptyHint}
+          searchHint={copy.emptySearchHint}
+          Icon={copy.Icon}
+        />
       ) : view === "grid" ? (
         <div
           className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
@@ -342,12 +398,12 @@ export function AdminVendors() {
         >
           <DialogHeader className="text-left space-y-1">
             <DialogTitle className="text-[17px] font-semibold text-slate-900">
-              Add vendor
+              {copy.addDialogTitle}
             </DialogTitle>
             <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
-              Paste a URL from the vendor's site — the About page works best,
-              but the home page is fine too. We'll prefill name, domain, logo,
-              cover, and bio.
+              Paste a URL from the {mode === "maker" ? "maker's" : "shop's"}{" "}
+              site — the About page works best, but the home page is fine too.
+              We'll prefill name, domain, logo, cover, and bio.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 pt-1">
@@ -504,22 +560,32 @@ function VendorRow({
   );
 }
 
-function EmptyState({ searching }: { searching: boolean }) {
+function EmptyState({
+  searching,
+  title,
+  hint,
+  searchHint,
+  Icon,
+}: {
+  searching: boolean;
+  title: string;
+  hint: string;
+  searchHint: string;
+  Icon: ComponentType<{ className?: string }>;
+}) {
   return (
     <div
       className="py-16 flex flex-col items-center justify-center text-center"
       data-testid="empty-vendors"
     >
       <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-        <Store className="w-6 h-6" />
+        <Icon className="w-6 h-6" />
       </div>
       <p className="text-slate-700 text-[14px] font-semibold">
-        {searching ? "No vendors match that search" : "No vendors yet"}
+        {searching ? "No matches" : title}
       </p>
       <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
-        {searching
-          ? "Try a different name or domain."
-          : "Add a shop the first time you attach one of their products to an instrument."}
+        {searching ? searchHint : hint}
       </p>
     </div>
   );

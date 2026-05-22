@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -454,16 +454,34 @@ export const instruments = pgTable("instruments", {
   photoUrl: text("photo_url"),
   about: text("about"),
   artistNote: text("artist_note"),
+  // Headline maker — the partner who *built* this piece of gear (Gibson,
+  // Fender, Martin, …). One FK per instrument because a guitar has one
+  // builder. Resellers (where you can buy it) live in instrument_vendors.
+  // ON DELETE SET NULL so deleting a vendor doesn't orphan the instrument.
+  makerVendorId: varchar("maker_vendor_id").references((): any => vendors.id, {
+    onDelete: "set null",
+  }),
 });
 
-// Real-world vendor entity. One row per shop (Carter Vintage, Reverb,
-// Sweetwater, …) — the logo / bio / location / cover live here so editing
-// once propagates across every instrument that links to this vendor.
-// `domain` is the canonical dedup key (lowercased hostname, no www).
+// Real-world vendor entity. One row per partner (Carter Vintage, Reverb,
+// Sweetwater, Gibson, Martin, …) — the logo / bio / location / cover live
+// here so editing once propagates across every instrument that links to
+// this partner. `domain` is the canonical dedup key (lowercased hostname,
+// no www).
+//
+// Task #174 — one entity, two roles:
+//   `isReseller` — shows up in the admin Resellers index, can be attached
+//                  to a gear item as "Available at" via instrument_vendors.
+//   `isMaker`    — shows up in the admin Makers index, can be set as a
+//                  gear item's headline maker via instruments.makerVendorId.
+// A single row can carry both flags (Gibson is both a Maker and a
+// Reseller for its current-production catalog).
 export const vendors = pgTable("vendors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   domain: text("domain").notNull().unique(),
+  isMaker: boolean("is_maker").notNull().default(false),
+  isReseller: boolean("is_reseller").notNull().default(true),
   homeUrl: text("home_url"),
   aboutUrl: text("about_url"),
   logoUrl: text("logo_url"),
@@ -479,7 +497,15 @@ export const vendors = pgTable("vendors", {
   location: text("location"),
   coverUrl: text("cover_url"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Task #174 — a vendor row with both flags off is invisible to both
+  // index pages. The DB-level CHECK is the truth; the API guard in
+  // PUT /api/admin/vendors/:id mirrors it for a friendlier 400 message.
+  roleAtLeastOne: check(
+    "vendors_role_at_least_one",
+    sql`${table.isMaker} OR ${table.isReseller}`,
+  ),
+}));
 
 // Join row attaching a vendor to an instrument with a per-instrument
 // product URL. Vendor metadata lives on `vendors`; only the things that
@@ -1273,6 +1299,12 @@ export type Instrument = typeof instruments.$inferSelect;
 export const insertVendorSchema = createInsertSchema(vendors).omit({ id: true, createdAt: true });
 export type InsertVendor = z.infer<typeof insertVendorSchema>;
 export type Vendor = typeof vendors.$inferSelect;
+
+// Enriched read shape for /api/instruments — includes the headline Maker
+// (vendor row referenced by makerVendorId) joined in so the admin Gear
+// index and fan InstrumentDetail can render the maker without a second
+// fetch. `maker` is null when the gear hasn't been linked to a builder.
+export type InstrumentWithMaker = Instrument & { maker: Vendor | null };
 
 export const insertLabelSchema = createInsertSchema(labels).omit({ id: true, createdAt: true });
 export type InsertLabel = z.infer<typeof insertLabelSchema>;

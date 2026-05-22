@@ -5,6 +5,7 @@ import {
   Disc3,
   User,
   Guitar,
+  Hammer,
   Store,
   Tag,
   Factory,
@@ -58,6 +59,7 @@ export type EntityKey =
   | "albums"
   | "people"
   | "gear"
+  | "makers"
   | "vendors"
   | "labels"
   | "manufacturers"
@@ -188,10 +190,16 @@ export function AdminFrame({
     queryKey: ["/api/instruments"],
     enabled: !!user?.isAdmin,
   });
-  const { data: vendors = [] } = useQuery<unknown[]>({
+  // Task #174 — Vendors split into Makers + Resellers. Both feed off the
+  // same `/api/vendors` table; the sidebar uses the `?role=` query so
+  // each row counts only its half of the world. A vendor with both
+  // flags (e.g. Gibson) counts on both sides — that's the point.
+  const { data: vendors = [] } = useQuery<Array<{ isMaker?: boolean; isReseller?: boolean }>>({
     queryKey: ["/api/vendors"],
     enabled: !!user?.isAdmin,
   });
+  const makerCount = vendors.filter((v) => v.isMaker).length;
+  const resellerCount = vendors.filter((v) => v.isReseller).length;
   const { data: labels = [] } = useQuery<unknown[]>({
     queryKey: ["/api/labels"],
     enabled: !!user?.isAdmin,
@@ -277,10 +285,23 @@ export function AdminFrame({
               onClick={() => navigate("/admin/instruments")}
               testId="nav-gear"
             />
+            {/* Task #174 — Makers and Resellers are two sides of the
+                same vendor table. Makers build the gear (FK
+                instruments.maker_vendor_id); Resellers sell it (the
+                instrument_vendors join). A single row can carry both
+                flags (Gibson sits in both counts). */}
+            <SidebarLink
+              icon={Hammer}
+              label="Makers"
+              count={makerCount}
+              active={active === "makers"}
+              onClick={() => navigate("/admin/makers")}
+              testId="nav-makers"
+            />
             <SidebarLink
               icon={Store}
-              label="Vendors"
-              count={vendors.length}
+              label="Resellers"
+              count={resellerCount}
               active={active === "vendors"}
               onClick={() => navigate("/admin/vendors")}
               testId="nav-vendors"
@@ -293,9 +314,13 @@ export function AdminFrame({
               onClick={() => navigate("/admin/labels")}
               testId="nav-labels"
             />
+            {/* Task #174 — vinyl pressing plants are now labelled
+                "Presses" so the noun doesn't clash with "Maker" (gear
+                builder). URL stays /admin/manufacturers; the underlying
+                table + RFQ flow is unchanged. */}
             <SidebarLink
               icon={Factory}
-              label="Manufacturers"
+              label="Presses"
               count={manufacturers.length}
               active={active === "manufacturers"}
               onClick={() => navigate("/admin/manufacturers")}

@@ -42,6 +42,9 @@ interface InstrumentLite {
   shortCategory: string | null;
   photoUrl: string | null;
   vendors: unknown[];
+  // Task #174 — null when no Maker is set. Drives the "Unassigned
+  // maker" filter chip and the inline warning glyph in list-mode.
+  makerVendorId?: string | null;
 }
 
 // apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
@@ -70,6 +73,12 @@ export function AdminInstruments() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  // Task #174 — operator cleanup filter for the post-backfill state.
+  // The maker-name → instrument-name match catches "Gibson Les Paul"
+  // but not "Custom Shop '59 Reissue", so a handful of rows always
+  // need a hand-pick. This toggle narrows the grid to only those
+  // unassigned rows so the operator can sweep them in one sitting.
+  const [onlyUnassignedMaker, setOnlyUnassignedMaker] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Entity token stays "instruments" to match the rest of the file's
   // testids (`grid-instruments`, `card-instrument-…`, `row-instrument-…`)
@@ -98,18 +107,26 @@ export function AdminInstruments() {
     enabled: !!user?.isAdmin,
   });
 
+  const unassignedMakerCount = useMemo(
+    () => instruments.filter((i) => !i.makerVendorId).length,
+    [instruments],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const rows = q
+    let rows = q
       ? instruments.filter(
           (i) =>
             i.name.toLowerCase().includes(q) ||
             i.category.toLowerCase().includes(q),
         )
       : instruments.slice();
+    if (onlyUnassignedMaker) {
+      rows = rows.filter((i) => !i.makerVendorId);
+    }
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
-  }, [instruments, search]);
+  }, [instruments, search, onlyUnassignedMaker]);
 
   const openInstrument = (id: string) => {
     navigate(`/admin/instruments/${id}`);
@@ -298,6 +315,38 @@ export function AdminInstruments() {
               data-testid="button-open-search"
             >
               <Search className="w-4 h-4" />
+            </button>
+          )}
+          {/* Task #174 — unassigned-maker filter. Hidden when the
+              catalog is fully classified so the header doesn't carry
+              dead UI; surfaces as a small pill while any rows still
+              need a Maker pick. */}
+          {unassignedMakerCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setOnlyUnassignedMaker((v) => !v)}
+              aria-pressed={onlyUnassignedMaker}
+              className={[
+                "h-9 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-[12.5px] font-medium transition-colors",
+                onlyUnassignedMaker
+                  ? "bg-amber-50 border-amber-300 text-amber-800"
+                  : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50",
+              ].join(" ")}
+              data-testid="button-filter-unassigned-maker"
+              title="Show only gear without a Maker assigned"
+            >
+              <Guitar className="w-3.5 h-3.5" />
+              {onlyUnassignedMaker ? "Unassigned only" : "Unassigned maker"}
+              <span
+                className={[
+                  "rounded-full px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tabular-nums",
+                  onlyUnassignedMaker
+                    ? "bg-amber-200 text-amber-900"
+                    : "bg-slate-100 text-slate-600",
+                ].join(" ")}
+              >
+                {unassignedMakerCount}
+              </span>
             </button>
           )}
           <ViewModeToggle

@@ -255,6 +255,17 @@ function Router() {
         <Route path="/admin/vendors">
           <ProtectedRoute component={AdminVendors} />
         </Route>
+        {/* Task #174 — Makers (gear builders) share the vendor table
+            and the AdminVendor / AdminVendors components; mode is
+            detected by useRoute inside those pages. URL is /admin/makers
+            so the sidebar + breadcrumbs read as "Makers" while the
+            underlying row identity (id) stays a vendor. */}
+        <Route path="/admin/makers/:id">
+          <ProtectedRoute component={AdminVendor} />
+        </Route>
+        <Route path="/admin/makers">
+          <ProtectedRoute component={AdminVendors} />
+        </Route>
         <Route path="/admin/labels/:id">
           <ProtectedRoute component={AdminLabel} />
         </Route>

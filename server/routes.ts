@@ -8110,10 +8110,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(i);
   });
   app.post("/api/admin/instruments", requireAdmin, async (req, res) => {
-    const { name, category, shortCategory, photoUrl, about, artistNote } = req.body ?? {};
+    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId } = req.body ?? {};
     if (!name || !category) return res.status(400).json({ message: "name and category are required" });
     if (shortCategory && !(SHORT_CATEGORIES as readonly string[]).includes(String(shortCategory))) {
       return res.status(400).json({ message: `Invalid shortCategory. Allowed: ${SHORT_CATEGORIES.join(", ")}` });
+    }
+    // Task #174 — validate the Maker FK up front so we return 400 instead
+    // of letting Postgres raise a generic 500 on FK violation. Empty
+    // string clears the link.
+    if (makerVendorId) {
+      const m = await storage.getVendorById(String(makerVendorId));
+      if (!m) return res.status(400).json({ message: "makerVendorId does not match any vendor" });
     }
     const i = await storage.createInstrument({
       name: String(name),
@@ -8122,12 +8129,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       photoUrl: photoUrl ? String(photoUrl) : null,
       about: about ? String(about) : null,
       artistNote: artistNote ? String(artistNote) : null,
+      makerVendorId: makerVendorId ? String(makerVendorId) : null,
     } as any);
     return res.status(201).json(i);
   });
   app.put("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, category, shortCategory, photoUrl, about, artistNote } = req.body ?? {};
+    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (category !== undefined) updates.category = String(category);
@@ -8140,6 +8148,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
     if (about !== undefined) updates.about = about ? String(about) : null;
     if (artistNote !== undefined) updates.artistNote = artistNote ? String(artistNote) : null;
+    // Task #174 — headline maker. `null` / `""` clears the link; a real
+    // id is validated against vendors so a bad id returns 400 not 500.
+    if (makerVendorId !== undefined) {
+      if (makerVendorId === null || makerVendorId === "") {
+        updates.makerVendorId = null;
+      } else {
+        const m = await storage.getVendorById(String(makerVendorId));
+        if (!m) return res.status(400).json({ message: "makerVendorId does not match any vendor" });
+        updates.makerVendorId = String(makerVendorId);
+      }
+    }
     const i = await storage.updateInstrument(id, updates);
     if (!i) return res.status(404).json({ message: "Instrument not found" });
     return res.json(i);
@@ -8698,8 +8717,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Editing here propagates to every instrument attached to this vendor.
   // The join row (attachment) is a separate resource — see /instrument-vendors below.
-  app.get("/api/vendors", async (_req, res) => {
-    return res.json(await storage.getVendors());
+  // Task #174 — `?role=maker|reseller` narrows the list to vendors with
+  // that flag set. Default (no filter) returns every vendor regardless of
+  // role so the sidebar counts + the legacy clients keep working.
+  app.get("/api/vendors", async (req, res) => {
+    const all = await storage.getVendors();
+    const role = String(req.query.role ?? "").toLowerCase();
+    if (role === "maker") return res.json(all.filter((v) => (v as any).isMaker));
+    if (role === "reseller") return res.json(all.filter((v) => (v as any).isReseller));
+    return res.json(all);
   });
   app.get("/api/vendors/:id", async (req, res) => {
     const v = await storage.getVendorById(String(req.params.id));
@@ -8822,6 +8848,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ]);
     return res.json({ vendor, instruments: insts, artists });
   });
+  // Task #174 — Maker profile bundle. The Maker entity *is* a vendor row
+  // (with isMaker=true), so the URL anchors on the same id space. Returns
+  // every instrument whose headline maker is this vendor — that's the
+  // builder's product catalog. Resellers per-instrument still live on
+  // each instrument's own profile.
+  app.get("/api/makers/:id/profile", async (req, res) => {
+    const id = String(req.params.id);
+    const vendor = await storage.getVendorById(id);
+    if (!vendor) return res.status(404).json({ message: "Maker not found" });
+    // Hydrate each built piece with its reseller list so the Maker
+    // page can show "Where it's sold" inline per gear row — that's the
+    // fan-side promise (build/sell split) rendered as one operator
+    // surface. Also alias `vendor` so the same `{ vendor, instruments }`
+    // contract the reseller profile uses keeps working for shared UI.
+    const instruments = await storage.getMakerInstrumentsWithResellers(id);
+    return res.json({ maker: vendor, vendor, instruments });
+  });
   // Vendor page scraper. Paste any URL on the vendor's site — home page
   // works, but an About page gives us a real bio (og:description on a
   // home page is usually marketing copy). Mirrors the labels scraper:
@@ -8933,11 +8976,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/vendors", requireAdmin, async (req, res) => {
-    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl } = req.body ?? {};
+    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller } = req.body ?? {};
     if (!name || !domain) return res.status(400).json({ message: "name and domain are required" });
     const normDomain = String(domain).toLowerCase().replace(/^www\./, "");
     const existing = await storage.getVendorByDomain(normDomain);
-    if (existing) return res.status(409).json({ message: "A vendor with that domain already exists", vendor: existing });
+    if (existing) {
+      // Task #174 — "add via Makers index" should *promote* an existing
+      // vendor to also carry isMaker rather than dead-end on 409. Same
+      // for isReseller. The original row identity is preserved, so the
+      // operator never loses Gibson's reseller history when they flip on
+      // the Maker flag from the Makers create flow.
+      const promote: Record<string, unknown> = {};
+      if (isMaker === true && !(existing as any).isMaker) (promote as any).isMaker = true;
+      if (isReseller === true && !(existing as any).isReseller) (promote as any).isReseller = true;
+      if (Object.keys(promote).length > 0) {
+        const updated = await storage.updateVendor(existing.id, promote as any);
+        return res.status(200).json(updated);
+      }
+      return res.status(409).json({ message: "A vendor with that domain already exists", vendor: existing });
+    }
     const v = await storage.createVendor({
       name: String(name),
       domain: normDomain,
@@ -8948,18 +9005,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       bio: bio ? String(bio) : null,
       location: location ? String(location) : null,
       coverUrl: coverUrl ? String(coverUrl) : null,
-    });
+      ...(isMaker === true ? { isMaker: true } : {}),
+      ...(isReseller === false ? { isReseller: false } : {}),
+    } as any);
     return res.status(201).json(v);
   });
   app.put("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl } = req.body ?? {};
+    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (domain !== undefined) updates.domain = String(domain).toLowerCase().replace(/^www\./, "");
     if (homeUrl !== undefined) updates.homeUrl = homeUrl ? String(homeUrl) : null;
     if (aboutUrl !== undefined) updates.aboutUrl = aboutUrl ? String(aboutUrl) : null;
     if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
+    // Task #174 — role flags. Coerce loosely (boolean | "true" | "false")
+    // so admin form toggles + curl alike work. One row can carry both
+    // roles, but at least one MUST be true — a zero-role row is
+    // invisible to both index pages. We compute the *resulting* flag
+    // pair after the patch and 400 if it would land in the ghost state.
+    // Mirrors the DB-level CHECK constraint so the API responds with a
+    // useful message instead of a 500.
+    if (isMaker !== undefined) updates.isMaker = !(isMaker === false || isMaker === "false");
+    if (isReseller !== undefined) updates.isReseller = !(isReseller === false || isReseller === "false");
+    if (updates.isMaker !== undefined || updates.isReseller !== undefined) {
+      const existing = await storage.getVendorById(id);
+      if (!existing) return res.status(404).json({ message: "Vendor not found" });
+      const nextMaker = updates.isMaker ?? existing.isMaker;
+      const nextReseller = updates.isReseller ?? existing.isReseller;
+      if (!nextMaker && !nextReseller) {
+        return res.status(400).json({
+          message:
+            "A vendor must be a Maker, a Reseller, or both — at least one role must stay on.",
+        });
+      }
+    }
     // Curation lock on the vendor logo. Loose-coerce so callers can pass
     // boolean | "true" | "false". Locking does NOT prevent a same-PUT
     // logoUrl write — locks gate *automated* refresh paths, not the

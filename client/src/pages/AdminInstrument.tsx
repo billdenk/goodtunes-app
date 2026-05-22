@@ -90,13 +90,28 @@ interface InstrumentFull {
   about: string | null;
   artistNote: string | null;
   vendors: AttachedVendor[];
+  // Task #174 — the single Maker who built this piece. Distinct from
+  // the `vendors[]` array, which is the reseller affiliate listings.
+  // Null when unassigned (legacy rows, or a piece nobody's matched a
+  // Maker row to yet).
+  makerVendorId: string | null;
+  maker: {
+    id: string;
+    name: string;
+    domain: string;
+    logoUrl: string | null;
+  } | null;
 }
 
 type Tab = "overview" | "photo" | "vendors" | "people";
+// Task #174 — the join-table attachments under this tab are resellers
+// (Reverb listings, Sweetwater pages, etc). The single Maker who built
+// the piece lives on the Overview panel via the Maker selector, not on
+// this list. Tab key stays "vendors" so deep links don't break.
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "photo", label: "Photo" },
-  { key: "vendors", label: "Vendors" },
+  { key: "vendors", label: "Resellers" },
   { key: "people", label: "People" },
 ];
 
@@ -291,9 +306,31 @@ export function AdminInstrument() {
             >
               {instrument.name}
             </h1>
-            <div className="text-slate-500 text-[13px] mt-0.5 inline-flex items-center gap-1.5">
-              <Store className="w-3.5 h-3.5 text-slate-400" />
-              {vendorCount} {vendorCount === 1 ? "vendor" : "vendors"}
+            <div className="text-slate-500 text-[13px] mt-0.5 inline-flex items-center gap-3 flex-wrap">
+              {instrument.maker && (
+                <Link
+                  href={`/admin/makers/${instrument.maker.id}`}
+                  className="inline-flex items-center gap-1.5 hover:text-[var(--brand-blue)] transition-colors"
+                  data-testid="link-instrument-maker"
+                >
+                  {instrument.maker.logoUrl ? (
+                    <img
+                      src={instrument.maker.logoUrl}
+                      alt=""
+                      className="w-3.5 h-3.5 rounded-sm object-cover"
+                    />
+                  ) : (
+                    <Guitar className="w-3.5 h-3.5 text-slate-400" />
+                  )}
+                  <span className="font-medium text-slate-700">
+                    {instrument.maker.name}
+                  </span>
+                </Link>
+              )}
+              <span className="inline-flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5 text-slate-400" />
+                {vendorCount} {vendorCount === 1 ? "reseller" : "resellers"}
+              </span>
             </div>
           </div>
         </div>
@@ -431,7 +468,9 @@ function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
   ];
   const endpoint = `/api/admin/instruments/${instrument.id}`;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div className="space-y-5">
+      <MakerPickerPanel instrument={instrument} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"
@@ -485,6 +524,200 @@ function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
           },
         ]}
       />
+      </div>
+    </div>
+  );
+}
+
+/* ─── Maker picker (Task #174) ─────────────────────────────────────── */
+
+// One Maker per piece of gear (the brand that actually built it). The
+// picker is a typeahead over /api/vendors?role=maker — pick from any
+// existing Maker, or clear to leave the field unset. Resellers live on
+// the dedicated Resellers tab and aren't pickable here.
+function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const { data: makers = [] } = useQuery<
+    Array<{ id: string; name: string; domain: string; logoUrl: string | null }>
+  >({
+    queryKey: ["/api/vendors?role=maker"],
+    enabled: open,
+  });
+
+  const setMaker = useMutation({
+    mutationFn: async (makerVendorId: string | null) => {
+      await apiRequest("PUT", `/api/admin/instruments/${instrument.id}`, {
+        makerVendorId,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/instruments", instrument.id] });
+      qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith("/api/vendors"),
+      });
+      setOpen(false);
+      setQuery("");
+      toast({ title: "Maker updated" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update the Maker",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? makers.filter(
+        (m) =>
+          m.name.toLowerCase().includes(q) ||
+          m.domain.toLowerCase().includes(q),
+      )
+    : makers;
+
+  return (
+    <div
+      className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5"
+      data-testid="panel-maker"
+    >
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div className="min-w-0">
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
+            Maker
+          </div>
+          <p className="text-slate-500 text-[12.5px] mt-1">
+            The brand that built this piece. Listed under their name on the
+            gear card and detail page.
+          </p>
+        </div>
+        {instrument.maker && (
+          <button
+            type="button"
+            onClick={() => setMaker.mutate(null)}
+            disabled={setMaker.isPending}
+            className="text-slate-400 hover:text-rose-600 text-[11.5px] font-medium disabled:opacity-50"
+            data-testid="button-clear-maker"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {instrument.maker ? (
+        <Link
+          href={`/admin/makers/${instrument.maker.id}`}
+          className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 hover:bg-slate-50 transition-colors"
+          data-testid="link-current-maker"
+        >
+          <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+            {instrument.maker.logoUrl ? (
+              <img
+                src={instrument.maker.logoUrl}
+                alt={instrument.maker.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Guitar className="w-5 h-5 text-slate-300" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-slate-900 text-[14px] font-semibold truncate">
+              {instrument.maker.name}
+            </div>
+            <div className="text-slate-400 text-[11.5px] truncate">
+              {instrument.maker.domain}
+            </div>
+          </div>
+        </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full rounded-xl border border-dashed border-slate-300 px-3 py-3 text-left text-slate-500 text-[13px] hover:bg-slate-50 transition-colors"
+          data-testid="button-pick-maker"
+        >
+          {open ? "Pick a maker…" : "No maker set — pick one"}
+        </button>
+      )}
+      {open && (
+        <div className="mt-3 space-y-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search makers (Gibson, Steinway, Neumann…)"
+              className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+              data-testid="input-search-makers"
+            />
+          </div>
+          <div
+            className="max-h-64 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100 bg-white"
+            data-testid="list-maker-results"
+          >
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-[12.5px] text-slate-400 text-center">
+                {makers.length === 0
+                  ? "No makers yet — add one from the Makers sidebar."
+                  : "No makers match that search."}
+              </div>
+            ) : (
+              filtered.slice(0, 30).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMaker.mutate(m.id)}
+                  disabled={setMaker.isPending}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 text-left disabled:opacity-50"
+                  data-testid={`option-maker-${m.id}`}
+                >
+                  <div className="w-7 h-7 rounded bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                    {m.logoUrl ? (
+                      <img
+                        src={m.logoUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Guitar className="w-3.5 h-3.5 text-slate-300" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-slate-900 text-[13px] font-medium truncate">
+                      {m.name}
+                    </div>
+                    <div className="text-slate-400 text-[11px] truncate">
+                      {m.domain}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setQuery("");
+              }}
+              className="text-[12px] text-slate-500 hover:text-slate-900 px-2 py-1"
+              data-testid="button-cancel-maker"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

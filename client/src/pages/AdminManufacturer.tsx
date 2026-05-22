@@ -98,7 +98,7 @@ export function AdminManufacturer() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/manufacturers"] });
-      toast({ title: "Manufacturer deleted" });
+      toast({ title: "Press deleted" });
       navigate("/admin/manufacturers");
     },
   });
@@ -123,9 +123,9 @@ export function AdminManufacturer() {
     return (
       <AdminFrame active="manufacturers">
         <div className="py-20 text-center">
-          <h1 className="text-slate-900 text-lg font-semibold">Manufacturer not found</h1>
+          <h1 className="text-slate-900 text-lg font-semibold">Press not found</h1>
           <Link href="/admin/manufacturers" className="text-[var(--brand-blue)] text-sm hover:underline">
-            Back to manufacturers
+            Back to presses
           </Link>
         </div>
       </AdminFrame>
@@ -137,7 +137,7 @@ export function AdminManufacturer() {
       <div className="space-y-5">
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           <Link href="/admin/manufacturers" className="hover:text-slate-700">
-            Manufacturers
+            Presses
           </Link>
           <ChevronRight className="w-3 h-3" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">{m.name}</span>
@@ -181,7 +181,7 @@ export function AdminManufacturer() {
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this manufacturer?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this press?</AlertDialogTitle>
             <AlertDialogDescription>
               Open RFQs that invited this plant will keep their reply rows, but the plant won't
               appear in new RFQs.

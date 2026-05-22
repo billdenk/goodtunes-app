@@ -66,6 +66,10 @@ interface Vendor {
   bio: string | null;
   location: string | null;
   coverUrl: string | null;
+  // Task #174 — a single vendor row can carry both flags (Gibson is
+  // both a Maker and a Reseller). Toggle them on the Roles panel.
+  isMaker: boolean;
+  isReseller: boolean;
 }
 
 interface VendorInstrument {
@@ -74,6 +78,16 @@ interface VendorInstrument {
   category: string;
   shortCategory: string | null;
   photoUrl: string | null;
+  // Task #174 — only populated by /api/makers/:id/profile. On the
+  // reseller surface this field is omitted; the panel hides the
+  // per-row reseller chip rail when absent.
+  resellers?: Array<{
+    id: string;
+    name: string;
+    domain: string | null;
+    logoUrl: string | null;
+    affiliateUrl: string | null;
+  }>;
 }
 
 interface VendorProfile {
@@ -91,7 +105,20 @@ const TABS: { key: Tab; label: string }[] = [
 
 export function AdminVendor() {
   const { user, isLoading: authLoading } = useAuth();
-  const [, params] = useRoute<{ id: string }>("/admin/vendors/:id");
+  // Task #174 — same component is mounted at both /admin/vendors/:id and
+  // /admin/makers/:id. We pull the id from whichever path matched, and
+  // keep the rest of the page chrome (active sidebar key, breadcrumb,
+  // list-route fallbacks) in sync with the surface the operator came in
+  // through. The underlying DB row is the same vendor entity either way.
+  const [matchReseller, resellerParams] =
+    useRoute<{ id: string }>("/admin/vendors/:id");
+  const [matchMaker, makerParams] =
+    useRoute<{ id: string }>("/admin/makers/:id");
+  const mode: "maker" | "reseller" = matchMaker ? "maker" : "reseller";
+  const params = matchMaker ? makerParams : resellerParams;
+  const listRoute = mode === "maker" ? "/admin/makers" : "/admin/vendors";
+  const listLabel = mode === "maker" ? "Makers" : "Resellers";
+  const activeKey: "makers" | "vendors" = mode === "maker" ? "makers" : "vendors";
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
   // Logo editor lives as a modal hanging off the header logo thumbnail
@@ -120,13 +147,13 @@ export function AdminVendor() {
       qc.removeQueries({ queryKey: ["/api/vendors", vendorId, "profile"] });
       qc.invalidateQueries({ queryKey: ["/api/vendors"] });
       qc.invalidateQueries({ queryKey: ["/api/instruments"] });
-      toast({ title: "Vendor deleted." });
+      toast({ title: `${mode === "maker" ? "Maker" : "Reseller"} deleted.` });
       setDeleteConfirmOpen(false);
-      navigate("/admin/vendors");
+      navigate(listRoute);
     },
     onError: (e: any) => {
       toast({
-        title: "Couldn't delete vendor",
+        title: `Couldn't delete ${mode === "maker" ? "maker" : "reseller"}`,
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       });
@@ -140,8 +167,21 @@ export function AdminVendor() {
     };
   }, []);
 
+  // Task #174 — the profile endpoint differs by mode. Reseller mode
+  // uses /api/vendors/:id/profile (instrument_vendors join — every
+  // piece this storefront carries). Maker mode uses /api/makers/:id/
+  // profile (instruments.maker_vendor_id FK — every piece this brand
+  // built, each row hydrated with its own reseller list). Both
+  // responses are normalized to `{ vendor, instruments }` here so the
+  // rest of the page treats them the same. The maker-mode instrument
+  // rows carry an extra `resellers[]` array that InstrumentsPanel
+  // shows inline.
+  const profileEndpoint =
+    mode === "maker"
+      ? `/api/makers/${vendorId}/profile`
+      : `/api/vendors/${vendorId}/profile`;
   const { data: profile, isLoading, error } = useQuery<VendorProfile>({
-    queryKey: ["/api/vendors", vendorId, "profile"],
+    queryKey: [profileEndpoint],
     enabled: !!user?.isAdmin && !!vendorId,
   });
 
@@ -155,7 +195,7 @@ export function AdminVendor() {
 
   if (authLoading || isLoading) {
     return (
-      <AdminFrame active="vendors">
+      <AdminFrame active={activeKey}>
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
@@ -173,10 +213,10 @@ export function AdminVendor() {
 
   if (error || !profile) {
     return (
-      <AdminFrame active="vendors">
+      <AdminFrame active={activeKey}>
         <div className="py-20 text-center space-y-3">
           <h1 className="text-slate-900 text-lg font-semibold">
-            Vendor not found
+            {mode === "maker" ? "Maker" : "Reseller"} not found
           </h1>
           {backCrumb ? (
             <Link
@@ -189,12 +229,12 @@ export function AdminVendor() {
             </Link>
           ) : (
             <Link
-              href="/admin/vendors"
+              href={listRoute}
               className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
               data-testid="link-back-to-vendors"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
-              Back to vendors
+              Back to {listLabel.toLowerCase()}
             </Link>
           )}
         </div>
@@ -206,7 +246,7 @@ export function AdminVendor() {
 
   return (
     <AdminFrame
-      active="vendors"
+      active={activeKey}
       contentWidth="narrow"
       preview={
         <VendorPreviewCard vendor={vendor} instruments={instruments} />
@@ -225,11 +265,11 @@ export function AdminVendor() {
             </Link>
           ) : (
             <Link
-              href="/admin/vendors"
+              href={listRoute}
               className="hover:text-slate-700"
               data-testid="link-breadcrumb-vendors"
             >
-              Vendors
+              {listLabel}
             </Link>
           )}
           <ChevronRight className="w-3 h-3 flex-shrink-0" />
@@ -355,9 +395,10 @@ export function AdminVendor() {
 
         {/* CONTENT */}
         {tab === "overview" && <OverviewPanel vendor={vendor} />}
+        {tab === "overview" && <RolesPanel vendor={vendor} />}
         {tab === "cover" && <CoverPanel vendor={vendor} />}
         {tab === "instruments" && (
-          <InstrumentsPanel instruments={instruments} />
+          <InstrumentsPanel instruments={instruments} mode={mode} />
         )}
       </div>
 
@@ -417,6 +458,156 @@ export function AdminVendor() {
         </DialogContent>
       </Dialog>
     </AdminFrame>
+  );
+}
+
+/* ─── Roles panel (Task #174) ──────────────────────────────────────── */
+
+// One vendor row can carry both flags — Gibson is both a Maker (builds
+// the gear) and a Reseller (sells it). The two toggles live here so the
+// operator can promote a reseller-only row into a Maker (or vice versa)
+// without having to delete and re-create on the other surface. PUTting
+// either flag re-issues both vendor list caches so the sidebar counts
+// settle immediately.
+function RolesPanel({ vendor }: { vendor: Vendor }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const flip = useMutation({
+    mutationFn: async (patch: { isMaker?: boolean; isReseller?: boolean }) => {
+      await apiRequest("PUT", `/api/admin/vendors/${vendor.id}`, patch);
+      return patch;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/vendors", vendor.id, "profile"] });
+      qc.invalidateQueries({ queryKey: ["/api/vendors"] });
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith("/api/vendors"),
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't change roles",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const ensureOne = (nextMaker: boolean, nextReseller: boolean): boolean => {
+    if (!nextMaker && !nextReseller) {
+      toast({
+        title: "Pick at least one role",
+        description: "A vendor must be a Maker, a Reseller, or both.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
+
+  return (
+    <div className="mt-5">
+      <div
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5"
+        data-testid="panel-roles"
+      >
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
+              Roles
+            </div>
+            <p className="text-slate-500 text-[12.5px] mt-1 max-w-md">
+              Makers build the gear; Resellers sell it. A row can be both
+              — Gibson, Steinway, and Fender all are.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <RoleToggle
+            label="Maker"
+            description="Builds gear that gets listed under their name."
+            checked={vendor.isMaker}
+            disabled={flip.isPending}
+            testId="toggle-role-maker"
+            onChange={(next) => {
+              if (!ensureOne(next, vendor.isReseller)) return;
+              flip.mutate({ isMaker: next });
+            }}
+          />
+          <RoleToggle
+            label="Reseller"
+            description="Sells gear via an affiliate / product URL."
+            checked={vendor.isReseller}
+            disabled={flip.isPending}
+            testId="toggle-role-reseller"
+            onChange={(next) => {
+              if (!ensureOne(vendor.isMaker, next)) return;
+              flip.mutate({ isReseller: next });
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoleToggle({
+  label,
+  description,
+  checked,
+  disabled,
+  testId,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled: boolean;
+  testId: string;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
+      role="switch"
+      aria-checked={checked}
+      data-testid={testId}
+      className={[
+        "text-left rounded-xl border p-3 flex items-start gap-3 transition-colors",
+        checked
+          ? "border-[var(--brand-blue)]/40 bg-[var(--brand-blue)]/5"
+          : "border-slate-200 bg-white hover:bg-slate-50",
+        disabled && "opacity-50",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <span
+        className={[
+          "mt-0.5 inline-flex w-9 h-5 rounded-full p-0.5 transition-colors flex-shrink-0",
+          checked ? "bg-[var(--brand-blue)]" : "bg-slate-300",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "block w-4 h-4 rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-4" : "translate-x-0",
+          ].join(" ")}
+        />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-slate-900 text-[13.5px] font-semibold">
+          {label}
+        </span>
+        <span className="block text-slate-500 text-[11.5px] mt-0.5">
+          {description}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -861,9 +1052,12 @@ function CoverPanel({ vendor }: { vendor: Vendor }) {
 
 function InstrumentsPanel({
   instruments,
+  mode,
 }: {
   instruments: VendorInstrument[];
+  mode: "maker" | "reseller";
 }) {
+  const isMaker = mode === "maker";
   if (instruments.length === 0) {
     return (
       <Card
@@ -874,11 +1068,14 @@ function InstrumentsPanel({
           <Guitar className="w-6 h-6" />
         </div>
         <p className="text-slate-700 text-[14px] font-semibold">
-          No instruments link to this vendor yet
+          {isMaker
+            ? "No gear yet attributes its build to this maker"
+            : "No instruments link to this vendor yet"}
         </p>
         <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
-          Attach a product URL to any instrument and this vendor will
-          appear here.
+          {isMaker
+            ? "Open a piece of gear and pick this brand as its Maker — it'll show up here."
+            : "Attach a product URL to any instrument and this vendor will appear here."}
         </p>
       </Card>
     );
@@ -891,21 +1088,24 @@ function InstrumentsPanel({
       <div className="px-6 py-4 border-b border-slate-100">
         <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
           <Guitar className="w-4 h-4 text-slate-400" />
-          Instruments
+          {isMaker ? "Built by this maker" : "Instruments"}
         </h2>
         <p className="text-slate-400 text-[11.5px]">
           {instruments.length}{" "}
-          {instruments.length === 1 ? "instrument" : "instruments"} attached
+          {instruments.length === 1
+            ? isMaker
+              ? "piece"
+              : "instrument"
+            : isMaker
+            ? "pieces"
+            : "instruments"}{" "}
+          {isMaker ? "tied to this maker" : "attached"}
         </p>
       </div>
       <ul className="divide-y divide-slate-100" data-testid="list-instruments">
         {instruments.map((i) => (
-          <li key={i.id}>
-            <Link
-              href={`/admin/instruments/${i.id}`}
-              className="flex items-center gap-3.5 px-6 py-3 hover:bg-slate-50 transition-colors"
-              data-testid={`row-instrument-${i.id}`}
-            >
+          <li key={i.id} className="px-6 py-3 hover:bg-slate-50 transition-colors">
+            <div className="flex items-center gap-3.5">
               <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
                 {i.photoUrl ? (
                   <img
@@ -917,16 +1117,57 @@ function InstrumentsPanel({
                   <Guitar className="w-4 h-4 text-slate-400" />
                 )}
               </div>
-              <div className="flex-1 min-w-0">
+              <Link
+                href={`/admin/instruments/${i.id}`}
+                className="flex-1 min-w-0"
+                data-testid={`row-instrument-${i.id}`}
+              >
                 <div className="text-slate-900 text-[13.5px] font-semibold truncate">
                   {i.name}
                 </div>
                 <div className="text-slate-400 text-[11.5px] truncate">
                   {i.shortCategory || i.category}
                 </div>
-              </div>
+              </Link>
               <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-            </Link>
+            </div>
+            {isMaker && i.resellers && (
+              <div
+                className="mt-2 ml-[54px] flex flex-wrap items-center gap-1.5"
+                data-testid={`resellers-${i.id}`}
+              >
+                {i.resellers.length === 0 ? (
+                  <span className="text-slate-400 text-[11px] italic">
+                    No resellers yet
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mr-1">
+                      Available at
+                    </span>
+                    {i.resellers.map((r) => (
+                      <Link
+                        key={`${i.id}-${r.id}`}
+                        href={`/admin/vendors/${r.id}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors px-2 py-0.5 text-[11px] text-slate-700"
+                        data-testid={`chip-reseller-${i.id}-${r.id}`}
+                      >
+                        {r.logoUrl ? (
+                          <img
+                            src={r.logoUrl}
+                            alt=""
+                            className="w-3 h-3 rounded-sm object-cover"
+                          />
+                        ) : (
+                          <Store className="w-2.5 h-2.5 text-slate-400" />
+                        )}
+                        <span className="font-medium">{r.name}</span>
+                      </Link>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </li>
         ))}
       </ul>
