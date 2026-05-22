@@ -341,7 +341,7 @@ export function AdminJobs() {
               className={[
                 "px-3 py-1.5 rounded-full text-xs font-semibold transition-colors",
                 jobType === t.value
-                  ? "bg-[var(--brand-blue)] text-white"
+                  ? "bg-[color:var(--brand-blue)] text-white border border-transparent"
                   : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100",
               ].join(" ")}
               data-testid={`button-type-${t.value}`}
@@ -355,7 +355,7 @@ export function AdminJobs() {
           <div className="relative">
             {albumPick ? (
               <div
-                className="inline-flex items-center gap-2 bg-[var(--brand-blue)] text-white text-xs font-semibold rounded-full pl-3 pr-1.5 py-1"
+                className="inline-flex items-center gap-2 bg-[color:var(--brand-blue)] text-white text-xs font-semibold rounded-full pl-3 pr-1.5 py-1"
                 data-testid="pill-album-pick"
               >
                 <span className="truncate max-w-[260px]">
@@ -381,7 +381,7 @@ export function AdminJobs() {
                   onFocus={() => setAlbumFocused(true)}
                   onBlur={() => setTimeout(() => setAlbumFocused(false), 150)}
                   placeholder="Filter by album or artist…"
-                  className="text-xs border border-slate-200 rounded-full px-3 py-1.5 w-[280px] focus:outline-none focus:border-[var(--brand-blue)]"
+                  className="text-xs bg-white text-slate-900 placeholder:text-slate-400 border border-slate-200 rounded-full px-3 py-1.5 w-[280px] focus:outline-none focus:border-[var(--brand-blue)]"
                   data-testid="input-album-search"
                 />
                 {albumFocused && filteredAlbums.length > 0 && (
