@@ -806,6 +806,14 @@ export const creditRoles = pgTable(
 // "FK to one of two tables", and we want kind to be the authoritative
 // switch anyway — the server always reads tokens through the kind+id
 // pair via the storage layer).
+//
+// NOTE: do NOT re-add a `user_id → users(id)` foreign key here. An older
+// version of this table had `auth_tokens_user_id_users_id_fk` left over
+// from before the dual-auth refactor; it was dropped by hand in dev+prod
+// because customer rows (kind='customer') point at customer_users.id and
+// any FK to users(id) breaks customer Google/Apple sign-in with a 500 on
+// the token insert. `db:push` won't drop FKs that vanish from the schema,
+// so if it ever reappears it has to be dropped manually again.
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
   userId: varchar("user_id").notNull(),
