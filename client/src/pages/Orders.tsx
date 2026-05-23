@@ -15,8 +15,16 @@ import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printer } from "lucide-react";
-import type { StripeAddressSnapshot } from "@shared/schema";
+import type { StripeAddressSnapshot, AlbumFormat } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
+import { VinylPreview } from "@/components/VinylPreview";
+import {
+  DEFAULT_JACKET_UPGRADE,
+  DEFAULT_VINYL_COLOR_ID,
+  VINYL_COLOR_BY_ID,
+  isVinylFormat,
+  type JacketUpgrade,
+} from "@shared/pressing";
 
 // Task #46 — gift block on each row exposes the buyer's self-serve
 // gifting controls (copy share link, resend, change recipient within
@@ -76,7 +84,17 @@ type OrderRow = {
   trackingNumber?: string | null;
   trackingUrl?: string | null;
   shippingAddress?: StripeAddressSnapshot | null;
-  items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
+  items: {
+    id: string;
+    kind: string;
+    sku: string;
+    label: string;
+    unitPriceCents: number;
+    quantity: number;
+    // Task #201 — pressing snapshot per item; null on non-vinyl rows.
+    vinylColor?: string | null;
+    jacketUpgrade?: JacketUpgrade | null;
+  }[];
   gift: GiftInfo | null;
 };
 
@@ -254,9 +272,32 @@ export function Orders() {
               >
                 <Link href={`/album/${o.albumId}`} className="block active:scale-[0.99] transition-transform">
                   <div className="flex gap-3">
-                    {o.albumArtwork && (
-                      <img src={o.albumArtwork} alt="" className="w-16 h-16 rounded-lg object-cover" />
-                    )}
+                    {(() => {
+                      // Task #201 — if this order has a vinyl line item,
+                      // swap the plain artwork thumb for <VinylPreview>
+                      // so the row shows the actual disc that's coming.
+                      const vinylItem = o.items.find(
+                        (it) => it.kind === "format" && isVinylFormat(it.sku as AlbumFormat),
+                      );
+                      if (vinylItem) {
+                        const color =
+                          VINYL_COLOR_BY_ID[vinylItem.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
+                          VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+                        return (
+                          <div className="w-24 flex-shrink-0" data-testid={`order-vinyl-preview-${o.id}`}>
+                            <VinylPreview
+                              artworkUrl={o.albumArtwork}
+                              color={color}
+                              jacketUpgrade={vinylItem.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
+                              size="sm"
+                            />
+                          </div>
+                        );
+                      }
+                      return o.albumArtwork ? (
+                        <img src={o.albumArtwork} alt="" className="w-16 h-16 rounded-lg object-cover" />
+                      ) : null;
+                    })()}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${st.cls}`}>
@@ -659,19 +700,42 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
             <section className="mt-5">
               <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2">Items</h3>
               <div className="rounded-2xl bg-white/5 border border-white/10 divide-y divide-white/10">
-                {order.items.map((it) => (
-                  <div key={it.id} className="flex items-center justify-between px-4 py-3" data-testid={`detail-item-${it.id}`}>
-                    <div>
-                      <div className="text-[14px] text-white">{it.label}</div>
-                      {it.quantity > 1 && (
-                        <div className="text-[11px] text-white/45">Qty {it.quantity}</div>
+                {order.items.map((it) => {
+                  // Task #201 — vinyl line items render the colored
+                  // <VinylPreview> in the detail row so the fan sees the
+                  // exact disc color confirmed on their receipt.
+                  const isVinyl = it.kind === "format" && isVinylFormat(it.sku as AlbumFormat);
+                  const color = isVinyl
+                    ? VINYL_COLOR_BY_ID[it.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
+                      VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]
+                    : null;
+                  return (
+                    <div key={it.id} className="flex items-center gap-3 px-4 py-3" data-testid={`detail-item-${it.id}`}>
+                      {isVinyl && color && (
+                        <div className="w-24 flex-shrink-0" data-testid={`detail-vinyl-preview-${it.id}`}>
+                          <VinylPreview
+                            artworkUrl={order.albumArtwork}
+                            color={color}
+                            jacketUpgrade={it.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
+                            size="sm"
+                          />
+                        </div>
                       )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[14px] text-white">{it.label}</div>
+                        {isVinyl && color && (
+                          <div className="text-[11.5px] text-white/55 mt-0.5">{color.name}</div>
+                        )}
+                        {it.quantity > 1 && (
+                          <div className="text-[11px] text-white/45">Qty {it.quantity}</div>
+                        )}
+                      </div>
+                      <div className="text-[13px] tabular-nums text-white/85">
+                        {dollars(it.unitPriceCents * it.quantity)}
+                      </div>
                     </div>
-                    <div className="text-[13px] tabular-nums text-white/85">
-                      {dollars(it.unitPriceCents * it.quantity)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div className="flex items-center justify-between px-4 py-3 bg-white/[0.03]">
                   <div className="text-[12px] uppercase tracking-widest text-white/45 font-semibold">Total</div>
                   <div className="text-[15px] font-semibold tabular-nums">{dollars(order.totalCents)}</div>

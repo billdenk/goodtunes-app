@@ -10,8 +10,29 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics";
+import { VinylPreview } from "@/components/VinylPreview";
+import {
+  DEFAULT_JACKET_UPGRADE,
+  DEFAULT_VINYL_COLOR_ID,
+  VINYL_COLOR_BY_ID,
+  isVinylFormat,
+  type JacketUpgrade,
+} from "@shared/pressing";
+import type { AlbumFormat } from "@shared/schema";
 
-type OrderItem = { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number };
+type OrderItem = {
+  id: string;
+  kind: string;
+  sku: string;
+  label: string;
+  unitPriceCents: number;
+  quantity: number;
+  // Task #201 — snapshot of the vinyl pressing picks for this item so
+  // the post-checkout receipt shows the same colored disc the fan saw
+  // when they bought it. Null on non-vinyl line items.
+  vinylColor?: string | null;
+  jacketUpgrade?: JacketUpgrade | null;
+};
 type Order = {
   id: string;
   albumId: string;
@@ -21,11 +42,13 @@ type Order = {
   shippingName: string | null;
   createdAt: string;
 };
+type AlbumLite = { artwork: string | null };
 type SessionResponse = {
   paymentStatus: string;
   status: string;
   order: Order | null;
   items: OrderItem[];
+  album: AlbumLite | null;
 };
 
 export function Welcome() {
@@ -216,6 +239,34 @@ export function Welcome() {
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
           <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-3">Order</div>
+          {/* Task #201 — for each vinyl line item, render the colored
+              <VinylPreview> the fan picked at checkout so the receipt
+              matches what they'll unbox. Falls back to Black for any
+              older SKU whose color was never set. */}
+          {data.items
+            .filter((it) => it.kind === "format" && isVinylFormat(it.sku as AlbumFormat))
+            .map((it) => {
+              const color =
+                VINYL_COLOR_BY_ID[it.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
+                VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+              return (
+                <div
+                  key={`preview-${it.id}`}
+                  className="mb-4 rounded-2xl bg-white/[0.04] border border-white/10 p-3"
+                  data-testid={`welcome-vinyl-preview-${it.sku}`}
+                >
+                  <VinylPreview
+                    artworkUrl={data.album?.artwork ?? null}
+                    color={color}
+                    jacketUpgrade={it.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
+                    size="md"
+                  />
+                  <div className="mt-2 text-[12px] text-white/65 leading-snug">
+                    {color.name} · {it.label}
+                  </div>
+                </div>
+              );
+            })}
           {data.items.map((it) => (
             <div key={it.id} className="flex items-center justify-between text-[14px] mb-1" data-testid={`order-item-${it.kind}-${it.sku}`}>
               <span className="text-white/85">{it.label}</span>

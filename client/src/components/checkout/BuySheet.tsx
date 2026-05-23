@@ -23,6 +23,15 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
 import { X } from "lucide-react";
+import { VinylPreview } from "@/components/VinylPreview";
+import {
+  DEFAULT_VINYL_COLOR_ID,
+  DEFAULT_JACKET_UPGRADE,
+  VINYL_COLOR_BY_ID,
+  isVinylFormat,
+  type JacketUpgrade,
+} from "@shared/pressing";
+import type { AlbumFormat } from "@shared/schema";
 
 type Sku = {
   id: string;
@@ -31,6 +40,10 @@ type Sku = {
   priceCents: number;
   stock: number | null;
   soldOut: boolean;
+  // Task #201 — pressing snapshot so the "You'll get" preview shows the
+  // actual disc color the artist picked. Null on non-vinyl SKUs.
+  vinylColor: string | null;
+  jacketUpgrade: JacketUpgrade | null;
 };
 type Addon = { id: string; kind: string; label: string; priceCents: number; minPriceCents: number };
 type BuyOptions = {
@@ -189,6 +202,33 @@ export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () =>
                     <div className="text-[13px] text-white/55 truncate">{options.artist}</div>
                   </div>
                 </div>
+
+                {/* Task #201 — "You'll get" preview. When the fan has
+                    a vinyl format selected, render the same
+                    <VinylPreview> the artist sees in admin so the disc
+                    they tap is the disc that arrives. Falls back to
+                    Black when an older SKU never had a color picked. */}
+                {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && (
+                  <div className="mb-5" data-testid="youll-get-vinyl">
+                    <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">You'll get</div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <VinylPreview
+                        artworkUrl={options.artwork}
+                        color={
+                          VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
+                          VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]
+                        }
+                        jacketUpgrade={selectedSku.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
+                        size="md"
+                      />
+                      <div className="mt-3 text-[12px] text-white/60 leading-snug">
+                        {(VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]).name}
+                        {" · "}
+                        {selectedSku.label}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">Format</div>
                 {options.skus.length === 0 ? (

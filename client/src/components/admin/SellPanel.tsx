@@ -50,7 +50,7 @@ import {
   type JacketUpgrade,
   type VinylColorOption,
 } from "@shared/pressing";
-import { VinylPreview } from "@/components/admin/VinylPreview";
+import { VinylPreview } from "@/components/VinylPreview";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {

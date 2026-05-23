@@ -303,8 +303,59 @@ async function getOrderById(id: string): Promise<Order | undefined> {
   const [row] = await db.select().from(orders).where(eq(orders.id, id));
   return row;
 }
-async function getOrderItems(orderId: string): Promise<OrderItem[]> {
-  return db.select().from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(asc(orderItems.createdAt));
+// Task #201 — extend the wire shape with the vinyl pressing snapshot so
+// fan-side surfaces (Welcome, Orders, Library) can render <VinylPreview>
+// in the exact color the artist picked. Snapshot fields live directly
+// on order_items (written at materialize-time) so a later artist edit
+// to album_skus can never rewrite an existing receipt. For historical
+// rows written before the snapshot column existed, we fall back to
+// looking up the current SKU; if even that is gone the fan-side render
+// falls back to DEFAULT_VINYL_COLOR_ID ("black").
+type OrderItemWithVinyl = OrderItem & {
+  vinylColor: string | null;
+  jacketUpgrade: JacketUpgrade | null;
+};
+async function getOrderItems(orderId: string): Promise<OrderItemWithVinyl[]> {
+  const rows = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(asc(orderItems.createdAt));
+  if (rows.length === 0) return [];
+  // Fast path: every vinyl-format row already has its snapshot. Skip
+  // the album_skus join entirely.
+  const needsFallback = rows.some(
+    (r) => r.kind === "format" && r.vinylColor == null,
+  );
+  if (!needsFallback) {
+    return rows.map((r) => ({
+      ...r,
+      vinylColor: r.vinylColor ?? null,
+      jacketUpgrade: (r.jacketUpgrade as JacketUpgrade | null) ?? null,
+    }));
+  }
+  // Legacy fallback: pull current SKU pressing picks for the parent
+  // album so old paid orders still render *something* sensible.
+  const [order] = await db.select({ albumId: orders.albumId }).from(orders).where(eq(orders.id, orderId));
+  const skuRows = order
+    ? await db
+        .select({ format: albumSkus.format, vinylColor: albumSkus.vinylColor, jacketUpgrade: albumSkus.jacketUpgrade })
+        .from(albumSkus)
+        .where(eq(albumSkus.albumId, order.albumId))
+    : [];
+  const skuByFormat = new Map(skuRows.map((s) => [s.format, s]));
+  return rows.map((r) => {
+    if (r.kind !== "format") return { ...r, vinylColor: null, jacketUpgrade: null };
+    if (r.vinylColor != null) {
+      return {
+        ...r,
+        vinylColor: r.vinylColor,
+        jacketUpgrade: (r.jacketUpgrade as JacketUpgrade | null) ?? null,
+      };
+    }
+    const sku = skuByFormat.get(r.sku as any);
+    return {
+      ...r,
+      vinylColor: sku?.vinylColor ?? null,
+      jacketUpgrade: (sku?.jacketUpgrade as JacketUpgrade | null) ?? null,
+    };
+  });
 }
 
 // Assigns the next per-album GoodDeed number atomically. We rank by
@@ -380,6 +431,11 @@ export function registerCommerceRoutes(app: Express) {
         priceCents: s.priceCents,
         stock: s.stock,
         soldOut: s.stock !== null && s.stock <= 0,
+        // Task #201 — fan-side BuySheet renders <VinylPreview> against
+        // these picks. Non-vinyl SKUs leave both fields null and the UI
+        // falls back to the format label only.
+        vinylColor: s.vinylColor ?? null,
+        jacketUpgrade: (s.jacketUpgrade as JacketUpgrade | null) ?? null,
       })),
       addons: addons.map((a) => ({
         id: a.id,
@@ -1154,11 +1210,15 @@ export function registerCommerceRoutes(app: Express) {
     if (!order && session.payment_status === "paid") {
       order = await materializeOrderFromSession(session);
     }
+    // Task #201 — surface the album artwork so the /welcome receipt can
+    // render <VinylPreview> for vinyl line items.
+    const album = order ? await storage.getAlbumById(order.albumId) : null;
     res.json({
       paymentStatus: session.payment_status,
       status: session.status,
       order: order ?? null,
       items: order ? await getOrderItems(order.id) : [],
+      album: album ? { artwork: album.artwork ?? null } : null,
     });
   });
 
@@ -1461,17 +1521,29 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
 
   // Build line item snapshots from the session, with our metadata.
   const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 10, expand: ["data.price.product"] });
+  // Task #201 — snapshot the album's current SKU pressing picks
+  // (vinyl_color + jacket_upgrade) onto each vinyl line item at order
+  // creation time, so a later artist edit to the SKU can never rewrite
+  // an existing receipt. Done in one query keyed off the album.
+  const skuRowsAtPurchase = await db
+    .select({ format: albumSkus.format, vinylColor: albumSkus.vinylColor, jacketUpgrade: albumSkus.jacketUpgrade })
+    .from(albumSkus)
+    .where(eq(albumSkus.albumId, albumId));
+  const skuByFormatAtPurchase = new Map(skuRowsAtPurchase.map((s) => [s.format, s]));
   const items: Array<Omit<OrderItem, "id" | "orderId" | "createdAt">> = [];
   for (const li of lineItems.data) {
     const product = li.price?.product as Stripe.Product | undefined;
     const kind = (product?.metadata?.gt_kind as "format" | "addon") ?? "format";
     const sku = product?.metadata?.gt_sku ?? "unknown";
+    const pressingSnap = kind === "format" ? skuByFormatAtPurchase.get(sku as any) : undefined;
     items.push({
       kind,
       sku,
       label: li.description ?? product?.name ?? sku,
       unitPriceCents: li.amount_total ?? li.price?.unit_amount ?? 0,
       quantity: li.quantity ?? 1,
+      vinylColor: pressingSnap?.vinylColor ?? null,
+      jacketUpgrade: (pressingSnap?.jacketUpgrade as JacketUpgrade | null) ?? null,
     });
   }
   const totalCents = full.amount_total ?? items.reduce((a, b) => a + b.unitPriceCents * b.quantity, 0);

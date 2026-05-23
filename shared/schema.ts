@@ -1255,6 +1255,15 @@ export const orderItems = pgTable("order_items", {
   label: text("label").notNull(),
   unitPriceCents: integer("unit_price_cents").notNull(),
   quantity: integer("quantity").notNull().default(1),
+  // Task #201 — pressing snapshot. For vinyl format rows we copy the
+  // SKU's vinyl_color + jacket_upgrade onto the order item at
+  // materialize-time so a later artist edit to album_skus can never
+  // retroactively change the receipt the fan already got. Null on
+  // non-vinyl / addon rows and on historical orders written before
+  // this column existed (those fall back to current-SKU lookup on
+  // read, then black if the SKU is gone).
+  vinylColor: text("vinyl_color"),
+  jacketUpgrade: text("jacket_upgrade"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
