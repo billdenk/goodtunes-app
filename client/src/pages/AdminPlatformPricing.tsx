@@ -185,6 +185,8 @@ export function AdminPlatformPricing() {
           </div>
         )}
 
+        <SignedCertLadderCard />
+
         {formatCosts && formatCosts.length > 0 && (
           <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-format-costs">
             <div>
@@ -293,6 +295,97 @@ function FormatCostRow({ row }: { row: PayoutFormatCost }) {
           {dollars(total)}
         </span>
       </div>
+    </div>
+  );
+}
+
+// Task #241 — read-only reference rendering of the signed-cert wholesale
+// ladder so operators always quote the same number the auto-charge logic
+// uses. Source of truth lives in docs/shopify-pricing-strategy.md
+// ("Signed-cert wholesale ladder" section); keep these in lockstep when
+// the ladder moves.
+const SIGNED_CERT_LADDER: { range: string; wholesale: string }[] = [
+  { range: "25–49", wholesale: "$13" },
+  { range: "50–99", wholesale: "$12" },
+  { range: "100–199", wholesale: "$9" },
+  { range: "200–299", wholesale: "$7" },
+  { range: "300+", wholesale: "$6" },
+];
+
+function SignedCertLadderCard() {
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-3"
+      data-testid="panel-signed-cert-ladder"
+    >
+      <div>
+        <h2 className="text-[15px] font-semibold text-slate-900">
+          Signed-cert wholesale ladder
+        </h2>
+        <p className="text-[13px] text-slate-500 mt-1">
+          Per-unit price GoodTunes charges artists and labels for printed,
+          signed, hologrammed GoodDeed certificates. Snapped to the actual
+          run size at window close — not the artist's hoped-for number.
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-slate-200">
+        <table className="w-full text-[13px]">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              <th className="text-left font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2">
+                Batch size
+              </th>
+              <th className="text-right font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2">
+                Wholesale / unit
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {SIGNED_CERT_LADDER.map((row) => (
+              <tr
+                key={row.range}
+                className="border-t border-slate-100"
+                data-testid={`row-signed-cert-ladder-${row.range.replace(/[^0-9+]/g, "-")}`}
+              >
+                <td className="px-3 py-2 text-slate-900">{row.range}</td>
+                <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                  {row.wholesale}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ul className="text-[12px] text-slate-500 space-y-1.5 pl-4 list-disc">
+        <li>
+          <span className="text-slate-900 font-medium">25-unit minimum.</span>{" "}
+          If fewer than 25 sell at window close, the cert add-on auto-refunds
+          and no print run happens.
+        </li>
+        <li>
+          <span className="text-slate-900 font-medium">Billed on actuals.</span>{" "}
+          Artist is wholesale-billed on the count that actually sold, snapped
+          to the ladder above — no pre-buying to lock a lower tier.
+        </li>
+        <li>
+          <span className="text-slate-900 font-medium">Pass-throughs.</span>{" "}
+          Expedited shipping, international shipping, and any mid-cycle vendor
+          fee bumps (Hoover, Sticker Mule, Spinney) are billed at cost on top
+          of the ladder.
+        </li>
+      </ul>
+
+      <p className="text-[11.5px] text-slate-400 pt-2 border-t border-slate-100">
+        Read-only. Source of truth is{" "}
+        <code className="text-slate-500">
+          docs/shopify-pricing-strategy.md
+        </code>{" "}
+        — "Signed-cert wholesale ladder". Vendor-quoted inputs (the cost
+        stack underneath this ladder) will move into a press-managed pricing
+        portal in a later task.
+      </p>
     </div>
   );
 }

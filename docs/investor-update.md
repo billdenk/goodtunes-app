@@ -31,6 +31,7 @@ What fans and operators can actually do right now.
 ### Commerce & Partners
 - **Direct in-player checkout.** Stripe Embedded Checkout sells album bundles (digital + optional vinyl, merch, signed copies) right inside the player. The album unlocks the instant payment clears, the buyer's GoodDeed serial is assigned, and refunds reverse cleanly. Stripe Connect powers artist and label payouts.
 - **Shopify Bundle integration.** Labels and artists already selling physical product on Shopify can bundle GoodTunes digital access into the same checkout — no plugin to install. After the buyer pays on the label's store, GoodTunes unlocks the album for the email on the order, mints a one-time redemption code, and drops the fan into a branded redeem page that already knows their name.
+- **Signed-cert wholesale is a published tier, not a per-deal negotiation.** GoodTunes now publishes a five-rung wholesale ladder for printed, signed, hologrammed GoodDeed certificates (25-unit minimum at $13/unit, scaling down to $6/unit at 300+), with billing on actual orders at window close — one source of truth the admin UI, the auto-charge logic, and our sales conversations all pull from.
 - **Pressing-plant & fulfillment partners as first-class entities.** Plants and fulfillment warehouses live in the admin alongside artists and labels, with contact info, specialties, and turnaround times — the foundation for the in-app RFQ flow that lets GoodTunes invite multiple plants to bid on a print run.
 
 ### Platform & Integrations
