@@ -31,6 +31,8 @@ import { AdminAlbum } from "@/pages/AdminAlbum";
 import { AdminPeople } from "@/pages/AdminPeople";
 import { AdminPerson } from "@/pages/AdminPerson";
 import AdminNonProfit from "@/pages/AdminNonProfit";
+import { AdminNonProfits } from "@/pages/AdminNonProfits";
+import { AdminFanOrders } from "@/pages/AdminFanOrders";
 import { AdminInstruments } from "@/pages/AdminInstruments";
 import { AdminInstrument } from "@/pages/AdminInstrument";
 import { AdminVendors } from "@/pages/AdminVendors";
@@ -263,6 +265,15 @@ function Router() {
         {/* Task #78 — Super-admin detail page for a non-profit partner. */}
         <Route path="/admin/non-profits/:id">
           <ProtectedRoute component={AdminNonProfit} />
+        </Route>
+        {/* Task #230 — NPO directory index, linked from the new
+            CATALOG section of the admin sidebar. */}
+        <Route path="/admin/non-profits">
+          <ProtectedRoute component={AdminNonProfits} />
+        </Route>
+        {/* Task #230 — Fan orders queue (design stub for now). */}
+        <Route path="/admin/fan-orders">
+          <ProtectedRoute component={AdminFanOrders} />
         </Route>
         <Route path="/admin/people">
           <ProtectedRoute component={AdminPeople} />

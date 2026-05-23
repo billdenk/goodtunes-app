@@ -16,6 +16,8 @@ import {
   Activity,
   DollarSign,
   LayoutDashboard,
+  HeartHandshake,
+  ShoppingBag,
   PanelRightClose,
   PanelRightOpen,
   Smartphone,
@@ -59,12 +61,14 @@ export type EntityKey =
   | "dashboard"
   | "albums"
   | "people"
+  | "nonprofits"
   | "gear"
   | "makers"
   | "vendors"
   | "labels"
   | "manufacturers"
   | "pressing-orders"
+  | "fan-orders"
   | "fulfillment"
   | "customers"
   | "reports"
@@ -225,6 +229,13 @@ export function AdminFrame({
     enabled: !!user?.isAdmin,
   });
   const customerCount = customersResp?.total ?? 0;
+  // Task #230 — NPO directory count drives the badge on the new NPOs
+  // sidebar entry. Reuses the same /api/non-profits payload the rest
+  // of the admin already hits.
+  const { data: nonProfits = [] } = useQuery<unknown[]>({
+    queryKey: ["/api/non-profits"],
+    enabled: !!user?.isAdmin,
+  });
   // Task #119 — Platform Pricing is super-admin-only; we hide the
   // sidebar link entirely for other roles so they don't see a tab
   // that 403s when they click it.
@@ -251,10 +262,10 @@ export function AdminFrame({
             <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
           </Link>
         </div>
-        <nav className="flex-1 px-2 pt-2 space-y-0.5 border-r border-slate-200" data-testid="nav-admin-entities">
-            {/* Task #140 — Dashboard sits above Albums as the admin's
-                at-a-glance home. No count (it's a surface, not a CRUD
-                list) so we pass -1 to suppress the badge. */}
+        <nav className="flex-1 px-2 pt-2 pb-3 space-y-0.5 border-r border-slate-200 overflow-y-auto" data-testid="nav-admin-entities">
+            {/* Task #140 — Dashboard sits above the labelled sections as
+                the admin's at-a-glance home. No section header; it's a
+                solo entry. */}
             <SidebarLink
               icon={LayoutDashboard}
               label="Dashboard"
@@ -263,13 +274,12 @@ export function AdminFrame({
               onClick={() => navigate("/admin/dashboard")}
               testId="nav-dashboard"
             />
-            {/* Sidebar order is by founder-importance for a vinyl-first
-                music platform: the production chain first (Albums →
-                People → Labels → Presses → Fulfillment), then the fans
-                buying it (Customers) and the BI on top (Reports), then
-                the secondary gear-credits catalog (Makers → Resellers
-                → Gear), and finally plumbing (Jobs, Platform pricing).
-                Reorder here when the business priorities change. */}
+
+            {/* Task #230 — Sidebar is grouped into labelled sections so
+                the relationship between catalog nouns, supply-chain
+                vendors, and action queues is obvious. Headers are quiet
+                visual labels (not buttons, not collapsible). */}
+            <SectionHeader label="Catalog" />
             <SidebarLink
               icon={Disc3}
               label="Albums"
@@ -294,10 +304,29 @@ export function AdminFrame({
               onClick={() => navigate("/admin/labels")}
               testId="nav-labels"
             />
+            {/* Task #230 — NPO partner directory (page existed before
+                but was never linked from the sidebar). */}
+            <SidebarLink
+              icon={HeartHandshake}
+              label="NPOs"
+              count={nonProfits.length}
+              active={active === "nonprofits"}
+              onClick={() => navigate("/admin/non-profits")}
+              testId="nav-nonprofits"
+            />
+            <SidebarLink
+              icon={Guitar}
+              label="Gear"
+              count={instruments.length}
+              active={active === "gear"}
+              onClick={() => navigate("/admin/instruments")}
+              testId="nav-gear"
+            />
+
+            <SectionHeader label="Supply chain" />
             {/* Task #174 — vinyl pressing plants are now labelled
                 "Presses" so the noun doesn't clash with "Maker" (gear
-                builder). URL stays /admin/manufacturers; the underlying
-                table + RFQ flow is unchanged. */}
+                builder). URL stays /admin/manufacturers. */}
             <SidebarLink
               icon={Factory}
               label="Presses"
@@ -306,51 +335,9 @@ export function AdminFrame({
               onClick={() => navigate("/admin/manufacturers")}
               testId="nav-manufacturers"
             />
-            {/* Task #225 — Pressing-order review inbox. Tool, not a CRUD
-                list, so we pass -1 to suppress the count. Sits next to
-                Presses since that's the pipeline it feeds. */}
-            <SidebarLink
-              icon={Factory}
-              label="Pressing orders"
-              count={-1}
-              active={active === "pressing-orders"}
-              onClick={() => navigate("/admin/pressing-orders")}
-              testId="nav-pressing-orders"
-            />
-            <SidebarLink
-              icon={Truck}
-              label="Fulfillment"
-              count={fulfillment.length}
-              active={active === "fulfillment"}
-              onClick={() => navigate("/admin/fulfillment-partners")}
-              testId="nav-fulfillment"
-            />
-            {/* Task #131 — Customers (fan-account directory). */}
-            <SidebarLink
-              icon={Users}
-              label="Customers"
-              count={customerCount}
-              active={active === "customers"}
-              onClick={() => navigate("/admin/customers")}
-              testId="nav-customers"
-            />
-            {/* Task #80 — Reports surface. No count here (it's a tool,
-                not a CRUD list) so we pass -1 and special-case below. */}
-            <SidebarLink
-              icon={BarChart3}
-              label="Reports"
-              count={-1}
-              active={active === "reports"}
-              onClick={() => navigate("/admin/reports")}
-              testId="nav-reports"
-            />
             {/* Task #174 — Makers and Resellers are two sides of the
-                same vendor table. Makers build the gear (FK
-                instruments.maker_vendor_id); Resellers sell it (the
-                instrument_vendors join). A single row can carry both
-                flags (Gibson sits in both counts). Sit below the
-                production chain because gear credits are a secondary
-                catalog vs. the primary music catalog above. */}
+                same vendor table. A single row can carry both flags
+                (Gibson sits in both counts). */}
             <SidebarLink
               icon={Hammer}
               label="Makers"
@@ -368,12 +355,34 @@ export function AdminFrame({
               testId="nav-vendors"
             />
             <SidebarLink
-              icon={Guitar}
-              label="Gear"
-              count={instruments.length}
-              active={active === "gear"}
-              onClick={() => navigate("/admin/instruments")}
-              testId="nav-gear"
+              icon={Truck}
+              label="Fulfillment"
+              count={fulfillment.length}
+              active={active === "fulfillment"}
+              onClick={() => navigate("/admin/fulfillment-partners")}
+              testId="nav-fulfillment"
+            />
+
+            <SectionHeader label="Queues" />
+            {/* Task #225 — Pressing-order review inbox. Tool, not a CRUD
+                list, so we pass -1 to suppress the count. */}
+            <SidebarLink
+              icon={Factory}
+              label="Pressing orders"
+              count={-1}
+              active={active === "pressing-orders"}
+              onClick={() => navigate("/admin/pressing-orders")}
+              testId="nav-pressing-orders"
+            />
+            {/* Task #230 — Fan orders queue (design stub for now; tab
+                strip + table skeleton, no data wiring). */}
+            <SidebarLink
+              icon={ShoppingBag}
+              label="Fan orders"
+              count={-1}
+              active={active === "fan-orders"}
+              onClick={() => navigate("/admin/fan-orders")}
+              testId="nav-fan-orders"
             />
             {/* Task #136 — Auto-sync-lyrics job history. Tool, not a CRUD
                 list, so we pass -1 to suppress the count. */}
@@ -385,15 +394,40 @@ export function AdminFrame({
               onClick={() => navigate("/admin/jobs")}
               testId="nav-jobs"
             />
+
+            <SectionHeader label="Audience" />
+            {/* Task #131 — Customers (fan-account directory). */}
+            <SidebarLink
+              icon={Users}
+              label="Customers"
+              count={customerCount}
+              active={active === "customers"}
+              onClick={() => navigate("/admin/customers")}
+              testId="nav-customers"
+            />
+            {/* Task #80 — Reports surface. No count (it's a tool, not
+                a CRUD list). */}
+            <SidebarLink
+              icon={BarChart3}
+              label="Reports"
+              count={-1}
+              active={active === "reports"}
+              onClick={() => navigate("/admin/reports")}
+              testId="nav-reports"
+            />
+
             {isSuperAdmin && (
-              <SidebarLink
-                icon={DollarSign}
-                label="Platform pricing"
-                count={-1}
-                active={active === "platform-pricing"}
-                onClick={() => navigate("/admin/platform-pricing")}
-                testId="nav-platform-pricing"
-              />
+              <>
+                <SectionHeader label="System" />
+                <SidebarLink
+                  icon={DollarSign}
+                  label="Platform pricing"
+                  count={-1}
+                  active={active === "platform-pricing"}
+                  onClick={() => navigate("/admin/platform-pricing")}
+                  testId="nav-platform-pricing"
+                />
+              </>
             )}
           </nav>
         </aside>
@@ -520,6 +554,20 @@ export function AdminFrame({
             )}
           </aside>
         )}
+    </div>
+  );
+}
+
+// Task #230 — Quiet visual label that groups the sidebar links into
+// sections. Not a button, not collapsible — just typography. Mirrors
+// the muted-uppercase rhythm Stripe and Linear use in their nav rails.
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div
+      className="px-3 pt-4 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-400 select-none"
+      data-testid={`nav-section-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      {label}
     </div>
   );
 }
