@@ -20,7 +20,7 @@
 // A new Presses panel above Formats surfaces the pressing-plant
 // directory (MRP, PMP, Hellbender …) as info cards — per-press RFQ
 // pricing plumbing is tracked separately on the roadmap.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, X, Info, MapPin, Clock, Lock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -78,13 +78,53 @@ type Manufacturer = {
 // `press` is null when the album's artist + label both have no
 // invited-by-press stamp; in that case `formatCosts` mirrors the
 // platform defaults so callers can fall through to one source.
+// Task #218 — `catalog` is the press's formats → tiers → colors tree.
+// Empty `formats` (or absent press) means the SellPanel falls back to
+// the legacy Hellbender-matrix picker for back-compat.
+type CatalogColor = {
+  id: string;
+  name: string;
+  swatchHex: string | null;
+  swatchImageUrl: string | null;
+  position: number;
+};
+type CatalogTier = {
+  id: string;
+  name: string;
+  position: number;
+  priceLadder: { qty: number; unitCents: number }[];
+  colors: CatalogColor[];
+};
+type CatalogFormatRow = {
+  format: AlbumFormat;
+  position: number;
+  tiers: CatalogTier[];
+};
+type Catalog = { formats: CatalogFormatRow[] };
+
 type InvitedPressResponse = {
   press: Manufacturer | null;
   hasShippedFirst: boolean;
   scopeKind?: "artist" | "label" | null;
   scopeId?: string | null;
   formatCosts: PayoutFormatCost[];
+  catalog?: Catalog;
 };
+
+// Mirrors `snapToCatalogQuantityTier` server-side. Walks an ordered
+// ladder and returns the matched rung + a `requiresQuote` flag when
+// the typed quantity exceeds the top rung.
+function snapCatalogLadder(
+  ladder: { qty: number; unitCents: number }[],
+  n: number,
+): { qty: number; unitCents: number; requiresQuote: boolean } | null {
+  if (!Array.isArray(ladder) || ladder.length === 0) return null;
+  const sorted = [...ladder].sort((a, b) => a.qty - b.qty);
+  const q = Math.max(1, Math.floor(n));
+  for (const r of sorted) if (q <= r.qty) return { qty: r.qty, unitCents: r.unitCents, requiresQuote: false };
+  const top = sorted[sorted.length - 1];
+  return { qty: top.qty, unitCents: top.unitCents, requiresQuote: true };
+}
 
 export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; artworkUrl?: string | null }) {
   const { toast } = useToast();
@@ -125,6 +165,8 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
       plannedQuantity: number | null;
       vinylColor: string | null;
       jacketUpgrade: JacketUpgrade | null;
+      pressTierId?: string | null;
+      pressColorId?: string | null;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
       return r.json();
@@ -163,13 +205,27 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   const skuByFormat = new Map(data.skus.map((s) => [s.format as AlbumFormat, s]));
   const signedAddon = data.addons.find((a) => a.kind === "signed_cert");
 
+  // Task #218 — when this album is invited by a press that has built
+  // its catalog, restrict the Add-Physical menu to the formats that
+  // catalog offers. Free / non-invited albums keep the full
+  // ALBUM_FORMATS list so the SellPanel still works without a press.
+  const catalogByFormat = useMemo(() => {
+    const m = new Map<AlbumFormat, CatalogFormatRow>();
+    (invitedPress?.catalog?.formats ?? []).forEach((f) => m.set(f.format, f));
+    return m;
+  }, [invitedPress]);
+  const catalogScoped = !!invitedPress?.press && catalogByFormat.size > 0;
+  const offeredFormats = catalogScoped
+    ? ALBUM_FORMATS.filter((f) => catalogByFormat.has(f))
+    : ALBUM_FORMATS;
+
   // Once a draft becomes a real SKU (visible in `data.skus`), drop it
   // from the local draft list — the saved row takes over rendering.
   const liveDrafts = draftFormats.filter((f) => !skuByFormat.has(f));
   // Formats actually configured on this album — these are the rows we
   // render. The "+ Add Physical Good" picker handles the rest.
   const configuredFormats = ALBUM_FORMATS.filter((f) => skuByFormat.has(f));
-  const availableFormats = ALBUM_FORMATS.filter(
+  const availableFormats = offeredFormats.filter(
     (f) => !skuByFormat.has(f) && !liveDrafts.includes(f),
   );
 
@@ -217,6 +273,7 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
                     format={f}
                     existing={existing}
                     liveCost={costByFormat.get(f) ?? null}
+                    catalogFormat={catalogByFormat.get(f) ?? null}
                     artworkUrl={artworkUrl}
                     onSave={upsertSku.mutate}
                     onDelete={() => deleteSku.mutate(f)}
@@ -229,6 +286,7 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
                   format={f}
                   existing={null}
                   liveCost={costByFormat.get(f) ?? null}
+                  catalogFormat={catalogByFormat.get(f) ?? null}
                   artworkUrl={artworkUrl}
                   onSave={(body) => {
                     upsertSku.mutate(body, {
@@ -599,24 +657,18 @@ function SkuRow({
   format,
   existing,
   liveCost,
+  catalogFormat,
   artworkUrl,
   onSave,
   onDelete,
 }: {
   format: AlbumFormat;
-  // `null` = draft row (operator just picked the format from the menu;
-  // nothing has hit the DB yet). Save promotes it to a real SKU; Delete
-  // simply drops the draft from local state. See note in SellPanel.
   existing: AlbumSku | null;
-  // Live platform default for this format. Used on draft rows + when
-  // the existing SKU pre-dates the cost-snapshot columns (NULL snapshot
-  // fields). For vinyl, manufacturing is overridden by the live
-  // Hellbender matrix lookup; publishing / processing / GoodTunes
-  // margin still come from this row.
   liveCost: PayoutFormatCost | null;
-  // Album cover art — feeds the in-row vinyl preview so the artist
-  // can see what a fan's "You'll get" mock will look like as they
-  // change colors. Optional; falls back to a slate placeholder.
+  // Task #218 — when present, the picker switches from the legacy
+  // Hellbender matrix to the invited press's catalog (tier → color →
+  // quantity ladder). Null = free / non-invited flow.
+  catalogFormat: CatalogFormatRow | null;
   artworkUrl: string | null;
   onSave: (b: {
     format: AlbumFormat;
@@ -626,6 +678,8 @@ function SkuRow({
     plannedQuantity: number | null;
     vinylColor: string | null;
     jacketUpgrade: JacketUpgrade | null;
+    pressTierId?: string | null;
+    pressColorId?: string | null;
   }) => void;
   onDelete: () => void;
 }) {
@@ -657,6 +711,44 @@ function SkuRow({
   );
   const vinylColor: VinylColorOption = VINYL_COLOR_BY_ID[vinylColorId] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
 
+  // Task #218 — catalog picks (only when an invited press's catalog
+  // covers this format). Initial tier defaults to the first one; if
+  // the saved SKU's `vinylColorTier` matches a tier name, re-pick it.
+  // Same trick for color via `vinylColor` (snapshotted as the color's
+  // display name on save).
+  const tiers = catalogFormat?.tiers ?? [];
+  const initialTier = useMemo(() => {
+    if (!tiers.length) return null;
+    if (existing?.vinylColorTier) {
+      const hit = tiers.find((t) => t.name === existing.vinylColorTier);
+      if (hit) return hit;
+    }
+    return tiers[0];
+  }, [tiers, existing?.vinylColorTier]);
+  const [pressTierId, setPressTierId] = useState<string | null>(initialTier?.id ?? null);
+  const pickedTier = tiers.find((t) => t.id === pressTierId) ?? initialTier ?? null;
+  const initialColorId = useMemo(() => {
+    if (!pickedTier || pickedTier.colors.length === 0) return null;
+    if (existing?.vinylColor) {
+      const hit = pickedTier.colors.find((c) => c.name === existing.vinylColor);
+      if (hit) return hit.id;
+    }
+    return pickedTier.colors[0].id;
+  }, [pickedTier, existing?.vinylColor]);
+  const [pressColorId, setPressColorId] = useState<string | null>(initialColorId);
+  // When tier changes, reset color to the first one in the new tier.
+  useEffect(() => {
+    if (!pickedTier) {
+      if (pressColorId !== null) setPressColorId(null);
+      return;
+    }
+    const stillThere = pickedTier.colors.find((c) => c.id === pressColorId);
+    if (!stillThere) setPressColorId(pickedTier.colors[0]?.id ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedTier?.id]);
+
+  const usingCatalog = !!catalogFormat && !!pickedTier;
+
   const parsedQty = useMemo(() => {
     const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -670,6 +762,15 @@ function SkuRow({
   const qtySnap = useMemo(
     () => snapToQuantityTier(parsedQty ?? DEFAULT_VINYL_QUANTITY),
     [parsedQty],
+  );
+  // Task #218 — catalog ladder snap (parallel to qtySnap but driven by
+  // the picked tier's price ladder, not the Hellbender matrix).
+  const catalogSnap = useMemo(
+    () =>
+      usingCatalog && pickedTier
+        ? snapCatalogLadder(pickedTier.priceLadder, parsedQty ?? DEFAULT_VINYL_QUANTITY)
+        : null,
+    [usingCatalog, pickedTier, parsedQty],
   );
 
   // Live Cost computation. Vinyl recomputes Manufacturing from the
@@ -692,6 +793,32 @@ function SkuRow({
           }
         : null;
     if (!sideCarCents) return null;
+    if (usingCatalog && pickedTier) {
+      // Catalog-driven: live snap from the picked tier's ladder. Mirror
+      // the snapshot-vs-live trick from the legacy block so a saved row
+      // shows the locked snapshot until the artist actually changes a
+      // pick (then we recompute and re-snapshot at Save).
+      const pickedColor = pickedTier.colors.find((c) => c.id === pressColorId);
+      const storedTierName = existing?.vinylColorTier ?? null;
+      const storedColorName = existing?.vinylColor ?? null;
+      const storedQtyTier = existing?.quantityTier ?? null;
+      const picksDirty =
+        pickedTier.name !== storedTierName ||
+        (pickedColor?.name ?? null) !== storedColorName ||
+        (storedQtyTier !== null && catalogSnap !== null && catalogSnap.qty !== storedQtyTier);
+      if (existing && existing.costSnapshotManufacturingCents != null && !picksDirty) {
+        return {
+          manufacturingCents: existing.costSnapshotManufacturingCents,
+          ...sideCarCents,
+          source: "catalog" as const,
+        };
+      }
+      return {
+        manufacturingCents: catalogSnap?.unitCents ?? 0,
+        ...sideCarCents,
+        source: "catalog" as const,
+      };
+    }
     if (isVinyl) {
       // Snapshot-at-save semantics: if the row is saved AND the
       // artist hasn't changed any of the picks the matrix is keyed
@@ -730,7 +857,20 @@ function SkuRow({
       ?? liveCost?.manufacturingCents
       ?? 0;
     return { manufacturingCents, ...sideCarCents, source: "placeholder" as const };
-  }, [existing, liveCost, isVinyl, format, vinylColor.tier, vinylColorId, qtySnap.tier, jacketUpgrade]);
+  }, [
+    existing,
+    liveCost,
+    isVinyl,
+    format,
+    vinylColor.tier,
+    vinylColorId,
+    qtySnap.tier,
+    jacketUpgrade,
+    usingCatalog,
+    pickedTier,
+    pressColorId,
+    catalogSnap,
+  ]);
 
   const totalCostCents = breakdown
     ? breakdown.manufacturingCents +
@@ -755,13 +895,20 @@ function SkuRow({
   const storedQty = existing?.plannedQuantity ?? null;
   const storedColor = existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID;
   const storedJacket = (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE;
+  // Task #218 — catalog picks dirty when tier or color id differs from
+  // initial. We compare by id, not by snapshot name, so reopening a
+  // saved row doesn't appear dirty.
+  const catalogDirty =
+    usingCatalog &&
+    (pressTierId !== (initialTier?.id ?? null) || pressColorId !== initialColorId);
   const dirty =
     active !== storedActive ||
     priceStr !== storedPrice ||
     stockStr !== storedStock ||
     qtyMode !== storedMode ||
     (qtyMode === "fixed" && parsedQty !== storedQty) ||
-    (isVinyl && (vinylColorId !== storedColor || jacketUpgrade !== storedJacket));
+    (isVinyl && !usingCatalog && (vinylColorId !== storedColor || jacketUpgrade !== storedJacket)) ||
+    catalogDirty;
 
   const submit = () => {
     const cents = parseDollars(priceStr);
@@ -775,8 +922,14 @@ function SkuRow({
       stock,
       active,
       plannedQuantity,
-      vinylColor: isVinyl ? vinylColorId : null,
-      jacketUpgrade: isVinyl ? jacketUpgrade : null,
+      // Catalog mode wins: the server resolves picks via pressTierId /
+      // pressColorId and snapshots the tier name + color name itself.
+      // Legacy vinyl picks are skipped (jacket upgrade was dropped
+      // from the catalog model).
+      vinylColor: usingCatalog ? null : isVinyl ? vinylColorId : null,
+      jacketUpgrade: usingCatalog ? null : isVinyl ? jacketUpgrade : null,
+      pressTierId: usingCatalog ? pressTierId : null,
+      pressColorId: usingCatalog ? pressColorId : null,
     });
   };
 
@@ -853,9 +1006,11 @@ function SkuRow({
                 className="text-slate-400 text-[11px]"
                 data-testid={`text-cost-source-${format}`}
               >
-                ({isVinyl
-                  ? (existing?.costSnapshotManufacturingCents != null ? "locked · Hellbender" : "live · Hellbender")
-                  : "placeholder"})
+                ({usingCatalog
+                  ? (existing?.costSnapshotManufacturingCents != null ? "locked · catalog" : "live · catalog")
+                  : isVinyl
+                    ? (existing?.costSnapshotManufacturingCents != null ? "locked · Hellbender" : "live · Hellbender")
+                    : "placeholder"})
               </span>
             </span>
             <span
@@ -1005,7 +1160,7 @@ function SkuRow({
               Only if all {parsedQty} sell.
             </div>
           )}
-          {isVinyl && qtyMode === "fixed" && parsedQty !== null && (
+          {isVinyl && !usingCatalog && qtyMode === "fixed" && parsedQty !== null && (
             <div
               className="text-[11.5px] text-slate-500 text-right"
               data-testid={`text-qty-tier-${format}`}
@@ -1019,10 +1174,33 @@ function SkuRow({
               )}
             </div>
           )}
+          {usingCatalog && qtyMode === "fixed" && parsedQty !== null && catalogSnap && (
+            <div
+              className="text-[11.5px] text-slate-500 text-right"
+              data-testid={`text-qty-tier-${format}`}
+            >
+              {catalogSnap.requiresQuote ? (
+                <>{catalogSnap.qty}+ — request a custom quote</>
+              ) : parsedQty === catalogSnap.qty ? (
+                <>Priced at the {catalogSnap.qty}-unit rung.</>
+              ) : (
+                <>Priced at the next rung up: {catalogSnap.qty} units.</>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {isVinyl && (
+      {usingCatalog && pickedTier ? (
+        <CatalogPicksBlock
+          format={format}
+          tiers={tiers}
+          pickedTier={pickedTier}
+          pickedColorId={pressColorId}
+          onPickTier={setPressTierId}
+          onPickColor={setPressColorId}
+        />
+      ) : isVinyl ? (
         <VinylPicksBlock
           format={format}
           artworkUrl={artworkUrl}
@@ -1031,7 +1209,100 @@ function SkuRow({
           jacketUpgrade={jacketUpgrade}
           onPickJacket={setJacketUpgrade}
         />
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+// Task #218 — catalog-driven picker. Tier select (chips) + color
+// swatch row, both driven by the invited press's catalog. Quantity
+// lives in the existing "Sold" input above; the row above this one
+// shows the snapped rung. We deliberately keep this minimal and
+// data-dense (Apple-Music-ish chips) since most artists pick once
+// and forget.
+function CatalogPicksBlock({
+  format,
+  tiers,
+  pickedTier,
+  pickedColorId,
+  onPickTier,
+  onPickColor,
+}: {
+  format: AlbumFormat;
+  tiers: CatalogTier[];
+  pickedTier: CatalogTier;
+  pickedColorId: string | null;
+  onPickTier: (id: string) => void;
+  onPickColor: (id: string) => void;
+}) {
+  return (
+    <div
+      className="mt-3 pt-3 border-t border-slate-100 space-y-3"
+      data-testid={`catalog-picks-${format}`}
+    >
+      <div>
+        <div className="text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
+          Color tier
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {tiers.map((t) => {
+            const on = t.id === pickedTier.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onPickTier(t.id)}
+                className={[
+                  "h-7 rounded-full px-3 text-[12px] border transition-colors",
+                  on
+                    ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300",
+                ].join(" ")}
+                data-testid={`chip-tier-${format}-${t.id}`}
+              >
+                {t.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
+          Color
+        </div>
+        {pickedTier.colors.length === 0 ? (
+          <div className="text-[12px] text-slate-400">
+            No colors set on this tier yet — ask the press to fill in their catalog.
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {pickedTier.colors.map((c) => {
+              const on = c.id === pickedColorId;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onPickColor(c.id)}
+                  className={[
+                    "inline-flex items-center gap-1.5 h-7 rounded-full pl-1 pr-2.5 border transition-colors",
+                    on
+                      ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue)]/5"
+                      : "border-slate-200 hover:border-slate-300",
+                  ].join(" ")}
+                  data-testid={`chip-color-${format}-${c.id}`}
+                  title={c.name}
+                >
+                  <span
+                    className="w-5 h-5 rounded-full border border-slate-200"
+                    style={{ background: c.swatchHex ?? "#ccc" }}
+                  />
+                  <span className="text-[12px] text-slate-700">{c.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

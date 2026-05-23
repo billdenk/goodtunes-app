@@ -74,6 +74,12 @@ Placeholder until real per-song timing arrives via the upload portal — at that
 
 ElevenLabs' forced-alignment / Scribe endpoint enforces its own 150 MB hard cap on whatever we POST it. Long 24-bit/96 kHz masters routinely exceed that even after Task #32's FLAC shrink. The auto-sync route handles this transparently: when the source bytes are over the cap, the server transcodes a throwaway *alignment-only* copy on the fly — mono, 16 kHz, MP3 64 kbps — via the `transcodeForAlignment` helper, and ships those bytes to ElevenLabs instead. The stored `audio_url` / `audio_source_url` / playback are unchanged; only the bytes sent to ElevenLabs change. The alignment copy preserves the original timeline (no `-ss` / `-t` / `atempo`), so word-level cues map 1:1 back to the real master and the existing refinement + hallucination filter runs exactly as before. If the alignment-copy transcode itself fails (ffmpeg error, corrupt source), the operator sees the actual ffmpeg stderr tail in the error — not the misleading "Try a FLAC" message it used to return.
 
+## Sell panel — physical good picker
+
+The "+ Add physical good" menu on an album's Sell panel is **catalog-driven** when the album's artist or label was onboarded by a press. Only the formats that press's catalog covers show in the menu; non-invited / free albums see the full `ALBUM_FORMATS` list. On a vinyl row, the color picker is a progressive **tier → color → quantity** picker reading the press's catalog (color tiers + each tier's quantity price ladder). The typed quantity snaps up to the next ladder rung, the row shows that rung in a caveat ("Priced at the next rung up: 300 units."), and the per-unit Cost is recomputed live from the picked tier's ladder. Picks are snapshotted to the SKU on Save (tier name + color display name + snapped qty + `costSource: "catalog"`), preserving the cost-locked-at-save semantics fans depend on at checkout.
+
+See `docs/admin-conventions.md` → **Press Catalog** for the editor + cost-split between per-press manufacturing and platform-wide publishing / processing / margin.
+
 ## Playlist covers
 
 - Always show the actual artwork mosaic (gradient fallback only when truly empty).

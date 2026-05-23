@@ -14,9 +14,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
-import type { PayoutSettings } from "@shared/schema";
+import type { PayoutSettings, PayoutFormatCost, AlbumFormat } from "@shared/schema";
+import { ALBUM_FORMATS, ALBUM_FORMAT_LABEL } from "@shared/schema";
 
 type RoleInfo = { role: string; roleScopeId: string | null };
+
+// Task #218 — the four per-format lines super-admins edit here. Manufacturing
+// stays as a placeholder for non-vinyl + free flows; invited-press vinyl now
+// pulls its manufacturing cents from the press catalog ladder instead.
+const FORMAT_COST_FIELDS = [
+  { key: "manufacturingCents", label: "Manufacturing" },
+  { key: "publishingCents", label: "Publishing" },
+  { key: "paymentProcessingCents", label: "Payment processing" },
+  { key: "goodtunesCents", label: "GoodTunes margin" },
+] as const;
+type FormatCostField = (typeof FORMAT_COST_FIELDS)[number]["key"];
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {
@@ -48,6 +60,10 @@ export function AdminPlatformPricing() {
     queryKey: ["/api/admin/payout-settings"],
     enabled: !!user?.isAdmin,
     retry: false,
+  });
+  const { data: formatCosts } = useQuery<PayoutFormatCost[]>({
+    queryKey: ["/api/admin/payout-format-costs"],
+    enabled: !!user?.isAdmin,
   });
 
   const [certStr, setCertStr] = useState("");
@@ -168,8 +184,116 @@ export function AdminPlatformPricing() {
             </p>
           </div>
         )}
+
+        {formatCosts && formatCosts.length > 0 && (
+          <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-format-costs">
+            <div>
+              <h2 className="text-[15px] font-semibold text-slate-900">Per-format pricing</h2>
+              <p className="text-[13px] text-slate-500 mt-1">
+                Publishing fee, payment processing, and the GoodTunes margin charged on every unit
+                of each format. Manufacturing is a placeholder for free / non-invited flows — when
+                a press's catalog covers the format, the catalog's price ladder wins on cost.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {ALBUM_FORMATS.map((fmt) => {
+                const row = formatCosts.find((r) => r.format === fmt);
+                if (!row) return null;
+                return <FormatCostRow key={fmt} row={row} />;
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </AdminFrame>
+  );
+}
+
+function FormatCostRow({ row }: { row: PayoutFormatCost }) {
+  const { toast } = useToast();
+  const [values, setValues] = useState<Record<FormatCostField, string>>(() => ({
+    manufacturingCents: (row.manufacturingCents / 100).toFixed(2),
+    publishingCents: (row.publishingCents / 100).toFixed(2),
+    paymentProcessingCents: (row.paymentProcessingCents / 100).toFixed(2),
+    goodtunesCents: (row.goodtunesCents / 100).toFixed(2),
+  }));
+  useEffect(() => {
+    setValues({
+      manufacturingCents: (row.manufacturingCents / 100).toFixed(2),
+      publishingCents: (row.publishingCents / 100).toFixed(2),
+      paymentProcessingCents: (row.paymentProcessingCents / 100).toFixed(2),
+      goodtunesCents: (row.goodtunesCents / 100).toFixed(2),
+    });
+  }, [row.manufacturingCents, row.publishingCents, row.paymentProcessingCents, row.goodtunesCents]);
+  const dirty = FORMAT_COST_FIELDS.some((f) => parseDollars(values[f.key]) !== row[f.key]);
+  const save = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, number> = {};
+      for (const f of FORMAT_COST_FIELDS) {
+        const c = parseDollars(values[f.key]);
+        if (c == null) throw new Error(`Enter a valid ${f.label.toLowerCase()} amount`);
+        body[f.key] = c;
+      }
+      const r = await apiRequest("PUT", `/api/admin/payout-format-costs/${row.format}`, body);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-format-costs"] });
+      // Invited-press calculator on the SellPanel merges these defaults
+      // into `formatCosts` — bust the album list so artists see the new
+      // numbers immediately on the cost readout.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      toast({ title: `Saved ${ALBUM_FORMAT_LABEL[row.format as AlbumFormat]} pricing` });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
+  const total = FORMAT_COST_FIELDS.reduce(
+    (sum, f) => sum + (parseDollars(values[f.key]) ?? 0),
+    0,
+  );
+  return (
+    <div className="rounded-md border border-slate-200 p-3" data-testid={`row-format-cost-${row.format}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[13.5px] font-semibold text-slate-900">
+          {ALBUM_FORMAT_LABEL[row.format as AlbumFormat]}
+        </span>
+        <button
+          type="button"
+          onClick={() => save.mutate()}
+          disabled={!dirty || save.isPending}
+          className="h-8 px-3 rounded-md bg-[color:var(--brand-blue)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-60"
+          data-testid={`button-save-format-cost-${row.format}`}
+        >
+          {save.isPending ? "Saving…" : "Save"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {FORMAT_COST_FIELDS.map((f) => (
+          <label key={f.key} className="block">
+            <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+              {f.label}
+            </span>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+              <input
+                value={values[f.key]}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                inputMode="decimal"
+                className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]"
+                data-testid={`input-${f.key}-${row.format}`}
+              />
+            </div>
+          </label>
+        ))}
+      </div>
+      <div className="mt-2 text-right text-[12px] text-slate-500">
+        Total per unit:{" "}
+        <span className="text-slate-900 font-semibold" data-testid={`text-format-total-${row.format}`}>
+          {dollars(total)}
+        </span>
+      </div>
+    </div>
   );
 }
 

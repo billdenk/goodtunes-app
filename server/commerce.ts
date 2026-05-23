@@ -52,6 +52,12 @@ import {
   type VinylColorTier,
   type JacketUpgrade,
 } from "@shared/pressing";
+import {
+  registerPressCatalogRoutes,
+  getPressCatalog,
+  lookupCatalogUnitCents,
+  seedHellbenderCatalog,
+} from "./pressCatalog";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -485,32 +491,76 @@ export function registerCommerceRoutes(app: Express) {
     stock: z.number().int().min(0).nullable().optional(),
     active: z.boolean().default(true),
     // Task #194 — null/omitted = "as many as will sell"; positive int =
-    // planned run size. Rejects 0 / negatives so the UI's Fixed mode
-    // can't silently round down to nothing.
+    // planned run size.
     plannedQuantity: z.number().int().min(1).nullable().optional(),
-    // Task #200 — vinyl pressing picks. Only meaningful on vinyl
-    // formats (7_inch / 12_lp); ignored on cassette/CD/12_double.
+    // Task #200 — legacy vinyl picks. Kept for back-compat with rows
+    // saved before T218; new rows use the catalog ids below.
     vinylColor: z.string().optional().nullable(),
     jacketUpgrade: z.enum(["none", "insert", "gatefold", "gatefold_insert"]).optional().nullable(),
+    // Task #218 — catalog picks. When present + the album's invited
+    // press has a catalog, the SKU's Manufacturing cost is taken from
+    // the picked tier's price ladder (snapped by plannedQuantity).
+    // `pressTierId` is the catalog tier row (carries the ladder);
+    // `pressColorId` is the picked color inside that tier (display
+    // only — snapshotted onto album_skus.vinylColor as the name).
+    pressTierId: z.string().optional().nullable(),
+    pressColorId: z.string().optional().nullable(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const parsed = skuBodySchema.safeParse({ ...req.body, format: String(req.params.format) });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid SKU" });
-    // Task #200 — for vinyl, derive Manufacturing cost from the
-    // Hellbender matrix using the artist's picks (snapped quantity
-    // tier × color tier × jacket upgrade). For non-vinyl formats fall
-    // back to the platform placeholder Cost row from #194.
+    // Task #218 — Manufacturing cost is taken from the album's invited
+    // press's catalog (per-tier price ladder, snapped by quantity).
+    // Publishing / payment-processing / GoodTunes-margin still come
+    // from the platform `payout_format_costs` row (now edited on the
+    // super-admin Platform Pricing page). Falls back to the platform
+    // manufacturing placeholder when no catalog row exists (e.g.
+    // non-invited artist, or a press without a catalog yet).
     const platformCost = await getFormatCost(parsed.data.format);
     const vinyl = isVinylFormat(parsed.data.format);
     let manufacturingCents = platformCost.manufacturingCents;
     let costSource = "placeholder";
     let vinylColorId: string | null = null;
-    let vinylColorTier: VinylColorTier | null = null;
+    let vinylColorTier: string | null = null;
     let jacketUpgrade: JacketUpgrade | null = null;
     let quantityTier: number | null = null;
-    if (vinyl) {
+
+    if (parsed.data.pressTierId) {
+      // Resolve the press for this album (artist invitedByPressId →
+      // label invitedByPressId), then look up the catalog row.
+      let pressId: string | null = null;
+      if (album.primaryArtistId) {
+        const p = await storage.getPersonById(album.primaryArtistId);
+        if (p && (p as any).invitedByPressId) pressId = String((p as any).invitedByPressId);
+      }
+      if (!pressId && album.labelId) {
+        const l = await storage.getLabelById(album.labelId);
+        if (l && (l as any).invitedByPressId) pressId = String((l as any).invitedByPressId);
+      }
+      if (pressId) {
+        const looked = await lookupCatalogUnitCents({
+          pressId,
+          format: parsed.data.format,
+          tierId: parsed.data.pressTierId,
+          colorId: parsed.data.pressColorId ?? null,
+          quantity: parsed.data.plannedQuantity ?? null,
+        });
+        if (looked) {
+          manufacturingCents = looked.unitCents;
+          costSource = "catalog";
+          vinylColorTier = looked.tierName;
+          vinylColorId = looked.colorName; // snapshot as display name
+          quantityTier = looked.snappedQty;
+        }
+      }
+    }
+
+    if (costSource === "placeholder" && vinyl) {
+      // Back-compat: rows still posting the pre-T218 vinyl picks fall
+      // through to the legacy Hellbender matrix so an existing SKU can
+      // re-save without errors while the SellPanel rolls over.
       const colorOption =
         (parsed.data.vinylColor && VINYL_COLOR_BY_ID[parsed.data.vinylColor]) ||
         VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
@@ -521,7 +571,7 @@ export function registerCommerceRoutes(app: Express) {
       quantityTier = snap.tier;
       const looked = lookupHellbenderUnitCents({
         format: parsed.data.format,
-        colorTier: vinylColorTier,
+        colorTier: colorOption.tier,
         qtyTier: snap.tier,
         jacketUpgrade,
       });
@@ -560,6 +610,42 @@ export function registerCommerceRoutes(app: Express) {
     res.json(await listFormatCosts());
   });
 
+  // Task #218 — super-admin per-format edit of the publishing /
+  // payment-processing / GoodTunes-margin lines (the "platform pricing"
+  // surface). Manufacturing stays on the row as a placeholder fallback
+  // for non-vinyl formats / non-invited artists, but the press catalog
+  // is now authoritative for invited-press vinyl.
+  const payoutFormatBodySchema = z.object({
+    manufacturingCents: z.number().int().min(0).optional(),
+    publishingCents: z.number().int().min(0).optional(),
+    paymentProcessingCents: z.number().int().min(0).optional(),
+    goodtunesCents: z.number().int().min(0).optional(),
+  });
+  app.put("/api/admin/payout-format-costs/:format", requireAdmin, async (req, res) => {
+    const userId = (req as any).adminUserId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole(userId);
+    if (info?.role !== "super_admin") return res.status(403).json({ message: "Super admin only" });
+    const format = String(req.params.format);
+    if (!ALBUM_FORMATS.includes(format as AlbumFormat)) return res.status(400).json({ message: "Unknown format" });
+    const parsed = payoutFormatBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid pricing" });
+    // Make sure a row exists then patch it.
+    await getFormatCost(format as AlbumFormat);
+    const set: Record<string, any> = { updatedAt: new Date() };
+    if (parsed.data.manufacturingCents !== undefined) set.manufacturingCents = parsed.data.manufacturingCents;
+    if (parsed.data.publishingCents !== undefined) set.publishingCents = parsed.data.publishingCents;
+    if (parsed.data.paymentProcessingCents !== undefined) set.paymentProcessingCents = parsed.data.paymentProcessingCents;
+    if (parsed.data.goodtunesCents !== undefined) set.goodtunesCents = parsed.data.goodtunesCents;
+    const [row] = await db
+      .update(payoutFormatCosts)
+      .set(set)
+      .where(eq(payoutFormatCosts.format, format))
+      .returning();
+    res.json(row);
+  });
+
   // Task #204 — Per-press cost breakdown. Returns one row per format
   // (every entry in ALBUM_FORMATS) merging the press's saved
   // `press_format_costs` overrides on top of the platform defaults so
@@ -586,6 +672,10 @@ export function registerCommerceRoutes(app: Express) {
     if (info.role === "manufacturer" && info.roleScopeId === pressId) return next();
     return res.status(403).json({ message: "Forbidden" });
   };
+
+  // Task #218 — mount the press catalog routes (formats/tiers/colors)
+  // under the same requirePressScope as the legacy format-cost routes.
+  registerPressCatalogRoutes(app, requireAdmin, requirePressScope);
 
   app.get("/api/admin/manufacturers/:id/format-costs", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
@@ -701,7 +791,7 @@ export function registerCommerceRoutes(app: Express) {
     }
 
     if (!pressId) {
-      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts() });
+      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] } });
     }
 
     const press = await storage.getManufacturerById(pressId);
@@ -709,8 +799,12 @@ export function registerCommerceRoutes(app: Express) {
     // isn't on the column — we left it untyped to keep the migration
     // simple). Treat a dangling reference as "no lock".
     if (!press) {
-      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts() });
+      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] } });
     }
+    // Task #218 — make sure Hellbender's catalog rows exist on first
+    // read so an existing dev/prod DB with the Hellbender press but
+    // no catalog yet doesn't show an empty picker.
+    await seedHellbenderCatalog();
 
     // Has-shipped check: any shipped paid order on any album whose
     // primary_artist (or label) matches our locked scope.
@@ -761,6 +855,10 @@ export function registerCommerceRoutes(app: Express) {
       scopeKind,
       scopeId,
       formatCosts,
+      // Task #218 — full press catalog for the SellPanel's Add Physical
+      // picker. Empty `formats` array means the press hasn't built
+      // their catalog yet; SellPanel falls back to a no-physical menu.
+      catalog: await getPressCatalog(pressId),
     });
   });
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {

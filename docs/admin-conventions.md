@@ -28,7 +28,7 @@ Treat `(artist, lower(title))` collisions across the `is_goodtunes_release` boun
 When a manufacturer (pressing plant) admin with `inviteSubusers` invites an artist or label onto GoodTunes, the invite-accept handler stamps `people.invited_by_press_id` / `labels.invited_by_press_id` with the inviting press. That stamp gates two things on the partner's side:
 
 1. **Sell-panel Presses surface** — the partner sees only the inviting press's card (with a lock note) until any of their albums has an order in `orders.fulfillment_status='shipped'`. Once a run ships, the full pressing-plant directory unlocks with the inviting press still floated to the front and highlighted. No "see other plants" disclosure is shown to the partner while locked — the message is "your press" and "message GoodTunes if you need to switch sooner."
-2. **Cost calculator defaults** — `GET /api/admin/albums/:id/invited-press` returns the inviting press's `press_format_costs` rows merged over the platform `payout_format_costs` defaults format-by-format, and the SellPanel's draft-SKU Cost readout reads from that merged source whenever a press is set.
+2. **Cost calculator defaults** — `GET /api/admin/albums/:id/invited-press` returns the inviting press's `press_format_costs` rows merged over the platform `payout_format_costs` defaults format-by-format **plus** the inviting press's `catalog` tree (formats → color tiers → ladder + colors). The SellPanel's draft-SKU Cost readout reads the publishing / payment-processing / GoodTunes-margin lines from the merged format-costs and reads the per-unit manufacturing cents from the picked tier's ladder snapping the typed quantity up to the next rung. When the inviting press has a catalog, the "+ Add physical good" menu is restricted to the formats that catalog offers; free / non-invited albums fall back to the full `ALBUM_FORMATS` list with the legacy Hellbender matrix driving vinyl manufacturing.
 
 Super-admin can clear or reassign the press at any time via `PATCH /api/admin/{people|labels}/:id/invited-press` (surfaced in the partner's Identity panel as the InvitedByPressPanel) — useful if the relationship sours. The lock is per-partner, not per-album, and shipping the first run is irreversible (no re-locking after unlock).
 
@@ -51,6 +51,21 @@ The `vendors` table carries `is_maker` and `is_reseller` booleans (both default-
 - The Gear page (`AdminInstrument.tsx`) Overview gets a **MakerPickerPanel** typeahead that writes `instruments.makerVendorId` via PUT `/api/admin/instruments/:id`. The "Resellers" tab (key still `vendors` so deep links don't break) drives the legacy reseller join table.
 
 If you add a new vendor-adjacent admin surface, follow the same shape: route on `/admin/makers/...` for Maker context, keep the URL-string `?role=` filter, and never invent a third role token.
+
+## Press Catalog (formats → tiers → colors → quantity ladders)
+
+Each press's pricing is editable on the press detail page (`AdminManufacturer.tsx` → **Catalog** panel, replaces the old "Per-format costs" panel). Shape (`shared/schema.ts`): one `press_formats` row per format the press runs, with N `press_color_tiers` underneath it (name + `priceLadder` jsonb of `{qty, unitCents}` rungs), each with N `press_colors` (name + hex swatch). `seedHellbenderCatalog()` in `server/pressCatalog.ts` lazily materializes Hellbender's three tiers (Black / Standard color / Regrind) for 7″ and 12″ LP from `shared/pressing.ts` on first read, so existing Hellbender invitees keep working without a backfill.
+
+Cost knobs split by surface — don't cross the streams:
+- **Press catalog** (per-press, on the manufacturer page) = formats offered + per-tier price ladder + colors. This is the *only* place per-unit manufacturing cents are configured for invited-press vinyl.
+- **Platform pricing** (super-admin, `AdminPlatformPricing.tsx`) = the `payout_format_costs` table edited via `PUT /api/admin/payout-format-costs/:format`. Carries publishing fee, payment processing, and the GoodTunes margin charged on every unit; the `manufacturingCents` line stays as a placeholder fallback for non-vinyl + non-invited free flow only.
+
+SellPanel composition (see also the bullet in the invited-press section above):
+- `+ Add physical good` lists *only* the formats the invited press's catalog covers (free / non-invited albums see the full `ALBUM_FORMATS` list).
+- The vinyl row's color picker becomes a progressive **tier → color → quantity** picker driven by the catalog. Quantity snaps up to the next ladder rung (or shows "{topRung}+ — request a custom quote" above the cap).
+- Save sends `pressTierId` + `pressColorId` to `PUT /api/admin/albums/:id/skus/:format`; the server snapshots `vinylColorTier` (tier name), `vinylColor` (color display name), `quantityTier` (snapped qty), and `costSource: "catalog"` onto the SKU. SKU storage shape is unchanged from #200, so checkout / cart / payout are untouched.
+
+**Why:** decoupling per-press manufacturing pricing from platform-level fees means a new press can be onboarded without GoodTunes super-admin touching the cost calculator, and a platform fee change rolls out without disturbing each press's negotiated rates.
 
 ## Pressing plants are "Presses", not "Manufacturers"
 

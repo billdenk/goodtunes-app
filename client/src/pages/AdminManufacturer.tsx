@@ -177,7 +177,7 @@ export function AdminManufacturer() {
           saving={save.isPending}
         />
 
-        <PressFormatCostsPanel pressId={id} />
+        <PressCatalogPanel pressId={id} />
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -369,21 +369,27 @@ function PartnerProfileForm({
 const INPUT =
   "w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)] bg-white";
 
-type PressFormatCostRow = {
-  format: AlbumFormat;
-  manufacturingCents: number;
-  publishingCents: number;
-  paymentProcessingCents: number;
-  goodtunesCents: number;
-  isOverride: boolean;
+// Task #218 — press catalog (formats → tiers → colors).
+type CatalogColor = {
+  id: string;
+  name: string;
+  swatchHex: string | null;
+  swatchImageUrl: string | null;
+  position: number;
 };
-
-const COST_FIELDS: { key: keyof Omit<PressFormatCostRow, "format" | "isOverride">; label: string }[] = [
-  { key: "manufacturingCents", label: "Manufacturing" },
-  { key: "publishingCents", label: "Publishing" },
-  { key: "paymentProcessingCents", label: "Payment processing" },
-  { key: "goodtunesCents", label: "GoodTunes margin" },
-];
+type CatalogTier = {
+  id: string;
+  name: string;
+  position: number;
+  priceLadder: { qty: number; unitCents: number }[];
+  colors: CatalogColor[];
+};
+type CatalogFormat = {
+  format: AlbumFormat;
+  position: number;
+  tiers: CatalogTier[];
+};
+type Catalog = { formats: CatalogFormat[] };
 
 const parseDollars = (v: string): number | null => {
   const n = Number.parseFloat(v.replace(/[^0-9.]/g, ""));
@@ -392,13 +398,9 @@ const parseDollars = (v: string): number | null => {
 };
 const formatDollars = (c: number) => (c / 100).toFixed(2);
 
-function PressFormatCostsPanel({ pressId }: { pressId: string }) {
-  const { toast } = useToast();
-  // Role gate — server is authoritative (returns 403 for non-platform
-  // admins outside this press's scope), but we hide the panel up front
-  // for admins who would just see a 403 either way. Platform staff
-  // (super_admin/admin) and manufacturer-role admins scoped to this
-  // press see + edit the panel.
+function PressCatalogPanel({ pressId }: { pressId: string }) {
+  // Role gate — server is authoritative; we hide the panel for admins
+  // who would just see a 403 either way.
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
     queryKey: ["/api/me/role"],
   });
@@ -406,204 +408,332 @@ function PressFormatCostsPanel({ pressId }: { pressId: string }) {
     roleInfo?.role === "super_admin" ||
     roleInfo?.role === "admin" ||
     (roleInfo?.role === "manufacturer" && roleInfo?.roleScopeId === pressId);
-  const { data, isLoading } = useQuery<PressFormatCostRow[]>({
-    queryKey: ["/api/admin/manufacturers", pressId, "format-costs"],
+  const { data, isLoading } = useQuery<Catalog>({
+    queryKey: ["/api/admin/manufacturers", pressId, "catalog"],
     enabled: !!pressId && !!canEdit,
+  });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/manufacturers", pressId, "catalog"] });
+
+  const toggleFormat = useMutation({
+    mutationFn: async (args: { format: AlbumFormat; enabled: boolean }) => {
+      const r = await apiRequest(
+        "PUT",
+        `/api/admin/manufacturers/${pressId}/catalog/formats/${args.format}`,
+        { enabled: args.enabled },
+      );
+      return r.json();
+    },
+    onSuccess: invalidate,
   });
 
   if (roleInfo && !canEdit) return null;
 
+  const offered = new Set((data?.formats ?? []).map((f) => f.format));
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-format-costs">
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-catalog">
       <div>
-        <h2 className="text-[15px] font-semibold text-slate-900">Per-format costs</h2>
+        <h2 className="text-[15px] font-semibold text-slate-900">Catalog</h2>
         <p className="text-[13px] text-slate-500 mt-1">
-          Set this press's per-unit cost breakdown for each format. Saved rows replace the platform default
-          on the cost calculator for any artist or label invited by this press.
+          What this press offers, how it's priced. Pick the formats this press runs, then under each format
+          add color tiers (e.g. Black / Standard color / Splatter) with a quantity-keyed price ladder and
+          the colors that belong to that tier. Artists invited by this press see the resulting picker on
+          their album's Sell panel; cost on each SKU is taken from the matching tier's ladder.
         </p>
       </div>
       {isLoading || !data ? (
         <div className="text-slate-500 text-sm py-4">Loading…</div>
       ) : (
-        <div className="space-y-3">
-          {data.map((row) => (
-            <PressFormatCostRowEditor
-              key={row.format}
-              pressId={pressId}
-              row={row}
-              onSaved={() => toast({ title: `Saved ${ALBUM_FORMAT_LABEL[row.format]} pricing` })}
-              onReset={() => toast({ title: `Reset ${ALBUM_FORMAT_LABEL[row.format]} to platform default` })}
-            />
-          ))}
+        <div className="space-y-5">
+          {ALBUM_FORMATS.map((fmt) => {
+            const fmtRow = data.formats.find((f) => f.format === fmt) ?? null;
+            const isOn = offered.has(fmt);
+            return (
+              <div
+                key={fmt}
+                className={[
+                  "rounded-md border p-3 space-y-3",
+                  isOn ? "border-slate-200" : "border-dashed border-slate-200 bg-slate-50/60",
+                ].join(" ")}
+                data-testid={`catalog-format-${fmt}`}
+              >
+                <div className="flex items-center justify-between">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isOn}
+                      onChange={(e) => toggleFormat.mutate({ format: fmt, enabled: e.target.checked })}
+                      disabled={toggleFormat.isPending}
+                      className="h-4 w-4 rounded border-slate-300"
+                      data-testid={`toggle-format-${fmt}`}
+                    />
+                    <span className="text-[13.5px] font-semibold text-slate-900">
+                      {ALBUM_FORMAT_LABEL[fmt]}
+                    </span>
+                  </label>
+                  {!isOn && (
+                    <span className="text-[11.5px] text-slate-400">Not offered</span>
+                  )}
+                </div>
+                {isOn && fmtRow && (
+                  <CatalogFormatBody pressId={pressId} fmt={fmt} tiers={fmtRow.tiers} onChanged={invalidate} />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function PressFormatCostRowEditor({
+function CatalogFormatBody({
   pressId,
-  row,
-  onSaved,
-  onReset,
+  fmt,
+  tiers,
+  onChanged,
 }: {
   pressId: string;
-  row: PressFormatCostRow;
-  onSaved: () => void;
-  onReset: () => void;
+  fmt: AlbumFormat;
+  tiers: CatalogTier[];
+  onChanged: () => void;
 }) {
   const { toast } = useToast();
-  const [values, setValues] = useState<Record<string, string>>({
-    manufacturingCents: formatDollars(row.manufacturingCents),
-    publishingCents: formatDollars(row.publishingCents),
-    paymentProcessingCents: formatDollars(row.paymentProcessingCents),
-    goodtunesCents: formatDollars(row.goodtunesCents),
-  });
-
-  // Reset local edit buffer whenever the source row updates (after
-  // save/reset round-trips) so the inputs reflect the new server state.
-  useEffect(() => {
-    setValues({
-      manufacturingCents: formatDollars(row.manufacturingCents),
-      publishingCents: formatDollars(row.publishingCents),
-      paymentProcessingCents: formatDollars(row.paymentProcessingCents),
-      goodtunesCents: formatDollars(row.goodtunesCents),
-    });
-  }, [row.manufacturingCents, row.publishingCents, row.paymentProcessingCents, row.goodtunesCents]);
-
-  const dirty = COST_FIELDS.some(
-    (f) => parseDollars(values[f.key]) !== row[f.key],
-  );
-
-  const save = useMutation({
+  const [newTierName, setNewTierName] = useState("");
+  const addTier = useMutation({
     mutationFn: async () => {
-      const body: Record<string, number> = {};
-      for (const f of COST_FIELDS) {
-        const c = parseDollars(values[f.key]);
-        if (c == null) throw new Error(`Enter a valid ${f.label.toLowerCase()} amount`);
-        body[f.key] = c;
-      }
       const r = await apiRequest(
-        "PUT",
-        `/api/admin/manufacturers/${pressId}/format-costs/${row.format}`,
-        body,
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/formats/${fmt}/tiers`,
+        { name: newTierName.trim(), priceLadder: [] },
       );
       return r.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/admin/manufacturers", pressId, "format-costs"],
-      });
-      // Invited-press calculator on the SellPanel reads merged costs;
-      // bust it too so artists see the new numbers immediately.
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
-      onSaved();
+      setNewTierName("");
+      onChanged();
     },
-    onError: (e: any) =>
-      toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Couldn't add tier", description: e?.message, variant: "destructive" }),
+  });
+  return (
+    <div className="space-y-3 pl-6">
+      {tiers.length === 0 && (
+        <div className="text-[12px] text-slate-500">No tiers yet — add one to start.</div>
+      )}
+      {tiers.map((t) => (
+        <CatalogTierEditor key={t.id} pressId={pressId} tier={t} onChanged={onChanged} />
+      ))}
+      <div className="flex items-center gap-2 pt-1">
+        <input
+          value={newTierName}
+          onChange={(e) => setNewTierName(e.target.value)}
+          placeholder="New tier name (e.g. Black, Splatter, Color-in-color)"
+          className={INPUT}
+          data-testid={`input-new-tier-${fmt}`}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => newTierName.trim() && addTier.mutate()}
+          disabled={!newTierName.trim() || addTier.isPending}
+          data-testid={`button-add-tier-${fmt}`}
+        >
+          <Plus className="w-4 h-4 mr-1" />
+          Add tier
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CatalogTierEditor({
+  pressId,
+  tier,
+  onChanged,
+}: {
+  pressId: string;
+  tier: CatalogTier;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [name, setName] = useState(tier.name);
+  // Ladder edited as plain text: "qty:$price" per line, e.g. "100:$8.50".
+  // Parses back to the jsonb shape on save. Empty / malformed lines are
+  // dropped silently — keeps the editor forgiving for press staff.
+  const ladderToText = (l: { qty: number; unitCents: number }[]) =>
+    l.map((r) => `${r.qty}: $${formatDollars(r.unitCents)}`).join("\n");
+  const textToLadder = (s: string) => {
+    const out: { qty: number; unitCents: number }[] = [];
+    for (const raw of s.split(/\n/)) {
+      const m = raw.match(/^\s*(\d+)\s*[:=]\s*\$?\s*(\d+(?:\.\d+)?)/);
+      if (!m) continue;
+      const qty = parseInt(m[1], 10);
+      const cents = Math.round(parseFloat(m[2]) * 100);
+      if (qty > 0 && Number.isFinite(cents) && cents >= 0) out.push({ qty, unitCents: cents });
+    }
+    return out.sort((a, b) => a.qty - b.qty);
+  };
+  const [ladderText, setLadderText] = useState(ladderToText(tier.priceLadder));
+  useEffect(() => {
+    setName(tier.name);
+    setLadderText(ladderToText(tier.priceLadder));
+  }, [tier.id, tier.name, tier.priceLadder]);
+
+  const dirty = name !== tier.name || ladderText !== ladderToText(tier.priceLadder);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "PATCH",
+        `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}`,
+        { name: name.trim(), priceLadder: textToLadder(ladderText) },
+      );
+      return r.json();
+    },
+    onSuccess: onChanged,
+    onError: (e: any) => toast({ title: "Couldn't save tier", description: e?.message, variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}`);
+    },
+    onSuccess: onChanged,
   });
 
-  const reset = useMutation({
+  const [newColorName, setNewColorName] = useState("");
+  const [newColorHex, setNewColorHex] = useState("#000000");
+  const addColor = useMutation({
     mutationFn: async () => {
-      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/format-costs/${row.format}`);
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}/colors`,
+        { name: newColorName.trim(), swatchHex: newColorHex || null },
+      );
+      return r.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/admin/manufacturers", pressId, "format-costs"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
-      onReset();
+      setNewColorName("");
+      onChanged();
     },
-    onError: (e: any) =>
-      toast({ title: "Couldn't reset", description: e?.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Couldn't add color", description: e?.message, variant: "destructive" }),
+  });
+  const removeColor = useMutation({
+    mutationFn: async (colorId: string) => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${colorId}`);
+    },
+    onSuccess: onChanged,
   });
 
-  const total = COST_FIELDS.reduce((sum, f) => {
-    const c = parseDollars(values[f.key]);
-    return sum + (c ?? 0);
-  }, 0);
-
   return (
-    <div
-      className="rounded-md border border-slate-200 p-3"
-      data-testid={`row-press-format-cost-${row.format}`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[13.5px] font-semibold text-slate-900">
-            {ALBUM_FORMAT_LABEL[row.format]}
-          </span>
-          {row.isOverride ? (
-            <span
-              className="text-[10.5px] uppercase tracking-wider font-semibold rounded px-1.5 py-0.5 bg-[var(--brand-blue)]/10 text-[#266a93]"
-              data-testid={`badge-override-${row.format}`}
-            >
-              Press pricing
-            </span>
-          ) : (
-            <span
-              className="text-[10.5px] uppercase tracking-wider font-semibold rounded px-1.5 py-0.5 bg-slate-100 text-slate-500"
-              data-testid={`badge-platform-${row.format}`}
-            >
-              Platform default
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {row.isOverride && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => reset.mutate()}
-              disabled={reset.isPending}
-              className="h-8 px-2 text-[12px] text-slate-500 hover:text-slate-700"
-              data-testid={`button-reset-${row.format}`}
-            >
-              Reset to platform
-            </Button>
-          )}
+    <div className="rounded-md border border-slate-200 p-3 space-y-3" data-testid={`tier-${tier.id}`}>
+      <div className="flex items-start justify-between gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={INPUT}
+          data-testid={`input-tier-name-${tier.id}`}
+        />
+        <div className="flex items-center gap-1 shrink-0">
           <Button
             type="button"
+            variant="ghost"
             onClick={() => save.mutate()}
             disabled={!dirty || save.isPending}
             className="h-8 px-3 text-[12px]"
-            data-testid={`button-save-format-cost-${row.format}`}
+            data-testid={`button-save-tier-${tier.id}`}
           >
             {save.isPending ? "Saving…" : "Save"}
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => remove.mutate()}
+            disabled={remove.isPending}
+            className="h-8 w-8 p-0 text-rose-600 hover:bg-rose-50"
+            aria-label="Delete tier"
+            data-testid={`button-delete-tier-${tier.id}`}
+          >
+            <X className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {COST_FIELDS.map((f) => (
-          <label key={f.key} className="block">
-            <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-              {f.label}
-            </span>
-            <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">
-                $
-              </span>
-              <input
-                value={values[f.key]}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, [f.key]: e.target.value }))
-                }
-                inputMode="decimal"
-                className={INPUT + " pl-5"}
-                data-testid={`input-${f.key}-${row.format}`}
-              />
-            </div>
-          </label>
-        ))}
-      </div>
-      <div className="mt-2 text-right text-[12px] text-slate-500">
-        Total per unit:{" "}
-        <span
-          className="text-slate-900 font-semibold"
-          data-testid={`text-total-${row.format}`}
-        >
-          ${formatDollars(total)}
-        </span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label className="block">
+          <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+            Price ladder (qty: $price per unit)
+          </span>
+          <textarea
+            value={ladderText}
+            onChange={(e) => setLadderText(e.target.value)}
+            rows={Math.max(3, ladderText.split("\n").length)}
+            className={INPUT + " min-h-[80px] py-2 font-mono text-[12px]"}
+            placeholder={"100: $8.50\n200: $7.10\n500: $5.40"}
+            data-testid={`input-ladder-${tier.id}`}
+          />
+          <p className="text-[11.5px] text-slate-400 mt-1">
+            Artists' typed quantity snaps up to the next rung. The top rung is the cap (above that, the
+            picker shows "request a custom quote").
+          </p>
+        </label>
+        <div className="block">
+          <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+            Colors
+          </span>
+          <div className="space-y-1.5">
+            {tier.colors.map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center gap-2 text-[12.5px] text-slate-700"
+                data-testid={`color-${c.id}`}
+              >
+                <span
+                  className="w-4 h-4 rounded-full border border-slate-200 shrink-0"
+                  style={{ background: c.swatchHex ?? "#ccc" }}
+                />
+                <span className="flex-1 truncate">{c.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeColor.mutate(c.id)}
+                  className="text-slate-400 hover:text-rose-600"
+                  aria-label={`Remove ${c.name}`}
+                  data-testid={`button-delete-color-${c.id}`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {tier.colors.length === 0 && (
+              <div className="text-[11.5px] text-slate-400">No colors yet.</div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              type="color"
+              value={newColorHex}
+              onChange={(e) => setNewColorHex(e.target.value)}
+              className="h-7 w-9 rounded border border-slate-200 cursor-pointer"
+              data-testid={`input-new-color-hex-${tier.id}`}
+            />
+            <input
+              value={newColorName}
+              onChange={(e) => setNewColorName(e.target.value)}
+              placeholder="Color name"
+              className={INPUT}
+              data-testid={`input-new-color-name-${tier.id}`}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => newColorName.trim() && addColor.mutate()}
+              disabled={!newColorName.trim() || addColor.isPending}
+              className="h-8 px-2"
+              data-testid={`button-add-color-${tier.id}`}
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

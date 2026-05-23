@@ -902,6 +902,69 @@ export const pressFormatCosts = pgTable("press_format_costs", {
 }));
 export type PressFormatCost = typeof pressFormatCosts.$inferSelect;
 
+// ─── Task #218 — Press catalog (formats → tiers → colors) ────────────────
+// Replaces the per-format manufacturing override above. A press's
+// catalog is what its admin actually maintains: which formats they
+// press, which color/finish tiers exist inside each format, what
+// colors live inside each tier, and the price-per-unit ladder by
+// quantity for each tier. The Sell-panel "Add Physical" picker walks
+// the catalog progressively (format → tier → color → quantity) and
+// the saved SKU snapshots the picked tier name + color name + qty
+// tier + unit cents onto `album_skus` so historical orders are stable
+// when the press re-prices.
+//
+// Quantity ladders are stored inline on the tier as JSON (a small,
+// ordered list of {qty, unitCents}). They're rarely more than 6-8
+// rungs and they always change as a unit, so a side-table would be
+// overkill. Lookup snaps the artist's typed quantity up to the next
+// rung the same way #200 snapped to Hellbender's 50/100/200/300/500/
+// 1000 brackets — see `snapToCatalogQuantityTier` in shared/pressing.ts.
+export const pressFormats = pgTable(
+  "press_formats",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    pressId: varchar("press_id").notNull(),
+    format: text("format").notNull(),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => ({
+    pressFormatUniq: unique("press_formats_press_format_uniq").on(t.pressId, t.format),
+  }),
+);
+export type PressFormat = typeof pressFormats.$inferSelect;
+
+export const pressColorTiers = pgTable("press_color_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull(),
+  format: text("format").notNull(),
+  name: text("name").notNull(),
+  position: integer("position").notNull().default(0),
+  // Quantity → unit-cents ladder. Stored sorted ascending by `qty`.
+  // Anything above the top rung is treated as "request a custom
+  // quote" (the SKU still saves at the top-rung price; the UI shows
+  // a caveat). Example: [{qty:100,unitCents:1235},{qty:200,unitCents:889}…].
+  priceLadder: jsonb("price_ladder")
+    .$type<{ qty: number; unitCents: number }[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+});
+export type PressColorTier = typeof pressColorTiers.$inferSelect;
+
+export const pressColors = pgTable("press_colors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tierId: varchar("tier_id")
+    .notNull()
+    .references(() => pressColorTiers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  // Either swatchHex (CSS color) OR swatchImageUrl (uploaded swatch
+  // photo) drives the picker thumbnail. Hex is enough for solids;
+  // splatter / picture-disc / marbled stocks use the image.
+  swatchHex: text("swatch_hex"),
+  swatchImageUrl: text("swatch_image_url"),
+  position: integer("position").notNull().default(0),
+});
+export type PressColor = typeof pressColors.$inferSelect;
+
 // Generic per-album add-on. First user: the **signed_cert** add-on (printed
 // & signed GoodDeed certificate). Future shapes (professional framing,
 // full-album-sized framed GoodDeed with QR provenance) drop in here as new
