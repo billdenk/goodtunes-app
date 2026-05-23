@@ -2232,3 +2232,42 @@ export const pressingOrderRequests = pgTable("pressing_order_requests", {
 
 export type PressingOrderRequest = typeof pressingOrderRequests.$inferSelect;
 export type InsertPressingOrderRequest = typeof pressingOrderRequests.$inferInsert;
+
+// Task #217 — Pressing-plant print PDF generations.
+//
+// One `print_generations` row per "Generate print PDFs for [Vendor]"
+// click on a release's admin page. Each row groups N
+// `print_artifacts` (one per template the order required — center
+// label, jacket, insert, …). Versioning is just "rows are immutable;
+// re-clicking generates a new row" — the admin page lists all
+// generations newest-first so previous versions are downloadable.
+//
+// `overrideJustification` is non-null when the source art failed
+// upload validation and the admin clicked through anyway; we record
+// the justification on the generation, not the order, so the
+// downstream "why did we ship this art" forensic trail lives next
+// to the bytes that were sent.
+export const printGenerations = pgTable("print_generations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  vendorId: text("vendor_id").notNull(), // "mrp" | "pmp" | "hellbender"
+  createdByUserId: varchar("created_by_user_id"),
+  overrideJustification: text("override_justification"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const printArtifacts = pgTable("print_artifacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  generationId: varchar("generation_id").notNull().references(() => printGenerations.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull(),
+  templateLabel: text("template_label").notNull(),
+  fileName: text("file_name").notNull(),
+  assetUrl: text("asset_url").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PrintGeneration = typeof printGenerations.$inferSelect;
+export type InsertPrintGeneration = typeof printGenerations.$inferInsert;
+export type PrintArtifact = typeof printArtifacts.$inferSelect;
+export type InsertPrintArtifact = typeof printArtifacts.$inferInsert;

@@ -93,6 +93,8 @@ import {
   pressingOrderRequests,
   type PressingOrderRequest,
   type PressingOrderPackageSnapshot,
+  printGenerations,
+  printArtifacts,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -583,7 +585,42 @@ export interface IStorage {
     decidedByUserId: string,
     rejectionNote?: string | null,
   ): Promise<PressingOrderRequest | undefined>;
+
+  // ---- Task #217 — Print PDF generations ---------------------------
+  // One row per "Generate print PDFs" click on a release; child
+  // print_artifacts rows are the per-template PDFs produced.
+  listPrintGenerations(albumId: string): Promise<PrintGenerationWithArtifacts[]>;
+  insertPrintGeneration(args: {
+    albumId: string;
+    vendorId: string;
+    createdByUserId: string | null;
+    overrideJustification: string | null;
+    artifacts: Array<{
+      templateId: string;
+      templateLabel: string;
+      fileName: string;
+      assetUrl: string;
+      sizeBytes: number;
+    }>;
+  }): Promise<PrintGenerationWithArtifacts>;
 }
+
+export type PrintGenerationWithArtifacts = {
+  id: string;
+  albumId: string;
+  vendorId: string;
+  createdByUserId: string | null;
+  overrideJustification: string | null;
+  createdAt: Date;
+  artifacts: Array<{
+    id: string;
+    templateId: string;
+    templateLabel: string;
+    fileName: string;
+    assetUrl: string;
+    sizeBytes: number;
+  }>;
+};
 
 export type UploadValidationRow = {
   id: string;
@@ -2803,6 +2840,89 @@ export class DbStorage implements IStorage {
       .where(eq(pressingOrderRequests.id, id))
       .returning();
     return row;
+  }
+
+  // ---- Task #217 — Print PDF generations ---------------------------
+  async listPrintGenerations(albumId: string): Promise<PrintGenerationWithArtifacts[]> {
+    const gens = await db
+      .select()
+      .from(printGenerations)
+      .where(eq(printGenerations.albumId, albumId))
+      .orderBy(desc(printGenerations.createdAt));
+    if (gens.length === 0) return [];
+    const arts = await db
+      .select()
+      .from(printArtifacts)
+      .where(inArray(printArtifacts.generationId, gens.map((g) => g.id)))
+      .orderBy(asc(printArtifacts.templateLabel));
+    const byGen = new Map<string, typeof arts>();
+    for (const a of arts) {
+      const list = byGen.get(a.generationId) ?? [];
+      list.push(a);
+      byGen.set(a.generationId, list);
+    }
+    return gens.map((g) => ({
+      id: g.id,
+      albumId: g.albumId,
+      vendorId: g.vendorId,
+      createdByUserId: g.createdByUserId,
+      overrideJustification: g.overrideJustification,
+      createdAt: g.createdAt,
+      artifacts: (byGen.get(g.id) ?? []).map((a) => ({
+        id: a.id,
+        templateId: a.templateId,
+        templateLabel: a.templateLabel,
+        fileName: a.fileName,
+        assetUrl: a.assetUrl,
+        sizeBytes: a.sizeBytes,
+      })),
+    }));
+  }
+
+  async insertPrintGeneration(args: {
+    albumId: string;
+    vendorId: string;
+    createdByUserId: string | null;
+    overrideJustification: string | null;
+    artifacts: Array<{
+      templateId: string;
+      templateLabel: string;
+      fileName: string;
+      assetUrl: string;
+      sizeBytes: number;
+    }>;
+  }): Promise<PrintGenerationWithArtifacts> {
+    const [gen] = await db
+      .insert(printGenerations)
+      .values({
+        albumId: args.albumId,
+        vendorId: args.vendorId,
+        createdByUserId: args.createdByUserId,
+        overrideJustification: args.overrideJustification,
+      })
+      .returning();
+    const inserted = args.artifacts.length
+      ? await db
+          .insert(printArtifacts)
+          .values(args.artifacts.map((a) => ({ ...a, generationId: gen.id })))
+          .returning()
+      : [];
+    return {
+      id: gen.id,
+      albumId: gen.albumId,
+      vendorId: gen.vendorId,
+      createdByUserId: gen.createdByUserId,
+      overrideJustification: gen.overrideJustification,
+      createdAt: gen.createdAt,
+      artifacts: inserted.map((a) => ({
+        id: a.id,
+        templateId: a.templateId,
+        templateLabel: a.templateLabel,
+        fileName: a.fileName,
+        assetUrl: a.assetUrl,
+        sizeBytes: a.sizeBytes,
+      })),
+    };
   }
 }
 

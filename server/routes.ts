@@ -12129,5 +12129,185 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // ─── Task #217 — Pressing-plant print PDF generation ─────────────
+  // Compose one PDF per template the release needs (center label,
+  // jacket, insert …) for a chosen vendor, sized to finished+bleed,
+  // store versioned in object storage, return the per-template
+  // download URLs. Blocks when source art validation has a `fail`
+  // row that isn't overridden, unless the caller supplies an
+  // `overrideJustification` (recorded on the generation row).
+  app.get("/api/admin/albums/:albumId/print-pdfs", requireAdminBearer, async (req, res) => {
+    const gens = await storage.listPrintGenerations(req.params.albumId);
+    res.json(gens);
+  });
+
+  app.post(
+    "/api/admin/albums/:albumId/print-pdfs/generate",
+    requireAdminBearer,
+    async (req, res) => {
+      const albumId = req.params.albumId;
+      const body = z
+        .object({
+          vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+          overrideJustification: z.string().trim().min(8).optional(),
+        })
+        .safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      const { vendorId, overrideJustification } = body.data;
+
+      try {
+        const album = await storage.getAlbum(albumId);
+        if (!album) return res.status(404).json({ message: "Album not found" });
+
+        // Validation gate — any failing `art` row for this vendor that
+        // hasn't been overridden blocks unless this request itself
+        // carries an override justification.
+        const validations = await storage.listUploadValidations(albumId);
+        const blocking = validations.filter(
+          (v) =>
+            v.kind === "art" &&
+            v.vendorId === vendorId &&
+            v.status === "fail" &&
+            !v.overrideAt,
+        );
+        if (blocking.length > 0 && !overrideJustification) {
+          return res.status(409).json({
+            message: `Source art has ${blocking.length} failing check(s) for this vendor. Override with a justification to proceed.`,
+            blocking: blocking.map((v) => ({
+              id: v.id,
+              fileName: v.fileName,
+              checks: v.checks.filter((c) => c.status === "fail"),
+            })),
+          });
+        }
+
+        // Pick which templates this release needs based on its SKUs.
+        const skuRows = await db.execute(sql`
+          SELECT format, active, jacket_upgrade AS "jacketUpgrade"
+          FROM album_skus
+          WHERE album_id = ${albumId}
+        `);
+        const skus = ((skuRows as any).rows ?? skuRows) as Array<{
+          format: string | null;
+          active: boolean | null;
+          jacketUpgrade: string | null;
+        }>;
+        const { selectRequiredTemplates } = await import("./printPdfs/templateSelection");
+        const templates = selectRequiredTemplates(vendorId, skus);
+        if (templates.length === 0) {
+          return res.status(400).json({ message: "No vinyl SKUs configured for this release — add a 7\", 10\", or 12\" format before generating print PDFs." });
+        }
+
+        // Per-template source-art mapping. For each required template
+        // we pick the latest passing/warned upload_validation row that
+        // matches this vendor + templateId. If none exists (artist
+        // only uploaded a single jacket image, not per-template files),
+        // we fall back to the album's primary artwork — but only when
+        // the admin supplies an override justification, since that art
+        // hasn't been validated against every template's spec.
+        const artValidations = validations
+          .filter((v) => v.kind === "art" && v.vendorId === vendorId && v.status !== "fail")
+          .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+        function pickSourceForTemplate(templateId: string): { assetUrl: string; isFallback: boolean } | null {
+          const match = artValidations.find((v) => v.templateId === templateId);
+          if (match) return { assetUrl: match.assetUrl, isFallback: false };
+          if (album.artwork.startsWith("/objects/")) {
+            return { assetUrl: album.artwork, isFallback: true };
+          }
+          return null;
+        }
+
+        const missing: string[] = [];
+        const fallbacks: string[] = [];
+        const sourcePicks = new Map<string, string>();
+        for (const t of templates) {
+          const pick = pickSourceForTemplate(t.id);
+          if (!pick) { missing.push(t.label); continue; }
+          if (pick.isFallback) fallbacks.push(t.label);
+          sourcePicks.set(t.id, pick.assetUrl);
+        }
+        if (missing.length > 0) {
+          return res.status(409).json({
+            message: `No validated source artwork found for: ${missing.join(", ")}. Upload + preflight each template before generating.`,
+            missingTemplates: missing,
+          });
+        }
+        if (fallbacks.length > 0 && !overrideJustification) {
+          return res.status(409).json({
+            message: `Falling back to the album's primary artwork for ${fallbacks.length} template(s) (${fallbacks.join(", ")}). Override with a justification to proceed.`,
+            fallbackTemplates: fallbacks,
+          });
+        }
+
+        // Fetch each unique source asset once.
+        const sourceCache = new Map<string, { buffer: Buffer; contentType: string }>();
+        for (const url of new Set(sourcePicks.values())) {
+          const file = await objectStorage.getObjectEntityFile(url);
+          const [meta] = await file.getMetadata();
+          const ct = (meta.contentType as string | undefined) ?? "application/octet-stream";
+          if (!/^image\/(jpe?g|png)$/i.test(ct)) {
+            return res.status(409).json({
+              message: `Source artwork for one or more templates is ${ct}; print composition requires JPEG or PNG. Re-export as PNG/JPEG and re-validate.`,
+              unsupportedContentType: ct,
+            });
+          }
+          const [buf] = await file.download();
+          sourceCache.set(url, { buffer: buf, contentType: ct });
+        }
+
+        const { VENDOR_SPECS } = await import("../shared/vendorSpecs");
+        const vendor = VENDOR_SPECS[vendorId];
+        const { composePrintPdf, buildPrintFileName } = await import("./printPdfs/compositor");
+
+        const catalogCode = albumId.slice(0, 8).toUpperCase();
+        const at = new Date();
+        const artifacts: Array<{
+          templateId: string;
+          templateLabel: string;
+          fileName: string;
+          assetUrl: string;
+          sizeBytes: number;
+        }> = [];
+
+        for (const template of templates) {
+          const src = sourceCache.get(sourcePicks.get(template.id)!)!;
+          const pdf = await composePrintPdf({
+            vendor,
+            template,
+            artBuffer: src.buffer,
+            artContentType: src.contentType,
+            album: { title: album.title, artist: album.artist, catalogCode },
+          });
+          const fileName = buildPrintFileName({
+            catalogCode,
+            artist: album.artist,
+            templateId: template.id,
+            at,
+          });
+          const assetUrl = await uploadBufferToObjectStorage(pdf, "application/pdf");
+          artifacts.push({
+            templateId: template.id,
+            templateLabel: template.label,
+            fileName,
+            assetUrl,
+            sizeBytes: pdf.length,
+          });
+        }
+
+        const generation = await storage.insertPrintGeneration({
+          albumId,
+          vendorId,
+          createdByUserId: req.session.userId ?? null,
+          overrideJustification: overrideJustification ?? null,
+          artifacts,
+        });
+        res.json(generation);
+      } catch (e: any) {
+        console.error("[print-pdfs/generate]", e);
+        res.status(500).json({ message: e?.message ?? "Generation failed" });
+      }
+    },
+  );
+
   return httpServer;
 }

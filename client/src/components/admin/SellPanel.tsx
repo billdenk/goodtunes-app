@@ -53,6 +53,7 @@ import {
 import { VinylPreview } from "@/components/VinylPreview";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
+import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {
@@ -243,6 +244,9 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
             specs. Sits above Presses so failing checks surface BEFORE
             the operator commits to a vendor below. */}
         <UploadValidationsPanel albumId={albumId} />
+
+        {/* Task #217 — compose vendor-shaped print PDFs from artwork. */}
+        <PrintPdfsPanel albumId={albumId} />
 
         {/* Presses */}
         <PressesPanel albumId={albumId} invited={invitedPress ?? null} />
