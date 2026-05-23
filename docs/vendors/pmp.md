@@ -1,0 +1,70 @@
+# Physical Music Products (PMP)
+
+PMP publishes far less than MRP. The color library is being updated, numeric specs are not posted, and templates are CSR-assigned per project. Capture what is published; flag the rest as **"not stated — request from CSR."**
+
+## Contact
+
+- General: info@physicalmusicproducts.com
+- Artwork: julie@physicalmusicproducts.com, art@physicalmusicproducts.com
+- Phone: +1 (629) 236-2181
+- Hours: every day 8am–10pm
+
+## Source pages
+
+- Color: https://www.physicalmusicproducts.com/color
+- Detailed FAQ: https://www.physicalmusicproducts.com/detailed-faq
+- Audio file drop: https://www.physicalmusicproducts.com/file-drop-audio
+- Artwork file drop: https://www.physicalmusicproducts.com/file-drop-artwork
+
+## Formats offered
+
+- **Today:** 12" LP / EP / Single.
+- **Coming soon:** 7" big-hole and small-hole, then picture discs.
+- **Speeds:** 33 RPM (full-length) and 45 RPM (singles / short cuts). Fidelity scales with shorter program time per side.
+
+## Short-run packages
+
+Not stated — request from CSR.
+
+## Art file requirements
+
+- Must use **only PMP-provided templates** (no outside templates).
+- **Mandatory filename convention:** `Catalog#_ArtistName_TemplateType_yyyymmdd`
+  - Example: `ABC123_DAVIDBOWIE_CENTERLABEL_20240101`
+- Delivery via the **PMP file-drop tool** (artwork drop page).
+- Numeric specs (resolution, color space, bleed): **not stated — request from CSR.**
+
+## Audio file requirements
+
+- **24-bit WAV** files, mastered for vinyl.
+- **PQ sheet** with side breaks, catalog / matrix number (CSR will assign if you don't have one), engineer contact info, file types, and how many files to expect.
+- Sample rate, per-side time limits, file-naming: **not stated — request from CSR.**
+
+## Packaging options
+
+- Default assembly: record into sleeve, top-loaded with jacket opening on the right.
+- Printed inner sleeves: assembled A-side toward operator, top-loaded.
+- Booklets in **multiples of 4 pages** (4, 8, 12, 16…).
+- Other packaging options (gatefold, tip-on, widespine, inserts, posters, obi, etching): **not stated — request from CSR.**
+
+## Color / vinyl options
+
+- Specialty mixes, splatters, marble, half-and-half, and custom requests welcomed.
+- **Full catalog not currently published online.** Color page indicates the library is being updated. Catalog names / codes: **not stated — request from CSR.**
+
+## Templates
+
+PMP issues templates per project via CSR. **No public template gallery.** When a customer needs a template, the CSR sends the correct one with the assigned catalog number; that template's name flows into the mandatory filename convention above.
+
+## Submission / file drop
+
+- Art: artwork file-drop tool (link above).
+- Audio: audio file-drop tool (link above).
+
+## Turn time
+
+5–7 weeks once audio and artwork are approved and in the pipeline.
+
+## Press throughput
+
+~35–40 seconds per record (just under 2 records / minute).
