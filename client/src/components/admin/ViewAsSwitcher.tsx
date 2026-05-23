@@ -12,6 +12,7 @@ import {
   Store,
   Truck,
   User,
+  Heart,
 } from "lucide-react";
 import {
   Popover,
@@ -57,6 +58,7 @@ type PersonaKey =
   | "label"
   | "press"
   | "artist"
+  | "nonprofit"
   | "maker"
   | "reseller"
   | "fulfillment";
@@ -77,8 +79,21 @@ interface Persona {
   allowCreate?: boolean;
 }
 
-// Order mirrors the left-nav importance order below (Dashboard isn't a
+// Order mirrors the left-nav importance order (Dashboard isn't a
 // persona, so God View takes the top slot).
+//
+// `detailPath` controls what "View as <persona> → <entity>" lands on:
+//   • Personas with a real partner portal (Label, Artist, Non-profit)
+//     route to that portal with the super-admin `?<scope>Id=` view-as
+//     query param the backend already honors (server/labelReports.ts,
+//     server/artistReports.ts, /api/non-profit/* in routes.ts). The
+//     result is *what that partner actually sees when logged in* — the
+//     useful version for both founder/agent collaboration and investor
+//     demos.
+//   • Personas without a portal yet (Press, Maker, Reseller,
+//     Fulfillment) fall back to the admin detail page so the switcher
+//     still saves clicks. Swap their `detailPath` to a portal URL once
+//     the portal ships — no other change needed here.
 const PERSONAS: Persona[] = [
   {
     key: "god",
@@ -90,7 +105,8 @@ const PERSONAS: Persona[] = [
     label: "Label",
     icon: Tag,
     endpoint: "/api/labels",
-    detailPath: (id) => `/admin/labels/${id}`,
+    // Real portal: LabelDashboard reads ?labelId= when caller is super_admin.
+    detailPath: (id) => `/label?labelId=${encodeURIComponent(id)}`,
     listPath: "/admin/labels",
     allowCreate: true,
   },
@@ -99,6 +115,7 @@ const PERSONAS: Persona[] = [
     label: "Press",
     icon: Factory,
     endpoint: "/api/manufacturers",
+    // No portal yet — falls back to admin detail.
     detailPath: (id) => `/admin/manufacturers/${id}`,
     listPath: "/admin/manufacturers",
     allowCreate: true,
@@ -108,8 +125,23 @@ const PERSONAS: Persona[] = [
     label: "Artist",
     icon: User,
     endpoint: "/api/people",
-    detailPath: (id) => `/admin/people/${id}`,
+    // Real portal: ArtistDashboard reads ?personId= when super_admin.
+    detailPath: (id) => `/artist?personId=${encodeURIComponent(id)}`,
     listPath: "/admin/people",
+    allowCreate: true,
+  },
+  {
+    key: "nonprofit",
+    label: "Non-profit",
+    icon: Heart,
+    // Non-profits live in the labels table today (label.kind="non_profit"),
+    // exposed through /api/labels. Filter on the client so we don't have
+    // to add a new endpoint.
+    endpoint: "/api/labels",
+    filter: (e) => (e as { kind?: string }).kind === "non_profit",
+    // Real portal: NonProfitDashboard backend honors ?orgId= for super_admin.
+    detailPath: (id) => `/non-profit?orgId=${encodeURIComponent(id)}`,
+    listPath: "/admin/labels",
     allowCreate: true,
   },
   {
@@ -118,6 +150,7 @@ const PERSONAS: Persona[] = [
     icon: Hammer,
     endpoint: "/api/vendors",
     filter: (e) => !!e.isMaker,
+    // No portal yet.
     detailPath: (id) => `/admin/makers/${id}`,
     listPath: "/admin/makers",
     allowCreate: true,
@@ -128,6 +161,7 @@ const PERSONAS: Persona[] = [
     icon: Store,
     endpoint: "/api/vendors",
     filter: (e) => !!e.isReseller,
+    // No portal yet.
     detailPath: (id) => `/admin/vendors/${id}`,
     listPath: "/admin/vendors",
     allowCreate: true,
@@ -137,6 +171,7 @@ const PERSONAS: Persona[] = [
     label: "Fulfillment",
     icon: Truck,
     endpoint: "/api/fulfillment-partners",
+    // No portal yet.
     detailPath: (id) => `/admin/fulfillment-partners/${id}`,
     listPath: "/admin/fulfillment-partners",
     allowCreate: true,

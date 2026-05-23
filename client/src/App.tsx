@@ -55,6 +55,7 @@ import { Redeem } from "@/pages/Redeem";
 import { AdminShopify } from "@/pages/AdminShopify";
 import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
+import { ScreenTag } from "@/components/admin/ScreenTag";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
@@ -340,6 +341,11 @@ function Router() {
       </Switch>
       <PlayerOverlay />
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
+      {/* Super-admin-only screen-code chip. Shown on every page so Nick
+          can include the code in a screenshot/comment and we know
+          exactly which route → file → component to touch. Self-gates on
+          super_admin via /api/me/role. */}
+      <ScreenTag />
     </>
   );
 }
