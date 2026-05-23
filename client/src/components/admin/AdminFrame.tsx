@@ -229,6 +229,23 @@ export function AdminFrame({
     enabled: !!user?.isAdmin,
   });
   const customerCount = customersResp?.total ?? 0;
+  // Task #234 — Fan-orders sidebar badge mirrors the "Active" tab on
+  // /admin/fan-orders: orders currently in flight (paid or shipped,
+  // not refunded, not returned). Same /api/admin/orders payload the
+  // page itself uses so the badge stays in lockstep without a second
+  // endpoint.
+  const { data: fanOrders = [] } = useQuery<
+    Array<{ status: string; fulfillmentStatus?: string | null; returnedAt?: string | null }>
+  >({
+    queryKey: ["/api/admin/orders"],
+    enabled: !!user?.isAdmin,
+  });
+  const fanOrdersActiveCount = fanOrders.filter(
+    (o) =>
+      (o.status === "paid" || o.status === "shipped") &&
+      !o.returnedAt &&
+      o.fulfillmentStatus !== "returned",
+  ).length;
   // Task #230 — NPO directory count drives the badge on the new NPOs
   // sidebar entry. Reuses the same /api/non-profits payload the rest
   // of the admin already hits.
@@ -374,12 +391,14 @@ export function AdminFrame({
               onClick={() => navigate("/admin/pressing-orders")}
               testId="nav-pressing-orders"
             />
-            {/* Task #230 — Fan orders queue (design stub for now; tab
-                strip + table skeleton, no data wiring). */}
+            {/* Task #234 — Fan orders queue. Badge reflects the in-flight
+                ("Active" tab) count so operators see their daily work
+                volume at a glance; the page itself splits All/Active/
+                Returns/Refunded with the same data. */}
             <SidebarLink
               icon={ShoppingBag}
               label="Fan orders"
-              count={-1}
+              count={fanOrdersActiveCount}
               active={active === "fan-orders"}
               onClick={() => navigate("/admin/fan-orders")}
               testId="nav-fan-orders"
