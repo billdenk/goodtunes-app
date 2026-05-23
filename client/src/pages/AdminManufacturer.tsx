@@ -1,8 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, RefreshCw, Trash2, X, Plus } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  ChevronRight,
+  ExternalLink,
+  Factory,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -17,6 +27,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ALBUM_FORMATS, ALBUM_FORMAT_LABEL, type AlbumFormat, type Manufacturer, type FulfillmentPartner } from "@shared/schema";
 
 /**
@@ -36,6 +53,7 @@ export function AdminManufacturer() {
   const { toast } = useToast();
   const id = params?.id ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
 
   const { data: m, isLoading } = useQuery<Manufacturer>({
     queryKey: ["/api/manufacturers", id],
@@ -134,39 +152,119 @@ export function AdminManufacturer() {
 
   return (
     <AdminFrame active="manufacturers" contentWidth="narrow">
-      <div className="space-y-5">
+      <div className="space-y-6">
+        {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          <Link href="/admin/manufacturers" className="hover:text-slate-700">
+          <Link href="/admin/manufacturers" className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid="link-breadcrumb-presses">
             Presses
           </Link>
-          <ChevronRight className="w-3 h-3" />
+          <ChevronRight className="w-3 h-3 flex-shrink-0" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">{m.name}</span>
         </div>
 
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-[26px] font-bold text-slate-900 truncate" data-testid="heading-manufacturer-name">
-            {m.name}
-          </h1>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
+        {/* HEADER — logo tile + domain eyebrow + name + Visit link */}
+        <div className="flex items-start gap-5">
+          <button
+            type="button"
+            onClick={() => setLogoEditorOpen(true)}
+            className="group relative w-24 h-24 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
+            aria-label="Edit press logo"
+            data-testid="button-edit-press-logo"
+          >
+            {m.logoUrl ? (
+              <img
+                src={m.logoUrl}
+                alt={m.name}
+                className="w-full h-full object-contain p-2 transition-transform group-hover:scale-[1.03]"
+                data-testid="img-press-logo"
+              />
+            ) : (
+              <Factory className="w-10 h-10 text-slate-300" strokeWidth={1.5} />
+            )}
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors" />
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                <Pencil className="w-4 h-4" />
+              </span>
+            </span>
+          </button>
+          <PressLogoEditorDialog
+            press={m}
+            open={logoEditorOpen}
+            onOpenChange={setLogoEditorOpen}
+          />
+          <div className="flex-1 min-w-0">
+            {m.domain && (
+              <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider" data-testid="text-press-domain">
+                {m.domain}
+              </div>
+            )}
+            <h1
+              className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate"
+              data-testid="heading-manufacturer-name"
+            >
+              {m.name}
+            </h1>
+            {m.websiteUrl && (
+              <div className="flex items-center gap-3 text-slate-500 text-[12.5px] mt-1">
+                <a
+                  href={m.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 hover:text-[var(--brand-blue)]"
+                  data-testid="link-press-website"
+                >
+                  Visit
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* TAB BAR — Overview only for now; Refresh + Delete sit on the right. */}
+        <div
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
+          data-testid="tabs-admin-press"
+        >
+          <div className="flex items-center gap-5 overflow-x-auto">
+            <button
+              type="button"
+              className="relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap text-slate-900"
+              data-testid="tab-overview"
+            >
+              Overview
+              <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
               onClick={() => rescrape.mutate()}
               disabled={!m.websiteUrl || rescrape.isPending}
+              aria-label="Refresh from website"
               title={m.websiteUrl ? "Re-fetch logo, cover, and bio from the website" : "Add a website URL first"}
+              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
               data-testid="button-rescrape-manufacturer"
             >
-              <RefreshCw className={`w-4 h-4 mr-1.5 ${rescrape.isPending ? "animate-spin" : ""}`} />
-              {rescrape.isPending ? "Refreshing…" : "Refresh from website"}
-            </Button>
-            <Button
-              variant="ghost"
+              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                {rescrape.isPending ? "Refreshing…" : "Refresh from website"}
+              </span>
+              <RefreshCw className={`w-3.5 h-3.5 ${rescrape.isPending ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              type="button"
               onClick={() => setDeleteOpen(true)}
-              className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+              disabled={remove.isPending}
+              aria-label="Delete press"
+              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
               data-testid="button-delete-manufacturer"
             >
-              <Trash2 className="w-4 h-4 mr-1.5" />
-              Delete
-            </Button>
+              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                Delete
+              </span>
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
@@ -219,7 +317,6 @@ function PartnerProfileForm({
   const [contactPhone, setContactPhone] = useState(initial.contactPhone ?? "");
   const [location, setLocation] = useState(initial.location ?? "");
   const [bio, setBio] = useState(initial.bio ?? "");
-  const [logoUrl, setLogoUrl] = useState(initial.logoUrl ?? "");
   const [turnaroundDays, setTurnaroundDays] = useState(
     initial.turnaroundDays != null ? String(initial.turnaroundDays) : "",
   );
@@ -244,7 +341,6 @@ function PartnerProfileForm({
       contactPhone: contactPhone.trim() || null,
       location: location.trim() || null,
       bio: bio.trim() || null,
-      logoUrl: logoUrl.trim() || null,
       turnaroundDays: turnaroundDays === "" ? null : Number(turnaroundDays),
       specialties,
       defaultFulfillmentPartnerId: defaultFp || null,
@@ -271,9 +367,6 @@ function PartnerProfileForm({
         </Field>
         <Field label="Contact phone">
           <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className={INPUT} data-testid="input-mfr-contact-phone" />
-        </Field>
-        <Field label="Logo URL">
-          <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} className={INPUT} placeholder="https://…/logo.png" data-testid="input-mfr-logo" />
         </Field>
         <Field label="Standard turnaround (days)">
           <input
@@ -747,5 +840,222 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </span>
       {children}
     </label>
+  );
+}
+
+/* ─── Logo editor — drag-drop upload, Replace + Remove ─────────────── */
+
+async function uploadImageFile(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error("Sign out and back in — your session token is missing.");
+  }
+  const res = await fetch("/api/admin/upload", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
+function PressLogoEditorDialog({
+  press,
+  open,
+  onOpenChange,
+}: {
+  press: Manufacturer;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/manufacturers"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/manufacturers", press.id] });
+  };
+
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      setPreviewUrl(URL.createObjectURL(file));
+      const url = await uploadImageFile(file);
+      await apiRequest("PUT", `/api/admin/manufacturers/${press.id}`, { logoUrl: url });
+      return url;
+    },
+    onSuccess: () => {
+      invalidate();
+      setPreviewUrl(null);
+      toast({ title: "Logo updated" });
+    },
+    onError: (e: any) => {
+      setPreviewUrl(null);
+      toast({
+        title: "Couldn't update the logo",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const removeLogo = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", `/api/admin/manufacturers/${press.id}`, { logoUrl: null });
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Logo removed" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't remove the logo",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const acceptFile = (file: File | undefined | null) => {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) {
+      toast({ title: "That's not an image", description: "Use a JPG, PNG, or WebP file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Keep images under 8 MB.", variant: "destructive" });
+      return;
+    }
+    upload.mutate(file);
+  };
+
+  const busy = upload.isPending || removeLogo.isPending;
+  const shownUrl = previewUrl || press.logoUrl;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
+      <DialogContent
+        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        data-testid="dialog-edit-press-logo"
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0">
+          <DialogTitle className="text-slate-900 text-[14px] font-bold">Logo</DialogTitle>
+          <DialogDescription className="sr-only">
+            Replace the logo for {press.name}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div
+            className="rounded-2xl shadow-sm border border-slate-200 bg-white p-6"
+            data-testid="panel-press-logo-current"
+          >
+            <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
+              Current logo
+            </div>
+            <div className="relative rounded-xl overflow-hidden bg-slate-50 ring-1 ring-slate-200 aspect-square">
+              {shownUrl ? (
+                <img
+                  src={shownUrl}
+                  alt={press.name}
+                  className="w-full h-full object-contain p-3"
+                  data-testid="img-press-logo-current"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                  <Factory className="w-12 h-12" strokeWidth={1.5} />
+                </div>
+              )}
+              {busy && (
+                <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+                  <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[12px] text-slate-700 font-semibold">
+                    {upload.isPending ? "Uploading…" : "Removing…"}
+                  </span>
+                </div>
+              )}
+            </div>
+            {press.logoUrl && (
+              <div className="mt-3 flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => removeLogo.mutate()}
+                  disabled={busy}
+                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2 text-[12px]"
+                  data-testid="button-remove-press-logo"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  Remove
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div
+            className="rounded-2xl shadow-sm border border-slate-200 bg-white p-6 flex flex-col"
+            data-testid="panel-press-logo-upload"
+          >
+            <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
+              Replace logo
+            </div>
+            <button
+              type="button"
+              onClick={() => !busy && fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!busy) setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                if (busy) return;
+                acceptFile(e.dataTransfer.files?.[0]);
+              }}
+              disabled={busy}
+              data-testid="dropzone-press-logo"
+              className={[
+                "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
+                dragging
+                  ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
+                  : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+                busy && "opacity-60 cursor-not-allowed",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <Upload
+                className={["w-7 h-7", dragging ? "text-[var(--brand-blue)]" : "text-slate-400"].join(" ")}
+              />
+              <div className="text-slate-700 text-[13px] font-semibold">
+                {dragging ? "Drop to upload" : "Drag an image here, or click to pick"}
+              </div>
+              <div className="text-slate-400 text-[11.5px]">JPG, PNG, or WebP · up to 8 MB</div>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                acceptFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+              data-testid="input-press-logo-file"
+            />
+            <p className="mt-4 text-[11.5px] text-slate-500 leading-relaxed">
+              Square works best — used in the Presses list and anywhere this plant is credited.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
