@@ -1768,7 +1768,7 @@ function SheetShell({
   ariaLabel: string;
   testId: string;
   onClose: () => void;
-  variant?: "bottom" | "full";
+  variant?: "bottom" | "full" | "fixed";
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -1790,6 +1790,22 @@ function SheetShell({
   }, [onClose]);
 
   const isFull = variant === "full";
+  const isFixed = variant === "fixed";
+
+  // Container classes per variant.
+  // - `full`   : edge-to-edge full-viewport sheet, child manages scroll.
+  // - `fixed`  : bottom sheet with locked outer height (`h-[88vh]`), child
+  //              manages its own internal scroll. Used by the performer
+  //              sheet so the sheet's outline doesn't jump between tabs.
+  // - `bottom` : classic bottom sheet, the container itself scrolls.
+  let containerClass: string;
+  if (isFull) {
+    containerClass = "relative w-full z-10 h-full flex flex-col overflow-hidden";
+  } else if (isFixed) {
+    containerClass = "relative w-full max-w-[390px] z-10 rounded-t-3xl pt-3 h-[88vh] flex flex-col overflow-hidden";
+  } else {
+    containerClass = "relative w-full max-w-[390px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide";
+  }
 
   return (
     <div
@@ -1807,11 +1823,7 @@ function SheetShell({
           so the underlying page barely shows through anyway. */}
       {!isFull && <div className="absolute inset-0 bg-black/70" onClick={onClose} />}
       <div
-        className={
-          isFull
-            ? "relative w-full z-10 h-full flex flex-col overflow-hidden"
-            : "relative w-full max-w-[390px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide"
-        }
+        className={containerClass}
         style={{ background: "rgb(20, 24, 48)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
       >
         {!isFull && <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />}
@@ -2145,29 +2157,32 @@ function PerformerSheet({
   };
 
   return (
-    <SheetShell ariaLabel={`${person.name} on ${song.title}`} testId="sheet-performer" onClose={onClose}>
-      {/* Apple-style header: close button floats top-right, hero is a centered large avatar + name */}
-      <div className="relative">
+    <SheetShell ariaLabel={`${person.name} on ${song.title}`} testId="sheet-performer" variant="fixed" onClose={onClose}>
+      {/* HERO — non-scrolling. Apple-Music-style centered avatar + name +
+          contextual subtitle. The close button sits in the safe top-right
+          corner clear of the avatar. */}
+      <div className="relative flex-shrink-0">
         <IconButton
           variant="glass"
           label="Close"
           onClick={onClose}
-          className="absolute top-0 right-4"
+          className="absolute top-1 right-4 z-10"
           data-testid="button-performer-close"
         >
           <XIcon strokeWidth={2.5} />
         </IconButton>
-        <div className="flex flex-col items-center text-center px-5 pt-2 pb-5">
-          <PersonAvatar person={person} size={112} />
-          <h2 className="text-white text-[24px] font-bold leading-tight mt-3">{person.name}</h2>
-          <p className="text-white/55 text-[13px] mt-1 truncate max-w-full">On "{song.title}"</p>
+        <div className="flex flex-col items-center text-center px-5 pt-3 pb-5">
+          <PersonAvatar person={person} size={120} />
+          <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight mt-4" data-testid="text-performer-name">{person.name}</h2>
+          <p className="text-white/55 text-[13px] mt-1.5 truncate max-w-full" data-testid="text-performer-context">On &ldquo;{song.title}&rdquo;</p>
         </div>
       </div>
 
-      {/* Tab strip — About | Music | Gear. Same shape/typography as the
-          VendorSheet tabs so the two artist-adjacent sheets read as a pair. */}
-      <div className="px-5 pt-1 pb-0" style={{ background: "#00062B" }}>
-        <div className="flex gap-6 border-b border-white/10">
+      {/* STICKY TAB STRIP — About | Music | Gear. Underline indicator in
+          brand blue, count chips with active/inactive contrast, ≥44px tall
+          touch targets. Sits directly under the hero and never moves. */}
+      <div className="flex-shrink-0 px-5">
+        <div className="flex gap-7 border-b border-white/10">
           {(["about", "music", "gear"] as const).map((t) => {
             const active = tab === t;
             const label = t === "about" ? "About" : t === "music" ? "Music" : "Gear";
@@ -2177,14 +2192,20 @@ function PerformerSheet({
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                className="relative pb-3 pt-2 text-[14px] font-semibold tracking-wide transition-colors"
+                className="relative h-11 flex items-center text-[15px] font-semibold tracking-tight transition-colors"
                 style={{ color: active ? "#FFFFFF" : "rgba(255,255,255,0.45)" }}
                 data-testid={`tab-performer-${t}`}
               >
                 <span className="flex items-center gap-1.5">
                   {label}
                   {typeof count === "number" && count > 0 && (
-                    <span className="text-[12px] font-medium" style={{ color: active ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.35)" }}>
+                    <span
+                      className="text-[12px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full"
+                      style={{
+                        background: active ? "rgba(49,158,216,0.18)" : "rgba(255,255,255,0.08)",
+                        color: active ? "var(--brand-blue)" : "rgba(255,255,255,0.50)",
+                      }}
+                    >
                       {count}
                     </span>
                   )}
@@ -2198,9 +2219,16 @@ function PerformerSheet({
         </div>
       </div>
 
+      {/* SCROLLABLE CONTENT — the ONLY thing in the sheet that scrolls.
+          Outer sheet height stays put when switching tabs; short tabs leave
+          empty space at the bottom, long tabs scroll internally. */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pb-8"
+        data-testid="region-performer-content"
+      >
       {/* ABOUT */}
       {tab === "about" && (
-        <div className="pb-4">
+        <div>
           {person.bio ? (
             <p className="px-5 pt-4 text-white/80 text-[15px] leading-[1.55] whitespace-pre-line" data-testid="text-performer-bio">
               {person.bio}
@@ -2209,21 +2237,20 @@ function PerformerSheet({
             <p className="px-5 pt-4 text-white/45 text-[14px]">No bio yet for {person.name}.</p>
           )}
 
-          {/* Artist Profile link — placeholder for the future cross-album /
-              streaming-handoff flow. See replit.md → "Streaming-service handoff". */}
-          <div className="h-px bg-white/8 mx-5 mt-5 mb-3" />
-          <div className="px-5">
+          {/* Artist Profile link — Apple-Music-style cell. Placeholder for
+              the future cross-album / streaming-handoff flow. */}
+          <div className="px-5 pt-5">
             <button
               type="button"
               onClick={() => {
                 toast({ title: `Artist profile for ${person.name}`, description: "Coming soon" });
               }}
-              className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl active:opacity-80"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+              className="w-full flex items-center justify-between gap-3 px-4 h-12 rounded-2xl active:bg-white/10 transition-colors"
+              style={{ background: "rgba(255,255,255,0.06)" }}
               data-testid="button-artist-profile"
             >
-              <span className="text-white text-[14px] font-medium">View artist profile</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/45" aria-hidden="true">
+              <span className="text-white text-[15px] font-medium">View artist profile</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="text-white/40" aria-hidden="true">
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
@@ -2409,6 +2436,7 @@ function PerformerSheet({
           )}
         </div>
       )}
+      </div>
     </SheetShell>
   );
 }
