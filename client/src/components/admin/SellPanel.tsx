@@ -52,6 +52,7 @@ import {
 } from "@shared/pressing";
 import { VinylPreview } from "@/components/VinylPreview";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
+import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {
@@ -232,6 +233,12 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   return (
     <div className="py-6">
       <div className="max-w-3xl">
+        {/* Task #225 — five-stage progress strip (Select package → Upload
+            art → Set price → Select quantity → Go to Press!). Frames
+            every Sell-panel session so artists always know what's next
+            and what's blocking submission. */}
+        <PressingOrderStepper albumId={albumId} skus={data.skus} />
+
         {/* Task #216 — preflight art/audio against the picked plant's
             specs. Sits above Presses so failing checks surface BEFORE
             the operator commits to a vendor below. */}
@@ -317,6 +324,11 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
             />
           </div>
         </div>
+
+        {/* Task #225 — terminal action of the stepper above. Only lights
+            up when stages 0-3 are complete; surfaces the same submission
+            state as the stepper when one is in flight. */}
+        <GoToPressButton albumId={albumId} skus={data.skus} />
       </div>
     </div>
   );

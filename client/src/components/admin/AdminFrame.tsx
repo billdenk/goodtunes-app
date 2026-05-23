@@ -64,6 +64,7 @@ export type EntityKey =
   | "vendors"
   | "labels"
   | "manufacturers"
+  | "pressing-orders"
   | "fulfillment"
   | "customers"
   | "reports"
@@ -304,6 +305,17 @@ export function AdminFrame({
               active={active === "manufacturers"}
               onClick={() => navigate("/admin/manufacturers")}
               testId="nav-manufacturers"
+            />
+            {/* Task #225 — Pressing-order review inbox. Tool, not a CRUD
+                list, so we pass -1 to suppress the count. Sits next to
+                Presses since that's the pipeline it feeds. */}
+            <SidebarLink
+              icon={Factory}
+              label="Pressing orders"
+              count={-1}
+              active={active === "pressing-orders"}
+              onClick={() => navigate("/admin/pressing-orders")}
+              testId="nav-pressing-orders"
             />
             <SidebarLink
               icon={Truck}

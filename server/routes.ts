@@ -11934,5 +11934,200 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
+  // ─── Task #225 — Pressing-order requests (artist → GoodTunes review) ──
+  // The bridge between "I've made my Sell-tab choices" and "GoodTunes
+  // has something to push to the press." Snapshot-based: pickedSku +
+  // press details are frozen onto the request row at submit time so
+  // later catalog edits never mutate a pending order.
+  const { resolveAlbumScope, checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+
+  async function rollupPreflightForAlbum(albumId: string): Promise<string | null> {
+    const rows = await storage.listUploadValidations(albumId);
+    if (rows.length === 0) return null;
+    let worst: "pass" | "warn" | "fail" | "overridden" = "pass";
+    for (const r of rows) {
+      const effective = r.overrideAt ? "overridden" : r.status;
+      if (effective === "fail") return "fail";
+      if (effective === "warn" && worst === "pass") worst = "warn";
+      if (effective === "overridden" && worst === "pass") worst = "overridden";
+    }
+    return worst;
+  }
+
+  // GET latest request for an album — drives the Sell-tab stepper's
+  // "Submitted / rejected" state without a second round trip.
+  app.get("/api/admin/albums/:id/pressing-order", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const userId = req.session.userId;
+    if (!userId) return res.status(401).json({ message: "Not signed in" });
+    const resolved = await resolveAlbumScope(albumId);
+    if (!resolved) return res.status(404).json({ message: "Album not found" });
+    if (resolved.scope) {
+      const err = await checkPartnerVerbForScope(userId, "edit_metadata", resolved.scope, { req });
+      if (err) return res.status(err.status).json(err.body);
+    }
+    const row = await storage.getLatestPressingOrderRequestForAlbum(albumId);
+    res.json(row ?? null);
+  });
+
+  // POST submit — gated by the same edit_metadata verb that the Sell
+  // panel itself uses. Validates package + price + quantity + preflight
+  // before snapshotting. Idempotent on (albumId, status=pending) — the
+  // storage helper cancels any prior pending row on this album first.
+  app.post("/api/admin/albums/:id/pressing-order", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const userId = req.session.userId;
+    if (!userId) return res.status(401).json({ message: "Not signed in" });
+    const resolved = await resolveAlbumScope(albumId);
+    if (!resolved) return res.status(404).json({ message: "Album not found" });
+    if (resolved.scope) {
+      const err = await checkPartnerVerbForScope(userId, "edit_metadata", resolved.scope, {
+        albumIdForLock: albumId,
+        req,
+      });
+      if (err) return res.status(err.status).json(err.body);
+    }
+    // Locate the SKU the artist wants pressed. v1 picks the first
+    // configured SKU with a price and a planned quantity; multi-format
+    // submissions (e.g. vinyl + cassette in one ticket) are a follow-up.
+    const { albumSkus: albumSkusTable } = await import("@shared/schema");
+    const skus = await db
+      .select()
+      .from(albumSkusTable)
+      .where(eq(albumSkusTable.albumId, albumId));
+    const eligible = skus.find(
+      (s) => (s.priceCents ?? 0) > 0 && (s.plannedQuantity ?? 0) > 0 && s.active,
+    );
+    if (!eligible) {
+      return res
+        .status(400)
+        .json({ message: "Pick a package, set a price, and choose a quantity before submitting." });
+    }
+    const preflight = await rollupPreflightForAlbum(albumId);
+    if (preflight === "fail" || preflight === null) {
+      return res.status(400).json({
+        message:
+          preflight === "fail"
+            ? "Upload art that passes the plant preflight (or get an admin override) before submitting."
+            : "Upload art for plant preflight before submitting.",
+      });
+    }
+    const quantity = eligible.plannedQuantity!;
+    const unitCents = eligible.priceCents;
+    const totalCents = unitCents * quantity;
+    const row = await storage.insertPressingOrderRequest({
+      albumId,
+      packageSnapshot: {
+        format: eligible.format,
+        // SKUs don't carry a press FK today (invited-press lives on the
+        // partner row and is consulted at cost-calc time). Leave null;
+        // the admin queue surfaces the album link so reviewers can see
+        // the press in context. Wire a concrete pressId/name when the
+        // invited-press snapshot lands on album_skus.
+        pressId: null,
+        pressName: null,
+        vinylColor: eligible.vinylColor ?? null,
+        vinylColorTier: eligible.vinylColorTier ?? null,
+        jacketUpgrade: eligible.jacketUpgrade ?? null,
+        quantityTier: eligible.quantityTier ?? null,
+      },
+      quantity,
+      unitCents,
+      totalCents,
+      preflightStatus: preflight,
+      submittedByUserId: userId,
+    });
+    res.json(row);
+  });
+
+  // GET admin queue — super-admin sees all, scoped partners see only
+  // the rows on their own albums. Filter by ?status= (pending default).
+  app.get("/api/admin/pressing-orders", requireAdmin, async (req, res) => {
+    const userId = req.session.userId;
+    if (!userId) return res.status(401).json({ message: "Not signed in" });
+    const statusRaw = String(req.query.status ?? "pending");
+    const status =
+      statusRaw === "approved" || statusRaw === "rejected" || statusRaw === "cancelled" || statusRaw === "all"
+        ? statusRaw
+        : "pending";
+
+    const info = await getUserRole(userId);
+    let albumIds: string[] | null = null;
+    if (info?.role !== "super_admin" && info?.role !== "admin") {
+      if (!info?.roleScopeId) return res.json([]);
+      // Find every album under this partner's scope. Label-scoped sees
+      // its own labelId; artist-scoped sees primaryArtistId.
+      const scopeId = info.roleScopeId;
+      const allAlbums = await storage.getAlbums();
+      if (info.role === "label") {
+        albumIds = allAlbums.filter((a) => a.labelId === scopeId).map((a) => a.id);
+      } else if (info.role === "artist") {
+        albumIds = allAlbums.filter((a) => (a as any).primaryArtistId === scopeId).map((a) => a.id);
+      } else {
+        return res.json([]);
+      }
+    }
+    const rows = await storage.listPressingOrderRequests({ status: status as any, albumIds });
+    // Hydrate each row with the album + artist name so the inbox renders
+    // without a second round-trip per row.
+    const out = await Promise.all(
+      rows.map(async (r) => {
+        const a = await storage.getAlbumById(r.albumId, { includeHidden: true });
+        return {
+          ...r,
+          albumTitle: a?.title ?? null,
+          albumArtist: a?.artist ?? null,
+          albumArtwork: a?.artwork ?? null,
+        };
+      }),
+    );
+    res.json(out);
+  });
+
+  // POST approve — super-admin only (GoodTunes ops decision).
+  app.post(
+    "/api/admin/pressing-orders/:id/approve",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: "Not signed in" });
+      const existing = await storage.getPressingOrderRequest(String(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      if (existing.status !== "pending") {
+        return res.status(409).json({ message: `Already ${existing.status}` });
+      }
+      const row = await storage.decidePressingOrderRequest(String(req.params.id), "approved", userId);
+      res.json(row);
+    },
+  );
+
+  // POST reject — super-admin only, requires a note ≥ 8 chars.
+  app.post(
+    "/api/admin/pressing-orders/:id/reject",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: "Not signed in" });
+      const body = z
+        .object({ note: z.string().trim().min(8, "Note must be at least 8 characters") })
+        .safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Invalid" });
+      const existing = await storage.getPressingOrderRequest(String(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      if (existing.status !== "pending") {
+        return res.status(409).json({ message: `Already ${existing.status}` });
+      }
+      const row = await storage.decidePressingOrderRequest(
+        String(req.params.id),
+        "rejected",
+        userId,
+        body.data.note,
+      );
+      res.json(row);
+    },
+  );
+
   return httpServer;
 }

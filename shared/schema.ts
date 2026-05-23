@@ -2198,3 +2198,37 @@ export const uploadValidations = pgTable("upload_validations", {
 
 export type UploadValidation = typeof uploadValidations.$inferSelect;
 export type InsertUploadValidation = typeof uploadValidations.$inferInsert;
+
+// ─── Task #225 — Pressing-order requests (artist → GoodTunes review) ────
+// One row per "Go to Press!" submission from the artist Sell tab. Status
+// is a single column (pending | approved | rejected | cancelled).
+// `packageSnapshot` is a JSON snapshot of the SKU/press picks at submit
+// time so later catalog edits never mutate a pending or decided order.
+export type PressingOrderPackageSnapshot = {
+  format: string;
+  pressId: string | null;
+  pressName: string | null;
+  vinylColor: string | null;
+  vinylColorTier: string | null;
+  jacketUpgrade: string | null;
+  quantityTier: number | null;
+};
+
+export const pressingOrderRequests = pgTable("pressing_order_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  status: text("status").notNull(), // pending | approved | rejected | cancelled
+  packageSnapshot: jsonb("package_snapshot").$type<PressingOrderPackageSnapshot>().notNull(),
+  quantity: integer("quantity").notNull(),
+  unitCents: integer("unit_cents").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  preflightStatus: text("preflight_status"), // pass | warn | overridden | fail | null
+  rejectionNote: text("rejection_note"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  submittedByUserId: varchar("submitted_by_user_id"),
+  decidedAt: timestamp("decided_at"),
+  decidedByUserId: varchar("decided_by_user_id"),
+});
+
+export type PressingOrderRequest = typeof pressingOrderRequests.$inferSelect;
+export type InsertPressingOrderRequest = typeof pressingOrderRequests.$inferInsert;

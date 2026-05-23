@@ -49,6 +49,7 @@ import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
 import { AdminReview } from "@/pages/AdminReview";
+import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
 import { GiftClaim } from "@/pages/GiftClaim";
 import { Redeem } from "@/pages/Redeem";
@@ -184,6 +185,11 @@ function Router() {
             edits awaiting review. */}
         <Route path="/admin/review">
           <ProtectedRoute component={AdminReview} />
+        </Route>
+        {/* Task #225 — GoodTunes-admin queue of artist "Go to Press!"
+            submissions awaiting Approve/Reject. */}
+        <Route path="/admin/pressing-orders">
+          <ProtectedRoute component={AdminPressingOrders} />
         </Route>
         {/* Public invite-accept page — recipient sets username + password
             using a token-bound email + role. No auth required. */}

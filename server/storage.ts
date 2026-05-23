@@ -90,6 +90,9 @@ import {
   albumPhotos,
   orders,
   uploadValidations,
+  pressingOrderRequests,
+  type PressingOrderRequest,
+  type PressingOrderPackageSnapshot,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -557,6 +560,29 @@ export interface IStorage {
     byUserId: string,
   ): Promise<UploadValidationRow | undefined>;
   deleteUploadValidation(id: string): Promise<void>;
+
+  // ---- Task #225 — Pressing-order requests --------------------------
+  listPressingOrderRequests(opts: {
+    status?: "pending" | "approved" | "rejected" | "cancelled" | "all";
+    albumIds?: string[] | null;
+  }): Promise<PressingOrderRequest[]>;
+  getPressingOrderRequest(id: string): Promise<PressingOrderRequest | undefined>;
+  getLatestPressingOrderRequestForAlbum(albumId: string): Promise<PressingOrderRequest | undefined>;
+  insertPressingOrderRequest(data: {
+    albumId: string;
+    packageSnapshot: PressingOrderPackageSnapshot;
+    quantity: number;
+    unitCents: number;
+    totalCents: number;
+    preflightStatus: string | null;
+    submittedByUserId: string;
+  }): Promise<PressingOrderRequest>;
+  decidePressingOrderRequest(
+    id: string,
+    decision: "approved" | "rejected" | "cancelled",
+    decidedByUserId: string,
+    rejectionNote?: string | null,
+  ): Promise<PressingOrderRequest | undefined>;
 }
 
 export type UploadValidationRow = {
@@ -2698,6 +2724,86 @@ export class DbStorage implements IStorage {
   async deleteUploadValidation(id: string): Promise<void> {
     await db.delete(uploadValidations).where(eq(uploadValidations.id, id));
   }
+
+  // ---- Task #225 — Pressing-order requests --------------------------
+  async listPressingOrderRequests(opts: {
+    status?: "pending" | "approved" | "rejected" | "cancelled" | "all";
+    albumIds?: string[] | null;
+  }): Promise<PressingOrderRequest[]> {
+    const conds: any[] = [];
+    if (opts.status && opts.status !== "all") {
+      conds.push(eq(pressingOrderRequests.status, opts.status));
+    }
+    if (opts.albumIds) {
+      if (opts.albumIds.length === 0) return [];
+      conds.push(inArray(pressingOrderRequests.albumId, opts.albumIds));
+    }
+    const q = db.select().from(pressingOrderRequests);
+    const filtered = conds.length ? q.where(and(...conds)) : q;
+    return filtered.orderBy(desc(pressingOrderRequests.submittedAt));
+  }
+  async getPressingOrderRequest(id: string): Promise<PressingOrderRequest | undefined> {
+    const [row] = await db.select().from(pressingOrderRequests).where(eq(pressingOrderRequests.id, id));
+    return row;
+  }
+  async getLatestPressingOrderRequestForAlbum(albumId: string): Promise<PressingOrderRequest | undefined> {
+    const [row] = await db
+      .select()
+      .from(pressingOrderRequests)
+      .where(eq(pressingOrderRequests.albumId, albumId))
+      .orderBy(desc(pressingOrderRequests.submittedAt))
+      .limit(1);
+    return row;
+  }
+  async insertPressingOrderRequest(data: {
+    albumId: string;
+    packageSnapshot: PressingOrderPackageSnapshot;
+    quantity: number;
+    unitCents: number;
+    totalCents: number;
+    preflightStatus: string | null;
+    submittedByUserId: string;
+  }): Promise<PressingOrderRequest> {
+    // Idempotency: cancel any other pending row on this album first so
+    // the new submission is the canonical pending one. Cheap; covers
+    // the case where an artist clicks "Go to Press!" twice.
+    await db
+      .update(pressingOrderRequests)
+      .set({ status: "cancelled", decidedAt: new Date(), decidedByUserId: data.submittedByUserId })
+      .where(and(eq(pressingOrderRequests.albumId, data.albumId), eq(pressingOrderRequests.status, "pending")));
+    const [row] = await db
+      .insert(pressingOrderRequests)
+      .values({
+        albumId: data.albumId,
+        status: "pending",
+        packageSnapshot: data.packageSnapshot,
+        quantity: data.quantity,
+        unitCents: data.unitCents,
+        totalCents: data.totalCents,
+        preflightStatus: data.preflightStatus,
+        submittedByUserId: data.submittedByUserId,
+      })
+      .returning();
+    return row;
+  }
+  async decidePressingOrderRequest(
+    id: string,
+    decision: "approved" | "rejected" | "cancelled",
+    decidedByUserId: string,
+    rejectionNote?: string | null,
+  ): Promise<PressingOrderRequest | undefined> {
+    const [row] = await db
+      .update(pressingOrderRequests)
+      .set({
+        status: decision,
+        decidedAt: new Date(),
+        decidedByUserId,
+        rejectionNote: decision === "rejected" ? (rejectionNote ?? null) : null,
+      })
+      .where(eq(pressingOrderRequests.id, id))
+      .returning();
+    return row;
+  }
 }
 
 function toUploadValidationRow(row: typeof uploadValidations.$inferSelect): UploadValidationRow {
@@ -2780,6 +2886,24 @@ async function ensureRuntimeMigrations(): Promise<void> {
           created_at timestamp NOT NULL DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS upload_validations_album_idx ON upload_validations(album_id);
+        -- Task #225 — pressing-order requests (artist → GoodTunes review)
+        CREATE TABLE IF NOT EXISTS pressing_order_requests (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          album_id varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+          status text NOT NULL,
+          package_snapshot jsonb NOT NULL,
+          quantity integer NOT NULL,
+          unit_cents integer NOT NULL,
+          total_cents integer NOT NULL,
+          preflight_status text,
+          rejection_note text,
+          submitted_at timestamp NOT NULL DEFAULT now(),
+          submitted_by_user_id varchar,
+          decided_at timestamp,
+          decided_by_user_id varchar
+        );
+        CREATE INDEX IF NOT EXISTS pressing_order_requests_album_idx ON pressing_order_requests(album_id);
+        CREATE INDEX IF NOT EXISTS pressing_order_requests_status_idx ON pressing_order_requests(status);
         IF to_regclass('public.album_addons') IS NOT NULL THEN
           ALTER TABLE album_addons ADD COLUMN IF NOT EXISTS cost_cents_snapshot INTEGER;
           IF to_regclass('public.payout_settings') IS NOT NULL THEN
