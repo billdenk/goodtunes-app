@@ -807,16 +807,19 @@ export const creditRoles = pgTable(
 // switch anyway — the server always reads tokens through the kind+id
 // pair via the storage layer).
 //
-// NOTE: do NOT re-add a `user_id → users(id)` foreign key here. An older
-// version of this table had `auth_tokens_user_id_users_id_fk` left over
-// from before the dual-auth refactor; it was dropped by hand in dev+prod
-// because customer rows (kind='customer') point at customer_users.id and
-// any FK to users(id) breaks customer Google/Apple sign-in with a 500 on
-// the token insert. `db:push` won't drop FKs that vanish from the schema,
-// so if it ever reappears it has to be dropped manually again.
-// 2026-05-23: reappeared in dev+prod and 500'd a real fan's signup-code
-// verify (insert of userId='verify:<email>' violates the FK because no
-// such users(id) row exists). Dropped by hand again on both DBs.
+// NOTE: do NOT re-add a `user_id → users(id)` foreign key here. Customer
+// rows (kind='customer') hold a `customer_users.id`, and the synthetic
+// signup-verify row holds `verify:<email>` — neither has a matching
+// `users(id)`, so any such FK 500s on the token insert.
+//
+// Root cause of the recurring reappearance (Task #264): the FK is not in
+// this schema, but it lingered in some dev DBs from before the dual-auth
+// refactor. Replit's publish flow diffs **dev → prod** (see
+// .agents/memory/dev-prod-schema-drift.md), so whenever a dev DB still
+// carried the FK, the next publish re-added it to prod. The durable fix
+// lives in `scripts/post-merge.sh`, which now idempotently runs
+// `DROP CONSTRAINT IF EXISTS auth_tokens_user_id_users_id_fk` on BOTH
+// dev and prod after every merge so the publish diff has nothing to add.
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
   userId: varchar("user_id").notNull(),
