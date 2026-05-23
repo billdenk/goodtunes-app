@@ -141,11 +141,8 @@ export function ArtistDetail() {
     joinedYear: number | null;
     leftYear: number | null;
     displayOrder: number;
-    person: {
-      id: string;
-      name: string;
-      photoUrl: string | null;
-    } | null;
+    memberName: string;
+    memberPhotoUrl: string | null;
   };
   const { data: allPeople = [] } = useQuery<PublicPerson[]>({
     queryKey: ["/api/people"],
@@ -173,11 +170,11 @@ export function ArtistDetail() {
     enabled: !!artistPerson?.id && isGroupArtist,
   });
   const currentMembers = useMemo(
-    () => bandMembers.filter((m) => m.leftYear === null && m.person),
+    () => bandMembers.filter((m) => m.leftYear === null),
     [bandMembers],
   );
   const formerMembers = useMemo(
-    () => bandMembers.filter((m) => m.leftYear !== null && m.person),
+    () => bandMembers.filter((m) => m.leftYear !== null),
     [bandMembers],
   );
 
@@ -575,22 +572,22 @@ export function ArtistDetail() {
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => navigate(`/artist/${encodeURIComponent(m.person!.name)}`)}
+                    onClick={() => navigate(`/artist/${encodeURIComponent(m.memberName)}`)}
                     className="flex-shrink-0 flex flex-col items-center text-center w-[88px] active:opacity-80"
                     data-testid={`band-member-${m.memberId}`}
                   >
                     <div className="w-[72px] h-[72px] rounded-full overflow-hidden bg-white/5">
-                      {m.person!.photoUrl ? (
+                      {m.memberPhotoUrl ? (
                         <img
-                          src={m.person!.photoUrl}
-                          alt={m.person!.name}
+                          src={m.memberPhotoUrl}
+                          alt={m.memberName}
                           className="w-full h-full object-cover"
                           loading="lazy"
                         />
                       ) : null}
                     </div>
                     <p className="text-white text-[12px] font-semibold mt-2 leading-tight line-clamp-2">
-                      {m.person!.name}
+                      {m.memberName}
                     </p>
                     {m.roles && m.roles.length > 0 && (
                       <p className="text-white/55 text-[10.5px] leading-tight mt-0.5 line-clamp-2">
@@ -613,10 +610,10 @@ export function ArtistDetail() {
                       <li key={m.id} data-testid={`former-member-${m.memberId}`}>
                         <button
                           type="button"
-                          onClick={() => navigate(`/artist/${encodeURIComponent(m.person!.name)}`)}
+                          onClick={() => navigate(`/artist/${encodeURIComponent(m.memberName)}`)}
                           className="text-left active:opacity-70"
                         >
-                          <span className="text-white/85">{m.person!.name}</span>
+                          <span className="text-white/85">{m.memberName}</span>
                           {m.roles && m.roles.length > 0 && (
                             <span className="text-white/45"> — {m.roles.join(", ")}</span>
                           )}
