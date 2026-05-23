@@ -180,6 +180,44 @@ export function ArtistDetail() {
     () => bandMembers.filter((m) => m.leftYear !== null && m.person),
     [bandMembers],
   );
+
+  // Task #191 — reverse direction: bands this person is a member of.
+  // /api/people/:id/bands returns BandMemberWithPerson rows where the
+  // joined Person fields describe the BAND (the other side of the
+  // relation), so we can render "Member of: Steely Dan, Toto, …" on a
+  // session player's page without a second fetch. Hidden entirely for
+  // solo artists (no rows). Shape matches `BandMemberWithPerson` in
+  // shared/schema.ts: flat memberName / memberPhotoUrl on the row.
+  type MemberOfRow = {
+    id: string;
+    bandId: string;
+    memberId: string;
+    roles: string[] | null;
+    joinedYear: number | null;
+    leftYear: number | null;
+    displayOrder: number;
+    memberName: string;
+    memberPhotoUrl: string | null;
+    memberIsGroup: boolean;
+  };
+  const { data: memberOfBands = [] } = useQuery<MemberOfRow[]>({
+    queryKey: ["/api/people", artistPerson?.id, "bands"],
+    queryFn: async () => {
+      if (!artistPerson?.id) return [];
+      const r = await fetch(`/api/people/${artistPerson.id}/bands`);
+      if (!r.ok) return [];
+      return r.json();
+    },
+    enabled: !!artistPerson?.id,
+  });
+  const currentBands = useMemo(
+    () => memberOfBands.filter((b) => b.leftYear === null),
+    [memberOfBands],
+  );
+  const formerBands = useMemo(
+    () => memberOfBands.filter((b) => b.leftYear !== null),
+    [memberOfBands],
+  );
   // Dedupe vs GoodTunes Releases by title (case-insensitive). Anything
   // already in the catalog renders above as a full GT tile — we don't
   // want it to appear twice with a streaming handoff fan can use to
@@ -595,6 +633,83 @@ export function ArtistDetail() {
               )}
             </div>
           )}
+
+          {/* Task #191 — "Member of" rail (reverse direction of the
+              Members rail above). Lists every band this person currently
+              belongs to, with a "Formerly with" disclosure for past
+              memberships. Hidden entirely for solo artists (no rows
+              returned). Tapping a band routes to its ArtistDetail page. */}
+          {memberOfBands.length > 0 && (
+            <div className="px-5 mt-9" data-testid="section-member-of-bands">
+              <h2 className="text-white text-xl font-bold tracking-tight mb-3">
+                Member of
+              </h2>
+              {currentBands.length > 0 && (
+              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+                {currentBands.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => navigate(`/artist/${encodeURIComponent(b.memberName)}`)}
+                    className="flex-shrink-0 flex flex-col items-center text-center w-[88px] active:opacity-80"
+                    data-testid={`member-of-band-${b.bandId}`}
+                  >
+                    <div className="w-[72px] h-[72px] rounded-full overflow-hidden bg-white/5">
+                      {b.memberPhotoUrl ? (
+                        <img
+                          src={b.memberPhotoUrl}
+                          alt={b.memberName}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : null}
+                    </div>
+                    <p className="text-white text-xs font-semibold mt-2 leading-tight line-clamp-2">
+                      {b.memberName}
+                    </p>
+                    {b.roles && b.roles.length > 0 && (
+                      <p className="text-white/55 text-xs leading-tight mt-0.5 line-clamp-2">
+                        {b.roles.join(", ")}
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+              )}
+              {formerBands.length > 0 && (
+                <details className="mt-3 text-white/55 text-xs">
+                  <summary
+                    className="cursor-pointer text-white/65 font-semibold"
+                    data-testid="toggle-formerly-with"
+                  >
+                    Formerly with
+                  </summary>
+                  <ul className="mt-2 space-y-1">
+                    {formerBands.map((b) => (
+                      <li key={b.id} data-testid={`formerly-with-band-${b.bandId}`}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/artist/${encodeURIComponent(b.memberName)}`)}
+                          className="text-left active:opacity-70"
+                        >
+                          <span className="text-white/85">{b.memberName}</span>
+                          {b.roles && b.roles.length > 0 && (
+                            <span className="text-white/45"> — {b.roles.join(", ")}</span>
+                          )}
+                          {(b.joinedYear || b.leftYear) && (
+                            <span className="text-white/40">
+                              {" "}({b.joinedYear ?? "?"}–{b.leftYear ?? ""})
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
         </div>
 
         <MiniPlayer />
