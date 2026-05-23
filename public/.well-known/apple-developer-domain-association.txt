@@ -1,0 +1,5 @@
+REPLACE_WITH_APPLE_DOMAIN_ASSOCIATION_FILE
+# This is a placeholder. The route in server/routes.ts detects this
+# sentinel and falls back to the APPLE_DOMAIN_ASSOCIATION env var until
+# the real bytes from the Apple Developer portal are committed here.
+# See README.md in this directory for the activation steps.

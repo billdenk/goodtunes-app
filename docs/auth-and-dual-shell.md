@@ -10,7 +10,9 @@ The current single-tier admin generalizes into per-org roles in the next phase �
 
 ## OAuth (customer + admin)
 
-Apple + Google OAuth both wired (Apple is **inert until a real PKCS#8 private key replaces the placeholder secret** — `APPLE_CONFIGURED` gate in `server/auth/oauth.ts`).
+Apple + Google OAuth both live. `APPLE_CONFIGURED` gate in `server/auth/oauth.ts` flips true when `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_SERVICES_ID` (`io.GoGoods.music`) and a PKCS#8 `APPLE_PRIVATE_KEY` are all set. `normalizeApplePrivateKey()` accepts either a full PEM block (`-----BEGIN PRIVATE KEY-----…`) or the raw base64 body of a `.p8` file and wraps it before handing to JOSE, so however the secret got pasted into the env, the ES256 client-secret signer just works. Startup prints a one-line `[auth] oauth: google=on apple=on (io.GoGoods.music)` summary so operators can confirm at-a-glance.
+
+**Identity is keyed off the provider `sub`, never the email.** Apple "Hide my email" returns a per-(fan, app) `@privaterelay.appleid.com` forwarder; the OAuth callback's email-lookup branch (the "we found an account with this email" prompt) skips relay addresses entirely, because a relay row from a previous run would otherwise collide unrelated fans. Same fan re-signing in always matches via the stable `sub`.
 
 ### Login-page provider lookup (Task #45)
 
@@ -26,7 +28,7 @@ When Apple Sign-In returns `@privaterelay.appleid.com`, the customer is prompted
 - `my.goodtunes.music` → customer shell
 - `*.replit.app` works as dev with both shells reachable
 
-CNAMEs at the user's DNS provider point both subdomains at the deployment. Apple domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts via the `APPLE_DOMAIN_ASSOCIATION` env var.
+CNAMEs at the user's DNS provider point both subdomains at the deployment. Apple's domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts. Two ways to provide it: (1) commit the verification file Apple gives you to `public/.well-known/apple-developer-domain-association.txt` (preferred — survives redeploy, no secret-manager fiddling), or (2) set `APPLE_DOMAIN_ASSOCIATION` in the env. The route prefers the file when present and falls back to the env var.
 
 ## Partner invites + referrals (Task #78)
 

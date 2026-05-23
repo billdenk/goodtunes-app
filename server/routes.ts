@@ -517,10 +517,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // file on each subdomain. We serve a `body` env var (so the user can
   // paste in the value Apple gives them at the Developer portal step)
   // and fall back to a friendly 404 in dev. Served on BOTH hosts.
-  app.get("/.well-known/apple-developer-domain-association.txt", (_req, res) => {
-    const body = process.env.APPLE_DOMAIN_ASSOCIATION;
-    if (!body) return res.status(404).type("text/plain").send("apple-developer-domain-association.txt is not configured yet");
-    res.type("text/plain").send(body);
+  // Two ways to provide the file, in order of precedence:
+  //   1. Drop the verification file Apple gives you at
+  //      `public/.well-known/apple-developer-domain-association.txt`
+  //      (committed alongside the app — survives redeploy, no env var
+  //      mgmt). The folder also gets statically mounted, but we serve
+  //      it explicitly here so the response has a deterministic
+  //      content-type even if static mounting changes.
+  //   2. Set the `APPLE_DOMAIN_ASSOCIATION` env var (handy when an
+  //      operator wants to rotate the file without a deploy).
+  // Served on BOTH hosts (admin.* and my.*) because Apple verifies
+  // every domain listed in the Services ID separately.
+  app.get("/.well-known/apple-developer-domain-association.txt", async (_req, res) => {
+    try {
+      const { promises: fs } = await import("fs");
+      const path = await import("path");
+      const filePath = path.resolve(process.cwd(), "public/.well-known/apple-developer-domain-association.txt");
+      const body = await fs.readFile(filePath, "utf8");
+      // A sentinel placeholder ships in the repo so the directory and
+      // route shape exist. Once the operator drops the real bytes from
+      // the Apple Developer portal in, the sentinel is gone and we
+      // serve the real file. Until then, fall through to the env-var
+      // fallback so any APPLE_DOMAIN_ASSOCIATION rotation still works.
+      if (body.includes("REPLACE_WITH_APPLE_DOMAIN_ASSOCIATION_FILE")) {
+        throw new Error("placeholder");
+      }
+      return res.type("text/plain").send(body);
+    } catch {
+      const body = process.env.APPLE_DOMAIN_ASSOCIATION;
+      if (!body) return res.status(404).type("text/plain").send("apple-developer-domain-association.txt is not configured yet");
+      return res.type("text/plain").send(body);
+    }
   });
 
   // ─── OAuth: Google + Apple ─────────────────────────────────────────
@@ -721,12 +748,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // "We found an account with this email — sign in with password
       // first, then link this provider from your profile." The login
       // page shows a friendly explanation; we redirect with ?prompt=link.
-      const existing = kind === "admin"
-        ? await storage.getUserByEmail(identity.email)
-        : await storage.getCustomerByEmail(identity.email);
-      if (existing) {
-        const params = new URLSearchParams({ prompt: "link", provider, email: identity.email });
-        return res.redirect(`/login?${params.toString()}`);
+      //
+      // Apple "Hide my email" returns an `@privaterelay.appleid.com`
+      // forwarder unique per (fan, app). Identity must key off Apple's
+      // stable `sub` (handled above) — never off the relay address.
+      // We skip the email-lookup branch entirely for relay emails so a
+      // stale relay row from a previous run can't accidentally collide
+      // a different fan into someone else's account. The same fan
+      // re-signing in is already covered by the `existingByIdentity`
+      // (sub) match above.
+      const isRelay = identity.email.endsWith("@privaterelay.appleid.com");
+      if (!isRelay) {
+        const existing = kind === "admin"
+          ? await storage.getUserByEmail(identity.email)
+          : await storage.getCustomerByEmail(identity.email);
+        if (existing) {
+          const params = new URLSearchParams({ prompt: "link", provider, email: identity.email });
+          return res.redirect(`/login?${params.toString()}`);
+        }
       }
     }
 

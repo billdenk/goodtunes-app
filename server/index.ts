@@ -171,6 +171,20 @@ httpServer.listen(
   await seedCatalog();
   await registerRoutes(httpServer, app);
 
+  // One-line OAuth provider status so operators can confirm at-a-glance
+  // that the Apple/Google sign-in buttons will actually work in this
+  // environment (env var present + key normalised). No secret values
+  // are printed — only the gate booleans + which Services ID is in use.
+  try {
+    const { APPLE_CONFIGURED, GOOGLE_CONFIGURED } = await import("./auth/oauth");
+    log(
+      `oauth: google=${GOOGLE_CONFIGURED ? "on" : "off"} apple=${APPLE_CONFIGURED ? `on (${process.env.APPLE_SERVICES_ID})` : "off"}`,
+      "auth",
+    );
+  } catch (e: any) {
+    log(`oauth status check failed: ${e?.message ?? e}`, "auth");
+  }
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
