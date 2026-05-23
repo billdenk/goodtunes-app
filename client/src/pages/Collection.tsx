@@ -41,6 +41,12 @@ export function Collection() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showSort, setShowSort] = useState(false);
   const [addToPlaylistSong, setAddToPlaylistSong] = useState<SongWithAlbum | null>(null);
+  // iOS Safari renderer-OOM mitigation: cap the rendered list so we never
+  // paint hundreds of song/album/artist rows at once (each pulls album
+  // artwork + animation state). User taps "Show more" to extend in 60-row
+  // chunks. Resets when the tab or search query changes.
+  const [visibleCount, setVisibleCount] = useState(60);
+  useEffect(() => { setVisibleCount(60); }, [tab, search]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -399,17 +405,30 @@ export function Collection() {
               {filteredAlbums.length === 0 ? (
                 <p className="text-white/35 text-sm text-center mt-8">No albums match "{search}"</p>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  {filteredAlbums.map((album) => (
-                    <AlbumCard
-                      key={album.id}
-                      album={album}
-                      isCurrentlyPlaying={currentSong?.albumId === album.id}
-                      onPress={() => navigate(`/album/${album.id}`)}
-                      onCertPress={() => setCertAlbum(album)}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    {filteredAlbums.slice(0, visibleCount).map((album) => (
+                      <AlbumCard
+                        key={album.id}
+                        album={album}
+                        isCurrentlyPlaying={currentSong?.albumId === album.id}
+                        onPress={() => navigate(`/album/${album.id}`)}
+                        onCertPress={() => setCertAlbum(album)}
+                      />
+                    ))}
+                  </div>
+                  {filteredAlbums.length > visibleCount && (
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount((n) => n + 60)}
+                      className="w-full mt-5 py-3 rounded-xl text-sm font-semibold text-[#319ED8] active:opacity-60 transition-opacity"
+                      style={{ background: "rgba(49,158,216,0.12)" }}
+                      data-testid="button-show-more-albums"
+                    >
+                      Show more ({filteredAlbums.length - visibleCount} left)
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -419,14 +438,14 @@ export function Collection() {
               {filteredSongs.length === 0 && (
                 <p className="text-white/35 text-sm text-center mt-8">No songs match "{search}"</p>
               )}
-              {filteredSongs.map((song, idx) => {
+              {filteredSongs.slice(0, visibleCount).map((song, idx, visibleSongs) => {
                 const isActive = currentSong?.id === song.id;
                 return (
                   <div
                     key={song.id}
                     className="flex items-center gap-3 py-2.5"
                     style={{
-                      borderBottom: idx < filteredSongs.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                      borderBottom: idx < visibleSongs.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                     }}
                     data-testid={`row-song-${song.id}`}
                   >
@@ -476,6 +495,17 @@ export function Collection() {
                   </div>
                 );
               })}
+              {filteredSongs.length > visibleCount && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((n) => n + 60)}
+                  className="w-full mt-5 py-3 rounded-xl text-sm font-semibold text-[#319ED8] active:opacity-60 transition-opacity"
+                  style={{ background: "rgba(49,158,216,0.12)" }}
+                  data-testid="button-show-more-songs"
+                >
+                  Show more ({filteredSongs.length - visibleCount} left)
+                </button>
+              )}
             </div>
           )}
 
@@ -486,7 +516,7 @@ export function Collection() {
               {filteredArtists.length === 0 && (
                 <p className="text-white/35 text-sm text-center mt-8">No artists match "{search}"</p>
               )}
-              {filteredArtists.map((artist, idx) => {
+              {filteredArtists.slice(0, visibleCount).map((artist, idx, visibleArtists) => {
                 const isFav = favArtists.has(artist.name);
                 return (
                   <button
@@ -498,7 +528,7 @@ export function Collection() {
                     }}
                     className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
                     style={{
-                      borderBottom: idx < filteredArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                      borderBottom: idx < visibleArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                     }}
                     data-testid={`row-artist-${artist.name}`}
                   >
@@ -539,6 +569,17 @@ export function Collection() {
                   </button>
                 );
               })}
+              {filteredArtists.length > visibleCount && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((n) => n + 60)}
+                  className="w-full mt-5 py-3 rounded-xl text-sm font-semibold text-[#319ED8] active:opacity-60 transition-opacity"
+                  style={{ background: "rgba(49,158,216,0.12)" }}
+                  data-testid="button-show-more-artists"
+                >
+                  Show more ({filteredArtists.length - visibleCount} left)
+                </button>
+              )}
             </div>
             );
           })()}
