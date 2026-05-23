@@ -1081,6 +1081,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ recoveryCodes: codes });
   });
 
+  // ─── Admin self-serve password change (Task #261) ─────────────────
+  // Both endpoints are bearer-gated (same CSRF reasoning as factor-
+  // preference above — sameSite:"none" session cookies would otherwise
+  // let a cross-site POST silently rotate an admin's password). The
+  // status probe lets /admin/security disable the card for admins who
+  // signed in via Google/Apple and only carry the `!oauth-only:` shaped
+  // placeholder password (see the customer→admin promotion path).
+  app.get("/api/auth/password/status", requireAdminBearer, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const hasPassword = !user.password.startsWith("!oauth-only:");
+    return res.json({ hasPassword });
+  });
+
+  app.post("/api/auth/password/change", requireAdminBearer, async (req, res) => {
+    const schema = z.object({
+      currentPassword: z.string().min(1, "Current password is required"),
+      newPassword: z.string().min(8, "New password must be at least 8 characters"),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    }
+    const { currentPassword, newPassword } = parsed.data;
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (user.password.startsWith("!oauth-only:")) {
+      return res.status(400).json({ message: "This account signs in via OAuth and has no password to change." });
+    }
+    if (!(await comparePasswords(currentPassword, user.password))) {
+      return res.status(401).json({ message: "Current password is incorrect" });
+    }
+    const hashed = await hashPassword(newPassword);
+    await db.execute(sql`UPDATE users SET password = ${hashed} WHERE id = ${user.id}`);
+    return res.status(204).end();
+  });
+
   // ─── Linked identities (profile) ──────────────────────────────────
   app.get("/api/auth/identities", requireAuth, async (req, res) => {
     const list = await storage.listIdentities(req.session.kind!, req.session.userId!);

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
+type PasswordStatus = { hasPassword: boolean };
+
 type FactorPref = {
   factorPref: "email" | "totp";
   email: string;
@@ -32,6 +34,53 @@ type EnrollData = { qr: string; secret: string; recoveryCodes: string[] };
 export default function AdminSecurity() {
   const { toast } = useToast();
   const { data, isLoading, isError, error } = useQuery<FactorPref>({ queryKey: ["/api/auth/factor-preference"] });
+  const { data: pwStatus } = useQuery<PasswordStatus>({ queryKey: ["/api/auth/password/status"] });
+
+  // ─── Change password (Task #261) ─────────────────────────────────
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [currentPwError, setCurrentPwError] = useState<string | null>(null);
+  const hasPassword = pwStatus?.hasPassword !== false;
+  const newPwTooShort = newPassword.length > 0 && newPassword.length < 8;
+  const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const canSubmitPassword =
+    hasPassword &&
+    currentPassword.length > 0 &&
+    newPassword.length >= 8 &&
+    confirmPassword.length > 0 &&
+    newPassword === confirmPassword;
+
+  const changePassword = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/password/change", {
+        currentPassword,
+        newPassword,
+      });
+      // 204 No Content — nothing to parse.
+      return res.status === 204 ? null : res.json().catch(() => null);
+    },
+    onSuccess: () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setCurrentPwError(null);
+      toast({ title: "Password updated" });
+    },
+    onError: (e: any) => {
+      const msg = e?.message ?? "Couldn't change password";
+      // apiRequest throws errors shaped like "401: { ...json... }" or
+      // "401: Current password is incorrect". Sniff the status prefix so
+      // a bad current password becomes an inline field error instead of
+      // a toast.
+      if (/^401[:\s]/.test(msg) || /current password is incorrect/i.test(msg)) {
+        setCurrentPwError("Current password is incorrect");
+      } else {
+        setCurrentPwError(null);
+        toast({ title: msg, variant: "destructive" });
+      }
+    },
+  });
 
   const [enrollData, setEnrollData] = useState<EnrollData | null>(null);
   const [enrollCode, setEnrollCode] = useState("");
@@ -258,6 +307,100 @@ export default function AdminSecurity() {
             )}
           </Card>
         )}
+
+        <Card className="p-5 space-y-4" data-testid="card-change-password">
+          <div>
+            <h2 className="text-[15px] font-semibold text-slate-900">Change password</h2>
+            <p className="text-[12.5px] text-slate-500 mt-1">
+              {hasPassword
+                ? "Use your current password to set a new one. Must be at least 8 characters."
+                : "You sign in via Google or Apple, so there's no password on this account to change."}
+            </p>
+          </div>
+
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!canSubmitPassword || changePassword.isPending) return;
+              changePassword.mutate();
+            }}
+          >
+            <div>
+              <label className="text-[12px] font-medium text-slate-700 block mb-1" htmlFor="current-password">
+                Current password
+              </label>
+              <input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  if (currentPwError) setCurrentPwError(null);
+                }}
+                disabled={!hasPassword || changePassword.isPending}
+                className="w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled:bg-slate-50 disabled:text-slate-400"
+                data-testid="input-current-password"
+              />
+              {currentPwError && (
+                <p className="text-[12px] text-rose-600 mt-1" data-testid="text-current-password-error">
+                  {currentPwError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[12px] font-medium text-slate-700 block mb-1" htmlFor="new-password">
+                New password
+              </label>
+              <input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                disabled={!hasPassword || changePassword.isPending}
+                className="w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled:bg-slate-50 disabled:text-slate-400"
+                data-testid="input-new-password"
+              />
+              {newPwTooShort && (
+                <p className="text-[12px] text-rose-600 mt-1" data-testid="text-new-password-error">
+                  Must be at least 8 characters.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[12px] font-medium text-slate-700 block mb-1" htmlFor="confirm-password">
+                Confirm new password
+              </label>
+              <input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={!hasPassword || changePassword.isPending}
+                className="w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled:bg-slate-50 disabled:text-slate-400"
+                data-testid="input-confirm-password"
+              />
+              {mismatch && (
+                <p className="text-[12px] text-rose-600 mt-1" data-testid="text-confirm-password-error">
+                  Passwords don't match.
+                </p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              disabled={!canSubmitPassword || changePassword.isPending}
+              data-testid="button-save-password"
+            >
+              {changePassword.isPending ? "Saving…" : "Save new password"}
+            </Button>
+          </form>
+        </Card>
       </div>
     </AdminFrame>
   );
