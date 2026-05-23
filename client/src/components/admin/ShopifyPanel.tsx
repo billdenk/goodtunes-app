@@ -5,11 +5,11 @@
 // "all variants"), and toggle whether the printed-signed-cert add-on
 // is bundled into the same Shopify order — at a price floor-checked
 // against the album's signed_cert min.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Link as LinkIcon, Trash2, ChevronDown } from "lucide-react";
+import { Link as LinkIcon, Trash2, ChevronDown, ExternalLink, Upload, AlertTriangle } from "lucide-react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 
 type Mapping = {
@@ -39,10 +39,44 @@ const parseDollars = (v: string): number | null => {
   return Math.round(n * 100);
 };
 
+type PushStatus = {
+  album: {
+    priceCents: number | null;
+    maxRedemptions: number | null;
+    signedCertRetailCents: number | null;
+  };
+  cert: {
+    plannedQuantity: number | null;
+    minPriceCents: number | null;
+  } | null;
+  earnings: {
+    plannedQuantity: number;
+    wholesaleCents: number;
+    retailCents: number;
+    perCertCents: number;
+    totalCents: number;
+    rungLabel: string;
+  } | null;
+  stores: { id: string; shopDomain: string; storeName: string | null }[];
+  push: {
+    storeId: string;
+    shopDomain: string | null;
+    storeName: string | null;
+    productId: string;
+    editionVariantId: string | null;
+    certVariantId: string | null;
+    pushedAt: string | null;
+    adminUrl: string | null;
+  } | null;
+};
+
 export function ShopifyPanel({ albumId }: { albumId: string }) {
   const { toast } = useToast();
   const { data: mappings, isLoading } = useQuery<Mapping[]>({
     queryKey: ["/api/admin/albums", albumId, "shopify-mappings"],
+  });
+  const { data: pushStatus } = useQuery<PushStatus>({
+    queryKey: ["/api/admin/albums", albumId, "shopify-push"],
   });
   // Exclusive-disclosure for the linked-mapping rows — at most one
   // expanded at a time. Collapsed shows just the product title; the
@@ -55,6 +89,76 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
   const [variantId, setVariantId] = useState<string | null>(null);
   const [offerCert, setOfferCert] = useState(false);
   const [certPrice, setCertPrice] = useState("9.99");
+
+  // Push-to-Shopify (Task #242) — locally-edited fields. Initialized
+  // from /shopify-push so the inputs reflect the persisted album row
+  // on first load, then drift independently as the operator edits.
+  const [maxRedemptions, setMaxRedemptions] = useState<string>("");
+  const [certRetail, setCertRetail] = useState<string>("");
+  const [pushStoreId, setPushStoreId] = useState<string>("");
+  const [pushConflicts, setPushConflicts] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!pushStatus) return;
+    setMaxRedemptions(pushStatus.album.maxRedemptions != null ? String(pushStatus.album.maxRedemptions) : "");
+    setCertRetail(
+      pushStatus.album.signedCertRetailCents != null
+        ? (pushStatus.album.signedCertRetailCents / 100).toFixed(2)
+        : "",
+    );
+    setPushStoreId(
+      pushStatus.push?.storeId ?? (pushStatus.stores.length === 1 ? pushStatus.stores[0].id : ""),
+    );
+  }, [pushStatus]);
+
+  const savePushFields = useMutation({
+    mutationFn: async () => {
+      const body: any = {};
+      body.maxRedemptions = maxRedemptions.trim() === "" ? null : Number(maxRedemptions);
+      if (pushStatus?.cert) {
+        const cents = parseDollars(certRetail);
+        body.signedCertRetailCents = cents;
+      }
+      const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, body);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "shopify-push"] });
+    },
+    onError: (e: any) => toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
+
+  const push = useMutation({
+    mutationFn: async (opts: { force?: boolean } = {}) => {
+      // Persist edits first so the push uses the latest values.
+      await savePushFields.mutateAsync();
+      const body: any = { force: !!opts.force };
+      if (pushStoreId) body.storeId = pushStoreId;
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/shopify-push`, body);
+      return r.json();
+    },
+    onSuccess: (r: any) => {
+      setPushConflicts(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "shopify-push"] });
+      toast({ title: r.action === "updated" ? "Updated draft on Shopify" : "Pushed draft to Shopify" });
+    },
+    onError: async (e: any) => {
+      // 409 conflict — surface the field list so the operator can
+      // confirm-overwrite. apiRequest throws on non-2xx with a string
+      // body that may include the JSON payload.
+      const msg = String(e?.message ?? "");
+      const m = msg.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          const j = JSON.parse(m[0]);
+          if (Array.isArray(j.conflicts) && j.conflicts.length > 0) {
+            setPushConflicts(j.conflicts);
+            return;
+          }
+        } catch {}
+      }
+      toast({ title: "Push failed", description: e?.message, variant: "destructive" });
+    },
+  });
 
   const resolve = useMutation({
     mutationFn: async () => {
@@ -103,9 +207,196 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "shopify-mappings"] }),
   });
 
+  const earnings = pushStatus?.earnings ?? null;
+  const liveCertCents = parseDollars(certRetail);
+  const liveEarnings = earnings && liveCertCents != null
+    ? {
+        perCertCents: liveCertCents - earnings.wholesaleCents,
+        totalCents: (liveCertCents - earnings.wholesaleCents) * earnings.plannedQuantity,
+      }
+    : null;
+
   return (
     <div className="py-6" data-testid="panel-shopify">
       <div className="max-w-3xl">
+        {/* Push to Shopify (Task #242) — creates a DRAFT product on the
+            label's connected store. Sits above the URL-pasting flow
+            because this is the path most labels will take by default. */}
+        <div className="rounded-lg border border-slate-200 bg-white p-4 mb-6" data-testid="section-shopify-push">
+          <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Push to Shopify as a draft</h2>
+          <p className="text-[13px] text-slate-500 mb-4 leading-snug">
+            One-click create the album as a draft Shopify product on a connected store, with a “GoodTunes Edition”
+            variant{pushStatus?.cert ? " plus an optional “+ Signed printed GoodDeed” variant" : ""}. We never publish
+            for you — the label flips it live in Shopify when they’re ready.
+          </p>
+
+          {pushStatus && pushStatus.stores.length === 0 && (
+            <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-[12.5px] text-slate-600">
+              No Shopify store connected. Install GoodTunes on a store at{" "}
+              <a className="text-[var(--brand-blue)] underline" href="/admin/shopify">/admin/shopify</a> first.
+            </div>
+          )}
+
+          {pushStatus && pushStatus.stores.length > 0 && (
+            <div className="space-y-3">
+              {pushStatus.stores.length > 1 && (
+                <div>
+                  <label className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Store</label>
+                  <select
+                    value={pushStoreId}
+                    onChange={(e) => setPushStoreId(e.target.value)}
+                    className="w-full h-8 border border-slate-300 rounded-md px-2 text-[13px] bg-white"
+                    data-testid="select-push-store"
+                  >
+                    <option value="">— Pick a store —</option>
+                    {pushStatus.stores.map((s) => (
+                      <option key={s.id} value={s.id}>{s.storeName ?? s.shopDomain}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
+                    Edition price
+                  </label>
+                  <div className="h-8 px-2 flex items-center text-[13px] text-slate-700 bg-slate-50 rounded-md border border-slate-200">
+                    {pushStatus.album.priceCents != null
+                      ? `$${(pushStatus.album.priceCents / 100).toFixed(2)}`
+                      : "— set bundle price on Sell tab"}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
+                    Edition inventory cap
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={maxRedemptions}
+                    onChange={(e) => setMaxRedemptions(e.target.value)}
+                    placeholder="Uncapped"
+                    className="w-full h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+                    data-testid="input-push-max-redemptions"
+                  />
+                </div>
+              </div>
+
+              {pushStatus.cert && (
+                <div className="rounded-md bg-emerald-50/40 border border-emerald-200 p-3 space-y-2">
+                  <div className="text-[12px] font-semibold text-slate-700">Signed-cert variant</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
+                        Retail (fan-facing)
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 text-[12px]">$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={certRetail}
+                          onChange={(e) => setCertRetail(e.target.value)}
+                          placeholder="0.00"
+                          className="flex-1 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+                          data-testid="input-push-cert-retail"
+                        />
+                      </div>
+                      {pushStatus.cert.minPriceCents != null && (
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          Min ${(pushStatus.cert.minPriceCents / 100).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
+                        Inventory cap (planned)
+                      </label>
+                      <div className="h-8 px-2 flex items-center text-[13px] text-slate-700 bg-white rounded-md border border-slate-200">
+                        {pushStatus.cert.plannedQuantity != null ? `${pushStatus.cert.plannedQuantity} units` : "—"}
+                      </div>
+                    </div>
+                  </div>
+                  {earnings && (
+                    <div className="text-[12px] text-slate-600 leading-snug pt-1" data-testid="text-push-earnings">
+                      <span className="font-semibold text-slate-800">Earnings preview</span> · GoodTunes bills{" "}
+                      <span className="font-semibold">${(earnings.wholesaleCents / 100).toFixed(2)}</span>/cert at the{" "}
+                      {earnings.rungLabel} rung. At {dollars(liveCertCents)} retail you keep{" "}
+                      <span className="font-semibold text-emerald-700">{dollars(liveEarnings?.perCertCents ?? null)}</span>{" "}
+                      per cert · <span className="font-semibold">{dollars(liveEarnings?.totalCents ?? null)}</span> total
+                      across {earnings.plannedQuantity} units.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {pushConflicts && pushConflicts.length > 0 && (
+                <div className="rounded-md bg-amber-50 border border-amber-200 p-3" data-testid="push-conflict-banner">
+                  <div className="flex items-start gap-2 text-[12.5px] text-amber-900">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <div>
+                      <div className="font-semibold">The label edited this product on Shopify.</div>
+                      <div className="mt-1">Re-pushing will overwrite: {pushConflicts.join(", ")}.</div>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => push.mutate({ force: true })}
+                          disabled={push.isPending}
+                          className="h-7 px-2.5 rounded-md bg-amber-700 text-white text-[12px] font-medium hover:bg-amber-800 disabled:opacity-50"
+                          data-testid="button-push-confirm-overwrite"
+                        >
+                          {push.isPending ? "Overwriting…" : "Overwrite anyway"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPushConflicts(null)}
+                          className="h-7 px-2.5 rounded-md bg-white border border-amber-300 text-amber-900 text-[12px] font-medium hover:bg-amber-50"
+                          data-testid="button-push-cancel-overwrite"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3 pt-1">
+                {pushStatus.push ? (
+                  <a
+                    href={pushStatus.push.adminUrl ?? "#"}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-[12px] text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1"
+                    data-testid="link-push-shopify-admin"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Draft on {pushStatus.push.storeName ?? pushStatus.push.shopDomain ?? "Shopify"}
+                    {pushStatus.push.pushedAt && (
+                      <span className="text-slate-400 ml-1">
+                        · pushed {new Date(pushStatus.push.pushedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </a>
+                ) : (
+                  <div className="text-[12px] text-slate-400">Not pushed yet.</div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => push.mutate({})}
+                  disabled={push.isPending || pushStatus.album.priceCents == null || (pushStatus.stores.length > 1 && !pushStoreId)}
+                  className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 inline-flex items-center gap-1.5"
+                  data-testid="button-push-to-shopify"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {push.isPending ? "Pushing…" : pushStatus.push ? "Re-push as draft" : "Push as draft"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Sell this album on Shopify</h2>
         <p className="text-[13px] text-slate-500 mb-4 leading-snug">
           Paste a Shopify product URL from a connected store and we'll bundle GoodTunes digital access into every paid

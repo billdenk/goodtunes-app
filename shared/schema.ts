@@ -156,7 +156,48 @@ export const albums = pgTable("albums", {
   // pending_changes queue. Super-admin is never blocked. Idempotent —
   // only written when currently null, never reset on refund.
   firstSoldAt: timestamp("first_sold_at"),
+  // Task #242 — One-click Push to Shopify (draft product).
+  // `maxRedemptions` is the inventory cap for the digital-edition
+  // variant on Shopify (label can leave NULL to leave inventory
+  // untracked / uncapped). `signedCertRetailCents` is the fan-facing
+  // retail of the optional signed-cert variant when the album has the
+  // signed_cert addon enabled — must clear the wholesale rung GoodTunes
+  // will bill at window close (the earnings preview surfaces this).
+  // The `shopifyPush*` fields persist the draft product's Shopify ids
+  // after a successful push so re-clicking Push updates the same draft
+  // (idempotent) instead of creating duplicates. `shopifyPushSnapshot`
+  // captures a fingerprint of what we last sent so we can detect
+  // post-push edits the label made on the Shopify side and warn before
+  // overwriting them.
+  maxRedemptions: integer("max_redemptions"),
+  signedCertRetailCents: integer("signed_cert_retail_cents"),
+  shopifyPushStoreId: varchar("shopify_push_store_id"),
+  shopifyPushProductId: text("shopify_push_product_id"),
+  shopifyPushEditionVariantId: text("shopify_push_edition_variant_id"),
+  shopifyPushCertVariantId: text("shopify_push_cert_variant_id"),
+  shopifyPushedAt: timestamp("shopify_pushed_at"),
+  shopifyPushSnapshot: jsonb("shopify_push_snapshot").$type<ShopifyPushSnapshot>(),
 });
+
+// Fingerprint of what was last sent to Shopify on a Push. Re-push
+// fetches the live product and diffs the same shape against this row
+// — any field whose Shopify value diverges from the snapshot means the
+// label edited it after our push, and we surface a confirm-overwrite
+// in the UI before clobbering.
+export type ShopifyPushSnapshot = {
+  title: string;
+  bodyHtml: string;
+  vendor: string;
+  tags: string;
+  edition: {
+    priceCents: number;
+    inventory: number | null;
+  };
+  cert: {
+    priceCents: number;
+    inventory: number | null;
+  } | null;
+};
 
 // Bonus content attached to an album. Both tables are intentionally
 // tiny — admin uploads a file via /api/admin/upload (Object Storage),
@@ -1095,6 +1136,25 @@ export const vendorGoodDeedServices = pgTable(
 
 export type VendorGoodDeedServiceRow = typeof vendorGoodDeedServices.$inferSelect;
 export type InsertVendorGoodDeedService = typeof vendorGoodDeedServices.$inferInsert;
+
+// Task #242 — Push-to-Shopify audit trail. One row per push attempt
+// (create or update), persisted after the Shopify API call succeeds.
+// Operators can scan this from the album editor to see who pushed,
+// when, with what action, and whether they had to force-overwrite a
+// label-side edit. Kept narrow on purpose — the canonical
+// product/variant ids live on the album row; this is the *history*.
+export const shopifyPushLog = pgTable("shopify_push_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  storeId: varchar("store_id").notNull(),
+  productId: varchar("product_id").notNull(),
+  action: text("action").notNull(),
+  forced: boolean("forced").notNull().default(false),
+  conflicts: text("conflicts").array(),
+  actorUserId: varchar("actor_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type ShopifyPushLogEntry = typeof shopifyPushLog.$inferSelect;
 
 // Task #122 — Pending signed-certificate reservations. Created the
 // moment we mint a Stripe Checkout Session that includes the

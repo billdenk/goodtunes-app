@@ -3350,6 +3350,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         updates.priceCents = n;
       }
     }
+    // Task #242 — Push-to-Shopify configuration. Both nullable ints.
+    for (const field of ["maxRedemptions", "signedCertRetailCents"] as const) {
+      if (req.body?.[field] !== undefined) {
+        const raw = req.body[field];
+        if (raw === null || raw === "") {
+          updates[field] = null;
+        } else {
+          const n = Number(raw);
+          if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+            return res.status(400).json({ message: `${field} must be a non-negative integer or null.` });
+          }
+          updates[field] = n;
+        }
+      }
+    }
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
     return res.json(updated);

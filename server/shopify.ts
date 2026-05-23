@@ -15,7 +15,7 @@
 import type { Express, Request, Response } from "express";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   albums,
@@ -27,10 +27,13 @@ import {
   shopifyStores,
   shopifyProductMappings,
   shopifyRedemptionCodes,
+  shopifyPushLog,
   insertShopifyProductMappingSchema,
   type ShopifyStore,
   type ShopifyProductMapping,
+  type ShopifyPushSnapshot,
 } from "@shared/schema";
+import { lookupSignedCertRung } from "@shared/signedCertLadder";
 import { z } from "zod";
 import { storage } from "./storage";
 
@@ -655,6 +658,46 @@ async function handleShopifyRefund(payload: { order_id?: number; id?: number }):
   }
 }
 
+// ─── Push-snapshot diff (Task #242) ───────────────────────────────────
+// Compare the fingerprint we last sent to Shopify against the live
+// product. Returns a list of human-readable field names that drifted —
+// each one is something the label edited on Shopify after our last
+// push and that re-pushing would silently clobber unless they confirm.
+function diffPushSnapshot(
+  snap: ShopifyPushSnapshot,
+  live: any,
+  variantIds: { editionVariantId: string | null; certVariantId: string | null },
+): string[] {
+  const out: string[] = [];
+  if (String(live?.title ?? "") !== snap.title) out.push("Title");
+  if (String(live?.body_html ?? "") !== snap.bodyHtml) out.push("Description");
+  if (String(live?.vendor ?? "") !== snap.vendor) out.push("Vendor");
+  if (String(live?.tags ?? "") !== snap.tags) out.push("Tags");
+  const variants: any[] = Array.isArray(live?.variants) ? live.variants : [];
+  const edition = variants.find((v) => String(v?.id) === variantIds.editionVariantId) ?? variants[0];
+  if (edition) {
+    const livePriceCents = Math.round(Number.parseFloat(String(edition.price ?? "0")) * 100);
+    if (livePriceCents !== snap.edition.priceCents) out.push("Edition price");
+    if (snap.edition.inventory != null && Number(edition.inventory_quantity ?? 0) !== snap.edition.inventory) {
+      out.push("Edition inventory");
+    }
+  }
+  if (snap.cert) {
+    const cert = variants.find((v) => String(v?.id) === variantIds.certVariantId)
+      ?? variants.find((v) => String(v?.option1 ?? "").includes("Signed"));
+    if (cert) {
+      const livePriceCents = Math.round(Number.parseFloat(String(cert.price ?? "0")) * 100);
+      if (livePriceCents !== snap.cert.priceCents) out.push("Signed-cert price");
+      if (snap.cert.inventory != null && Number(cert.inventory_quantity ?? 0) !== snap.cert.inventory) {
+        out.push("Signed-cert inventory");
+      }
+    } else {
+      out.push("Signed-cert variant (removed on Shopify)");
+    }
+  }
+  return out;
+}
+
 // ─── requireAdmin (duplicated from commerce.ts pattern) ───────────────
 // Shopify install/admin endpoints need the same gate Task #44 uses for
 // its admin-side mutations. We can't import from server/routes.ts (it
@@ -1238,6 +1281,377 @@ export function registerShopifyRoutes(app: Express) {
         ),
       );
     res.json({ ok: true });
+  });
+
+  // ─── Push album → draft Shopify product (Task #242) ───────────────
+  // One-click "Push to Shopify" from the album editor. Creates (or, on
+  // re-push, idempotently updates) a DRAFT product with two variants:
+  //
+  //   1. "GoodTunes Edition"          — priced at album.priceCents,
+  //                                      inventory cap = album.maxRedemptions.
+  //   2. "+ Signed printed GoodDeed"  — only when the album has a
+  //                                      signed_cert addon enabled. Priced
+  //                                      at album.signedCertRetailCents
+  //                                      (>= wholesale rung; UI shows the
+  //                                      earnings preview). Inventory cap =
+  //                                      cert.plannedQuantity.
+  //
+  // Never publishes (status:'draft' is non-negotiable — the label is the
+  // sole decision-maker on going live). Persists ids + a fingerprint
+  // snapshot on the album row so re-push targets the same product and we
+  // can detect post-push edits the label made on the Shopify side and
+  // prompt before overwriting them.
+  app.post("/api/admin/albums/:id/shopify-push", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      if (await gateAlbumRoute(req, res, "map_shopify", albumId)) return;
+    }
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    if (album.priceCents == null) {
+      return res.status(400).json({ message: "Set a bundle price on the album before pushing to Shopify." });
+    }
+
+    // Resolve target store: prefer the store this album was last pushed
+    // to (re-push hits the same draft), else the explicit body.storeId,
+    // else the single installed store if exactly one is connected.
+    let storeId: string | null = album.shopifyPushStoreId ?? null;
+    if (!storeId && req.body?.storeId) storeId = String(req.body.storeId);
+    if (!storeId) {
+      const installed = await db.select().from(shopifyStores).where(isNull(shopifyStores.uninstalledAt));
+      if (installed.length === 1) storeId = installed[0].id;
+      else if (installed.length === 0) return res.status(400).json({ message: "Connect a Shopify store first at /admin/shopify." });
+      else return res.status(400).json({ message: "Pick which Shopify store to push to (multiple stores connected)." });
+    }
+    const store = await getStoreById(storeId);
+    if (!store || store.uninstalledAt) return res.status(404).json({ message: "Shopify store not connected." });
+
+    // Signed-cert configuration. If the addon is configured, the label
+    // must have set signedCertRetailCents and it must clear the addon's
+    // min-floor. (Wholesale-tier check is informational in the UI; we
+    // don't block here on it — the label is free to absorb margin.)
+    const [certAddon] = await db
+      .select()
+      .from(albumAddons)
+      .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert"), eq(albumAddons.active, true)));
+    if (certAddon && album.signedCertRetailCents == null) {
+      return res.status(400).json({ message: "Set the signed-cert retail price before pushing." });
+    }
+    if (certAddon && certAddon.minPriceCents != null && (album.signedCertRetailCents ?? 0) < certAddon.minPriceCents) {
+      return res.status(400).json({
+        message: `Signed-cert retail must be at least $${(certAddon.minPriceCents / 100).toFixed(2)}.`,
+      });
+    }
+
+    const editionInventory = album.maxRedemptions ?? null;
+    const certInventory = certAddon?.plannedQuantity ?? null;
+    const editionPriceDollars = (album.priceCents / 100).toFixed(2);
+    const certPriceDollars = certAddon ? ((album.signedCertRetailCents ?? 0) / 100).toFixed(2) : null;
+    const title = album.title;
+    const bodyHtml = album.description
+      ? `<p>${String(album.description).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!))}</p>`
+      : "";
+    const vendor = album.label?.name ?? album.artist;
+    const tags = "goodtunes";
+
+    const snapshot: ShopifyPushSnapshot = {
+      title,
+      bodyHtml,
+      vendor,
+      tags,
+      edition: { priceCents: album.priceCents, inventory: editionInventory },
+      cert: certAddon
+        ? { priceCents: album.signedCertRetailCents ?? 0, inventory: certInventory }
+        : null,
+    };
+
+    // Variants payload, in canonical order (edition first, cert second).
+    // `inventory_management:"shopify"` tells Shopify to track the count
+    // — without it Shopify ignores `available` and treats stock as
+    // unlimited. `inventory_policy:"deny"` blocks oversell once the cap
+    // is hit (which is exactly what maxRedemptions/plannedQuantity mean).
+    const buildVariant = (label: string, price: string, sku: string, inventory: number | null, requiresShipping: boolean) => ({
+      option1: label,
+      price,
+      sku,
+      requires_shipping: requiresShipping,
+      taxable: true,
+      ...(inventory != null
+        ? { inventory_management: "shopify" as const, inventory_policy: "deny" as const }
+        : {}),
+    });
+    const editionVariant = buildVariant(
+      "GoodTunes Edition",
+      editionPriceDollars,
+      `gt-${albumId.slice(0, 8)}-edition`,
+      editionInventory,
+      false,
+    );
+    const certVariant = certAddon
+      ? buildVariant(
+          "+ Signed printed GoodDeed",
+          certPriceDollars!,
+          `gt-${albumId.slice(0, 8)}-cert`,
+          certInventory,
+          true,
+        )
+      : null;
+
+    const existingProductId = album.shopifyPushStoreId === store.id ? album.shopifyPushProductId : null;
+    const force = req.body?.force === true || req.body?.force === "true";
+
+    // Conflict check on re-push: diff the live product against the
+    // snapshot of what we last sent. Anything that drifted is a
+    // label-side edit we'd clobber. We return 409 with the field list
+    // so the UI can show a "Overwrite label edits?" confirm and retry
+    // with {force:true}. If the product was deleted on Shopify, fall
+    // through and create a new draft.
+    if (existingProductId && !force) {
+      const r = await shopifyFetch(store, `products/${existingProductId}.json`);
+      if (r.ok) {
+        const j: any = await r.json();
+        const live = j?.product;
+        if (live && album.shopifyPushSnapshot) {
+          const conflicts = diffPushSnapshot(album.shopifyPushSnapshot, live, {
+            editionVariantId: album.shopifyPushEditionVariantId,
+            certVariantId: album.shopifyPushCertVariantId,
+          });
+          if (conflicts.length > 0) {
+            return res.status(409).json({
+              message: "This product was edited on Shopify after the last push.",
+              conflicts,
+              productId: existingProductId,
+            });
+          }
+        }
+      }
+    }
+
+    let productId = existingProductId;
+    let editionVariantId: string | null = null;
+    let certVariantId: string | null = null;
+
+    if (productId) {
+      const productPayload: any = {
+        product: {
+          id: Number(productId),
+          title,
+          body_html: bodyHtml,
+          vendor,
+          tags,
+          options: [{ name: "Edition" }],
+          variants: [
+            album.shopifyPushEditionVariantId
+              ? { ...editionVariant, id: Number(album.shopifyPushEditionVariantId) }
+              : editionVariant,
+            ...(certVariant
+              ? [album.shopifyPushCertVariantId
+                  ? { ...certVariant, id: Number(album.shopifyPushCertVariantId) }
+                  : certVariant]
+              : []),
+          ],
+          status: "draft" as const,
+        },
+      };
+      if (album.artwork) productPayload.product.images = [{ src: album.artwork }];
+      const r = await shopifyFetch(store, `products/${productId}.json`, {
+        method: "PUT",
+        body: JSON.stringify(productPayload),
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        console.error(`[shopify-push] update failed album=${albumId} status=${r.status} ${t.slice(0, 200)}`);
+        return res.status(502).json({ message: `Shopify update failed (${r.status})`, detail: t.slice(0, 400) });
+      }
+      const j: any = await r.json();
+      const p = j?.product;
+      editionVariantId = p?.variants?.[0]?.id ? String(p.variants[0].id) : null;
+      certVariantId = certAddon && p?.variants?.[1]?.id ? String(p.variants[1].id) : null;
+    } else {
+      const productPayload: any = {
+        product: {
+          title,
+          body_html: bodyHtml,
+          vendor,
+          tags,
+          options: [{ name: "Edition" }],
+          variants: certVariant ? [editionVariant, certVariant] : [editionVariant],
+          status: "draft" as const,
+        },
+      };
+      if (album.artwork) productPayload.product.images = [{ src: album.artwork }];
+      const r = await shopifyFetch(store, `products.json`, {
+        method: "POST",
+        body: JSON.stringify(productPayload),
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        console.error(`[shopify-push] create failed album=${albumId} status=${r.status} ${t.slice(0, 200)}`);
+        return res.status(502).json({ message: `Shopify create failed (${r.status})`, detail: t.slice(0, 400) });
+      }
+      const j: any = await r.json();
+      const p = j?.product;
+      productId = p?.id ? String(p.id) : null;
+      editionVariantId = p?.variants?.[0]?.id ? String(p.variants[0].id) : null;
+      certVariantId = certAddon && p?.variants?.[1]?.id ? String(p.variants[1].id) : null;
+    }
+
+    // Apply inventory levels for tracked variants. Shopify's
+    // products.json create/update sets `inventory_management` but not
+    // the actual `available` count — that's a separate endpoint keyed
+    // on (inventory_item_id, location_id). Best-effort: log and
+    // continue on failure so the label still has a usable draft.
+    if ((editionInventory != null || certInventory != null) && productId) {
+      try {
+        const locRes = await shopifyFetch(store, "locations.json");
+        const pRes = await shopifyFetch(store, `products/${productId}.json`);
+        if (locRes.ok && pRes.ok) {
+          const locJson: any = await locRes.json();
+          const locId = locJson?.locations?.[0]?.id;
+          const pJson: any = await pRes.json();
+          const vs: any[] = pJson?.product?.variants ?? [];
+          if (locId && editionInventory != null && vs[0]?.inventory_item_id) {
+            await shopifyFetch(store, "inventory_levels/set.json", {
+              method: "POST",
+              body: JSON.stringify({ location_id: locId, inventory_item_id: vs[0].inventory_item_id, available: editionInventory }),
+            });
+          }
+          if (locId && certInventory != null && vs[1]?.inventory_item_id) {
+            await shopifyFetch(store, "inventory_levels/set.json", {
+              method: "POST",
+              body: JSON.stringify({ location_id: locId, inventory_item_id: vs[1].inventory_item_id, available: certInventory }),
+            });
+          }
+        }
+      } catch (e: any) {
+        console.error(`[shopify-push] inventory set failed album=${albumId}`, e?.message);
+      }
+    }
+
+    if (!productId) return res.status(502).json({ message: "Shopify returned no product id" });
+
+    await db
+      .update(albums)
+      .set({
+        shopifyPushStoreId: store.id,
+        shopifyPushProductId: productId,
+        shopifyPushEditionVariantId: editionVariantId,
+        shopifyPushCertVariantId: certVariantId,
+        shopifyPushedAt: new Date(),
+        shopifyPushSnapshot: snapshot,
+      })
+      .where(eq(albums.id, albumId));
+
+    const action = existingProductId ? "updated" : "created";
+    const actorUserId = (req as any).adminUser?.id ?? null;
+    // Persist an audit row per push (Task #242 step 3). Best-effort —
+    // never block the success response on log-table failure.
+    try {
+      await db.insert(shopifyPushLog).values({
+        albumId,
+        storeId: store.id,
+        productId: productId!,
+        action,
+        forced: !!force,
+        conflicts: null,
+        actorUserId,
+      });
+    } catch (e: any) {
+      console.error(`[shopify-push] audit insert failed album=${albumId}`, e?.message);
+    }
+    console.log(
+      `[shopify-push] album=${albumId} ${action} store=${store.shopDomain} product=${productId} ` +
+        `edition=${editionVariantId ?? "-"} cert=${certVariantId ?? "-"}${force ? " (force)" : ""}`,
+    );
+
+    res.json({
+      productId,
+      editionVariantId,
+      certVariantId,
+      storeId: store.id,
+      shopDomain: store.shopDomain,
+      adminUrl: `https://${store.shopDomain}/admin/products/${productId}`,
+      pushedAt: new Date().toISOString(),
+      action,
+    });
+  });
+
+  // GET — read-only view for the UI. Returns push status + connected
+  // stores + cert earnings preview (computed from the wholesale ladder
+  // using the addon's plannedQuantity). The album record itself carries
+  // the persistent ids; this endpoint just shapes them for the panel
+  // and saves the panel a second round-trip for the store list.
+  app.get("/api/admin/albums/:id/shopify-push", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const stores = await db.select().from(shopifyStores).where(isNull(shopifyStores.uninstalledAt));
+    const [certAddon] = await db
+      .select()
+      .from(albumAddons)
+      .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert"), eq(albumAddons.active, true)));
+    const rung = certAddon ? lookupSignedCertRung(certAddon.plannedQuantity) : null;
+    const earnings = rung && album.signedCertRetailCents != null
+      ? {
+          plannedQuantity: certAddon!.plannedQuantity,
+          wholesaleCents: rung.wholesaleCents,
+          retailCents: album.signedCertRetailCents,
+          perCertCents: album.signedCertRetailCents - rung.wholesaleCents,
+          totalCents: (album.signedCertRetailCents - rung.wholesaleCents) * (certAddon!.plannedQuantity ?? 0),
+          rungLabel: rung.label,
+        }
+      : null;
+    const pushedStore = album.shopifyPushStoreId
+      ? stores.find((s) => s.id === album.shopifyPushStoreId) ?? null
+      : null;
+    // Recent push audit trail (Task #242 step 3). Newest first, capped
+    // at 20 so the panel can show a "history" disclosure without
+    // dragging a huge payload on every album-edit open.
+    const recentPushes = await db
+      .select()
+      .from(shopifyPushLog)
+      .where(eq(shopifyPushLog.albumId, albumId))
+      .orderBy(desc(shopifyPushLog.createdAt))
+      .limit(20);
+    res.json({
+      recentPushes: recentPushes.map((r) => ({
+        id: r.id,
+        storeId: r.storeId,
+        productId: r.productId,
+        action: r.action,
+        forced: r.forced,
+        actorUserId: r.actorUserId,
+        createdAt: r.createdAt,
+      })),
+      album: {
+        priceCents: album.priceCents,
+        maxRedemptions: album.maxRedemptions,
+        signedCertRetailCents: album.signedCertRetailCents,
+      },
+      cert: certAddon
+        ? {
+            plannedQuantity: certAddon.plannedQuantity,
+            minPriceCents: certAddon.minPriceCents,
+          }
+        : null,
+      earnings,
+      stores: stores.map((s) => ({ id: s.id, shopDomain: s.shopDomain, storeName: s.storeName })),
+      push: album.shopifyPushProductId
+        ? {
+            storeId: album.shopifyPushStoreId,
+            shopDomain: pushedStore?.shopDomain ?? null,
+            storeName: pushedStore?.storeName ?? null,
+            productId: album.shopifyPushProductId,
+            editionVariantId: album.shopifyPushEditionVariantId,
+            certVariantId: album.shopifyPushCertVariantId,
+            pushedAt: album.shopifyPushedAt,
+            adminUrl: pushedStore
+              ? `https://${pushedStore.shopDomain}/admin/products/${album.shopifyPushProductId}`
+              : null,
+          }
+        : null,
+    });
   });
 
   // ─── Per-release engagement (Step 8) ──────────────────────────────

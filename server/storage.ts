@@ -657,7 +657,22 @@ export type InsertUploadValidationRow = Omit<UploadValidationRow, "id" | "create
 // defaults fill in the rest.
 type SeedAlbum = Omit<
   Album,
-  "isExplicit" | "linerNotes" | "payoutFeePctOverride" | "payoutCertCentsOverride" | "payoutOwnerKind" | "payoutOwnerId"
+  | "isExplicit"
+  | "linerNotes"
+  | "payoutFeePctOverride"
+  | "payoutCertCentsOverride"
+  | "payoutOwnerKind"
+  | "payoutOwnerId"
+  | "priceCents"
+  | "firstSoldAt"
+  | "maxRedemptions"
+  | "signedCertRetailCents"
+  | "shopifyPushStoreId"
+  | "shopifyPushProductId"
+  | "shopifyPushEditionVariantId"
+  | "shopifyPushCertVariantId"
+  | "shopifyPushedAt"
+  | "shopifyPushSnapshot"
 >;
 const SEED_ALBUMS: SeedAlbum[] = [
   { id: "album-1", title: "When the World Stops", artist: "Tim Snider & Wolfgang Timber", artwork: "/figmaAssets/artworks-000451097049-kerecr-t500x500.png", year: 2024, type: "LP", description: "A sweeping collection of songs about stillness, change, and the moments between.", labelId: null, isHidden: false, isGoodTunesRelease: true, appleMusicUrl: null, spotifyUrl: null, goodTunesReleaseDate: null, streamingReleaseDate: null, primaryArtistId: null, genre: null },
