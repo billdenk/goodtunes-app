@@ -395,6 +395,46 @@ export const people = pgTable("people", {
   referredByPersonId: varchar("referred_by_person_id"),
   referredByOrgId: varchar("referred_by_org_id"),
   referrerPerUnitCents: integer("referrer_per_unit_cents").notNull().default(100),
+  // Task #190 — bands & members. When `isGroup` is true this Person row
+  // represents a band/duo/orchestra/etc. rather than a single human; the
+  // join rows in `bandMembers` enumerate who plays in it. `groupKind` is
+  // a free-form label ("Band", "Duo", "Orchestra", "Quartet", "Trio",
+  // "Choir", "Ensemble") shown on the fan-side group page under the
+  // name. Solo artists keep `isGroup=false` and never appear in either
+  // join table.
+  isGroup: boolean("is_group").notNull().default(false),
+  groupKind: text("group_kind"),
+});
+
+// Task #190 — Band ↔ member roster. One row per (band, member) pair;
+// `bandId` and `memberId` are both Person rows (the band itself is the
+// `isGroup=true` Person). `joinedYear` / `leftYear` are nullable so the
+// admin can record "founding member" or "still in the band" without
+// being forced to invent dates; `leftYear == null` means current member.
+// `roles[]` captures the per-band role(s) ("Bass, Vocals") so a single
+// human in two bands can carry different responsibilities. `displayOrder`
+// drives the band's roster order on the fan page (lead → rhythm → etc.).
+export const bandMembers = pgTable("band_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bandId: varchar("band_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+  roles: text("roles").array(),
+  joinedYear: integer("joined_year"),
+  leftYear: integer("left_year"),
+  displayOrder: integer("display_order").notNull().default(0),
+});
+
+// Task #190 — Per-album lineup snapshot. When an album's primary artist
+// is a band, the admin can optionally pin which members played on this
+// specific record (e.g. Pink Floyd's lineup on The Wall vs The Division
+// Bell). When no rows exist for an album, the fan page falls back to
+// the band's *current* roster (members with `leftYear == null`).
+export const albumLineup = pgTable("album_lineup", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+  roles: text("roles").array(),
+  displayOrder: integer("display_order").notNull().default(0),
 });
 
 // Alias rows for a Person — extra names + extra source IDs that all point
@@ -1298,6 +1338,27 @@ export type Person = typeof people.$inferSelect;
 export const insertPersonDiscographySchema = createInsertSchema(personDiscography).omit({ id: true });
 export type InsertPersonDiscography = z.infer<typeof insertPersonDiscographySchema>;
 export type PersonDiscography = typeof personDiscography.$inferSelect;
+
+export const insertBandMemberSchema = createInsertSchema(bandMembers).omit({ id: true });
+export type InsertBandMember = z.infer<typeof insertBandMemberSchema>;
+export type BandMember = typeof bandMembers.$inferSelect;
+
+export const insertAlbumLineupSchema = createInsertSchema(albumLineup).omit({ id: true });
+export type InsertAlbumLineup = z.infer<typeof insertAlbumLineupSchema>;
+export type AlbumLineup = typeof albumLineup.$inferSelect;
+
+// Enriched read shapes for band-member & album-lineup endpoints — the
+// joined Person fields (name/photoUrl/isGroup) are baked in so fan UIs
+// can render member rows without N+1 person fetches.
+export type BandMemberWithPerson = BandMember & {
+  memberName: string;
+  memberPhotoUrl: string | null;
+  memberIsGroup: boolean;
+};
+export type AlbumLineupWithPerson = AlbumLineup & {
+  memberName: string;
+  memberPhotoUrl: string | null;
+};
 
 export const insertInstrumentSchema = createInsertSchema(instruments).omit({ id: true });
 export type InsertInstrument = z.infer<typeof insertInstrumentSchema>;

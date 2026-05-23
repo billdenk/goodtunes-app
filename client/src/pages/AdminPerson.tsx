@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -80,6 +80,10 @@ interface PersonFull {
   blueskyUrl: string | null;
   facebookUrl: string | null;
   websiteUrl: string | null;
+  // Task #190 — bands & members. When true this Person row is a group;
+  // the Members tab + per-album lineup snapshots only show then.
+  isGroup: boolean;
+  groupKind: string | null;
 }
 
 interface LabelLite {
@@ -96,8 +100,8 @@ interface LabelLite {
 // even though the discography endpoints under the hood still say
 // "discography" — the rename is UI-only on purpose so the iTunes pull
 // machinery doesn't ripple.
-type Tab = "overview" | "cover" | "releases" | "streaming" | "gear" | "payouts" | "permissions";
-const TABS: { key: Tab; label: string }[] = [
+type Tab = "overview" | "cover" | "members" | "releases" | "streaming" | "gear" | "payouts" | "permissions";
+const BASE_TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
   { key: "releases", label: "GoodTunes\u00AE Releases" },
@@ -106,6 +110,17 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "payouts", label: "Payouts" },
   { key: "permissions", label: "Permissions" },
 ];
+// Task #190 — Members tab is only relevant when this Person represents
+// a band/duo/orchestra (is_group=true). Splice it in next to Overview so
+// the band-curation surfaces sit together.
+function tabsForPerson(person: PersonFull): { key: Tab; label: string }[] {
+  if (!person.isGroup) return BASE_TABS;
+  const out = [...BASE_TABS];
+  const after = out.findIndex((t) => t.key === "cover");
+  const insertAt = after === -1 ? 1 : after + 1;
+  out.splice(insertAt, 0, { key: "members", label: "Members" });
+  return out;
+}
 
 // Track row shape from `/api/people/:id/profile` — used to derive the
 // dedup'd instrument list for the Gear tab.
@@ -338,7 +353,7 @@ export function AdminPerson() {
           data-testid="tabs-admin-person"
         >
           <div className="flex items-center gap-5 overflow-x-auto">
-            {TABS.map((t) => (
+            {tabsForPerson(person).map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -377,6 +392,7 @@ export function AdminPerson() {
           <OverviewPanel person={person} labels={labels} />
         )}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
+        {tab === "members" && person.isGroup && <MembersPanel person={person} />}
         {tab === "releases" && (
           <ReleasesPanel person={person} allAlbums={allAlbums} />
         )}
@@ -504,6 +520,17 @@ function OverviewPanel({
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((l) => ({ value: l.id, label: l.name })),
   ];
+  // Task #190 — group kind options. Free-form on the wire, picker in the UI.
+  const groupKindOptions = [
+    { value: "", label: "Solo artist" },
+    { value: "Band", label: "Band" },
+    { value: "Duo", label: "Duo" },
+    { value: "Trio", label: "Trio" },
+    { value: "Quartet", label: "Quartet" },
+    { value: "Orchestra", label: "Orchestra" },
+    { value: "Choir", label: "Choir" },
+    { value: "Ensemble", label: "Ensemble" },
+  ];
   return (
     <div className="space-y-5">
       <ReferralSummaryPanel kind="artist" id={person.id} />
@@ -515,6 +542,10 @@ function OverviewPanel({
           name: person.name,
           bio: person.bio,
           labelId: person.labelId ?? "",
+          // Task #190 — group kind. Empty = solo artist; non-empty value
+          // flips `isGroup` true server-side and unlocks the Members tab
+          // + the per-album Lineup panel.
+          groupKind: person.groupKind ?? "",
         }}
         invalidate={invalidate}
         fields={[
@@ -524,6 +555,12 @@ function OverviewPanel({
             label: "Label",
             type: "select",
             options: labelOptions,
+          },
+          {
+            key: "groupKind",
+            label: "Type",
+            type: "select",
+            options: groupKindOptions,
           },
           {
             key: "bio",
@@ -1652,3 +1689,322 @@ function ReferralSummaryPanel({ kind, id }: { kind: "artist" | "non_profit"; id:
 // Exported so AdminNonProfit can reuse the same panel without
 // re-implementing the layout.
 export { ReferralSummaryPanel };
+
+// ─── Task #190 — MembersPanel ────────────────────────────────────────
+// Admin surface for curating a band/duo/orchestra's roster. Only
+// rendered when the Person is_group=true (see tabsForPerson above).
+//
+// Each row is one (band ↔ member Person) relationship with optional
+// roles, joined/left years, and a manual display order. Members are
+// other Person rows — typing the name in the picker either selects an
+// existing row or no-ops; creating a brand-new Person should still
+// happen via the People admin (we don't fork a creation flow here to
+// keep the data model honest).
+type MembersPanelMemberRow = {
+  id: string;
+  bandId: string;
+  memberId: string;
+  roles: string[] | null;
+  joinedYear: number | null;
+  leftYear: number | null;
+  displayOrder: number;
+  person: {
+    id: string;
+    name: string;
+    photoUrl: string | null;
+    isGroup?: boolean;
+  } | null;
+};
+
+function MembersPanel({ person }: { person: PersonFull }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const membersKey = ["/api/admin/people", person.id, "members"] as const;
+  const { data: members = [], isLoading } = useQuery<MembersPanelMemberRow[]>({
+    queryKey: membersKey,
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/people/${person.id}/members`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  // Full people list for the picker. We exclude the current band itself
+  // and anyone already in the roster client-side.
+  const { data: allPeople = [] } = useQuery<
+    Array<{ id: string; name: string; photoUrl: string | null; isGroup?: boolean }>
+  >({
+    queryKey: ["/api/people"],
+  });
+  const taken = new Set(members.map((m) => m.memberId));
+  const candidates = useMemo(
+    () =>
+      [...allPeople]
+        .filter((p) => p.id !== person.id && !taken.has(p.id))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [allPeople, person.id, taken],
+  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: membersKey });
+    qc.invalidateQueries({ queryKey: ["/api/people", person.id, "members"] });
+  };
+
+  const addMutation = useMutation({
+    mutationFn: async (memberId: string) =>
+      apiRequest("POST", `/api/admin/people/${person.id}/members`, {
+        memberId,
+        displayOrder: members.length,
+      }),
+    onSuccess: () => {
+      setPickerOpen(false);
+      setPickerQuery("");
+      invalidate();
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't add member", description: String(e?.message ?? e), variant: "destructive" }),
+  });
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: any }) =>
+      apiRequest("PUT", `/api/admin/band-members/${id}`, patch),
+    onSuccess: invalidate,
+    onError: (e: any) =>
+      toast({ title: "Couldn't save", description: String(e?.message ?? e), variant: "destructive" }),
+  });
+  const removeMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/admin/band-members/${id}`),
+    onSuccess: invalidate,
+    onError: (e: any) =>
+      toast({ title: "Couldn't remove", description: String(e?.message ?? e), variant: "destructive" }),
+  });
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm" data-testid="panel-members">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div>
+          <h2 className="text-[15px] font-semibold text-slate-900">Members</h2>
+          <p className="text-[12.5px] text-slate-500 mt-0.5">
+            People in {person.name}. Drag isn't wired yet — set order manually with the number field.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPickerOpen((v) => !v)}
+          className="text-[13px] font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 active:bg-slate-900"
+          data-testid="button-add-member"
+        >
+          {pickerOpen ? "Cancel" : "Add member"}
+        </button>
+      </div>
+      {pickerOpen && (
+        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
+          <input
+            type="text"
+            value={pickerQuery}
+            onChange={(e) => setPickerQuery(e.target.value)}
+            placeholder="Search people…"
+            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-[13px]"
+            data-testid="input-member-search"
+            autoFocus
+          />
+          <div className="mt-3 max-h-64 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-lg bg-white">
+            {candidates
+              .filter((c: { id: string; name: string; photoUrl: string | null; isGroup?: boolean }) =>
+                pickerQuery.trim() === ""
+                  ? true
+                  : c.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
+              )
+              .slice(0, 50)
+              .map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => addMutation.mutate(c.id)}
+                  disabled={addMutation.isPending}
+                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left disabled:opacity-50"
+                  data-testid={`option-add-member-${c.id}`}
+                >
+                  <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
+                    {c.photoUrl && (
+                      <img src={c.photoUrl} alt="" className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                  <span className="text-[13px] text-slate-900 flex-1 truncate">{c.name}</span>
+                  {c.isGroup && (
+                    <span className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400">
+                      Group
+                    </span>
+                  )}
+                </button>
+              ))}
+            {candidates.length === 0 && (
+              <p className="px-3 py-3 text-[12.5px] text-slate-500">
+                Everyone's already on this roster. Create a new person from the People admin first.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="divide-y divide-slate-100">
+        {isLoading && (
+          <p className="px-5 py-6 text-[13px] text-slate-500">Loading…</p>
+        )}
+        {!isLoading && members.length === 0 && (
+          <p className="px-5 py-6 text-[13px] text-slate-500" data-testid="empty-members">
+            No members yet. Add the first lineup above.
+          </p>
+        )}
+        {members.map((m) => (
+          <MemberRow
+            key={m.id}
+            row={m}
+            onSave={(patch) => updateMutation.mutate({ id: m.id, patch })}
+            onRemove={() => {
+              if (window.confirm(`Remove ${m.person?.name ?? "this person"} from ${person.name}?`)) {
+                removeMutation.mutate(m.id);
+              }
+            }}
+            saving={updateMutation.isPending}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MemberRow({
+  row,
+  onSave,
+  onRemove,
+  saving,
+}: {
+  row: MembersPanelMemberRow;
+  onSave: (patch: any) => void;
+  onRemove: () => void;
+  saving: boolean;
+}) {
+  // Local draft so the admin can edit roles/years/order without firing
+  // a PUT on every keystroke. Save reconciles via the patch.
+  const [rolesText, setRolesText] = useState((row.roles ?? []).join(", "));
+  const [joinedYear, setJoinedYear] = useState(
+    row.joinedYear === null ? "" : String(row.joinedYear),
+  );
+  const [leftYear, setLeftYear] = useState(
+    row.leftYear === null ? "" : String(row.leftYear),
+  );
+  const [displayOrder, setDisplayOrder] = useState(String(row.displayOrder));
+  const dirty =
+    rolesText !== (row.roles ?? []).join(", ") ||
+    joinedYear !== (row.joinedYear === null ? "" : String(row.joinedYear)) ||
+    leftYear !== (row.leftYear === null ? "" : String(row.leftYear)) ||
+    displayOrder !== String(row.displayOrder);
+  const save = () => {
+    onSave({
+      roles: rolesText
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+      joinedYear: joinedYear.trim() === "" ? null : Number(joinedYear),
+      leftYear: leftYear.trim() === "" ? null : Number(leftYear),
+      displayOrder: Number(displayOrder) || 0,
+    });
+  };
+  const isFormer = row.leftYear !== null;
+  return (
+    <div
+      className="px-5 py-4 grid grid-cols-12 gap-3 items-center"
+      data-testid={`row-band-member-${row.memberId}`}
+    >
+      <div className="col-span-3 flex items-center gap-3 min-w-0">
+        <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
+          {row.person?.photoUrl && (
+            <img src={row.person.photoUrl} alt="" className="w-full h-full object-cover" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[13.5px] font-semibold text-slate-900 truncate">
+            {row.person?.name ?? "(unknown)"}
+          </p>
+          {isFormer && (
+            <p className="text-[10.5px] uppercase tracking-wide font-semibold text-amber-600">
+              Former
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="col-span-4">
+        <label className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400">
+          Roles
+        </label>
+        <input
+          type="text"
+          value={rolesText}
+          onChange={(e) => setRolesText(e.target.value)}
+          placeholder="lead vocals, guitar"
+          className="w-full mt-1 px-2 py-1.5 rounded-md border border-slate-200 text-[12.5px]"
+          data-testid={`input-member-roles-${row.memberId}`}
+        />
+      </div>
+      <div className="col-span-1">
+        <label className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400">
+          Joined
+        </label>
+        <input
+          type="number"
+          value={joinedYear}
+          onChange={(e) => setJoinedYear(e.target.value)}
+          className="w-full mt-1 px-2 py-1.5 rounded-md border border-slate-200 text-[12.5px]"
+          data-testid={`input-member-joined-${row.memberId}`}
+        />
+      </div>
+      <div className="col-span-1">
+        <label className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400">
+          Left
+        </label>
+        <input
+          type="number"
+          value={leftYear}
+          onChange={(e) => setLeftYear(e.target.value)}
+          className="w-full mt-1 px-2 py-1.5 rounded-md border border-slate-200 text-[12.5px]"
+          data-testid={`input-member-left-${row.memberId}`}
+        />
+      </div>
+      <div className="col-span-1">
+        <label className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400">
+          Order
+        </label>
+        <input
+          type="number"
+          value={displayOrder}
+          onChange={(e) => setDisplayOrder(e.target.value)}
+          className="w-full mt-1 px-2 py-1.5 rounded-md border border-slate-200 text-[12.5px]"
+          data-testid={`input-member-order-${row.memberId}`}
+        />
+      </div>
+      <div className="col-span-2 flex items-center gap-2 justify-end">
+        {dirty && (
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50"
+            data-testid={`button-save-member-${row.memberId}`}
+          >
+            Save
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50"
+          data-testid={`button-remove-member-${row.memberId}`}
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+  );
+}

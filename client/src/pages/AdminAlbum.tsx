@@ -1280,6 +1280,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           },
         ]}
       />
+      {/* Task #190 — per-album Lineup snapshot. Only meaningful when the
+          album's primary artist is a group (band/duo/orchestra). Renders
+          inside its own panel below Metadata. */}
+      {album.primaryArtistId && (
+        <AlbumLineupPanel album={album} disabled={disabled} disabledReason={disabledReason} />
+      )}
     </div>
   );
 }
@@ -12484,5 +12490,365 @@ function AlbumPhotoSheet({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── Task #190 — AlbumLineupPanel ────────────────────────────────────
+// Per-album snapshot of who played on this record. Defaults to "use
+// band's current roster" when empty — admin can then add/remove/order
+// to capture the actual session lineup (which may differ from the
+// touring lineup of the year).
+type LineupRow = {
+  id: string;
+  albumId: string;
+  memberId: string;
+  roles: string[] | null;
+  displayOrder: number;
+  person: {
+    id: string;
+    name: string;
+    photoUrl: string | null;
+  } | null;
+};
+type BandMemberLite = {
+  id: string;
+  bandId: string;
+  memberId: string;
+  roles: string[] | null;
+  leftYear: number | null;
+  displayOrder: number;
+  person: { id: string; name: string; photoUrl: string | null } | null;
+};
+
+function AlbumLineupPanel({
+  album,
+  disabled,
+  disabledReason,
+}: {
+  album: AlbumFull;
+  disabled: boolean;
+  disabledReason?: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const lineupKey = ["/api/admin/albums", album.id, "lineup"] as const;
+  const { data: lineup = [], isLoading } = useQuery<LineupRow[]>({
+    queryKey: lineupKey,
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/albums/${album.id}/lineup`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  // Resolve the primary artist's Person so we can tell whether the
+  // bound artist is actually a group; only groups get the "Use band's
+  // lineup" default + member picker that draws from the band roster.
+  const { data: primaryArtist } = useQuery<{
+    id: string;
+    name: string;
+    isGroup?: boolean;
+  }>({
+    queryKey: ["/api/people", album.primaryArtistId],
+    queryFn: async () => {
+      const r = await fetch(`/api/people/${album.primaryArtistId}`);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    enabled: !!album.primaryArtistId,
+  });
+  const { data: bandRoster = [] } = useQuery<BandMemberLite[]>({
+    queryKey: ["/api/people", album.primaryArtistId, "members"],
+    queryFn: async () => {
+      const r = await fetch(`/api/people/${album.primaryArtistId}/members`);
+      if (!r.ok) return [];
+      return r.json();
+    },
+    enabled: !!album.primaryArtistId && !!primaryArtist?.isGroup,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (members: Array<{ memberId: string; roles: string[] | null; displayOrder: number }>) =>
+      apiRequest("PUT", `/api/admin/albums/${album.id}/lineup`, { members }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: lineupKey });
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id, "lineup"] });
+      toast({ title: "Lineup saved" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save lineup",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      }),
+  });
+  const clearMutation = useMutation({
+    mutationFn: async () => apiRequest("DELETE", `/api/admin/albums/${album.id}/lineup`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: lineupKey });
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id, "lineup"] });
+    },
+  });
+
+  // Local draft — admin edits the whole list, then hits Save which PUTs
+  // the entire snapshot (full-replace semantics on the server).
+  const [draft, setDraft] = useState<
+    Array<{ memberId: string; roles: string[] | null; displayOrder: number; personName: string; photoUrl: string | null }>
+  >([]);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    if (!isLoading) {
+      setDraft(
+        lineup.map((r) => ({
+          memberId: r.memberId,
+          roles: r.roles,
+          displayOrder: r.displayOrder,
+          personName: r.person?.name ?? "(unknown)",
+          photoUrl: r.person?.photoUrl ?? null,
+        })),
+      );
+      setHydrated(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, lineup]);
+
+  const dirty = useMemo(() => {
+    if (!hydrated) return false;
+    if (draft.length !== lineup.length) return true;
+    for (let i = 0; i < draft.length; i++) {
+      const a = draft[i];
+      const b = lineup[i];
+      if (!b) return true;
+      if (a.memberId !== b.memberId) return true;
+      if (a.displayOrder !== b.displayOrder) return true;
+      const ar = (a.roles ?? []).join("|");
+      const br = (b.roles ?? []).join("|");
+      if (ar !== br) return true;
+    }
+    return false;
+  }, [draft, lineup, hydrated]);
+
+  const usedIds = new Set(draft.map((d) => d.memberId));
+  const rosterCandidates = bandRoster.filter(
+    (m) => m.person && !usedIds.has(m.memberId),
+  );
+
+  if (!album.primaryArtistId) return null;
+  if (!primaryArtist) return null;
+  if (!primaryArtist.isGroup) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5" data-testid="panel-lineup-solo">
+        <h2 className="text-[15px] font-semibold text-slate-900">Lineup</h2>
+        <p className="text-[12.5px] text-slate-500 mt-2">
+          {primaryArtist.name} is a solo artist. To capture a per-album
+          lineup, mark the artist as a group from their People admin page.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="bg-white rounded-2xl border border-slate-200 shadow-sm"
+      data-testid="panel-album-lineup"
+    >
+      <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
+        <div>
+          <h2 className="text-[15px] font-semibold text-slate-900">Lineup</h2>
+          <p className="text-[12.5px] text-slate-500 mt-0.5">
+            Who played on this record. Leave empty and the fan page falls
+            back to {primaryArtist.name}'s current band roster.
+          </p>
+          {disabled && disabledReason && (
+            <p className="text-[11px] text-amber-600 mt-1">{disabledReason}</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {dirty && (
+            <button
+              type="button"
+              onClick={() =>
+                saveMutation.mutate(
+                  draft.map((d, i) => ({
+                    memberId: d.memberId,
+                    roles: d.roles,
+                    displayOrder: i,
+                  })),
+                )
+              }
+              disabled={disabled || saveMutation.isPending}
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50"
+              data-testid="button-save-lineup"
+            >
+              Save lineup
+            </button>
+          )}
+          {draft.length === 0 && bandRoster.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(
+                  bandRoster
+                    .filter((m) => m.person && m.leftYear === null)
+                    .sort((a, b) => a.displayOrder - b.displayOrder)
+                    .map((m, i) => ({
+                      memberId: m.memberId,
+                      roles: m.roles,
+                      displayOrder: i,
+                      personName: m.person!.name,
+                      photoUrl: m.person!.photoUrl,
+                    })),
+                );
+              }}
+              disabled={disabled}
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              data-testid="button-prefill-lineup"
+            >
+              Use band's current roster
+            </button>
+          )}
+          {draft.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Clear the per-album lineup? The fan page will fall back to the band's current roster.")) {
+                  setDraft([]);
+                  clearMutation.mutate();
+                }
+              }}
+              disabled={disabled || clearMutation.isPending}
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              data-testid="button-clear-lineup"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {draft.length === 0 && (
+          <p
+            className="px-5 py-6 text-[13px] text-slate-500"
+            data-testid="empty-album-lineup"
+          >
+            No per-album lineup set. {bandRoster.length === 0
+              ? `Add members to ${primaryArtist.name} first.`
+              : "Use the band's current roster or pick members below."}
+          </p>
+        )}
+        {draft.map((d, i) => (
+          <div
+            key={d.memberId}
+            className="px-5 py-3 grid grid-cols-12 gap-3 items-center"
+            data-testid={`row-album-lineup-${d.memberId}`}
+          >
+            <div className="col-span-4 flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
+                {d.photoUrl && (
+                  <img src={d.photoUrl} alt="" className="w-full h-full object-cover" />
+                )}
+              </div>
+              <p className="text-[13px] text-slate-900 truncate">{d.personName}</p>
+            </div>
+            <div className="col-span-6">
+              <input
+                type="text"
+                value={(d.roles ?? []).join(", ")}
+                onChange={(e) => {
+                  const next = [...draft];
+                  next[i] = {
+                    ...d,
+                    roles: e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter((s) => s.length > 0),
+                  };
+                  setDraft(next);
+                }}
+                placeholder="lead vocals, rhythm guitar"
+                className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-[12.5px]"
+                data-testid={`input-lineup-roles-${d.memberId}`}
+                disabled={disabled}
+              />
+            </div>
+            <div className="col-span-2 flex justify-end gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (i === 0) return;
+                  const next = [...draft];
+                  [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                  setDraft(next.map((r, idx) => ({ ...r, displayOrder: idx })));
+                }}
+                disabled={disabled || i === 0}
+                className="text-[12px] px-2 py-1 rounded border border-slate-200 disabled:opacity-30"
+                data-testid={`button-lineup-up-${d.memberId}`}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (i === draft.length - 1) return;
+                  const next = [...draft];
+                  [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                  setDraft(next.map((r, idx) => ({ ...r, displayOrder: idx })));
+                }}
+                disabled={disabled || i === draft.length - 1}
+                className="text-[12px] px-2 py-1 rounded border border-slate-200 disabled:opacity-30"
+                data-testid={`button-lineup-down-${d.memberId}`}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft(draft.filter((_, j) => j !== i))}
+                disabled={disabled}
+                className="text-[12px] px-2 py-1 rounded border border-slate-200 text-slate-600 disabled:opacity-30"
+                data-testid={`button-lineup-remove-${d.memberId}`}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {rosterCandidates.length > 0 && (
+        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
+          <p className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400 mb-2">
+            Add from band roster
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {rosterCandidates.map((m) => (
+              <button
+                key={m.memberId}
+                type="button"
+                onClick={() => {
+                  setDraft([
+                    ...draft,
+                    {
+                      memberId: m.memberId,
+                      roles: m.roles,
+                      displayOrder: draft.length,
+                      personName: m.person!.name,
+                      photoUrl: m.person!.photoUrl,
+                    },
+                  ]);
+                }}
+                disabled={disabled}
+                className="text-[12px] font-semibold px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                data-testid={`button-add-lineup-${m.memberId}`}
+              >
+                + {m.person!.name}
+                {m.leftYear !== null && (
+                  <span className="text-amber-600"> (former)</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

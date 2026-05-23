@@ -824,6 +824,13 @@ function AlbumDetailMobile() {
               videos/photos. Keeps clean albums looking identical to before. */}
           <AlbumBonusContent albumId={album.id} />
 
+          {/* Task #190 — per-album Lineup rail. Renders only when the
+              admin has set a lineup snapshot on this album (the API
+              returns [] otherwise, so this stays hidden for solo-artist
+              records and ungrouped bands). Same Apple-Music-density
+              avatar rail used for band members on ArtistDetail. */}
+          <AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />
+
           {/* Metadata block — Apple-Music-style footer that lives BELOW
               the tracklist (not above it). Carries release year, total
               runtime, label, and ownership. Year + label were previously
@@ -3747,6 +3754,72 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; 
 // playlist hydration) already loads.
 interface BonusVideo { id: string; albumId: string; title: string; videoUrl: string; posterUrl: string | null; position: number; }
 interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: string | null; position: number; }
+
+// Task #190 — fan-side per-album lineup rail. Reads the snapshot the
+// admin captured on the album's Overview → Lineup panel. Renders
+// nothing when the album has no lineup (solo records and ungrouped
+// bands), so adding this is a no-op for the existing catalog.
+function AlbumLineupRail({
+  albumId,
+  onPickMember,
+}: {
+  albumId: string;
+  onPickMember: (memberName: string) => void;
+}) {
+  type LineupRow = {
+    id: string;
+    memberId: string;
+    roles: string[] | null;
+    displayOrder: number;
+    person: { id: string; name: string; photoUrl: string | null } | null;
+  };
+  const { data: lineup = [] } = useQuery<LineupRow[]>({
+    queryKey: ["/api/albums", albumId, "lineup"],
+    queryFn: async () => {
+      const r = await fetch(`/api/albums/${albumId}/lineup`);
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+  if (lineup.length === 0) return null;
+  return (
+    <div className="px-5 mt-7" data-testid="section-album-lineup">
+      <h2 className="text-white text-xl font-bold tracking-tight mb-3">Lineup</h2>
+      <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+        {lineup
+          .filter((m) => m.person)
+          .map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onPickMember(m.person!.name)}
+              className="flex-shrink-0 flex flex-col items-center text-center w-[88px] active:opacity-80"
+              data-testid={`album-lineup-member-${m.memberId}`}
+            >
+              <div className="w-[72px] h-[72px] rounded-full overflow-hidden bg-white/5">
+                {m.person!.photoUrl && (
+                  <img
+                    src={m.person!.photoUrl}
+                    alt={m.person!.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                )}
+              </div>
+              <p className="text-white text-[12px] font-semibold mt-2 leading-tight line-clamp-2">
+                {m.person!.name}
+              </p>
+              {m.roles && m.roles.length > 0 && (
+                <p className="text-white/55 text-[10.5px] leading-tight mt-0.5 line-clamp-2">
+                  {m.roles.join(", ")}
+                </p>
+              )}
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
 
 function AlbumBonusContent({ albumId }: { albumId: string }) {
   const { data: videos = [] } = useQuery<BonusVideo[]>({

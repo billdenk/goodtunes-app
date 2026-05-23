@@ -126,6 +126,26 @@ export function ArtistDetail() {
     bio: string | null;
     photoUrl: string | null;
     coverUrl: string | null;
+    // Task #190 — bands & members. When true we render the band's
+    // current roster as an Apple-Music-style "Members" rail under About.
+    isGroup?: boolean;
+    groupKind?: string | null;
+  };
+  // Member row returned by /api/people/:id/members. Mirrors the shape
+  // shared/schema.ts's BandMemberWithPerson exposes.
+  type BandMemberRow = {
+    id: string;
+    bandId: string;
+    memberId: string;
+    roles: string[] | null;
+    joinedYear: number | null;
+    leftYear: number | null;
+    displayOrder: number;
+    person: {
+      id: string;
+      name: string;
+      photoUrl: string | null;
+    } | null;
   };
   const { data: allPeople = [] } = useQuery<PublicPerson[]>({
     queryKey: ["/api/people"],
@@ -136,6 +156,29 @@ export function ArtistDetail() {
         (p) => p.name.trim().toLowerCase() === artistName.trim().toLowerCase(),
       ),
     [allPeople, artistName],
+  );
+  // Task #190 — when this artist is a band/duo/orchestra, fetch the
+  // current roster so we can render a "Members" rail under About. The
+  // endpoint already returns members ordered by displayOrder; we split
+  // current (no leftYear) from former on the client.
+  const isGroupArtist = !!artistPerson?.isGroup;
+  const { data: bandMembers = [] } = useQuery<BandMemberRow[]>({
+    queryKey: ["/api/people", artistPerson?.id, "members"],
+    queryFn: async () => {
+      if (!artistPerson?.id) return [];
+      const r = await fetch(`/api/people/${artistPerson.id}/members`);
+      if (!r.ok) return [];
+      return r.json();
+    },
+    enabled: !!artistPerson?.id && isGroupArtist,
+  });
+  const currentMembers = useMemo(
+    () => bandMembers.filter((m) => m.leftYear === null && m.person),
+    [bandMembers],
+  );
+  const formerMembers = useMemo(
+    () => bandMembers.filter((m) => m.leftYear !== null && m.person),
+    [bandMembers],
   );
   // Dedupe vs GoodTunes Releases by title (case-insensitive). Anything
   // already in the catalog renders above as a full GT tile — we don't
@@ -480,6 +523,78 @@ export function ArtistDetail() {
                 `Music by ${artistName} on GoodTunes®.`}
             </p>
           </div>
+
+          {/* Task #190 — Members rail. Only shown for groups. Tapping a
+              member routes to their own ArtistDetail page (keyed by
+              display name, same as everywhere else in the app). */}
+          {isGroupArtist && currentMembers.length > 0 && (
+            <div className="px-5 mt-9" data-testid="section-band-members">
+              <h2 className="text-white text-xl font-bold tracking-tight mb-3">
+                Members
+              </h2>
+              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+                {currentMembers.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => navigate(`/artist/${encodeURIComponent(m.person!.name)}`)}
+                    className="flex-shrink-0 flex flex-col items-center text-center w-[88px] active:opacity-80"
+                    data-testid={`band-member-${m.memberId}`}
+                  >
+                    <div className="w-[72px] h-[72px] rounded-full overflow-hidden bg-white/5">
+                      {m.person!.photoUrl ? (
+                        <img
+                          src={m.person!.photoUrl}
+                          alt={m.person!.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : null}
+                    </div>
+                    <p className="text-white text-[12px] font-semibold mt-2 leading-tight line-clamp-2">
+                      {m.person!.name}
+                    </p>
+                    {m.roles && m.roles.length > 0 && (
+                      <p className="text-white/55 text-[10.5px] leading-tight mt-0.5 line-clamp-2">
+                        {m.roles.join(", ")}
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {formerMembers.length > 0 && (
+                <details className="mt-3 text-white/55 text-[12px]">
+                  <summary
+                    className="cursor-pointer text-white/65 font-semibold"
+                    data-testid="toggle-former-members"
+                  >
+                    Former members
+                  </summary>
+                  <ul className="mt-2 space-y-1">
+                    {formerMembers.map((m) => (
+                      <li key={m.id} data-testid={`former-member-${m.memberId}`}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/artist/${encodeURIComponent(m.person!.name)}`)}
+                          className="text-left active:opacity-70"
+                        >
+                          <span className="text-white/85">{m.person!.name}</span>
+                          {m.roles && m.roles.length > 0 && (
+                            <span className="text-white/45"> — {m.roles.join(", ")}</span>
+                          )}
+                          {(m.joinedYear || m.leftYear) && (
+                            <span className="text-white/40">
+                              {" "}({m.joinedYear ?? "?"}–{m.leftYear ?? ""})
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
         </div>
 
         <MiniPlayer />

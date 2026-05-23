@@ -7868,6 +7868,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     blueskyUrl: p.blueskyUrl ?? null,
     facebookUrl: p.facebookUrl ?? null,
     websiteUrl: p.websiteUrl ?? null,
+    // Task #190 — bands & members. Fan UIs branch on `isGroup` to swap
+    // the artist page into a band roster surface; `groupKind` shows
+    // under the band name ("Band", "Duo", "Orchestra", …).
+    isGroup: !!p.isGroup,
+    groupKind: p.groupKind ?? null,
   });
   app.get("/api/people", async (_req, res) => {
     const rows = await storage.getPeople();
@@ -7897,6 +7902,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       facebookUrl: opt(b.facebookUrl),
       websiteUrl: opt(b.websiteUrl),
       labelId: opt(b.labelId),
+      isGroup: b.isGroup === true || b.isGroup === "true",
+      groupKind: opt(b.groupKind),
     } as any);
     return res.status(201).json(p);
   });
@@ -7949,6 +7956,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.facebookUrl !== undefined) updates.facebookUrl = opt(b.facebookUrl);
     if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
     if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
+    // Task #190 — bands & members. `groupKind` is the surfaced control in
+    // the admin (a select like Band / Duo / Orchestra / "Solo artist");
+    // `isGroup` is derived from it (non-empty kind ⇒ this Person is a
+    // group). Callers can still pass `isGroup` explicitly when needed.
+    if (b.groupKind !== undefined) {
+      const kind = opt(b.groupKind);
+      updates.groupKind = kind;
+      // Don't clobber an explicit `isGroup` from the same PUT if the
+      // caller is setting both — let the explicit flag below win.
+      if (b.isGroup === undefined) {
+        updates.isGroup = !!kind;
+      }
+    }
+    if (b.isGroup !== undefined) {
+      updates.isGroup = !(b.isGroup === false || b.isGroup === "false");
+    }
     // Curation locks. Stored as bool; coerce loosely so callers can pass
     // boolean | "true" | "false" without surprises. Locking does NOT
     // prevent an admin from explicitly setting photoUrl/coverUrl on the
@@ -8199,6 +8222,140 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     await storage.deletePerson(String(req.params.id));
     return res.json({ message: "Deleted" });
+  });
+
+  // ----- Task #190 — Bands & members ---------------------------------
+  // Public reads: a band's roster + the per-album lineup snapshot drive
+  // the fan-side artist & album pages, so both are unauthenticated.
+  // Writes are admin-only and gated by the same artist-scope edit_metadata
+  // permission as PUT /api/admin/people/:id, so an artist-scoped partner
+  // can curate their own band's lineup.
+  const bandMemberInputToRecord = (b: any) => ({
+    roles: Array.isArray(b?.roles)
+      ? (b.roles as any[]).map((r) => String(r)).filter((r) => r.trim().length > 0)
+      : null,
+    joinedYear:
+      b?.joinedYear === null || b?.joinedYear === undefined || b?.joinedYear === ""
+        ? null
+        : Number(b.joinedYear),
+    leftYear:
+      b?.leftYear === null || b?.leftYear === undefined || b?.leftYear === ""
+        ? null
+        : Number(b.leftYear),
+    displayOrder:
+      b?.displayOrder === undefined || b?.displayOrder === null
+        ? 0
+        : Number(b.displayOrder),
+  });
+
+  app.get("/api/people/:id/members", async (req, res) => {
+    const rows = await storage.listBandMembers(String(req.params.id));
+    return res.json(rows);
+  });
+
+  app.get("/api/people/:id/bands", async (req, res) => {
+    const rows = await storage.listMemberBands(String(req.params.id));
+    return res.json(rows);
+  });
+
+  app.get("/api/admin/people/:id/members", requireAdmin, async (req, res) => {
+    const rows = await storage.listBandMembers(String(req.params.id));
+    return res.json(rows);
+  });
+
+  app.post("/api/admin/people/:id/members", requireAdmin, async (req, res) => {
+    const bandId = String(req.params.id);
+    const memberId = req.body?.memberId ? String(req.body.memberId) : "";
+    if (!memberId) {
+      return res.status(400).json({ message: "memberId is required" });
+    }
+    if (memberId === bandId) {
+      return res.status(400).json({ message: "A band can't list itself as a member." });
+    }
+    // Soft-confirm both rows exist; the FK would catch this anyway but
+    // the error message is gentler here.
+    const [band, member] = await Promise.all([
+      storage.getPersonById(bandId),
+      storage.getPersonById(memberId),
+    ]);
+    if (!band) return res.status(404).json({ message: "Band not found" });
+    if (!member) return res.status(404).json({ message: "Member not found" });
+    const row = await storage.addBandMember({
+      bandId,
+      memberId,
+      ...bandMemberInputToRecord(req.body ?? {}),
+    } as any);
+    return res.status(201).json(row);
+  });
+
+  app.put("/api/admin/band-members/:rowId", requireAdmin, async (req, res) => {
+    const id = String(req.params.rowId);
+    const patch: any = {};
+    const b = req.body ?? {};
+    if (b.roles !== undefined) {
+      patch.roles = Array.isArray(b.roles)
+        ? b.roles.map((r: any) => String(r)).filter((r: string) => r.trim().length > 0)
+        : null;
+    }
+    if (b.joinedYear !== undefined) {
+      patch.joinedYear =
+        b.joinedYear === null || b.joinedYear === "" ? null : Number(b.joinedYear);
+    }
+    if (b.leftYear !== undefined) {
+      patch.leftYear =
+        b.leftYear === null || b.leftYear === "" ? null : Number(b.leftYear);
+    }
+    if (b.displayOrder !== undefined) {
+      patch.displayOrder = Number(b.displayOrder);
+    }
+    const row = await storage.updateBandMember(id, patch);
+    if (!row) return res.status(404).json({ message: "Band member not found" });
+    return res.json(row);
+  });
+
+  app.delete("/api/admin/band-members/:rowId", requireAdmin, async (req, res) => {
+    await storage.removeBandMember(String(req.params.rowId));
+    return res.json({ message: "Deleted" });
+  });
+
+  // ----- Album lineup snapshots -------------------------------------
+  app.get("/api/albums/:id/lineup", async (req, res) => {
+    const rows = await storage.listAlbumLineup(String(req.params.id));
+    return res.json(rows);
+  });
+
+  app.get("/api/admin/albums/:id/lineup", requireAdmin, async (req, res) => {
+    const rows = await storage.listAlbumLineup(String(req.params.id));
+    return res.json(rows);
+  });
+
+  // Full-replace semantics — admin always saves the entire ordered list.
+  // Body: { members: [{ memberId, roles?: string[]|null, displayOrder?: number }, ...] }
+  app.put("/api/admin/albums/:id/lineup", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const input = Array.isArray(req.body?.members) ? req.body.members : [];
+    const seen = new Set<string>();
+    const members: Array<{ memberId: string; roles: string[] | null; displayOrder: number }> = [];
+    for (let i = 0; i < input.length; i++) {
+      const m = input[i] ?? {};
+      const memberId = m.memberId ? String(m.memberId) : "";
+      if (!memberId || seen.has(memberId)) continue;
+      seen.add(memberId);
+      members.push({
+        memberId,
+        roles: Array.isArray(m.roles)
+          ? m.roles.map((r: any) => String(r)).filter((r: string) => r.trim().length > 0)
+          : null,
+        displayOrder: m.displayOrder === undefined ? i : Number(m.displayOrder),
+      });
+    }
+    const rows = await storage.setAlbumLineup(albumId, members);
+    return res.json(rows);
+  });
+
+  app.delete("/api/admin/albums/:id/lineup", requireAdmin, async (req, res) => {
+    await storage.clearAlbumLineup(String(req.params.id));
+    return res.json({ message: "Cleared" });
   });
 
   // --- Artist URL scraper (Apple Music / Spotify → prefilled person + discography) ---

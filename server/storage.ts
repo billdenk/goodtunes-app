@@ -58,6 +58,12 @@ import {
   type JobRun,
   people,
   personDiscography,
+  bandMembers,
+  albumLineup,
+  type BandMember,
+  type InsertBandMember,
+  type BandMemberWithPerson,
+  type AlbumLineupWithPerson,
   instruments,
   instrumentVendors,
   vendors,
@@ -151,6 +157,24 @@ export interface IStorage {
   createPerson(data: InsertPerson & { id?: string }): Promise<Person>;
   updatePerson(id: string, data: Partial<Person>): Promise<Person | undefined>;
   deletePerson(id: string): Promise<void>;
+
+  // Task #190 — Bands & members. Both sides hydrate the joined Person
+  // name/photo so callers don't N+1.
+  listBandMembers(bandId: string): Promise<BandMemberWithPerson[]>;
+  listMemberBands(memberId: string): Promise<BandMemberWithPerson[]>;
+  addBandMember(data: InsertBandMember): Promise<BandMember>;
+  updateBandMember(id: string, data: Partial<InsertBandMember>): Promise<BandMember | undefined>;
+  removeBandMember(id: string): Promise<void>;
+
+  // Album-lineup snapshots — full-replace semantics (admin saves the whole
+  // ordered list at once). `listAlbumLineup` returns empty when no
+  // snapshot is pinned; callers fall back to current band roster.
+  listAlbumLineup(albumId: string): Promise<AlbumLineupWithPerson[]>;
+  setAlbumLineup(
+    albumId: string,
+    members: Array<{ memberId: string; roles: string[] | null; displayOrder: number }>,
+  ): Promise<AlbumLineupWithPerson[]>;
+  clearAlbumLineup(albumId: string): Promise<void>;
 
   // Apple Music discography for a Person, mirrored from the admin's
   // iTunes Lookup pull. Replace-all on every persist (admin scrape is
@@ -806,6 +830,105 @@ export class DbStorage implements IStorage {
   }
   async deletePerson(id: string): Promise<void> {
     await db.delete(people).where(eq(people.id, id));
+  }
+
+  // ---- Task #190 — Bands & members ---------------------------------
+  async listBandMembers(bandId: string): Promise<BandMemberWithPerson[]> {
+    const rows = await db
+      .select({ bm: bandMembers, p: people })
+      .from(bandMembers)
+      .innerJoin(people, eq(bandMembers.memberId, people.id))
+      .where(eq(bandMembers.bandId, bandId))
+      .orderBy(asc(bandMembers.displayOrder), asc(people.name));
+    return rows.map((r) => ({
+      ...r.bm,
+      memberName: r.p.name,
+      memberPhotoUrl: r.p.photoUrl ?? null,
+      memberIsGroup: !!r.p.isGroup,
+    }));
+  }
+
+  async listMemberBands(memberId: string): Promise<BandMemberWithPerson[]> {
+    const rows = await db
+      .select({ bm: bandMembers, p: people })
+      .from(bandMembers)
+      .innerJoin(people, eq(bandMembers.bandId, people.id))
+      .where(eq(bandMembers.memberId, memberId))
+      .orderBy(asc(people.name));
+    // memberName/photo here reflect the BAND (the other side), so the
+    // caller can render "Plays in: <band>" without a second fetch.
+    return rows.map((r) => ({
+      ...r.bm,
+      memberName: r.p.name,
+      memberPhotoUrl: r.p.photoUrl ?? null,
+      memberIsGroup: !!r.p.isGroup,
+    }));
+  }
+
+  async addBandMember(data: InsertBandMember): Promise<BandMember> {
+    const [row] = await db.insert(bandMembers).values(data as any).returning();
+    return row;
+  }
+
+  async updateBandMember(
+    id: string,
+    data: Partial<InsertBandMember>,
+  ): Promise<BandMember | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [row] = await db.select().from(bandMembers).where(eq(bandMembers.id, id));
+      return row;
+    }
+    const [row] = await db
+      .update(bandMembers)
+      .set(rest)
+      .where(eq(bandMembers.id, id))
+      .returning();
+    return row;
+  }
+
+  async removeBandMember(id: string): Promise<void> {
+    await db.delete(bandMembers).where(eq(bandMembers.id, id));
+  }
+
+  async listAlbumLineup(albumId: string): Promise<AlbumLineupWithPerson[]> {
+    const rows = await db
+      .select({ al: albumLineup, p: people })
+      .from(albumLineup)
+      .innerJoin(people, eq(albumLineup.memberId, people.id))
+      .where(eq(albumLineup.albumId, albumId))
+      .orderBy(asc(albumLineup.displayOrder), asc(people.name));
+    return rows.map((r) => ({
+      ...r.al,
+      memberName: r.p.name,
+      memberPhotoUrl: r.p.photoUrl ?? null,
+    }));
+  }
+
+  async setAlbumLineup(
+    albumId: string,
+    members: Array<{ memberId: string; roles: string[] | null; displayOrder: number }>,
+  ): Promise<AlbumLineupWithPerson[]> {
+    await db.transaction(async (tx) => {
+      await tx.delete(albumLineup).where(eq(albumLineup.albumId, albumId));
+      if (members.length > 0) {
+        await tx
+          .insert(albumLineup)
+          .values(
+            members.map((m) => ({
+              albumId,
+              memberId: m.memberId,
+              roles: m.roles,
+              displayOrder: m.displayOrder,
+            })) as any,
+          );
+      }
+    });
+    return this.listAlbumLineup(albumId);
+  }
+
+  async clearAlbumLineup(albumId: string): Promise<void> {
+    await db.delete(albumLineup).where(eq(albumLineup.albumId, albumId));
   }
 
   async getDiscographyByPerson(personId: string): Promise<PersonDiscography[]> {
