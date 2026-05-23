@@ -31,6 +31,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
+import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import {
   LabelPreviewCard,
   type LabelPreviewAlbum,
@@ -76,13 +77,14 @@ interface AlbumLite {
   primaryArtistId: string | null;
 }
 
-type Tab = "overview" | "logo" | "cover" | "releases" | "payouts";
+type Tab = "overview" | "logo" | "cover" | "releases" | "payouts" | "permissions";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "logo", label: "Logo" },
   { key: "cover", label: "Cover" },
   { key: "releases", label: "Releases" },
   { key: "payouts", label: "Payouts" },
+  { key: "permissions", label: "Permissions" },
 ];
 
 export function AdminLabel() {
@@ -387,6 +389,9 @@ export function AdminLabel() {
             ownerName={label.name}
             ownerEmail={null}
           />
+        )}
+        {tab === "permissions" && (
+          <PartnerPermissionsPanel scopeKind="label" scopeId={label.id} scopeName={label.name} />
         )}
       </div>
 

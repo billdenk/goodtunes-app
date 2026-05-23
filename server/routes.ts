@@ -3272,8 +3272,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(201).json({ album, trackCount: created });
   });
 
-  app.put("/api/admin/albums/:id", requireAdmin, async (req, res) => {
+  app.put("/api/admin/albums/:id", requireAdmin, async (req, res, next) => {
+    // Task #79 — partner-permission gate. Resolves caller role + target
+    // scope + post-sale lock, then either lets the request through
+    // (super_admin / unscoped admin / authorized partner) or sets
+    // req.partnerGate.divert=true so we write the body to the queue.
+    const { requirePartnerPermission } = await import("./auth/partnerPermissions");
+    return requirePartnerPermission("edit_metadata", "albums", (r) => String(r.params.id))(req, res, next);
+  }, async (req, res) => {
     const id = String(req.params.id);
+    const gate = req.partnerGate!;
+    if (gate.divert) {
+      const { createPendingChange } = await import("./auth/partnerPermissions");
+      const row = await createPendingChange({
+        targetTable: "albums",
+        targetId: id,
+        albumId: id,
+        scopeKind: gate.targetScope!.kind as any,
+        scopeId: gate.targetScope!.id,
+        patch: req.body ?? {},
+        submittedByUserId: req.session.userId!,
+        submittedNote: req.body?.__note ? String(req.body.__note) : null,
+      });
+      // Diverts only happen for the approval-required path now —
+      // post-sale lock returns a hard 403 from requirePartnerPermission
+      // before we ever reach this handler.
+      return res.status(202).json({
+        pendingChange: row,
+        message: "Your edit was sent to GoodTunes for review.",
+      });
+    }
     const { title, artist, artwork, year, type, description } = req.body ?? {};
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
@@ -3324,6 +3352,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/admin/albums/:id", requireAdmin, async (req, res) => {
+    // Task #79 — deleting an album is a content mutation that must
+    // respect edit_metadata + the post-sale lock, AND divert to the
+    // review queue under approval-mode. A sold album can never be
+    // deleted by a partner without an override.
+    {
+      const id = String(req.params.id);
+      const { partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumScope = await resolveAlbumScope(id);
+      if (!albumScope) return res.status(404).json({ message: "Album not found" });
+      if (albumScope.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: id });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "albums", targetId: id, albumId: id,
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "delete" },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+    }
     await storage.deleteAlbum(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
@@ -3332,6 +3383,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl } = req.body ?? {};
     if (!albumId || !title || trackNumber == null) {
       return res.status(400).json({ message: "albumId, title, trackNumber are required" });
+    }
+    // Task #79 — creating a song is a track-listing change
+    // (edit_metadata) and, when it embeds a master, also upload_masters.
+    // Both respect the post-sale lock. Approval-mode diverts the
+    // metadata side to the queue; if the create includes audio, it
+    // additionally requires upload_masters (no divert for that — masters
+    // are not in the approval-queue scope).
+    {
+      const { partnerEditGate, gateAlbumRoute, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumScope = await resolveAlbumScope(String(albumId));
+      if (!albumScope) return res.status(404).json({ message: "Album not found" });
+      if (albumScope.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: String(albumId) });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "songs", targetId: String(albumId), albumId: String(albumId),
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "create", title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+      if (audioUrl) {
+        if (await gateAlbumRoute(req, res, "upload_masters", String(albumId))) return;
+      }
     }
     const song = await storage.createSong({
       albumId: String(albumId),
@@ -3351,9 +3429,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(201).json(song);
   });
 
-  app.put("/api/admin/songs/:id", requireAdmin, async (req, res) => {
+  app.put("/api/admin/songs/:id", requireAdmin, async (req, res, next) => {
+    // Task #79 — partner-permission gate (mirrors album PUT). Songs
+    // gate on `edit_metadata` like their parent album; the verb gates
+    // master uploads via the dedicated `upload_masters` flag elsewhere.
+    const { requirePartnerPermission } = await import("./auth/partnerPermissions");
+    return requirePartnerPermission("edit_metadata", "songs", (r) => String(r.params.id))(req, res, next);
+  }, async (req, res) => {
     const id = String(req.params.id);
+    const gate = req.partnerGate!;
+    if (gate.divert) {
+      const { createPendingChange } = await import("./auth/partnerPermissions");
+      const row = await createPendingChange({
+        targetTable: "songs",
+        targetId: id,
+        albumId: gate.albumId,
+        scopeKind: gate.targetScope!.kind as any,
+        scopeId: gate.targetScope!.id,
+        patch: req.body ?? {},
+        submittedByUserId: req.session.userId!,
+      });
+      // Diverts only happen for the approval-required path now —
+      // post-sale lock returns a hard 403 from requirePartnerPermission
+      // before we ever reach this handler.
+      return res.status(202).json({
+        pendingChange: row,
+        message: "Your edit was sent to GoodTunes for review.",
+      });
+    }
     const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs } = req.body ?? {};
+    // Task #79 — body-shape gating: the outer middleware enforces
+    // edit_metadata + lock for ANY song PUT, but writes that touch the
+    // master file additionally require upload_masters. This keeps a
+    // partner with edit_metadata=true / upload_masters=false from
+    // swapping the audio under the guise of a metadata edit.
+    if (audioUrl !== undefined || audioSourceUrl !== undefined) {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      // gate.albumId is already set by requirePartnerPermission.
+      if (gate.albumId && await gateAlbumRoute(req, res, "upload_masters", gate.albumId)) return;
+    }
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
@@ -3462,6 +3576,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/admin/songs/:id", requireAdmin, async (req, res) => {
+    // Task #79 — deleting a track is a track-listing change. Resolve
+    // the song's album for scope + lock; divert under approval-mode.
+    {
+      const songId = String(req.params.id);
+      const song = await storage.getSongById(songId);
+      if (!song) return res.status(404).json({ message: "Song not found" });
+      const { partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumScope = await resolveAlbumScope(song.albumId);
+      if (albumScope?.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: song.albumId });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "songs", targetId: songId, albumId: song.albumId,
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "delete" },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+    }
     await storage.deleteSong(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
@@ -7766,6 +7902,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.put("/api/admin/people/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
+    // Task #79 — an artist-scoped partner editing their own person row
+    // (bio, photo, links) must have edit_metadata on the artist scope.
+    // People aren't sold, so no album lock — but approval-mode still
+    // diverts the edit into the review queue.
+    {
+      const { partnerEditGate, createPendingChange } = await import("./auth/partnerPermissions");
+      const scope = { kind: "artist" as const, id };
+      const outcome = await partnerEditGate(req, res, "edit_metadata", scope);
+      if (outcome === "deny") return;
+      if (outcome === "divert") {
+        const row = await createPendingChange({
+          targetTable: "people", targetId: id, albumId: null,
+          scopeKind: "artist", scopeId: id,
+          patch: { __op: "update", ...(req.body ?? {}) },
+          submittedByUserId: req.session.userId!,
+        });
+        return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+      }
+    }
     const b = req.body ?? {};
     const updates: any = {};
     const opt = (v: any) => (v ? String(v) : null);
@@ -8027,6 +8182,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/admin/people/:id", requireAdmin, async (req, res) => {
+    {
+      const id = String(req.params.id);
+      const { partnerEditGate, createPendingChange } = await import("./auth/partnerPermissions");
+      const outcome = await partnerEditGate(req, res, "edit_metadata", { kind: "artist", id });
+      if (outcome === "deny") return;
+      if (outcome === "divert") {
+        const row = await createPendingChange({
+          targetTable: "people", targetId: id, albumId: null,
+          scopeKind: "artist", scopeId: id,
+          patch: { __op: "delete" },
+          submittedByUserId: req.session.userId!,
+        });
+        return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+      }
+    }
     await storage.deletePerson(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
@@ -8345,6 +8515,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.put("/api/admin/labels/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
+    // Task #79 — label-scoped partners editing their own label profile
+    // (bio, logo, links) need edit_metadata. No album lock — labels
+    // aren't sold — but approval-mode still diverts to the queue.
+    {
+      const { partnerEditGate, createPendingChange } = await import("./auth/partnerPermissions");
+      const outcome = await partnerEditGate(req, res, "edit_metadata", { kind: "label", id });
+      if (outcome === "deny") return;
+      if (outcome === "divert") {
+        const row = await createPendingChange({
+          targetTable: "labels", targetId: id, albumId: null,
+          scopeKind: "label", scopeId: id,
+          patch: { __op: "update", ...(req.body ?? {}) },
+          submittedByUserId: req.session.userId!,
+        });
+        return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+      }
+    }
     const { name, domain, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
@@ -8385,6 +8572,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   app.delete("/api/admin/labels/:id", requireAdmin, async (req, res) => {
+    {
+      const id = String(req.params.id);
+      const { partnerEditGate, createPendingChange } = await import("./auth/partnerPermissions");
+      const outcome = await partnerEditGate(req, res, "edit_metadata", { kind: "label", id });
+      if (outcome === "deny") return;
+      if (outcome === "divert") {
+        const row = await createPendingChange({
+          targetTable: "labels", targetId: id, albumId: null,
+          scopeKind: "label", scopeId: id,
+          patch: { __op: "delete" },
+          submittedByUserId: req.session.userId!,
+        });
+        return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+      }
+    }
     // SET NULL on albums.label_id — releases stay, label credit clears.
     await storage.deleteLabel(String(req.params.id));
     return res.json({ message: "Deleted" });
@@ -9342,6 +9544,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = writerCreateBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid writer", issues: parsed.error.issues });
     const songId = String(req.params.id);
+    // Task #79 — credits ARE metadata. Gate via the parent album's
+    // scope. If the partner is in approval mode, divert this CREATE
+    // into pending_changes (targetId = parent songId + __op:"create").
+    const song = await storage.getSongById(songId);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    const { partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+    const albumScope = await resolveAlbumScope(song.albumId);
+    if (!albumScope?.scope) {
+      // Unscoped album → admin/super_admin only; requireAdmin already enforced.
+    } else {
+      const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: song.albumId });
+      if (outcome === "deny") return;
+      if (outcome === "divert") {
+        const row = await createPendingChange({
+          targetTable: "track_writers",
+          targetId: songId,
+          albumId: song.albumId,
+          scopeKind: albumScope.scope.kind,
+          scopeId: albumScope.scope.id,
+          patch: { __op: "create", ...parsed.data },
+          submittedByUserId: req.session.userId!,
+        });
+        return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+      }
+    }
     const existing = await storage.getSongCredits(songId);
     try {
       const w = await storage.createTrackWriter({
@@ -9358,6 +9585,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/admin/writers/:id", requireAdmin, async (req, res) => {
     const parsed = writerUpdateBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid writer", issues: parsed.error.issues });
+    {
+      const id = String(req.params.id);
+      const { getAlbumIdForCreditRow, partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumId = await getAlbumIdForCreditRow("writer", id);
+      if (!albumId) return res.status(404).json({ message: "Writer not found" });
+      const albumScope = await resolveAlbumScope(albumId);
+      if (albumScope?.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "track_writers", targetId: id, albumId,
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "update", ...parsed.data },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+    }
     try {
       const w = await storage.updateTrackWriter(String(req.params.id), parsed.data as any);
       if (!w) return res.status(404).json({ message: "Writer not found" });
@@ -9368,6 +9615,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   app.delete("/api/admin/writers/:id", requireAdmin, async (req, res) => {
+    {
+      const id = String(req.params.id);
+      const { getAlbumIdForCreditRow, partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumId = await getAlbumIdForCreditRow("writer", id);
+      if (!albumId) return res.status(404).json({ message: "Writer not found" });
+      const albumScope = await resolveAlbumScope(albumId);
+      if (albumScope?.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "track_writers", targetId: id, albumId,
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "delete" },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+    }
     await storage.deleteTrackWriter(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
@@ -9376,6 +9643,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = performerCreateBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid performer", issues: parsed.error.issues });
     const songId = String(req.params.id);
+    {
+      const song = await storage.getSongById(songId);
+      if (!song) return res.status(404).json({ message: "Song not found" });
+      const { partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumScope = await resolveAlbumScope(song.albumId);
+      if (albumScope?.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: song.albumId });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "track_performers", targetId: songId, albumId: song.albumId,
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "create", ...parsed.data },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+    }
     const existing = await storage.getSongCredits(songId);
     try {
       const p = await storage.createTrackPerformer({
@@ -9392,6 +9678,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/admin/performers/:id", requireAdmin, async (req, res) => {
     const parsed = performerUpdateBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid performer", issues: parsed.error.issues });
+    {
+      const id = String(req.params.id);
+      const { getAlbumIdForCreditRow, partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumId = await getAlbumIdForCreditRow("performer", id);
+      if (!albumId) return res.status(404).json({ message: "Performer not found" });
+      const albumScope = await resolveAlbumScope(albumId);
+      if (albumScope?.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "track_performers", targetId: id, albumId,
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "update", ...parsed.data },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+    }
     try {
       const p = await storage.updateTrackPerformer(String(req.params.id), parsed.data as any);
       if (!p) return res.status(404).json({ message: "Performer not found" });
@@ -9402,6 +9708,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   app.delete("/api/admin/performers/:id", requireAdmin, async (req, res) => {
+    {
+      const id = String(req.params.id);
+      const { getAlbumIdForCreditRow, partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const albumId = await getAlbumIdForCreditRow("performer", id);
+      if (!albumId) return res.status(404).json({ message: "Performer not found" });
+      const albumScope = await resolveAlbumScope(albumId);
+      if (albumScope?.scope) {
+        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          const row = await createPendingChange({
+            targetTable: "track_performers", targetId: id, albumId,
+            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            patch: { __op: "delete" },
+            submittedByUserId: req.session.userId!,
+          });
+          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+        }
+      }
+    }
     await storage.deleteTrackPerformer(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
@@ -10270,13 +10596,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })));
   });
 
-  // Create + email an invite (super-admin only).
-  app.post("/api/admin/invites", requireAdmin, requireRole("super_admin"), async (req, res) => {
+  // Create + email an invite. Super-admin can invite anyone into any
+  // role/scope. Task #79 — a partner (label/artist/etc.) with the
+  // `invite_subusers` permission can also call this, but the invite
+  // is force-pinned to their own role + scope so they can only grow
+  // their own team, never escalate or cross-scope.
+  app.post("/api/admin/invites", requireAdmin, async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
-    const role = String(req.body?.role || "").trim();
+    let role = String(req.body?.role || "").trim();
     let roleScopeId = req.body?.roleScopeId ? String(req.body.roleScopeId) : null;
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
+
+    // Authorize the caller. Super-admin → unrestricted. Otherwise the
+    // caller must be a partner whose scope has invite_subusers=true,
+    // and we overwrite role/scope with theirs.
+    const { getPartnerPermissions } = await import("./auth/partnerPermissions");
+    const { getUserRole } = await import("./auth/roles");
+    const { PARTNER_SCOPE_KINDS } = await import("@shared/schema");
+    const callerRole = await getUserRole(req.session.userId!);
+    if (!callerRole) return res.status(403).json({ message: "No role" });
+    if (callerRole.role !== "super_admin") {
+      if (!PARTNER_SCOPE_KINDS.includes(callerRole.role as any) || !callerRole.roleScopeId) {
+        return res.status(403).json({ message: "Only super-admins and scoped partners can invite" });
+      }
+      const perms = await getPartnerPermissions(callerRole.role as any, callerRole.roleScopeId);
+      if (!perms?.inviteSubusers) {
+        return res.status(403).json({ message: "Your team isn't allowed to invite sub-users — ask GoodTunes." });
+      }
+      role = callerRole.role;
+      roleScopeId = callerRole.roleScopeId;
+    }
+
     if (!ADMIN_ROLES.includes(role as any)) {
       return res.status(400).json({ message: "Pick a role" });
     }
@@ -10889,6 +11240,188 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!profile) return res.status(404).json({ message: "Customer not found" });
     res.json(profile);
   });
+
+  // ─── Task #79 — Per-partner permissions + post-sale edit lock ──────
+  const {
+    getPartnerPermissions,
+    upsertPartnerPermissions,
+    listPendingChanges,
+    getPendingChange,
+    reviewPendingChange,
+    createAdminOverride,
+    listAdminOverridesForAlbum,
+    getAlbumEditAccess,
+  } = await import("./auth/partnerPermissions");
+  const { PARTNER_SCOPE_KINDS } = await import("@shared/schema");
+
+  // Read the permissions row for (kind, id). Returns conservative
+  // all-false defaults when no row exists so the UI can render the
+  // toggle grid without a separate "not yet provisioned" branch.
+  app.get("/api/admin/partner-permissions/:kind/:id", requireAdmin, async (req, res) => {
+    const kind = String(req.params.kind);
+    const id = String(req.params.id);
+    if (!PARTNER_SCOPE_KINDS.includes(kind as any)) {
+      return res.status(400).json({ message: "Bad scope kind" });
+    }
+    const row = await getPartnerPermissions(kind as any, id);
+    res.json(row ?? {
+      scopeKind: kind,
+      scopeId: id,
+      editMetadata: false,
+      uploadMasters: false,
+      mapShopify: false,
+      managePayouts: false,
+      inviteSubusers: false,
+      metadataEditsRequireApproval: true,
+    });
+  });
+
+  // Super-admin writes the toggle grid. Upsert — first save creates the
+  // row, subsequent saves update it and stamp updated_by/at.
+  app.put(
+    "/api/admin/partner-permissions/:kind/:id",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const kind = String(req.params.kind);
+      const id = String(req.params.id);
+      if (!PARTNER_SCOPE_KINDS.includes(kind as any)) {
+        return res.status(400).json({ message: "Bad scope kind" });
+      }
+      const b = req.body ?? {};
+      const patch: Record<string, boolean> = {};
+      for (const k of [
+        "editMetadata",
+        "uploadMasters",
+        "mapShopify",
+        "managePayouts",
+        "inviteSubusers",
+        "metadataEditsRequireApproval",
+      ]) {
+        if (k in b) patch[k] = !!b[k];
+      }
+      const row = await upsertPartnerPermissions(kind as any, id, patch as any, req.session.userId!);
+      res.json(row);
+    },
+  );
+
+  // Pending changes queue — super-admin only. List filters by status,
+  // default "pending" so the review page lands on the inbox view.
+  app.get(
+    "/api/admin/pending-changes",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const status = (String(req.query.status || "pending")) as any;
+      const rows = await listPendingChanges(status);
+      res.json(rows);
+    },
+  );
+
+  app.get(
+    "/api/admin/pending-changes/:id",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const row = await getPendingChange(String(req.params.id));
+      if (!row) return res.status(404).json({ message: "Not found" });
+      res.json(row);
+    },
+  );
+
+  // Approve replays the patch via storage; reject just stamps the row.
+  // Both record reviewer + at + optional note for audit.
+  app.post(
+    "/api/admin/pending-changes/:id/review",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const decision = String(req.body?.decision || "");
+      if (decision !== "approved" && decision !== "rejected") {
+        return res.status(400).json({ message: "decision must be approved or rejected" });
+      }
+      const reviewerNote = req.body?.reviewerNote ? String(req.body.reviewerNote) : null;
+      // Approve-with-edits: when the reviewer tweaked the diff in the
+      // UI, the client posts the edited patch as `patchOverride`. The
+      // storage layer replays this instead of the partner's original
+      // and stamps the row's `patch` column with what was applied so
+      // the audit trail reflects reality.
+      const patchOverride =
+        decision === "approved" && req.body?.patchOverride && typeof req.body.patchOverride === "object"
+          ? (req.body.patchOverride as Record<string, unknown>)
+          : null;
+      let updated;
+      try {
+        updated = await reviewPendingChange(
+          String(req.params.id),
+          decision,
+          req.session.userId!,
+          reviewerNote,
+          patchOverride,
+        );
+      } catch (err: any) {
+        // apply_failed = the replayed patch could not be applied (row
+        // gone, FK violation, etc). Do NOT mark the queue row approved
+        // — leave it pending so the reviewer can adjust and retry.
+        if (err?.message === "apply_failed") {
+          return res.status(502).json({
+            message: "Could not apply the change. The target row may have moved or the patch is invalid — adjust and retry.",
+          });
+        }
+        throw err;
+      }
+      if (!updated) return res.status(404).json({ message: "Not found or already reviewed" });
+      res.json(updated);
+    },
+  );
+
+  // UI affordance read: returns `{canEdit, locked, hasActiveOverride,
+  // requiresApproval, missingPermissions}` so AdminAlbum can disable
+  // inputs and show an inline lock hint without speculatively POSTing
+  // and parsing a 403. Any authenticated admin (incl. partners) can
+  // call this for any album they can already load — it leaks no data
+  // they couldn't infer from the existing locked-chip endpoint.
+  app.get(
+    "/api/admin/albums/:id/edit-access",
+    requireAdmin,
+    async (req, res) => {
+      const out = await getAlbumEditAccess(req.session.userId!, String(req.params.id));
+      if (!out) return res.status(404).json({ message: "Album not found" });
+      res.json(out);
+    },
+  );
+
+  // List override audit for one album so AdminAlbum can show "Unlocked
+  // by Nick on 2026-05-22 — typo in title" alongside the lock badge.
+  app.get(
+    "/api/admin/albums/:id/overrides",
+    requireAdmin,
+    async (req, res) => {
+      const rows = await listAdminOverridesForAlbum(String(req.params.id));
+      res.json(rows);
+    },
+  );
+
+  // Super-admin grants an unlock override on a post-sale-locked album.
+  // `expiresAt` optional — null = single-shot (one edit, then consumed).
+  app.post(
+    "/api/admin/albums/:id/overrides",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const reason = String(req.body?.reason || "").trim();
+      if (!reason) return res.status(400).json({ message: "Reason is required" });
+      const expiresAt = req.body?.expiresAt ? new Date(req.body.expiresAt) : null;
+      const row = await createAdminOverride({
+        targetTable: "albums",
+        targetId: String(req.params.id),
+        grantedByUserId: req.session.userId!,
+        reason,
+        expiresAt,
+      });
+      res.json(row);
+    },
+  );
 
   return httpServer;
 }

@@ -463,6 +463,11 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     })
     .onConflictDoNothing({ target: orders.shopifyOrderId })
     .returning();
+  // Task #79 — first paid order stamps the post-sale lock on the album.
+  if (order) {
+    const { stampFirstSoldAtIfNeeded } = await import("./auth/partnerPermissions");
+    await stampFirstSoldAtIfNeeded(albumId);
+  }
 
   // If we lost the race (concurrent webhook replay), look up the order
   // that won and return its code.
@@ -981,6 +986,10 @@ export function registerShopifyRoutes(app: Express) {
       })
       .onConflictDoNothing({ target: orders.shopifyOrderId })
       .returning();
+    if (order) {
+      const { stampFirstSoldAtIfNeeded } = await import("./auth/partnerPermissions");
+      await stampFirstSoldAtIfNeeded(albumId);
+    }
     if (!order) {
       const [winner] = await db.select().from(orders).where(eq(orders.shopifyOrderId, fakeShopifyOrderId));
       const [code] = winner ? await db.select().from(shopifyRedemptionCodes).where(eq(shopifyRedemptionCodes.orderId, winner.id)) : [];
@@ -1082,6 +1091,11 @@ export function registerShopifyRoutes(app: Express) {
 
   app.post("/api/admin/albums/:id/shopify-mappings", requireAdmin, async (req, res) => {
     const albumId = String(req.params.id);
+    // Task #79 — Shopify mapping is gated by `map_shopify`.
+    {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      if (await gateAlbumRoute(req, res, "map_shopify", albumId)) return;
+    }
     const parsed = insertShopifyProductMappingSchema.safeParse({ ...req.body, albumId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid body" });
 
@@ -1137,6 +1151,10 @@ export function registerShopifyRoutes(app: Express) {
   });
 
   app.delete("/api/admin/albums/:albumId/shopify-mappings/:id", requireAdmin, async (req, res) => {
+    {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      if (await gateAlbumRoute(req, res, "map_shopify", String(req.params.albumId))) return;
+    }
     await db
       .delete(shopifyProductMappings)
       .where(

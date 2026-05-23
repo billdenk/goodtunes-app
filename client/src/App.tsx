@@ -47,6 +47,7 @@ import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
 import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
+import { AdminReview } from "@/pages/AdminReview";
 import AcceptInvite from "@/pages/AcceptInvite";
 import { GiftClaim } from "@/pages/GiftClaim";
 import { Redeem } from "@/pages/Redeem";
@@ -176,6 +177,11 @@ function Router() {
         </Route>
         <Route path="/admin/invites">
           <ProtectedRoute component={AdminInvites} />
+        </Route>
+        {/* Task #79 — Super-admin queue of partner-submitted metadata
+            edits awaiting review. */}
+        <Route path="/admin/review">
+          <ProtectedRoute component={AdminReview} />
         </Route>
         {/* Public invite-accept page — recipient sets username + password
             using a token-bound email + role. No auth required. */}

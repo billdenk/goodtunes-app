@@ -70,6 +70,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
@@ -147,6 +148,11 @@ interface AlbumFull {
   // Bundle purchase price in cents — drives the consumer Buy Bundle CTA.
   // Null = not for sale yet, no CTA shown on /album/:id.
   priceCents?: number | null;
+  // Task #79 — set the first time a paid order materializes for this
+  // album. Non-null means the album is post-sale locked for partner
+  // metadata edits; super-admin can still edit, or grant an unlock
+  // override (see /admin/review).
+  firstSoldAt?: string | null;
   songs: SongLite[];
 }
 
@@ -485,6 +491,9 @@ export function AdminAlbum() {
                   admin chrome (white card, slate text). */}
               {album.isExplicit && <ExplicitBadge tone="slate" />}
               <LifecyclePill {...lifecycle} />
+              {album.firstSoldAt && <AlbumLockChip album={album} />}
+              <AlbumEditAccessChip albumId={album.id} />
+              
               {album.isHidden && (
                 <span
                   className="inline-flex items-center gap-1 text-amber-700 text-[10.5px] font-medium normal-case tracking-normal"
@@ -927,6 +936,176 @@ export function AdminAlbum() {
   );
 }
 
+/* ─── Post-sale lock chip ──────────────────────────────────────────── */
+//
+// Task #79 — When `albums.firstSoldAt` is set, partner roles can no
+// longer edit metadata directly; their PUTs land in the pending-changes
+// queue. This chip surfaces the lock state to *any* admin so it's clear
+// why a partner's edits are getting routed for review. Super-admin gets
+// a click target that opens a small "Unlock for partner edits" dialog
+// that posts an admin_overrides row (single-shot by default).
+function AlbumLockChip({ album }: { album: AlbumFull }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: role } = useQuery<{ role: string }>({ queryKey: ["/api/me/role"] });
+  const isSuperAdmin = role?.role === "super_admin";
+
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [windowed, setWindowed] = useState(false);
+
+  const grant = useMutation({
+    mutationFn: async () => {
+      const expiresAt = windowed ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null;
+      const r = await apiRequest("POST", `/api/admin/albums/${album.id}/overrides`, {
+        reason: reason.trim(),
+        expiresAt,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/albums", album.id, "overrides"] });
+      toast({ title: "Unlock granted.", description: "Partner can now apply one metadata edit." });
+      setOpen(false);
+      setReason("");
+      setWindowed(false);
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't grant unlock",
+        description: e?.message || "Try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const soldAt = album.firstSoldAt ? new Date(album.firstSoldAt).toLocaleDateString() : "";
+  const chip = (
+    <span
+      className={
+        "inline-flex items-center gap-1 text-amber-700 text-[10.5px] font-medium normal-case tracking-normal" +
+        (isSuperAdmin ? " cursor-pointer hover:text-amber-800" : "")
+      }
+      title={`Locked for partner edits — first sold ${soldAt}`}
+      data-testid="badge-album-locked"
+      onClick={isSuperAdmin ? () => setOpen(true) : undefined}
+    >
+      <Lock className="w-3 h-3" />
+      Locked
+    </span>
+  );
+
+  if (!isSuperAdmin) return chip;
+
+  return (
+    <>
+      {chip}
+      <Dialog open={open} onOpenChange={(v) => !grant.isPending && setOpen(v)}>
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-album-unlock"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Unlock <span className="italic">{album.title}</span> for partner edits
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              This album is locked after its first paid sale. Granting an override lets a partner
+              push one metadata edit directly; we'll record who, when, and why for audit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-[12px] text-slate-700">Reason</Label>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                placeholder="e.g. fixing a typo in the track-3 title"
+                className="mt-1 text-[13px]"
+                data-testid="textarea-unlock-reason"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-[12.5px] text-slate-700">
+              <input
+                type="checkbox"
+                checked={windowed}
+                onChange={(e) => setWindowed(e.target.checked)}
+                data-testid="checkbox-unlock-windowed"
+              />
+              Allow edits for 24 hours (instead of a single edit)
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={grant.isPending}
+              className="bg-white text-slate-900 border border-slate-200 hover:bg-slate-50"
+              data-testid="button-unlock-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => grant.mutate()}
+              disabled={grant.isPending || !reason.trim()}
+              className="bg-[var(--brand-blue)] text-white hover:opacity-90"
+              data-testid="button-unlock-grant"
+            >
+              {grant.isPending ? "Granting…" : "Grant unlock"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/* ─── Per-user edit-access affordance ──────────────────────────────── */
+//
+// Task #79 — a tiny chip the partner sees when their session can't
+// directly edit this album. We render nothing for super-admins (they
+// always canEdit) and nothing for partners who can save freely, so
+// the header stays quiet in the happy path. The chip is a hint, not
+// a gate — the server still has the final say via the PUT middleware.
+function AlbumEditAccessChip({ albumId }: { albumId: string }) {
+  const { data } = useQuery<{
+    canEdit: boolean;
+    locked: boolean;
+    hasActiveOverride: boolean;
+    requiresApproval: boolean;
+    missingPermissions: string[];
+  }>({
+    queryKey: ["/api/admin/albums", albumId, "edit-access"],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/albums/${albumId}/edit-access`, { credentials: "include" });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  if (!data) return null;
+  if (data.canEdit && !data.requiresApproval) return null;
+  const label = !data.canEdit
+    ? data.locked && !data.hasActiveOverride
+      ? "Locked — ask GoodTunes to unlock"
+      : data.missingPermissions.includes("edit_metadata")
+        ? "Read-only for your team"
+        : data.missingPermissions.includes("out_of_scope")
+          ? "Out of scope"
+          : "Read-only"
+    : "Edits go to GoodTunes for review";
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-slate-600 text-[10.5px] font-medium normal-case tracking-normal bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5"
+      data-testid="badge-album-edit-access"
+      title={label}
+    >
+      {label}
+    </span>
+  );
+}
+
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
 function OverviewPanel({ album }: { album: AlbumFull }) {
@@ -938,6 +1117,32 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
   const { data: labels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
   });
+  // Task #79 — surface per-field read-only state when the session can't
+  // edit. Same query key as AlbumEditAccessChip so this is a cache hit.
+  const { data: editAccess } = useQuery<{
+    canEdit: boolean;
+    locked: boolean;
+    hasActiveOverride: boolean;
+    requiresApproval: boolean;
+    missingPermissions: string[];
+  }>({
+    queryKey: ["/api/admin/albums", album.id, "edit-access"],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/albums/${album.id}/edit-access`, { credentials: "include" });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  const disabled = editAccess ? !editAccess.canEdit : false;
+  const disabledReason = !editAccess
+    ? undefined
+    : editAccess.locked && !editAccess.hasActiveOverride
+      ? "Locked after first sale"
+      : editAccess.missingPermissions.includes("edit_metadata")
+        ? "Read-only for your team"
+        : editAccess.missingPermissions.includes("out_of_scope")
+          ? "Out of scope"
+          : undefined;
   // Build the dropdown options. Most-used label names first would be
   // nicer but the list is short — alphabetical is fine.
   const labelOptions = [
@@ -953,6 +1158,8 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         testId="panel-overview-release"
         endpoint={endpoint}
         columns={4}
+        disabled={disabled}
+        disabledReason={disabledReason}
         values={{
           goodTunesReleaseDate: album.goodTunesReleaseDate,
           streamingReleaseDate: album.streamingReleaseDate,
@@ -994,6 +1201,8 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         testId="panel-overview-metadata"
         endpoint={endpoint}
         columns={4}
+        disabled={disabled}
+        disabledReason={disabledReason}
         values={{
           title: album.title,
           artist: album.artist,

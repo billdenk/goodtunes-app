@@ -1186,6 +1186,10 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
   }
 
   if (order && order.status === "paid") {
+    // Task #79 — Stamp post-sale lock on first paid order. Idempotent
+    // (only writes when first_sold_at IS NULL).
+    const { stampFirstSoldAtIfNeeded } = await import("./auth/partnerPermissions");
+    await stampFirstSoldAtIfNeeded(albumId);
     // Task #122 — Reservation served its purpose: the order_items now
     // carry the signed_cert line, so the cap counter switches from
     // "pending reservation" to "paid order item" without a moment of

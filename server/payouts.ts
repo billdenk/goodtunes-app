@@ -339,6 +339,14 @@ export function registerPayoutRoutes(app: Express) {
     const parsed = createAccountSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
     const { ownerKind, ownerId } = parsed.data;
+    // Task #79 — payouts gated by `manage_payouts` against the owner's
+    // scope (person → artist scope; label → label scope).
+    {
+      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+      const scope = { kind: (ownerKind === "person" ? "artist" : "label") as any, id: ownerId };
+      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      if (err) return res.status(err.status).json(err.body);
+    }
     // Validate owner exists.
     if (ownerKind === "person") {
       const [p] = await db.select({ id: people.id, name: people.name }).from(people).where(eq(people.id, ownerId));
@@ -392,6 +400,12 @@ export function registerPayoutRoutes(app: Express) {
   app.post("/api/admin/payouts/accounts/:id/onboard", requireAdmin, async (req, res) => {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.status(404).json({ message: "Account not found" });
+    {
+      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+      const scope = { kind: (row.ownerKind === "person" ? "artist" : "label") as any, id: row.ownerId };
+      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      if (err) return res.status(err.status).json(err.body);
+    }
     try {
       const stripe = await getStripe();
       const origin = absoluteOrigin(req);
@@ -411,6 +425,12 @@ export function registerPayoutRoutes(app: Express) {
   app.post("/api/admin/payouts/accounts/:id/refresh", requireAdmin, async (req, res) => {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.status(404).json({ message: "Account not found" });
+    {
+      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+      const scope = { kind: (row.ownerKind === "person" ? "artist" : "label") as any, id: row.ownerId };
+      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      if (err) return res.status(err.status).json(err.body);
+    }
     try {
       const stripe = await getStripe();
       const acct = await stripe.accounts.retrieve(row.stripeAccountId);
@@ -425,6 +445,12 @@ export function registerPayoutRoutes(app: Express) {
   app.delete("/api/admin/payouts/accounts/:id", requireAdmin, async (req, res) => {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.json({ ok: true });
+    {
+      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+      const scope = { kind: (row.ownerKind === "person" ? "artist" : "label") as any, id: row.ownerId };
+      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      if (err) return res.status(err.status).json(err.body);
+    }
     try {
       const stripe = await getStripe();
       // Stripe rejects deletes against live accounts that have completed

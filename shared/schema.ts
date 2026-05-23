@@ -142,6 +142,13 @@ export const albums = pgTable("albums", {
   // by admin on the Preview & Purchase pipeline. Real checkout (Stripe +
   // cart sheet) arrives in later tasks — this is the data + stub button.
   priceCents: integer("price_cents"),
+  // Task #79 — post-sale edit lock. Stamped the moment an album's first
+  // paid order materializes (Stripe webhook + Shopify webhook + dev
+  // mint). Once non-null, partner-side metadata mutations require a
+  // super-admin unlock (admin_overrides row) or are written into the
+  // pending_changes queue. Super-admin is never blocked. Idempotent —
+  // only written when currently null, never reset on refund.
+  firstSoldAt: timestamp("first_sold_at"),
 });
 
 // Bonus content attached to an album. Both tables are intentionally
@@ -1847,3 +1854,104 @@ export const certNameAudits = pgTable("cert_name_audits", {
   toName: text("to_name").notNull(),
   at: timestamp("at").defaultNow().notNull(),
 });
+
+// ─── Task #79 — Per-partner permissions ──────────────────────────────
+// One row per (scopeKind, scopeId) — i.e. per label or per artist.
+// Permission verbs are stored as boolean columns so the admin UI and
+// the server middleware share the exact same shape with no JSON
+// guessing. Defaults are CONSERVATIVE: a freshly-invited partner can
+// look but not touch until a super-admin flips the flags on.
+//
+// `metadataEditsRequireApproval` is the "training wheels" flag. When
+// true, partner-side mutations that would otherwise apply directly to
+// album/song metadata (title, description, credits, bio) are diverted
+// into the `pending_changes` queue for a super-admin to review.
+//
+// scopeKind ∈ {label, artist, manufacturer, fulfillment}. The middleware
+// resolves the album → scope row (labelId or primaryArtistId) and looks
+// up the row to gate the request.
+export const PARTNER_SCOPE_KINDS = ["label", "artist", "manufacturer", "fulfillment"] as const;
+export type PartnerScopeKind = (typeof PARTNER_SCOPE_KINDS)[number];
+
+export const PARTNER_PERMISSION_VERBS = [
+  "edit_metadata",
+  "upload_masters",
+  "map_shopify",
+  "manage_payouts",
+  "invite_subusers",
+] as const;
+export type PartnerPermissionVerb = (typeof PARTNER_PERMISSION_VERBS)[number];
+
+export const partnerPermissions = pgTable("partner_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scopeKind: text("scope_kind").notNull(),
+  scopeId: varchar("scope_id").notNull(),
+  editMetadata: boolean("edit_metadata").notNull().default(false),
+  uploadMasters: boolean("upload_masters").notNull().default(false),
+  mapShopify: boolean("map_shopify").notNull().default(false),
+  managePayouts: boolean("manage_payouts").notNull().default(false),
+  inviteSubusers: boolean("invite_subusers").notNull().default(false),
+  metadataEditsRequireApproval: boolean("metadata_edits_require_approval").notNull().default(true),
+  updatedByUserId: varchar("updated_by_user_id"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type PartnerPermissions = typeof partnerPermissions.$inferSelect;
+export type InsertPartnerPermissions = typeof partnerPermissions.$inferInsert;
+
+// ─── Task #79 — Pending changes queue ────────────────────────────────
+// When a partner with `metadataEditsRequireApproval = true` (or a
+// partner editing a post-sale-locked album) submits a mutation, the
+// route writes a row here instead of applying. Super-admin reviews on
+// /admin/review and applies (status=approved) or rejects.
+//
+// `targetTable` ∈ {albums, songs} for the v1 surface. `patch` is the
+// raw JSON body the partner submitted; the apply step replays it
+// against the same storage method an admin PUT would call.
+export const PENDING_CHANGE_STATUSES = ["pending", "approved", "rejected"] as const;
+export type PendingChangeStatus = (typeof PENDING_CHANGE_STATUSES)[number];
+
+export const pendingChanges = pgTable("pending_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  targetTable: text("target_table").notNull(),
+  targetId: varchar("target_id").notNull(),
+  // Denorm of the album the change ultimately affects (songs roll up
+  // to their album). Lets the review queue group by album without a
+  // join, and lets us show the lock status on the queue row.
+  albumId: varchar("album_id"),
+  scopeKind: text("scope_kind").notNull(),
+  scopeId: varchar("scope_id").notNull(),
+  patch: jsonb("patch").notNull(),
+  submittedByUserId: varchar("submitted_by_user_id").notNull(),
+  submittedNote: text("submitted_note"),
+  status: text("status").notNull().default("pending"),
+  reviewedByUserId: varchar("reviewed_by_user_id"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewerNote: text("reviewer_note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PendingChange = typeof pendingChanges.$inferSelect;
+export type InsertPendingChange = typeof pendingChanges.$inferInsert;
+
+// ─── Task #79 — Super-admin unlock overrides ─────────────────────────
+// One row each time a super-admin unlocks a post-sale-locked album for
+// a partner edit. `consumedAt` is set the moment the override is used
+// (single-shot) OR the override carries an `expiresAt` window — the
+// gate accepts either model. Audit trail survives consumption.
+export const adminOverrides = pgTable("admin_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  targetTable: text("target_table").notNull(), // "albums" for v1
+  targetId: varchar("target_id").notNull(),
+  grantedByUserId: varchar("granted_by_user_id").notNull(),
+  reason: text("reason").notNull(),
+  // Window override (e.g. 24h) — non-null = "any number of edits until
+  // expiresAt"; null = single-shot consumed at first edit.
+  expiresAt: timestamp("expires_at"),
+  consumedAt: timestamp("consumed_at"),
+  consumedByUserId: varchar("consumed_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AdminOverride = typeof adminOverrides.$inferSelect;
+export type InsertAdminOverride = typeof adminOverrides.$inferInsert;

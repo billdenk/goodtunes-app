@@ -104,6 +104,12 @@ export interface EditablePanelProps {
   // Field grid width. Default 2 (legacy two-column layout). Use 4 for
   // wide horizontal panels (e.g. album Overview Release strip).
   columns?: 2 | 4;
+  // Task #79 — when the caller knows the session can't edit (partner
+  // missing edit_metadata, post-sale lock, etc.), hide the pencil and
+  // surface a quiet hint instead of the action affordance. The server
+  // is still the gate; this just keeps the UI honest.
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 export function EditablePanel({
@@ -115,6 +121,8 @@ export function EditablePanel({
   invalidate,
   readExtras,
   columns = 2,
+  disabled = false,
+  disabledReason,
 }: EditablePanelProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -332,17 +340,27 @@ export function EditablePanel({
     >
       <div className="flex items-center justify-between">
         <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-        <button
-          ref={editButtonRef}
-          type="button"
-          onClick={() => setEditing(true)}
-          aria-label={`Edit ${title}`}
-          title={`Edit ${title}`}
-          data-testid={`button-edit-${slug}`}
-          className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        {disabled ? (
+          <span
+            className="text-[11px] font-medium text-slate-400 italic"
+            title={disabledReason || "Read-only"}
+            data-testid={`badge-readonly-${slug}`}
+          >
+            {disabledReason || "Read-only"}
+          </span>
+        ) : (
+          <button
+            ref={editButtonRef}
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label={`Edit ${title}`}
+            title={`Edit ${title}`}
+            data-testid={`button-edit-${slug}`}
+            className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       {shortFields.length > 0 && (
         <dl

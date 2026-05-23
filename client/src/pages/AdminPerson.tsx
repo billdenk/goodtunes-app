@@ -32,6 +32,7 @@ import {
 } from "@/components/admin/previews/PersonPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
+import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -95,7 +96,7 @@ interface LabelLite {
 // even though the discography endpoints under the hood still say
 // "discography" — the rename is UI-only on purpose so the iTunes pull
 // machinery doesn't ripple.
-type Tab = "overview" | "cover" | "releases" | "streaming" | "gear" | "payouts";
+type Tab = "overview" | "cover" | "releases" | "streaming" | "gear" | "payouts" | "permissions";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
@@ -103,6 +104,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "streaming", label: "Streaming" },
   { key: "gear", label: "Gear" },
   { key: "payouts", label: "Payouts" },
+  { key: "permissions", label: "Permissions" },
 ];
 
 // Track row shape from `/api/people/:id/profile` — used to derive the
@@ -387,6 +389,9 @@ export function AdminPerson() {
             ownerName={person.name}
             ownerEmail={(person as any).email ?? null}
           />
+        )}
+        {tab === "permissions" && (
+          <PartnerPermissionsPanel scopeKind="artist" scopeId={person.id} scopeName={person.name} />
         )}
       </div>
 
