@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
 import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
+import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
 import { Player } from "@/pages/Player";
@@ -347,12 +348,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <PlayerProvider>
-          <NavVisibilityProvider>
-            <Toaster />
-            <Router />
-          </NavVisibilityProvider>
-        </PlayerProvider>
+        <GlobalErrorBoundary>
+          <PlayerProvider>
+            <NavVisibilityProvider>
+              <Toaster />
+              <Router />
+            </NavVisibilityProvider>
+          </PlayerProvider>
+        </GlobalErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );
