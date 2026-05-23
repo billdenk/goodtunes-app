@@ -814,6 +814,9 @@ export const creditRoles = pgTable(
 // any FK to users(id) breaks customer Google/Apple sign-in with a 500 on
 // the token insert. `db:push` won't drop FKs that vanish from the schema,
 // so if it ever reappears it has to be dropped manually again.
+// 2026-05-23: reappeared in dev+prod and 500'd a real fan's signup-code
+// verify (insert of userId='verify:<email>' violates the FK because no
+// such users(id) row exists). Dropped by hand again on both DBs.
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
   userId: varchar("user_id").notNull(),
