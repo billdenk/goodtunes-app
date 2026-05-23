@@ -797,17 +797,6 @@ export function Login() {
             </button>
           </div>
         )}
-        {isAdmin && (
-          <p
-            className="mt-3 mb-5 rounded-lg bg-slate-100 px-3 py-2 text-[12px] leading-snug text-slate-700"
-            data-testid="text-invite-only-notice"
-          >
-            Partner accounts are invite-only. If you were promised access, check your email for an
-            invite link, or contact{" "}
-            <a className="font-semibold underline" href="mailto:nick@goodtunes.fm">nick@goodtunes.fm</a>.
-          </p>
-        )}
-
         {mode === "register" && (
           <div className="flex items-center justify-center gap-2 mb-5">
             <div className={s.step1Tick(step === 1)} />
