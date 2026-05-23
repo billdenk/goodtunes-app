@@ -931,11 +931,23 @@ export function registerCommerceRoutes(app: Express) {
     const codeHash = await hashCode(code);
     const expiresAt = new Date(Date.now() + 15 * 60_000);
     await db.insert(emailVerifications).values({ email, codeHash, expiresAt });
-    // Real email send wires up in a follow-up task; today we log the code
-    // to the server console so dev can grab it. The response shape never
-    // includes the code — leaking it here would defeat the whole gate.
-    console.log(`[verify] email=${email} code=${code} (15min ttl)`);
-    res.json({ ok: true, devCode: process.env.NODE_ENV === "production" ? undefined : code });
+    // When RESEND_API_KEY is set, attempt a real send. On success we
+    // never echo the code back or log it (would defeat the gate). On
+    // failure, the caller gets a generic "try again" — never leak
+    // whether the address exists or why the send failed. When no key
+    // is configured (local dev), fall back to console log + devCode so
+    // development keeps working without an inbox.
+    if (process.env.RESEND_API_KEY) {
+      const { sendCustomerSignupCodeEmail } = await import("./mail");
+      const result = await sendCustomerSignupCodeEmail(email, code, 15);
+      if (!result.ok) {
+        console.warn(`[verify] mail failed for ${email}: ${result.reason}`);
+        return res.status(500).json({ message: "Couldn't send a code right now — please try again in a moment" });
+      }
+      return res.json({ ok: true });
+    }
+    console.log(`[verify] email=${email} code=${code} (15min ttl, dev — no RESEND_API_KEY)`);
+    res.json({ ok: true, devCode: code });
   });
 
   app.post("/api/email-verifications/confirm", async (req, res) => {

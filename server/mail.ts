@@ -75,6 +75,33 @@ export async function sendAdminOtpEmail(toEmail: string, code: string, ttlMinute
   return sendViaResend(toEmail, subject, html, text);
 }
 
+// Send a customer signup code. Fan-facing copy ("Welcome to GoodTunes")
+// distinct from the admin OTP template — same Resend transport, same
+// ok/reason contract so the caller decides whether to fall back to a
+// dev console log + devCode echo.
+export async function sendCustomerSignupCodeEmail(toEmail: string, code: string, ttlMinutes: number): Promise<SendResult> {
+  const subject = `Welcome to GoodTunes — your sign-in code: ${code}`;
+  const text = [
+    `Welcome to GoodTunes!`,
+    ``,
+    `Your sign-in code is ${code}.`,
+    ``,
+    `Enter it on the sign-in screen to finish creating your account. It expires in ${ttlMinutes} minutes.`,
+    ``,
+    `If you didn't ask to sign in, you can safely ignore this email.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Welcome to GoodTunes</div>
+      <h1 style="font-size: 28px; margin: 12px 0 24px; font-weight: 700;">Your sign-in code</h1>
+      <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; padding: 20px 24px; background: #f4f4f7; border-radius: 12px; text-align: center; font-family: 'SF Mono', Menlo, Consolas, monospace; color: #00062B;">${code}</div>
+      <p style="font-size: 15px; color: #444; margin-top: 24px; line-height: 1.5;">Pop this code back into the sign-in screen to finish creating your account. It expires in <strong>${ttlMinutes} minutes</strong>.</p>
+      <p style="font-size: 13px; color: #888; margin-top: 32px; line-height: 1.5;">If you didn't ask to sign in, you can safely ignore this email — no account will be created.</p>
+    </div>
+  `;
+  return sendViaResend(toEmail, subject, html, text);
+}
+
 // Task #256 — Notify super-admins that a customer landed on the admin
 // shell and is asking to be promoted. One email per (customer, day) is
 // enforced by the caller via admin_access_requests.last_notified_at;

@@ -30,6 +30,10 @@ When Apple Sign-In returns `@privaterelay.appleid.com`, the customer is prompted
 
 CNAMEs at the user's DNS provider point both subdomains at the deployment. Apple's domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts. Two ways to provide it: (1) commit the verification file Apple gives you to `public/.well-known/apple-developer-domain-association.txt` (preferred — survives redeploy, no secret-manager fiddling), or (2) set `APPLE_DOMAIN_ASSOCIATION` in the env. The route prefers the file when present and falls back to the env var.
 
+## Customer signup verification email (Task #259)
+
+New fans hit `POST /api/email-verifications/start` from the `my.goodtunes.music` login page; the handler hashes a 6-digit code, stores it on `email_verifications`, and — when `RESEND_API_KEY` is set — sends the branded `sendCustomerSignupCodeEmail` (fan copy, 15-minute TTL) via the same Resend transport as admin OTP. On a successful real send the response omits `devCode` and the code is **never** console-logged (would defeat the gate). If Resend rejects the send, the user gets a generic 500 "Couldn't send a code right now — please try again" and the underlying reason is logged server-side only — we never leak whether the address exists or whether mail is misconfigured. With no `RESEND_API_KEY` (local dev), behavior is unchanged: code logs to the workflow console and is echoed back as `devCode` so signup keeps working without an inbox.
+
 ## Partner invites + referrals (Task #78)
 
 Single invite sheet at `/admin/invites` (super-admin only) covers every partner role: super-admin, label, artist, manufacturer, fulfillment, **and non-profit**. Non-profits live in the existing `organizations` table with `kind='non_profit'` — they share the org schema with labels/manufacturers rather than getting a parallel table, which keeps `people.referredByOrgId` pointing at one place.
