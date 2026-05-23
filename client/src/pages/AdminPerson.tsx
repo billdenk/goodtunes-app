@@ -33,6 +33,7 @@ import {
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -84,6 +85,10 @@ interface PersonFull {
   // the Members tab + per-album lineup snapshots only show then.
   isGroup: boolean;
   groupKind: string | null;
+  // Task #199 — if this artist was invited by a specific press, their
+  // Sell-panel Presses surface is hard-locked to that press until
+  // their first run ships. Super-admin can clear/switch via Identity.
+  invitedByPressId: string | null;
 }
 
 interface LabelLite {
@@ -534,6 +539,7 @@ function OverviewPanel({
   return (
     <div className="space-y-5">
       <ReferralSummaryPanel kind="artist" id={person.id} />
+      <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} />
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"

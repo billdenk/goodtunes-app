@@ -23,6 +23,19 @@ A streaming-imported album (Apple/Spotify-sourced, `is_goodtunes_release=false`,
 
 Treat `(artist, lower(title))` collisions across the `is_goodtunes_release` boundary as expected. Don't propose dedupe, don't auto-claim, don't merge on import. Surface them in admin only as informational (so the operator knows both exist), never as a warning that needs action. The two-row pattern is the product design.
 
+## Press-invited partners — hard-locked Sell-panel Presses surface
+
+When a manufacturer (pressing plant) admin with `inviteSubusers` invites an artist or label onto GoodTunes, the invite-accept handler stamps `people.invited_by_press_id` / `labels.invited_by_press_id` with the inviting press. That stamp gates two things on the partner's side:
+
+1. **Sell-panel Presses surface** — the partner sees only the inviting press's card (with a lock note) until any of their albums has an order in `orders.fulfillment_status='shipped'`. Once a run ships, the full pressing-plant directory unlocks with the inviting press still floated to the front and highlighted. No "see other plants" disclosure is shown to the partner while locked — the message is "your press" and "message GoodTunes if you need to switch sooner."
+2. **Cost calculator defaults** — `GET /api/admin/albums/:id/invited-press` returns the inviting press's `press_format_costs` rows merged over the platform `payout_format_costs` defaults format-by-format, and the SellPanel's draft-SKU Cost readout reads from that merged source whenever a press is set.
+
+Super-admin can clear or reassign the press at any time via `PATCH /api/admin/{people|labels}/:id/invited-press` (surfaced in the partner's Identity panel as the InvitedByPressPanel) — useful if the relationship sours. The lock is per-partner, not per-album, and shipping the first run is irreversible (no re-locking after unlock).
+
+**Why:** so a press that recruited a partner gets a guaranteed first run on its own machines without GoodTunes hard-coding exclusivity, and so the cost-calculator numbers match the press the partner is actually about to use.
+
+**How to apply:** any new partner-onboarding referrer kind that wants a similar lock should mirror this exact shape (referrer-scope column on the partner table, single GET endpoint returning the locked-entity + `hasShippedFirst` flag + merged defaults, super-admin-only override panel on the partner detail page). Do not add a "request to unlock" UI on the partner side — escalation is out-of-band by design.
+
 ## Paste-a-URL entry for shop-like entities (vendors, gear, labels, manufacturers)
 
 `AdminVendors.tsx`, `AdminInstruments.tsx`, `AdminLabels.tsx`, and `AdminManufacturers.tsx` all use the same "Add" dialog — operator pastes the entity's website, the server scraper (`POST /api/admin/vendors/scrape`, `/api/admin/instruments/scrape`, `/api/admin/labels/scrape`, `/api/admin/manufacturers/scrape`) returns OG-derived `{name, domain, logoUrl, …}`, and the create POST surfaces a 409 + `{label|vendor|manufacturer}` payload when the domain is already in the catalog so the UI offers "open existing" instead of double-creating.

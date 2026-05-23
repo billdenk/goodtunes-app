@@ -10878,6 +10878,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { PARTNER_SCOPE_KINDS } = await import("@shared/schema");
     const callerRole = await getUserRole(req.session.userId!);
     if (!callerRole) return res.status(403).json({ message: "No role" });
+    // Task #199 — track whether this invite is the special
+    // "manufacturer admin invites a brand-new artist/label" path so we
+    // can auto-pin the referrer to the press at the bottom of the
+    // handler (post-validation). pressInviterScopeId stays null for
+    // every other caller / role combination.
+    let pressInviterScopeId: string | null = null;
     if (callerRole.role !== "super_admin") {
       if (!PARTNER_SCOPE_KINDS.includes(callerRole.role as any) || !callerRole.roleScopeId) {
         return res.status(403).json({ message: "Only super-admins and scoped partners can invite" });
@@ -10886,8 +10892,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!perms?.inviteSubusers) {
         return res.status(403).json({ message: "Your team isn't allowed to invite sub-users — ask GoodTunes." });
       }
-      role = callerRole.role;
-      roleScopeId = callerRole.roleScopeId;
+      // Task #199 — a manufacturer (press) admin with invite_subusers
+      // can either grow their own team (role=manufacturer, same scope)
+      // OR invite a brand-new artist/label onto GoodTunes. In the
+      // artist/label case we let the requested role/scope through
+      // unchanged and stamp the referrer to this press; in every
+      // other case we keep the original force-to-own-scope rule.
+      if (callerRole.role === "manufacturer" && (role === "artist" || role === "label")) {
+        pressInviterScopeId = callerRole.roleScopeId;
+        // keep client-provided role + roleScopeId
+      } else {
+        role = callerRole.role;
+        roleScopeId = callerRole.roleScopeId;
+      }
     }
 
     if (!ADMIN_ROLES.includes(role as any)) {
@@ -10932,16 +10949,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // accept (and store) for any role though so the audit trail is
     // intact even if the role changes later.
     const referrerKindRaw = req.body?.referrerKind ? String(req.body.referrerKind) : null;
-    const referrerScopeId = req.body?.referrerScopeId ? String(req.body.referrerScopeId) : null;
+    let referrerScopeId = req.body?.referrerScopeId ? String(req.body.referrerScopeId) : null;
     const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
-    let referrerKind: "artist" | "non_profit" | null = null;
-    if (referrerKindRaw === "artist" || referrerKindRaw === "non_profit") {
+    let referrerKind: "artist" | "non_profit" | "manufacturer" | null = null;
+    if (referrerKindRaw === "artist" || referrerKindRaw === "non_profit" || referrerKindRaw === "manufacturer") {
       if (!referrerScopeId) return res.status(400).json({ message: "Pick a referrer or clear the field" });
       const ok = referrerKindRaw === "artist"
         ? !!(await storage.getPersonById(referrerScopeId))
-        : await orgExists(referrerScopeId);
+        : referrerKindRaw === "manufacturer"
+          ? !!(await storage.getManufacturerById(referrerScopeId))
+          : await orgExists(referrerScopeId);
       if (!ok) return res.status(400).json({ message: "That referrer no longer exists" });
       referrerKind = referrerKindRaw;
+    }
+
+    // Task #199 — when a press admin invites a new artist/label,
+    // overwrite any client-supplied referrer with the press itself.
+    // Super-admin issuing the same invite from the admin form can
+    // pick the press explicitly through the referrer picker (which
+    // takes the same code path below).
+    if (pressInviterScopeId) {
+      referrerKind = "manufacturer";
+      referrerScopeId = pressInviterScopeId;
     }
 
     const existing = await storage.getUserByEmail(email);
@@ -10990,6 +11019,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       emailDelivered: result.ok,
     });
   });
+
+  // ─── Task #199 — Invited-by press override (super-admin only) ──────
+  // The press-invite flow stamps `people.invited_by_press_id` /
+  // `labels.invited_by_press_id` on accept. Until the artist/label
+  // ships their first run their Sell-panel Presses surface is hard-
+  // locked to that press. If the relationship sours before then (or
+  // we mis-attributed on import), super-admin can clear or reassign
+  // the press here. body = `{ pressId: string | null }`.
+  async function setInvitedByPress(
+    kind: "people" | "labels",
+    id: string,
+    pressId: string | null,
+  ): Promise<{ ok: true } | { error: string }> {
+    if (pressId) {
+      const m = await storage.getManufacturerById(pressId);
+      if (!m) return { error: "That press no longer exists" };
+    }
+    const exists = kind === "people"
+      ? await storage.getPersonById(id)
+      : await storage.getLabelById(id);
+    if (!exists) return { error: "Partner not found" };
+    if (kind === "people") {
+      await db.execute(sql`UPDATE people SET invited_by_press_id = ${pressId} WHERE id = ${id}`);
+    } else {
+      await db.execute(sql`UPDATE labels SET invited_by_press_id = ${pressId} WHERE id = ${id}`);
+    }
+    return { ok: true };
+  }
+  app.patch(
+    "/api/admin/people/:id/invited-press",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const pressId = req.body?.pressId ? String(req.body.pressId) : null;
+      const r = await setInvitedByPress("people", String(req.params.id), pressId);
+      if ("error" in r) return res.status(400).json({ message: r.error });
+      res.json({ ok: true });
+    },
+  );
+  app.patch(
+    "/api/admin/labels/:id/invited-press",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const pressId = req.body?.pressId ? String(req.body.pressId) : null;
+      const r = await setInvitedByPress("labels", String(req.params.id), pressId);
+      if ("error" in r) return res.status(400).json({ message: r.error });
+      res.json({ ok: true });
+    },
+  );
 
   // Revoke a pending invite (super-admin only). Soft-revoke so we keep
   // the audit row; the token is immediately rejected at /api/invites/:token.
@@ -11126,6 +11205,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       } catch (e: any) {
         console.warn(`[invite] referrer wiring failed for ${invite.id}: ${e?.message}`);
+      }
+    }
+
+    // Task #199 — when the inviting party is a press (manufacturer),
+    // stamp the artist or label's `invited_by_press_id`. This drives
+    // the hard lock on the Sell-panel Presses surface until the
+    // partner ships their first run (then the lock softens to the
+    // full directory). Super-admin can clear/switch later via the
+    // Identity panel override endpoint.
+    if (referrerKind === "manufacturer" && referrerScopeId && invite.roleScopeId) {
+      try {
+        if (invite.role === "artist") {
+          await db.execute(sql`UPDATE people SET invited_by_press_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
+        } else if (invite.role === "label") {
+          await db.execute(sql`UPDATE labels SET invited_by_press_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
+        }
+      } catch (e: any) {
+        console.warn(`[invite] press wiring failed for ${invite.id}: ${e?.message}`);
       }
     }
 

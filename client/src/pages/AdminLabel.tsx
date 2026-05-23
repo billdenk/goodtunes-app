@@ -32,6 +32,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import {
   LabelPreviewCard,
   type LabelPreviewAlbum,
@@ -63,6 +64,11 @@ interface Label {
   websiteUrl: string | null;
   instagramUrl: string | null;
   coverUrl: string | null;
+  // Task #199 — if this label was invited by a specific press, their
+  // Sell-panel Presses surface is hard-locked to that press until
+  // they ship their first run. Super-admin can clear/switch via the
+  // Identity panel.
+  invitedByPressId: string | null;
 }
 
 interface AlbumLite {
@@ -471,7 +477,9 @@ function OverviewPanel({ label }: { label: Label }) {
   ];
   const endpoint = `/api/admin/labels/${label.id}`;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div className="space-y-5">
+      <InvitedByPressPanel kind="labels" id={label.id} currentPressId={label.invitedByPressId} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"
@@ -523,6 +531,7 @@ function OverviewPanel({ label }: { label: Label }) {
           },
         ]}
       />
+      </div>
     </div>
   );
 }

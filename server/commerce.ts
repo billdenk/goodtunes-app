@@ -443,6 +443,111 @@ export function registerCommerceRoutes(app: Express) {
   app.get("/api/admin/payout-format-costs", requireAdmin, async (_req, res) => {
     res.json(await listFormatCosts());
   });
+
+  // Task #199 — Invited-by press for an album. Resolves the press
+  // through `albums.primary_artist_id → people.invited_by_press_id`
+  // first, then `albums.label_id → labels.invited_by_press_id`, then
+  // null. When set, also returns:
+  //   • `press`           — the manufacturer row (logo/name/location/etc.)
+  //   • `hasShippedFirst` — has the artist/label ever shipped a paid
+  //                         physical run? Drives the soft/hard lock on
+  //                         the Sell-panel Presses surface.
+  //   • `formatCosts`     — per-format cost breakdown to use in the
+  //                         cost calculator: merges any
+  //                         `press_format_costs` rows for this press
+  //                         on top of the platform defaults so a press
+  //                         that hasn't filled in its own pricing yet
+  //                         still produces a usable readout.
+  // The "shipped" signal is `orders.fulfillment_status = 'shipped'`
+  // (the carrier-accepted state); pending/in-fulfillment runs don't
+  // soften the lock yet.
+  app.get("/api/admin/albums/:id/invited-press", requireAdmin, async (req, res) => {
+    const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+
+    let pressId: string | null = null;
+    let scopeKind: "artist" | "label" | null = null;
+    let scopeId: string | null = null;
+    if (album.primaryArtistId) {
+      const p = await storage.getPersonById(album.primaryArtistId);
+      if (p && (p as any).invitedByPressId) {
+        pressId = String((p as any).invitedByPressId);
+        scopeKind = "artist";
+        scopeId = album.primaryArtistId;
+      }
+    }
+    if (!pressId && album.labelId) {
+      const l = await storage.getLabelById(album.labelId);
+      if (l && (l as any).invitedByPressId) {
+        pressId = String((l as any).invitedByPressId);
+        scopeKind = "label";
+        scopeId = album.labelId;
+      }
+    }
+
+    if (!pressId) {
+      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts() });
+    }
+
+    const press = await storage.getManufacturerById(pressId);
+    // press might have been deleted out from under the column (SET NULL
+    // isn't on the column — we left it untyped to keep the migration
+    // simple). Treat a dangling reference as "no lock".
+    if (!press) {
+      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts() });
+    }
+
+    // Has-shipped check: any shipped paid order on any album whose
+    // primary_artist (or label) matches our locked scope.
+    let hasShippedFirst = false;
+    try {
+      const col = scopeKind === "artist" ? "primary_artist_id" : "label_id";
+      const r: any = await db.execute(sql.raw(`
+        SELECT 1 FROM orders o
+        JOIN albums a ON a.id = o.album_id
+        WHERE a.${col} = '${String(scopeId).replace(/'/g, "''")}'
+          AND o.fulfillment_status = 'shipped'
+        LIMIT 1
+      `));
+      hasShippedFirst = ((r as any).rows ?? []).length > 0;
+    } catch {}
+
+    // Merge per-press overrides on top of platform defaults so callers
+    // get one row per format.
+    const platform = await listFormatCosts();
+    const overrides: any = await db.execute(sql`SELECT * FROM press_format_costs WHERE press_id = ${pressId}`);
+    const overrideMap = new Map<string, any>();
+    for (const r of ((overrides as any).rows ?? [])) overrideMap.set(String(r.format), r);
+    const formatCosts = platform.map((p: any) => {
+      const o = overrideMap.get(p.format);
+      if (!o) return p;
+      return {
+        ...p,
+        manufacturingCents: Number(o.manufacturing_cents),
+        publishingCents: Number(o.publishing_cents),
+        paymentProcessingCents: Number(o.payment_processing_cents),
+        goodtunesCents: Number(o.goodtunes_cents),
+      };
+    });
+
+    res.json({
+      press: {
+        id: press.id,
+        name: press.name,
+        logoUrl: (press as any).logoUrl ?? null,
+        coverUrl: (press as any).coverUrl ?? null,
+        bio: (press as any).bio ?? null,
+        location: (press as any).location ?? null,
+        websiteUrl: (press as any).websiteUrl ?? null,
+        turnaroundDays: (press as any).turnaroundDays ?? null,
+        specialties: (press as any).specialties ?? [],
+      },
+      hasShippedFirst,
+      scopeKind,
+      scopeId,
+      formatCosts,
+    });
+  });
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     await db
       .delete(albumSkus)

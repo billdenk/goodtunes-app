@@ -49,10 +49,16 @@ const SCOPE_CONFIG: Record<
   non_profit: { endpoint: "/api/non-profits", noun: "non-profit", thumbField: "logoUrl" },
 };
 
-// Referrer picker — artist or non-profit only. Same SCOPE_CONFIG entries.
+// Referrer picker — artist, non-profit, or press (manufacturer).
+// Task #199 added "manufacturer" so super-admins can attribute an
+// invite to a specific pressing plant; the accept flow stamps
+// `people.invited_by_press_id` / `labels.invited_by_press_id` from
+// this so the partner's Sell-panel Presses surface is hard-locked
+// to that press until their first run ships.
 const REFERRER_CONFIG = {
   artist: SCOPE_CONFIG.artist,
   non_profit: SCOPE_CONFIG.non_profit,
+  manufacturer: SCOPE_CONFIG.manufacturer,
 } as const;
 
 type ScopeEntity = { id: string; name: string; photoUrl?: string | null; logoUrl?: string | null };
@@ -190,7 +196,7 @@ export function AdminInvites() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("super_admin");
   const [scopeId, setScopeId] = useState<string | null>(null);
-  const [referrerKind, setReferrerKind] = useState<"" | "artist" | "non_profit">("");
+  const [referrerKind, setReferrerKind] = useState<"" | "artist" | "non_profit" | "manufacturer">("");
   const [referrerScopeId, setReferrerScopeId] = useState<string | null>(null);
   const [welcomeNote, setWelcomeNote] = useState("");
   const [lastUrl, setLastUrl] = useState<string | null>(null);
@@ -383,6 +389,7 @@ export function AdminInvites() {
               <option value="">— none —</option>
               <option value="artist">Artist</option>
               <option value="non_profit">Non-profit</option>
+              <option value="manufacturer">Press (manufacturer)</option>
             </select>
             {referrerKind && (
               <ScopePicker

@@ -22,7 +22,7 @@
 // pricing plumbing is tracked separately on the roadmap.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, Lock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
@@ -58,6 +58,18 @@ type Manufacturer = {
   specialties: string[];
 };
 
+// Task #199 — response from /api/admin/albums/:id/invited-press.
+// `press` is null when the album's artist + label both have no
+// invited-by-press stamp; in that case `formatCosts` mirrors the
+// platform defaults so callers can fall through to one source.
+type InvitedPressResponse = {
+  press: Manufacturer | null;
+  hasShippedFirst: boolean;
+  scopeKind?: "artist" | "label" | null;
+  scopeId?: string | null;
+  formatCosts: PayoutFormatCost[];
+};
+
 export function SellPanel({ albumId }: { albumId: string }) {
   const { toast } = useToast();
   const { data, isLoading } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
@@ -73,11 +85,20 @@ export function SellPanel({ albumId }: { albumId: string }) {
   const { data: formatCosts } = useQuery<PayoutFormatCost[]>({
     queryKey: ["/api/admin/payout-format-costs"],
   });
+  // Task #199 — if this album's primary artist (or label) was invited
+  // by a specific press, prefer that press's cost overrides for the
+  // calculator. Falls back to platform defaults format-by-format when
+  // the press hasn't filled in its own numbers yet, so artists always
+  // see a usable readout. Also drives the Presses panel hard-lock.
+  const { data: invitedPress } = useQuery<InvitedPressResponse>({
+    queryKey: ["/api/admin/albums", albumId, "invited-press"],
+  });
   const costByFormat = useMemo(() => {
     const m = new Map<string, PayoutFormatCost>();
-    (formatCosts ?? []).forEach((c) => m.set(c.format, c));
+    const source = invitedPress?.press ? invitedPress.formatCosts : formatCosts;
+    (source ?? []).forEach((c) => m.set(c.format, c));
     return m;
-  }, [formatCosts]);
+  }, [formatCosts, invitedPress]);
 
   const upsertSku = useMutation({
     mutationFn: async (body: {
@@ -138,7 +159,7 @@ export function SellPanel({ albumId }: { albumId: string }) {
     <div className="py-6">
       <div className="max-w-3xl">
         {/* Presses */}
-        <PressesPanel />
+        <PressesPanel albumId={albumId} invited={invitedPress ?? null} />
 
         {/* SKUs */}
         <div className="mb-8">
@@ -308,35 +329,77 @@ function AddPhysicalGoodButton({
 // pricing plumbing is tracked on the roadmap — for now the panel is
 // purely informational so an artist can see who's available before
 // they decide on a pressing plant.
-function PressesPanel() {
+function PressesPanel({
+  albumId,
+  invited,
+}: {
+  albumId: string;
+  invited: InvitedPressResponse | null;
+}) {
   const { data, isLoading } = useQuery<Manufacturer[]>({
     queryKey: ["/api/manufacturers"],
   });
   const presses = data ?? [];
+
+  // Task #199 — hard lock until the first run ships. When this album's
+  // artist (or label) was invited to GoodTunes by a specific press,
+  // they only see that press until they've shipped their first paid
+  // run. Once `hasShippedFirst` flips true the panel unlocks to the
+  // full directory (invited press still rendered first, marked).
+  // Super-admin can clear/switch the invited press at any time via
+  // the partner's Identity panel.
+  const invitedPress = invited?.press ?? null;
+  const locked = !!invitedPress && !invited?.hasShippedFirst;
+
+  if (locked) {
+    return (
+      <div className="mb-8" data-testid="panel-presses">
+        <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Your press</h2>
+        <p className="text-[13px] text-slate-500 mb-4 inline-flex items-center gap-1.5">
+          <Lock className="w-3 h-3 text-slate-400" />
+          You were invited by {invitedPress!.name}. The full pressing-plant directory unlocks once your first run ships — message GoodTunes if you need to switch sooner.
+        </p>
+        <div className="flex">
+          <PressCard press={invitedPress!} highlight />
+        </div>
+      </div>
+    );
+  }
+
   // Hide the whole panel on empty/loading per task #194 spec — a fresh
   // DB without any presses should not render an empty-state card.
   if (isLoading || presses.length === 0) return null;
+
+  // Once unlocked (or never locked), render the full directory. When
+  // invited press is set we float it to the front and mark it so the
+  // partner still knows who brought them on.
+  const ordered = invitedPress
+    ? [invitedPress, ...presses.filter((p) => p.id !== invitedPress.id)]
+    : presses;
   return (
     <div className="mb-8" data-testid="panel-presses">
       <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Presses</h2>
       <p className="text-[13px] text-slate-500 mb-4">
-        Pressing plants GoodTunes works with. Per-press quotes wire in soon — this is who you'll be choosing between.
+        {invitedPress
+          ? `Pressing plants GoodTunes works with — ${invitedPress.name} brought you on, but you're free to pick anyone.`
+          : "Pressing plants GoodTunes works with. Per-press quotes wire in soon — this is who you'll be choosing between."}
       </p>
-      {/* Horizontally-scrollable row on wide screens, stacks on mobile.
-          Cards keep a fixed width so the row scans like a carousel
-          rather than a grid that grows with the viewport. */}
       <div
         className="flex flex-col sm:flex-row sm:overflow-x-auto gap-3 sm:pb-2 -mx-4 sm:px-4"
       >
-        {presses.map((p) => (
-          <PressCard key={p.id} press={p} />
+        {ordered.map((p) => (
+          <PressCard
+            key={p.id}
+            press={p}
+            highlight={invitedPress?.id === p.id}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function PressCard({ press }: { press: Manufacturer }) {
+function PressCard({ press, highlight = false }: { press: Manufacturer; highlight?: boolean }) {
   // Clickable card per task #194 — opens the press's website in a new
   // tab. `noopener noreferrer` prevents the opened page from gaining a
   // window.opener back-reference. When a press has no website URL we
@@ -353,8 +416,11 @@ function PressCard({ press }: { press: Manufacturer }) {
     <Wrapper
       {...wrapperProps}
       className={[
-        "rounded-md border border-slate-200 bg-white p-4 flex flex-col gap-3",
+        "rounded-md border bg-white p-4 flex flex-col gap-3",
         "w-full sm:w-72 sm:shrink-0",
+        highlight
+          ? "border-[color:var(--brand-blue)] ring-1 ring-[color:var(--brand-blue)]/30"
+          : "border-slate-200",
         press.websiteUrl
           ? "hover:border-[color:var(--brand-blue)] hover:shadow-sm transition-all cursor-pointer no-underline"
           : "",

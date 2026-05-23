@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -50,6 +50,13 @@ export const labels = pgTable("labels", {
   // server fetches), so this is admin-entered.
   instagramUrl: text("instagram_url"),
   coverUrl: text("cover_url"),
+  // Task #199 — invited-by press. When a manufacturer (pressing plant)
+  // admin invites this label to GoodTunes, we stamp their manufacturer
+  // id here so the label's Sell-panel Presses surface defaults to that
+  // press (soft lock — artist can expand to other plants) and the
+  // per-format cost calculator pulls from that press's pricing.
+  // Nullable + SET NULL so deleting a press doesn't orphan the label.
+  invitedByPressId: varchar("invited_by_press_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -395,6 +402,13 @@ export const people = pgTable("people", {
   referredByPersonId: varchar("referred_by_person_id"),
   referredByOrgId: varchar("referred_by_org_id"),
   referrerPerUnitCents: integer("referrer_per_unit_cents").notNull().default(100),
+  // Task #199 — invited-by press. When a manufacturer admin invites
+  // this artist, we stamp the manufacturer id here so their Sell-panel
+  // Presses surface defaults to that press (soft lock — artist can
+  // expand to other plants) and the per-format cost calculator pulls
+  // from that press's pricing. Nullable + SET NULL on delete so a
+  // removed press doesn't orphan the artist row.
+  invitedByPressId: varchar("invited_by_press_id"),
   // Task #190 — bands & members. When `isGroup` is true this Person row
   // represents a band/duo/orchestra/etc. rather than a single human; the
   // join rows in `bandMembers` enumerate who plays in it. `groupKind` is
@@ -851,6 +865,31 @@ export const payoutFormatCosts = pgTable("payout_format_costs", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 export type PayoutFormatCost = typeof payoutFormatCosts.$inferSelect;
+
+// Task #199 — Per-press cost overrides. When an artist/label was
+// invited to GoodTunes by a specific press (people.invitedByPressId or
+// labels.invitedByPressId), the Sell-panel cost calculator pulls its
+// manufacturing/publishing/payment-processing/GoodTunes lines from
+// this table first and falls back to the platform-default
+// `payout_format_costs` row when this press hasn't set its own
+// numbers. Composite primary key on (pressId, format).
+//
+// No admin UI to edit these yet — the row is reserved for the
+// press's own negotiated pricing, populated out-of-band as we
+// onboard each press. The fallback to platform defaults keeps the
+// soft-lock useful from day one.
+export const pressFormatCosts = pgTable("press_format_costs", {
+  pressId: varchar("press_id").notNull(),
+  format: text("format").notNull(),
+  manufacturingCents: integer("manufacturing_cents").notNull().default(0),
+  publishingCents: integer("publishing_cents").notNull().default(0),
+  paymentProcessingCents: integer("payment_processing_cents").notNull().default(0),
+  goodtunesCents: integer("goodtunes_cents").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  pressFormatPk: primaryKey({ columns: [t.pressId, t.format] }),
+}));
+export type PressFormatCost = typeof pressFormatCosts.$inferSelect;
 
 // Generic per-album add-on. First user: the **signed_cert** add-on (printed
 // & signed GoodDeed certificate). Future shapes (professional framing,
@@ -1840,7 +1879,7 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
   email: z.string().email(),
   role: z.enum(ADMIN_ROLES),
   roleScopeId: z.string().optional().nullable(),
-  referrerKind: z.enum(["artist", "non_profit"]).optional().nullable(),
+  referrerKind: z.enum(["artist", "non_profit", "manufacturer"]).optional().nullable(),
   referrerScopeId: z.string().optional().nullable(),
   welcomeNote: z.string().max(1000).optional().nullable(),
 });
