@@ -17,7 +17,7 @@ export function GoodTunesLogo({ size = "md", className = "", variant = "white" }
       style={{
         height: h,
         width: "auto",
-        mixBlendMode: "screen",
+        ...(variant === "white" ? { mixBlendMode: "screen" as const } : null),
         display: "block",
       }}
       className={className}
