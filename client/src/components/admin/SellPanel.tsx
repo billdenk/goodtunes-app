@@ -21,8 +21,9 @@
 // directory (MRP, PMP, Hellbender …) as info cards — per-press RFQ
 // pricing plumbing is tracked separately on the roadmap.
 import { useEffect, useMemo, useState } from "react";
+import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, Lock } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, Lock, ChevronDown } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
@@ -201,6 +202,11 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   // operator clicks Save on the row, so a stray menu click can't push
   // a $0 active SKU to the Buy sheet.
   const [draftFormats, setDraftFormats] = useState<AlbumFormat[]>([]);
+  // Exclusive-disclosure controller for the per-format SKU rows. With
+  // multi-format albums the editor was a wall of expanded blocks; now
+  // opening one collapses whichever sibling was previously open. Keyed
+  // by AlbumFormat. See docs/design-system.md ("Expandable row lists").
+  const skuDisclosure = useExclusiveDisclosure<string>();
 
   if (isLoading || !data) return <div className="text-slate-500 text-sm py-6">Loading…</div>;
 
@@ -288,6 +294,8 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
                     artworkUrl={artworkUrl}
                     onSave={upsertSku.mutate}
                     onDelete={() => deleteSku.mutate(f)}
+                    expanded={skuDisclosure.isOpen(f)}
+                    onSetExpanded={(open) => skuDisclosure.setOpen(f, open)}
                   />
                 );
               })}
@@ -306,6 +314,8 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
                     });
                   }}
                   onDelete={() => setDraftFormats((prev) => prev.filter((d) => d !== f))}
+                  expanded={skuDisclosure.isOpen(`draft-${f}`)}
+                  onSetExpanded={(open) => skuDisclosure.setOpen(`draft-${f}`, open)}
                 />
               ))}
             </div>
@@ -677,6 +687,8 @@ function SkuRow({
   artworkUrl,
   onSave,
   onDelete,
+  expanded,
+  onSetExpanded,
 }: {
   format: AlbumFormat;
   existing: AlbumSku | null;
@@ -698,9 +710,21 @@ function SkuRow({
     pressColorId?: string | null;
   }) => void;
   onDelete: () => void;
+  // Exclusive-disclosure: owned by SellPanel via `useExclusiveDisclosure`.
+  // Draft rows auto-open on mount so the operator can start editing
+  // immediately; existing rows open on click. See docs/design-system.md
+  // ("Expandable row lists").
+  expanded: boolean;
+  onSetExpanded: (open: boolean) => void;
 }) {
   const isDraft = existing === null;
   const isVinyl = isVinylFormat(format);
+  // Draft rows auto-open on first mount — the operator just picked the
+  // format from the "+ Add" menu and clearly wants to start editing.
+  useEffect(() => {
+    if (isDraft && !expanded) onSetExpanded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
   const [stockStr, setStockStr] = useState(existing?.stock?.toString() ?? "");
@@ -965,7 +989,7 @@ function SkuRow({
       ].join(" ")}
       data-testid={isDraft ? `row-sku-draft-${format}` : `row-sku-${format}`}
     >
-      <div className="flex items-start justify-between gap-4 mb-3">
+      <div className={["flex items-start justify-between gap-4", expanded ? "mb-3" : ""].join(" ")}>
         <label className="inline-flex items-center gap-2 min-w-0">
           <input
             type="checkbox"
@@ -977,9 +1001,25 @@ function SkuRow({
           <span className="text-[13.5px] font-semibold text-slate-900">
             {ALBUM_FORMAT_LABEL[format]}
           </span>
+          {!expanded && (
+            <span className="text-[12px] text-slate-500 ml-2" data-testid={`text-sku-summary-${format}`}>
+              {priceStr ? `$${priceStr}` : "no price"}
+              {active ? "" : " · off"}
+            </span>
+          )}
         </label>
         <div className="flex items-center gap-1">
           <SaveLink dirty={dirty} onClick={submit} testId={`button-save-sku-${format}`} />
+          <button
+            type="button"
+            onClick={() => onSetExpanded(!expanded)}
+            className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+            aria-label={expanded ? "Collapse format" : "Expand format"}
+            aria-expanded={expanded}
+            data-testid={`button-toggle-sku-${format}`}
+          >
+            <ChevronDown className={["w-4 h-4 transition-transform", expanded ? "rotate-180" : ""].join(" ")} />
+          </button>
           <button
             type="button"
             onClick={onDelete}
@@ -992,6 +1032,8 @@ function SkuRow({
         </div>
       </div>
 
+      {expanded && (
+      <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
         {/* Left column — Price / Cost / Profit */}
         <div className="space-y-3">
@@ -1226,6 +1268,8 @@ function SkuRow({
           onPickJacket={setJacketUpgrade}
         />
       ) : null}
+      </>
+      )}
     </div>
   );
 }

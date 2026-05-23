@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { CheckCircle2, XCircle, Clock, FileText } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, FileText, ChevronDown } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 
 // Task #79 — Super-admin queue of partner-submitted metadata edits.
 // Each row shows the target (album or song), the scope, the diff, and
@@ -57,6 +58,11 @@ export function AdminReview() {
   // untouched row submits the original patch unchanged.
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string | null>>({});
+  // Exclusive-disclosure controller — at most one pending-change row
+  // open at a time so the queue doesn't turn into a wall of JSON
+  // patches + textareas. See docs/design-system.md ("Expandable row
+  // lists").
+  const disclosure = useExclusiveDisclosure<string>();
 
   const review = useMutation({
     mutationFn: async (input: {
@@ -134,9 +140,24 @@ export function AdminReview() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {rows.map((row) => (
+            {rows.map((row) => {
+              const expanded = disclosure.isOpen(row.id);
+              return (
               <Card key={row.id} className="p-5" data-testid={`card-pending-${row.id}`}>
-                <div className="flex items-start justify-between gap-4">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={expanded}
+                  onClick={() => disclosure.setOpen(row.id, !expanded)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      disclosure.setOpen(row.id, !expanded);
+                    }
+                  }}
+                  className="flex items-start justify-between gap-4 cursor-pointer select-none"
+                  data-testid={`button-toggle-${row.id}`}
+                >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 text-[11.5px] text-slate-500 uppercase tracking-wide">
                       <Clock className="w-3 h-3" />
@@ -149,10 +170,9 @@ export function AdminReview() {
                     <div className="mt-1 text-[14px] font-semibold text-slate-900">
                       Edit to{" "}
                       {row.targetTable === "albums" ? (
-                        <Link
-                          href={`/admin/albums/${row.targetId}`}
-                          className="text-[var(--brand-blue)] hover:underline"
+                        <Link href={`/admin/albums/${row.targetId}`} className="text-[var(--brand-blue)] hover:underline underline-offset-2"
                           data-testid={`link-target-${row.id}`}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           album {row.targetId.slice(0, 8)}…
                         </Link>
@@ -160,10 +180,9 @@ export function AdminReview() {
                         <span>
                           song {row.targetId.slice(0, 8)}…{" "}
                           {row.albumId && (
-                            <Link
-                              href={`/admin/albums/${row.albumId}`}
-                              className="text-[var(--brand-blue)] hover:underline ml-1"
+                            <Link href={`/admin/albums/${row.albumId}`} className="text-[var(--brand-blue)] hover:underline underline-offset-2 ml-1"
                               data-testid={`link-target-album-${row.id}`}
+                              onClick={(e) => e.stopPropagation()}
                             >
                               (open album)
                             </Link>
@@ -177,8 +196,16 @@ export function AdminReview() {
                       </div>
                     )}
                   </div>
+                  <ChevronDown
+                    className={[
+                      "w-4 h-4 text-slate-400 mt-1 transition-transform flex-shrink-0",
+                      expanded ? "rotate-180" : "",
+                    ].join(" ")}
+                  />
                 </div>
 
+                {expanded && (
+                  <>
                 <pre
                   className="mt-3 text-[12px] bg-slate-50 border border-slate-200 rounded-md p-3 overflow-x-auto text-slate-700"
                   data-testid={`patch-${row.id}`}
@@ -297,8 +324,11 @@ export function AdminReview() {
                     {row.reviewerNote && <> · “{row.reviewerNote}”</>}
                   </div>
                 )}
+                  </>
+                )}
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

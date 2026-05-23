@@ -9,7 +9,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Link as LinkIcon, Trash2 } from "lucide-react";
+import { Link as LinkIcon, Trash2, ChevronDown } from "lucide-react";
+import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 
 type Mapping = {
   id: string;
@@ -43,6 +44,11 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
   const { data: mappings, isLoading } = useQuery<Mapping[]>({
     queryKey: ["/api/admin/albums", albumId, "shopify-mappings"],
   });
+  // Exclusive-disclosure for the linked-mapping rows — at most one
+  // expanded at a time. Collapsed shows just the product title; the
+  // store/variant/cert meta + remove button live behind expansion.
+  // See docs/design-system.md ("Expandable row lists").
+  const disclosure = useExclusiveDisclosure<string>();
 
   const [url, setUrl] = useState("");
   const [resolved, setResolved] = useState<Resolved | null>(null);
@@ -118,29 +124,60 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
               No Shopify products linked to this album yet.
             </div>
           )}
-          {(mappings ?? []).map((m) => (
-            <div key={m.id} className="px-4 py-3 flex items-center gap-3" data-testid={`row-shopify-mapping-${m.id}`}>
-              <LinkIcon className="w-4 h-4 text-slate-400 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="text-[13.5px] font-medium text-slate-900 truncate">{m.shopifyProductTitle ?? m.shopifyProductId}</div>
-                <div className="text-[11.5px] text-slate-500 truncate">
-                  {m.storeName ?? m.shopDomain ?? "—"}
-                  {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
-                  {m.offerSignedCert ? ` · cert ${dollars(m.signedCertPriceCents)}` : ""}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => remove.mutate(m.id)}
-                disabled={remove.isPending}
-                className="text-slate-400 hover:text-rose-600 p-1"
-                data-testid={`button-remove-mapping-${m.id}`}
-                aria-label="Remove mapping"
+          {(mappings ?? []).map((m) => {
+            const expanded = disclosure.isOpen(m.id);
+            return (
+            <div key={m.id} data-testid={`row-shopify-mapping-${m.id}`}>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={expanded}
+                onClick={() => disclosure.setOpen(m.id, !expanded)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    disclosure.setOpen(m.id, !expanded);
+                  }
+                }}
+                className="px-4 py-3 flex items-center gap-3 cursor-pointer select-none hover:bg-slate-50"
+                data-testid={`button-toggle-mapping-${m.id}`}
               >
-                <Trash2 className="w-4 h-4" />
-              </button>
+                <LinkIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                <div className="min-w-0 flex-1 text-[13.5px] font-medium text-slate-900 truncate">
+                  {m.shopifyProductTitle ?? m.shopifyProductId}
+                </div>
+                <ChevronDown
+                  className={[
+                    "w-4 h-4 text-slate-400 transition-transform shrink-0",
+                    expanded ? "rotate-180" : "",
+                  ].join(" ")}
+                />
+              </div>
+              {expanded && (
+                <div className="px-4 pb-3 pl-11 flex items-start justify-between gap-3">
+                  <div className="text-[11.5px] text-slate-500 min-w-0 flex-1">
+                    {m.storeName ?? m.shopDomain ?? "—"}
+                    {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
+                    {m.offerSignedCert ? ` · cert ${dollars(m.signedCertPriceCents)}` : ""}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove.mutate(m.id);
+                    }}
+                    disabled={remove.isPending}
+                    className="text-slate-400 hover:text-rose-600 p-1 shrink-0"
+                    data-testid={`button-remove-mapping-${m.id}`}
+                    aria-label="Remove mapping"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Add a new mapping */}
