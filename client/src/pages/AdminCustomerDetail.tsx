@@ -1,10 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link, useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2 } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { CustomerUser, StripeAddressSnapshot } from "@shared/schema";
 
 /**
@@ -247,7 +249,10 @@ export function AdminCustomerDetail() {
         </Section>
 
         {/* Collection */}
-        <Section title={`Collection (${collection.length})`}>
+        <Section
+          title={`Collection (${collection.length})`}
+          action={id ? <GrantAlbumGate customerId={id} ownedAlbumIds={collection.map((a) => a.albumId)} /> : null}
+        >
           {collection.length === 0 ? (
             <EmptyRow icon={Disc3} text="No albums in this fan's collection yet." />
           ) : (
@@ -316,12 +321,181 @@ function Stat({ label, value, testId }: { label: string; value: string; testId?:
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
+  );
+}
+
+type AdminAlbumLite = { id: string; title: string; artist: string; artwork: string | null };
+
+function GrantAlbumGate({ customerId, ownedAlbumIds }: { customerId: string; ownedAlbumIds: string[] }) {
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  if (roleInfo?.role !== "super_admin") return null;
+  return <GrantAlbumButton customerId={customerId} ownedAlbumIds={ownedAlbumIds} />;
+}
+
+function GrantAlbumButton({ customerId, ownedAlbumIds }: { customerId: string; ownedAlbumIds: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+        data-testid="button-grant-album-open"
+      >
+        <Plus className="w-3.5 h-3.5" /> Grant album
+      </button>
+      {open && (
+        <GrantAlbumDialog
+          customerId={customerId}
+          ownedAlbumIds={ownedAlbumIds}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function GrantAlbumDialog({
+  customerId,
+  ownedAlbumIds,
+  onClose,
+}: {
+  customerId: string;
+  ownedAlbumIds: string[];
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [q, setQ] = useState("");
+  const owned = useMemo(() => new Set(ownedAlbumIds), [ownedAlbumIds]);
+  const { data: allAlbums = [], isLoading } = useQuery<AdminAlbumLite[]>({
+    queryKey: ["/api/albums"],
+  });
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const list = needle
+      ? allAlbums.filter(
+          (a) =>
+            a.title.toLowerCase().includes(needle) ||
+            a.artist.toLowerCase().includes(needle),
+        )
+      : allAlbums;
+    return list.slice(0, 80);
+  }, [allAlbums, q]);
+
+  const grant = useMutation({
+    mutationFn: async (albumId: string) => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/customers/${customerId}/grant-album`,
+        { albumId },
+      );
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.message || `Failed (${r.status})`);
+      }
+    },
+    onSuccess: (_, albumId) => {
+      const a = allAlbums.find((x) => x.id === albumId);
+      toast({ title: "Album granted", description: a ? `${a.title} — ${a.artist}` : undefined });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId] });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't grant album", description: e.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+      data-testid="dialog-grant-album"
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+          <div>
+            <div className="text-slate-900 text-sm font-semibold">Grant album (demo)</div>
+            <div className="text-slate-500 text-[11px]">Free comp — no payment, no order, super-admin only</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600"
+            data-testid="button-grant-album-close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search albums by title or artist…"
+              autoFocus
+              className="w-full pl-8 pr-3 py-2 text-[13px] border border-slate-200 rounded-md focus:border-[var(--brand-blue)] focus:outline-none"
+              data-testid="input-grant-album-search"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="p-6 text-center text-slate-500 text-[13px]">Loading albums…</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-6 text-center text-slate-500 text-[13px]">No albums match.</div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {filtered.map((a) => {
+                const isOwned = owned.has(a.id);
+                return (
+                  <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <div className="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
+                      {a.artwork && (
+                        <img src={a.artwork} alt="" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-slate-900 text-[13px] font-medium truncate">{a.title}</div>
+                      <div className="text-slate-500 text-[12px] truncate">{a.artist}</div>
+                    </div>
+                    {isOwned ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-600 text-[11px] font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Owned
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={grant.isPending}
+                        onClick={() => grant.mutate(a.id)}
+                        className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-[12px] font-medium hover:opacity-90 disabled:opacity-50"
+                        data-testid={`button-grant-album-${a.id}`}
+                      >
+                        Grant
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

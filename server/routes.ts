@@ -2,7 +2,8 @@ import type { Express, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, and, eq } from "drizzle-orm";
+import { userAlbums, albums } from "@shared/schema";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID } from "crypto";
@@ -11955,6 +11956,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!profile) return res.status(404).json({ message: "Customer not found" });
     res.json(profile);
   });
+
+  // Demo-only: super_admin grants a fan a comp album so we can show the
+  // player flow without standing up a real purchase. Lives next to the
+  // customer profile route since the UI dock is on the same page. Uses
+  // user_albums' (user_id, album_id) unique index for idempotency.
+  app.post(
+    "/api/admin/customers/:id/grant-album",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const customerId = String(req.params.id);
+      const albumId = String(req.body?.albumId || "").trim();
+      if (!albumId) return res.status(400).json({ message: "albumId required" });
+      const profile = await storage.getAdminCustomerProfile(customerId);
+      if (!profile) return res.status(404).json({ message: "Customer not found" });
+      const [album] = await db.select().from(albums).where(eq(albums.id, albumId));
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      await db
+        .insert(userAlbums)
+        .values({ userId: customerId, albumId })
+        .onConflictDoNothing();
+      res.json({ ok: true });
+    },
+  );
+
+  app.post(
+    "/api/admin/customers/:id/revoke-album",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const customerId = String(req.params.id);
+      const albumId = String(req.body?.albumId || "").trim();
+      if (!albumId) return res.status(400).json({ message: "albumId required" });
+      await db
+        .delete(userAlbums)
+        .where(and(eq(userAlbums.userId, customerId), eq(userAlbums.albumId, albumId)));
+      res.json({ ok: true });
+    },
+  );
 
   // ─── Task #256 — Admin-shell access guard + promote-from-customers ──
   //

@@ -15,6 +15,7 @@ import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
+import { Disc3, Music2, Mic2 } from "lucide-react";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 interface UserPlaylist {
@@ -406,9 +407,9 @@ export function Collection() {
                 search ? (
                   <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-albums-search">No albums match "{search}"</p>
                 ) : (
-                  <div className="text-center mt-16 px-6" data-testid="text-empty-albums">
-                    <p className="text-white text-base font-semibold">Your collection is empty</p>
-                    <p className="text-white/55 text-sm mt-2 leading-relaxed">Buy a GoodTunes album and it lands here — yours forever, ready to play offline.</p>
+                  <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-albums">
+                    <Disc3 className="w-10 h-10 text-white/25" strokeWidth={1.5} />
+                    <p className="text-white/55 text-sm">No Albums yet</p>
                   </div>
                 )
               ) : (
@@ -446,9 +447,9 @@ export function Collection() {
                 search ? (
                   <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-songs-search">No songs match "{search}"</p>
                 ) : (
-                  <div className="text-center mt-16 px-6" data-testid="text-empty-songs">
-                    <p className="text-white text-base font-semibold">No songs yet</p>
-                    <p className="text-white/55 text-sm mt-2 leading-relaxed">Songs from any GoodTunes album you own will show up here.</p>
+                  <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-songs">
+                    <Music2 className="w-10 h-10 text-white/25" strokeWidth={1.5} />
+                    <p className="text-white/55 text-sm">No Songs yet</p>
                   </div>
                 )
               )}
@@ -531,9 +532,9 @@ export function Collection() {
                 search ? (
                   <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-artists-search">No artists match "{search}"</p>
                 ) : (
-                  <div className="text-center mt-16 px-6" data-testid="text-empty-artists">
-                    <p className="text-white text-base font-semibold">No artists yet</p>
-                    <p className="text-white/55 text-sm mt-2 leading-relaxed">The artists behind your GoodTunes albums will show up here.</p>
+                  <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-artists">
+                    <Mic2 className="w-10 h-10 text-white/25" strokeWidth={1.5} />
+                    <p className="text-white/55 text-sm">No Artists yet</p>
                   </div>
                 )
               )}
