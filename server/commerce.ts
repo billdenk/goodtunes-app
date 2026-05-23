@@ -1518,6 +1518,128 @@ export function registerCommerceRoutes(app: Express) {
     );
     res.json(out);
   });
+  // ─── Task #236 — operator-initiated refund ──────────────────────────
+  // One endpoint covers both origins. Direct (Stripe) orders refund via
+  // the Stripe API; Shopify-origin orders go through Shopify's refund
+  // REST endpoint via the connected store's offline access token. For a
+  // *full* refund we synchronously run the same `handleRefund` lock-
+  // return / GoodDeed-void logic the webhook would have run, so the
+  // detail sheet reflects the new state on the very next read. The
+  // webhook (Stripe `charge.refunded` or Shopify `refunds/create`) is
+  // still authoritative and idempotent — it just confirms what we did.
+  // Partial refunds leave status="paid" + the album unlock intact and
+  // record an event so the Refund history list picks it up.
+  app.post("/api/admin/orders/:id/refund", requireAdmin, async (req, res) => {
+    const o = await getOrderById(String(req.params.id));
+    if (!o) return res.status(404).json({ message: "Order not found" });
+    if (o.status === "refunded") return res.status(409).json({ message: "Order already refunded" });
+    if (o.status !== "paid" && o.status !== "shipped") {
+      return res.status(400).json({ message: `Cannot refund order in status ${o.status}` });
+    }
+    const body = z
+      .object({
+        amountCents: z.number().int().positive().optional(),
+        reason: z.string().trim().max(500).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return res.status(400).json({ message: "Invalid refund request" });
+    const amountCents = body.data.amountCents ?? o.totalCents;
+    const reason = body.data.reason?.trim() || null;
+    if (amountCents > o.totalCents) {
+      return res.status(400).json({ message: "Refund amount exceeds order total" });
+    }
+    const isFull = amountCents >= o.totalCents;
+    const isShopify = (o.origin ?? "").startsWith("shopify:") && !!o.shopifyOrderId && !!o.shopifyStoreId;
+
+    try {
+      if (isShopify) {
+        const { refundShopifyOrder } = await import("./shopify");
+        await refundShopifyOrder({
+          shopifyStoreId: o.shopifyStoreId!,
+          shopifyOrderId: o.shopifyOrderId!,
+          amountCents,
+          reason,
+        });
+      } else {
+        if (!o.stripePaymentIntentId) {
+          return res.status(400).json({ message: "Order has no Stripe payment intent" });
+        }
+        const stripe = await getStripe();
+        // Stripe's reason enum is narrow — we pass the operator's text
+        // as metadata so it survives in the dashboard, and only set the
+        // canonical `reason` when the operator's text maps to one.
+        const reasonEnum: "duplicate" | "fraudulent" | "requested_by_customer" | undefined =
+          reason && /duplicate/i.test(reason)
+            ? "duplicate"
+            : reason && /fraud/i.test(reason)
+              ? "fraudulent"
+              : "requested_by_customer";
+        await stripe.refunds.create({
+          payment_intent: o.stripePaymentIntentId,
+          amount: amountCents,
+          reason: reasonEnum,
+          metadata: {
+            gt_order_id: o.id,
+            gt_admin_user_id: (req as any).adminUserId ?? "",
+            gt_reason: reason ?? "",
+          },
+        });
+      }
+    } catch (e: any) {
+      console.error(`[refund] failed for order ${o.id}`, e?.message);
+      return res.status(502).json({ message: e?.message ?? "Refund failed" });
+    }
+
+    // Apply local state changes before the webhook lands so the UI sees
+    // the new refund immediately. The webhook is idempotent — for full
+    // refunds, handleRefund() early-returns when status is already
+    // "refunded"; for partials, the webhook handler we have only flips
+    // status on a *full* shopify refund / charge.refunded, so the partial
+    // event remains a no-op.
+    if (isFull) {
+      if (isShopify) {
+        // Shopify path: reuse the same logic the webhook handler runs.
+        // It's defined privately in server/shopify.ts but the SQL it
+        // does is small, so we inline it here to avoid an export churn.
+        await db
+          .update(orders)
+          .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
+          .where(eq(orders.id, o.id));
+        const remaining = await db
+          .select({ id: orders.id })
+          .from(orders)
+          .where(and(eq(orders.customerId, o.customerId), eq(orders.albumId, o.albumId), eq(orders.status, "paid")));
+        if (remaining.length === 0) {
+          await db.delete(userAlbums).where(and(eq(userAlbums.userId, o.customerId), eq(userAlbums.albumId, o.albumId)));
+        }
+      } else if (o.stripePaymentIntentId) {
+        await handleRefund(o.stripePaymentIntentId);
+      }
+    }
+
+    // Record the refund as an order_desk_webhook_events row so the
+    // Refund history list in the fan-order detail sheet picks it up
+    // immediately (it already filters that table for "refund" entries).
+    try {
+      const { orderDeskWebhookEvents } = await import("@shared/schema");
+      await db
+        .insert(orderDeskWebhookEvents)
+        .values({
+          eventId: `refund:${o.id}:${Date.now()}:${randomBytes(4).toString("hex")}`,
+          orderId: o.id,
+          eventType: isFull
+            ? `refund.full · ${isShopify ? "shopify" : "stripe"}${reason ? ` · ${reason}` : ""}`
+            : `refund.partial $${(amountCents / 100).toFixed(2)} · ${isShopify ? "shopify" : "stripe"}${reason ? ` · ${reason}` : ""}`,
+        })
+        .onConflictDoNothing();
+    } catch (e: any) {
+      console.warn(`[refund] couldn't log refund event for ${o.id}: ${e?.message}`);
+    }
+
+    const refreshed = await getOrderById(o.id);
+    return res.json({ order: refreshed, amountCents, full: isFull });
+  });
+
   app.post("/api/admin/orders/:id/ship", requireAdmin, async (req, res) => {
     const o = await getOrderById(String(req.params.id));
     if (!o) return res.status(404).json({ message: "Order not found" });

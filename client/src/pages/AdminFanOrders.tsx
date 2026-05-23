@@ -1,11 +1,16 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ArrowDown, ArrowUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 // Task #234 — wire the fan-orders queue to the real /api/admin/orders
 // payload (Shopify webhook materializations + direct GoodTunes/Stripe
@@ -650,6 +655,7 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
       </Section>
 
       <Section title="Refund history">
+        <RefundAction order={o as AdminOrderRow} />
         {!refunded && refundEvents.length === 0 ? (
           <div className="text-slate-500">No refunds recorded.</div>
         ) : (
@@ -685,6 +691,143 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
           </ul>
         )}
       </Section>
+    </div>
+  );
+}
+
+// Task #236 — in-sheet refund control. Direct (Stripe) and Shopify-
+// origin orders share a single `/api/admin/orders/:id/refund` endpoint;
+// the server picks the right gateway from `order.origin`. We invalidate
+// both the list and this order's detail query so the Refund history
+// list + status pill update without a page reload.
+function RefundAction({ order }: { order: AdminOrderRow }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState<string>(
+    ((order.totalCents ?? 0) / 100).toFixed(2),
+  );
+  const [reason, setReason] = useState<string>("");
+  const refundable = order.status === "paid" || order.status === "shipped";
+  const isShopify = (order.origin ?? "direct").startsWith("shopify:");
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const dollars = Number.parseFloat(amount);
+      if (!Number.isFinite(dollars) || dollars <= 0) {
+        throw new Error("Enter a refund amount greater than $0");
+      }
+      const cents = Math.round(dollars * 100);
+      if (cents > order.totalCents) {
+        throw new Error("Refund amount cannot exceed order total");
+      }
+      const res = await apiRequest("POST", `/api/admin/orders/${order.id}/refund`, {
+        amountCents: cents,
+        reason: reason.trim() || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: (data: { full: boolean; amountCents: number }) => {
+      toast({
+        title: data.full ? "Refund issued" : "Partial refund issued",
+        description: `$${(data.amountCents / 100).toFixed(2)} returned via ${isShopify ? "Shopify" : "Stripe"}.`,
+      });
+      setOpen(false);
+      setReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders", order.id] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Refund failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (!refundable) return null;
+
+  if (!open) {
+    return (
+      <div className="mb-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setOpen(true)}
+          data-testid="button-open-refund"
+        >
+          Refund this order
+        </Button>
+        <p className="text-[11.5px] text-slate-500 mt-1">
+          Issues a {isShopify ? "Shopify" : "Stripe"} refund directly. Full refunds void the GoodDeed
+          number and return the album unlock; partial refunds leave the order
+          intact.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2"
+      data-testid="refund-form"
+    >
+      <div className="flex items-center gap-2">
+        <label className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 w-16">
+          Amount
+        </label>
+        <span className="text-slate-500">$</span>
+        <Input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          className="h-8 w-28 tabular-nums"
+          data-testid="input-refund-amount"
+        />
+        <button
+          type="button"
+          onClick={() => setAmount((order.totalCents / 100).toFixed(2))}
+          className="text-[11.5px] text-[var(--brand-blue)] hover:underline"
+          data-testid="button-refund-full"
+        >
+          Full (${(order.totalCents / 100).toFixed(2)})
+        </button>
+      </div>
+      <div className="flex items-start gap-2">
+        <label className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 w-16 mt-1.5">
+          Reason
+        </label>
+        <Textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Optional — shown in Stripe / sent in Shopify refund note"
+          rows={2}
+          className="text-[12.5px]"
+          data-testid="input-refund-reason"
+        />
+      </div>
+      <div className="flex items-center gap-2 justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          disabled={mutation.isPending}
+          data-testid="button-cancel-refund"
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
+          data-testid="button-submit-refund"
+        >
+          {mutation.isPending ? "Refunding…" : "Issue refund"}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -555,6 +555,80 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   return { orderId: order.id, code };
 }
 
+// Task #236 — operator-initiated refund against a Shopify-origin order.
+// Calls Shopify Admin REST `refunds/calculate.json` to build a valid
+// refund payload for the requested cents (the calc endpoint figures out
+// which transactions to refund against — gateway, gift card, etc.),
+// then POSTs `refunds.json` to actually issue it. Shopify in turn fires
+// `refunds/create` + `orders/refunded` webhooks back at us, but we don't
+// wait — `handleShopifyRefund` is idempotent so the webhook is a no-op
+// when it lands. Returns the Shopify refund id for logging.
+export async function refundShopifyOrder(opts: {
+  shopifyStoreId: string;
+  shopifyOrderId: string;
+  amountCents: number;
+  reason: string | null;
+}): Promise<{ refundId: string }> {
+  const store = await getStoreById(opts.shopifyStoreId);
+  if (!store) throw new Error("Shopify store not connected");
+  if (store.uninstalledAt) throw new Error("Shopify store has been disconnected");
+  const amount = (opts.amountCents / 100).toFixed(2);
+
+  // Step 1: ask Shopify what transactions to refund against.
+  const calcRes = await shopifyFetch(store, `orders/${opts.shopifyOrderId}/refunds/calculate.json`, {
+    method: "POST",
+    body: JSON.stringify({
+      refund: {
+        currency: undefined, // let Shopify default to the order currency
+        shipping: { full_refund: false },
+        refund_line_items: [],
+        // `transactions: []` here would calc a zero-amount refund; instead
+        // we ask Shopify to suggest transactions covering the dollar amount.
+        // The documented shape uses `transactions` with `kind: "suggested_refund"`
+        // returned from this same endpoint — but the simpler path is to fetch
+        // the parent transactions list and refund against the most recent sale.
+      },
+    }),
+  });
+  // Fetch transactions so we can build a refund payload covering `amount`.
+  const txRes = await shopifyFetch(store, `orders/${opts.shopifyOrderId}/transactions.json`, { method: "GET" });
+  if (!txRes.ok) {
+    const body = await txRes.text();
+    throw new Error(`Shopify transactions fetch failed: ${txRes.status} ${body.slice(0, 200)}`);
+  }
+  const txJson = (await txRes.json()) as { transactions: Array<{ id: number; kind: string; status: string; gateway: string; amount: string; parent_id: number | null }> };
+  const sale = (txJson.transactions ?? []).find((t) => (t.kind === "sale" || t.kind === "capture") && t.status === "success");
+  if (!sale) throw new Error("No successful sale transaction found on Shopify order");
+  // Silence unused-var lint on calcRes — we may want to surface its
+  // estimate to operators later; right now we just need it to have run.
+  void calcRes;
+
+  const refundBody = {
+    refund: {
+      notify: true,
+      note: opts.reason ?? "GoodTunes admin refund",
+      transactions: [
+        {
+          parent_id: sale.id,
+          amount,
+          kind: "refund",
+          gateway: sale.gateway,
+        },
+      ],
+    },
+  };
+  const res = await shopifyFetch(store, `orders/${opts.shopifyOrderId}/refunds.json`, {
+    method: "POST",
+    body: JSON.stringify(refundBody),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Shopify refund failed: ${res.status} ${body.slice(0, 300)}`);
+  }
+  const json = (await res.json()) as { refund?: { id: number } };
+  return { refundId: String(json.refund?.id ?? "") };
+}
+
 async function handleShopifyRefund(payload: { order_id?: number; id?: number }): Promise<void> {
   // `orders/refunded` carries `order_id` on the refund object; `refunds/create`
   // does too. `orders/refunded` also fires on the order itself with `id =
