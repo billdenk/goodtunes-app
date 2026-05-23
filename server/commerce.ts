@@ -28,6 +28,7 @@ import {
   emailVerifications,
   userAlbums,
   authTokens,
+  signupVerifyTokens,
   gifts,
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
@@ -968,11 +969,11 @@ export function registerCommerceRoutes(app: Express) {
       if (match) {
         await db.update(emailVerifications).set({ consumedAt: new Date() }).where(eq(emailVerifications.id, row.id));
         // Mint a short-lived verify ticket the signup endpoint will
-        // trade in. We reuse `auth_tokens` with kind="customer" but a
-        // sentinel userId so it can't be confused with a real session;
-        // the signup endpoint deletes the ticket on use.
+        // trade in. Task #265 — lives in its own table so it never has
+        // to write a sentinel userId into a column that carries a real
+        // user FK; the signup endpoint deletes the ticket on use.
         const verifyToken = `vt_${generateToken()}`;
-        await db.insert(authTokens).values({ token: verifyToken, userId: `verify:${email}`, kind: "customer" });
+        await db.insert(signupVerifyTokens).values({ token: verifyToken, email });
         return res.json({ ok: true, verifyToken });
       }
     }
@@ -990,11 +991,11 @@ export function registerCommerceRoutes(app: Express) {
     if (!isValidEmail(email)) return res.status(400).json({ message: "Please enter a valid email" });
     if (password.length < 8) return res.status(400).json({ message: "Password must be at least 8 characters" });
     if (!verifyToken.startsWith("vt_")) return res.status(400).json({ message: "Email is not verified yet" });
-    const [tk] = await db.select().from(authTokens).where(eq(authTokens.token, verifyToken));
-    if (!tk || tk.userId !== `verify:${email}`) {
+    const [tk] = await db.select().from(signupVerifyTokens).where(eq(signupVerifyTokens.token, verifyToken));
+    if (!tk || tk.email !== email) {
       return res.status(400).json({ message: "Verify code expired — request a new one" });
     }
-    await db.delete(authTokens).where(eq(authTokens.token, verifyToken));
+    await db.delete(signupVerifyTokens).where(eq(signupVerifyTokens.token, verifyToken));
 
     const existing = await storage.getCustomerByEmail(email);
     if (existing) return res.status(409).json({ message: "An account with that email already exists — sign in instead" });

@@ -428,9 +428,9 @@ export interface IStorage {
   // Auth tokens (bearer)
   // `kind` defaults to "admin" for back-compat with the existing route
   // call sites — once those routes are kind-aware, every new token mint
-  // should pass the actual kind.
+  // should pass the actual kind. Task #265: under the hood we route to
+  // either `admin_user_id` or `customer_user_id`, each with a real FK.
   createAuthToken(token: string, userId: string, kind?: "admin" | "customer"): Promise<void>;
-  getUserIdByAuthToken(token: string): Promise<string | undefined>;
   // Kind-aware lookup: returns the row only when the token's kind matches.
   // Used by host-routed endpoints to prevent a customer token being
   // replayed against an admin host, or vice versa.
@@ -2245,17 +2245,20 @@ export class DbStorage implements IStorage {
   }
 
   async createAuthToken(token: string, userId: string, kind: "admin" | "customer" = "admin"): Promise<void> {
-    await db.insert(authTokens).values({ token, userId, kind }).onConflictDoNothing();
-  }
-  async getUserIdByAuthToken(token: string): Promise<string | undefined> {
-    const [row] = await db.select().from(authTokens).where(eq(authTokens.token, token));
-    return row?.userId;
+    // Task #265 — route to the side-specific column so the row carries
+    // a real, DB-enforced FK to the right user table.
+    const values = kind === "customer"
+      ? { token, customerUserId: userId, kind }
+      : { token, adminUserId: userId, kind };
+    await db.insert(authTokens).values(values).onConflictDoNothing();
   }
   async getAuthBy(token: string): Promise<{ userId: string; kind: "admin" | "customer" } | undefined> {
     const [row] = await db.select().from(authTokens).where(eq(authTokens.token, token));
     if (!row) return undefined;
     const kind = (row.kind === "customer" ? "customer" : "admin") as "admin" | "customer";
-    return { userId: row.userId, kind };
+    const userId = kind === "customer" ? row.customerUserId : row.adminUserId;
+    if (!userId) return undefined;
+    return { userId, kind };
   }
   async deleteAuthToken(token: string): Promise<void> {
     await db.delete(authTokens).where(eq(authTokens.token, token));

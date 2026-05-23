@@ -1,42 +1,37 @@
 ---
-name: auth_tokens FK keeps reappearing
-description: Why `auth_tokens_user_id_users_id_fk` re-appears on prod even though `shared/schema.ts` never declares it, and where the durable fix lives.
+name: auth_tokens FK recurrence — resolved structurally
+description: Historical note. `auth_tokens.user_id` no longer exists; the table now has separate admin_user_id / customer_user_id columns each with a real FK, so the stale `auth_tokens_user_id_users_id_fk` can no longer reappear.
 ---
 
-# auth_tokens.user_id FK recurrence
+# auth_tokens FK recurrence (resolved)
 
-## Rule
-`auth_tokens.user_id` must never carry a FK to `users(id)`. Customer tokens
-hold a `customer_users.id`, and the signup-verify flow temporarily stores
-`verify:<email>` — neither has a matching `users(id)`, so any such FK 500s
-the token insert (most painfully: a real fan finishing the 6-digit code on
-signup gets a 500 from `insert into auth_tokens`).
+## Current shape
+`auth_tokens` has **no `user_id` column** anymore. Instead:
 
-## Why it keeps coming back
-The schema is clean (no `.references(...)`). The drift comes from the
-publish flow:
+- `admin_user_id`    `varchar REFERENCES users(id)          ON DELETE CASCADE`
+- `customer_user_id` `varchar REFERENCES customer_users(id) ON DELETE CASCADE`
 
-1. An old leftover FK from before the dual-auth refactor lingers in some
-   dev DBs.
-2. Replit's publish dialog diffs **dev DB → prod DB** (see
-   `dev-prod-schema-drift.md`), not schema → prod.
-3. Any dev DB that still carries the FK re-adds it to prod on next publish.
-4. `db:push` doesn't drop FKs that vanish from the schema, so manually
-   dropping it on prod alone doesn't stick — the next publish from a stale
-   dev DB puts it right back.
+Exactly one of the two is set per row, picked by the storage layer from
+the `kind` argument. The signup-verify ticket lives in its own table
+(`signup_verify_tokens(token, email, created_at)`) so the verify step
+never has to write a sentinel into a column that points at a real user
+table.
+
+## Why this note still exists
+The publish flow diffs **dev DB → prod DB** (see
+`dev-prod-schema-drift.md`). For months an old leftover
+`auth_tokens_user_id_users_id_fk` lingered in dev DBs from before
+dual-auth, and every publish kept re-adding it to prod and 500ing
+customer signup verify. With the `user_id` column gone, the FK can no
+longer exist on either side, so there is nothing for the diff to
+re-add. The Task #264 post-merge FK-sweep was removed.
 
 ## How to apply
-The durable fix lives in `scripts/post-merge.sh`: it runs
-`ALTER TABLE IF EXISTS auth_tokens DROP CONSTRAINT IF EXISTS auth_tokens_user_id_users_id_fk`
-against both `DATABASE_URL` and `PROD_DATABASE_URL` after every merge.
-Idempotent — no-op when the FK is already gone — so it can run forever
-without harm.
-
-If you ever see the FK back in `\d auth_tokens`:
-- Confirm `shared/schema.ts` still has no `.references(users.id)` on
-  `authTokens.userId` (any future addition is the bug).
-- Run the post-merge script manually (`bash scripts/post-merge.sh`) to
-  sweep both DBs.
-- If the FK keeps reappearing despite the sweep, something is re-issuing
-  the ALTER between merge and publish — look at recent migration files or
-  one-off SQL run against the publish target.
+- Never reintroduce a single `user_id` column on `auth_tokens` — that is
+  the shape that couldn't carry an enforced FK.
+- Token mints go through `storage.createAuthToken(token, userId, kind)`;
+  it routes to the correct column. Don't insert into `auth_tokens`
+  directly from new code.
+- If you ever see `\d auth_tokens` show a `user_id` column or a FK named
+  `auth_tokens_user_id_*` on either DB, a regression has landed —
+  re-run the migration block in `scripts/post-merge.sh` (idempotent).

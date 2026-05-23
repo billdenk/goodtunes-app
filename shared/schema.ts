@@ -807,23 +807,33 @@ export const creditRoles = pgTable(
 // switch anyway — the server always reads tokens through the kind+id
 // pair via the storage layer).
 //
-// NOTE: do NOT re-add a `user_id → users(id)` foreign key here. Customer
-// rows (kind='customer') hold a `customer_users.id`, and the synthetic
-// signup-verify row holds `verify:<email>` — neither has a matching
-// `users(id)`, so any such FK 500s on the token insert.
+// Task #265 — Per-side id columns with real, enforced FKs. Prior shape
+// was a single `user_id` varchar that held either a `users.id` (admin),
+// a `customer_users.id` (customer), or a `verify:<email>` sentinel
+// during signup. One column can't reference two tables, so we ran with
+// no FK at all — and a stale leftover FK kept reappearing on prod via
+// the publish dev→prod diff (see Task #264 and .agents/memory/
+// auth-tokens-fk-recurrence.md).
 //
-// Root cause of the recurring reappearance (Task #264): the FK is not in
-// this schema, but it lingered in some dev DBs from before the dual-auth
-// refactor. Replit's publish flow diffs **dev → prod** (see
-// .agents/memory/dev-prod-schema-drift.md), so whenever a dev DB still
-// carried the FK, the next publish re-added it to prod. The durable fix
-// lives in `scripts/post-merge.sh`, which now idempotently runs
-// `DROP CONSTRAINT IF EXISTS auth_tokens_user_id_users_id_fk` on BOTH
-// dev and prod after every merge so the publish diff has nothing to add.
+// Now: exactly one of `admin_user_id` / `customer_user_id` is set per
+// row, each carrying a real FK that the DB enforces. The signup-verify
+// ticket moved out of this table entirely — see `signupVerifyTokens`
+// below — so this table never holds a non-user sentinel again.
 export const authTokens = pgTable("auth_tokens", {
   token: varchar("token").primaryKey(),
-  userId: varchar("user_id").notNull(),
+  adminUserId: varchar("admin_user_id").references(() => users.id, { onDelete: "cascade" }),
+  customerUserId: varchar("customer_user_id").references(() => customerUsers.id, { onDelete: "cascade" }),
   kind: text("kind").notNull().default("admin"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Short-lived ticket minted by /api/email-verifications/confirm and
+// traded in at /api/customer/signup-with-code. Lives in its own table
+// (not auth_tokens) so signup never has to write a sentinel userId
+// into a column that carries a real user FK.
+export const signupVerifyTokens = pgTable("signup_verify_tokens", {
+  token: varchar("token").primaryKey(),
+  email: text("email").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

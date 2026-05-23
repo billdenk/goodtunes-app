@@ -17,32 +17,65 @@ set -e
 # explicit admin approval. Dev DB drift is fixed manually with additive SQL.
 npm install
 
-# Task #264 — Stop `auth_tokens_user_id_users_id_fk` from reappearing on prod.
+# Task #265 — Migrate auth_tokens to per-side id columns and move the
+# signup-verify ticket out of auth_tokens entirely. This supersedes the
+# Task #264 FK-sweep: with the old `user_id` column gone, the leftover
+# `auth_tokens_user_id_users_id_fk` constraint can no longer exist on
+# either side, so nothing for the publish dev→prod diff to re-add.
 #
-# Root cause: `shared/schema.ts` never declares a `.references(users.id)` on
-# `auth_tokens.user_id`, but an old leftover FK from before the dual-auth
-# refactor lingers in some dev DBs. The Replit publish flow diffs **dev →
-# prod** (see .agents/memory/dev-prod-schema-drift.md), so any dev DB that
-# still carries the FK re-adds it to prod on the next publish. That FK then
-# 500s customer signup verify (the synthetic `verify:<email>` userId has no
-# matching row in `users`).
-#
-# Fix: after every merge, drop the FK idempotently on the local dev DB AND
-# on the production DB so both sides stay flat. `DROP CONSTRAINT IF EXISTS`
-# is a no-op when the FK is already gone, so this is safe to run every time.
-drop_auth_tokens_fk() {
+# Everything below is idempotent (IF NOT EXISTS / IF EXISTS), so it is
+# safe to run on every merge and on DBs that have already migrated.
+migrate_auth_tokens() {
   local label="$1" url="$2"
   if [ -z "$url" ]; then
-    echo "post-merge: skipping auth_tokens FK sweep on $label (no URL set)"
+    echo "post-merge: skipping auth_tokens migration on $label (no URL set)"
     return 0
   fi
-  if psql "$url" -v ON_ERROR_STOP=1 -c \
-      "ALTER TABLE IF EXISTS auth_tokens DROP CONSTRAINT IF EXISTS auth_tokens_user_id_users_id_fk;" \
-      >/dev/null 2>&1; then
-    echo "post-merge: auth_tokens FK sweep ok on $label"
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS signup_verify_tokens (
+  token       varchar PRIMARY KEY,
+  email       text    NOT NULL,
+  created_at  timestamp DEFAULT now()
+);
+ALTER TABLE IF EXISTS auth_tokens
+  DROP CONSTRAINT IF EXISTS auth_tokens_user_id_users_id_fk;
+ALTER TABLE IF EXISTS auth_tokens
+  ADD COLUMN IF NOT EXISTS admin_user_id    varchar REFERENCES users(id)          ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS customer_user_id varchar REFERENCES customer_users(id) ON DELETE CASCADE;
+-- Backfill from the legacy single column, if it still exists.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'auth_tokens' AND column_name = 'user_id'
+  ) THEN
+    DELETE FROM auth_tokens WHERE user_id LIKE 'verify:%';
+    UPDATE auth_tokens
+       SET admin_user_id = user_id
+     WHERE kind = 'admin'
+       AND admin_user_id IS NULL
+       AND user_id IN (SELECT id FROM users);
+    UPDATE auth_tokens
+       SET customer_user_id = user_id
+     WHERE kind = 'customer'
+       AND customer_user_id IS NULL
+       AND user_id IN (SELECT id FROM customer_users);
+    -- Anything that still can't be matched is orphan; drop it so the
+    -- column-drop below doesn't lose data silently to no one.
+    DELETE FROM auth_tokens
+     WHERE admin_user_id IS NULL AND customer_user_id IS NULL;
+    ALTER TABLE auth_tokens DROP COLUMN user_id;
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  then
+    echo "post-merge: auth_tokens migration ok on $label"
   else
-    echo "post-merge: WARNING — auth_tokens FK sweep failed on $label (continuing)"
+    echo "post-merge: WARNING — auth_tokens migration failed on $label (continuing)"
   fi
 }
-drop_auth_tokens_fk dev  "${DATABASE_URL:-}"
-drop_auth_tokens_fk prod "${PROD_DATABASE_URL:-}"
+migrate_auth_tokens dev  "${DATABASE_URL:-}"
+migrate_auth_tokens prod "${PROD_DATABASE_URL:-}"
