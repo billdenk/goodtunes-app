@@ -765,26 +765,28 @@ export function Login() {
           </p>
         </div>
 
-        <div
-          className={s.segmentedWrap}
-          style={isAdmin ? undefined : { background: "rgba(255,255,255,0.07)" }}
-        >
+        {/* Task #78 — admin/partner accounts are invite-only; with
+            only one tab the segmented control collapses into a
+            redundant "Sign In" pill stacked under the heading. Skip
+            it entirely on the admin shell — the invite-only notice
+            below does the explaining. */}
+        {!isAdmin && (
           <div
-            className={s.segmentedThumbClass}
-            style={s.segmentedThumbStyle(mode)}
-          />
-          <button
-            type="button"
-            onClick={() => switchMode("login")}
-            className={s.segmentedBtn(mode === "login")}
-            data-testid="tab-login"
+            className={s.segmentedWrap}
+            style={{ background: "rgba(255,255,255,0.07)" }}
           >
-            Sign In
-          </button>
-          {/* Task #78 — admin/partner accounts are invite-only; the
-              public "Create Account" tab is only rendered on the
-              customer shell. Admins arrive via /invite/:token. */}
-          {!isAdmin && (
+            <div
+              className={s.segmentedThumbClass}
+              style={s.segmentedThumbStyle(mode)}
+            />
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className={s.segmentedBtn(mode === "login")}
+              data-testid="tab-login"
+            >
+              Sign In
+            </button>
             <button
               type="button"
               onClick={() => switchMode("register")}
@@ -793,8 +795,8 @@ export function Login() {
             >
               Create Account
             </button>
-          )}
-        </div>
+          </div>
+        )}
         {isAdmin && (
           <p
             className="mt-3 mb-5 rounded-lg bg-slate-100 px-3 py-2 text-[12px] leading-snug text-slate-700"
