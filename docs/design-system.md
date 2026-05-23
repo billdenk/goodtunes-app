@@ -63,6 +63,40 @@ The admin (`body.gt-admin`) is a Stripe-leaning light surface and lives off a to
 - **Accent restraint**: at most one filled primary action per row/section. Repeated row-level Save affordances (Formats list, Printed & Signed GoodDeed, per-row edit panels) use a quiet ghost-link Save that activates (brand blue text + faint soft pill) only when the row is dirty. The canonical reference is `client/src/components/admin/SellPanel.tsx`'s `SaveLink`.
 - Admin buttons keep crisp ~6px corners (not pills) and `h-8`/`h-9` density. No scale-bounce on press — that's a fan-IconButton-only motion.
 
+## Design Review Checklist — before you ship a page
+
+Every new page (or material edit to an existing one) gets vetted against this checklist **and** the mechanical linter (`npm run design:lint`). The linter catches the boring drift; this checklist catches the judgment calls it can't.
+
+**Mechanical (the linter enforces these — fix or baseline)**:
+- No raw brand hex literals (`#319ED8 / #7F10A7 / #4AFFCA / #FF5470 / #00062B`) outside `index.css` and the IconButton/shadcn primitives. Reach them through `var(--brand-*)`.
+- No `h-10 / h-11 / h-12` on `<Button>` / `<button>` in admin pages — admin density is `h-8`/`h-9`.
+- No `text-[Npx]` literals — use the shadcn type scale or the Apple HIG sizes already in this doc.
+- Icons come from `lucide-react` (UI chrome) or `react-icons/si` (company logos) only. Any other icon library import is flagged.
+- Native `<select>` and hand-rolled `role="menu"` dropdowns are forbidden on admin surfaces — use the shadcn `Select` and `DropdownMenu` from `@/components/ui/*`.
+- Naked `<button>` elements that render a single icon child (a lone `<Search />` / `<Trash />` / etc.) must use the `IconButton` primitive instead.
+- Sub-44px circular controls on fan-facing surfaces (`rounded-full` with width below `w-11`) are flagged — bump to `IconButton size="md"`.
+- Admin inline `<Link>` to other CMS pages must carry the shared link treatment (inherit color at rest, `hover:underline` + brand-blue on hover, with `underline-offset`).
+- Any `Trash` / "Delete" / "Remove forever" affordance in a file must be paired with an `AlertDialog` (or equivalent confirm primitive) in the same file.
+
+**Judgment (a human or the reviewer subagent enforces these)**:
+- **Surface judgment** — does this page belong to the Apple-Music mobile player or the Stripe-leaning admin? Use the right chrome (glass IconButton vs h-9 square button, gradient bg vs slate-50 page, segmented pill tabs vs slate-100 segmented control). When in doubt on the player: Apple Music, Apple Music, Apple Music.
+- **Touch targets** — 44×44pt floor on every fan-facing interactive. No 40px circular buttons.
+- **Accent restraint** — at most one filled primary action per row/section on admin. Per-row Save uses the quiet `SaveLink` (ghost link that activates only when dirty).
+- **Inline links** — admin metadata that deep-links to its own CMS page inherits text color at rest, switches to brand blue + underline on hover. Never render a `<Link>` to `/admin/.../undefined` — gate on the FK actually being set.
+- **Destructive copy** — confirm sheets name the thing being destroyed ("Delete *Storms*? This removes the master, snippet, lyrics, and credits.") with a rose-tinted primary. Hide / Park / Archive are reversible — toast "Hidden — undo," no confirm.
+- **Spelling** — US English on every user-facing string. "color", "favorite", "organize".
+- **Dark-mode parity** — fan player surfaces must read on the navy `#00062B` gradient (test against the body bg, not white).
+- **Mobile-vs-admin chrome consistency** — don't borrow admin h-9 squares into the player, or fan glass chips into admin.
+
+## Shipping a page — standard flow
+
+1. Build the page.
+2. Run `npm run design:lint` and fix every NEW violation (the baseline at `.design-lint-baseline.json` absorbs legacy drift; only NEW violations beyond baseline fail).
+3. Spawn a design-review subagent against the changed files — see `.local/skills/design-review/SKILL.md`. The reviewer reads this doc, runs the linter, judges the checklist, and returns a structured report.
+4. Fix anything red. Re-run lint + reviewer if you made structural changes. Then merge.
+
+**Refreshing the baseline**: only when a legacy page is intentionally migrated, run `npm run design:lint -- --update-baseline` to snapshot the new known set. Don't refresh to silence drift you introduced — fix the drift instead.
+
 ## Spelling
 
 Use **US English** for all user-facing strings (e.g. "color", not "colour"; "favorite", not "favourite"). Code identifiers can stay as they are; only the visible UI copy needs to read American.
