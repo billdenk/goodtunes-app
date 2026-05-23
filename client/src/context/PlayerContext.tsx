@@ -106,11 +106,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Merge DB fields onto a PlayerSong without losing its joined `album`
   // (which the static seed surfaces still supply). DB row wins for the
   // playable fields; the album reference is preserved from the caller.
+  // The catalog response intentionally omits the heavy `lyrics`,
+  // `syncedLyrics`, and `waveform` columns (see /api/songs server-side
+  // — keeps the payload off the iOS Safari OOM cliff), so we preserve
+  // those from `s` when the catalog row doesn't carry them. They're
+  // back-filled per-currentSong by the GET /api/songs/:id effect below.
   const hydrate = useCallback(
     (s: PlayerSong): PlayerSong => {
       const db = dbSongById.get(s.id);
       if (!db) return s;
-      return { ...s, ...db, album: s.album };
+      return {
+        ...s,
+        ...db,
+        lyrics: (db as any).lyrics ?? s.lyrics,
+        syncedLyrics: (db as any).syncedLyrics ?? s.syncedLyrics,
+        waveform: (db as any).waveform ?? (s as any).waveform,
+        album: s.album,
+      };
     },
     [dbSongById],
   );
@@ -173,6 +185,40 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const currentSong = queue[currentIndex] ?? null;
+
+  // On-demand lyrics hydration for the currently playing song. The
+  // catalog list (/api/songs) omits lyrics/syncedLyrics/waveform to
+  // keep the response small on mobile Safari, so we lazily fetch the
+  // full row for the current song and patch it into the queue. Skipped
+  // when the song already carries lyrics (e.g. it arrived via the
+  // album-detail fetch which still returns full fields).
+  const currentSongId = currentSong?.id ?? null;
+  const currentSongNeedsLyrics =
+    !!currentSong &&
+    (currentSong as any).lyrics == null &&
+    (currentSong as any).syncedLyrics == null;
+  const { data: fullCurrent } = useQuery<Song>({
+    queryKey: ["/api/songs", currentSongId],
+    enabled: !!currentSongId && currentSongNeedsLyrics,
+  });
+  useEffect(() => {
+    if (!fullCurrent || !currentSongId || fullCurrent.id !== currentSongId) return;
+    setQueue((q) => {
+      const i = q.findIndex((s) => s.id === currentSongId);
+      if (i < 0) return q;
+      const cur = q[i];
+      if ((cur as any).lyrics != null || (cur as any).syncedLyrics != null) return q;
+      const next = q.slice();
+      next[i] = {
+        ...cur,
+        lyrics: (fullCurrent as any).lyrics ?? cur.lyrics,
+        syncedLyrics: (fullCurrent as any).syncedLyrics ?? cur.syncedLyrics,
+        waveform: (fullCurrent as any).waveform ?? (cur as any).waveform,
+      };
+      return next;
+    });
+  }, [fullCurrent, currentSongId]);
+
   const hasRealAudio = !!currentSong?.audioUrl;
   const duration = (hasRealAudio && audioDuration != null && audioDuration > 0)
     ? audioDuration

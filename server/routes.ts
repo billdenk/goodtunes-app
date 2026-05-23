@@ -9822,7 +9822,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/songs", requireAuth, async (req, res) => {
     const includeHidden = await isAdminUser(req);
     const all = await storage.getAllSongs({ includeHidden });
-    return res.json(all);
+    // Trim the heavy per-song JSON/text columns from the catalog list:
+    // `syncedLyrics` (per-cue arrays — easily 5–10 KB each), `lyrics`
+    // (full text), and `waveform` (sample arrays). With ~200+ songs the
+    // untrimmed response was multi-MB, which OOM'd iOS Safari into
+    // "A problem repeatedly occurred" once AlbumDetail mounted on top.
+    // PlayerContext rehydrates lyrics/syncedLyrics per-currentSong via
+    // GET /api/songs/:id below.
+    const slim = all.map((s: any) => {
+      const { lyrics: _l, syncedLyrics: _s, waveform: _w, ...rest } = s;
+      return rest;
+    });
+    return res.json(slim);
+  });
+
+  // Per-song fetch used by PlayerContext to load the heavy lyrics +
+  // syncedLyrics + waveform fields on demand for the *currently playing*
+  // song only. Keeps the catalog list endpoint small enough for mobile
+  // Safari while still feeding the lyrics overlay real data.
+  app.get("/api/songs/:id", requireAuth, async (req, res) => {
+    const song = await storage.getSongById(String(req.params.id));
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    return res.json(song);
   });
 
   app.get("/api/my-albums", requireAuth, async (req, res) => {
