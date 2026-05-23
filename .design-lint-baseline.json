@@ -5696,6 +5696,81 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">GoodDeed pricing</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<p className=\"text-[13px] text-slate-500 mt-1 max-w-2xl\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<h3 className=\"text-[14px] font-semibold text-slate-900\">{c.title}</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "\"text-[10.5px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-500 mt-1\">{c.blurb}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<label className=\"inline-flex items-center gap-2 text-[12.5px] text-slate-700 select-none\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "\"h-8 px-3 rounded-md text-[12px] font-semibold transition-colors \" +"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "className=\"w-full h-8 px-2 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "className=\"w-full rounded-md border border-slate-200 p-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<span className=\"text-[11px] uppercase tracking-wider text-slate-500 font-semibold\">{label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<span className=\"absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]\">$</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "className=\"w-full h-8 pl-5 pr-2 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "<div className=\"grid grid-cols-[1fr,1fr,32px] gap-2 items-center text-[10.5px] uppercase tracking-wider text-slate-500 font-semibold px-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "className=\"h-8 px-2 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[12px] text-[var(--brand-blue)] font-semibold hover:underline\""
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/InvitedByPressPanel.tsx",
     "snippet": "className=\"text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)]\""
   },
@@ -6973,6 +7048,81 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "className=\"h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "return <p className=\"text-[13px] text-slate-500 py-2\">Loading vendor routing…</p>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<h3 className=\"text-[14px] font-semibold text-slate-900\">GoodDeed vendor routing</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-500 mt-0.5 max-w-xl\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<label className=\"text-[12px] text-slate-600\">Run qty</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "className=\"w-24 h-8 px-2 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-500 font-semibold\">Wholesale per unit</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"text-[18px] font-bold text-slate-900 tabular-nums\" data-testid=\"text-wholesale-per-unit\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"text-[11px] text-slate-500 tabular-nums\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"rounded-md bg-amber-50 border border-amber-200 p-3 text-[12px] text-amber-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"text-[12.5px] text-slate-700 font-medium\">{LABELS[service]}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "className=\"w-full h-9 pl-3 pr-8 rounded-md border border-slate-200 bg-white text-[13px] text-slate-900 appearance-none focus:outline-none focus:border-[var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold text-slate-900 tabular-nums\" data-testid={`text-leg-price-${service}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-400\">—</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
+    "snippet": "<div className=\"text-[10.5px] text-slate-500\">+ {dollars(leg.setupFeeCents)} setup</div>"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -10602,6 +10752,51 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<div className=\"text-slate-500 text-[11px]\">Free comp — no payment, no order, super-admin only</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "className=\"w-full pl-8 pr-3 py-2 text-[13px] border border-slate-200 rounded-md focus:border-[var(--brand-blue)] focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<div className=\"p-6 text-center text-slate-500 text-[13px]\">Loading albums…</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<div className=\"p-6 text-center text-slate-500 text-[13px]\">No albums match.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<div className=\"text-slate-900 text-[13px] font-medium truncate\">{a.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<div className=\"text-slate-500 text-[12px] truncate\">{a.artist}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-emerald-600 text-[11px] font-medium\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "className=\"rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-[12px] font-medium hover:opacity-90 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
     "snippet": "<div className=\"text-slate-500 text-[13px]\">{text}</div>"
   },
   {
@@ -10623,6 +10818,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
     "snippet": "<span className={`inline-block mt-0.5 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${cls}`}>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<button type=\"button\" onClick={onClose} className=\"p-1 text-slate-400 hover:text-slate-600\" data-testid=\"button-grant-album-close\" > <X className=\"w-4 h-4\" /> </button>"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -12582,12 +12782,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
+    "snippet": "<th className=\"text-left font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2 w-[110px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPlatformPricing.tsx",
     "snippet": "<th className=\"text-left font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<th className=\"text-right font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2\">"
+    "snippet": "<th className=\"text-right font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2 w-[140px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPlatformPricing.tsx",
+    "snippet": "className=\"w-full h-8 border border-slate-200 rounded-md px-2 text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)] disabled:bg-slate-50 disabled:text-slate-500\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPlatformPricing.tsx",
+    "snippet": "className=\"w-full h-8 border border-slate-200 rounded-md px-2 text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPlatformPricing.tsx",
+    "snippet": "className=\"w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-right text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPlatformPricing.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-[color:var(--brand-blue)] hover:bg-slate-50 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPlatformPricing.tsx",
+    "snippet": "className=\"h-8 px-3 rounded-md text-[12px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPlatformPricing.tsx",
+    "snippet": "className=\"h-8 px-3 rounded-md bg-[color:var(--brand-blue)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -13030,6 +13265,11 @@
     "snippet": "<div className=\"mt-3 text-[12px] text-slate-500\">"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "className=\"w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
     "snippet": "<p className=\"text-[13px] text-rose-600\" data-testid=\"text-security-error\">"
@@ -13067,32 +13307,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Recovery codes</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminSecurity.tsx",
     "snippet": "<p className=\"text-[12.5px] text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these — you won't see them again.</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<div className=\"grid grid-cols-2 gap-1.5 font-mono text-[13px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Add an authenticator app</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[12.5px] text-slate-500\">Scan the QR with Google Authenticator, 1Password, Authy, etc., then enter the 6-digit code to confirm.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13108,6 +13323,56 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
     "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these — each works once if you lose your authenticator. You won't see them again.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<div className=\"grid grid-cols-2 gap-1.5 font-mono text-[13px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Recovery codes</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these — you won't see them again.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Change password</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<label className=\"text-[12px] font-medium text-slate-700 block mb-1\" htmlFor=\"current-password\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-current-password-error\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<label className=\"text-[12px] font-medium text-slate-700 block mb-1\" htmlFor=\"new-password\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-new-password-error\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<label className=\"text-[12px] font-medium text-slate-700 block mb-1\" htmlFor=\"confirm-password\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminSecurity.tsx",
+    "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-confirm-password-error\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -15712,7 +15977,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Login.tsx",
-    "snippet": "footer: \"absolute bottom-6 left-0 right-0 text-center text-[10px] leading-snug px-8\","
+    "snippet": "footer: \"w-full max-w-[440px] text-center text-[10px] leading-snug px-8\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -15733,11 +15998,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Login.tsx",
     "snippet": "<p className={`${isAdmin ? \"text-amber-700 bg-amber-50 border-amber-200\" : \"text-amber-200 bg-amber-500/10 border-amber-400/30\"} text-[12px] border rounded px-2 py-1 mb-3 text-center`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "className=\"mt-3 mb-5 rounded-lg bg-slate-100 px-3 py-2 text-[12px] leading-snug text-slate-700\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16623,6 +16883,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Redeem.tsx",
     "snippet": "className=\"text-white/55 text-[13px] underline-offset-2 hover:underline\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/VendorPortal.tsx",
+    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold\">Vendor portal</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/VendorPortal.tsx",
+    "snippet": "<Link href=\"/api/logout\" className=\"text-[12px] text-slate-500 hover:text-slate-900\">"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/VendorPortal.tsx",
+    "snippet": "<div className=\"w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin\" />"
   },
   {
     "rule": "brand-hex-literal",

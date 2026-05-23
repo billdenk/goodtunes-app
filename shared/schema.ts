@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import type { SignedCertLadderRung } from "./signedCertLadder";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1483,6 +1484,15 @@ export const payoutSettings = pgTable("payout_settings", {
   // Surfaced on the Platform Pricing page; payout math wiring is
   // tracked separately on the roadmap.
   shopifyFeeCents: integer("shopify_fee_cents").notNull().default(350),
+  // Signed-cert wholesale ladder — the per-unit price GoodTunes charges
+  // artists and labels for printed, signed, hologrammed GoodDeed
+  // certificates, snapped to the actual run size at window close. Edited
+  // by super_admin on AdminPlatformPricing; consumed by the Push-to-Shopify
+  // earnings preview (server/shopify.ts) and the future window-close
+  // auto-charge. NULL falls back to `DEFAULT_SIGNED_CERT_LADDER` in
+  // shared/signedCertLadder.ts so the column being un-seeded never breaks
+  // the preview math. See `validateSignedCertLadder` for the write rules.
+  signedCertLadder: jsonb("signed_cert_ladder").$type<SignedCertLadderRung[]>(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

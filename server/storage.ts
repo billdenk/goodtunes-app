@@ -3041,6 +3041,22 @@ async function ensureRuntimeMigrations(): Promise<void> {
       BEGIN
         IF to_regclass('public.payout_settings') IS NOT NULL THEN
           ALTER TABLE payout_settings ADD COLUMN IF NOT EXISTS shopify_fee_cents INTEGER NOT NULL DEFAULT 350;
+          -- Signed-cert wholesale ladder (editable in god-view). Nullable
+          -- so the column adding never blocks an existing fresh DB; the
+          -- read path falls back to DEFAULT_SIGNED_CERT_LADDER when NULL.
+          -- Backfill any existing 'default' row that is still NULL so
+          -- the AdminPlatformPricing form has rungs to render on first
+          -- load.
+          ALTER TABLE payout_settings ADD COLUMN IF NOT EXISTS signed_cert_ladder JSONB;
+          UPDATE payout_settings
+          SET signed_cert_ladder = '[
+            {"minQty":25,"label":"25–49","wholesaleCents":1300},
+            {"minQty":50,"label":"50–99","wholesaleCents":1200},
+            {"minQty":100,"label":"100–199","wholesaleCents":900},
+            {"minQty":200,"label":"200–299","wholesaleCents":700},
+            {"minQty":300,"label":"300+","wholesaleCents":600}
+          ]'::jsonb
+          WHERE id = 'default' AND signed_cert_ladder IS NULL;
           -- Make sure the singleton row exists *before* we use its
           -- cert_cost_cents to backfill addon snapshots. Without this,
           -- a fresh DB where getPayoutSettings() hasn't run yet would
@@ -3048,8 +3064,14 @@ async function ensureRuntimeMigrations(): Promise<void> {
           -- a later platform-cost change would retroactively shift the
           -- artist's "You earn" readout — the exact thing the
           -- price-lock rule (docs/admin-conventions.md) forbids.
-          INSERT INTO payout_settings (id, platform_fee_pct, cert_cost_cents, shopify_fee_cents)
-          VALUES ('default', 10, 1200, 350)
+          INSERT INTO payout_settings (id, platform_fee_pct, cert_cost_cents, shopify_fee_cents, signed_cert_ladder)
+          VALUES ('default', 10, 1200, 350, '[
+            {"minQty":25,"label":"25–49","wholesaleCents":1300},
+            {"minQty":50,"label":"50–99","wholesaleCents":1200},
+            {"minQty":100,"label":"100–199","wholesaleCents":900},
+            {"minQty":200,"label":"200–299","wholesaleCents":700},
+            {"minQty":300,"label":"300+","wholesaleCents":600}
+          ]'::jsonb)
           ON CONFLICT (id) DO NOTHING;
         END IF;
         -- Task #216 — preflight validation results

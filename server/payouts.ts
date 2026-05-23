@@ -29,6 +29,10 @@ import {
 import { and, desc, eq, sql, or, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
+import {
+  DEFAULT_SIGNED_CERT_LADDER,
+  validateSignedCertLadder,
+} from "@shared/signedCertLadder";
 import { getStripe } from "./stripe";
 import type Stripe from "stripe";
 
@@ -41,7 +45,13 @@ export async function getPayoutSettings(): Promise<PayoutSettings> {
   if (row) return row;
   const [inserted] = await db
     .insert(payoutSettings)
-    .values({ id: "default", platformFeePct: 10, certCostCents: 1200, shopifyFeeCents: 350 })
+    .values({
+      id: "default",
+      platformFeePct: 10,
+      certCostCents: 1200,
+      shopifyFeeCents: 350,
+      signedCertLadder: DEFAULT_SIGNED_CERT_LADDER,
+    })
     .onConflictDoNothing()
     .returning();
   if (inserted) return inserted;
@@ -294,6 +304,10 @@ export function registerPayoutRoutes(app: Express) {
     platformFeePct: z.number().int().min(0).max(50).optional(),
     certCostCents: z.number().int().min(0).max(10000).optional(),
     shopifyFeeCents: z.number().int().min(0).max(10000).optional(),
+    // Signed-cert wholesale ladder — array shape validated by
+    // `validateSignedCertLadder` after zod (label/order/floor checks
+    // are easier to express imperatively than in a zod schema).
+    signedCertLadder: z.array(z.unknown()).optional(),
   });
   app.put("/api/admin/payout-settings", requireAdmin, async (req, res) => {
     const { getUserRole } = await import("./auth/roles");
@@ -308,6 +322,11 @@ export function registerPayoutRoutes(app: Express) {
     if (parsed.data.platformFeePct !== undefined) patch.platformFeePct = parsed.data.platformFeePct;
     if (parsed.data.certCostCents !== undefined) patch.certCostCents = parsed.data.certCostCents;
     if (parsed.data.shopifyFeeCents !== undefined) patch.shopifyFeeCents = parsed.data.shopifyFeeCents;
+    if (parsed.data.signedCertLadder !== undefined) {
+      const v = validateSignedCertLadder(parsed.data.signedCertLadder);
+      if (!v.ok) return res.status(400).json({ message: v.message });
+      patch.signedCertLadder = v.rungs;
+    }
     const [row] = await db
       .update(payoutSettings)
       .set(patch as any)

@@ -1600,7 +1600,10 @@ export function registerShopifyRoutes(app: Express) {
       .select()
       .from(albumAddons)
       .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert"), eq(albumAddons.active, true)));
-    const rung = certAddon ? lookupSignedCertRung(certAddon.plannedQuantity) : null;
+    const { getPayoutSettings } = await import("./payouts");
+    const payoutSettings = await getPayoutSettings();
+    const ladderRungs = payoutSettings.signedCertLadder ?? undefined;
+    const rung = certAddon ? lookupSignedCertRung(certAddon.plannedQuantity, ladderRungs) : null;
     const earnings = rung && album.signedCertRetailCents != null
       ? {
           plannedQuantity: certAddon!.plannedQuantity,
