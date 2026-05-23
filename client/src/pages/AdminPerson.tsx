@@ -1774,6 +1774,41 @@ function MembersPanel({ person }: { person: PersonFull }) {
     onError: (e: any) =>
       toast({ title: "Couldn't save", description: String(e?.message ?? e), variant: "destructive" }),
   });
+  // Drag/↑↓ reorder. Optimistically reorders the cached list, then PUTs
+  // the new displayOrder for every row whose position changed (cheaper
+  // and simpler than diffing — a few extra PUTs are fine here).
+  const reorderMutation = useMutation({
+    mutationFn: async (nextOrder: MembersPanelMemberRow[]) => {
+      await Promise.all(
+        nextOrder.map((row, idx) =>
+          row.displayOrder === idx
+            ? Promise.resolve()
+            : apiRequest("PUT", `/api/admin/band-members/${row.id}`, {
+                displayOrder: idx,
+              }),
+        ),
+      );
+    },
+    onSuccess: invalidate,
+    onError: (e: any) => {
+      invalidate();
+      toast({
+        title: "Couldn't reorder",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      });
+    },
+  });
+  const swap = (from: number, to: number) => {
+    if (to < 0 || to >= members.length || from === to) return;
+    const next = [...members];
+    [next[from], next[to]] = [next[to], next[from]];
+    qc.setQueryData<MembersPanelMemberRow[]>(
+      membersKey,
+      next.map((r, idx) => ({ ...r, displayOrder: idx })),
+    );
+    reorderMutation.mutate(next);
+  };
   const removeMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/admin/band-members/${id}`),
     onSuccess: invalidate,
@@ -1787,7 +1822,7 @@ function MembersPanel({ person }: { person: PersonFull }) {
         <div>
           <h2 className="text-[15px] font-semibold text-slate-900">Members</h2>
           <p className="text-[12.5px] text-slate-500 mt-0.5">
-            People in {person.name}. Drag isn't wired yet — set order manually with the number field.
+            People in {person.name}. Use the ↑/↓ buttons on each row to reorder.
           </p>
         </div>
         <button
@@ -1857,11 +1892,16 @@ function MembersPanel({ person }: { person: PersonFull }) {
             No members yet. Add the first lineup above.
           </p>
         )}
-        {members.map((m) => (
+        {members.map((m, i) => (
           <MemberRow
             key={m.id}
             row={m}
+            index={i}
+            total={members.length}
             onSave={(patch) => updateMutation.mutate({ id: m.id, patch })}
+            onMoveUp={() => swap(i, i - 1)}
+            onMoveDown={() => swap(i, i + 1)}
+            reordering={reorderMutation.isPending}
             onRemove={() => {
               if (window.confirm(`Remove ${m.person?.name ?? "this person"} from ${person.name}?`)) {
                 removeMutation.mutate(m.id);
@@ -1877,17 +1917,29 @@ function MembersPanel({ person }: { person: PersonFull }) {
 
 function MemberRow({
   row,
+  index,
+  total,
   onSave,
+  onMoveUp,
+  onMoveDown,
+  reordering,
   onRemove,
   saving,
 }: {
   row: MembersPanelMemberRow;
+  index: number;
+  total: number;
   onSave: (patch: any) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  reordering: boolean;
   onRemove: () => void;
   saving: boolean;
 }) {
-  // Local draft so the admin can edit roles/years/order without firing
+  // Local draft so the admin can edit roles/years without firing
   // a PUT on every keystroke. Save reconciles via the patch.
+  // Display order is no longer edited here — it's driven by the
+  // ↑/↓ buttons, which fire their own PUTs from the parent panel.
   const [rolesText, setRolesText] = useState((row.roles ?? []).join(", "));
   const [joinedYear, setJoinedYear] = useState(
     row.joinedYear === null ? "" : String(row.joinedYear),
@@ -1895,12 +1947,10 @@ function MemberRow({
   const [leftYear, setLeftYear] = useState(
     row.leftYear === null ? "" : String(row.leftYear),
   );
-  const [displayOrder, setDisplayOrder] = useState(String(row.displayOrder));
   const dirty =
     rolesText !== (row.roles ?? []).join(", ") ||
     joinedYear !== (row.joinedYear === null ? "" : String(row.joinedYear)) ||
-    leftYear !== (row.leftYear === null ? "" : String(row.leftYear)) ||
-    displayOrder !== String(row.displayOrder);
+    leftYear !== (row.leftYear === null ? "" : String(row.leftYear));
   const save = () => {
     onSave({
       roles: rolesText
@@ -1909,7 +1959,6 @@ function MemberRow({
         .filter((s) => s.length > 0),
       joinedYear: joinedYear.trim() === "" ? null : Number(joinedYear),
       leftYear: leftYear.trim() === "" ? null : Number(leftYear),
-      displayOrder: Number(displayOrder) || 0,
     });
   };
   const isFormer = row.leftYear !== null;
@@ -1976,13 +2025,28 @@ function MemberRow({
         <label className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400">
           Order
         </label>
-        <input
-          type="number"
-          value={displayOrder}
-          onChange={(e) => setDisplayOrder(e.target.value)}
-          className="w-full mt-1 px-2 py-1.5 rounded-md border border-slate-200 text-[12.5px]"
-          data-testid={`input-member-order-${row.memberId}`}
-        />
+        <div className="mt-1 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={reordering || index === 0}
+            className="flex-1 px-1.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 inline-flex items-center justify-center"
+            aria-label="Move up"
+            data-testid={`button-member-up-${row.memberId}`}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={reordering || index === total - 1}
+            className="flex-1 px-1.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 inline-flex items-center justify-center"
+            aria-label="Move down"
+            data-testid={`button-member-down-${row.memberId}`}
+          >
+            ↓
+          </button>
+        </div>
       </div>
       <div className="col-span-2 flex items-center gap-2 justify-end">
         {dirty && (
