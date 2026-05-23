@@ -120,7 +120,7 @@ export function AdminReview() {
 
         {isLoading ? (
           <Card className="p-10 grid place-items-center" data-testid="state-review-loading">
-            <Spinner />
+            <Spinner className="w-6 h-6 text-[var(--brand-blue)] animate-spin" />
           </Card>
         ) : !rows || rows.length === 0 ? (
           <Card className="p-10 text-center" data-testid="state-review-empty">

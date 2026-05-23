@@ -82,8 +82,8 @@ export function PartnerPermissionsPanel({ scopeKind, scopeId, scopeName }: Props
 
   if (isLoading || !draft) {
     return (
-      <Card className="p-6 mt-6" data-testid="card-partner-permissions-loading">
-        <Spinner />
+      <Card className="p-6 mt-6 grid place-items-center" data-testid="card-partner-permissions-loading">
+        <Spinner className="w-6 h-6 text-[var(--brand-blue)] animate-spin" />
       </Card>
     );
   }
