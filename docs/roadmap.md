@@ -487,15 +487,16 @@ Cart UX, Stripe checkout, fulfillment dashboard, post-purchase delivery email, r
 
 ## Per-press RFQ pricing on the Sell panel (deferred — May 23, 2026)
 
-The Sell panel's new Presses directory (Task #194) renders every pressing plant as a static info card — logo, location, turnaround, specialty chips — but the price an artist sees on each format row still comes from the **platform default** in `payout_format_costs`, snapshotted onto the SKU at save. There is no per-press quote, no "Memphis vs. Precision vs. Hellbender" comparison, and no RFQ button.
+The Sell panel's vinyl rows now price off a hard-coded Hellbender Vinyl reference matrix keyed by (size, color tier, qty tier, jacket upgrade) — picks are snapshotted onto each SKU at save (Task #200). Non-vinyl formats (double-LP, cassette, CD) still fall back to the platform default in `payout_format_costs` because we don't have published rate sheets in the codebase yet, and **no** format has true per-plant comparison: there is no "Memphis vs. Precision vs. Hellbender" pick, no RFQ button, and the chosen-plant column on `album_skus` is still null.
 
 Next phase:
-- New table `press_format_quotes (press_id, format, run_size, manufacturing_cents, lead_time_days, valid_until)` — one row per (plant, format, run-size band) quote.
-- Press cards grow a "Request quote" CTA that emails the plant a structured RFQ (album metadata + planned quantity + format) and parks a pending row.
-- SkuRow's Cost tooltip switches from a single Manufacturing line to a Manufacturing-by-press dropdown; selecting a press writes the chosen press_id onto the SKU and snapshots that press's quote.
-- Super-admin Platform Pricing surface grows a per-format defaults editor so the existing seed numbers (today only `7_inch` is non-zero) stop being a SQL-only knob.
+- New table `press_format_quotes (press_id, format, run_size, color_tier, jacket_upgrade, manufacturing_cents, lead_time_days, valid_until)` — one row per (plant, format, run-size band, picks) quote. Hellbender's matrix becomes the seed dataset.
+- Press cards grow a "Request quote" CTA that emails the plant a structured RFQ (album metadata + planned quantity + format + the artist's vinyl picks) and parks a pending row.
+- SkuRow's Cost tooltip switches from "Source: Hellbender reference matrix" to a Manufacturing-by-press dropdown; selecting a press writes the chosen press_id onto the SKU and snapshots that press's quote.
+- Same matrix lookup ports to the rest of the catalog (double-LP, cassette, CD) once their plants' rate sheets land in `shared/pressing.ts`.
+- Fan-side "You'll get" surface on Preview & Purchase reuses the `<VinylPreview>` component already built for the Sell panel so the disc the artist picks is the disc the fan sees.
 
-Until then: the per-format ⓘ tooltip surfaces the four-line breakdown so artists at least see *what* is in the cost number; per-press swaps are deferred.
+Until then: vinyl rows show a live Hellbender cost + a fan-preview thumbnail next to the color/jacket pickers; non-vinyl rows keep the placeholder.
 
 ## Masters tab — consolidate into Tracks (proposed May 16, 2026)
 

@@ -40,6 +40,17 @@ import {
   type Order,
   type OrderItem,
 } from "@shared/schema";
+import {
+  lookupHellbenderUnitCents,
+  snapToQuantityTier,
+  isVinylFormat,
+  VINYL_COLOR_BY_ID,
+  DEFAULT_VINYL_COLOR_ID,
+  DEFAULT_VINYL_QUANTITY,
+  DEFAULT_JACKET_UPGRADE,
+  type VinylColorTier,
+  type JacketUpgrade,
+} from "@shared/pressing";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -149,6 +160,12 @@ async function upsertSku(input: {
   costSnapshotPublishingCents: number;
   costSnapshotPaymentProcessingCents: number;
   costSnapshotGoodtunesCents: number;
+  // Task #200
+  vinylColor: string | null;
+  vinylColorTier: VinylColorTier | null;
+  jacketUpgrade: JacketUpgrade | null;
+  quantityTier: number | null;
+  costSource: string;
 }): Promise<AlbumSku> {
   const [row] = await db
     .insert(albumSkus)
@@ -164,6 +181,11 @@ async function upsertSku(input: {
         costSnapshotPublishingCents: input.costSnapshotPublishingCents,
         costSnapshotPaymentProcessingCents: input.costSnapshotPaymentProcessingCents,
         costSnapshotGoodtunesCents: input.costSnapshotGoodtunesCents,
+        vinylColor: input.vinylColor,
+        vinylColorTier: input.vinylColorTier,
+        jacketUpgrade: input.jacketUpgrade,
+        quantityTier: input.quantityTier,
+        costSource: input.costSource,
       },
     })
     .returning();
@@ -409,16 +431,48 @@ export function registerCommerceRoutes(app: Express) {
     // planned run size. Rejects 0 / negatives so the UI's Fixed mode
     // can't silently round down to nothing.
     plannedQuantity: z.number().int().min(1).nullable().optional(),
+    // Task #200 — vinyl pressing picks. Only meaningful on vinyl
+    // formats (7_inch / 12_lp); ignored on cassette/CD/12_double.
+    vinylColor: z.string().optional().nullable(),
+    jacketUpgrade: z.enum(["none", "insert", "gatefold", "gatefold_insert"]).optional().nullable(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const parsed = skuBodySchema.safeParse({ ...req.body, format: String(req.params.format) });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid SKU" });
-    // Task #194 — snapshot the live platform cost breakdown onto the
-    // SKU at save time so the artist's profit readout stays stable
-    // until they re-save. Mirrors the addon `costCentsSnapshot` pattern.
-    const cost = await getFormatCost(parsed.data.format);
+    // Task #200 — for vinyl, derive Manufacturing cost from the
+    // Hellbender matrix using the artist's picks (snapped quantity
+    // tier × color tier × jacket upgrade). For non-vinyl formats fall
+    // back to the platform placeholder Cost row from #194.
+    const platformCost = await getFormatCost(parsed.data.format);
+    const vinyl = isVinylFormat(parsed.data.format);
+    let manufacturingCents = platformCost.manufacturingCents;
+    let costSource = "placeholder";
+    let vinylColorId: string | null = null;
+    let vinylColorTier: VinylColorTier | null = null;
+    let jacketUpgrade: JacketUpgrade | null = null;
+    let quantityTier: number | null = null;
+    if (vinyl) {
+      const colorOption =
+        (parsed.data.vinylColor && VINYL_COLOR_BY_ID[parsed.data.vinylColor]) ||
+        VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+      vinylColorId = colorOption.id;
+      vinylColorTier = colorOption.tier;
+      jacketUpgrade = parsed.data.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE;
+      const snap = snapToQuantityTier(parsed.data.plannedQuantity ?? DEFAULT_VINYL_QUANTITY);
+      quantityTier = snap.tier;
+      const looked = lookupHellbenderUnitCents({
+        format: parsed.data.format,
+        colorTier: vinylColorTier,
+        qtyTier: snap.tier,
+        jacketUpgrade,
+      });
+      if (looked !== null) {
+        manufacturingCents = looked;
+        costSource = "hellbender";
+      }
+    }
     const row = await upsertSku({
       albumId: album.id,
       format: parsed.data.format,
@@ -426,10 +480,15 @@ export function registerCommerceRoutes(app: Express) {
       stock: parsed.data.stock ?? null,
       active: parsed.data.active,
       plannedQuantity: parsed.data.plannedQuantity ?? null,
-      costSnapshotManufacturingCents: cost.manufacturingCents,
-      costSnapshotPublishingCents: cost.publishingCents,
-      costSnapshotPaymentProcessingCents: cost.paymentProcessingCents,
-      costSnapshotGoodtunesCents: cost.goodtunesCents,
+      costSnapshotManufacturingCents: manufacturingCents,
+      costSnapshotPublishingCents: platformCost.publishingCents,
+      costSnapshotPaymentProcessingCents: platformCost.paymentProcessingCents,
+      costSnapshotGoodtunesCents: platformCost.goodtunesCents,
+      vinylColor: vinylColorId,
+      vinylColorTier,
+      jacketUpgrade,
+      quantityTier,
+      costSource,
     });
     res.json(row);
   });

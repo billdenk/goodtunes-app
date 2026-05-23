@@ -711,7 +711,7 @@ export function AdminAlbum() {
         {tab === "bonus" && (
           <BonusPanel album={album} onEdit={openInClassicAdmin} />
         )}
-        {tab === "sell" && <SellPanel albumId={album.id} />}
+        {tab === "sell" && <SellPanel albumId={album.id} artworkUrl={album.artwork} />}
         {tab === "shopify" && <ShopifyPanel albumId={album.id} />}
       </div>
 

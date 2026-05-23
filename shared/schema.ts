@@ -844,6 +844,17 @@ export const albumSkus = pgTable(
     costSnapshotPublishingCents: integer("cost_snapshot_publishing_cents"),
     costSnapshotPaymentProcessingCents: integer("cost_snapshot_payment_processing_cents"),
     costSnapshotGoodtunesCents: integer("cost_snapshot_goodtunes_cents"),
+    // Task #200 — Pressing picks snapshot. Captures which row of the
+    // Hellbender reference matrix the manufacturing snapshot came from
+    // (color id + collapsed price tier + jacket upgrade + snapped qty
+    // tier) plus a source tag ("hellbender" for vinyl, "placeholder"
+    // for cassette/CD/12" double until those plants have their own
+    // matrices). Nullable for pre-#200 rows.
+    vinylColor: text("vinyl_color"),
+    vinylColorTier: text("vinyl_color_tier"),
+    jacketUpgrade: text("jacket_upgrade"),
+    quantityTier: integer("quantity_tier"),
+    costSource: text("cost_source"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({

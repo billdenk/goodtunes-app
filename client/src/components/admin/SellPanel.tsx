@@ -36,6 +36,21 @@ import {
   type PayoutSettings,
   type PayoutFormatCost,
 } from "@shared/schema";
+import {
+  VINYL_COLORS,
+  VINYL_COLOR_BY_ID,
+  VINYL_COLOR_TIER_LABEL,
+  JACKET_UPGRADE_LABEL,
+  DEFAULT_VINYL_COLOR_ID,
+  DEFAULT_VINYL_QUANTITY,
+  DEFAULT_JACKET_UPGRADE,
+  isVinylFormat,
+  lookupHellbenderUnitCents,
+  snapToQuantityTier,
+  type JacketUpgrade,
+  type VinylColorOption,
+} from "@shared/pressing";
+import { VinylPreview } from "@/components/admin/VinylPreview";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {
@@ -70,7 +85,7 @@ type InvitedPressResponse = {
   formatCosts: PayoutFormatCost[];
 };
 
-export function SellPanel({ albumId }: { albumId: string }) {
+export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; artworkUrl?: string | null }) {
   const { toast } = useToast();
   const { data, isLoading } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
   // Live platform-cost feed — used for the "You earn" readout the first
@@ -107,6 +122,8 @@ export function SellPanel({ albumId }: { albumId: string }) {
       stock: number | null;
       active: boolean;
       plannedQuantity: number | null;
+      vinylColor: string | null;
+      jacketUpgrade: JacketUpgrade | null;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
       return r.json();
@@ -194,6 +211,7 @@ export function SellPanel({ albumId }: { albumId: string }) {
                     format={f}
                     existing={existing}
                     liveCost={costByFormat.get(f) ?? null}
+                    artworkUrl={artworkUrl}
                     onSave={upsertSku.mutate}
                     onDelete={() => deleteSku.mutate(f)}
                   />
@@ -205,6 +223,7 @@ export function SellPanel({ albumId }: { albumId: string }) {
                   format={f}
                   existing={null}
                   liveCost={costByFormat.get(f) ?? null}
+                  artworkUrl={artworkUrl}
                   onSave={(body) => {
                     upsertSku.mutate(body, {
                       onSuccess: () =>
@@ -381,8 +400,8 @@ function PressesPanel({
       <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Presses</h2>
       <p className="text-[13px] text-slate-500 mb-4">
         {invitedPress
-          ? `Pressing plants GoodTunes works with — ${invitedPress.name} brought you on, but you're free to pick anyone.`
-          : "Pressing plants GoodTunes works with. Per-press quotes wire in soon — this is who you'll be choosing between."}
+          ? `Pressing plants GoodTunes works with — ${invitedPress.name} brought you on, but you're free to pick anyone. Today the Cost on every vinyl format uses Hellbender Vinyl's public rate sheet as the default; per-plant quote plumbing wires in next so an artist can compare side-by-side.`
+          : "Pressing plants GoodTunes works with. Today the Cost on every vinyl format uses Hellbender Vinyl's public rate sheet as the default — per-plant quote plumbing wires in next so an artist can compare side-by-side."}
       </p>
       <div
         className="flex flex-col sm:flex-row sm:overflow-x-auto gap-3 sm:pb-2 -mx-4 sm:px-4"
@@ -439,11 +458,25 @@ function PressCard({ press, highlight = false }: { press: Manufacturer; highligh
           <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 shrink-0" />
         )}
         <div className="min-w-0">
-          <div
-            className="text-[13.5px] font-semibold text-slate-900 truncate"
-            data-testid={`text-press-name-${press.id}`}
-          >
-            {press.name}
+          <div className="flex items-center gap-1.5">
+            <div
+              className="text-[13.5px] font-semibold text-slate-900 truncate"
+              data-testid={`text-press-name-${press.id}`}
+            >
+              {press.name}
+            </div>
+            {/* Until per-press RFQ pricing ships, every vinyl SKU
+                prices off Hellbender's published rate sheet — even
+                cards for other plants. Pill calls that out so the
+                operator isn't confused why "Memphis" and "Precision"
+                show identical Cost numbers. */}
+            <span
+              className="text-[9.5px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded-sm px-1 py-[1px] shrink-0"
+              title="Today every vinyl Cost uses Hellbender Vinyl's published rate sheet as the default. Per-plant quotes wire in next."
+              data-testid={`pill-press-source-${press.id}`}
+            >
+              Hellbender reference rates
+            </span>
           </div>
           {press.location && (
             <div
@@ -499,6 +532,7 @@ function CostTooltip({
     publishingCents: number;
     paymentProcessingCents: number;
     goodtunesCents: number;
+    source?: "hellbender" | "placeholder";
   };
 }) {
   const total =
@@ -543,6 +577,13 @@ function CostTooltip({
         <Row label="Payment processing" cents={breakdown.paymentProcessingCents} />
         <Row label="GoodTunes" cents={breakdown.goodtunesCents} />
         <Row label="Total" cents={total} bold />
+        {breakdown.source && (
+          <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+            {breakdown.source === "hellbender"
+              ? "Source: Hellbender Vinyl reference matrix"
+              : "Placeholder — per-plant matrix pending"}
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -552,6 +593,7 @@ function SkuRow({
   format,
   existing,
   liveCost,
+  artworkUrl,
   onSave,
   onDelete,
 }: {
@@ -562,19 +604,27 @@ function SkuRow({
   existing: AlbumSku | null;
   // Live platform default for this format. Used on draft rows + when
   // the existing SKU pre-dates the cost-snapshot columns (NULL snapshot
-  // fields). Once the row is saved with non-null snapshot fields, the
-  // snapshot is the source of truth and `liveCost` is ignored.
+  // fields). For vinyl, manufacturing is overridden by the live
+  // Hellbender matrix lookup; publishing / processing / GoodTunes
+  // margin still come from this row.
   liveCost: PayoutFormatCost | null;
+  // Album cover art — feeds the in-row vinyl preview so the artist
+  // can see what a fan's "You'll get" mock will look like as they
+  // change colors. Optional; falls back to a slate placeholder.
+  artworkUrl: string | null;
   onSave: (b: {
     format: AlbumFormat;
     priceCents: number;
     stock: number | null;
     active: boolean;
     plannedQuantity: number | null;
+    vinylColor: string | null;
+    jacketUpgrade: JacketUpgrade | null;
   }) => void;
   onDelete: () => void;
 }) {
   const isDraft = existing === null;
+  const isVinyl = isVinylFormat(format);
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
   const [stockStr, setStockStr] = useState(existing?.stock?.toString() ?? "");
@@ -584,43 +634,108 @@ function SkuRow({
     existing?.plannedQuantity != null ? "fixed" : "unlimited";
   const [qtyMode, setQtyMode] = useState<"fixed" | "unlimited">(initialMode);
   const [qtyInput, setQtyInput] = useState<string>(
-    existing?.plannedQuantity != null ? String(existing.plannedQuantity) : "100",
+    existing?.plannedQuantity != null
+      ? String(existing.plannedQuantity)
+      : String(DEFAULT_VINYL_QUANTITY),
   );
-
-  // Cost source: prefer the snapshot on the SKU row (so it stays
-  // stable until the artist re-saves). Fall back to the live platform
-  // default for draft rows + pre-snapshot rows.
-  const snapshot = existing && existing.costSnapshotManufacturingCents != null
-    ? {
-        manufacturingCents: existing.costSnapshotManufacturingCents,
-        publishingCents: existing.costSnapshotPublishingCents ?? 0,
-        paymentProcessingCents: existing.costSnapshotPaymentProcessingCents ?? 0,
-        goodtunesCents: existing.costSnapshotGoodtunesCents ?? 0,
-      }
-    : liveCost
-      ? {
-          manufacturingCents: liveCost.manufacturingCents,
-          publishingCents: liveCost.publishingCents,
-          paymentProcessingCents: liveCost.paymentProcessingCents,
-          goodtunesCents: liveCost.goodtunesCents,
-        }
-      : null;
-  const costLocked = existing?.costSnapshotManufacturingCents != null;
-  const totalCostCents = snapshot
-    ? snapshot.manufacturingCents +
-      snapshot.publishingCents +
-      snapshot.paymentProcessingCents +
-      snapshot.goodtunesCents
-    : null;
-
-  const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
-  const profitCents =
-    priceCents !== null && totalCostCents !== null ? priceCents - totalCostCents : null;
+  // Task #200 — vinyl picks. Initialised from the SKU snapshot (when
+  // present) so a saved row re-opens with the picks the artist locked
+  // in. New / non-vinyl rows fall back to platform defaults.
+  const [vinylColorId, setVinylColorId] = useState<string>(
+    existing?.vinylColor && VINYL_COLOR_BY_ID[existing.vinylColor]
+      ? existing.vinylColor
+      : DEFAULT_VINYL_COLOR_ID,
+  );
+  const [jacketUpgrade, setJacketUpgrade] = useState<JacketUpgrade>(
+    (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE,
+  );
+  const vinylColor: VinylColorOption = VINYL_COLOR_BY_ID[vinylColorId] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
 
   const parsedQty = useMemo(() => {
     const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [qtyInput]);
+
+  // Task #200 — snap the typed quantity up to the next published
+  // Hellbender tier (50/100/200/300/500/1000). The matrix is keyed
+  // by tier, so this is also what gets snapshotted on save. Anything
+  // above 1000 stays at 1000 and flips `requiresQuote` so the row
+  // can show a "1000+ — request custom quote" caveat.
+  const qtySnap = useMemo(
+    () => snapToQuantityTier(parsedQty ?? DEFAULT_VINYL_QUANTITY),
+    [parsedQty],
+  );
+
+  // Live Cost computation. Vinyl recomputes Manufacturing from the
+  // Hellbender matrix every time the artist changes picks, so they
+  // see the new cost immediately (the snapshot still locks at Save).
+  // Non-vinyl formats fall back to the existing #194 snapshot/live
+  // placeholder rule.
+  const breakdown = useMemo(() => {
+    const sideCarCents = existing && existing.costSnapshotManufacturingCents != null
+      ? {
+          publishingCents: existing.costSnapshotPublishingCents ?? 0,
+          paymentProcessingCents: existing.costSnapshotPaymentProcessingCents ?? 0,
+          goodtunesCents: existing.costSnapshotGoodtunesCents ?? 0,
+        }
+      : liveCost
+        ? {
+            publishingCents: liveCost.publishingCents,
+            paymentProcessingCents: liveCost.paymentProcessingCents,
+            goodtunesCents: liveCost.goodtunesCents,
+          }
+        : null;
+    if (!sideCarCents) return null;
+    if (isVinyl) {
+      // Snapshot-at-save semantics: if the row is saved AND the
+      // artist hasn't changed any of the picks the matrix is keyed
+      // by, show the locked snapshot so the cost is stable until
+      // they explicitly re-save (mirroring #194). If picks ARE
+      // dirty, recompute live so the artist sees the new cost as
+      // they tweak; that new number gets snapshotted on Save.
+      const storedColorId = existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID;
+      const storedJacketLocal = (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE;
+      const storedTier = existing?.quantityTier ?? null;
+      const picksDirty =
+        vinylColorId !== storedColorId ||
+        jacketUpgrade !== storedJacketLocal ||
+        (storedTier !== null && qtySnap.tier !== storedTier);
+      if (existing && existing.costSnapshotManufacturingCents != null && !picksDirty) {
+        return {
+          manufacturingCents: existing.costSnapshotManufacturingCents,
+          ...sideCarCents,
+          source: "hellbender" as const,
+        };
+      }
+      const m = lookupHellbenderUnitCents({
+        format,
+        colorTier: vinylColor.tier,
+        qtyTier: qtySnap.tier,
+        jacketUpgrade,
+      });
+      return {
+        manufacturingCents: m ?? 0,
+        ...sideCarCents,
+        source: "hellbender" as const,
+      };
+    }
+    // Non-vinyl: snapshot wins until re-save (preserve #194 behaviour).
+    const manufacturingCents = existing?.costSnapshotManufacturingCents
+      ?? liveCost?.manufacturingCents
+      ?? 0;
+    return { manufacturingCents, ...sideCarCents, source: "placeholder" as const };
+  }, [existing, liveCost, isVinyl, format, vinylColor.tier, vinylColorId, qtySnap.tier, jacketUpgrade]);
+
+  const totalCostCents = breakdown
+    ? breakdown.manufacturingCents +
+      breakdown.publishingCents +
+      breakdown.paymentProcessingCents +
+      breakdown.goodtunesCents
+    : null;
+
+  const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
+  const profitCents =
+    priceCents !== null && totalCostCents !== null ? priceCents - totalCostCents : null;
 
   const totalCents =
     qtyMode === "fixed" && profitCents !== null && parsedQty !== null
@@ -632,12 +747,15 @@ function SkuRow({
   const storedStock = existing?.stock?.toString() ?? "";
   const storedMode: "fixed" | "unlimited" = initialMode;
   const storedQty = existing?.plannedQuantity ?? null;
+  const storedColor = existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID;
+  const storedJacket = (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE;
   const dirty =
     active !== storedActive ||
     priceStr !== storedPrice ||
     stockStr !== storedStock ||
     qtyMode !== storedMode ||
-    (qtyMode === "fixed" && parsedQty !== storedQty);
+    (qtyMode === "fixed" && parsedQty !== storedQty) ||
+    (isVinyl && (vinylColorId !== storedColor || jacketUpgrade !== storedJacket));
 
   const submit = () => {
     const cents = parseDollars(priceStr);
@@ -645,7 +763,15 @@ function SkuRow({
     const stock = stockStr.trim() === "" ? null : Math.max(0, Math.floor(Number(stockStr)));
     const plannedQuantity = qtyMode === "fixed" ? parsedQty : null;
     if (qtyMode === "fixed" && plannedQuantity === null) return;
-    onSave({ format, priceCents: cents, stock, active, plannedQuantity });
+    onSave({
+      format,
+      priceCents: cents,
+      stock,
+      active,
+      plannedQuantity,
+      vinylColor: isVinyl ? vinylColorId : null,
+      jacketUpgrade: isVinyl ? jacketUpgrade : null,
+    });
   };
 
   const lossColor = profitCents !== null && profitCents < 0;
@@ -714,11 +840,16 @@ function SkuRow({
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-[12px] inline-flex items-center gap-1">
               Cost $
-              {snapshot && (
-                <CostTooltip format={format} breakdown={snapshot} />
+              {breakdown && (
+                <CostTooltip format={format} breakdown={breakdown} />
               )}
-              <span className="text-slate-400 text-[11px]">
-                ({costLocked ? "locked at last save" : "live"})
+              <span
+                className="text-slate-400 text-[11px]"
+                data-testid={`text-cost-source-${format}`}
+              >
+                ({isVinyl
+                  ? (existing?.costSnapshotManufacturingCents != null ? "locked · Hellbender" : "live · Hellbender")
+                  : "placeholder"})
               </span>
             </span>
             <span
@@ -728,6 +859,14 @@ function SkuRow({
               {totalCostCents === null ? "—" : dollars(totalCostCents)}
             </span>
           </div>
+          {!isVinyl && (
+            <div
+              className="text-[11px] text-slate-400 leading-snug -mt-1.5"
+              data-testid={`text-cost-nonvinyl-note-${format}`}
+            >
+              Quoted manually — Hellbender doesn't press this format.
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-[12px]">
@@ -860,7 +999,144 @@ function SkuRow({
               Only if all {parsedQty} sell.
             </div>
           )}
+          {isVinyl && qtyMode === "fixed" && parsedQty !== null && (
+            <div
+              className="text-[11.5px] text-slate-500 text-right"
+              data-testid={`text-qty-tier-${format}`}
+            >
+              {qtySnap.requiresQuote ? (
+                <>1000+ — request a custom quote</>
+              ) : parsedQty === qtySnap.tier ? (
+                <>Priced at the {qtySnap.tier}-unit tier.</>
+              ) : (
+                <>Priced at the next tier up: {qtySnap.tier} units.</>
+              )}
+            </div>
+          )}
         </div>
+      </div>
+
+      {isVinyl && (
+        <VinylPicksBlock
+          format={format}
+          artworkUrl={artworkUrl}
+          color={vinylColor}
+          onPickColor={(id) => setVinylColorId(id)}
+          jacketUpgrade={jacketUpgrade}
+          onPickJacket={setJacketUpgrade}
+        />
+      )}
+    </div>
+  );
+}
+
+// Task #200 — Vinyl color + jacket picker. Lives under the
+// Price/Cost/Profit grid on 7" / 12" rows. The swatch row is
+// horizontally scrollable so the artist can try a different color
+// without leaving the row (a fix for Hellbender's own picker, which
+// makes you back out to switch colors). Live preview on the right
+// shows what a fan will see in the "You'll get" mock.
+function VinylPicksBlock({
+  format,
+  artworkUrl,
+  color,
+  onPickColor,
+  jacketUpgrade,
+  onPickJacket,
+}: {
+  format: AlbumFormat;
+  artworkUrl: string | null;
+  color: VinylColorOption;
+  onPickColor: (id: string) => void;
+  jacketUpgrade: JacketUpgrade;
+  onPickJacket: (j: JacketUpgrade) => void;
+}) {
+  return (
+    <div
+      className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-4 items-start"
+      data-testid={`vinyl-picks-${format}`}
+    >
+      <div className="space-y-3">
+        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+          Vinyl
+        </div>
+
+        {/* Color picker — swatch grid. Wraps + scrolls so the whole
+            Hellbender palette is one click away. */}
+        <div>
+          <div className="flex items-baseline justify-between gap-2 mb-1.5">
+            <span className="text-[12px] text-slate-500">Color</span>
+            <span
+              className="text-[12px] text-slate-700 font-medium"
+              data-testid={`text-vinyl-color-name-${format}`}
+            >
+              {color.name}
+              <span className="text-[11px] text-slate-400 ml-1.5">
+                · {VINYL_COLOR_TIER_LABEL[color.tier]}
+              </span>
+            </span>
+          </div>
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="radiogroup"
+            aria-label="Vinyl color"
+            data-testid={`picker-vinyl-color-${format}`}
+          >
+            {VINYL_COLORS.map((c) => {
+              const selected = c.id === color.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  title={`${c.name} (${VINYL_COLOR_TIER_LABEL[c.tier]})`}
+                  onClick={() => onPickColor(c.id)}
+                  className={[
+                    "w-7 h-7 rounded-full border-2 transition-transform",
+                    selected
+                      ? "border-[color:var(--brand-blue)] scale-110 shadow"
+                      : "border-slate-200 hover:border-slate-400",
+                  ].join(" ")}
+                  style={{ background: c.swatch }}
+                  data-testid={`swatch-vinyl-color-${format}-${c.id}`}
+                >
+                  <span className="sr-only">{c.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Jacket select */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] text-slate-500">Jacket</span>
+          <select
+            value={jacketUpgrade}
+            onChange={(e) => onPickJacket(e.target.value as JacketUpgrade)}
+            className={`${fieldClass} pr-8 w-56`}
+            data-testid={`select-jacket-${format}`}
+          >
+            {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
+              <option key={j} value={j}>
+                {JACKET_UPGRADE_LABEL[j]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Live preview — album jacket + colored disc peeking out. The
+          same mock will surface on the fan Preview & Purchase page. */}
+      <div className="w-full sm:w-72">
+        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
+          Fan preview
+        </div>
+        <VinylPreview
+          artworkUrl={artworkUrl}
+          color={color}
+          jacketUpgrade={jacketUpgrade}
+        />
       </div>
     </div>
   );
