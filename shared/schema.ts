@@ -816,12 +816,41 @@ export const albumSkus = pgTable(
     stock: integer("stock"),
     active: boolean("active").notNull().default(true),
     position: integer("position").notNull().default(0),
+    // Task #194 — planning number for this physical format (vinyl press
+    // run, cassette dub count, CD short-run). NULL = uncapped; positive
+    // int = artist's committed run. Drives the "Total if they all sell"
+    // readout in the admin Sell panel. Not a hard cap on fan checkout
+    // today — `stock` is still the only column that gates buy attempts.
+    plannedQuantity: integer("planned_quantity"),
+    // Task #194 — per-format cost snapshot. Locked at save time off the
+    // platform default in `payout_format_costs`, so the artist's profit
+    // readout is stable until they re-save (mirrors the addon
+    // `costCentsSnapshot` pattern). Nullable until first save.
+    costSnapshotManufacturingCents: integer("cost_snapshot_manufacturing_cents"),
+    costSnapshotPublishingCents: integer("cost_snapshot_publishing_cents"),
+    costSnapshotPaymentProcessingCents: integer("cost_snapshot_payment_processing_cents"),
+    costSnapshotGoodtunesCents: integer("cost_snapshot_goodtunes_cents"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({
     albumFormatUnique: unique("album_skus_album_format_unique").on(t.albumId, t.format),
   }),
 );
+
+// Task #194 — Platform default cost breakdown per physical format. One
+// row per format. Editable by super-admin; per-album snapshot lives on
+// `album_skus`. Manufacturing/publishing/payment processing/GoodTunes
+// margin are stored as integer cents so the SellPanel ⓘ tooltip can
+// add them up to a single Cost number.
+export const payoutFormatCosts = pgTable("payout_format_costs", {
+  format: text("format").primaryKey(),
+  manufacturingCents: integer("manufacturing_cents").notNull().default(0),
+  publishingCents: integer("publishing_cents").notNull().default(0),
+  paymentProcessingCents: integer("payment_processing_cents").notNull().default(0),
+  goodtunesCents: integer("goodtunes_cents").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type PayoutFormatCost = typeof payoutFormatCosts.$inferSelect;
 
 // Generic per-album add-on. First user: the **signed_cert** add-on (printed
 // & signed GoodDeed certificate). Future shapes (professional framing,

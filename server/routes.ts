@@ -8771,11 +8771,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : INVALID;
   };
 
+  // Task #194 — one-shot founding-press seed, called lazily from the
+  // list endpoint so non-seeded environments (a fresh dev DB or a
+  // newly-restored prod) get a populated Presses panel on first load.
+  // Idempotent: keyed by domain via getManufacturerByDomain.
+  const FOUNDING_PRESSES: Array<{
+    name: string;
+    domain: string;
+    websiteUrl: string;
+    location: string;
+    bio: string;
+    turnaroundDays: number;
+    specialties: string[];
+  }> = [
+    {
+      name: "Memphis Record Pressing",
+      domain: "memphisrecordpressing.com",
+      websiteUrl: "https://memphisrecordpressing.com",
+      location: "Memphis, TN",
+      bio: "High-capacity vinyl pressing plant in Memphis serving major and independent labels worldwide.",
+      turnaroundDays: 90,
+      specialties: ["7\" / 10\" / 12\"", "180g black", "Colored vinyl", "Picture disc"],
+    },
+    {
+      name: "Precision Pressing",
+      domain: "precisionpressing.com",
+      websiteUrl: "https://precisionpressing.com",
+      location: "Saginaw, MI",
+      bio: "Boutique vinyl press focused on short-to-mid runs with hands-on QC and color/splatter specialty work.",
+      turnaroundDays: 75,
+      specialties: ["7\" / 12\"", "Splatter", "Marble / swirl", "Eco-friendly bioVinyl"],
+    },
+    {
+      name: "Hellbender Vinyl",
+      domain: "hellbendervinyl.com",
+      websiteUrl: "https://hellbendervinyl.com",
+      location: "Asheville, NC",
+      bio: "Independent vinyl pressing plant in Western NC running boutique runs for indie labels and artists.",
+      turnaroundDays: 120,
+      specialties: ["7\" / 12\"", "Lathe-cut option", "Recycled vinyl", "Short-run friendly"],
+    },
+  ];
+  let pressSeedRan = false;
+  async function ensureFoundingPresses() {
+    if (pressSeedRan) return;
+    pressSeedRan = true;
+    try {
+      for (const p of FOUNDING_PRESSES) {
+        const existing = await storage.getManufacturerByDomain(p.domain);
+        if (existing) continue;
+        await storage.createManufacturer({
+          name: p.name,
+          domain: p.domain,
+          websiteUrl: p.websiteUrl,
+          location: p.location,
+          bio: p.bio,
+          turnaroundDays: p.turnaroundDays,
+          specialties: p.specialties,
+        } as any);
+      }
+    } catch (e) {
+      // Don't block the read on a seed failure — log and move on.
+      console.warn("[manufacturers] founding-press seed failed:", (e as Error).message);
+      pressSeedRan = false;
+    }
+  }
+
   // Partner records carry operational contact info (emails, phones,
   // receiving-dock addresses) that should not be public. Gate read
   // access behind requireAdmin today — once the manufacturer/fulfillment
   // role middleware lands, swap to requireRole(...) + scope-by-id.
   app.get("/api/manufacturers", requireAdmin, async (_req, res) => {
+    // Task #194 — make sure the three founding pressing plants (MRP,
+    // PMP, Hellbender) exist on first read so a fresh deploy gets a
+    // populated Presses panel without a separate manual seed. Each
+    // row is idempotent — keyed by domain, so re-reads on a populated
+    // DB are free. PMP's "queer-owned" chip from the task brief is
+    // intentionally omitted because their live site doesn't make that
+    // claim today; if/when it does, add it via the admin Presses page
+    // (this seed only fills truly empty rows).
+    await ensureFoundingPresses();
     return res.json(await storage.getManufacturers());
   });
   app.get("/api/manufacturers/:id", requireAdmin, async (req, res) => {

@@ -19,6 +19,7 @@ import {
   albums,
   albumSkus,
   albumAddons,
+  payoutFormatCosts,
   orders,
   orderItems,
   signedCertReservations,
@@ -137,16 +138,73 @@ async function listAllAddons(albumId: string): Promise<AlbumAddon[]> {
   return db.select().from(albumAddons).where(eq(albumAddons.albumId, albumId)).orderBy(asc(albumAddons.position));
 }
 
-async function upsertSku(input: { albumId: string; format: AlbumFormat; priceCents: number; stock: number | null; active: boolean }): Promise<AlbumSku> {
+async function upsertSku(input: {
+  albumId: string;
+  format: AlbumFormat;
+  priceCents: number;
+  stock: number | null;
+  active: boolean;
+  plannedQuantity: number | null;
+  costSnapshotManufacturingCents: number;
+  costSnapshotPublishingCents: number;
+  costSnapshotPaymentProcessingCents: number;
+  costSnapshotGoodtunesCents: number;
+}): Promise<AlbumSku> {
   const [row] = await db
     .insert(albumSkus)
     .values(input)
     .onConflictDoUpdate({
       target: [albumSkus.albumId, albumSkus.format],
-      set: { priceCents: input.priceCents, stock: input.stock, active: input.active },
+      set: {
+        priceCents: input.priceCents,
+        stock: input.stock,
+        active: input.active,
+        plannedQuantity: input.plannedQuantity,
+        costSnapshotManufacturingCents: input.costSnapshotManufacturingCents,
+        costSnapshotPublishingCents: input.costSnapshotPublishingCents,
+        costSnapshotPaymentProcessingCents: input.costSnapshotPaymentProcessingCents,
+        costSnapshotGoodtunesCents: input.costSnapshotGoodtunesCents,
+      },
     })
     .returning();
   return row;
+}
+
+// Task #194 — Platform per-format cost defaults. Seed lazily on first
+// read so fresh DBs don't need a separate migration step. Mirrors
+// `getPayoutSettings()` in server/payouts.ts.
+const FORMAT_COST_DEFAULTS: Record<string, {
+  manufacturingCents: number;
+  publishingCents: number;
+  paymentProcessingCents: number;
+  goodtunesCents: number;
+}> = {
+  "7_inch": { manufacturingCents: 1000, publishingCents: 34, paymentProcessingCents: 130, goodtunesCents: 450 },
+  "12_lp": { manufacturingCents: 0, publishingCents: 0, paymentProcessingCents: 0, goodtunesCents: 0 },
+  "12_double": { manufacturingCents: 0, publishingCents: 0, paymentProcessingCents: 0, goodtunesCents: 0 },
+  "cassette": { manufacturingCents: 0, publishingCents: 0, paymentProcessingCents: 0, goodtunesCents: 0 },
+  "cd": { manufacturingCents: 0, publishingCents: 0, paymentProcessingCents: 0, goodtunesCents: 0 },
+};
+async function getFormatCost(format: AlbumFormat) {
+  const [row] = await db.select().from(payoutFormatCosts).where(eq(payoutFormatCosts.format, format));
+  if (row) return row;
+  const defaults = FORMAT_COST_DEFAULTS[format] ?? {
+    manufacturingCents: 0, publishingCents: 0, paymentProcessingCents: 0, goodtunesCents: 0,
+  };
+  const [inserted] = await db
+    .insert(payoutFormatCosts)
+    .values({ format, ...defaults })
+    .onConflictDoNothing()
+    .returning();
+  if (inserted) return inserted;
+  const [again] = await db.select().from(payoutFormatCosts).where(eq(payoutFormatCosts.format, format));
+  return again!;
+}
+async function listFormatCosts() {
+  // Ensure every known format is present so the admin SellPanel can
+  // render a row per format without per-format network errors.
+  await Promise.all(ALBUM_FORMATS.map((f) => getFormatCost(f)));
+  return db.select().from(payoutFormatCosts);
 }
 async function upsertAddon(input: {
   albumId: string;
@@ -347,20 +405,43 @@ export function registerCommerceRoutes(app: Express) {
     priceCents: z.number().int().min(0),
     stock: z.number().int().min(0).nullable().optional(),
     active: z.boolean().default(true),
+    // Task #194 — null/omitted = "as many as will sell"; positive int =
+    // planned run size. Rejects 0 / negatives so the UI's Fixed mode
+    // can't silently round down to nothing.
+    plannedQuantity: z.number().int().min(1).nullable().optional(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const parsed = skuBodySchema.safeParse({ ...req.body, format: String(req.params.format) });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid SKU" });
+    // Task #194 — snapshot the live platform cost breakdown onto the
+    // SKU at save time so the artist's profit readout stays stable
+    // until they re-save. Mirrors the addon `costCentsSnapshot` pattern.
+    const cost = await getFormatCost(parsed.data.format);
     const row = await upsertSku({
       albumId: album.id,
       format: parsed.data.format,
       priceCents: parsed.data.priceCents,
       stock: parsed.data.stock ?? null,
       active: parsed.data.active,
+      plannedQuantity: parsed.data.plannedQuantity ?? null,
+      costSnapshotManufacturingCents: cost.manufacturingCents,
+      costSnapshotPublishingCents: cost.publishingCents,
+      costSnapshotPaymentProcessingCents: cost.paymentProcessingCents,
+      costSnapshotGoodtunesCents: cost.goodtunesCents,
     });
     res.json(row);
+  });
+
+  // Task #194 — Platform default per-format cost breakdown, served to
+  // the admin Sell panel so unsaved (draft) rows can show a live
+  // profit readout against today's platform cost before the artist
+  // snapshots it onto the SKU. Edit endpoint is deferred — defaults
+  // are seeded once in `getFormatCost` and tuned via direct SQL until
+  // the super-admin Platform Pricing surface grows a row per format.
+  app.get("/api/admin/payout-format-costs", requireAdmin, async (_req, res) => {
+    res.json(await listFormatCosts());
   });
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     await db

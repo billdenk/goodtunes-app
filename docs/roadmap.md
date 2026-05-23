@@ -485,6 +485,18 @@ The storefront IS the product on day one. Streaming-without-purchase comes later
 Cart UX, Stripe checkout, fulfillment dashboard, post-purchase delivery email, refund flow, sales reporting per artist/label, public sold-out leaderboards. All of that is post-admin-restructure work.
 
 
+## Per-press RFQ pricing on the Sell panel (deferred — May 23, 2026)
+
+The Sell panel's new Presses directory (Task #194) renders every pressing plant as a static info card — logo, location, turnaround, specialty chips — but the price an artist sees on each format row still comes from the **platform default** in `payout_format_costs`, snapshotted onto the SKU at save. There is no per-press quote, no "Memphis vs. Precision vs. Hellbender" comparison, and no RFQ button.
+
+Next phase:
+- New table `press_format_quotes (press_id, format, run_size, manufacturing_cents, lead_time_days, valid_until)` — one row per (plant, format, run-size band) quote.
+- Press cards grow a "Request quote" CTA that emails the plant a structured RFQ (album metadata + planned quantity + format) and parks a pending row.
+- SkuRow's Cost tooltip switches from a single Manufacturing line to a Manufacturing-by-press dropdown; selecting a press writes the chosen press_id onto the SKU and snapshots that press's quote.
+- Super-admin Platform Pricing surface grows a per-format defaults editor so the existing seed numbers (today only `7_inch` is non-zero) stop being a SQL-only knob.
+
+Until then: the per-format ⓘ tooltip surfaces the four-line breakdown so artists at least see *what* is in the cost number; per-press swaps are deferred.
+
 ## Masters tab — consolidate into Tracks (proposed May 16, 2026)
 
 Bill's call: a "master" is just the audio file attached to a track, not a separate entity. Today we render the same per-track info on both the Tracks tab (rich row with chips for Master / Lyrics / Sync / Credits) **and** a dedicated Masters tab (bulk listening + upload). The Masters tab is redundant.

@@ -10,12 +10,23 @@
 // at the row's right edge — it activates (brand blue) only when the row
 // has unsaved edits. A row of 5 enabled formats no longer reads as 5
 // loud blue pills; only the dirty one calls for attention.
+//
+// Task #194 — each format row now ships the same Price/Cost/Profit
+// vs. Sold/Profit/Total two-column layout the signed_cert addon uses
+// (mirrors Task #121). Cost is the sum of a four-line per-format
+// breakdown (manufacturing + publishing + payment processing +
+// GoodTunes margin) snapshotted at save time; an ⓘ popover surfaces
+// that breakdown so artists can see where the cost number comes from.
+// A new Presses panel above Formats surfaces the pressing-plant
+// directory (MRP, PMP, Hellbender …) as info cards — per-press RFQ
+// pricing plumbing is tracked separately on the roadmap.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
@@ -23,6 +34,7 @@ import {
   type AlbumSku,
   type AlbumAddon,
   type PayoutSettings,
+  type PayoutFormatCost,
 } from "@shared/schema";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -34,6 +46,18 @@ const parseDollars = (v: string): number | null => {
 
 type SellResponse = { skus: AlbumSku[]; addons: AlbumAddon[] };
 
+type Manufacturer = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  bio: string | null;
+  location: string | null;
+  websiteUrl: string | null;
+  turnaroundDays: number | null;
+  specialties: string[];
+};
+
 export function SellPanel({ albumId }: { albumId: string }) {
   const { toast } = useToast();
   const { data, isLoading } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
@@ -43,9 +67,26 @@ export function SellPanel({ albumId }: { albumId: string }) {
   const { data: payoutSettings } = useQuery<PayoutSettings>({
     queryKey: ["/api/admin/payout-settings"],
   });
+  // Task #194 — per-format cost breakdown defaults. Powers the Cost
+  // readout (+ tooltip) on draft SKU rows before the artist first
+  // saves; saved rows use the snapshot on the SKU itself.
+  const { data: formatCosts } = useQuery<PayoutFormatCost[]>({
+    queryKey: ["/api/admin/payout-format-costs"],
+  });
+  const costByFormat = useMemo(() => {
+    const m = new Map<string, PayoutFormatCost>();
+    (formatCosts ?? []).forEach((c) => m.set(c.format, c));
+    return m;
+  }, [formatCosts]);
 
   const upsertSku = useMutation({
-    mutationFn: async (body: { format: AlbumFormat; priceCents: number; stock: number | null; active: boolean }) => {
+    mutationFn: async (body: {
+      format: AlbumFormat;
+      priceCents: number;
+      stock: number | null;
+      active: boolean;
+      plannedQuantity: number | null;
+    }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
       return r.json();
     },
@@ -96,6 +137,9 @@ export function SellPanel({ albumId }: { albumId: string }) {
   return (
     <div className="py-6">
       <div className="max-w-3xl">
+        {/* Presses */}
+        <PressesPanel />
+
         {/* SKUs */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-1">
@@ -120,7 +164,7 @@ export function SellPanel({ albumId }: { albumId: string }) {
               </div>
             </div>
           ) : (
-            <div className="rounded-md border border-slate-200 bg-white divide-y divide-slate-100">
+            <div className="space-y-3">
               {configuredFormats.map((f) => {
                 const existing = skuByFormat.get(f)!;
                 return (
@@ -128,6 +172,7 @@ export function SellPanel({ albumId }: { albumId: string }) {
                     key={f}
                     format={f}
                     existing={existing}
+                    liveCost={costByFormat.get(f) ?? null}
                     onSave={upsertSku.mutate}
                     onDelete={() => deleteSku.mutate(f)}
                   />
@@ -138,6 +183,7 @@ export function SellPanel({ albumId }: { albumId: string }) {
                   key={`draft-${f}`}
                   format={f}
                   existing={null}
+                  liveCost={costByFormat.get(f) ?? null}
                   onSave={(body) => {
                     upsertSku.mutate(body, {
                       onSuccess: () =>
@@ -256,9 +302,190 @@ function AddPhysicalGoodButton({
   );
 }
 
+// Task #194 — Presses panel. Reads the existing manufacturers
+// directory and renders each plant as an info card (logo, name,
+// description, location, turnaround, specialties). Per-press RFQ
+// pricing plumbing is tracked on the roadmap — for now the panel is
+// purely informational so an artist can see who's available before
+// they decide on a pressing plant.
+function PressesPanel() {
+  const { data, isLoading } = useQuery<Manufacturer[]>({
+    queryKey: ["/api/manufacturers"],
+  });
+  const presses = data ?? [];
+  // Hide the whole panel on empty/loading per task #194 spec — a fresh
+  // DB without any presses should not render an empty-state card.
+  if (isLoading || presses.length === 0) return null;
+  return (
+    <div className="mb-8" data-testid="panel-presses">
+      <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Presses</h2>
+      <p className="text-[13px] text-slate-500 mb-4">
+        Pressing plants GoodTunes works with. Per-press quotes wire in soon — this is who you'll be choosing between.
+      </p>
+      {/* Horizontally-scrollable row on wide screens, stacks on mobile.
+          Cards keep a fixed width so the row scans like a carousel
+          rather than a grid that grows with the viewport. */}
+      <div
+        className="flex flex-col sm:flex-row sm:overflow-x-auto gap-3 sm:pb-2 -mx-4 sm:px-4"
+      >
+        {presses.map((p) => (
+          <PressCard key={p.id} press={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PressCard({ press }: { press: Manufacturer }) {
+  // Clickable card per task #194 — opens the press's website in a new
+  // tab. `noopener noreferrer` prevents the opened page from gaining a
+  // window.opener back-reference. When a press has no website URL we
+  // fall back to a non-interactive container so the card still renders.
+  const Wrapper: any = press.websiteUrl ? "a" : "div";
+  const wrapperProps = press.websiteUrl
+    ? {
+        href: press.websiteUrl,
+        target: "_blank" as const,
+        rel: "noopener noreferrer",
+      }
+    : {};
+  return (
+    <Wrapper
+      {...wrapperProps}
+      className={[
+        "rounded-md border border-slate-200 bg-white p-4 flex flex-col gap-3",
+        "w-full sm:w-72 sm:shrink-0",
+        press.websiteUrl
+          ? "hover:border-[color:var(--brand-blue)] hover:shadow-sm transition-all cursor-pointer no-underline"
+          : "",
+      ].join(" ")}
+      data-testid={`card-press-${press.id}`}
+    >
+      <div className="flex items-start gap-3">
+        {press.logoUrl ? (
+          <img
+            src={press.logoUrl}
+            alt=""
+            className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
+            data-testid={`img-press-logo-${press.id}`}
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 shrink-0" />
+        )}
+        <div className="min-w-0">
+          <div
+            className="text-[13.5px] font-semibold text-slate-900 truncate"
+            data-testid={`text-press-name-${press.id}`}
+          >
+            {press.name}
+          </div>
+          {press.location && (
+            <div
+              className="text-[12px] text-slate-500 inline-flex items-center gap-1 mt-0.5"
+              data-testid={`text-press-location-${press.id}`}
+            >
+              <MapPin className="w-3 h-3" />
+              {press.location}
+            </div>
+          )}
+        </div>
+      </div>
+      {press.bio && (
+        <div
+          className="text-[12.5px] text-slate-600 leading-snug line-clamp-3"
+          data-testid={`text-press-bio-${press.id}`}
+        >
+          {press.bio}
+        </div>
+      )}
+      {press.turnaroundDays != null && (
+        <div
+          className="text-[12px] text-slate-500 inline-flex items-center gap-1"
+          data-testid={`text-press-turnaround-${press.id}`}
+        >
+          <Clock className="w-3 h-3" />
+          {press.turnaroundDays}-day turnaround
+        </div>
+      )}
+      {press.specialties.length > 0 && (
+        <div className="flex flex-wrap gap-1" data-testid={`chips-press-specialties-${press.id}`}>
+          {press.specialties.map((s, i) => (
+            <span
+              key={`${press.id}-spec-${i}`}
+              className="text-[11px] rounded-full bg-slate-100 text-slate-700 px-2 py-0.5"
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
+    </Wrapper>
+  );
+}
+
+function CostTooltip({
+  format,
+  breakdown,
+}: {
+  format: AlbumFormat;
+  breakdown: {
+    manufacturingCents: number;
+    publishingCents: number;
+    paymentProcessingCents: number;
+    goodtunesCents: number;
+  };
+}) {
+  const total =
+    breakdown.manufacturingCents +
+    breakdown.publishingCents +
+    breakdown.paymentProcessingCents +
+    breakdown.goodtunesCents;
+  const Row = ({ label, cents, bold }: { label: string; cents: number; bold?: boolean }) => (
+    <div
+      className={[
+        "flex items-center justify-between gap-6 text-[12.5px]",
+        bold ? "text-slate-900 font-semibold pt-1.5 border-t border-slate-100 mt-1" : "text-slate-600",
+      ].join(" ")}
+    >
+      <span>{label}</span>
+      <span className="tabular-nums">{dollars(cents)}</span>
+    </div>
+  );
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Cost breakdown for ${ALBUM_FORMAT_LABEL[format]}`}
+          className="inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-400 hover:text-[color:var(--brand-blue)] transition-colors"
+          data-testid={`button-cost-breakdown-${format}`}
+        >
+          <Info className="w-3.5 h-3.5" />
+          <span className="sr-only">Cost breakdown</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-56 p-3"
+        align="start"
+        data-testid={`tooltip-cost-${format}`}
+      >
+        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2">
+          Cost breakdown
+        </div>
+        <Row label="Manufacturing" cents={breakdown.manufacturingCents} />
+        <Row label="Publishing" cents={breakdown.publishingCents} />
+        <Row label="Payment processing" cents={breakdown.paymentProcessingCents} />
+        <Row label="GoodTunes" cents={breakdown.goodtunesCents} />
+        <Row label="Total" cents={total} bold />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function SkuRow({
   format,
   existing,
+  liveCost,
   onSave,
   onDelete,
 }: {
@@ -267,82 +494,307 @@ function SkuRow({
   // nothing has hit the DB yet). Save promotes it to a real SKU; Delete
   // simply drops the draft from local state. See note in SellPanel.
   existing: AlbumSku | null;
-  onSave: (b: { format: AlbumFormat; priceCents: number; stock: number | null; active: boolean }) => void;
+  // Live platform default for this format. Used on draft rows + when
+  // the existing SKU pre-dates the cost-snapshot columns (NULL snapshot
+  // fields). Once the row is saved with non-null snapshot fields, the
+  // snapshot is the source of truth and `liveCost` is ignored.
+  liveCost: PayoutFormatCost | null;
+  onSave: (b: {
+    format: AlbumFormat;
+    priceCents: number;
+    stock: number | null;
+    active: boolean;
+    plannedQuantity: number | null;
+  }) => void;
   onDelete: () => void;
 }) {
   const isDraft = existing === null;
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
   const [stockStr, setStockStr] = useState(existing?.stock?.toString() ?? "");
+  // Task #194 — planned quantity, same shape as the signed_cert addon.
+  // Existing rows without a planned quantity default to "unlimited".
+  const initialMode: "fixed" | "unlimited" =
+    existing?.plannedQuantity != null ? "fixed" : "unlimited";
+  const [qtyMode, setQtyMode] = useState<"fixed" | "unlimited">(initialMode);
+  const [qtyInput, setQtyInput] = useState<string>(
+    existing?.plannedQuantity != null ? String(existing.plannedQuantity) : "100",
+  );
 
-  // Row is dirty if any field diverges from the stored value (or no
-  // stored value exists yet but the operator typed something).
+  // Cost source: prefer the snapshot on the SKU row (so it stays
+  // stable until the artist re-saves). Fall back to the live platform
+  // default for draft rows + pre-snapshot rows.
+  const snapshot = existing && existing.costSnapshotManufacturingCents != null
+    ? {
+        manufacturingCents: existing.costSnapshotManufacturingCents,
+        publishingCents: existing.costSnapshotPublishingCents ?? 0,
+        paymentProcessingCents: existing.costSnapshotPaymentProcessingCents ?? 0,
+        goodtunesCents: existing.costSnapshotGoodtunesCents ?? 0,
+      }
+    : liveCost
+      ? {
+          manufacturingCents: liveCost.manufacturingCents,
+          publishingCents: liveCost.publishingCents,
+          paymentProcessingCents: liveCost.paymentProcessingCents,
+          goodtunesCents: liveCost.goodtunesCents,
+        }
+      : null;
+  const costLocked = existing?.costSnapshotManufacturingCents != null;
+  const totalCostCents = snapshot
+    ? snapshot.manufacturingCents +
+      snapshot.publishingCents +
+      snapshot.paymentProcessingCents +
+      snapshot.goodtunesCents
+    : null;
+
+  const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
+  const profitCents =
+    priceCents !== null && totalCostCents !== null ? priceCents - totalCostCents : null;
+
+  const parsedQty = useMemo(() => {
+    const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [qtyInput]);
+
+  const totalCents =
+    qtyMode === "fixed" && profitCents !== null && parsedQty !== null
+      ? profitCents * parsedQty
+      : null;
+
   const storedActive = existing?.active ?? false;
   const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "";
   const storedStock = existing?.stock?.toString() ?? "";
+  const storedMode: "fixed" | "unlimited" = initialMode;
+  const storedQty = existing?.plannedQuantity ?? null;
   const dirty =
-    active !== storedActive || priceStr !== storedPrice || stockStr !== storedStock;
+    active !== storedActive ||
+    priceStr !== storedPrice ||
+    stockStr !== storedStock ||
+    qtyMode !== storedMode ||
+    (qtyMode === "fixed" && parsedQty !== storedQty);
 
   const submit = () => {
     const cents = parseDollars(priceStr);
     if (cents === null) return;
     const stock = stockStr.trim() === "" ? null : Math.max(0, Math.floor(Number(stockStr)));
-    onSave({ format, priceCents: cents, stock, active });
+    const plannedQuantity = qtyMode === "fixed" ? parsedQty : null;
+    if (qtyMode === "fixed" && plannedQuantity === null) return;
+    onSave({ format, priceCents: cents, stock, active, plannedQuantity });
   };
+
+  const lossColor = profitCents !== null && profitCents < 0;
+  const profitLabel =
+    profitCents === null
+      ? "—"
+      : profitCents < 0
+        ? `-${dollars(Math.abs(profitCents))}`
+        : dollars(profitCents);
 
   return (
     <div
       className={[
-        "px-4 py-3 flex items-center gap-3",
-        isDraft ? "bg-slate-50" : "",
+        "rounded-md border bg-white p-4",
+        isDraft ? "border-slate-200 bg-slate-50" : "border-slate-200",
       ].join(" ")}
       data-testid={isDraft ? `row-sku-draft-${format}` : `row-sku-${format}`}
     >
-      <label className="inline-flex items-center gap-2 min-w-[140px]">
-        <input
-          type="checkbox"
-          checked={active}
-          onChange={(e) => setActive(e.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
-          data-testid={`toggle-sku-${format}`}
-        />
-        <span className="text-[13.5px] font-medium text-slate-900">{ALBUM_FORMAT_LABEL[format]}</span>
-      </label>
-      <div className="flex items-center gap-1.5">
-        <span className="text-slate-500 text-[13px]">$</span>
-        <input
-          type="text"
-          value={priceStr}
-          onChange={(e) => setPriceStr(e.target.value)}
-          placeholder="0.00"
-          inputMode="decimal"
-          className={`w-24 ${fieldClass}`}
-          data-testid={`input-price-${format}`}
-        />
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <label className="inline-flex items-center gap-2 min-w-0">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+            data-testid={`toggle-sku-${format}`}
+          />
+          <span className="text-[13.5px] font-semibold text-slate-900">
+            {ALBUM_FORMAT_LABEL[format]}
+          </span>
+        </label>
+        <div className="flex items-center gap-1">
+          <SaveLink dirty={dirty} onClick={submit} testId={`button-save-sku-${format}`} />
+          <button
+            type="button"
+            onClick={onDelete}
+            className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors"
+            aria-label={isDraft ? "Discard draft" : "Remove format"}
+            data-testid={`button-delete-sku-${format}`}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-slate-500 text-[12px]">Stock</span>
-        <input
-          type="text"
-          value={stockStr}
-          onChange={(e) => setStockStr(e.target.value.replace(/[^0-9]/g, ""))}
-          placeholder="∞"
-          inputMode="numeric"
-          className={`w-16 ${fieldClass}`}
-          data-testid={`input-stock-${format}`}
-        />
-      </div>
-      <div className="ml-auto flex items-center gap-1">
-        <SaveLink dirty={dirty} onClick={submit} testId={`button-save-sku-${format}`} />
-        <button
-          type="button"
-          onClick={onDelete}
-          className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors"
-          aria-label={isDraft ? "Discard draft" : "Remove format"}
-          data-testid={`button-delete-sku-${format}`}
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+        {/* Left column — Price / Cost / Profit */}
+        <div className="space-y-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+            Price · Cost · Profit
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px]">Price $</span>
+            <input
+              type="text"
+              value={priceStr}
+              onChange={(e) => setPriceStr(e.target.value)}
+              placeholder="0.00"
+              inputMode="decimal"
+              className={`w-28 ${fieldClass}`}
+              data-testid={`input-price-${format}`}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px] inline-flex items-center gap-1">
+              Cost $
+              {snapshot && (
+                <CostTooltip format={format} breakdown={snapshot} />
+              )}
+              <span className="text-slate-400 text-[11px]">
+                ({costLocked ? "locked at last save" : "live"})
+              </span>
+            </span>
+            <span
+              className="w-28 text-right tabular-nums text-[13.5px] text-slate-700"
+              data-testid={`text-cost-${format}`}
+            >
+              {totalCostCents === null ? "—" : dollars(totalCostCents)}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px]">
+              Profit ${" "}
+              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+            </span>
+            <span
+              className={[
+                "w-28 text-right tabular-nums text-[13.5px] font-semibold",
+                lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-900",
+              ].join(" ")}
+              data-testid={`text-profit-${format}`}
+            >
+              {profitLabel}
+            </span>
+          </div>
+
+          {/* Stock — preserved here so the per-album cap on physical
+              inventory keeps its admin affordance. Small + quiet. */}
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+            <span className="text-slate-400 text-[11.5px]">Stock</span>
+            <input
+              type="text"
+              value={stockStr}
+              onChange={(e) => setStockStr(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="∞"
+              inputMode="numeric"
+              className={`w-20 ${fieldClass} text-[12px]`}
+              data-testid={`input-stock-${format}`}
+            />
+          </div>
+        </div>
+
+        {/* Right column — Sold (planned qty) / Profit echo / Total */}
+        <div className="space-y-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+            Sold · Profit · Total
+          </div>
+          <div
+            className="flex flex-col gap-2"
+            role="radiogroup"
+            data-testid={`picker-sku-quantity-mode-${format}`}
+          >
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name={`sku-qty-mode-${format}`}
+                checked={qtyMode === "fixed"}
+                onChange={() => setQtyMode("fixed")}
+                className="h-4 w-4 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+                data-testid={`radio-sku-qty-fixed-${format}`}
+              />
+              <input
+                type="text"
+                value={qtyInput}
+                onChange={(e) => {
+                  setQtyInput(e.target.value);
+                  if (qtyMode !== "fixed") setQtyMode("fixed");
+                }}
+                onFocus={() => setQtyMode("fixed")}
+                disabled={qtyMode !== "fixed"}
+                inputMode="numeric"
+                className={`w-24 ${fieldClass} ${qtyMode !== "fixed" ? "opacity-50" : ""}`}
+                data-testid={`input-sold-${format}`}
+              />
+              <span className="text-[12.5px] text-slate-500">units</span>
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name={`sku-qty-mode-${format}`}
+                checked={qtyMode === "unlimited"}
+                onChange={() => setQtyMode("unlimited")}
+                className="h-4 w-4 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+                data-testid={`radio-sku-qty-unlimited-${format}`}
+              />
+              <span className="text-[13px] text-slate-700">As many as will sell</span>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span className="text-slate-500 text-[12px]">
+              Profit ${" "}
+              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+            </span>
+            <span
+              className={[
+                "w-28 text-right tabular-nums text-[13.5px]",
+                lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-700",
+              ].join(" ")}
+              data-testid={`text-profit-echo-${format}`}
+            >
+              {profitLabel}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-[12px]">Total $</span>
+            {qtyMode === "unlimited" ? (
+              <span
+                className="w-28 text-right tabular-nums text-[15px] font-semibold text-slate-400"
+                data-testid={`text-total-tbd-${format}`}
+              >
+                TBD
+              </span>
+            ) : (
+              <span
+                className={[
+                  "w-28 text-right tabular-nums text-[15px] font-semibold",
+                  totalCents !== null && totalCents < 0
+                    ? "text-[color:var(--brand-pink)]"
+                    : "text-slate-900",
+                ].join(" ")}
+                data-testid={`text-total-${format}`}
+              >
+                {totalCents === null
+                  ? "—"
+                  : totalCents < 0
+                    ? `-${dollars(Math.abs(totalCents))}`
+                    : dollars(totalCents)}
+              </span>
+            )}
+          </div>
+
+          {qtyMode === "fixed" && parsedQty !== null && (
+            <div
+              className="text-[11.5px] text-slate-400 text-right"
+              data-testid={`text-total-caveat-${format}`}
+            >
+              Only if all {parsedQty} sell.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
