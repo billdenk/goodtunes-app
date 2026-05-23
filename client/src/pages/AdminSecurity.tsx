@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -85,6 +85,19 @@ export default function AdminSecurity() {
   const [enrollData, setEnrollData] = useState<EnrollData | null>(null);
   const [enrollCode, setEnrollCode] = useState("");
   const [enrollError, setEnrollError] = useState<string | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+  // Monotonic attempt token. Increments on every start/cancel, so a
+  // late `start` response from a cancelled attempt is ignored instead
+  // of repopulating the QR after the admin clicked Cancel.
+  const enrollAttemptRef = useRef(0);
+
+  const cancelEnroll = () => {
+    enrollAttemptRef.current += 1;
+    setEnrolling(false);
+    setEnrollData(null);
+    setEnrollCode("");
+    setEnrollError(null);
+  };
   // Codes returned by the regenerate flow. Held in state so the admin
   // can copy them; the server only returns them once.
   const [regeneratedCodes, setRegeneratedCodes] = useState<string[] | null>(null);
@@ -103,12 +116,29 @@ export default function AdminSecurity() {
 
   const startEnroll = useMutation({
     mutationFn: async () => {
+      const attempt = ++enrollAttemptRef.current;
       const res = await apiRequest("POST", "/api/auth/totp/enroll/start");
-      return res.json();
+      const json = await res.json();
+      return { json, attempt };
     },
-    onSuccess: (j) => setEnrollData({ qr: j.qr, secret: j.secret, recoveryCodes: j.recoveryCodes }),
-    onError: (e: any) => toast({ title: e?.message ?? "Couldn't start enrollment", variant: "destructive" }),
+    onSuccess: ({ json, attempt }) => {
+      // Ignore stale responses from a cancelled attempt.
+      if (attempt !== enrollAttemptRef.current) return;
+      setEnrollData({ qr: json.qr, secret: json.secret, recoveryCodes: json.recoveryCodes });
+    },
+    onError: (e: any, _v, ctx) => {
+      // Don't toast for cancelled attempts.
+      toast({ title: e?.message ?? "Couldn't start enrollment", variant: "destructive" });
+    },
   });
+
+  // Single entrypoint — guards against double-fire from the radio
+  // onChange + the wrapper label click both firing in the same tick.
+  const beginEnrollment = () => {
+    if (enrolling || startEnroll.isPending) return;
+    setEnrolling(true);
+    startEnroll.mutate();
+  };
 
   const regenerate = useMutation({
     mutationFn: async () => {
@@ -125,19 +155,23 @@ export default function AdminSecurity() {
 
   const confirmEnroll = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/totp/enroll/verify", { code: enrollCode.trim() });
-      return res.json();
+      const verifyRes = await apiRequest("POST", "/api/auth/totp/enroll/verify", { code: enrollCode.trim() });
+      await verifyRes.json().catch(() => null);
+      // Chain the preference switch inline so "linked + selected" is
+      // deterministic. If this step fails the whole confirm flips to
+      // onError and the admin sees a single coherent failure instead
+      // of "linked but not selected".
+      const prefRes = await apiRequest("POST", "/api/auth/factor-preference", { factor: "totp" });
+      return prefRes.json().catch(() => null);
     },
     onSuccess: () => {
       setEnrollCode("");
       setEnrollError(null);
-      // After enrolling, flip the preference to TOTP — that's the whole
-      // point of the admin walking through this flow.
-      switchPref.mutate("totp");
+      setEnrolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/factor-preference"] });
       toast({ title: "Authenticator linked" });
-      // Keep enrollData visible so the admin can copy recovery codes;
-      // they only show this once.
+      // Keep enrollData around briefly so the admin can copy recovery
+      // codes; the factor-preference query refetch repaints the row.
     },
     onError: (e: any) => setEnrollError(e?.message ?? "Code didn't match"),
   });
@@ -204,24 +238,98 @@ export default function AdminSecurity() {
               </div>
             </label>
 
-            <label className={`flex items-start gap-3 p-3 rounded-md border border-slate-200 ${data.totpEnrolled ? "cursor-pointer hover:bg-slate-50" : "opacity-60"}`} data-testid="option-factor-totp">
-              <input
-                type="radio"
-                checked={data.factorPref === "totp"}
-                onChange={() => data.totpEnrolled && switchPref.mutate("totp")}
-                disabled={!data.totpEnrolled}
-                className="mt-1"
-                data-testid="input-factor-totp"
-              />
-              <div className="flex-1">
-                <div className="text-[13.5px] font-medium text-slate-900">Authenticator app</div>
-                <div className="text-[12.5px] text-slate-500">
-                  {data.totpEnrolled
-                    ? `Linked. ${data.recoveryCodesRemaining} recovery code${data.recoveryCodesRemaining === 1 ? "" : "s"} remaining.`
-                    : "Not set up. Use the button below to add an authenticator."}
+            <div className="rounded-md border border-slate-200 overflow-hidden" data-testid="option-factor-totp">
+              <label className="flex items-start gap-3 p-3 cursor-pointer hover:bg-slate-50">
+                <input
+                  type="radio"
+                  checked={data.totpEnrolled ? data.factorPref === "totp" : enrolling}
+                  onChange={() => {
+                    if (data.totpEnrolled) {
+                      switchPref.mutate("totp");
+                    } else {
+                      beginEnrollment();
+                    }
+                  }}
+                  className="mt-1"
+                  data-testid="input-factor-totp"
+                />
+                <div className="flex-1">
+                  <div className="text-[13.5px] font-medium text-slate-900">Authenticator app</div>
+                  <div className="text-[12.5px] text-slate-500">
+                    {data.totpEnrolled
+                      ? `Linked. ${data.recoveryCodesRemaining} recovery code${data.recoveryCodesRemaining === 1 ? "" : "s"} remaining.`
+                      : enrolling
+                        ? "Scan the QR with Google Authenticator, 1Password, Authy, etc., then enter the 6-digit code to confirm."
+                        : "Not set up. Select to add an authenticator."}
+                  </div>
                 </div>
-              </div>
-            </label>
+              </label>
+
+              {!data.totpEnrolled && enrolling && (
+                <div className="border-t border-slate-200 bg-slate-50/50 p-4">
+                  {!enrollData ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[12.5px] text-slate-500">
+                        {startEnroll.isPending ? "Preparing your QR code…" : "Couldn't start enrollment."}
+                      </p>
+                      <Button
+                        onClick={cancelEnroll}
+                        variant="ghost"
+                        size="sm"
+                        data-testid="button-cancel-totp-enroll"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-w-sm mx-auto">
+                      <img src={enrollData.qr} alt="2FA QR code" className="mx-auto w-40 h-40 border border-slate-200 rounded bg-white" />
+                      <p className="text-[11px] text-slate-400 text-center break-all">
+                        Manual: <span className="font-mono text-slate-700">{enrollData.secret}</span>
+                      </p>
+                      <input
+                        type="text"
+                        value={enrollCode}
+                        onChange={(e) => setEnrollCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="123 456"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        className="w-full text-center text-lg font-mono tracking-widest border border-slate-300 rounded-md h-10 px-3 text-slate-900 placeholder:text-slate-400 bg-white"
+                        data-testid="input-totp-enroll-code"
+                      />
+                      {enrollError && <p className="text-sm text-red-600">{enrollError}</p>}
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={cancelEnroll}
+                          variant="outline"
+                          className="flex-1"
+                          data-testid="button-cancel-totp-enroll"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={() => confirmEnroll.mutate()}
+                          disabled={confirmEnroll.isPending || enrollCode.length !== 6}
+                          className="flex-1"
+                          data-testid="button-confirm-totp-enroll"
+                        >
+                          {confirmEnroll.isPending ? "Verifying…" : "Confirm & link"}
+                        </Button>
+                      </div>
+                      <div className="mt-2 p-3 bg-white rounded-md border border-slate-200">
+                        <p className="text-[13px] font-semibold mb-2 text-slate-900">Recovery codes</p>
+                        <p className="text-[11.5px] text-slate-500 mb-2">Save these — each works once if you lose your authenticator. You won't see them again.</p>
+                        <div className="grid grid-cols-2 gap-1.5 font-mono text-[13px]">
+                          {enrollData.recoveryCodes.map((c) => (
+                            <div key={c} className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-slate-900" data-testid={`text-recovery-${c}`}>{c}</div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -256,53 +364,6 @@ export default function AdminSecurity() {
                 >
                   I've saved them
                 </Button>
-              </div>
-            )}
-          </Card>
-        )}
-
-        {!data.totpEnrolled && (
-          <Card className="p-5 space-y-3">
-            <h2 className="text-[15px] font-semibold text-slate-900">Add an authenticator app</h2>
-            <p className="text-[12.5px] text-slate-500">Scan the QR with Google Authenticator, 1Password, Authy, etc., then enter the 6-digit code to confirm.</p>
-            {!enrollData ? (
-              <Button onClick={() => startEnroll.mutate()} disabled={startEnroll.isPending} data-testid="button-start-totp-enroll">
-                {startEnroll.isPending ? "Preparing…" : "Set up authenticator"}
-              </Button>
-            ) : (
-              <div className="space-y-3 max-w-sm">
-                <img src={enrollData.qr} alt="2FA QR code" className="mx-auto w-40 h-40 border border-slate-200 rounded" />
-                <p className="text-[11px] text-slate-400 text-center break-all">
-                  Manual: <span className="font-mono text-slate-700">{enrollData.secret}</span>
-                </p>
-                <input
-                  type="text"
-                  value={enrollCode}
-                  onChange={(e) => setEnrollCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="123 456"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  className="w-full text-center text-lg font-mono tracking-widest border border-slate-300 rounded-md h-10 px-3 text-slate-900 placeholder:text-slate-400"
-                  data-testid="input-totp-enroll-code"
-                />
-                {enrollError && <p className="text-sm text-red-600">{enrollError}</p>}
-                <Button
-                  onClick={() => confirmEnroll.mutate()}
-                  disabled={confirmEnroll.isPending || enrollCode.length !== 6}
-                  className="w-full"
-                  data-testid="button-confirm-totp-enroll"
-                >
-                  {confirmEnroll.isPending ? "Verifying…" : "Confirm & link"}
-                </Button>
-                <div className="mt-4 p-3 bg-slate-50 rounded-md border border-slate-200">
-                  <p className="text-[13px] font-semibold mb-2 text-slate-900">Recovery codes</p>
-                  <p className="text-[11.5px] text-slate-500 mb-2">Save these — each works once if you lose your authenticator. You won't see them again.</p>
-                  <div className="grid grid-cols-2 gap-1.5 font-mono text-[13px]">
-                    {enrollData.recoveryCodes.map((c) => (
-                      <div key={c} className="px-2 py-1 bg-white border border-slate-200 rounded text-slate-900" data-testid={`text-recovery-${c}`}>{c}</div>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
           </Card>
