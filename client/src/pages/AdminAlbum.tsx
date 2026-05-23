@@ -79,6 +79,7 @@ import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDeskto
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
+import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import Hls from "hls.js";
@@ -1382,6 +1383,12 @@ function TracksPanel({
   // Inline composer for new tracks. Stays open across saves so the user
   // can hammer through a tracklist without clicking "Add track" each time.
   const [adding, setAdding] = useState(false);
+  // Exclusive-disclosure controller for the track list: at most one row
+  // expanded at a time. Opening a row collapses whichever sibling was
+  // previously open (Stripe order-rows pattern). See
+  // `client/src/hooks/useExclusiveDisclosure.ts` and the "Expandable
+  // row lists" subsection of docs/design-system.md.
+  const trackDisclosure = useExclusiveDisclosure<string>();
   // Tracks-tab "Advanced" menu — bulk-create N rows + album-wide GoodSync.
   // State lives here (not in the menu) so the dialogs survive the menu
   // close-on-select behavior and so `invalidateAlbum` can be passed in.
@@ -2104,6 +2111,10 @@ function TracksPanel({
               selectionMode={selectionMode}
               selected={selectedTrackIds.has(song.id)}
               onToggleSelect={onToggleTrack}
+              userExpanded={trackDisclosure.isOpen(song.id)}
+              onSetUserExpanded={(open) =>
+                trackDisclosure.setOpen(song.id, open)
+              }
             />
           );
         })}
@@ -4782,6 +4793,8 @@ function TrackRow({
   selectionMode,
   selected,
   onToggleSelect,
+  userExpanded,
+  onSetUserExpanded,
 }: {
   song: SongLite;
   albumId: string;
@@ -4804,13 +4817,19 @@ function TrackRow({
   selectionMode: boolean;
   selected: boolean;
   onToggleSelect: (songId: string) => void;
+  // Exclusive-disclosure: open/closed state is owned by TracksPanel via
+  // `useExclusiveDisclosure`, so opening this row collapses whichever
+  // sibling was previously open. See docs/design-system.md ("Expandable
+  // row lists").
+  userExpanded: boolean;
+  onSetUserExpanded: (open: boolean) => void;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
   // Seamless tile-expansion: the row collapses into the dot meter at
   // rest, and pops open into REQUIRED Master + 3-up OPTIONAL tiles when
   // the artist taps the chevron (or the title). Any time an editor is
   // open we force-expand so the tile context stays visible while editing.
-  const [userExpanded, setUserExpanded] = useState(false);
+  const setUserExpanded = onSetUserExpanded;
   const expanded = userExpanded || mode !== "view";
   const inputRef = useRef<HTMLInputElement>(null);
   const masterChipRef = useRef<HTMLButtonElement>(null);

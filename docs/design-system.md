@@ -97,6 +97,14 @@ Every new page (or material edit to an existing one) gets vetted against this ch
 
 **Refreshing the baseline**: only when a legacy page is intentionally migrated, run `npm run design:lint -- --update-baseline` to snapshot the new known set. Don't refresh to silence drift you introduced — fix the drift instead.
 
+## Expandable row lists
+
+Long lists of sibling rows where the user is *scanning* — admin album track rows, future Fan orders rows, anything Stripe-shaped — must use **exclusive disclosure**: at most one row open at a time. Opening a new row collapses whichever sibling was previously open. Toggling the open row by its own affordance still closes it and leaves the list with zero expanded rows. Without this rule, operators end up with five or six rows open at once and the page becomes a wall.
+
+Use the shared hook: `useExclusiveDisclosure<Id>()` from `client/src/hooks/useExclusiveDisclosure.ts`. Lift it to the list parent, pass `expanded` + `onSetExpanded(open)` down to each row, and make every entry point that opens a row (chevron, title click, status chips, inline edit triggers, etc.) route through the same controller — no per-row `useState` for open/closed, or two rows can drift open at once. Canonical reference: the album Tracks tab in `client/src/pages/AdminAlbum.tsx` (`TracksPanel` owns the disclosure; `TrackRow` is fully controlled).
+
+Use **independent disclosure** (per-section `useState`) for sidebar groups, nested settings disclosures (Player settings panels, etc.) and any case where the user genuinely wants to compare two open panels side-by-side. The exclusive rule only applies to scannable sibling-row lists.
+
 ## Spelling
 
 Use **US English** for all user-facing strings (e.g. "color", not "colour"; "favorite", not "favourite"). Code identifiers can stay as they are; only the visible UI copy needs to read American.
