@@ -22,6 +22,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard";
+import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -120,11 +121,14 @@ interface VendorProfile {
   children?: ChildLite[];
 }
 
-type Tab = "overview" | "cover" | "instruments";
+type Tab = "overview" | "cover" | "instruments" | "gooddeed";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
   { key: "instruments", label: "Instruments" },
+  // Task #245 — vendor-quoted GoodDeed pricing (printing / hologram /
+  // insertion). Same panel a vendor-role partner sees in /vendor.
+  { key: "gooddeed", label: "GoodDeed Services" },
 ];
 
 export function AdminVendor() {
@@ -476,6 +480,11 @@ export function AdminVendor() {
         {tab === "cover" && <CoverPanel vendor={vendor} />}
         {tab === "instruments" && (
           <InstrumentsPanel instruments={instruments} mode={mode} />
+        )}
+        {tab === "gooddeed" && (
+          <div className="mt-6">
+            <GoodDeedServicesTab vendorId={vendorId} />
+          </div>
         )}
       </div>
 

@@ -112,6 +112,25 @@ The destination consumes the params via the shared `useSmartBackCrumb()` hook at
 
 Currently wired: Gear ↔ Vendor, Gear ↔ Person. Album ↔ Person, Album ↔ Label, Vendor ↔ Label use the same primitive — wire them in when their cross-section tabs ship.
 
+## Vendor-managed GoodDeed pricing (Task #245)
+
+GoodDeed is fulfilled by three independent legs — **Printing**, **Hologram + shrinkwrap**, **Insertion** — each owned by a `vendors` row that has quoted its own price. There are two entry points:
+
+- **Super-admin** edits any vendor's pricing under `/admin/vendors/:id` → GoodDeed Services tab. Same surface for both maker- and reseller-mode vendor pages.
+- **Vendor-scoped partners** (role=`vendor`, `role_scope_id=<vendorId>`) sign in and land on `/vendor` — a stripped-down shell that mounts the same `GoodDeedServicesTab` for their own vendor only.
+
+API contract:
+
+- `GET/PUT /api/admin/vendors/:id/gooddeed-services` — list / upsert one service row at a time. Auth: super_admin OR matching vendor scope.
+- `GET /api/admin/gooddeed-vendors?service=printing|hologram|insertion` — vendors with an *active* row for that leg. Drives the album-side picker.
+- `PATCH /api/admin/albums/:id/signed-cert-vendors` — assign / clear any subset of the three legs on the album's `signed_cert` addon (`printVendorId`, `hologramVendorId`, `insertionVendorId`).
+- `GET /api/admin/albums/:id/gooddeed-pricing-preview?runQty=N` — live wholesale total at run size N. Returns the snapshot too once stamped.
+- `POST /api/admin/albums/:id/gooddeed-snapshot` (super-admin) — stamps the per-release pricing snapshot onto the addon at sale-window close. Vendor price edits no longer affect that release once stamped.
+
+Pricing edits **bypass the partner-permissions post-sale lock** the way `manage_payouts` does — operational routing has to stay live after first sale. The lock still applies to fan-facing addon price/min/quantity edits via the normal `edit_metadata` verb.
+
+Tier-walking rule for printing: at run quantity Q, pick the highest tier whose `qty` floor is ≤ Q; if Q falls below the smallest break, pick that smallest tier (we don't invent a fall-through — the vendor decides their floor charge).
+
 ## Person sheet — content guardrails
 
 The public, fan-facing Person sheet (and any artist bio surface we ingest) must **not** include legal-issue, criminal-allegation, lawsuit, or controversy content, even when the source (Wikipedia, Roon, MusicBrainz, etc.) has those sections. When ingesting biographies, filter out sections titled along the lines of "Legal issues", "Allegations", "Controversy", "Lawsuits", or any incident/court coverage — keep early life, career, discography, charity work, family, and music-related content only. This is a product rule, not a one-off Nick decision.

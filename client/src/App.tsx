@@ -64,6 +64,7 @@ import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
 import { AdminDashboard } from "@/pages/AdminDashboard";
+import { VendorPortal } from "@/pages/VendorPortal";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -213,6 +214,12 @@ function Router() {
         {/* Task #78 — Non-profit partner shell. Referrers earn $1/unit. */}
         <Route path="/non-profit">
           <ProtectedRoute component={NonProfitDashboard} />
+        </Route>
+        {/* Task #245 — Vendor portal. A printer / holographer / press
+            partner with role=vendor lands here to quote per-leg
+            GoodDeed pricing for their own vendor row. */}
+        <Route path="/vendor">
+          <ProtectedRoute component={VendorPortal} />
         </Route>
         <Route path="/artist/:slug">
           <ProtectedRoute component={ArtistDetail} />

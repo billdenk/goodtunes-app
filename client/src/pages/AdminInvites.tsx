@@ -29,6 +29,9 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "manufacturer", label: "Manufacturer" },
   { value: "fulfillment", label: "Fulfillment Partner" },
   { value: "non_profit", label: "Non-profit" },
+  // Task #245 — Vendor scope. A vendor-role partner lands on /vendor
+  // and can only quote GoodDeed pricing for their own vendor row.
+  { value: "vendor", label: "Vendor (GoodDeed pricing)" },
 ];
 
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(
@@ -47,6 +50,7 @@ const SCOPE_CONFIG: Record<
   manufacturer: { endpoint: "/api/manufacturers", noun: "manufacturer", thumbField: "logoUrl" },
   fulfillment: { endpoint: "/api/fulfillment-partners", noun: "fulfillment partner", thumbField: "logoUrl" },
   non_profit: { endpoint: "/api/non-profits", noun: "non-profit", thumbField: "logoUrl" },
+  vendor: { endpoint: "/api/vendors", noun: "vendor", thumbField: "logoUrl" },
 };
 
 // Referrer picker — artist, non-profit, or press (manufacturer).

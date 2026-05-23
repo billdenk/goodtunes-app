@@ -55,6 +55,7 @@ import { VinylPreview } from "@/components/VinylPreview";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
+import { SignedCertVendorPanel } from "@/components/admin/SignedCertVendorPanel";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {
@@ -336,6 +337,12 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
               livePlatformCostCents={payoutSettings?.certCostCents ?? null}
               onSave={upsertAddon.mutate}
             />
+          </div>
+          {/* Task #245 — per-leg vendor assignment + live wholesale
+              calculator. Sits under the AddonForm so the operator
+              edits the fan-facing price first, then routes the run. */}
+          <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+            <SignedCertVendorPanel albumId={albumId} />
           </div>
         </div>
 

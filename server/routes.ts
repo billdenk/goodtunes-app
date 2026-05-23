@@ -214,6 +214,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (role === "non_profit") return "/non-profit";
       if (role === "artist") return "/artist";
       if (role === "label") return "/label";
+      // Task #245 — vendor partners (a press/printer/holographer quoting
+      // their own GoodDeed pricing) land on a dedicated portal that is
+      // really just the AdminVendor "GoodDeed Services" tab rebadged.
+      if (role === "vendor") return "/vendor";
       return "/admin";
     } catch {
       return "/admin";
@@ -10851,6 +10855,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     manufacturer: "Manufacturer",
     fulfillment: "Fulfillment Partner",
     non_profit: "Non-profit",
+    // Task #245 — vendor scope (printer / holographer / press quoting
+    // their own GoodDeed pricing). One row in `vendors` is the scope id.
+    vendor: "Vendor",
   };
 
   // Task #78 — Non-profits are stored in the existing `organizations`
@@ -10894,8 +10901,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const rows = await storage.listPendingAdminInvites();
     const need = (kind: string) =>
       Array.from(new Set(rows.filter((r) => r.role === kind && r.roleScopeId).map((r) => r.roleScopeId!)));
-    const [peopleNeeded, labelsNeeded, mfgNeeded, ffNeeded] = [
-      need("artist"), need("label"), need("manufacturer"), need("fulfillment"),
+    const [peopleNeeded, labelsNeeded, mfgNeeded, ffNeeded, vendorNeeded] = [
+      need("artist"), need("label"), need("manufacturer"), need("fulfillment"), need("vendor"),
     ];
     const npoIdsScope = Array.from(new Set(rows.filter((r) => r.role === "non_profit" && r.roleScopeId).map((r) => r.roleScopeId!)));
     // Referrer ids — both kinds.
@@ -10903,7 +10910,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const refOrgIds = Array.from(new Set(rows.filter((r: any) => r.referrerKind === "non_profit" && r.referrerScopeId).map((r: any) => r.referrerScopeId as string)));
     const allNpoIds = Array.from(new Set([...npoIdsScope, ...refOrgIds]));
     const allPersonIds = Array.from(new Set([...peopleNeeded, ...refPersonIds]));
-    const [people, labels, mfgs, ffs, npos] = await Promise.all([
+    const [people, labels, mfgs, ffs, npos, vends] = await Promise.all([
       allPersonIds.length ? Promise.all(allPersonIds.map((id) => storage.getPersonById(id))) : [],
       labelsNeeded.length ? Promise.all(labelsNeeded.map((id) => storage.getLabelById(id))) : [],
       mfgNeeded.length ? Promise.all(mfgNeeded.map((id) => storage.getManufacturerById(id))) : [],
@@ -10911,9 +10918,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       allNpoIds.length
         ? db.execute<{ id: string; name: string; logo_url: string | null }>(sql`SELECT id, name, logo_url FROM organizations WHERE id = ANY(${allNpoIds}::varchar[])`).then((r: any) => r.rows ?? [])
         : Promise.resolve([] as any[]),
+      vendorNeeded.length ? Promise.all(vendorNeeded.map((id) => storage.getVendorById(id))) : [],
     ]);
     const idx = (arr: any[]) => new Map(arr.filter(Boolean).map((r: any) => [r.id, r]));
-    const peopleIdx = idx(people), labelsIdx = idx(labels), mfgIdx = idx(mfgs), ffIdx = idx(ffs);
+    const peopleIdx = idx(people), labelsIdx = idx(labels), mfgIdx = idx(mfgs), ffIdx = idx(ffs), vendorIdx = idx(vends);
     const npoIdx = new Map((npos as any[]).map((r) => [r.id, { id: r.id, name: r.name, logoUrl: r.logo_url }]));
     function scopeMeta(role: string, scopeId: string | null) {
       if (!scopeId) return { scopeName: null as string | null, scopeThumbUrl: null as string | null };
@@ -10923,6 +10931,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       else if (role === "manufacturer") row = mfgIdx.get(scopeId);
       else if (role === "fulfillment") row = ffIdx.get(scopeId);
       else if (role === "non_profit") row = npoIdx.get(scopeId);
+      else if (role === "vendor") row = vendorIdx.get(scopeId);
       if (!row) return { scopeName: null, scopeThumbUrl: null };
       return {
         scopeName: row.name ?? null,
@@ -11017,6 +11026,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       manufacturer: () => storage.getManufacturerById(roleScopeId!),
       fulfillment: () => storage.getFulfillmentPartnerById(roleScopeId!),
       non_profit: () => orgExists(roleScopeId!),
+      // Task #245 — vendor scope.
+      vendor: () => storage.getVendorById(roleScopeId!),
     };
     const SCOPE_LABEL: Record<string, string> = {
       artist: "an artist",
@@ -11024,6 +11035,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       manufacturer: "a manufacturer",
       fulfillment: "a fulfillment partner",
       non_profit: "a non-profit",
+      vendor: "a vendor",
     };
     if (SCOPED_ROLES[role]) {
       if (!roleScopeId) {
@@ -11160,6 +11172,166 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const r = await setInvitedByPress("labels", String(req.params.id), pressId);
       if ("error" in r) return res.status(400).json({ message: r.error });
       res.json({ ok: true });
+    },
+  );
+
+  // ─── Task #245 — Vendor-managed GoodDeed pricing portal ───────────
+  // Three legs (printing / hologram+shrinkwrap / insertion) — each vendor
+  // owns its own quote and toggles `active=true` to make it assignable.
+  // Auth: super_admin can read/write any vendor; a vendor-scoped user
+  // (role=vendor, role_scope_id=<vendorId>) can only read/write their
+  // own. Pricing endpoints intentionally bypass the partner-permissions
+  // post-sale lock — payouts and operational routing stay live after
+  // first sale (mirrors `manage_payouts`).
+  const vgdp = await import("./vendorGoodDeedPricing");
+  async function gateVendorAccess(req: any, res: any, vendorId: string): Promise<boolean> {
+    const callerRole = await getUserRole(req.session.userId!);
+    if (!callerRole) {
+      res.status(403).json({ message: "No role" });
+      return false;
+    }
+    if (callerRole.role === "super_admin") return true;
+    if (callerRole.role === "vendor" && callerRole.roleScopeId === vendorId) return true;
+    res.status(403).json({ message: "Not your vendor" });
+    return false;
+  }
+
+  app.get(
+    "/api/admin/vendors/:id/gooddeed-services",
+    requireAdmin,
+    async (req, res) => {
+      if (!(await gateVendorAccess(req, res, req.params.id))) return;
+      const vendor = await storage.getVendorById(req.params.id);
+      if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+      const rows = await vgdp.listVendorGoodDeedServices(req.params.id);
+      res.json({ vendor: { id: vendor.id, name: vendor.name, logoUrl: vendor.logoUrl, isReseller: vendor.isReseller, isMaker: vendor.isMaker }, services: rows });
+    },
+  );
+
+  app.put(
+    "/api/admin/vendors/:id/gooddeed-services",
+    requireAdmin,
+    async (req, res) => {
+      if (!(await gateVendorAccess(req, res, req.params.id))) return;
+      const vendor = await storage.getVendorById(req.params.id);
+      if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+      const input = req.body as vgdp.UpsertInput;
+      const err = vgdp.validateUpsert(input);
+      if (err) return res.status(400).json({ message: err });
+      const row = await vgdp.upsertVendorGoodDeedService(req.params.id, input, req.session.userId ?? null);
+      res.json(row);
+    },
+  );
+
+  // Lookup endpoint for the album-side assignment picker. Returns the
+  // vendors that have an active row for the requested service, with
+  // their current pricing folded in so the calculator can preview totals
+  // without a second round-trip per option.
+  app.get(
+    "/api/admin/gooddeed-vendors",
+    requireAdmin,
+    async (req, res) => {
+      const service = String(req.query.service || "");
+      if (!["printing", "hologram", "insertion"].includes(service)) {
+        return res.status(400).json({ message: "Unknown service" });
+      }
+      const rows = await vgdp.listVendorsWithService(service as any);
+      res.json(rows);
+    },
+  );
+
+  // Per-album leg assignment. Patch any subset of the three legs;
+  // null clears. The matching vendor must have an active row for the
+  // matching service (we soft-warn but allow the assignment because
+  // a vendor might be drafting their pricing — the UI flags it).
+  app.patch(
+    "/api/admin/albums/:id/signed-cert-vendors",
+    requireAdmin,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const album = await storage.getAlbumById(albumId);
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const cols = {
+        printVendorId: "print_vendor_id",
+        hologramVendorId: "hologram_vendor_id",
+        insertionVendorId: "insertion_vendor_id",
+      } as const;
+      let touched = false;
+      for (const k of Object.keys(cols) as Array<keyof typeof cols>) {
+        if (!(k in req.body)) continue;
+        touched = true;
+        const v = req.body[k] ? String(req.body[k]) : null;
+        const col = cols[k];
+        await db.execute(sql`
+          UPDATE album_addons SET ${sql.raw(col)} = ${v}
+          WHERE album_id = ${albumId} AND kind = 'signed_cert'
+        `);
+      }
+      if (!touched) return res.status(400).json({ message: "No legs supplied" });
+      const rows = await db.execute<any>(sql`
+        SELECT id, print_vendor_id AS "printVendorId",
+               hologram_vendor_id AS "hologramVendorId",
+               insertion_vendor_id AS "insertionVendorId"
+        FROM album_addons WHERE album_id = ${albumId} AND kind = 'signed_cert' LIMIT 1
+      `);
+      res.json({ ok: true, row: ((rows as any).rows ?? [])[0] ?? null });
+    },
+  );
+
+  // Live preview of total wholesale cost for a hypothetical run size.
+  // Used by the AddonForm so the artist sees what their wholesale tab
+  // would look like at, say, 100 units.
+  app.get(
+    "/api/admin/albums/:id/gooddeed-pricing-preview",
+    requireAdmin,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const runQty = Math.max(1, parseInt(String(req.query.runQty || "100"), 10) || 100);
+      const rows = await db.execute<any>(sql`
+        SELECT print_vendor_id, hologram_vendor_id, insertion_vendor_id, pricing_snapshot, pricing_snapshot_at
+        FROM album_addons
+        WHERE album_id = ${albumId} AND kind = 'signed_cert'
+        LIMIT 1
+      `);
+      const row = ((rows as any).rows ?? [])[0];
+      if (!row) return res.json({ legs: { printing: null, hologram: null, insertion: null }, totalPerUnitCents: 0, totalRunCents: 0, snapshot: null });
+      const live = await vgdp.resolveLivePricing(
+        {
+          printVendorId: row.print_vendor_id ?? null,
+          hologramVendorId: row.hologram_vendor_id ?? null,
+          insertionVendorId: row.insertion_vendor_id ?? null,
+        },
+        runQty,
+      );
+      res.json({
+        legs: { printing: live.printing, hologram: live.hologram, insertion: live.insertion },
+        totalPerUnitCents: live.totalPerUnitCents,
+        totalRunCents: live.totalRunCents,
+        snapshot: row.pricing_snapshot ?? null,
+        snapshotAt: row.pricing_snapshot_at ?? null,
+      });
+    },
+  );
+
+  // Stamp the per-release pricing snapshot. Called from the sale-window
+  // close path (downstream task wires this into the print-batch
+  // lifecycle); exposed as a super-admin POST for manual close + tests.
+  app.post(
+    "/api/admin/albums/:id/gooddeed-snapshot",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const runQty = Math.max(1, parseInt(String(req.body?.runQty || "0"), 10));
+      if (!runQty) return res.status(400).json({ message: "runQty required" });
+      const rows = await db.execute<{ id: string }>(sql`
+        SELECT id FROM album_addons WHERE album_id = ${albumId} AND kind = 'signed_cert' LIMIT 1
+      `);
+      const addonId = ((rows as any).rows ?? [])[0]?.id;
+      if (!addonId) return res.status(404).json({ message: "No signed_cert addon on this album" });
+      const r = await vgdp.snapshotPricingForAddon(addonId, runQty);
+      if (!r.ok) return res.status(400).json({ message: r.error });
+      res.json(r);
     },
   );
 

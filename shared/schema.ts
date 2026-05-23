@@ -1018,6 +1018,23 @@ export const albumAddons = pgTable(
     // artist's committed planned print run. This is a *planning* value
     // only (drives the admin Total readout); it does not hard-cap sales.
     plannedQuantity: integer("planned_quantity"),
+    // Task #245 — per-leg vendor assignment for the signed_cert add-on.
+    // Up to one vendor per leg (Printing / Hologram+shrinkwrap / Insertion).
+    // Each vendor must have an active vendor_gooddeed_services row for the
+    // matching service before it can be assigned. Vendors stay editable
+    // post-sale (the legs are operational routing, not metadata).
+    printVendorId: varchar("print_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+    hologramVendorId: varchar("hologram_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+    insertionVendorId: varchar("insertion_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+    // Task #245 — per-release pricing snapshot. Populated when the sale
+    // window closes and the run is locked for print. Shape:
+    //   { runQty, printing: { vendorId, perUnitCents, setupFeeCents },
+    //     hologram: { vendorId, perUnitCents, setupFeeCents },
+    //     insertion: { vendorId, perUnitCents, setupFeeCents } | null,
+    //     totalPerUnitCents, totalRunCents }
+    // Once stamped, vendor pricing edits no longer affect this release.
+    pricingSnapshot: jsonb("pricing_snapshot"),
+    pricingSnapshotAt: timestamp("pricing_snapshot_at"),
     active: boolean("active").notNull().default(true),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow(),
@@ -1026,6 +1043,58 @@ export const albumAddons = pgTable(
     albumKindUnique: unique("album_addons_album_kind_unique").on(t.albumId, t.kind),
   }),
 );
+
+// ─── Task #245 — Vendor-managed GoodDeed pricing portal ───────────────
+// One row per (vendor, service) where service is one of the three legs
+// a signed/printed GoodDeed run goes through:
+//   - "printing"  → tiered per-unit ladder in `tiersJson` (one row per
+//                   batch-size break: 25/50/100/200/300/500, etc.)
+//   - "hologram"  → flat per-unit price in `flatPerUnitCents`
+//                   (hologram sticker + shrinkwrap is sold together).
+//   - "insertion" → flat per-unit price in `flatPerUnitCents`
+//                   (insert into sleeves at the pressing plant). Only
+//                   meaningful when the vendor is also a press.
+//
+// `active=false` lets a vendor save a draft without being assignable.
+// `minBatch` and `leadTimeDays` are advisory — quoting tools use them
+// to flag undersized batches. `shipToDefault` is the default ship-to
+// address for inbound stock (printer → press, etc.) so artists/admins
+// don't have to type it on every PO.
+export const VENDOR_GOODDEED_SERVICES = ["printing", "hologram", "insertion"] as const;
+export type VendorGoodDeedService = (typeof VENDOR_GOODDEED_SERVICES)[number];
+
+export const vendorGoodDeedServices = pgTable(
+  "vendor_gooddeed_services",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+    service: text("service").notNull(),
+    active: boolean("active").notNull().default(false),
+    // Printing only — array of { qty, perUnitCents }, sorted asc by qty.
+    // `qty` is the floor of the tier; the runtime walks the ladder and
+    // picks the highest qty <= run size. Use `flat_per_unit_cents` for
+    // hologram/insertion.
+    tiersJson: jsonb("tiers_json").$type<Array<{ qty: number; perUnitCents: number }>>(),
+    flatPerUnitCents: integer("flat_per_unit_cents"),
+    setupFeeCents: integer("setup_fee_cents").notNull().default(0),
+    minBatch: integer("min_batch").notNull().default(25),
+    leadTimeDays: integer("lead_time_days").notNull().default(14),
+    shipToDefault: text("ship_to_default"),
+    notes: text("notes"),
+    updatedByUserId: varchar("updated_by_user_id"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    vendorServiceUniq: uniqueIndex("vendor_gooddeed_services_vendor_service_uniq").on(
+      t.vendorId,
+      t.service,
+    ),
+  }),
+);
+
+export type VendorGoodDeedServiceRow = typeof vendorGoodDeedServices.$inferSelect;
+export type InsertVendorGoodDeedService = typeof vendorGoodDeedServices.$inferInsert;
 
 // Task #122 — Pending signed-certificate reservations. Created the
 // moment we mint a Stripe Checkout Session that includes the
@@ -1941,7 +2010,7 @@ export type RfqReply = typeof rfqReplies.$inferSelect;
 // organizations table rather than minting a parallel scope table).
 // `org` is kept as a historical alias used in reports code; resolved
 // to `non_profit` by getUserRole().
-export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment", "non_profit"] as const;
+export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment", "non_profit", "vendor"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 // ─── Admin invitations ───────────────────────────────────────────────
@@ -2109,7 +2178,7 @@ export const certNameAudits = pgTable("cert_name_audits", {
 // scopeKind ∈ {label, artist, manufacturer, fulfillment}. The middleware
 // resolves the album → scope row (labelId or primaryArtistId) and looks
 // up the row to gate the request.
-export const PARTNER_SCOPE_KINDS = ["label", "artist", "manufacturer", "fulfillment"] as const;
+export const PARTNER_SCOPE_KINDS = ["label", "artist", "manufacturer", "fulfillment", "vendor"] as const;
 export type PartnerScopeKind = (typeof PARTNER_SCOPE_KINDS)[number];
 
 export const PARTNER_PERMISSION_VERBS = [
