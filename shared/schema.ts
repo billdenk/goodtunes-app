@@ -1581,6 +1581,22 @@ export const adminEmailOtp = pgTable("admin_email_otp", {
   lastSentAt: timestamp("last_sent_at").defaultNow(),
 });
 
+// Task #269 — Admin "Forgot password?" reset tokens. One row per
+// outstanding reset request; raw token lives only in the recipient's
+// email (we store the SHA-256 hex hash). Tokens are single-use
+// (`consumedAt` is set the moment the new password is written) and
+// expire 30 minutes after issue. Customer reset (when we ship one) is
+// a separate flow against `customer_users`; this table is admin-only.
+export const adminPasswordResetTokens = pgTable("admin_password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type AdminPasswordResetToken = typeof adminPasswordResetTokens.$inferSelect;
+
 export type CustomerUser = typeof customerUsers.$inferSelect;
 export type AdminIdentity = typeof adminIdentities.$inferSelect;
 export type CustomerIdentity = typeof customerIdentities.$inferSelect;

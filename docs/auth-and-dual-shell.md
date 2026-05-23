@@ -6,6 +6,10 @@ Dual auth shipped in Task #31. Two completely separate user tables, `users` (adm
 
 Requires TOTP (Google Authenticator / 1Password / Authy) on top of password. First sign-in enrolls via QR; recovery codes are scrypt-hashed. Super-admin grant/revoke UI lives on the admin Promote panel (`SuperAdminsPanel`).
 
+### Forgot password (Task #269)
+
+`/admin/login` carries a **Forgot password?** link under the password field. It posts the entered email to `POST /api/admin/auth/forgot-password`, which is intentionally non-enumerating — the response is always the same neutral 200, with a constant-time floor and per-IP (20/hr) + per-email (5/hr) rate limits. When the email matches an admin with a real password (OAuth-only admins are silently skipped), we mint a SHA-256-hashed single-use token, persist it in `admin_password_reset_tokens` with a 30-minute expiry, and email the raw token via `sendAdminPasswordResetEmail` (same Resend transport as admin OTP). The recipient lands on `/admin/reset-password/:token`, which pre-validates the link via `GET /api/admin/auth/reset-password/:token` and then `POST`s the new password. The password update does **not** sign the user in — they bounce back to `/admin/login` where the existing 2FA gate (email-OTP or TOTP) still fires before they reach the admin shell. Successful reset invalidates every other outstanding reset token for that admin. Customer reset (`customer_users`) is out of scope for this task.
+
 The current single-tier admin generalizes into per-org roles in the next phase — see "Roles, fulfillment & multi-tenant admin" in `docs/roadmap.md`.
 
 ## OAuth (customer + admin)

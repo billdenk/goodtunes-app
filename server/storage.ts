@@ -45,6 +45,8 @@ import {
   type AdminTotp,
   adminEmailOtp,
   type AdminEmailOtp,
+  adminPasswordResetTokens,
+  type AdminPasswordResetToken,
   albums,
   songs,
   userAlbums,
@@ -489,6 +491,18 @@ export interface IStorage {
   // tokens before the row is deleted.
   consumeAdminEmailOtp(userId: string, codeHash: string): Promise<boolean>;
   setUserFactorPref(userId: string, pref: "email" | "totp"): Promise<void>;
+
+  // ---- Admin password reset (Task #269) ---------------------------
+  // Single-use, scrypt-style: raw token only in the recipient's email,
+  // we store SHA-256 hex. `createAdminPasswordResetToken` returns the
+  // inserted row id so callers can audit. `consume` is the atomic
+  // verify+mark: it sets consumedAt only if the row is currently
+  // un-consumed and un-expired, returns the userId on the winning
+  // request and undefined on duplicates or stale tokens.
+  createAdminPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<AdminPasswordResetToken>;
+  getActiveAdminPasswordResetToken(tokenHash: string): Promise<AdminPasswordResetToken | undefined>;
+  consumeAdminPasswordResetToken(tokenHash: string): Promise<string | undefined>;
+  invalidateAdminPasswordResetTokensForUser(userId: string): Promise<void>;
 
   // Super-admin grant/revoke (Task #31 step 9). `listAdmins` is the
   // source of truth for the admin-only UI.
@@ -2481,6 +2495,56 @@ export class DbStorage implements IStorage {
   }
   async setUserFactorPref(userId: string, pref: "email" | "totp"): Promise<void> {
     await db.update(users).set({ factorPref: pref }).where(eq(users.id, userId));
+  }
+
+  // ---- Admin password reset (Task #269) ---------------------------
+  async createAdminPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<AdminPasswordResetToken> {
+    const [row] = await db
+      .insert(adminPasswordResetTokens)
+      .values({ userId, tokenHash, expiresAt })
+      .returning();
+    return row;
+  }
+  async getActiveAdminPasswordResetToken(tokenHash: string): Promise<AdminPasswordResetToken | undefined> {
+    const [row] = await db
+      .select()
+      .from(adminPasswordResetTokens)
+      .where(eq(adminPasswordResetTokens.tokenHash, tokenHash));
+    if (!row) return undefined;
+    if (row.consumedAt) return undefined;
+    if (row.expiresAt.getTime() < Date.now()) return undefined;
+    return row;
+  }
+  async consumeAdminPasswordResetToken(tokenHash: string): Promise<string | undefined> {
+    // Atomic: stamp consumedAt only if still un-consumed AND un-expired.
+    // The winning request gets the userId back; concurrent duplicates
+    // and stale tokens both see undefined.
+    const rows = await db
+      .update(adminPasswordResetTokens)
+      .set({ consumedAt: new Date() })
+      .where(
+        and(
+          eq(adminPasswordResetTokens.tokenHash, tokenHash),
+          sql`${adminPasswordResetTokens.consumedAt} IS NULL`,
+          sql`${adminPasswordResetTokens.expiresAt} > now()`,
+        ),
+      )
+      .returning({ userId: adminPasswordResetTokens.userId });
+    return rows[0]?.userId;
+  }
+  async invalidateAdminPasswordResetTokensForUser(userId: string): Promise<void> {
+    // Mark every outstanding token as consumed so a successful reset
+    // can't be followed by a second one minted before the password
+    // change. Cheap blanket update — these rows are tiny.
+    await db
+      .update(adminPasswordResetTokens)
+      .set({ consumedAt: new Date() })
+      .where(
+        and(
+          eq(adminPasswordResetTokens.userId, userId),
+          sql`${adminPasswordResetTokens.consumedAt} IS NULL`,
+        ),
+      );
   }
 
   async listAdmins() {

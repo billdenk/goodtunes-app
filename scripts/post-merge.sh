@@ -79,3 +79,34 @@ SQL
 }
 migrate_auth_tokens dev  "${DATABASE_URL:-}"
 migrate_auth_tokens prod "${PROD_DATABASE_URL:-}"
+
+# Task #269 — Admin "Forgot password?" reset tokens. Pre-create on both
+# DBs so the publish dev→prod diff doesn't try to invent the table
+# (and so signing in on a freshly-cloned dev DB never 500s the
+# /api/admin/auth/forgot-password endpoint).
+migrate_password_reset_tokens() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping password-reset migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS admin_password_reset_tokens (
+  id          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  text NOT NULL UNIQUE,
+  expires_at  timestamp NOT NULL,
+  consumed_at timestamp,
+  created_at  timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_password_reset_tokens_user_id_idx
+  ON admin_password_reset_tokens(user_id);
+SQL
+  then
+    echo "post-merge: admin_password_reset_tokens migration ok on $label"
+  else
+    echo "post-merge: WARNING — admin_password_reset_tokens migration failed on $label (continuing)"
+  fi
+}
+migrate_password_reset_tokens dev  "${DATABASE_URL:-}"
+migrate_password_reset_tokens prod "${PROD_DATABASE_URL:-}"

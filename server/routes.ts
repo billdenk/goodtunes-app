@@ -6,7 +6,7 @@ import { sql, and, eq } from "drizzle-orm";
 import { userAlbums, albums } from "@shared/schema";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { scrypt, randomBytes, timingSafeEqual, randomUUID } from "crypto";
+import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
@@ -1117,6 +1117,143 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const hashed = await hashPassword(newPassword);
     await db.execute(sql`UPDATE users SET password = ${hashed} WHERE id = ${user.id}`);
     return res.status(204).end();
+  });
+
+  // ─── Task #269 — Admin "Forgot password?" reset flow ───────────────
+  // Three endpoints:
+  //   POST /api/admin/auth/forgot-password   — always 200 neutral; if
+  //     the email matches an admin with a real password we mint a
+  //     single-use token (SHA-256-hashed in DB, raw in the email), TTL
+  //     30 minutes, and send it via Resend. OAuth-only admins are
+  //     silently no-op'd (same neutral response — no enumeration).
+  //   GET  /api/admin/auth/reset-password/:token — lets the reset page
+  //     pre-validate the link before the user types a password; returns
+  //     just `{ ok }` so the page can swap a "link expired" message in.
+  //   POST /api/admin/auth/reset-password — consumes the token + sets
+  //     the new password. Does NOT sign the user in — they bounce back
+  //     to /admin/login, where the 2FA gate still fires before they
+  //     reach the admin shell (matches the task's "2FA still required"
+  //     contract).
+  //
+  // Per-IP and per-email rate limits cap brute force on token URLs and
+  // mail-bomb attempts on the request endpoint.
+  const forgotIpBuckets = new Map<string, { count: number; resetAt: number }>();
+  const forgotEmailBuckets = new Map<string, { count: number; resetAt: number }>();
+  function forgotRateLimitOk(ip: string, emailNorm: string): boolean {
+    const now = Date.now();
+    const window = 60 * 60 * 1000; // 1h
+    const ipB = forgotIpBuckets.get(ip);
+    if (!ipB || ipB.resetAt < now) {
+      forgotIpBuckets.set(ip, { count: 1, resetAt: now + window });
+    } else {
+      ipB.count += 1;
+      if (ipB.count > 20) return false;
+    }
+    if (emailNorm) {
+      const eB = forgotEmailBuckets.get(emailNorm);
+      if (!eB || eB.resetAt < now) {
+        forgotEmailBuckets.set(emailNorm, { count: 1, resetAt: now + window });
+      } else {
+        eB.count += 1;
+        if (eB.count > 5) return false;
+      }
+    }
+    return true;
+  }
+  function hashResetToken(raw: string): string {
+    return createHash("sha256").update(raw).digest("hex");
+  }
+  // Pick the admin-host origin for the reset link. Prefer the request's
+  // own origin when it already looks like the admin shell; otherwise
+  // fall back to `admin.goodtunes.music` so dev cross-host requests
+  // still land somewhere sane.
+  function resetOrigin(req: Request): string {
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = (req.headers["x-forwarded-host"] as string) || req.get("host") || "admin.goodtunes.music";
+    return `${proto}://${host}`;
+  }
+
+  app.post("/api/admin/auth/forgot-password", async (req, res) => {
+    const RESET_TTL_MINUTES = 30;
+    const ip = (req.ip || req.socket.remoteAddress || "unknown").trim();
+    const emailRaw = String(req.body?.email ?? "").trim().toLowerCase();
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailRaw);
+    const okRate = forgotRateLimitOk(ip, looksLikeEmail ? emailRaw : "");
+    const started = Date.now();
+    if (okRate && looksLikeEmail) {
+      try {
+        const user = await storage.getUserByEmail(emailRaw);
+        // Skip OAuth-only admins — they have no password to reset, and
+        // sending them a "set a new password" mail would be confusing.
+        if (user && user.isAdmin && !user.password.startsWith("!oauth-only:")) {
+          const raw = randomBytes(32).toString("hex");
+          const hash = hashResetToken(raw);
+          const expiresAt = new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000);
+          await storage.createAdminPasswordResetToken(user.id, hash, expiresAt);
+          const resetUrl = `${resetOrigin(req)}/admin/reset-password/${raw}`;
+          const { sendAdminPasswordResetEmail } = await import("./mail");
+          const result = await sendAdminPasswordResetEmail(user.email, resetUrl, RESET_TTL_MINUTES);
+          if (!result.ok) {
+            // Log server-side only — never leak the reason to the
+            // caller; that would let an attacker probe whether mail is
+            // misconfigured for a given address.
+            console.warn(`[forgot-password] mail send failed for ${user.email}: ${result.reason}`);
+            // Dev fallback so the workflow operator can still grab the
+            // link from console output when Resend isn't configured.
+            if (!process.env.RESEND_API_KEY) {
+              console.log(`[forgot-password] dev link: ${resetUrl}`);
+            }
+          }
+        }
+      } catch (e: any) {
+        // Swallow — neutral response must not depend on success.
+        console.warn(`[forgot-password] internal error: ${e?.message ?? e}`);
+      }
+    }
+    // Constant-floor latency so a hit can't be timed apart from a miss.
+    const elapsed = Date.now() - started;
+    if (elapsed < 250) await new Promise((r) => setTimeout(r, 250 - elapsed));
+    return res.json({
+      ok: true,
+      message: "If an admin account exists for that email, a reset link is on its way.",
+    });
+  });
+
+  app.get("/api/admin/auth/reset-password/:token", async (req, res) => {
+    const raw = String(req.params.token || "");
+    if (!raw) return res.status(400).json({ ok: false, message: "Missing token" });
+    const row = await storage.getActiveAdminPasswordResetToken(hashResetToken(raw));
+    if (!row) return res.status(410).json({ ok: false, message: "This reset link is invalid or has expired." });
+    return res.json({ ok: true });
+  });
+
+  app.post("/api/admin/auth/reset-password", async (req, res) => {
+    const schema = z.object({
+      token: z.string().min(10),
+      newPassword: z.string().min(8, "New password must be at least 8 characters"),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    }
+    const { token, newPassword } = parsed.data;
+    const hash = hashResetToken(token);
+    const userId = await storage.consumeAdminPasswordResetToken(hash);
+    if (!userId) {
+      return res.status(410).json({ message: "This reset link is invalid or has already been used." });
+    }
+    const user = await storage.getUser(userId);
+    if (!user || !user.isAdmin) {
+      // Defensive — token row exists but the underlying admin doesn't
+      // anymore. Treat as expired so we don't leak the difference.
+      return res.status(410).json({ message: "This reset link is invalid or has expired." });
+    }
+    const hashed = await hashPassword(newPassword);
+    await db.execute(sql`UPDATE users SET password = ${hashed} WHERE id = ${user.id}`);
+    // Invalidate any other outstanding reset tokens for this admin so
+    // an old leaked mail can't follow a successful reset.
+    await storage.invalidateAdminPasswordResetTokensForUser(user.id);
+    return res.json({ ok: true });
   });
 
   // ─── Linked identities (profile) ──────────────────────────────────

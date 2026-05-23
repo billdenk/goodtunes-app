@@ -56,6 +56,8 @@ import { AdminInvites } from "@/pages/AdminInvites";
 import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import { GiftClaim } from "@/pages/GiftClaim";
 import { Redeem } from "@/pages/Redeem";
 import { AdminShopify } from "@/pages/AdminShopify";
@@ -173,6 +175,11 @@ function Router() {
             chrome is host-derived and these are simply aliases. */}
         <Route path="/admin/login" component={Login} />
         <Route path="/admin/register" component={Login} />
+        {/* Task #269 — Admin "Forgot password?" flow. Both routes are
+            public — they're how a locked-out admin gets back in. The
+            reset page validates the token before rendering the form. */}
+        <Route path="/admin/forgot-password" component={ForgotPassword} />
+        <Route path="/admin/reset-password/:token" component={ResetPassword} />
         {/* Task #44 — post-checkout landing. Public so the Stripe
             return URL works even before the auth cookie has settled
             (Welcome polls /api/checkout/session/:id to confirm the

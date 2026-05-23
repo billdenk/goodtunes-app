@@ -855,7 +855,19 @@ export function Login() {
             ) : (
               <>
                 <div>
-                  <label className={s.label}>Password</label>
+                  <div className="flex items-baseline justify-between mb-1.5">
+                    <label className={`${s.label} mb-0`}>Password</label>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => navigate("/admin/forgot-password")}
+                        className="text-xs font-medium text-[var(--brand-blue)] hover:underline"
+                        data-testid="link-forgot-password"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••" name="password" autoComplete="current-password"
