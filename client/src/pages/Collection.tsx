@@ -255,7 +255,7 @@ export function Collection() {
                           : "0 4px 16px rgba(0,0,0,0.4)",
                       }}
                     >
-                      <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
+                      <img src={album.artwork} alt={album.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
                     <p className="text-white text-[11px] font-semibold truncate leading-tight text-left">{album.title}</p>
                     <p className="text-white/45 text-[10px] truncate leading-tight text-left mt-0.5">{album.artist}</p>
@@ -439,7 +439,7 @@ export function Collection() {
                       className="flex items-center gap-3 flex-1 min-w-0 active:opacity-60 transition-opacity text-left"
                       data-testid={`button-play-song-${song.id}`}
                     >
-                      <img src={song.album.artwork} alt={song.album.title} className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
+                      <img src={song.album.artwork} alt={song.album.title} loading="lazy" decoding="async" className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm font-medium truncate leading-tight ${isActive ? "text-[#319ED8]" : "text-white"}`}>{song.title}</p>
                         <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
@@ -517,6 +517,8 @@ export function Collection() {
                         <img
                           src={photo ?? artist.albums[0].artwork}
                           alt={artist.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-12 h-12 rounded-full object-cover flex-shrink-0"
                           style={{
                             border: "1px solid rgba(255,255,255,0.1)",
@@ -566,7 +568,7 @@ export function Collection() {
                 </button>
               </div>
               <div className="flex items-center gap-3 px-5 pb-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <img src={addToPlaylistSong.album.artwork} alt={addToPlaylistSong.album.title} className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
+                <img src={addToPlaylistSong.album.artwork} alt={addToPlaylistSong.album.title} loading="lazy" decoding="async" className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate leading-tight">{addToPlaylistSong.title}</p>
                   <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{addToPlaylistSong.album.artist}</p>
@@ -598,7 +600,7 @@ export function Collection() {
                     >
                       <div className="w-11 h-11 rounded-md flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ background: "rgba(255,255,255,0.08)" }}>
                         {pl.artworks && pl.artworks[0] ? (
-                          <img src={pl.artworks[0]} alt={pl.name} className="w-full h-full object-cover" />
+                          <img src={pl.artworks[0]} alt={pl.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         ) : (
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round">
                             <path d="M9 17V5l12-2v12M9 17a3 3 0 11-3-3 3 3 0 013 3zM21 15a3 3 0 11-3-3 3 3 0 013 3z" />
@@ -665,7 +667,7 @@ function AlbumCard({
                 zIndex: 0,
               }}
             >
-              <img src={album.artwork} alt="" className="w-full h-full object-cover opacity-85" />
+              <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-85" />
             </div>
             {ownedCount > 2 && (
               <div
@@ -677,7 +679,7 @@ function AlbumCard({
                   zIndex: 1,
                 }}
               >
-                <img src={album.artwork} alt="" className="w-full h-full object-cover opacity-90" />
+                <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-90" />
               </div>
             )}
           </>
@@ -692,7 +694,7 @@ function AlbumCard({
               : "0 4px 20px rgba(0,0,0,0.4)",
           }}
         >
-        <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
+        <img src={album.artwork} alt={album.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
         {isCurrentlyPlaying && (
           <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,6,43,0.45)" }}>
             <div className="flex gap-[3px] items-end h-5">

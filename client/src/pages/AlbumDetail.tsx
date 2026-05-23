@@ -881,7 +881,7 @@ function AlbumDetailMobile() {
                     style={{ width: 280, aspectRatio: "16 / 9" }}
                     data-testid={`video-${v.id}`}
                   >
-                    <img src={v.thumbnail} alt={v.title} className="absolute inset-0 w-full h-full object-cover" />
+                    <img src={v.thumbnail} alt={v.title} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
                     <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85) 0%, rgba(0,6,43,0.05) 60%)" }} />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-13 h-13 w-[52px] h-[52px] rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.3)" }}>
@@ -3816,7 +3816,7 @@ function AlbumBonusContent({ albumId }: { albumId: string }) {
                       poster={v.posterUrl ?? undefined}
                       controls
                       playsInline
-                      preload="metadata"
+                      preload="none"
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -3865,7 +3865,7 @@ function AlbumBonusContent({ albumId }: { albumId: string }) {
                       poster={v.posterUrl ?? undefined}
                       controls
                       playsInline
-                      preload="metadata"
+                      preload="none"
                       className="w-full h-full object-cover"
                     />
                   </div>
