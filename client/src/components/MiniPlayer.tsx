@@ -27,9 +27,16 @@ export function MiniPlayer() {
         className="relative cursor-pointer active:scale-[0.98] transition-transform"
         style={{
           borderRadius: 9999,
-          background: "rgba(28, 30, 48, 0.55)",
-          backdropFilter: "blur(36px) saturate(200%)",
-          WebkitBackdropFilter: "blur(36px) saturate(200%)",
+          // iOS 26 mobile WebKit renderer-kill mitigation: this surface
+          // and BottomNav used to both run blur(36px) saturate(200%)
+          // backdrops, stacked, fixed over the /collection scroll
+          // list — enough GPU compositor work to trigger "A problem
+          // repeatedly occurred" on iPhone 14 Pro. Light blur + higher
+          // bg opacity keeps the frosted look at a tiny fraction of
+          // the cost. Mirror the values used in BottomNav.glassStyle.
+          background: "rgba(20, 22, 38, 0.82)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
           border: "1px solid rgba(255,255,255,0.10)",
           boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
         }}

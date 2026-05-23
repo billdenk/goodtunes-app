@@ -151,10 +151,19 @@ export function BottomNav() {
 
   // Compact (scrolled) state — Apple-style: only the active tab's icon stays
   // visible as a small pill anchored to the LEFT. Tapping it expands the bar.
+  // Apple-Music-style frosted bar. The blur radius used to be 36px with
+  // saturate(200%), but iOS 26 mobile WebKit kills the renderer
+  // ("A problem repeatedly occurred") when two of these surfaces (this
+  // nav + the MiniPlayer above it) are stacked over a scrolling list of
+  // album artwork — the GPU compositor has to re-sample the entire
+  // scene behind both layers every frame. Cutting blur to 14px and
+  // dropping saturate, then bumping the bg opacity so the bar still
+  // reads as opaque-frosted, keeps the look but takes the GPU cost
+  // from "renderer OOM on iPhone 14 Pro" to negligible.
   const glassStyle = {
-    background: "rgba(28, 30, 48, 0.55)",
-    backdropFilter: "blur(36px) saturate(200%)",
-    WebkitBackdropFilter: "blur(36px) saturate(200%)",
+    background: "rgba(20, 22, 38, 0.82)",
+    backdropFilter: "blur(14px)",
+    WebkitBackdropFilter: "blur(14px)",
     border: "1px solid rgba(255,255,255,0.10)",
     boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
   } as const;
