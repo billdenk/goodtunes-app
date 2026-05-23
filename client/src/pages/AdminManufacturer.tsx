@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { Manufacturer, FulfillmentPartner } from "@shared/schema";
+import { ALBUM_FORMATS, ALBUM_FORMAT_LABEL, type AlbumFormat, type Manufacturer, type FulfillmentPartner } from "@shared/schema";
 
 /**
  * Admin · Single manufacturer. Editable profile + specialties chips +
@@ -176,6 +176,8 @@ export function AdminManufacturer() {
           onSave={(patch) => save.mutate(patch)}
           saving={save.isPending}
         />
+
+        <PressFormatCostsPanel pressId={id} />
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -366,6 +368,246 @@ function PartnerProfileForm({
 
 const INPUT =
   "w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)] bg-white";
+
+type PressFormatCostRow = {
+  format: AlbumFormat;
+  manufacturingCents: number;
+  publishingCents: number;
+  paymentProcessingCents: number;
+  goodtunesCents: number;
+  isOverride: boolean;
+};
+
+const COST_FIELDS: { key: keyof Omit<PressFormatCostRow, "format" | "isOverride">; label: string }[] = [
+  { key: "manufacturingCents", label: "Manufacturing" },
+  { key: "publishingCents", label: "Publishing" },
+  { key: "paymentProcessingCents", label: "Payment processing" },
+  { key: "goodtunesCents", label: "GoodTunes margin" },
+];
+
+const parseDollars = (v: string): number | null => {
+  const n = Number.parseFloat(v.replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+};
+const formatDollars = (c: number) => (c / 100).toFixed(2);
+
+function PressFormatCostsPanel({ pressId }: { pressId: string }) {
+  const { toast } = useToast();
+  // Role gate — server is authoritative (returns 403 for non-platform
+  // admins outside this press's scope), but we hide the panel up front
+  // for admins who would just see a 403 either way. Platform staff
+  // (super_admin/admin) and manufacturer-role admins scoped to this
+  // press see + edit the panel.
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const canEdit =
+    roleInfo?.role === "super_admin" ||
+    roleInfo?.role === "admin" ||
+    (roleInfo?.role === "manufacturer" && roleInfo?.roleScopeId === pressId);
+  const { data, isLoading } = useQuery<PressFormatCostRow[]>({
+    queryKey: ["/api/admin/manufacturers", pressId, "format-costs"],
+    enabled: !!pressId && !!canEdit,
+  });
+
+  if (roleInfo && !canEdit) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-format-costs">
+      <div>
+        <h2 className="text-[15px] font-semibold text-slate-900">Per-format costs</h2>
+        <p className="text-[13px] text-slate-500 mt-1">
+          Set this press's per-unit cost breakdown for each format. Saved rows replace the platform default
+          on the cost calculator for any artist or label invited by this press.
+        </p>
+      </div>
+      {isLoading || !data ? (
+        <div className="text-slate-500 text-sm py-4">Loading…</div>
+      ) : (
+        <div className="space-y-3">
+          {data.map((row) => (
+            <PressFormatCostRowEditor
+              key={row.format}
+              pressId={pressId}
+              row={row}
+              onSaved={() => toast({ title: `Saved ${ALBUM_FORMAT_LABEL[row.format]} pricing` })}
+              onReset={() => toast({ title: `Reset ${ALBUM_FORMAT_LABEL[row.format]} to platform default` })}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PressFormatCostRowEditor({
+  pressId,
+  row,
+  onSaved,
+  onReset,
+}: {
+  pressId: string;
+  row: PressFormatCostRow;
+  onSaved: () => void;
+  onReset: () => void;
+}) {
+  const { toast } = useToast();
+  const [values, setValues] = useState<Record<string, string>>({
+    manufacturingCents: formatDollars(row.manufacturingCents),
+    publishingCents: formatDollars(row.publishingCents),
+    paymentProcessingCents: formatDollars(row.paymentProcessingCents),
+    goodtunesCents: formatDollars(row.goodtunesCents),
+  });
+
+  // Reset local edit buffer whenever the source row updates (after
+  // save/reset round-trips) so the inputs reflect the new server state.
+  useEffect(() => {
+    setValues({
+      manufacturingCents: formatDollars(row.manufacturingCents),
+      publishingCents: formatDollars(row.publishingCents),
+      paymentProcessingCents: formatDollars(row.paymentProcessingCents),
+      goodtunesCents: formatDollars(row.goodtunesCents),
+    });
+  }, [row.manufacturingCents, row.publishingCents, row.paymentProcessingCents, row.goodtunesCents]);
+
+  const dirty = COST_FIELDS.some(
+    (f) => parseDollars(values[f.key]) !== row[f.key],
+  );
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, number> = {};
+      for (const f of COST_FIELDS) {
+        const c = parseDollars(values[f.key]);
+        if (c == null) throw new Error(`Enter a valid ${f.label.toLowerCase()} amount`);
+        body[f.key] = c;
+      }
+      const r = await apiRequest(
+        "PUT",
+        `/api/admin/manufacturers/${pressId}/format-costs/${row.format}`,
+        body,
+      );
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/manufacturers", pressId, "format-costs"],
+      });
+      // Invited-press calculator on the SellPanel reads merged costs;
+      // bust it too so artists see the new numbers immediately.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      onSaved();
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
+
+  const reset = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/format-costs/${row.format}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/manufacturers", pressId, "format-costs"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      onReset();
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't reset", description: e?.message, variant: "destructive" }),
+  });
+
+  const total = COST_FIELDS.reduce((sum, f) => {
+    const c = parseDollars(values[f.key]);
+    return sum + (c ?? 0);
+  }, 0);
+
+  return (
+    <div
+      className="rounded-md border border-slate-200 p-3"
+      data-testid={`row-press-format-cost-${row.format}`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[13.5px] font-semibold text-slate-900">
+            {ALBUM_FORMAT_LABEL[row.format]}
+          </span>
+          {row.isOverride ? (
+            <span
+              className="text-[10.5px] uppercase tracking-wider font-semibold rounded px-1.5 py-0.5 bg-[var(--brand-blue)]/10 text-[#266a93]"
+              data-testid={`badge-override-${row.format}`}
+            >
+              Press pricing
+            </span>
+          ) : (
+            <span
+              className="text-[10.5px] uppercase tracking-wider font-semibold rounded px-1.5 py-0.5 bg-slate-100 text-slate-500"
+              data-testid={`badge-platform-${row.format}`}
+            >
+              Platform default
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {row.isOverride && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => reset.mutate()}
+              disabled={reset.isPending}
+              className="h-8 px-2 text-[12px] text-slate-500 hover:text-slate-700"
+              data-testid={`button-reset-${row.format}`}
+            >
+              Reset to platform
+            </Button>
+          )}
+          <Button
+            type="button"
+            onClick={() => save.mutate()}
+            disabled={!dirty || save.isPending}
+            className="h-8 px-3 text-[12px]"
+            data-testid={`button-save-format-cost-${row.format}`}
+          >
+            {save.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {COST_FIELDS.map((f) => (
+          <label key={f.key} className="block">
+            <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+              {f.label}
+            </span>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">
+                $
+              </span>
+              <input
+                value={values[f.key]}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [f.key]: e.target.value }))
+                }
+                inputMode="decimal"
+                className={INPUT + " pl-5"}
+                data-testid={`input-${f.key}-${row.format}`}
+              />
+            </div>
+          </label>
+        ))}
+      </div>
+      <div className="mt-2 text-right text-[12px] text-slate-500">
+        Total per unit:{" "}
+        <span
+          className="text-slate-900 font-semibold"
+          data-testid={`text-total-${row.format}`}
+        >
+          ${formatDollars(total)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

@@ -20,6 +20,7 @@ import {
   albumSkus,
   albumAddons,
   payoutFormatCosts,
+  pressFormatCosts,
   orders,
   orderItems,
   signedCertReservations,
@@ -501,6 +502,105 @@ export function registerCommerceRoutes(app: Express) {
   // the super-admin Platform Pricing surface grows a row per format.
   app.get("/api/admin/payout-format-costs", requireAdmin, async (_req, res) => {
     res.json(await listFormatCosts());
+  });
+
+  // Task #204 — Per-press cost breakdown. Returns one row per format
+  // (every entry in ALBUM_FORMATS) merging the press's saved
+  // `press_format_costs` overrides on top of the platform defaults so
+  // the admin panel can render a complete table even when the press
+  // hasn't saved its own pricing yet. `isOverride` flags which rows
+  // come from this press vs. the platform fallback so the UI can show
+  // a "platform default" hint and a "Reset to platform" affordance.
+  //
+  // Auth: gated by requireAdmin (admin bearer) AND scoped to either a
+  // super_admin/admin (platform staff — full access) OR a manufacturer-
+  // role admin whose role_scope_id matches this press. Any other admin
+  // bearer (artist, label, fulfillment, non_profit, or a manufacturer
+  // admin scoped to a different press) is rejected 403, so a press's
+  // pricing isn't reachable by other partners just because they have
+  // an admin bearer.
+  const requirePressScope = async (req: Request, res: Response, next: () => void) => {
+    const userId = (req as any).adminUserId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole(userId);
+    const pressId = String(req.params.id);
+    if (!info) return res.status(403).json({ message: "Forbidden" });
+    if (info.role === "super_admin" || info.role === "admin") return next();
+    if (info.role === "manufacturer" && info.roleScopeId === pressId) return next();
+    return res.status(403).json({ message: "Forbidden" });
+  };
+
+  app.get("/api/admin/manufacturers/:id/format-costs", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const platform = await listFormatCosts();
+    const overrides = await db
+      .select()
+      .from(pressFormatCosts)
+      .where(eq(pressFormatCosts.pressId, pressId));
+    const overrideMap = new Map(overrides.map((o) => [o.format, o]));
+    const rows = platform.map((p) => {
+      const o = overrideMap.get(p.format);
+      if (!o) {
+        return {
+          format: p.format,
+          manufacturingCents: p.manufacturingCents,
+          publishingCents: p.publishingCents,
+          paymentProcessingCents: p.paymentProcessingCents,
+          goodtunesCents: p.goodtunesCents,
+          isOverride: false,
+        };
+      }
+      return {
+        format: p.format,
+        manufacturingCents: o.manufacturingCents,
+        publishingCents: o.publishingCents,
+        paymentProcessingCents: o.paymentProcessingCents,
+        goodtunesCents: o.goodtunesCents,
+        isOverride: true,
+      };
+    });
+    res.json(rows);
+  });
+
+  const pressFormatCostBodySchema = z.object({
+    manufacturingCents: z.number().int().min(0),
+    publishingCents: z.number().int().min(0),
+    paymentProcessingCents: z.number().int().min(0),
+    goodtunesCents: z.number().int().min(0),
+  });
+  app.put("/api/admin/manufacturers/:id/format-costs/:format", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const format = String(req.params.format);
+    if (!ALBUM_FORMATS.includes(format as AlbumFormat)) {
+      return res.status(400).json({ message: "Unknown format" });
+    }
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const parsed = pressFormatCostBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid cost row" });
+    }
+    const [row] = await db
+      .insert(pressFormatCosts)
+      .values({ pressId, format, ...parsed.data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [pressFormatCosts.pressId, pressFormatCosts.format],
+        set: { ...parsed.data, updatedAt: new Date() },
+      })
+      .returning();
+    res.json({ ...row, isOverride: true });
+  });
+
+  app.delete("/api/admin/manufacturers/:id/format-costs/:format", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const format = String(req.params.format);
+    await db
+      .delete(pressFormatCosts)
+      .where(and(eq(pressFormatCosts.pressId, pressId), eq(pressFormatCosts.format, format)));
+    res.json({ ok: true });
   });
 
   // Task #199 — Invited-by press for an album. Resolves the press
