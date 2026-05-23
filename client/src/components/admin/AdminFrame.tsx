@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
+import { ViewAsSwitcher } from "@/components/admin/ViewAsSwitcher";
 import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
 import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
@@ -261,6 +262,13 @@ export function AdminFrame({
               onClick={() => navigate("/admin/dashboard")}
               testId="nav-dashboard"
             />
+            {/* Sidebar order is by founder-importance for a vinyl-first
+                music platform: the production chain first (Albums →
+                People → Labels → Presses → Fulfillment), then the fans
+                buying it (Customers) and the BI on top (Reports), then
+                the secondary gear-credits catalog (Makers → Resellers
+                → Gear), and finally plumbing (Jobs, Platform pricing).
+                Reorder here when the business priorities change. */}
             <SidebarLink
               icon={Disc3}
               label="Albums"
@@ -276,35 +284,6 @@ export function AdminFrame({
               active={active === "people"}
               onClick={() => navigate("/admin/people")}
               testId="nav-people"
-            />
-            <SidebarLink
-              icon={Guitar}
-              label="Gear"
-              count={instruments.length}
-              active={active === "gear"}
-              onClick={() => navigate("/admin/instruments")}
-              testId="nav-gear"
-            />
-            {/* Task #174 — Makers and Resellers are two sides of the
-                same vendor table. Makers build the gear (FK
-                instruments.maker_vendor_id); Resellers sell it (the
-                instrument_vendors join). A single row can carry both
-                flags (Gibson sits in both counts). */}
-            <SidebarLink
-              icon={Hammer}
-              label="Makers"
-              count={makerCount}
-              active={active === "makers"}
-              onClick={() => navigate("/admin/makers")}
-              testId="nav-makers"
-            />
-            <SidebarLink
-              icon={Store}
-              label="Resellers"
-              count={resellerCount}
-              active={active === "vendors"}
-              onClick={() => navigate("/admin/vendors")}
-              testId="nav-vendors"
             />
             <SidebarLink
               icon={Tag}
@@ -334,10 +313,7 @@ export function AdminFrame({
               onClick={() => navigate("/admin/fulfillment-partners")}
               testId="nav-fulfillment"
             />
-            {/* Task #131 — Customers (fan-account directory). Sits
-                between Fulfillment/Orders and Reports so the sales
-                side of the sidebar reads as Fulfillment → Customers
-                → Reports. */}
+            {/* Task #131 — Customers (fan-account directory). */}
             <SidebarLink
               icon={Users}
               label="Customers"
@@ -355,6 +331,37 @@ export function AdminFrame({
               active={active === "reports"}
               onClick={() => navigate("/admin/reports")}
               testId="nav-reports"
+            />
+            {/* Task #174 — Makers and Resellers are two sides of the
+                same vendor table. Makers build the gear (FK
+                instruments.maker_vendor_id); Resellers sell it (the
+                instrument_vendors join). A single row can carry both
+                flags (Gibson sits in both counts). Sit below the
+                production chain because gear credits are a secondary
+                catalog vs. the primary music catalog above. */}
+            <SidebarLink
+              icon={Hammer}
+              label="Makers"
+              count={makerCount}
+              active={active === "makers"}
+              onClick={() => navigate("/admin/makers")}
+              testId="nav-makers"
+            />
+            <SidebarLink
+              icon={Store}
+              label="Resellers"
+              count={resellerCount}
+              active={active === "vendors"}
+              onClick={() => navigate("/admin/vendors")}
+              testId="nav-vendors"
+            />
+            <SidebarLink
+              icon={Guitar}
+              label="Gear"
+              count={instruments.length}
+              active={active === "gear"}
+              onClick={() => navigate("/admin/instruments")}
+              testId="nav-gear"
             />
             {/* Task #136 — Auto-sync-lyrics job history. Tool, not a CRUD
                 list, so we pass -1 to suppress the count. */}
@@ -385,7 +392,8 @@ export function AdminFrame({
             three columns. The Admin chip lives here on the right;
             pages can use AdminPageHeader inside the body to render
             their own breadcrumb/title beneath this strip. */}
-        <div className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-end px-4 sm:px-6">
+        <div className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-between gap-3 px-4 sm:px-6">
+          <ViewAsSwitcher />
           <AdminUserMenu />
         </div>
         {/* Task #138 — Passive STT-creep alert banner. Lives outside
