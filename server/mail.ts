@@ -173,6 +173,38 @@ export async function sendAdminPasswordResetEmail(
   return sendViaResend(toEmail, subject, html, text);
 }
 
+// Task #272 — Confirmation email sent AFTER a successful admin password
+// reset. Best-effort: callers ignore failures so the reset itself
+// always lands. Mirrors the bank-style "this wasn't me" pattern so an
+// admin can spot a phished reset link.
+export async function sendAdminPasswordResetConfirmationEmail(
+  toEmail: string,
+  opts: { whenIso: string; country?: string | null; region?: string | null; contactEmail: string },
+): Promise<SendResult> {
+  const subject = `Your GoodTunes admin password was just reset`;
+  const locBits = [opts.region, opts.country].filter((x) => x && String(x).trim().length > 0);
+  const locText = locBits.length > 0 ? ` (near ${locBits.join(", ")})` : "";
+  const text = [
+    `Your GoodTunes admin password was just reset at ${opts.whenIso}${locText}.`,
+    ``,
+    `If this was you, no further action is needed — sign in with your new password.`,
+    ``,
+    `If this WASN'T you, contact us right away at ${opts.contactEmail} so we can lock the account.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes admin</div>
+      <h1 style="font-size: 24px; margin: 12px 0 16px; font-weight: 700;">Your password was just reset</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">Your GoodTunes admin password was reset on <strong>${opts.whenIso}</strong>${locText ? ` <span style="color:#888;">${locText}</span>` : ""}.</p>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">If this was you, you can ignore this email — just sign in with your new password.</p>
+      <div style="margin: 24px 0; padding: 16px 20px; background: #fff4f6; border-left: 4px solid #FF5470; border-radius: 6px;">
+        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #1a1a1a;"><strong>Wasn't you?</strong> Contact us right away at <a href="mailto:${opts.contactEmail}" style="color: #319ED8; text-decoration: none;">${opts.contactEmail}</a> so we can lock the account.</p>
+      </div>
+    </div>
+  `;
+  return sendViaResend(toEmail, subject, html, text);
+}
+
 // Send an admin-invite link. The link points at the public /invite/:token
 // page where the recipient sets a username + password; on submit we
 // provision their users row with the role + scope baked into the invite.

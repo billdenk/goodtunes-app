@@ -1253,6 +1253,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Invalidate any other outstanding reset tokens for this admin so
     // an old leaked mail can't follow a successful reset.
     await storage.invalidateAdminPasswordResetTokensForUser(user.id);
+    // Task #272 — best-effort "your password was just reset" confirmation
+    // email. Closes the loop on a phished reset link: the legitimate
+    // admin sees the notice in their inbox even though the attacker
+    // controlled the reset flow. Failure here must NOT roll back the
+    // reset — the new password is already saved.
+    (async () => {
+      try {
+        const geo = geoFromRequest(req);
+        const contactEmail = process.env.MAIL_REPLY_TO?.trim() || "admin@goodtunes.music";
+        const { sendAdminPasswordResetConfirmationEmail } = await import("./mail");
+        const r = await sendAdminPasswordResetConfirmationEmail(user.email, {
+          whenIso: new Date().toISOString(),
+          country: geo.country,
+          region: geo.region,
+          contactEmail,
+        });
+        if (!r.ok) console.warn(`[admin-reset-confirm] mail failed for ${user.email}: ${r.reason}`);
+      } catch (e) {
+        console.warn(`[admin-reset-confirm] threw for ${user.email}: ${(e as Error).message}`);
+      }
+    })();
     return res.json({ ok: true });
   });
 
