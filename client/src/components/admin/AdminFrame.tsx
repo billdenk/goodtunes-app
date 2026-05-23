@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   BarChart3,
   Activity,
+  ChevronRight,
   DollarSign,
   LayoutDashboard,
   HeartHandshake,
@@ -32,6 +33,41 @@ import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
 const PREVIEW_DEVICE_KEY = "gt:admin-preview-device";
+// Task #273 — per-admin record of which sidebar sections are expanded.
+// Once an admin toggles a section it stays however they left it across
+// reloads and navigations; we only fall back to "open the section
+// containing the active page" when this key has never been written.
+const SIDEBAR_SECTIONS_KEY = "gt:admin-sidebar-sections";
+
+// Task #273 — maps every routable EntityKey to the sidebar section it
+// belongs to. Used both for the "auto-expand on first ever load" rule
+// and for the active-highlight that sits on a collapsed parent header
+// when its child is the current page. Dashboard / none are top-level
+// rows and have no parent section.
+type SidebarSectionId =
+  | "catalog"
+  | "supply-chain"
+  | "queues"
+  | "audience"
+  | "system";
+
+const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
+  albums: "catalog",
+  people: "catalog",
+  labels: "catalog",
+  nonprofits: "catalog",
+  gear: "catalog",
+  manufacturers: "supply-chain",
+  makers: "supply-chain",
+  vendors: "supply-chain",
+  fulfillment: "supply-chain",
+  "pressing-orders": "queues",
+  "fan-orders": "queues",
+  jobs: "queues",
+  customers: "audience",
+  reports: "audience",
+  "platform-pricing": "system",
+};
 
 export type PreviewDevice = "phone" | "tablet";
 
@@ -262,6 +298,42 @@ export function AdminFrame({
   });
   const isSuperAdmin = roleInfo?.role === "super_admin";
 
+  // Task #273 — Collapsible sidebar sections (Stripe-style). State is
+  // one boolean per section id, persisted to localStorage so the admin's
+  // last layout survives reloads and navigations. On the very first
+  // load (no stored entry yet) we expand only the section that contains
+  // the current page; after that, the stored map is authoritative and
+  // we never auto-expand on navigation.
+  const activeSection = SECTION_FOR_ENTITY[active] ?? null;
+  const [openSections, setOpenSections] = useState<
+    Partial<Record<SidebarSectionId, boolean>>
+  >(() => {
+    if (typeof window === "undefined") {
+      return activeSection ? { [activeSection]: true } : {};
+    }
+    try {
+      const raw = window.localStorage.getItem(SIDEBAR_SECTIONS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed as Partial<Record<SidebarSectionId, boolean>>;
+        }
+      }
+    } catch {}
+    return activeSection ? { [activeSection]: true } : {};
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SIDEBAR_SECTIONS_KEY,
+        JSON.stringify(openSections),
+      );
+    } catch {}
+  }, [openSections]);
+  const toggleSection = (id: SidebarSectionId) =>
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  const isSectionOpen = (id: SidebarSectionId) => !!openSections[id];
+
   return (
     <div className="h-screen bg-slate-50 font-sans antialiased flex">
       <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
@@ -294,150 +366,187 @@ export function AdminFrame({
 
             {/* Task #230 — Sidebar is grouped into labelled sections so
                 the relationship between catalog nouns, supply-chain
-                vendors, and action queues is obvious. Headers are quiet
-                visual labels (not buttons, not collapsible). */}
-            <SectionHeader label="Catalog" />
-            <SidebarLink
-              icon={Disc3}
-              label="Albums"
-              count={albumCount}
-              active={active === "albums"}
-              onClick={() => navigate("/admin/albums")}
-              testId="nav-albums"
-            />
-            <SidebarLink
-              icon={User}
-              label="People"
-              count={people.length}
-              active={active === "people"}
-              onClick={() => navigate("/admin/people")}
-              testId="nav-people"
-            />
-            <SidebarLink
-              icon={Tag}
-              label="Labels"
-              count={labels.length}
-              active={active === "labels"}
-              onClick={() => navigate("/admin/labels")}
-              testId="nav-labels"
-            />
-            {/* Task #230 — NPO partner directory (page existed before
-                but was never linked from the sidebar). */}
-            <SidebarLink
-              icon={HeartHandshake}
-              label="NPOs"
-              count={nonProfits.length}
-              active={active === "nonprofits"}
-              onClick={() => navigate("/admin/non-profits")}
-              testId="nav-nonprofits"
-            />
-            <SidebarLink
-              icon={Guitar}
-              label="Gear"
-              count={instruments.length}
-              active={active === "gear"}
-              onClick={() => navigate("/admin/instruments")}
-              testId="nav-gear"
-            />
+                vendors, and action queues is obvious.
+                Task #273 — Section headers are now clickable rows that
+                expand/collapse their children (Stripe-style). The blue
+                "active" highlight rides on the collapsed parent when
+                the current page lives inside it, so admins can tell
+                which section they're in without auto-opening it. */}
+            <Section
+              id="catalog"
+              label="Catalog"
+              containsActive={activeSection === "catalog"}
+              expanded={isSectionOpen("catalog")}
+              onToggle={() => toggleSection("catalog")}
+            >
+              <SidebarLink
+                icon={Disc3}
+                label="Albums"
+                count={albumCount}
+                active={active === "albums"}
+                onClick={() => navigate("/admin/albums")}
+                testId="nav-albums"
+              />
+              <SidebarLink
+                icon={User}
+                label="People"
+                count={people.length}
+                active={active === "people"}
+                onClick={() => navigate("/admin/people")}
+                testId="nav-people"
+              />
+              <SidebarLink
+                icon={Tag}
+                label="Labels"
+                count={labels.length}
+                active={active === "labels"}
+                onClick={() => navigate("/admin/labels")}
+                testId="nav-labels"
+              />
+              {/* Task #230 — NPO partner directory (page existed before
+                  but was never linked from the sidebar). */}
+              <SidebarLink
+                icon={HeartHandshake}
+                label="NPOs"
+                count={nonProfits.length}
+                active={active === "nonprofits"}
+                onClick={() => navigate("/admin/non-profits")}
+                testId="nav-nonprofits"
+              />
+              <SidebarLink
+                icon={Guitar}
+                label="Gear"
+                count={instruments.length}
+                active={active === "gear"}
+                onClick={() => navigate("/admin/instruments")}
+                testId="nav-gear"
+              />
+            </Section>
 
-            <SectionHeader label="Supply chain" />
-            {/* Task #174 — vinyl pressing plants are now labelled
-                "Presses" so the noun doesn't clash with "Maker" (gear
-                builder). URL stays /admin/manufacturers. */}
-            <SidebarLink
-              icon={Factory}
-              label="Presses"
-              count={manufacturers.length}
-              active={active === "manufacturers"}
-              onClick={() => navigate("/admin/manufacturers")}
-              testId="nav-manufacturers"
-            />
-            {/* Task #174 — Makers and Resellers are two sides of the
-                same vendor table. A single row can carry both flags
-                (Gibson sits in both counts). */}
-            <SidebarLink
-              icon={Hammer}
-              label="Makers"
-              count={makerCount}
-              active={active === "makers"}
-              onClick={() => navigate("/admin/makers")}
-              testId="nav-makers"
-            />
-            <SidebarLink
-              icon={Store}
-              label="Resellers"
-              count={resellerCount}
-              active={active === "vendors"}
-              onClick={() => navigate("/admin/vendors")}
-              testId="nav-vendors"
-            />
-            <SidebarLink
-              icon={Truck}
-              label="Fulfillment"
-              count={fulfillment.length}
-              active={active === "fulfillment"}
-              onClick={() => navigate("/admin/fulfillment-partners")}
-              testId="nav-fulfillment"
-            />
+            <Section
+              id="supply-chain"
+              label="Supply chain"
+              containsActive={activeSection === "supply-chain"}
+              expanded={isSectionOpen("supply-chain")}
+              onToggle={() => toggleSection("supply-chain")}
+            >
+              {/* Task #174 — vinyl pressing plants are now labelled
+                  "Presses" so the noun doesn't clash with "Maker" (gear
+                  builder). URL stays /admin/manufacturers. */}
+              <SidebarLink
+                icon={Factory}
+                label="Presses"
+                count={manufacturers.length}
+                active={active === "manufacturers"}
+                onClick={() => navigate("/admin/manufacturers")}
+                testId="nav-manufacturers"
+              />
+              {/* Task #174 — Makers and Resellers are two sides of the
+                  same vendor table. A single row can carry both flags
+                  (Gibson sits in both counts). */}
+              <SidebarLink
+                icon={Hammer}
+                label="Makers"
+                count={makerCount}
+                active={active === "makers"}
+                onClick={() => navigate("/admin/makers")}
+                testId="nav-makers"
+              />
+              <SidebarLink
+                icon={Store}
+                label="Resellers"
+                count={resellerCount}
+                active={active === "vendors"}
+                onClick={() => navigate("/admin/vendors")}
+                testId="nav-vendors"
+              />
+              <SidebarLink
+                icon={Truck}
+                label="Fulfillment"
+                count={fulfillment.length}
+                active={active === "fulfillment"}
+                onClick={() => navigate("/admin/fulfillment-partners")}
+                testId="nav-fulfillment"
+              />
+            </Section>
 
-            <SectionHeader label="Queues" />
-            {/* Task #225 — Pressing-order review inbox. Tool, not a CRUD
-                list, so we pass -1 to suppress the count. */}
-            <SidebarLink
-              icon={Factory}
-              label="Pressing orders"
-              count={-1}
-              active={active === "pressing-orders"}
-              onClick={() => navigate("/admin/pressing-orders")}
-              testId="nav-pressing-orders"
-            />
-            {/* Task #234 — Fan orders queue. Badge reflects the in-flight
-                ("Active" tab) count so operators see their daily work
-                volume at a glance; the page itself splits All/Active/
-                Returns/Refunded with the same data. */}
-            <SidebarLink
-              icon={ShoppingBag}
-              label="Fan orders"
-              count={fanOrdersActiveCount}
-              active={active === "fan-orders"}
-              onClick={() => navigate("/admin/fan-orders")}
-              testId="nav-fan-orders"
-            />
-            {/* Task #136 — Auto-sync-lyrics job history. Tool, not a CRUD
-                list, so we pass -1 to suppress the count. */}
-            <SidebarLink
-              icon={Activity}
-              label="Jobs"
-              count={-1}
-              active={active === "jobs"}
-              onClick={() => navigate("/admin/jobs")}
-              testId="nav-jobs"
-            />
+            <Section
+              id="queues"
+              label="Queues"
+              containsActive={activeSection === "queues"}
+              expanded={isSectionOpen("queues")}
+              onToggle={() => toggleSection("queues")}
+            >
+              {/* Task #225 — Pressing-order review inbox. Tool, not a CRUD
+                  list, so we pass -1 to suppress the count. */}
+              <SidebarLink
+                icon={Factory}
+                label="Pressing orders"
+                count={-1}
+                active={active === "pressing-orders"}
+                onClick={() => navigate("/admin/pressing-orders")}
+                testId="nav-pressing-orders"
+              />
+              {/* Task #234 — Fan orders queue. Badge reflects the in-flight
+                  ("Active" tab) count so operators see their daily work
+                  volume at a glance; the page itself splits All/Active/
+                  Returns/Refunded with the same data. */}
+              <SidebarLink
+                icon={ShoppingBag}
+                label="Fan orders"
+                count={fanOrdersActiveCount}
+                active={active === "fan-orders"}
+                onClick={() => navigate("/admin/fan-orders")}
+                testId="nav-fan-orders"
+              />
+              {/* Task #136 — Auto-sync-lyrics job history. Tool, not a CRUD
+                  list, so we pass -1 to suppress the count. */}
+              <SidebarLink
+                icon={Activity}
+                label="Jobs"
+                count={-1}
+                active={active === "jobs"}
+                onClick={() => navigate("/admin/jobs")}
+                testId="nav-jobs"
+              />
+            </Section>
 
-            <SectionHeader label="Audience" />
-            {/* Task #131 — Customers (fan-account directory). */}
-            <SidebarLink
-              icon={Users}
-              label="Customers"
-              count={customerCount}
-              active={active === "customers"}
-              onClick={() => navigate("/admin/customers")}
-              testId="nav-customers"
-            />
-            {/* Task #80 — Reports surface. No count (it's a tool, not
-                a CRUD list). */}
-            <SidebarLink
-              icon={BarChart3}
-              label="Reports"
-              count={-1}
-              active={active === "reports"}
-              onClick={() => navigate("/admin/reports")}
-              testId="nav-reports"
-            />
+            <Section
+              id="audience"
+              label="Audience"
+              containsActive={activeSection === "audience"}
+              expanded={isSectionOpen("audience")}
+              onToggle={() => toggleSection("audience")}
+            >
+              {/* Task #131 — Customers (fan-account directory). */}
+              <SidebarLink
+                icon={Users}
+                label="Customers"
+                count={customerCount}
+                active={active === "customers"}
+                onClick={() => navigate("/admin/customers")}
+                testId="nav-customers"
+              />
+              {/* Task #80 — Reports surface. No count (it's a tool, not
+                  a CRUD list). */}
+              <SidebarLink
+                icon={BarChart3}
+                label="Reports"
+                count={-1}
+                active={active === "reports"}
+                onClick={() => navigate("/admin/reports")}
+                testId="nav-reports"
+              />
+            </Section>
 
             {isSuperAdmin && (
-              <>
-                <SectionHeader label="System" />
+              <Section
+                id="system"
+                label="System"
+                containsActive={activeSection === "system"}
+                expanded={isSectionOpen("system")}
+                onToggle={() => toggleSection("system")}
+              >
                 <SidebarLink
                   icon={DollarSign}
                   label="Platform pricing"
@@ -446,7 +555,7 @@ export function AdminFrame({
                   onClick={() => navigate("/admin/platform-pricing")}
                   testId="nav-platform-pricing"
                 />
-              </>
+              </Section>
             )}
           </nav>
         </aside>
@@ -577,16 +686,58 @@ export function AdminFrame({
   );
 }
 
-// Task #230 — Quiet visual label that groups the sidebar links into
-// sections. Not a button, not collapsible — just typography. Mirrors
-// the muted-uppercase rhythm Stripe and Linear use in their nav rails.
-function SectionHeader({ label }: { label: string }) {
+// Task #273 — Sidebar section: clickable header row that expands/
+// collapses its children (Stripe-style). The header matches the
+// SidebarLink visual rhythm (same height, padding, type weight, hover
+// treatment) and uses a rotating chevron in the icon slot to advertise
+// the toggle. Children indent one step so the hierarchy reads from
+// indentation, not from a separate header style. When the section is
+// collapsed AND the current page lives inside it, the header itself
+// carries the brand-blue "active" highlight so admins can tell where
+// they are without auto-opening the section.
+function Section({
+  id,
+  label,
+  containsActive,
+  expanded,
+  onToggle,
+  children,
+}: {
+  id: string;
+  label: string;
+  containsActive: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const highlightParent = containsActive && !expanded;
   return (
-    <div
-      className="px-3 pt-4 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-400 select-none"
-      data-testid={`nav-section-${label.toLowerCase().replace(/\s+/g, "-")}`}
-    >
-      {label}
+    <div className="pt-2 first:pt-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        data-testid={`nav-section-${id}`}
+        data-active={highlightParent ? "true" : "false"}
+        className={[
+          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors",
+          highlightParent
+            ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+            : "text-slate-700 hover:bg-slate-100",
+        ].join(" ")}
+      >
+        <ChevronRight
+          className={[
+            "w-4 h-4 flex-shrink-0 transition-transform",
+            expanded ? "rotate-90" : "",
+            highlightParent ? "text-[var(--brand-blue)]" : "text-slate-400",
+          ].join(" ")}
+        />
+        <span className="flex-1 text-left">{label}</span>
+      </button>
+      {expanded && (
+        <div className="pl-4 mt-0.5 space-y-0.5">{children}</div>
+      )}
     </div>
   );
 }
