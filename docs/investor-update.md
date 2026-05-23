@@ -2,6 +2,8 @@
 
 *Updated May 21, 2026.*
 
+> **See also:** [`sales/investor-one-pager.md`](./sales/investor-one-pager.md) — the shorter, scannable one-pager Nick sends to investors, organized around integrations + features and the benefit each one unlocks. This update letter is the longer narrative; the one-pager is the at-a-glance version.
+
 GoodTunes is a fan-first music player built around the idea that a song is a **structured object** — audio, lyrics, credits, and the gear behind it — not just an MP3. Fans buy albums directly from the artist, listen in an Apple-Music-quality player on web (and soon native), and discover the musicians, instruments, and brands behind every track. Artists get richer credits, a real listening relationship with their fans, and a new affiliate revenue stream through the gear they actually use.
 
 This page is the one-pager: what's live, what's landing in the next sprint or two, and where we're headed.

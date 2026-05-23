@@ -2,6 +2,8 @@
 
 A living, investor-facing catalog of what GoodTunes has actually shipped. Read this when you need to speak to investors, partners, or labels about the product as it exists today — not what's on the roadmap. For future-phase plans and deep-dives, see [`roadmap.md`](./roadmap.md).
 
+> **See also:** [`sales/investor-one-pager.md`](./sales/investor-one-pager.md) — the scannable, deck-grade one-pager Nick sends to investors, organized around integrations + features and the benefit each one unlocks. Keep it in sync with this catalog whenever a customer-visible capability ships.
+
 ## What GoodTunes is
 
 GoodTunes® is a fan-first music player built around the idea that a song is a **structured object** — audio, lyrics, credits, and the gear behind it — not just an MP3. Fans buy albums directly from the artist (no streaming-service middleman), listen in an Apple-Music-quality player on web and (soon) native, and discover the musicians, instruments, and brands behind every track. Artists get richer credits, a real listening relationship with their fans, and a new affiliate revenue stream through the gear they actually use.
@@ -107,4 +109,4 @@ Wired in design and on the near-term roadmap, but not yet shipped to fans:
 
 ## How to keep this current
 
-When a project task that ships a customer-visible capability merges, add or update its line here. This doc is the deck-grade reference Nick reads from when pitching, so it has to stay honest about what fans can actually do today. Anything still in design or behind a feature flag belongs in [`roadmap.md`](./roadmap.md), not here.
+When a project task that ships a customer-visible capability merges, add or update its line here **and** refresh the matching bullet in [`sales/investor-one-pager.md`](./sales/investor-one-pager.md) in the same change-set — the one-pager is the scannable version Nick sends to investors and has to track this catalog exactly. This doc is the deck-grade reference Nick reads from when pitching, so it has to stay honest about what fans can actually do today. Anything still in design or behind a feature flag belongs in [`roadmap.md`](./roadmap.md), not here.
