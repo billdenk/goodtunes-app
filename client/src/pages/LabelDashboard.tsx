@@ -22,6 +22,8 @@ type Range = { from: string; to: string };
 type LabelMe = {
   labelId: string; name: string; logoUrl: string | null; coverUrl: string | null;
   location: string | null; albumCount: number; songCount: number; rosterSize: number;
+  invitedPress?: { id: string; name: string; logoUrl: string | null } | null;
+  hasShippedFirst?: boolean;
 };
 type Kpis = {
   grossCents: number; labelShareCents: number; refundedCents: number;
@@ -159,6 +161,8 @@ export function LabelDashboard() {
         logoUrl={me.data?.logoUrl ?? null}
         rosterSize={me.data?.rosterSize ?? 0}
         albumCount={me.data?.albumCount ?? 0}
+        invitedPress={me.data?.invitedPress ?? null}
+        hasShippedFirst={!!me.data?.hasShippedFirst}
         preset={preset}
         onPreset={setPreset}
         compare={compare}
@@ -178,8 +182,10 @@ export function LabelDashboard() {
 }
 
 // ─── Page chrome ──────────────────────────────────────────────────────
-function Header({ labelName, logoUrl, rosterSize, albumCount, preset, onPreset, compare, onCompare }: {
+function Header({ labelName, logoUrl, rosterSize, albumCount, invitedPress, hasShippedFirst, preset, onPreset, compare, onCompare }: {
   labelName: string; logoUrl: string | null; rosterSize: number; albumCount: number;
+  invitedPress: { id: string; name: string; logoUrl: string | null } | null;
+  hasShippedFirst: boolean;
   preset: PresetId; onPreset: (p: PresetId) => void;
   compare: boolean; onCompare: (c: boolean) => void;
 }) {
@@ -202,6 +208,7 @@ function Header({ labelName, logoUrl, rosterSize, albumCount, preset, onPreset, 
             </p>
           </div>
         </div>
+        {invitedPress && <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} />}
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-full bg-white/5 p-1 ring-1 ring-white/10" data-testid="range-picker">
             {RANGE_PRESETS.map((p) => (
@@ -225,6 +232,42 @@ function Header({ labelName, logoUrl, rosterSize, albumCount, preset, onPreset, 
         </div>
       </div>
     </header>
+  );
+}
+
+// Task #205 — Read-only "Invited by {Press}" credit on the label
+// dashboard. Mirrors the artist-dashboard row so the two surfaces feel
+// like one product; softens after the label's first physical run ships.
+function InvitedByPressRow({ press, hasShippedFirst }: {
+  press: { id: string; name: string; logoUrl: string | null };
+  hasShippedFirst: boolean;
+}) {
+  const prefix = hasShippedFirst ? "Originally invited by" : "Invited by";
+  return (
+    <div
+      className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${hasShippedFirst ? "bg-white/[0.03] ring-white/10 text-white/55" : "bg-white/[0.05] ring-white/15 text-white/75"}`}
+      data-testid="row-invited-by-press"
+    >
+      {press.logoUrl ? (
+        <img src={press.logoUrl} alt="" className="w-5 h-5 rounded-sm object-cover" />
+      ) : (
+        <div className="w-5 h-5 rounded-sm bg-white/10" />
+      )}
+      <span className="text-[12px]">
+        {prefix}{" "}
+        <span className="font-semibold text-white/90" data-testid="text-invited-press-name">{press.name}</span>
+      </span>
+      {!hasShippedFirst && (
+        <>
+          <span className="text-white/25">·</span>
+          <Link href="/chat">
+            <a className="text-[12px] font-semibold text-[#319ED8] hover:underline" data-testid="link-message-goodtunes">
+              Message GoodTunes to switch
+            </a>
+          </Link>
+        </>
+      )}
+    </div>
   );
 }
 

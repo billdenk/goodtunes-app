@@ -255,6 +255,30 @@ async function meHandler(req: Request, res: Response) {
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
   const person = await storage.getPersonById(scope.personId);
   if (!person) return res.status(404).json({ message: "Person not found" });
+
+  // Task #205 — surface the inviting press on the artist dashboard so a
+  // partner landing here knows who brought them on. Softens to
+  // "Originally invited by …" once they've shipped their first run.
+  let invitedPress: { id: string; name: string; logoUrl: string | null } | null = null;
+  let hasShippedFirst = false;
+  const pressId = (person as any).invitedByPressId ?? null;
+  if (pressId) {
+    const press = await storage.getManufacturerById(String(pressId));
+    if (press) {
+      invitedPress = { id: press.id, name: press.name, logoUrl: (press as any).logoUrl ?? null };
+      try {
+        const r: any = await db.execute(sql`
+          SELECT 1 FROM orders o
+          JOIN albums a ON a.id = o.album_id
+          WHERE a.primary_artist_id = ${scope.personId}
+            AND o.fulfillment_status = 'shipped'
+          LIMIT 1
+        `);
+        hasShippedFirst = ((r as any).rows ?? []).length > 0;
+      } catch {}
+    }
+  }
+
   return res.json({
     personId: scope.personId,
     name: person.name,
@@ -262,6 +286,8 @@ async function meHandler(req: Request, res: Response) {
     photoUrl: (person as any).photoUrl ?? null,
     albumCount: scope.albumIds.length,
     songCount: scope.songIds.length,
+    invitedPress,
+    hasShippedFirst,
   });
 }
 

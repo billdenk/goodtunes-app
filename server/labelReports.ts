@@ -26,6 +26,7 @@ import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { getUserRole } from "./auth/roles";
+import { storage } from "./storage";
 
 // ─── Date range helpers ─────────────────────────────────────────────────
 type Range = { from: Date; to: Date };
@@ -187,11 +188,35 @@ function emptyKpis() {
 async function meHandler(req: Request, res: Response) {
   const scope = await resolveLabelScope(req);
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
-  const lbl = await db.execute<{ id: string; name: string; logo_url: string | null; cover_url: string | null; location: string | null }>(sql`
-    SELECT id, name, logo_url, cover_url, location FROM labels WHERE id = ${scope.labelId} LIMIT 1
+  const lbl = await db.execute<{ id: string; name: string; logo_url: string | null; cover_url: string | null; location: string | null; invited_by_press_id: string | null }>(sql`
+    SELECT id, name, logo_url, cover_url, location, invited_by_press_id FROM labels WHERE id = ${scope.labelId} LIMIT 1
   `);
   const row = ((lbl as any).rows || [])[0];
   if (!row) return res.status(404).json({ message: "Label not found" });
+
+  // Task #205 — surface the inviting press on the label dashboard. Same
+  // shape as the artist dashboard so the two surfaces feel like one
+  // product; softens to "Originally invited by …" after the label has
+  // shipped any physical run.
+  let invitedPress: { id: string; name: string; logoUrl: string | null } | null = null;
+  let hasShippedFirst = false;
+  if (row.invited_by_press_id) {
+    const press = await storage.getManufacturerById(String(row.invited_by_press_id));
+    if (press) {
+      invitedPress = { id: press.id, name: press.name, logoUrl: (press as any).logoUrl ?? null };
+      try {
+        const r: any = await db.execute(sql`
+          SELECT 1 FROM orders o
+          JOIN albums a ON a.id = o.album_id
+          WHERE a.label_id = ${scope.labelId}
+            AND o.fulfillment_status = 'shipped'
+          LIMIT 1
+        `);
+        hasShippedFirst = ((r as any).rows ?? []).length > 0;
+      } catch {}
+    }
+  }
+
   return res.json({
     labelId: scope.labelId,
     name: row.name,
@@ -201,6 +226,8 @@ async function meHandler(req: Request, res: Response) {
     albumCount: scope.albumIds.length,
     songCount: scope.songIds.length,
     rosterSize: scope.rosterPersonIds.length,
+    invitedPress,
+    hasShippedFirst,
   });
 }
 

@@ -98,7 +98,11 @@ export function ArtistDashboard() {
     return u.toString();
   }, [range, compare]);
 
-  const me = useQuery<{ personId: string; name: string; albumCount: number; songCount: number; photoUrl?: string | null }>({
+  const me = useQuery<{
+    personId: string; name: string; albumCount: number; songCount: number; photoUrl?: string | null;
+    invitedPress?: { id: string; name: string; logoUrl: string | null } | null;
+    hasShippedFirst?: boolean;
+  }>({
     queryKey: ["/api/artist/me", qs],
   });
 
@@ -124,6 +128,8 @@ export function ArtistDashboard() {
         photoUrl={me.data?.photoUrl ?? null}
         albumCount={me.data?.albumCount ?? 0}
         songCount={me.data?.songCount ?? 0}
+        invitedPress={me.data?.invitedPress ?? null}
+        hasShippedFirst={!!me.data?.hasShippedFirst}
         preset={preset}
         onPreset={setPreset}
         compare={compare}
@@ -144,8 +150,10 @@ export function ArtistDashboard() {
 }
 
 // ─── Page chrome ──────────────────────────────────────────────────────
-function Header({ artistName, photoUrl, albumCount, songCount, preset, onPreset, compare, onCompare }: {
+function Header({ artistName, photoUrl, albumCount, songCount, invitedPress, hasShippedFirst, preset, onPreset, compare, onCompare }: {
   artistName: string; photoUrl: string | null; albumCount: number; songCount: number;
+  invitedPress: { id: string; name: string; logoUrl: string | null } | null;
+  hasShippedFirst: boolean;
   preset: PresetId; onPreset: (p: PresetId) => void;
   compare: boolean; onCompare: (c: boolean) => void;
 }) {
@@ -166,6 +174,7 @@ function Header({ artistName, photoUrl, albumCount, songCount, preset, onPreset,
             <p className="text-white/55 text-[12px] mt-0.5">{albumCount} album{albumCount === 1 ? "" : "s"} · {songCount} credited track{songCount === 1 ? "" : "s"}</p>
           </div>
         </div>
+        {invitedPress && <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} />}
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-full bg-white/5 p-1 ring-1 ring-white/10" data-testid="range-picker">
             {RANGE_PRESETS.map((p) => (
@@ -189,6 +198,45 @@ function Header({ artistName, photoUrl, albumCount, songCount, preset, onPreset,
         </div>
       </div>
     </header>
+  );
+}
+
+// Task #205 — Read-only "Invited by {Press}" credit. Quietly fades to
+// "Originally invited by …" once the partner has shipped their first
+// physical run; the contact link routes to the in-app GoodTunes chat so
+// they can request a switch without an unlock button on this page.
+function InvitedByPressRow({ press, hasShippedFirst }: {
+  press: { id: string; name: string; logoUrl: string | null };
+  hasShippedFirst: boolean;
+}) {
+  const prefix = hasShippedFirst ? "Originally invited by" : "Invited by";
+  return (
+    <div
+      className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${hasShippedFirst ? "bg-white/[0.03] ring-white/10 text-white/55" : "bg-white/[0.05] ring-white/15 text-white/75"}`}
+      data-testid="row-invited-by-press"
+    >
+      {press.logoUrl ? (
+        <img src={press.logoUrl} alt="" className="w-5 h-5 rounded-sm object-cover" />
+      ) : (
+        <div className="w-5 h-5 rounded-sm bg-white/10" />
+      )}
+      <span className="text-[12px]">
+        {prefix}{" "}
+        <span className="font-semibold text-white/90" data-testid="text-invited-press-name">{press.name}</span>
+      </span>
+      {!hasShippedFirst && (
+        <>
+          <span className="text-white/25">·</span>
+          <a
+            href="/chat"
+            className="text-[12px] font-semibold text-[#319ED8] hover:underline"
+            data-testid="link-message-goodtunes"
+          >
+            Message GoodTunes to switch
+          </a>
+        </>
+      )}
+    </div>
   );
 }
 
