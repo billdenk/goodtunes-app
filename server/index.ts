@@ -167,9 +167,53 @@ httpServer.listen(
   },
 );
 
+// Task #256 — Idempotent founder + access-request bootstrap.
+//
+// `bill@gogoods.com` MUST always carry role=super_admin: if a manual
+// edit, restore, or migration knocks the role off his users row, the
+// next boot puts it back. The row itself is not created from scratch
+// (we have no password to seed) — this only updates an existing row.
+//
+// Also ensures the admin_access_requests table exists so the customer→
+// admin-shell promote flow has somewhere to record cross-shell hits.
+// CREATE-IF-NOT-EXISTS keeps it safe in both DEV and PROD (prod schema
+// drift is the documented norm; see .agents/memory/MEMORY.md).
+async function bootstrapAccessGuard() {
+  const { pool } = await import("./db");
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_access_requests (
+        customer_user_id varchar PRIMARY KEY,
+        email text NOT NULL,
+        display_name text NOT NULL,
+        first_requested_at timestamp NOT NULL DEFAULT NOW(),
+        last_requested_at timestamp NOT NULL DEFAULT NOW(),
+        last_notified_at timestamp,
+        resolved_at timestamp
+      )
+    `);
+  } catch (e: any) {
+    log(`admin_access_requests ensure failed: ${e?.message ?? e}`, "auth");
+  }
+  try {
+    const r = await pool.query(
+      `UPDATE users SET role = 'super_admin'
+        WHERE lower(email) = 'bill@gogoods.com'
+          AND (role IS NULL OR role <> 'super_admin')
+        RETURNING email`,
+    );
+    if (r.rowCount && r.rowCount > 0) {
+      log(`promoted ${r.rows[0].email} to super_admin (founder safety net)`, "auth");
+    }
+  } catch (e: any) {
+    log(`founder super_admin seed skipped: ${e?.message ?? e}`, "auth");
+  }
+}
+
 (async () => {
   await seedCatalog();
   await registerRoutes(httpServer, app);
+  await bootstrapAccessGuard();
 
   // One-line OAuth provider status so operators can confirm at-a-glance
   // that the Apple/Google sign-in buttons will actually work in this

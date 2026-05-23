@@ -75,6 +75,41 @@ export async function sendAdminOtpEmail(toEmail: string, code: string, ttlMinute
   return sendViaResend(toEmail, subject, html, text);
 }
 
+// Task #256 — Notify super-admins that a customer landed on the admin
+// shell and is asking to be promoted. One email per (customer, day) is
+// enforced by the caller via admin_access_requests.last_notified_at;
+// this function only handles delivery.
+export async function sendAdminAccessRequestEmail(
+  toEmail: string,
+  requester: { displayName: string; email: string; customerId: string },
+  adminOrigin: string,
+): Promise<SendResult> {
+  const linkUrl = `${adminOrigin}/admin/customers/${requester.customerId}`;
+  const subject = `${requester.displayName} is asking for GoodTunes admin access`;
+  const text = [
+    `${requester.displayName} <${requester.email}> tried to open the GoodTunes admin shell while signed in as a fan.`,
+    ``,
+    `If you want to give them access, open their customer profile and use "Make admin…":`,
+    linkUrl,
+    ``,
+    `Otherwise you can ignore this email — they cannot reach the admin shell without being promoted.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes admin</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">Access requested</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">
+        <strong>${requester.displayName}</strong> &lt;${requester.email}&gt; tried to open the admin shell while signed in as a fan.
+      </p>
+      <p style="margin: 24px 0;">
+        <a href="${linkUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">Open their profile</a>
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">If you want to grant access, use the &ldquo;Make admin&hellip;&rdquo; action on their row. Otherwise you can ignore this email — they cannot reach the admin shell without being promoted.</p>
+    </div>
+  `;
+  return sendViaResend(toEmail, subject, html, text);
+}
+
 // Send an admin-invite link. The link points at the public /invite/:token
 // page where the recipient sets a username + password; on submit we
 // provision their users row with the role + scope baked into the invite.

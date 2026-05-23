@@ -8,6 +8,9 @@ import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { AccessNotAuthorizedDialog } from "@/components/AccessNotAuthorizedDialog";
 import { Player } from "@/pages/Player";
 import { Login } from "@/pages/Login";
 import { Collection } from "@/pages/Collection";
@@ -108,6 +111,32 @@ function Router() {
   // both render so we can develop without juggling hosts. Production
   // 301s from the platform layer also enforce this at the network edge.
   const isProdHost = typeof window !== "undefined" && /goodtunes\.music$/.test(window.location.host);
+  // Task #256 — On the admin shell, a non-admin (signed-in customer
+  // OR a user the host says is admin-kind but who has no users row)
+  // gets the branded "access not authorized" dialog instead of a
+  // silent redirect. The probe also records the visit server-side so
+  // super_admins are notified (24h dedupe).
+  const onAdminShell =
+    kind === "admin" ||
+    (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+  const showAccessGuard = onAdminShell && !isLoading && !user;
+  const accessRequest = useQuery<{ displayName: string; email: string } | null>({
+    queryKey: ["/api/admin/access-request"],
+    queryFn: async () => {
+      try {
+        const r = await apiRequest("POST", "/api/admin/access-request");
+        return (await r.json()) as { displayName: string; email: string };
+      } catch {
+        return null;
+      }
+    },
+    enabled: showAccessGuard,
+    retry: false,
+    staleTime: 60_000,
+  });
+  if (showAccessGuard && accessRequest.data) {
+    return <AccessNotAuthorizedDialog customer={accessRequest.data} />;
+  }
   if (isProdHost) {
     if (kind === "customer" && location.startsWith("/admin")) {
       return <Redirect to="/account" />;

@@ -102,6 +102,8 @@ The third-party services GoodTunes already runs against in production.
 
 ---
 
+- **Admin access guard + promote-from-customers.** A signed-in fan who lands on `admin.goodtunes.music` sees a branded "access not authorized" modal instead of a silent bounce, and every super-admin gets one email per requester (24h dedupe) so the "we'll be in touch" copy is honest. Super-admins can now promote any existing customer in place from the Admin → Customers row — same email, same password, no second account — into any partner role (super_admin / label / artist / manufacturer / fulfillment / non_profit / vendor + scope).
+
 ## Coming next
 
 Wired in design and on the near-term roadmap, but not yet shipped to fans:

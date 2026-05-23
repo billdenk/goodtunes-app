@@ -42,3 +42,12 @@ Single invite sheet at `/admin/invites` (super-admin only) covers every partner 
   - Artist dashboard → **Referrals** tab — same KPIs scoped to the artist's own referrals.
   - Admin person Overview — referral summary panel (hidden when empty) for super-admin auditing.
 - **Prod migration.** `scripts/prod-schema-fixups/2026-05-22-task-78-partner-invites.sql` — idempotent (`IF NOT EXISTS` everywhere). Adds `referrer_kind`, `referrer_scope_id`, `welcome_note`, `revoked_at`, `resent_at` to `admin_invites`; creates `referral_credits` + the unique index + the two referrer-by-kind partial indexes.
+
+## Admin access guard + promote-from-customers (Task #256)
+
+Three guardrails around who can reach the admin shell:
+
+- **Founder safety net.** `bootstrapAccessGuard()` in `server/index.ts` upserts `users.role = 'super_admin'` for `bill@gogoods.com` at every boot (idempotent — no-op when already set, never mints a row from scratch since there's no password to seed). Pairs with the existing `billdenk@mac.com` dev shortcut.
+- **Branded "access not authorized" modal.** `AccessNotAuthorizedDialog` replaces the silent `/admin → /account` bounce. The admin shell probes `POST /api/admin/access-request` whenever it sees no admin user; that endpoint reads the session directly (bypasses the host/kind check) so a customer cookie landing on the admin host is detected, records the visit in `admin_access_requests`, and emails every `super_admin` once per 24h via `sendAdminAccessRequestEmail`. Probe is graceful: 401 → no dialog, login screen as before.
+- **"Make admin…" row action.** In `/admin/customers` (super_admin only), a per-row button opens the same role + scope picker `/admin/invites` uses (hoisted into `@/components/admin/RoleScopePicker`). On submit, `POST /api/admin/customers/:id/promote` finds or creates a `users` row matching the customer's email (copying username/displayName/realName/password verbatim, falling back to a `!oauth-only:` placeholder when the customer is OAuth-only) and copies their `customer_identities` to `admin_identities` so Google/Apple sign-in works on the admin shell too. Then calls `setUserRole` and marks any pending access-request resolved.
+- **Prod migration.** `scripts/prod-schema-fixups/2026-05-23-task-256-access-requests.sql` — idempotent `CREATE TABLE IF NOT EXISTS admin_access_requests` + the founder `UPDATE`. Bootstrap also runs this on every boot so dev DBs catch up automatically.

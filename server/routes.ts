@@ -10896,7 +10896,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // audit. The role/scope are written straight onto the new users row
   // via raw SQL (those columns live outside the pgTable definition —
   // see server/auth/roles.ts).
-  const { sendAdminInviteEmail } = await import("./mail");
+  const { sendAdminInviteEmail, sendAdminAccessRequestEmail } = await import("./mail");
   const { setUserRole, requireRole, getUserRole } = await import("./auth/roles");
   const { adminInvites: _adminInvites, ADMIN_ROLES } = await import("@shared/schema");
 
@@ -11918,6 +11918,173 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!profile) return res.status(404).json({ message: "Customer not found" });
     res.json(profile);
   });
+
+  // ─── Task #256 — Admin-shell access guard + promote-from-customers ──
+  //
+  // Two endpoints work together with the AccessNotAuthorizedDialog in
+  // the client: the dialog probes /access-request to record the visit
+  // (and trigger the super-admin notification email at most once per
+  // 24h), and a super_admin can later promote the customer in place
+  // via /customers/:id/promote — re-using the customer's existing
+  // credentials, no second account, no separate invite.
+  app.post("/api/admin/access-request", async (req, res) => {
+    // Read the session directly so this works even when the host/kind
+    // boundary would normally reject the request — by definition this
+    // is a customer session landing on the admin shell. Falls through
+    // to 401 (no body) when no session is present so the dialog stays
+    // hidden for signed-out visitors.
+    const sid = req.session?.userId;
+    const skind = req.session?.kind;
+    if (!sid || skind !== "customer") {
+      return res.status(401).json({ message: "Not signed in as customer" });
+    }
+    const customer = await storage.getCustomer(sid);
+    if (!customer) return res.status(401).json({ message: "Customer not found" });
+
+    // Upsert the access-request row. We always bump last_requested_at;
+    // last_notified_at gates email sending so we don't spam.
+    const existing = await db.execute<{ last_notified_at: Date | null }>(sql`
+      SELECT last_notified_at FROM admin_access_requests
+       WHERE customer_user_id = ${customer.id}
+       LIMIT 1
+    `);
+    const lastNotified = ((existing as any).rows?.[0]?.last_notified_at as Date | null) ?? null;
+    const shouldNotify =
+      !lastNotified ||
+      Date.now() - new Date(lastNotified).getTime() > 24 * 60 * 60 * 1000;
+
+    await db.execute(sql`
+      INSERT INTO admin_access_requests
+        (customer_user_id, email, display_name, first_requested_at, last_requested_at, last_notified_at)
+      VALUES
+        (${customer.id}, ${customer.email}, ${customer.displayName ?? customer.email},
+         NOW(), NOW(), ${shouldNotify ? sql`NOW()` : sql`${lastNotified}`})
+      ON CONFLICT (customer_user_id) DO UPDATE SET
+        email = EXCLUDED.email,
+        display_name = EXCLUDED.display_name,
+        last_requested_at = NOW(),
+        last_notified_at = ${shouldNotify ? sql`NOW()` : sql`admin_access_requests.last_notified_at`},
+        resolved_at = NULL
+    `);
+
+    if (shouldNotify) {
+      const supers = await db.execute<{ email: string }>(sql`
+        SELECT email FROM users
+         WHERE role = 'super_admin' AND email IS NOT NULL AND email <> ''
+      `);
+      const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
+      const origin = `${proto}://${host}`;
+      const requester = {
+        displayName: customer.displayName ?? customer.email,
+        email: customer.email,
+        customerId: customer.id,
+      };
+      for (const row of ((supers as any).rows ?? [])) {
+        try {
+          await sendAdminAccessRequestEmail(row.email, requester, origin);
+        } catch (e) {
+          console.warn("[access-request] notify failed", row.email, e);
+        }
+      }
+    }
+
+    res.json({ displayName: customer.displayName ?? customer.email, email: customer.email });
+  });
+
+  // Promote an existing customer to an admin/partner role. Requires a
+  // super_admin session. If the customer doesn't yet have a parallel
+  // `users` row we mint one from their customer_users record so their
+  // current credentials (password + linked OAuth identities) work on
+  // the admin shell as well — no invite email, no second password.
+  app.post(
+    "/api/admin/customers/:id/promote",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const customerId = String(req.params.id);
+      const body = req.body ?? {};
+      const role = String(body.role || "");
+      const roleScopeId = body.roleScopeId ? String(body.roleScopeId) : null;
+      if (!ADMIN_ROLES.includes(role as any)) {
+        return res.status(400).json({ message: "Unknown role" });
+      }
+      const scopedRoles = ["artist", "label", "manufacturer", "fulfillment", "non_profit", "vendor"];
+      if (scopedRoles.includes(role) && !roleScopeId) {
+        return res.status(400).json({ message: "Scope required for this role" });
+      }
+      const customer = await storage.getCustomer(customerId);
+      if (!customer) return res.status(404).json({ message: "Customer not found" });
+
+      // Find or create a matching users row. We match by lower(email)
+      // so manual housekeeping that already created a users row for
+      // the same person doesn't end up with two parallel admin
+      // accounts. New rows copy credentials verbatim — the customer
+      // signs into the admin shell with the same password.
+      let adminUserId: string;
+      const existing = await db.execute<{ id: string }>(sql`
+        SELECT id FROM users WHERE lower(email) = lower(${customer.email}) LIMIT 1
+      `);
+      const existingId = ((existing as any).rows?.[0]?.id as string | undefined) ?? null;
+      if (existingId) {
+        adminUserId = existingId;
+        await db.execute(sql`
+          UPDATE users SET is_admin = true WHERE id = ${adminUserId}
+        `);
+      } else {
+        // Pick a unique username — clash with an existing admin row?
+        // suffix -2, -3 until we land on something free. Password is
+        // copied straight across (hashed in customer_users already).
+        let candidate = customer.username || customer.email;
+        let n = 1;
+        while (true) {
+          const conflict = await db.execute<{ id: string }>(sql`
+            SELECT id FROM users WHERE username = ${candidate} LIMIT 1
+          `);
+          if (!((conflict as any).rows?.[0])) break;
+          n += 1;
+          candidate = `${customer.username || customer.email}-${n}`;
+        }
+        // customer_users.password is nullable (OAuth-only fans). users.password
+        // is NOT NULL, so seed an unusable bcrypt-shaped placeholder when
+        // missing — they'll sign in via the OAuth identity we copy below.
+        const password = customer.password ?? `!oauth-only:${randomBytes(16).toString("hex")}`;
+        const ins = await db.execute<{ id: string }>(sql`
+          INSERT INTO users (username, email, display_name, real_name, password, is_admin)
+          VALUES (${candidate}, ${customer.email}, ${customer.displayName ?? null},
+                  ${customer.realName ?? null}, ${password}, true)
+          RETURNING id
+        `);
+        adminUserId = (ins as any).rows[0].id;
+
+        // Mirror linked OAuth identities (Google, Apple) to admin_identities
+        // so the customer can use "Sign in with Google/Apple" on the admin
+        // shell with the exact same provider account.
+        try {
+          await db.execute(sql`
+            INSERT INTO admin_identities (user_id, provider, provider_user_id, email, created_at)
+            SELECT ${adminUserId}, provider, provider_user_id, email, NOW()
+              FROM customer_identities
+             WHERE user_id = ${customerId}
+            ON CONFLICT DO NOTHING
+          `);
+        } catch (e) {
+          console.warn("[promote] copying identities failed", e);
+        }
+      }
+
+      await setUserRole(adminUserId, role as any, roleScopeId);
+
+      // Resolve any pending access-request row so super_admins stop
+      // seeing the "asking for access" reminder for this customer.
+      await db.execute(sql`
+        UPDATE admin_access_requests SET resolved_at = NOW()
+         WHERE customer_user_id = ${customerId} AND resolved_at IS NULL
+      `);
+
+      res.json({ adminUserId, role, roleScopeId });
+    },
+  );
 
   // ─── Task #79 — Per-partner permissions + post-sale edit lock ──────
   const {

@@ -1558,6 +1558,24 @@ export const adminEmailOtp = pgTable("admin_email_otp", {
 export type CustomerUser = typeof customerUsers.$inferSelect;
 export type AdminIdentity = typeof adminIdentities.$inferSelect;
 export type CustomerIdentity = typeof customerIdentities.$inferSelect;
+
+// Task #256 — Pending admin-shell access requests.
+// One row per customer who landed on admin.goodtunes.music while
+// signed in as a fan. We use it to (a) dedupe the "tell the
+// super_admins" email to one per 24h per requester and (b) surface
+// the request in the Admin → Customers row so a super_admin can
+// promote the fan in place. `resolvedAt` is set when the customer is
+// promoted (or otherwise dismissed) so we stop showing reminders.
+export const adminAccessRequests = pgTable("admin_access_requests", {
+  customerUserId: varchar("customer_user_id").primaryKey(),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull(),
+  firstRequestedAt: timestamp("first_requested_at").defaultNow().notNull(),
+  lastRequestedAt: timestamp("last_requested_at").defaultNow().notNull(),
+  lastNotifiedAt: timestamp("last_notified_at"),
+  resolvedAt: timestamp("resolved_at"),
+});
+export type AdminAccessRequest = typeof adminAccessRequests.$inferSelect;
 export type AdminTotp = typeof adminTotp.$inferSelect;
 export type AdminEmailOtp = typeof adminEmailOtp.$inferSelect;
 
