@@ -116,7 +116,7 @@ const ADMIN_CHROME: Chrome = {
 };
 
 const CUSTOMER_CHROME: Chrome = {
-  page: "min-h-screen w-full flex justify-center items-center",
+  page: "min-h-screen w-full flex flex-col items-center justify-center gap-10 py-10 px-4",
   card: "relative w-full max-w-[390px] px-6",
   subtitle: "mt-3 text-white/55 text-[13px] text-center",
   label: "text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5 ml-1",
@@ -155,7 +155,7 @@ const CUSTOMER_CHROME: Chrome = {
   backChip:
     "w-14 h-14 shrink-0 rounded-full flex items-center justify-center text-white/85 hover:text-white active:scale-[0.94] transition-all",
   backChevronSize: 20,
-  footer: "absolute bottom-6 left-0 right-0 text-center text-[10px] leading-snug px-8",
+  footer: "w-full max-w-[440px] text-center text-[10px] leading-snug px-8",
 };
 
 // Inputs use bg via style on customer variant (translucent), but plain
