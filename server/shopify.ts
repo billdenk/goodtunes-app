@@ -246,6 +246,15 @@ async function hashPasswordForCustomer(password: string): Promise<string> {
   return `${buf.toString("hex")}.${salt}`;
 }
 
+// In-memory cache for Shopify variant retail lookups (Task #243). Keyed
+// by `${storeId}:${variantId}`, 60s TTL. Cheap to lose on restart; the
+// admin panel can always force a refresh with ?refresh=1.
+const VARIANT_RETAIL_TTL_MS = 60_000;
+const variantRetailCache = new Map<
+  string,
+  { at: number; value: { priceCents: number | null; currency: string | null; removed: boolean } }
+>();
+
 // ─── Redemption code helpers ──────────────────────────────────────────
 function generateRedemptionCode(): string {
   // 16 hex chars = 64 bits of entropy. Enough that brute-forcing the
@@ -1651,6 +1660,108 @@ export function registerShopifyRoutes(app: Express) {
               : null,
           }
         : null,
+    });
+  });
+
+  // ─── Per-variant retail + units sold (Task #243) ─────────────────
+  // Read-only mirror of what Shopify reports for the album's pushed
+  // product so admins can answer "what's it priced at, and how many
+  // moved?" without leaving the album panel. The variant set comes
+  // from the Push-to-Shopify columns on the album (edition + cert);
+  // legacy URL-pasted mappings aren't surfaced here because they
+  // don't model the edition-vs-cert split.
+  //
+  // - Retail: live fetch from the store's Admin API per variant. We
+  //   tolerate the variant being deleted on Shopify ("removed in
+  //   Shopify") by surfacing a `removed:true` flag instead of erroring.
+  // - Units sold: SUM(quantity) on order_items for that variant's
+  //   sku token (`shopify:<variant_id>`) joined to PAID, non-refunded
+  //   orders. Mirrors the same ingest used for redemptions (Task #234),
+  //   we just aggregate by variant.
+  // - Caching: a 60-second in-memory cache on the *live retail* fetch
+  //   only, keyed by storeId+variantId. The DB aggregation is cheap
+  //   enough to run on every open; a manual Refresh clears both.
+  app.get("/api/admin/albums/:id/shopify-sales", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    if (!album.shopifyPushStoreId || !album.shopifyPushProductId) {
+      return res.json({ mapped: false, variants: [] });
+    }
+    const store = await getStoreById(album.shopifyPushStoreId);
+    if (!store) return res.json({ mapped: false, variants: [] });
+    const force = String(req.query.refresh ?? "") === "1";
+
+    const variantSpecs: { kind: "edition" | "cert"; label: string; variantId: string }[] = [];
+    if (album.shopifyPushEditionVariantId) {
+      variantSpecs.push({ kind: "edition", label: "GoodTunes Edition", variantId: album.shopifyPushEditionVariantId });
+    }
+    if (album.shopifyPushCertVariantId) {
+      variantSpecs.push({ kind: "cert", label: "Signed-cert", variantId: album.shopifyPushCertVariantId });
+    }
+    if (variantSpecs.length === 0) return res.json({ mapped: false, variants: [] });
+
+    // Units-sold aggregation — paid orders only, non-refunded. The
+    // sku token on order_items.format rows is `shopify:<variant_id>`
+    // (see materializeOrderFromShopify), so we filter on that exact
+    // string per variant. Scoped to this album so cross-album SKU
+    // collisions can't bleed in.
+    const skuTokens = variantSpecs.map((v) => `shopify:${v.variantId}`);
+    const soldRows = await db.execute<{ sku: string; units: number }>(sql`
+      SELECT oi.sku AS sku, COALESCE(SUM(oi.quantity), 0)::int AS units
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE o.album_id = ${albumId}
+        AND o.status = 'paid'
+        AND oi.sku IN (${sql.join(skuTokens.map((t) => sql`${t}`), sql`, `)})
+      GROUP BY oi.sku
+    `);
+    const unitsBySku = new Map(soldRows.rows.map((r) => [r.sku, Number(r.units ?? 0)]));
+
+    const out = await Promise.all(
+      variantSpecs.map(async (spec) => {
+        const cacheKey = `${store.id}:${spec.variantId}`;
+        let retail: { priceCents: number | null; currency: string | null; removed: boolean } | null = null;
+        const cached = force ? null : variantRetailCache.get(cacheKey);
+        if (cached && Date.now() - cached.at < VARIANT_RETAIL_TTL_MS) {
+          retail = cached.value;
+        } else {
+          try {
+            const r = await shopifyFetch(store, `variants/${spec.variantId}.json`);
+            if (r.status === 404) {
+              retail = { priceCents: null, currency: null, removed: true };
+            } else if (r.ok) {
+              const j = (await r.json()) as { variant?: { price?: string } };
+              const priceStr = j.variant?.price ?? null;
+              retail = {
+                priceCents: priceStr ? dollarsToCents(priceStr) : null,
+                currency: "USD", // Shopify variant endpoint doesn't include currency; store currency is uniform
+                removed: false,
+              };
+            } else {
+              retail = { priceCents: null, currency: null, removed: false };
+            }
+            if (retail) variantRetailCache.set(cacheKey, { at: Date.now(), value: retail });
+          } catch (e: any) {
+            console.error(`[shopify-sales] variant fetch failed album=${albumId} variant=${spec.variantId}`, e?.message);
+            retail = { priceCents: null, currency: null, removed: false };
+          }
+        }
+        return {
+          kind: spec.kind,
+          label: spec.label,
+          variantId: spec.variantId,
+          retail,
+          unitsSold: unitsBySku.get(`shopify:${spec.variantId}`) ?? 0,
+        };
+      }),
+    );
+
+    res.json({
+      mapped: true,
+      storeName: store.storeName ?? store.shopDomain,
+      fetchedAt: new Date().toISOString(),
+      variants: out,
     });
   });
 

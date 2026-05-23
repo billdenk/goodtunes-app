@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Link as LinkIcon, Trash2, ChevronDown, ExternalLink, Upload, AlertTriangle } from "lucide-react";
+import { Link as LinkIcon, Trash2, ChevronDown, ExternalLink, Upload, AlertTriangle, RefreshCw } from "lucide-react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 
 type Mapping = {
@@ -397,6 +397,12 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
           )}
         </div>
 
+        {/* Sales mirror (Task #243) — read-only retail + units sold per
+            pushed variant. Renders only when the album has actually been
+            pushed (edition + optional cert variant ids on the row).
+            Refresh pulls live retail past the 60s server cache. */}
+        <ShopifySalesPanel albumId={albumId} />
+
         <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Sell this album on Shopify</h2>
         <p className="text-[13px] text-slate-500 mb-4 leading-snug">
           Paste a Shopify product URL from a connected store and we'll bundle GoodTunes digital access into every paid
@@ -557,6 +563,145 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── ShopifySalesPanel (Task #243) ────────────────────────────────────
+// Per-variant read-only mirror of "what is this priced at on Shopify,
+// and how many have sold?". Backed by GET /api/admin/albums/:id/
+// shopify-sales which returns one row per pushed variant (edition +
+// optional cert). Hidden entirely when the album has not been pushed
+// to Shopify yet — the existing empty state on the panel above
+// continues to cover the "not mapped" case.
+type SalesVariant = {
+  kind: "edition" | "cert";
+  label: string;
+  variantId: string;
+  retail: { priceCents: number | null; currency: string | null; removed: boolean } | null;
+  unitsSold: number;
+};
+type SalesResponse = {
+  mapped: boolean;
+  storeName?: string;
+  fetchedAt?: string;
+  variants: SalesVariant[];
+};
+
+function formatRelative(iso: string, now: number): string {
+  const t = new Date(iso).getTime();
+  const diffSec = Math.max(0, Math.round((now - t) / 1000));
+  if (diffSec < 5) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const mins = Math.floor(diffSec / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function ShopifySalesPanel({ albumId }: { albumId: string }) {
+  const queryKey = ["/api/admin/albums", albumId, "shopify-sales"] as const;
+  const { data, isLoading, isFetching, refetch } = useQuery<SalesResponse>({ queryKey });
+
+  // Tick once a second so the "Updated 12s ago" line stays current
+  // without re-fetching anything. Cheap state update.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const i = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(i);
+  }, []);
+
+  const refresh = async () => {
+    // Bypass the server's 60s cache and pull fresh from Shopify.
+    await queryClient.fetchQuery({
+      queryKey,
+      queryFn: async () => {
+        const r = await apiRequest("GET", `/api/admin/albums/${albumId}/shopify-sales?refresh=1`);
+        return r.json();
+      },
+    });
+    refetch();
+  };
+
+  if (isLoading || !data) return null;
+  if (!data.mapped || data.variants.length === 0) return null;
+
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-4 mb-6"
+      data-testid="section-shopify-sales"
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Live on Shopify</h2>
+          <p className="text-xs text-slate-500 leading-snug">
+            Retail price and units sold to date{data.storeName ? ` on ${data.storeName}` : ""}, mirrored from Shopify.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={isFetching}
+          className="h-8 px-2.5 rounded-md border border-slate-300 bg-white text-xs text-slate-700 font-medium hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5 shrink-0"
+          data-testid="button-shopify-sales-refresh"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          {isFetching ? "Refreshing…" : "Refresh from Shopify"}
+        </button>
+      </div>
+
+      <div className={`grid gap-3 ${data.variants.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {data.variants.map((v) => {
+          const removed = v.retail?.removed === true;
+          const price = v.retail?.priceCents ?? null;
+          return (
+            <div
+              key={v.variantId}
+              className="rounded-md border border-slate-200 bg-slate-50/60 p-3"
+              data-testid={`shopify-sales-variant-${v.kind}`}
+            >
+              <div className="text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">
+                {v.label}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-0.5">
+                    Retail
+                  </div>
+                  <div
+                    className={`text-sm font-semibold ${removed ? "text-rose-600" : "text-slate-900"}`}
+                    data-testid={`text-sales-retail-${v.kind}`}
+                  >
+                    {removed
+                      ? "Removed in Shopify"
+                      : price != null
+                        ? `$${(price / 100).toFixed(2)}`
+                        : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-0.5">
+                    Units sold
+                  </div>
+                  <div
+                    className="text-sm font-semibold text-slate-900"
+                    data-testid={`text-sales-units-${v.kind}`}
+                  >
+                    {v.unitsSold.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {data.fetchedAt && (
+        <div className="text-xs text-slate-400 mt-3" data-testid="text-shopify-sales-stamp">
+          Updated {formatRelative(data.fetchedAt, now)}
+        </div>
+      )}
     </div>
   );
 }
