@@ -403,7 +403,14 @@ export function Collection() {
           {tab === "albums" && (
             <div className="px-5 pb-4">
               {filteredAlbums.length === 0 ? (
-                <p className="text-white/35 text-sm text-center mt-8">No albums match "{search}"</p>
+                search ? (
+                  <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-albums-search">No albums match "{search}"</p>
+                ) : (
+                  <div className="text-center mt-16 px-6" data-testid="text-empty-albums">
+                    <p className="text-white text-base font-semibold">Your collection is empty</p>
+                    <p className="text-white/55 text-sm mt-2 leading-relaxed">Buy a GoodTunes album and it lands here — yours forever, ready to play offline.</p>
+                  </div>
+                )
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -436,7 +443,14 @@ export function Collection() {
           {tab === "songs" && (
             <div className="px-5 pb-4 flex flex-col">
               {filteredSongs.length === 0 && (
-                <p className="text-white/35 text-sm text-center mt-8">No songs match "{search}"</p>
+                search ? (
+                  <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-songs-search">No songs match "{search}"</p>
+                ) : (
+                  <div className="text-center mt-16 px-6" data-testid="text-empty-songs">
+                    <p className="text-white text-base font-semibold">No songs yet</p>
+                    <p className="text-white/55 text-sm mt-2 leading-relaxed">Songs from any GoodTunes album you own will show up here.</p>
+                  </div>
+                )
               )}
               {filteredSongs.slice(0, visibleCount).map((song, idx, visibleSongs) => {
                 const isActive = currentSong?.id === song.id;
@@ -514,7 +528,14 @@ export function Collection() {
             return (
             <div className="px-5 pb-4 flex flex-col">
               {filteredArtists.length === 0 && (
-                <p className="text-white/35 text-sm text-center mt-8">No artists match "{search}"</p>
+                search ? (
+                  <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-artists-search">No artists match "{search}"</p>
+                ) : (
+                  <div className="text-center mt-16 px-6" data-testid="text-empty-artists">
+                    <p className="text-white text-base font-semibold">No artists yet</p>
+                    <p className="text-white/55 text-sm mt-2 leading-relaxed">The artists behind your GoodTunes albums will show up here.</p>
+                  </div>
+                )
               )}
               {filteredArtists.slice(0, visibleCount).map((artist, idx, visibleArtists) => {
                 const isFav = favArtists.has(artist.name);
