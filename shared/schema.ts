@@ -2104,3 +2104,34 @@ export const adminOverrides = pgTable("admin_overrides", {
 
 export type AdminOverride = typeof adminOverrides.$inferSelect;
 export type InsertAdminOverride = typeof adminOverrides.$inferInsert;
+
+// ─── Task #216 — Upload preflight validation results ────────────────
+// Persisted output of `server/validators/preflight.ts`. One row per
+// art / audio file the artist or label submits. The same row powers
+// both the upload page (artist-side) and the admin Orders queue, so a
+// pass/warn/fail decision survives reloads and is visible to the admin
+// without re-running the validator. Failing checks are blocking by
+// default; an admin can override via /api/admin/uploads/validations/:id/override
+// which stamps `override_*` fields with a required justification.
+//
+// `checks` is the structured per-rule result (array of {key,label,status,message}).
+// `status` is the rolled-up worst status across `checks`, denormalized so
+// list queries can sort/filter without touching the JSONB.
+export const uploadValidations = pgTable("upload_validations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // "art" | "audio"
+  vendorId: text("vendor_id").notNull(), // "mrp" | "pmp" | "hellbender"
+  templateId: text("template_id"), // null for audio rows
+  assetUrl: text("asset_url").notNull(),
+  fileName: text("file_name"),
+  status: text("status").notNull(), // "pass" | "warn" | "fail"
+  checks: jsonb("checks").$type<Array<{ key: string; label: string; status: "pass" | "warn" | "fail"; message: string }>>().notNull(),
+  overrideJustification: text("override_justification"),
+  overrideByUserId: varchar("override_by_user_id"),
+  overrideAt: timestamp("override_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type UploadValidation = typeof uploadValidations.$inferSelect;
+export type InsertUploadValidation = typeof uploadValidations.$inferInsert;

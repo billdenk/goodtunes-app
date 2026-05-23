@@ -94,6 +94,35 @@ type AdminOrderRow = {
 // Small operator-facing badge surfacing where a row came from. Direct
 // orders stay unbadged; Shopify rows render the Shopify green so the
 // admin can filter visually without reading the origin string.
+// Task #216 — surfaces the worst non-overridden preflight status for
+// this order's album in the queue chrome, so fulfillment sees pressing
+// issues without opening the album. "Overridden" is its own tone so an
+// admin who already justified the fail doesn't get re-prompted here.
+function UploadValidationBadge({
+  rollup,
+  albumId,
+}: {
+  rollup: Record<string, string> | undefined;
+  albumId: string;
+}) {
+  const status = rollup?.[albumId];
+  if (!status || status === "pass") return null;
+  const cls =
+    status === "fail" ? "bg-rose-50 text-rose-700" :
+    status === "warn" ? "bg-amber-50 text-amber-700" :
+    "bg-violet-50 text-violet-700"; // overridden
+  const label = status === "overridden" ? "Preflight · overridden" : `Preflight · ${status}`;
+  return (
+    <span
+      className={`px-2 py-0.5 rounded-full font-semibold uppercase ${cls}`}
+      title="Click into the album's Sell tab to see per-rule details."
+      data-testid={`pill-preflight-${albumId}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function OriginBadge({ origin }: { origin: string | undefined }) {
   if (!origin || origin === "direct") return null;
   return (
@@ -138,6 +167,11 @@ function AdminOrdersInner() {
     refetch: refetchOrders,
   } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/orders"] });
   const { data: stuck } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/payouts/stuck"] });
+  // Task #216 — per-album worst preflight status, used by the pill in
+  // each order row. One query for the whole queue (not per-row).
+  const { data: preflightRollup } = useQuery<Record<string, string>>({
+    queryKey: ["/api/admin/upload-validations/rollup"],
+  });
 
   const ship = useMutation({
     mutationFn: async (orderId: string) => {
@@ -369,6 +403,7 @@ function AdminOrdersInner() {
                     "bg-slate-100 text-slate-600",
                   ].join(" ")}>{o.status}</span>
                   <OriginBadge origin={o.origin} />
+                  <UploadValidationBadge rollup={preflightRollup} albumId={o.albumId} />
                   {o.gift && (() => {
                     const s = giftStatus(o.gift);
                     return (

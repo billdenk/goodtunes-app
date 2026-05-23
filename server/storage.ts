@@ -89,6 +89,7 @@ import {
   albumVideos,
   albumPhotos,
   orders,
+  uploadValidations,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -543,7 +544,39 @@ export interface IStorage {
   revokeAdminInvite(id: string): Promise<void>;
   resendAdminInvite(id: string, newToken: string, newExpiresAt: Date): Promise<AdminInvite | undefined>;
   getAdminInviteById(id: string): Promise<AdminInvite | undefined>;
+
+  // ---- Task #216 — Upload validation results ----------------------
+  // Persisted preflight outcomes for art / audio uploads. The same row
+  // backs both the artist-side upload UI and the admin Orders queue.
+  listUploadValidations(albumId: string): Promise<UploadValidationRow[]>;
+  getUploadValidation(id: string): Promise<UploadValidationRow | undefined>;
+  insertUploadValidation(data: InsertUploadValidationRow): Promise<UploadValidationRow>;
+  overrideUploadValidation(
+    id: string,
+    justification: string,
+    byUserId: string,
+  ): Promise<UploadValidationRow | undefined>;
+  deleteUploadValidation(id: string): Promise<void>;
 }
+
+export type UploadValidationRow = {
+  id: string;
+  albumId: string;
+  kind: "art" | "audio";
+  vendorId: string;
+  templateId: string | null;
+  assetUrl: string;
+  fileName: string | null;
+  status: "pass" | "warn" | "fail";
+  checks: Array<{ key: string; label: string; status: "pass" | "warn" | "fail"; message: string }>;
+  overrideJustification: string | null;
+  overrideByUserId: string | null;
+  overrideAt: Date | null;
+  createdAt: Date;
+};
+export type InsertUploadValidationRow = Omit<UploadValidationRow, "id" | "createdAt" | "overrideJustification" | "overrideByUserId" | "overrideAt"> & {
+  id?: string;
+};
 
 // Seed catalog (albums + songs). Kept inline rather than imported from the
 // client `musicData.ts` because that module pulls Vite-managed `@assets/*`
@@ -2616,6 +2649,73 @@ export class DbStorage implements IStorage {
   async deleteAdminInvite(id: string): Promise<void> {
     await db.delete(adminInvites).where(eq(adminInvites.id, id));
   }
+
+  // ---- Task #216 — Upload validation results ----------------------
+  async listUploadValidations(albumId: string): Promise<UploadValidationRow[]> {
+    const rows = await db
+      .select()
+      .from(uploadValidations)
+      .where(eq(uploadValidations.albumId, albumId))
+      .orderBy(desc(uploadValidations.createdAt));
+    return rows.map(toUploadValidationRow);
+  }
+  async getUploadValidation(id: string): Promise<UploadValidationRow | undefined> {
+    const [row] = await db.select().from(uploadValidations).where(eq(uploadValidations.id, id));
+    return row ? toUploadValidationRow(row) : undefined;
+  }
+  async insertUploadValidation(data: InsertUploadValidationRow): Promise<UploadValidationRow> {
+    const [row] = await db
+      .insert(uploadValidations)
+      .values({
+        albumId: data.albumId,
+        kind: data.kind,
+        vendorId: data.vendorId,
+        templateId: data.templateId,
+        assetUrl: data.assetUrl,
+        fileName: data.fileName,
+        status: data.status,
+        checks: data.checks,
+      })
+      .returning();
+    return toUploadValidationRow(row);
+  }
+  async overrideUploadValidation(
+    id: string,
+    justification: string,
+    byUserId: string,
+  ): Promise<UploadValidationRow | undefined> {
+    const [row] = await db
+      .update(uploadValidations)
+      .set({
+        overrideJustification: justification,
+        overrideByUserId: byUserId,
+        overrideAt: new Date(),
+      })
+      .where(eq(uploadValidations.id, id))
+      .returning();
+    return row ? toUploadValidationRow(row) : undefined;
+  }
+  async deleteUploadValidation(id: string): Promise<void> {
+    await db.delete(uploadValidations).where(eq(uploadValidations.id, id));
+  }
+}
+
+function toUploadValidationRow(row: typeof uploadValidations.$inferSelect): UploadValidationRow {
+  return {
+    id: row.id,
+    albumId: row.albumId,
+    kind: row.kind as "art" | "audio",
+    vendorId: row.vendorId,
+    templateId: row.templateId,
+    assetUrl: row.assetUrl,
+    fileName: row.fileName,
+    status: row.status as "pass" | "warn" | "fail",
+    checks: (row.checks ?? []) as UploadValidationRow["checks"],
+    overrideJustification: row.overrideJustification,
+    overrideByUserId: row.overrideByUserId,
+    overrideAt: row.overrideAt,
+    createdAt: row.createdAt,
+  };
 }
 
 // Idempotent schema/data migrations that need to run on every boot,
@@ -2663,6 +2763,23 @@ async function ensureRuntimeMigrations(): Promise<void> {
           VALUES ('default', 10, 1200, 350)
           ON CONFLICT (id) DO NOTHING;
         END IF;
+        -- Task #216 — preflight validation results
+        CREATE TABLE IF NOT EXISTS upload_validations (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          album_id varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+          kind text NOT NULL,
+          vendor_id text NOT NULL,
+          template_id text,
+          asset_url text NOT NULL,
+          file_name text,
+          status text NOT NULL,
+          checks jsonb NOT NULL,
+          override_justification text,
+          override_by_user_id varchar,
+          override_at timestamp,
+          created_at timestamp NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS upload_validations_album_idx ON upload_validations(album_id);
         IF to_regclass('public.album_addons') IS NOT NULL THEN
           ALTER TABLE album_addons ADD COLUMN IF NOT EXISTS cost_cents_snapshot INTEGER;
           IF to_regclass('public.payout_settings') IS NOT NULL THEN

@@ -11782,5 +11782,157 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // ─── Task #216 — Upload preflight validation ─────────────────────
+  // Two intake endpoints (art + audio) accept the raw bytes via multer,
+  // upload them to Object Storage, run the spec validator, persist the
+  // result, and return it for the upload UI to render inline. A list +
+  // override pair backs the admin Orders queue.
+  const uploadPreflight = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 200 * 1024 * 1024 },
+  });
+
+  const sideBreakSchema = z.object({
+    side: z.string().min(1).max(4),
+    trackTimesSeconds: z.array(z.number().nonnegative()),
+  });
+  const artValidateSchema = z.object({
+    albumId: z.string().min(1),
+    vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+    templateId: z.string().min(1),
+  });
+  const audioValidateSchema = z.object({
+    albumId: z.string().min(1),
+    vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+    vinylSize: z.enum(['7"', '10"', '12"']),
+    rpm: z.coerce.number().refine((n) => n === 33 || n === 45),
+    side: z.string().nullable().optional(),
+    sideBreaks: z.string().optional(), // JSON-encoded SideBreakInput[]
+  });
+
+  app.post(
+    "/api/admin/uploads/validate-art",
+    requireAdminBearer,
+    uploadPreflight.single("file"),
+    async (req, res) => {
+      const f = (req as any).file as Express.Multer.File | undefined;
+      if (!f) return res.status(400).json({ message: "No file uploaded" });
+      const parsed = artValidateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      const { albumId, vendorId, templateId } = parsed.data;
+      try {
+        const { validateArt } = await import("./validators/preflight");
+        const { rollupStatus } = await import("../shared/uploadValidation");
+        const checks = validateArt(f.buffer, { vendorId, templateId, fileName: f.originalname });
+        const assetUrl = await uploadBufferToObjectStorage(f.buffer, f.mimetype || "application/octet-stream");
+        const row = await storage.insertUploadValidation({
+          albumId,
+          kind: "art",
+          vendorId,
+          templateId,
+          assetUrl,
+          fileName: f.originalname ?? null,
+          status: rollupStatus(checks),
+          checks,
+        });
+        res.json(row);
+      } catch (e: any) {
+        console.error("[upload-validate-art]", e);
+        res.status(500).json({ message: e?.message ?? "Validation failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/uploads/validate-audio",
+    requireAdminBearer,
+    uploadPreflight.single("file"),
+    async (req, res) => {
+      const f = (req as any).file as Express.Multer.File | undefined;
+      if (!f) return res.status(400).json({ message: "No file uploaded" });
+      const parsed = audioValidateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      const { albumId, vendorId, vinylSize, rpm, side } = parsed.data;
+      let sideBreaks: { side: string; trackTimesSeconds: number[] }[] | undefined;
+      if (parsed.data.sideBreaks) {
+        try {
+          const raw = JSON.parse(parsed.data.sideBreaks);
+          const sbParsed = z.array(sideBreakSchema).safeParse(raw);
+          if (sbParsed.success) sideBreaks = sbParsed.data;
+        } catch { /* leave undefined → validator will warn */ }
+      }
+      try {
+        const { validateAudio } = await import("./validators/preflight");
+        const { rollupStatus } = await import("../shared/uploadValidation");
+        const checks = await validateAudio(f.buffer, {
+          vendorId,
+          vinylSize: vinylSize as any,
+          rpm: rpm as 33 | 45,
+          fileName: f.originalname ?? null,
+          side: side ?? null,
+          sideBreaks,
+        });
+        const assetUrl = await uploadBufferToObjectStorage(f.buffer, f.mimetype || "application/octet-stream");
+        const row = await storage.insertUploadValidation({
+          albumId,
+          kind: "audio",
+          vendorId,
+          templateId: null,
+          assetUrl,
+          fileName: f.originalname ?? null,
+          status: rollupStatus(checks),
+          checks,
+        });
+        res.json(row);
+      } catch (e: any) {
+        console.error("[upload-validate-audio]", e);
+        res.status(500).json({ message: e?.message ?? "Validation failed" });
+      }
+    },
+  );
+
+  app.get("/api/admin/albums/:albumId/upload-validations", requireAdminBearer, async (req, res) => {
+    const rows = await storage.listUploadValidations(req.params.albumId);
+    res.json(rows);
+  });
+
+  // Rollup used by the Orders queue badge column — returns one entry
+  // per album that has any validation rows, with the worst non-overridden
+  // status. Empty map = no upload preflight has happened yet.
+  app.get("/api/admin/upload-validations/rollup", requireAdminBearer, async (_req, res) => {
+    const out = await db.execute(sql`
+      SELECT album_id,
+             CASE
+               WHEN bool_or(status = 'fail' AND override_at IS NULL) THEN 'fail'
+               WHEN bool_or(status = 'warn' AND override_at IS NULL) THEN 'warn'
+               WHEN bool_or(override_at IS NOT NULL) THEN 'overridden'
+               ELSE 'pass'
+             END AS status
+      FROM upload_validations
+      GROUP BY album_id
+    `);
+    const rows = (out as any).rows ?? out;
+    const map: Record<string, string> = {};
+    for (const r of rows as Array<{ album_id: string; status: string }>) {
+      map[r.album_id] = r.status;
+    }
+    res.json(map);
+  });
+
+  app.post("/api/admin/upload-validations/:id/override", requireAdminBearer, async (req, res) => {
+    const body = z.object({ justification: z.string().trim().min(8, "Justification must be at least 8 characters") }).safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const userId = req.session.userId;
+    if (!userId) return res.status(401).json({ message: "Not signed in" });
+    const row = await storage.overrideUploadValidation(req.params.id, body.data.justification, userId);
+    if (!row) return res.status(404).json({ message: "Not found" });
+    res.json(row);
+  });
+
+  app.delete("/api/admin/upload-validations/:id", requireAdminBearer, async (req, res) => {
+    await storage.deleteUploadValidation(req.params.id);
+    res.json({ ok: true });
+  });
+
   return httpServer;
 }

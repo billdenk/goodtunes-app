@@ -51,6 +51,7 @@ import {
   type VinylColorOption,
 } from "@shared/pressing";
 import { VinylPreview } from "@/components/VinylPreview";
+import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {
@@ -175,6 +176,11 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   return (
     <div className="py-6">
       <div className="max-w-3xl">
+        {/* Task #216 — preflight art/audio against the picked plant's
+            specs. Sits above Presses so failing checks surface BEFORE
+            the operator commits to a vendor below. */}
+        <UploadValidationsPanel albumId={albumId} />
+
         {/* Presses */}
         <PressesPanel albumId={albumId} invited={invitedPress ?? null} />
 
