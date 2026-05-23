@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowDown, ArrowUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Download, ExternalLink, Search, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -200,11 +200,140 @@ export function AdminFanOrders() {
   );
 }
 
+type DateRangePreset = "all" | "7d" | "30d" | "90d" | "custom";
+
+const DATE_PRESETS: { key: DateRangePreset; label: string }[] = [
+  { key: "all", label: "All time" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "90d", label: "Last 90 days" },
+  { key: "custom", label: "Custom" },
+];
+
+function presetBounds(preset: DateRangePreset, customFrom: string, customTo: string): { from: Date | null; to: Date | null } {
+  const now = Date.now();
+  const daysAgo = (n: number) => new Date(now - n * 24 * 60 * 60 * 1000);
+  if (preset === "7d") return { from: daysAgo(7), to: null };
+  if (preset === "30d") return { from: daysAgo(30), to: null };
+  if (preset === "90d") return { from: daysAgo(90), to: null };
+  if (preset === "custom") {
+    const from = customFrom ? new Date(`${customFrom}T00:00:00`) : null;
+    const to = customTo ? new Date(`${customTo}T23:59:59.999`) : null;
+    return { from, to };
+  }
+  return { from: null, to: null };
+}
+
+function matchesSearch(o: AdminOrderRow, q: string): boolean {
+  if (!q) return true;
+  const needle = q.toLowerCase();
+  const hay = [
+    o.id,
+    o.id.slice(0, 8),
+    `#${o.id.slice(0, 8)}`,
+    o.goodDeedNumber != null ? `#${o.goodDeedNumber}` : "",
+    o.goodDeedNumber != null ? String(o.goodDeedNumber) : "",
+    o.customerName ?? "",
+    o.customerEmail ?? "",
+    o.shippingName ?? "",
+    o.albumTitle ?? "",
+    o.albumArtist ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(needle);
+}
+
+function csvEscape(v: unknown): string {
+  if (v == null) return "";
+  let s = String(v);
+  // Defuse CSV formula injection: Excel/Sheets evaluate any cell that
+  // starts with =, +, -, @, tab, or CR as a formula. Prefix a single
+  // quote so the cell renders as text.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function downloadOrdersCsv(rows: AdminOrderRow[], tab: Tab) {
+  const header = [
+    "order_id",
+    "good_deed_number",
+    "origin",
+    "status",
+    "fulfillment_status",
+    "created_at",
+    "customer_name",
+    "customer_email",
+    "album_title",
+    "album_artist",
+    "items",
+    "total_cents",
+    "total_usd",
+    "shipping_name",
+    "shipping_city",
+    "shipping_state",
+    "shipping_postal_code",
+    "shipping_country",
+    "carrier",
+    "tracking_number",
+    "shipped_at",
+    "refunded_at",
+  ];
+  const body = rows.map((o) => {
+    const addr = (o.shippingAddress ?? {}) as Record<string, any>;
+    const itemsCol = o.items
+      .map((it) => `${it.label}${(it.quantity ?? 1) > 1 ? ` ×${it.quantity}` : ""}`)
+      .join("; ");
+    return [
+      o.id,
+      o.goodDeedNumber ?? "",
+      o.origin ?? "direct",
+      o.status,
+      o.fulfillmentStatus ?? "",
+      o.createdAt,
+      o.customerName ?? "",
+      o.customerEmail ?? "",
+      o.albumTitle ?? "",
+      o.albumArtist ?? "",
+      itemsCol,
+      o.totalCents,
+      (o.totalCents / 100).toFixed(2),
+      o.shippingName ?? "",
+      addr.city ?? "",
+      addr.state ?? "",
+      addr.postalCode ?? "",
+      addr.country ?? "",
+      o.carrier ?? "",
+      o.trackingNumber ?? "",
+      o.shippedAt ?? "",
+      o.refundedAt ?? "",
+    ]
+      .map(csvEscape)
+      .join(",");
+  });
+  const csv = [header.join(","), ...body].join("\r\n");
+  const stamp = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `fan-orders-${tab}-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function AdminFanOrdersInner() {
   const [tab, setTab] = useState<Tab>("all");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [datePreset, setDatePreset] = useState<DateRangePreset>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   const {
     data: orders,
@@ -214,19 +343,36 @@ function AdminFanOrdersInner() {
     refetch,
   } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/orders"] });
 
+  const { from: dateFrom, to: dateTo } = useMemo(
+    () => presetBounds(datePreset, customFrom, customTo),
+    [datePreset, customFrom, customTo],
+  );
+
+  const searchAndDateFiltered = useMemo(() => {
+    return (orders ?? []).filter((o) => {
+      if (!matchesSearch(o, search.trim())) return false;
+      if (dateFrom || dateTo) {
+        const t = new Date(o.createdAt).getTime();
+        if (dateFrom && t < dateFrom.getTime()) return false;
+        if (dateTo && t > dateTo.getTime()) return false;
+      }
+      return true;
+    });
+  }, [orders, search, dateFrom, dateTo]);
+
   const counts = useMemo(() => {
     const c = { all: 0, active: 0, returns: 0, refunded: 0 } as Record<Tab, number>;
-    for (const o of orders ?? []) {
+    for (const o of searchAndDateFiltered) {
       c.all += 1;
       if (classifyTab(o, "active")) c.active += 1;
       if (classifyTab(o, "returns")) c.returns += 1;
       if (classifyTab(o, "refunded")) c.refunded += 1;
     }
     return c;
-  }, [orders]);
+  }, [searchAndDateFiltered]);
 
   const filtered = useMemo(() => {
-    const rows = (orders ?? []).filter((o) => classifyTab(o, tab));
+    const rows = searchAndDateFiltered.filter((o) => classifyTab(o, tab));
     const cmp = (a: AdminOrderRow, b: AdminOrderRow): number => {
       switch (sortKey) {
         case "order": {
@@ -250,7 +396,7 @@ function AdminFanOrdersInner() {
     };
     rows.sort((a, b) => (sortDir === "asc" ? cmp(a, b) : -cmp(a, b)));
     return rows;
-  }, [orders, tab, sortKey, sortDir]);
+  }, [searchAndDateFiltered, tab, sortKey, sortDir]);
 
   const active = TABS.find((t) => t.key === tab)!;
 
@@ -276,6 +422,83 @@ function AdminFanOrdersInner() {
     <AdminFrame active="fan-orders">
       <div className="space-y-5" data-testid="page-admin-fan-orders">
         <AdminPageHeader title="Fan orders" />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px] max-w-md">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search order #, GoodDeed #, customer, email, album…"
+              className="pl-8 pr-8 h-9 text-[13px]"
+              data-testid="input-search-fan-orders"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
+                data-testid="button-clear-search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <select
+            value={datePreset}
+            onChange={(e) => setDatePreset(e.target.value as DateRangePreset)}
+            data-testid="select-date-range"
+            className="h-9 text-[13px] rounded-md border border-slate-200 bg-white px-2.5 text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+          >
+            {DATE_PRESETS.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+
+          {datePreset === "custom" && (
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="h-9 text-[13px] w-[140px]"
+                data-testid="input-date-from"
+                aria-label="From date"
+              />
+              <span className="text-slate-400 text-[12px]">to</span>
+              <Input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="h-9 text-[13px] w-[140px]"
+                data-testid="input-date-to"
+                aria-label="To date"
+              />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => downloadOrdersCsv(filtered, tab)}
+            disabled={filtered.length === 0}
+            data-testid="button-export-csv"
+            className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={
+              filtered.length === 0
+                ? "No rows to export"
+                : `Export ${filtered.length} row${filtered.length === 1 ? "" : "s"} as CSV`
+            }
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+            <span className="text-slate-400 tabular-nums">({filtered.length})</span>
+          </button>
+        </div>
 
         <div
           className="flex items-center gap-1 border-b border-slate-200"
