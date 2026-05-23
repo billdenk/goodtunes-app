@@ -9416,11 +9416,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const id = String(req.params.id);
     const vendor = await storage.getVendorById(id);
     if (!vendor) return res.status(404).json({ message: "Vendor not found" });
-    const [insts, artists] = await Promise.all([
+    const [insts, artists, children, parent] = await Promise.all([
       storage.getVendorInstruments(id),
       storage.getVendorSuperCreditArtists(id),
+      // Task #237 — sub-brand list shown on parent vendor pages.
+      storage.getVendorChildren(id),
+      // Parent attribution ("Owned by Gibson") for the fan VendorSheet.
+      (vendor as any).parentVendorId
+        ? storage.getVendorById(String((vendor as any).parentVendorId))
+        : Promise.resolve(undefined),
     ]);
-    return res.json({ vendor, instruments: insts, artists });
+    return res.json({
+      vendor,
+      instruments: insts,
+      artists,
+      children: children.map((c) => ({
+        id: c.id,
+        name: c.name,
+        domain: c.domain,
+        logoUrl: c.logoUrl,
+        isMaker: (c as any).isMaker,
+        isReseller: (c as any).isReseller,
+      })),
+      parent: parent
+        ? { id: parent.id, name: parent.name, domain: parent.domain, logoUrl: parent.logoUrl }
+        : null,
+    });
   });
   // Task #174 — Maker profile bundle. The Maker entity *is* a vendor row
   // (with isMaker=true), so the URL anchors on the same id space. Returns
@@ -9550,10 +9571,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/vendors", requireAdmin, async (req, res) => {
-    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller } = req.body ?? {};
+    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller, parentVendorId } = req.body ?? {};
     if (!name || !domain) return res.status(400).json({ message: "name and domain are required" });
     const normDomain = String(domain).toLowerCase().replace(/^www\./, "");
-    const existing = await storage.getVendorByDomain(normDomain);
+    // Task #237 — sub-brand create path. When the operator explicitly
+    // opts in (by passing parentVendorId), validate the parent exists
+    // and is itself top-level (single-level only — a sub-brand cannot
+    // itself be a parent). Domain collision is allowed on this path;
+    // that's the whole point of the partial unique index.
+    if (parentVendorId) {
+      const parent = await storage.getVendorById(String(parentVendorId));
+      if (!parent) return res.status(400).json({ message: "Parent vendor not found" });
+      if ((parent as any).parentVendorId) {
+        return res.status(400).json({ message: "Parent must be a top-level vendor (sub-brand chains aren't allowed)." });
+      }
+      const v = await storage.createVendor({
+        name: String(name),
+        domain: normDomain,
+        parentVendorId: String(parentVendorId),
+        homeUrl: homeUrl ? String(homeUrl) : null,
+        aboutUrl: aboutUrl ? String(aboutUrl) : null,
+        logoUrl: logoUrl ? String(logoUrl) : null,
+        tagline: tagline ? String(tagline) : null,
+        bio: bio ? String(bio) : null,
+        location: location ? String(location) : null,
+        coverUrl: coverUrl ? String(coverUrl) : null,
+        ...(isMaker === true ? { isMaker: true } : {}),
+        ...(isReseller === false ? { isReseller: false } : {}),
+      } as any);
+      return res.status(201).json(v);
+    }
+    // Top-level create — the partial unique index (and this guard)
+    // both enforce domain uniqueness when parent_vendor_id IS NULL.
+    const existing = await storage.getTopLevelVendorByDomain(normDomain);
     if (existing) {
       // Task #174 — "add via Makers index" should *promote* an existing
       // vendor to also carry isMaker rather than dead-end on 409. Same
@@ -9567,7 +9617,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const updated = await storage.updateVendor(existing.id, promote as any);
         return res.status(200).json(updated);
       }
-      return res.status(409).json({ message: "A vendor with that domain already exists", vendor: existing });
+      // Task #237 — surface the existing top-level row as a
+      // `parentCandidate` so the admin client can prompt the operator
+      // to re-POST with parentVendorId and create a sub-brand
+      // (Epiphone under Gibson) rather than dead-ending on the
+      // collision.
+      return res.status(409).json({
+        message: "A vendor with that domain already exists",
+        vendor: existing,
+        parentCandidate: {
+          id: existing.id,
+          name: existing.name,
+          domain: existing.domain,
+          logoUrl: existing.logoUrl,
+        },
+      });
     }
     const v = await storage.createVendor({
       name: String(name),
@@ -9586,10 +9650,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.put("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller } = req.body ?? {};
+    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller, parentVendorId } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (domain !== undefined) updates.domain = String(domain).toLowerCase().replace(/^www\./, "");
+    // Task #237 — repoint or clear the sub-brand parent. Pass `null` (or
+    // empty string) to detach into a top-level row. Validate single-
+    // level: a vendor that already has its own sub-brands cannot itself
+    // become a sub-brand; a sub-brand cannot point at itself; the
+    // chosen parent must itself be top-level.
+    if (parentVendorId !== undefined) {
+      if (parentVendorId === null || parentVendorId === "") {
+        updates.parentVendorId = null;
+      } else {
+        const nextParentId = String(parentVendorId);
+        if (nextParentId === id) {
+          return res.status(400).json({ message: "A vendor can't be its own parent." });
+        }
+        const [parent, ownChildren] = await Promise.all([
+          storage.getVendorById(nextParentId),
+          storage.getVendorChildren(id),
+        ]);
+        if (!parent) return res.status(400).json({ message: "Parent vendor not found" });
+        if ((parent as any).parentVendorId) {
+          return res.status(400).json({ message: "Parent must be a top-level vendor (sub-brand chains aren't allowed)." });
+        }
+        if (ownChildren.length > 0) {
+          return res.status(400).json({
+            message: "This vendor already has sub-brands and can't itself become a sub-brand. Move its sub-brands first.",
+          });
+        }
+        updates.parentVendorId = nextParentId;
+      }
+    }
     if (homeUrl !== undefined) updates.homeUrl = homeUrl ? String(homeUrl) : null;
     if (aboutUrl !== undefined) updates.aboutUrl = aboutUrl ? String(aboutUrl) : null;
     if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;

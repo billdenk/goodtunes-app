@@ -2987,6 +2987,12 @@ function VendorSheet({
       bio: string | null;
       trackCount: number;
     }>;
+    // Task #237 — when this vendor is a sub-brand (Epiphone, Kramer),
+    // the server returns the parent vendor so we can render
+    // "Owned by Gibson" under the vendor name.
+    parent?: {
+      id: string; name: string; domain: string; logoUrl: string | null;
+    } | null;
   };
   const { data: profile, isError: profileError } = useQuery<VendorProfile>({
     queryKey: ["/api/vendors", vendor.vendorId, "profile"],
@@ -3189,6 +3195,21 @@ function VendorSheet({
           </div>
           <div className="min-w-0 flex-1 pb-1">
             <h2 className="text-white text-[24px] font-bold leading-tight tracking-tight truncate" data-testid="text-vendor-name">{vendor.name}</h2>
+            {/* Task #237 — sub-brand attribution. Shown under the vendor
+                name so fans browsing an Epiphone gear page see "Owned by
+                Gibson" without leaving the sheet. */}
+            {profile?.parent && (
+              <p
+                className="text-[12.5px] mt-0.5 truncate"
+                style={{ color: "rgba(235,235,245,0.55)" }}
+                data-testid="text-vendor-parent"
+              >
+                Owned by{" "}
+                <span className="font-semibold" style={{ color: "rgba(235,235,245,0.8)" }}>
+                  {profile.parent.name}
+                </span>
+              </p>
+            )}
             {tagline && <p className="text-[14px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.7)" }}>{tagline}</p>}
           </div>
         </div>

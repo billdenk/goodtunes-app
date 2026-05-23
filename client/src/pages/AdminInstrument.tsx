@@ -325,6 +325,17 @@ export function AdminInstrument() {
                   <span className="font-medium text-slate-700">
                     {instrument.maker.name}
                   </span>
+                  {/* Task #237 — when the maker is a Gibson-owned sub-brand,
+                      show "(Gibson)" inline so the admin sees the lineage
+                      without opening the vendor sheet. */}
+                  {(instrument.maker as any).parent?.name && (
+                    <span
+                      className="text-slate-400 font-normal"
+                      data-testid="text-instrument-maker-parent"
+                    >
+                      ({(instrument.maker as any).parent.name})
+                    </span>
+                  )}
                 </Link>
               )}
               <span className="inline-flex items-center gap-1.5">

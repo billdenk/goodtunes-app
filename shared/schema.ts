@@ -540,7 +540,24 @@ export const instruments = pgTable("instruments", {
 export const vendors = pgTable("vendors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  domain: text("domain").notNull().unique(),
+  // Task #237 — `domain` is no longer globally unique. Sister brands
+  // under a single parent company (Epiphone/Kramer/KRK under Gibson;
+  // Squier under Fender) often share the parent's marketing domain
+  // while still deserving their own vendor row. The uniqueness is
+  // enforced by a *partial* unique index — `vendors_domain_top_uniq` —
+  // that only covers rows with parent_vendor_id IS NULL. Sub-brands
+  // (parent_vendor_id IS NOT NULL) are exempt. See the matching
+  // scripts/prod-schema-fixups/2026-05-23-task-237-parent-vendor.sql.
+  domain: text("domain").notNull(),
+  // Task #237 — single-level self-reference. When set, this vendor is a
+  // sub-brand of `parentVendorId` (e.g. Epiphone → Gibson). A parent
+  // row is one whose parent_vendor_id IS NULL; the admin UI rejects
+  // multi-level chains (a sub-brand cannot itself be a parent). On
+  // parent delete we SET NULL so the sub-brands survive as
+  // independents rather than cascading away.
+  parentVendorId: varchar("parent_vendor_id").references((): any => vendors.id, {
+    onDelete: "set null",
+  }),
   isMaker: boolean("is_maker").notNull().default(false),
   isReseller: boolean("is_reseller").notNull().default(true),
   homeUrl: text("home_url"),
@@ -566,6 +583,16 @@ export const vendors = pgTable("vendors", {
     "vendors_role_at_least_one",
     sql`${table.isMaker} OR ${table.isReseller}`,
   ),
+  // Task #237 — partial unique index. Only enforced for top-level rows
+  // (parent_vendor_id IS NULL). Sub-brands are allowed to share their
+  // parent's domain (Epiphone, Kramer, KRK can all sit under
+  // gibson.com without colliding with each other or with the Gibson
+  // parent row). drizzle-kit doesn't push WHERE clauses on indexes;
+  // the matching CREATE UNIQUE INDEX … WHERE lives in
+  // scripts/prod-schema-fixups/2026-05-23-task-237-parent-vendor.sql.
+  domainTopUniq: uniqueIndex("vendors_domain_top_uniq")
+    .on(table.domain)
+    .where(sql`${table.parentVendorId} IS NULL`),
 }));
 
 // Join row attaching a vendor to an instrument with a per-instrument

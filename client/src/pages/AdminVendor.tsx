@@ -71,6 +71,25 @@ interface Vendor {
   // both a Maker and a Reseller). Toggle them on the Roles panel.
   isMaker: boolean;
   isReseller: boolean;
+  // Task #237 — sub-brand self-reference. When set, this vendor is a
+  // sub-brand of `parentVendorId` (e.g. Epiphone → Gibson). Edited
+  // from the Lineage panel. One level deep only — sub-brands can't
+  // own sub-brands.
+  parentVendorId?: string | null;
+}
+
+interface ParentLite {
+  id: string;
+  name: string;
+  domain: string;
+  logoUrl: string | null;
+}
+
+interface ChildLite {
+  id: string;
+  name: string;
+  domain: string;
+  logoUrl: string | null;
 }
 
 interface VendorInstrument {
@@ -95,6 +114,10 @@ interface VendorProfile {
   vendor: Vendor;
   instruments: VendorInstrument[];
   artists: Array<{ id: string; name: string; trackCount: number }>;
+  // Task #237 — sub-brand graph. `parent` is set when this vendor is
+  // a sub-brand; `children` lists the sub-brands this vendor owns.
+  parent?: ParentLite | null;
+  children?: ChildLite[];
 }
 
 type Tab = "overview" | "cover" | "instruments";
@@ -443,6 +466,13 @@ export function AdminVendor() {
         {/* CONTENT */}
         {tab === "overview" && <OverviewPanel vendor={vendor} />}
         {tab === "overview" && <RolesPanel vendor={vendor} />}
+        {tab === "overview" && (
+          <LineagePanel
+            vendor={vendor}
+            parent={profile.parent ?? null}
+            childRows={profile.children ?? []}
+          />
+        )}
         {tab === "cover" && <CoverPanel vendor={vendor} />}
         {tab === "instruments" && (
           <InstrumentsPanel instruments={instruments} mode={mode} />
@@ -505,6 +535,193 @@ export function AdminVendor() {
         </DialogContent>
       </Dialog>
     </AdminFrame>
+  );
+}
+
+/* ─── Lineage panel (Task #237) ────────────────────────────────────── */
+
+// Sub-brand graph editor — sits below the Roles panel on Overview.
+// Two halves:
+//   • Parent picker: when this vendor is a sub-brand (has parentVendorId),
+//     show the parent chip + an "Unlink" button. When it isn't, show a
+//     dropdown of every top-level vendor as a candidate parent (excluding
+//     self + any vendor that already has children, since we only support
+//     one level of nesting).
+//   • Sub-brand list: when this vendor owns sub-brands (children[]),
+//     render each as a Link chip so the operator can hop straight in.
+//
+// PUT /api/admin/vendors/:id with `parentVendorId: <id> | null`. Server
+// enforces "no chains" + "no self" + "no parent-of-existing-parent".
+function LineagePanel({
+  vendor,
+  parent,
+  childRows,
+}: {
+  vendor: Vendor;
+  parent: ParentLite | null;
+  childRows: ChildLite[];
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const hasChildren = childRows.length > 0;
+
+  // Candidate parents — every top-level vendor that isn't us and that
+  // doesn't itself have children. We pull /api/vendors and filter
+  // client-side; it's at most a few hundred rows.
+  const { data: allVendors = [] } = useQuery<
+    Array<{ id: string; name: string; domain: string; logoUrl: string | null; parentVendorId?: string | null }>
+  >({
+    queryKey: ["/api/vendors"],
+    enabled: !hasChildren && !parent,
+  });
+
+  const candidates = allVendors
+    .filter((v) => v.id !== vendor.id && !v.parentVendorId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const setParent = useMutation({
+    mutationFn: async (nextParentId: string | null) => {
+      await apiRequest("PUT", `/api/admin/vendors/${vendor.id}`, {
+        parentVendorId: nextParentId,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/vendors", vendor.id, "profile"] });
+      qc.invalidateQueries({ queryKey: [`/api/vendors/${vendor.id}/profile`] });
+      qc.invalidateQueries({ queryKey: [`/api/makers/${vendor.id}/profile`] });
+      qc.invalidateQueries({ queryKey: ["/api/vendors"] });
+      qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update sub-brand link",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <div className="mt-5">
+      <div
+        className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5"
+        data-testid="panel-lineage"
+      >
+        <div className="mb-3">
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider">
+            Lineage
+          </div>
+          <p className="text-slate-500 text-[12.5px] mt-1 max-w-md">
+            Sub-brands let Gibson-owned brands like Epiphone or Kramer keep
+            their own vendor page while still showing "Owned by Gibson" to
+            fans. One level deep only.
+          </p>
+        </div>
+
+        {/* Parent half */}
+        <div className="space-y-2">
+          <div className="text-slate-700 text-[12px] font-semibold">
+            Parent brand
+          </div>
+          {parent ? (
+            <div
+              className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"
+              data-testid="lineage-current-parent"
+            >
+              <div className="w-9 h-9 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+                {parent.logoUrl ? (
+                  <img
+                    src={parent.logoUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Store className="w-4 h-4 text-slate-300" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Link
+                  href={`/admin/vendors/${parent.id}`}
+                  className="block text-slate-900 text-[13.5px] font-semibold truncate hover:text-[var(--brand-blue)]"
+                  data-testid={`link-lineage-parent-${parent.id}`}
+                >
+                  {parent.name}
+                </Link>
+                <div className="text-slate-400 text-[11.5px] truncate">
+                  {parent.domain}
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={setParent.isPending}
+                onClick={() => setParent.mutate(null)}
+                data-testid="button-lineage-unlink-parent"
+              >
+                Unlink
+              </Button>
+            </div>
+          ) : hasChildren ? (
+            <p className="text-slate-400 text-[12.5px]">
+              This vendor owns sub-brands, so it can't itself be a sub-brand.
+            </p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <select
+                disabled={setParent.isPending || candidates.length === 0}
+                defaultValue=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v) setParent.mutate(v);
+                }}
+                className="flex-1 h-9 px-2 rounded-md border border-slate-300 bg-white text-[12.5px] outline-none focus:border-[var(--brand-blue)]"
+                data-testid="select-lineage-parent"
+              >
+                <option value="">— Set parent brand…</option>
+                {candidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.domain})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Children half */}
+        {hasChildren && (
+          <div className="space-y-2 mt-4">
+            <div className="text-slate-700 text-[12px] font-semibold">
+              Sub-brands ({childRows.length})
+            </div>
+            <div
+              className="flex flex-wrap gap-2"
+              data-testid="lineage-sub-brand-list"
+            >
+              {childRows.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/admin/vendors/${c.id}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white pl-1 pr-3 py-1 hover:border-[var(--brand-blue)]/40"
+                  data-testid={`link-lineage-child-${c.id}`}
+                >
+                  <span className="w-6 h-6 rounded-full overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center">
+                    {c.logoUrl ? (
+                      <img src={c.logoUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Store className="w-3 h-3 text-slate-300" />
+                    )}
+                  </span>
+                  <span className="text-slate-700 text-[12.5px] font-medium">
+                    {c.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

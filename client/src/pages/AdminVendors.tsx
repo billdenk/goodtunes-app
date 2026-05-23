@@ -118,9 +118,35 @@ export function AdminVendors() {
   const [addOpen, setAddOpen] = useState(false);
   const [pasteUrl, setPasteUrl] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
+  // Task #237 — when a top-level domain collision comes back from the
+  // server as a 409 with a `parentCandidate`, we stash the prefilled
+  // payload + the candidate parent so the operator can confirm
+  // "create as sub-brand of {Parent}" with one click. Re-submits the
+  // same payload plus `parentVendorId`.
+  const [subBrandPrompt, setSubBrandPrompt] = useState<
+    | {
+        parent: { id: string; name: string; domain: string; logoUrl: string | null };
+        payload: Record<string, unknown>;
+        scrapedName: string | null;
+      }
+    | null
+  >(null);
 
   const createVendor = useMutation({
-    mutationFn: async (opts: { url?: string }) => {
+    mutationFn: async (opts: {
+      url?: string;
+      // Task #237 — sub-brand confirm path. When the operator clicks
+      // "Add as sub-brand of {Parent}" we re-POST the same payload
+      // captured from the first attempt + a parentVendorId, which
+      // bypasses the domain-collision check on the server.
+      payload?: Record<string, unknown>;
+      scrapedName?: string | null;
+    }) => {
+      if (opts.payload) {
+        const res = await apiRequest("POST", "/api/admin/vendors", opts.payload);
+        const vendor = (await res.json()) as VendorLite;
+        return { vendor, scrapedName: opts.scrapedName ?? null, payload: opts.payload };
+      }
       let payload: Record<string, unknown> = {
         name: "New vendor",
         domain: `new-vendor-${Date.now()}.example`,
@@ -154,8 +180,8 @@ export function AdminVendors() {
         payload = {
           ...payload,
           name: scraped.name || "New vendor",
-          // Fall back to a unique placeholder so the unique-domain
-          // constraint never blocks the create when scrape returns null.
+          // Fall back to a unique placeholder so the partial-unique
+          // index never blocks the create when scrape returns null.
           domain: scraped.domain || `new-vendor-${Date.now()}.example`,
           ...(scraped.homeUrl ? { homeUrl: scraped.homeUrl } : {}),
           ...(scraped.aboutUrl ? { aboutUrl: scraped.aboutUrl } : {}),
@@ -167,13 +193,14 @@ export function AdminVendors() {
       }
       const res = await apiRequest("POST", "/api/admin/vendors", payload);
       const vendor = (await res.json()) as VendorLite;
-      return { vendor, scrapedName };
+      return { vendor, scrapedName, payload };
     },
     onSuccess: ({ vendor, scrapedName }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
       setAddOpen(false);
       setPasteUrl("");
       setPasteError(null);
+      setSubBrandPrompt(null);
       if (scrapedName) {
         toast({
           title: `Pulled "${scrapedName}"`,
@@ -182,10 +209,40 @@ export function AdminVendors() {
       }
       navigate(`${copy.listRoute}/${vendor.id}`);
     },
-    onError: (err: any) => {
+    onError: (err: any, vars) => {
+      // Task #237 — domain-collision 409 with a `parentCandidate` is the
+      // "add as sub-brand?" prompt. Surface it inline instead of as a
+      // raw error message; the operator clicks once to re-submit with
+      // parentVendorId attached.
+      const raw = err instanceof Error ? err.message : String(err ?? "");
+      const m = raw.match(/^(\d{3}):\s*(.*)$/);
+      if (m && m[1] === "409") {
+        try {
+          const body = JSON.parse(m[2]);
+          if (body?.parentCandidate?.id && vars?.payload) {
+            setSubBrandPrompt({
+              parent: body.parentCandidate,
+              payload: vars.payload,
+              scrapedName: vars.scrapedName ?? null,
+            });
+            setPasteError(null);
+            return;
+          }
+        } catch {
+          /* fall through to humanized message */
+        }
+      }
       setPasteError(humanizeApiError(err));
     },
   });
+
+  const confirmSubBrand = () => {
+    if (!subBrandPrompt || createVendor.isPending) return;
+    createVendor.mutate({
+      payload: { ...subBrandPrompt.payload, parentVendorId: subBrandPrompt.parent.id },
+      scrapedName: subBrandPrompt.scrapedName,
+    });
+  };
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -389,6 +446,7 @@ export function AdminVendors() {
           if (!o) {
             setPasteUrl("");
             setPasteError(null);
+            setSubBrandPrompt(null);
           }
         }}
       >
@@ -398,14 +456,78 @@ export function AdminVendors() {
         >
           <DialogHeader className="text-left space-y-1">
             <DialogTitle className="text-[17px] font-semibold text-slate-900">
-              {copy.addDialogTitle}
+              {subBrandPrompt ? "Add as a sub-brand?" : copy.addDialogTitle}
             </DialogTitle>
             <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
-              Paste a URL from the {mode === "maker" ? "maker's" : "shop's"}{" "}
-              site — the About page works best, but the home page is fine too.
-              We'll prefill name, domain, logo, cover, and bio.
+              {subBrandPrompt ? (
+                <>
+                  A vendor with that domain already exists. Add this as a
+                  sub-brand of{" "}
+                  <span className="font-semibold text-slate-700">
+                    {subBrandPrompt.parent.name}
+                  </span>{" "}
+                  — like Epiphone under Gibson — instead of as a duplicate
+                  top-level row.
+                </>
+              ) : (
+                <>
+                  Paste a URL from the {mode === "maker" ? "maker's" : "shop's"}{" "}
+                  site — the About page works best, but the home page is fine
+                  too. We'll prefill name, domain, logo, cover, and bio.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
+          {subBrandPrompt ? (
+            <div className="pt-1 space-y-3" data-testid="prompt-sub-brand">
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+                <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                  {subBrandPrompt.parent.logoUrl ? (
+                    <img
+                      src={subBrandPrompt.parent.logoUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <copy.Icon className="w-5 h-5 text-slate-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-slate-900 text-[13.5px] font-semibold truncate">
+                    {subBrandPrompt.parent.name}
+                  </div>
+                  <div className="text-slate-400 text-[11.5px] truncate">
+                    {subBrandPrompt.parent.domain}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSubBrandPrompt(null)}
+                  disabled={createVendor.isPending}
+                  className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  data-testid="button-sub-brand-cancel"
+                >
+                  Back
+                </button>
+                <Button
+                  type="button"
+                  onClick={confirmSubBrand}
+                  disabled={createVendor.isPending}
+                  size="sm"
+                  className="text-[12.5px] font-semibold"
+                  data-testid="button-sub-brand-confirm"
+                >
+                  {createVendor.isPending && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  Add as sub-brand
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+          <>
           <div className="space-y-2 pt-1">
             <input
               type="url"
@@ -464,6 +586,8 @@ export function AdminVendors() {
               {createVendor.isPending ? "Reading…" : "Pull from URL"}
             </Button>
           </DialogFooter>
+          </>
+          )}
         </DialogContent>
       </Dialog>
     </AdminFrame>

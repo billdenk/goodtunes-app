@@ -96,7 +96,7 @@ import {
   printGenerations,
   printArtifacts,
 } from "@shared/schema";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
@@ -210,8 +210,8 @@ export interface IStorage {
   // metadata joined onto the attachment) so the client sees one shape.
   // `maker` is the joined vendor row referenced by makerVendorId (Task
   // #174) — null when the gear hasn't been linked to a builder yet.
-  getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null })[]>;
-  getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null }) | undefined>;
+  getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: (Vendor & { parent?: Vendor | null }) | null })[]>;
+  getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: (Vendor & { parent?: Vendor | null }) | null }) | undefined>;
   createInstrument(data: InsertInstrument & { id?: string }): Promise<Instrument>;
   updateInstrument(id: string, data: Partial<Instrument>): Promise<Instrument | undefined>;
   deleteInstrument(id: string): Promise<void>;
@@ -235,6 +235,13 @@ export interface IStorage {
   getVendors(): Promise<Vendor[]>;
   getVendorById(id: string): Promise<Vendor | undefined>;
   getVendorByDomain(domain: string): Promise<Vendor | undefined>;
+  // Task #237 — only the top-level row for a domain (parent_vendor_id
+  // IS NULL). Used by the create-flow collision check so a sub-brand's
+  // domain match doesn't dead-end the operator on 409.
+  getTopLevelVendorByDomain(domain: string): Promise<Vendor | undefined>;
+  // Task #237 — list every sub-brand directly under this vendor.
+  // Single-level: a sub-brand cannot itself be a parent.
+  getVendorChildren(parentId: string): Promise<Vendor[]>;
   createVendor(data: InsertVendor & { id?: string }): Promise<Vendor>;
   updateVendor(id: string, data: Partial<Vendor>): Promise<Vendor | undefined>;
   deleteVendor(id: string): Promise<void>;
@@ -1213,8 +1220,12 @@ export class DbStorage implements IStorage {
   // Task #174 — bulk-load the headline Maker (vendor) for a set of
   // instruments in one round trip. Returns a map keyed by instrument id;
   // entries are absent when the instrument has no makerVendorId.
-  private async loadMakers(instrumentRows: Instrument[]): Promise<Map<string, Vendor>> {
-    const out = new Map<string, Vendor>();
+  // Task #237 — when a maker is a sub-brand (parentVendorId set) we
+  // also hydrate the parent vendor onto the maker as `.parent`, so
+  // the AdminInstrument header can render "Epiphone — Owned by Gibson"
+  // without a second roundtrip.
+  private async loadMakers(instrumentRows: Instrument[]): Promise<Map<string, Vendor & { parent?: Vendor | null }>> {
+    const out = new Map<string, Vendor & { parent?: Vendor | null }>();
     const makerIds = Array.from(
       new Set(
         instrumentRows
@@ -1225,14 +1236,31 @@ export class DbStorage implements IStorage {
     if (makerIds.length === 0) return out;
     const rows = await db.select().from(vendors).where(inArray(vendors.id, makerIds));
     const byId = new Map(rows.map((v) => [v.id, v]));
+    const parentIds = Array.from(
+      new Set(
+        rows
+          .map((v) => (v as any).parentVendorId as string | null)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    const parentsById = new Map<string, Vendor>();
+    if (parentIds.length > 0) {
+      const prows = await db.select().from(vendors).where(inArray(vendors.id, parentIds));
+      for (const p of prows) parentsById.set(p.id, p);
+    }
     for (const i of instrumentRows) {
       const mid = (i as any).makerVendorId as string | null;
-      if (mid && byId.has(mid)) out.set(i.id, byId.get(mid)!);
+      if (mid && byId.has(mid)) {
+        const maker = byId.get(mid)!;
+        const pid = (maker as any).parentVendorId as string | null;
+        const enriched = { ...maker, parent: pid ? parentsById.get(pid) ?? null : null };
+        out.set(i.id, enriched);
+      }
     }
     return out;
   }
 
-  async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null })[]> {
+  async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: (Vendor & { parent?: Vendor | null }) | null })[]> {
     const all = await db.select().from(instruments).orderBy(asc(instruments.name));
     if (all.length === 0) return [];
     const [byInstrument, makers] = await Promise.all([
@@ -1245,7 +1273,7 @@ export class DbStorage implements IStorage {
       maker: makers.get(i.id) ?? null,
     }));
   }
-  async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: Vendor | null }) | undefined> {
+  async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: (Vendor & { parent?: Vendor | null }) | null }) | undefined> {
     const [i] = await db.select().from(instruments).where(eq(instruments.id, id));
     if (!i) return undefined;
     const [byInstrument, makers] = await Promise.all([
@@ -1337,6 +1365,23 @@ export class DbStorage implements IStorage {
   async getVendorByDomain(domain: string): Promise<Vendor | undefined> {
     const [v] = await db.select().from(vendors).where(eq(vendors.domain, domain.toLowerCase()));
     return v;
+  }
+  async getTopLevelVendorByDomain(domain: string): Promise<Vendor | undefined> {
+    // Task #237 — partial unique index `vendors_domain_top_uniq` makes
+    // this at most one row. Used by POST /api/admin/vendors to decide
+    // whether to 409 with a "sub-brand of …" prompt vs. allow create.
+    const [v] = await db
+      .select()
+      .from(vendors)
+      .where(and(eq(vendors.domain, domain.toLowerCase()), isNull(vendors.parentVendorId)));
+    return v;
+  }
+  async getVendorChildren(parentId: string): Promise<Vendor[]> {
+    return await db
+      .select()
+      .from(vendors)
+      .where(eq(vendors.parentVendorId, parentId))
+      .orderBy(asc(vendors.name));
   }
   async createVendor(data: InsertVendor & { id?: string }): Promise<Vendor> {
     const [v] = await db.insert(vendors).values({ ...data, domain: data.domain.toLowerCase() } as any).returning();
