@@ -12568,6 +12568,30 @@ function AlbumLineupPanel({
     enabled: !!album.primaryArtistId && !!primaryArtist?.isGroup,
   });
 
+  // Task #193 — distinct performers rolled up from per-track SuperCredits.
+  // The query refreshes whenever credits are re-imported (callers
+  // invalidate ["/api/admin/albums", album.id, "lineup"]), so the
+  // panel surfaces "we just learned about these people" without an
+  // extra click.
+  type LineupSuggestion = {
+    memberId: string;
+    personName: string;
+    photoUrl: string | null;
+    roles: string[];
+    trackCount: number;
+  };
+  const suggestKey = ["/api/admin/albums", album.id, "lineup", "suggest"] as const;
+  const { data: suggestion = [] } = useQuery<LineupSuggestion[]>({
+    queryKey: suggestKey,
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/albums/${album.id}/lineup/suggest`, {
+        credentials: "include",
+      });
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+
   const saveMutation = useMutation({
     mutationFn: async (members: Array<{ memberId: string; roles: string[] | null; displayOrder: number }>) =>
       apiRequest("PUT", `/api/admin/albums/${album.id}/lineup`, { members }),
@@ -12636,17 +12660,33 @@ function AlbumLineupPanel({
 
   if (!album.primaryArtistId) return null;
   if (!primaryArtist) return null;
-  if (!primaryArtist.isGroup) {
+  // Task #193 — even for solo artists, if SuperCredits name distinct
+  // session players we want the operator to be able to pin them as the
+  // album lineup. We only suppress the panel entirely when there's
+  // nothing to act on (not a group AND no suggestion AND no existing
+  // pinned lineup), so a true bedroom-pop solo record stays uncluttered.
+  if (
+    !primaryArtist.isGroup &&
+    suggestion.length === 0 &&
+    draft.length === 0 &&
+    lineup.length === 0
+  ) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5" data-testid="panel-lineup-solo">
         <h2 className="text-[15px] font-semibold text-slate-900">Lineup</h2>
         <p className="text-[12.5px] text-slate-500 mt-2">
-          {primaryArtist.name} is a solo artist. To capture a per-album
-          lineup, mark the artist as a group from their People admin page.
+          {primaryArtist.name} is a solo artist. Import per-track credits
+          (or mark the artist as a group) and we'll propose a lineup here
+          automatically.
         </p>
       </div>
     );
   }
+
+  // Suggested members not already in the draft — these power the
+  // "Add ___ (5 tracks)" chips below the roster picker. We compute it
+  // here so the button bar can also know whether anything's new.
+  const suggestionToAdd = suggestion.filter((s) => !usedIds.has(s.memberId));
 
   return (
     <div
@@ -12708,6 +12748,31 @@ function AlbumLineupPanel({
               Use band's current roster
             </button>
           )}
+          {/* Task #193 — one-click accept of the SuperCredits-derived
+              proposal. Replaces the draft so the operator sees exactly
+              what they're about to save; they can still edit roles or
+              remove rows before hitting Save. */}
+          {draft.length === 0 && suggestion.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(
+                  suggestion.map((s, i) => ({
+                    memberId: s.memberId,
+                    roles: s.roles.length > 0 ? s.roles : null,
+                    displayOrder: i,
+                    personName: s.personName,
+                    photoUrl: s.photoUrl,
+                  })),
+                );
+              }}
+              disabled={disabled}
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+              data-testid="button-suggest-lineup"
+            >
+              Use {suggestion.length} from credits
+            </button>
+          )}
           {draft.length > 0 && (
             <button
               type="button"
@@ -12732,9 +12797,16 @@ function AlbumLineupPanel({
             className="px-5 py-6 text-[13px] text-slate-500"
             data-testid="empty-album-lineup"
           >
-            No per-album lineup set. {bandRoster.length === 0
-              ? `Add members to ${primaryArtist.name} first.`
-              : "Use the band's current roster or pick members below."}
+            No per-album lineup set.{" "}
+            {suggestion.length > 0
+              ? `SuperCredits name ${suggestion.length} ${
+                  suggestion.length === 1 ? "player" : "players"
+                } across this album's tracks — click "Use ${
+                  suggestion.length
+                } from credits" to accept the proposal.`
+              : bandRoster.length === 0
+                ? `Add members to ${primaryArtist.name} first, or import per-track credits.`
+                : "Use the band's current roster or pick members below."}
           </p>
         )}
         {draft.map((d, i) => (
@@ -12814,6 +12886,43 @@ function AlbumLineupPanel({
           </div>
         ))}
       </div>
+      {suggestionToAdd.length > 0 && (
+        <div className="px-5 py-3 border-t border-slate-100 bg-purple-50/50">
+          <p className="text-[10.5px] uppercase tracking-wide font-semibold text-purple-500 mb-2">
+            From SuperCredits™
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suggestionToAdd.map((s) => (
+              <button
+                key={s.memberId}
+                type="button"
+                onClick={() => {
+                  setDraft([
+                    ...draft,
+                    {
+                      memberId: s.memberId,
+                      roles: s.roles.length > 0 ? s.roles : null,
+                      displayOrder: draft.length,
+                      personName: s.personName,
+                      photoUrl: s.photoUrl,
+                    },
+                  ]);
+                }}
+                disabled={disabled}
+                className="text-[12px] font-semibold px-3 py-1.5 rounded-full border border-purple-200 bg-white text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                data-testid={`button-add-suggested-${s.memberId}`}
+                title={s.roles.join(", ")}
+              >
+                + {s.personName}
+                <span className="text-purple-400 font-normal">
+                  {" "}
+                  ({s.trackCount} {s.trackCount === 1 ? "track" : "tracks"})
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {rosterCandidates.length > 0 && (
         <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
           <p className="text-[10.5px] uppercase tracking-wide font-semibold text-slate-400 mb-2">

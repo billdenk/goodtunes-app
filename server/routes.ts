@@ -8329,6 +8329,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(rows);
   });
 
+  // Task #193 — Proposed lineup rolled up from per-track SuperCredits.
+  // Returns distinct performers across the album's tracks, ordered by
+  // how many tracks they played on. The UI accepts (or edits) the
+  // proposal in one click and writes via PUT /api/admin/albums/:id/lineup.
+  app.get("/api/admin/albums/:id/lineup/suggest", requireAdmin, async (req, res) => {
+    const rows = await storage.suggestAlbumLineupFromCredits(String(req.params.id));
+    return res.json(rows);
+  });
+
   // Full-replace semantics — admin always saves the entire ordered list.
   // Body: { members: [{ memberId, roles?: string[]|null, displayOrder?: number }, ...] }
   app.put("/api/admin/albums/:id/lineup", requireAdmin, async (req, res) => {

@@ -185,6 +185,10 @@ export function CreditsImportSheet({
       qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "credits"] });
       qc.invalidateQueries({ queryKey: ["/api/people"] });
       qc.invalidateQueries({ queryKey: [`/api/admin/albums/${albumId}/credits`] });
+      // Task #193 — fresh credits ⇒ fresh proposed lineup. AlbumLineupPanel
+      // re-fetches and shows the "Use N from credits" CTA without an
+      // extra click.
+      qc.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "lineup", "suggest"] });
 
       const report: SpotifyReportItem[] = Array.isArray(body.spotifyReport) ? body.spotifyReport : [];
       const matched = report.filter((r) => r.status === "matched").length;

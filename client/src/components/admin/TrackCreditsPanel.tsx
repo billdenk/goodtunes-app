@@ -1137,6 +1137,11 @@ function DropboxCreditsImportDialog({
     await qc.invalidateQueries({
       queryKey: ["/api/albums", albumId, "credits"],
     });
+    // Task #193 — newly imported per-track performers feed the
+    // AlbumLineupPanel's "Use N from credits" proposal.
+    await qc.invalidateQueries({
+      queryKey: ["/api/admin/albums", albumId, "lineup", "suggest"],
+    });
     setSaving(false);
     if (failed.length === 0) {
       toast({

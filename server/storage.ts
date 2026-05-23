@@ -175,6 +175,19 @@ export interface IStorage {
     members: Array<{ memberId: string; roles: string[] | null; displayOrder: number }>,
   ): Promise<AlbumLineupWithPerson[]>;
   clearAlbumLineup(albumId: string): Promise<void>;
+  // Task #193 — Roll up distinct performers across an album's tracks
+  // (from track_performers / SuperCredits) into a proposed lineup, with
+  // suggested role labels and a track count so the admin can accept the
+  // suggestion in one click via PUT /api/admin/albums/:id/lineup.
+  suggestAlbumLineupFromCredits(albumId: string): Promise<
+    Array<{
+      memberId: string;
+      personName: string;
+      photoUrl: string | null;
+      roles: string[];
+      trackCount: number;
+    }>
+  >;
 
   // Apple Music discography for a Person, mirrored from the admin's
   // iTunes Lookup pull. Replace-all on every persist (admin scrape is
@@ -929,6 +942,95 @@ export class DbStorage implements IStorage {
 
   async clearAlbumLineup(albumId: string): Promise<void> {
     await db.delete(albumLineup).where(eq(albumLineup.albumId, albumId));
+  }
+
+  async suggestAlbumLineupFromCredits(albumId: string): Promise<
+    Array<{
+      memberId: string;
+      personName: string;
+      photoUrl: string | null;
+      roles: string[];
+      trackCount: number;
+    }>
+  > {
+    // Walk every track on the album → join its performer rows → join
+    // the Person row. Personless credits (name-snapshot only) and the
+    // primary artist themselves are skipped: a lineup is *members*, and
+    // a band's own row would otherwise show up if it ever got
+    // accidentally tagged on a track.
+    const album = await db
+      .select({ primaryArtistId: albums.primaryArtistId })
+      .from(albums)
+      .where(eq(albums.id, albumId))
+      .limit(1);
+    const primaryArtistId = album[0]?.primaryArtistId ?? null;
+
+    const rows = await db
+      .select({
+        personId: trackPerformers.personId,
+        role: trackPerformers.role,
+        songId: trackPerformers.songId,
+        personName: people.name,
+        photoUrl: people.photoUrl,
+      })
+      .from(trackPerformers)
+      .innerJoin(songs, eq(trackPerformers.songId, songs.id))
+      .innerJoin(people, eq(trackPerformers.personId, people.id))
+      .where(eq(songs.albumId, albumId));
+
+    // Aggregate by personId. Collapse role variants like "Composer ·
+    // Violin" down to the instrument label after the bullet when one
+    // exists, otherwise use the raw role. Distinct, order-preserving.
+    const agg = new Map<
+      string,
+      {
+        memberId: string;
+        personName: string;
+        photoUrl: string | null;
+        roles: string[];
+        roleSet: Set<string>;
+        songIds: Set<string>;
+      }
+    >();
+    for (const r of rows) {
+      if (!r.personId) continue;
+      if (primaryArtistId && r.personId === primaryArtistId) continue;
+      const cleanedRole = (() => {
+        const raw = (r.role ?? "").trim();
+        if (!raw) return "";
+        // "Composer · Violin" → "Violin" for lineup labels; keep raw
+        // otherwise so producers/engineers/etc. still render legibly.
+        const parts = raw.split("·").map((s) => s.trim()).filter(Boolean);
+        return parts.length > 1 ? parts[parts.length - 1] : raw;
+      })();
+      let entry = agg.get(r.personId);
+      if (!entry) {
+        entry = {
+          memberId: r.personId,
+          personName: r.personName,
+          photoUrl: r.photoUrl ?? null,
+          roles: [],
+          roleSet: new Set<string>(),
+          songIds: new Set<string>(),
+        };
+        agg.set(r.personId, entry);
+      }
+      entry.songIds.add(r.songId);
+      if (cleanedRole && !entry.roleSet.has(cleanedRole)) {
+        entry.roleSet.add(cleanedRole);
+        entry.roles.push(cleanedRole);
+      }
+    }
+
+    return Array.from(agg.values())
+      .map((e) => ({
+        memberId: e.memberId,
+        personName: e.personName,
+        photoUrl: e.photoUrl,
+        roles: e.roles,
+        trackCount: e.songIds.size,
+      }))
+      .sort((a, b) => b.trackCount - a.trackCount || a.personName.localeCompare(b.personName));
   }
 
   async getDiscographyByPerson(personId: string): Promise<PersonDiscography[]> {
