@@ -86,7 +86,7 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"overview" | "audience" | "catalog" | "orders">("overview");
+  const [tab, setTab] = useState<"overview" | "audience" | "catalog" | "orders" | "referrals">("overview");
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -137,6 +137,7 @@ export function ArtistDashboard() {
         {tab === "audience" && <AudienceTab qs={qs} />}
         {tab === "catalog" && <CatalogTab qs={qs} />}
         {tab === "orders" && <OrdersTab qs={qs} />}
+        {tab === "referrals" && <ReferralsTab />}
       </div>
     </main>
   );
@@ -197,6 +198,7 @@ function Tabs({ tab, onTab }: { tab: string; onTab: (t: any) => void }) {
     { id: "audience", label: "Audience" },
     { id: "catalog", label: "Catalog" },
     { id: "orders", label: "Orders" },
+    { id: "referrals", label: "Referrals" },
   ] as const;
   return (
     <nav className="sticky top-0 z-10 bg-[#00062B]/95 backdrop-blur border-b border-white/10">
@@ -612,5 +614,78 @@ function GeoTable({ buyers, listeners, loading }: { buyers: GeoPayload["buyers"]
         </div>
       ))}
     </div>
+  );
+}
+
+// ─── Referrals tab (Task #78) ─────────────────────────────────────────
+// Surfaces $1/unit credits the artist has accrued by referring other
+// artists onto the platform. Tab is always visible — empty state nudges
+// the artist to reach out to the GoodTunes team to refer a peer.
+function ReferralsTab() {
+  const q = useQuery<{
+    pendingCents: number;
+    pendingCount: number;
+    paidCents: number;
+    partners: { id: string; name: string; photoUrl: string | null; units: number; pendingCents: number }[];
+    nonProfits: { id: string; name: string; logoUrl: string | null }[];
+  }>({ queryKey: ["/api/artist/referrals"] });
+  if (q.isLoading) {
+    return <p className="py-10 text-center text-white/45 text-[13px]">Loading…</p>;
+  }
+  if (q.isError) {
+    return <p className="py-10 text-center text-white/45 text-[13px]">Couldn't load referrals.</p>;
+  }
+  const d = q.data!;
+  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+  return (
+    <>
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="referrals-kpis">
+        <Kpi label="Pending payout" value={fmt(d.pendingCents)} sub={`${d.pendingCount} unit${d.pendingCount === 1 ? "" : "s"} this period`} testId="kpi-ref-pending" />
+        <Kpi label="Paid out" value={fmt(d.paidCents)} testId="kpi-ref-paid" />
+        <Kpi label="Referred artists" value={String(d.partners.length)} testId="kpi-ref-count" />
+      </section>
+      <Card title="Artists you've referred" subtitle="$1 per paid unit, for life" testId="table-referred-artists">
+        {d.partners.length === 0 ? (
+          <p className="py-8 text-center text-white/55 text-[13px]" data-testid="empty-referrals">
+            You haven't referred anyone yet. Email <a className="underline" href="mailto:nick@goodtunes.fm">nick@goodtunes.fm</a> to refer an artist —
+            you'll earn $1 on every paid unit they ship.
+          </p>
+        ) : (
+          <ul className="divide-y divide-white/5">
+            {d.partners.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 py-3" data-testid={`row-referred-${p.id}`}>
+                {p.photoUrl ? (
+                  <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-white/5" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-white/5" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold truncate">{p.name}</p>
+                  <p className="text-[11px] text-white/55">{p.units} unit{p.units === 1 ? "" : "s"} attributed</p>
+                </div>
+                <span className="text-[#4AFFCA] tabular-nums font-semibold text-[13px]">{fmt(p.pendingCents)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      {d.nonProfits.length > 0 && (
+        <Card title="Non-profits you've referred" testId="table-referred-npos">
+          <ul className="divide-y divide-white/5" data-testid="list-referred-npos">
+            {d.nonProfits.map((o) => (
+              <li key={o.id} className="flex items-center gap-3 py-3" data-testid={`row-referred-npo-${o.id}`}>
+                {o.logoUrl ? (
+                  <img src={o.logoUrl} alt="" className="w-10 h-10 rounded object-cover bg-white/5" />
+                ) : (
+                  <div className="w-10 h-10 rounded bg-white/5" />
+                )}
+                <p className="flex-1 min-w-0 font-semibold truncate">{o.name}</p>
+                <span className="text-[11px] text-white/55 uppercase tracking-wider">Non-profit</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </>
   );
 }

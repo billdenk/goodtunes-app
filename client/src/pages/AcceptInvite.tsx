@@ -55,7 +55,9 @@ export default function AcceptInvite() {
       if (j.token) setAuthToken(j.token);
       queryClient.setQueryData(["/api/me"], j);
       queryClient.invalidateQueries();
-      navigate("/admin/albums");
+      // Task #78 — server returns landingPath so non-profit partners
+      // land on /non-profit, artists on /artist, labels on /label, etc.
+      navigate(j.landingPath || "/admin/albums");
     } catch (e: any) {
       setErrMsg(e.message || "Something went wrong");
       setSubmitting(false);
@@ -149,8 +151,38 @@ export default function AcceptInvite() {
           className="w-full bg-[#319ED8] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg py-2.5 transition-colors"
           data-testid="button-accept-invite"
         >
-          {submitting ? "Creating account…" : "Accept & continue"}
+          {submitting ? "Creating account…" : "Accept with email & password"}
         </button>
+
+        {/* Task #78 — OAuth invite accept. Recipients can attach a
+            Google or Apple identity to the invited admin account instead
+            of setting a password. The server (handleProviderCallback)
+            requires identity.email to match invite.email exactly so a
+            forwarded invite link can't be hijacked from another account. */}
+        <div className="my-5 flex items-center gap-3">
+          <div className="flex-1 h-px bg-slate-200" />
+          <span className="text-[11px] uppercase tracking-wide text-slate-400">or sign in with</span>
+          <div className="flex-1 h-px bg-slate-200" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href={`/api/auth/google/start?invite=${encodeURIComponent(token!)}`}
+            className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800"
+            data-testid="link-accept-google"
+          >
+            <span>Google</span>
+          </a>
+          <a
+            href={`/api/auth/apple/start?invite=${encodeURIComponent(token!)}`}
+            className="flex items-center justify-center gap-2 rounded-lg border border-slate-900 bg-slate-900 hover:bg-black px-3 py-2.5 text-sm font-semibold text-white"
+            data-testid="link-accept-apple"
+          >
+            <span>Apple</span>
+          </a>
+        </div>
+        <p className="mt-3 text-[11px] text-slate-500 text-center">
+          The Google/Apple account email must match <span className="font-semibold">{data.email}</span>.
+        </p>
       </form>
     </main>
   );

@@ -1,0 +1,162 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { Heart, Music as MusicIcon, Mail, Clock } from "lucide-react";
+
+// Task #78 — Non-profit partner shell. Single-page dashboard showing
+// the NPO's referred artists, their for-sale albums + paid units, and
+// the running $1/unit credit roll-up. No analytics surface (yet) — the
+// signal customers told us they want is "are my artists earning?".
+type Me = { id: string; name: string; logoUrl: string | null; websiteUrl: string | null };
+type Dashboard = {
+  pendingCents: number;
+  pendingCount: number;
+  paidCents: number;
+  artists: {
+    id: string;
+    name: string;
+    photoUrl: string | null;
+    status: "active" | "pending_invite";
+    albums: { id: string; title: string; coverUrl: string | null; paidUnits: number }[];
+  }[];
+  pendingInvites: { id: string; email: string; role: string; createdAt: string; expiresAt: string }[];
+};
+
+const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+export function NonProfitDashboard() {
+  const me = useQuery<Me>({ queryKey: ["/api/non-profit/me"] });
+  const dash = useQuery<Dashboard>({ queryKey: ["/api/non-profit/dashboard"] });
+
+  if (me.error) {
+    const msg = (me.error as any)?.message || "We couldn't load your non-profit scope.";
+    return (
+      <main className="min-h-screen bg-[#00062B] text-white flex items-center justify-center p-6">
+        <div className="max-w-md text-center" data-testid="non-profit-gate">
+          <h1 className="text-2xl font-bold mb-2">Non-profit dashboard</h1>
+          <p className="text-white/60 text-sm">{msg}</p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#00062B] text-white pb-20">
+      <header className="border-b border-white/10 bg-gradient-to-b from-[#0B1457] to-[#00062B]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+          <div className="flex items-center gap-4">
+            {me.data?.logoUrl ? (
+              <img src={me.data.logoUrl} alt="" className="w-14 h-14 rounded-xl object-cover bg-white/10 ring-1 ring-white/15" />
+            ) : (
+              <div className="w-14 h-14 rounded-xl bg-[#7F10A7]/30 ring-1 ring-white/15 flex items-center justify-center">
+                <Heart className="w-6 h-6 text-[#FF5470]" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-white/55 text-[12px] uppercase tracking-wider font-semibold">Non-profit dashboard</p>
+              <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="text-npo-name">{me.data?.name ?? "Loading…"}</h1>
+              {me.data?.websiteUrl && (
+                <a href={me.data.websiteUrl} target="_blank" rel="noreferrer" className="text-[12px] text-[#4AFFCA] hover:underline">
+                  {me.data.websiteUrl.replace(/^https?:\/\//, "")}
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="npo-kpis">
+        <Kpi label="Pending payout" value={fmt(dash.data?.pendingCents ?? 0)} sub={`${dash.data?.pendingCount ?? 0} unit${(dash.data?.pendingCount ?? 0) === 1 ? "" : "s"}`} testId="kpi-npo-pending" />
+        <Kpi label="Paid out" value={fmt(dash.data?.paidCents ?? 0)} testId="kpi-npo-paid" />
+        <Kpi label="Referred artists" value={String(dash.data?.artists.length ?? 0)} testId="kpi-npo-artists" />
+      </section>
+
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-6">
+        <h2 className="text-sm font-semibold text-white/85 mb-3">Your artists</h2>
+        {dash.isLoading ? (
+          <p className="py-8 text-center text-white/45 text-[13px]">Loading…</p>
+        ) : (dash.data?.artists.length ?? 0) === 0 ? (
+          <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-8 text-center" data-testid="empty-npo-artists">
+            <Heart className="w-8 h-8 text-[#FF5470] mx-auto mb-3" />
+            <p className="text-sm text-white/65">
+              You haven't referred any artists yet. Email <a href="mailto:nick@goodtunes.fm" className="underline">nick@goodtunes.fm</a> to
+              get your first artist onboarded — you'll earn $1 on every paid unit they ship.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-3" data-testid="list-npo-artists">
+            {dash.data!.artists.map((a) => (
+              <li key={a.id} className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid={`row-npo-artist-${a.id}`}>
+                <div className="flex items-center gap-3 mb-3">
+                  {a.photoUrl ? (
+                    <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-white/5" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-white/5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{a.name}</p>
+                    <p className="text-[11px] text-white/55">{a.albums.length} album{a.albums.length === 1 ? "" : "s"} listed</p>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${
+                      a.status === "active"
+                        ? "bg-[#4AFFCA]/15 text-[#4AFFCA] ring-1 ring-[#4AFFCA]/30"
+                        : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
+                    }`}
+                    data-testid={`status-npo-artist-${a.id}`}
+                  >
+                    {a.status === "active" ? "Active" : "Pending invite"}
+                  </span>
+                  <Link href={`/artist/${a.id}`} className="text-[12px] text-[#319ED8] hover:underline">View →</Link>
+                </div>
+                {a.albums.length > 0 && (
+                  <ul className="divide-y divide-white/5">
+                    {a.albums.map((al) => (
+                      <li key={al.id} className="flex items-center gap-3 py-2" data-testid={`row-npo-album-${al.id}`}>
+                        {al.coverUrl ? (
+                          <img src={al.coverUrl} alt="" className="w-9 h-9 rounded object-cover" />
+                        ) : (
+                          <div className="w-9 h-9 rounded bg-white/5 flex items-center justify-center"><MusicIcon className="w-4 h-4 text-white/30" /></div>
+                        )}
+                        <p className="flex-1 min-w-0 text-[13px] truncate">{al.title}</p>
+                        <span className="text-[11px] text-white/55 tabular-nums">
+                          {al.paidUnits} paid · <span className="text-[#4AFFCA]">{fmt(al.paidUnits * 100)}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {(dash.data?.pendingInvites.length ?? 0) > 0 && (
+        <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-8">
+          <h2 className="text-sm font-semibold text-white/85 mb-3">Outstanding invites</h2>
+          <ul className="divide-y divide-white/5 rounded-2xl bg-white/[0.04] ring-1 ring-white/10" data-testid="list-npo-invites">
+            {dash.data!.pendingInvites.map((i) => (
+              <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-[13px]" data-testid={`row-npo-invite-${i.id}`}>
+                <Mail className="w-4 h-4 text-white/45" />
+                <span className="flex-1 truncate">{i.email}</span>
+                <span className="text-[11px] text-white/55 inline-flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> expires {new Date(i.expiresAt).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </main>
+  );
+}
+
+function Kpi({ label, value, sub, testId }: { label: string; value: string; sub?: string; testId: string }) {
+  return (
+    <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid={testId}>
+      <p className="text-[11px] uppercase tracking-wider text-white/55 font-semibold">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
+      {sub && <p className="mt-1 text-[11px] text-white/55">{sub}</p>}
+    </div>
+  );
+}

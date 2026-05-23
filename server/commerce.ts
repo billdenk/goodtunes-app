@@ -1209,6 +1209,56 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
         .where(and(eq(albumSkus.albumId, albumId), eq(albumSkus.format, skuFormat), sql`${albumSkus.stock} IS NOT NULL`));
     }
 
+    // Task #78 — Referral credit accrual. If this order's album is by
+    // a referred artist (people.referred_by_person_id or _org_id), we
+    // write a pending_payout credit row per referrer. Idempotent via
+    // the unique (order_id, referrer_kind) index — safe to call twice.
+    if (!wasAlreadyPaid && order.artistSnapshotId) {
+      try {
+        const r = await db.execute<{
+          referred_by_person_id: string | null;
+          referred_by_org_id: string | null;
+          referrer_per_unit_cents: number | null;
+        }>(sql`SELECT referred_by_person_id, referred_by_org_id, referrer_per_unit_cents
+               FROM people WHERE id = ${order.artistSnapshotId} LIMIT 1`);
+        const row = (r as any).rows?.[0];
+        if (row && (row.referred_by_person_id || row.referred_by_org_id)) {
+          const perUnit = row.referrer_per_unit_cents ?? 100;
+          const currency = (order.currency || "usd").toLowerCase();
+          // Credits are $1 PER PAID UNIT. A vinyl + CD bundle (2 units in
+          // one order) accrues $2 to each referrer. Sum the `format`-kind
+          // order_items' quantity — `addon` rows (signed_cert etc.) are
+          // not "units of the album" and don't trigger referral credit.
+          const u = await db.execute<{ units: number }>(sql`
+            SELECT COALESCE(SUM(quantity), 0)::int AS units
+            FROM order_items WHERE order_id = ${order.id} AND kind = 'format'
+          `);
+          const units = ((u as any).rows?.[0]?.units ?? 0) as number;
+          // Defensive fallback: an order should always have ≥1 format
+          // line, but if order_items is empty for any reason, fall back
+          // to 1 unit so we don't silently zero out the credit.
+          const safeUnits = units > 0 ? units : 1;
+          const amountCents = perUnit * safeUnits;
+          if (row.referred_by_person_id) {
+            await db.execute(sql`
+              INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_person_id, amount_cents, currency, status, units)
+              VALUES (${order.id}, ${order.artistSnapshotId}, 'artist', ${row.referred_by_person_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
+              ON CONFLICT (order_id, referrer_kind) DO NOTHING
+            `);
+          }
+          if (row.referred_by_org_id) {
+            await db.execute(sql`
+              INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_org_id, amount_cents, currency, status, units)
+              VALUES (${order.id}, ${order.artistSnapshotId}, 'non_profit', ${row.referred_by_org_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
+              ON CONFLICT (order_id, referrer_kind) DO NOTHING
+            `);
+          }
+        }
+      } catch (e: any) {
+        console.error(`[commerce] referral accrual failed for ${order.id}`, e?.message);
+      }
+    }
+
     // Task #128 — if this order carries a signed_cert add-on, mint
     // (idempotent) the certificate row that drives the fan's name-
     // confirmation card and the admin print queue. Paper size is

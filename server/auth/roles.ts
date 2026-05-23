@@ -31,8 +31,12 @@ export async function getUserRole(userId: string): Promise<UserRoleInfo | null> 
   );
   const row = (r as any).rows?.[0];
   if (!row) return null;
-  const role = ADMIN_ROLES.includes(row.role as AdminRole)
-    ? (row.role as AdminRole)
+  // Task #78 — `org` is the historical name for the non-profit partner
+  // role used by reports code. Fold it into `non_profit` so the closed
+  // ADMIN_ROLES enum stays the single source of truth.
+  const normalized = row.role === "org" ? "non_profit" : row.role;
+  const role = ADMIN_ROLES.includes(normalized as AdminRole)
+    ? (normalized as AdminRole)
     : "super_admin";
   return { role, roleScopeId: row.role_scope_id ?? null };
 }

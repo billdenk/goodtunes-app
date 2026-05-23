@@ -1,7 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { pool } from "./db";
+import { pool, db } from "./db";
+import { sql } from "drizzle-orm";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID } from "crypto";
@@ -199,6 +200,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })
   );
 
+  // Task #78 — role-scoped post-login landing path. Reads the same
+  // user_roles table /api/auth/roles uses, then maps role to the
+  // partner shell the recipient should land on after 2FA. Used by
+  // TOTP/email-OTP verify so OAuth invite recipients land in their
+  // partner shell (/non-profit, /artist, /label) instead of /admin.
+  async function landingPathForUser(userId: string): Promise<string> {
+    try {
+      const row = await db.execute<any>(sql`
+        SELECT role FROM users WHERE id = ${userId} LIMIT 1
+      `);
+      const role = ((row as any).rows ?? [])[0]?.role as string | undefined;
+      if (role === "non_profit") return "/non-profit";
+      if (role === "artist") return "/artist";
+      if (role === "label") return "/label";
+      return "/admin";
+    } catch {
+      return "/admin";
+    }
+  }
+
   // ─── Auth (kind-aware) ─────────────────────────────────────────────
   // Every /api/register · /api/login · /api/me · /api/logout call uses
   // the host-derived `req.authKind` to pick the table. On the admin host
@@ -242,11 +263,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const hashed = await hashPassword(password);
 
     if (kind === "admin") {
+      // Task #78 — admin/partner accounts are invite-only. Public
+      // /api/register on the admin host is closed; the operator must
+      // mint a partner invite (super-admin) and the recipient must
+      // accept via /invite/:token (password or OAuth path).
+      return res.status(403).json({
+        message: "Admin accounts are invite-only. Ask a super-admin for an invite link, or email nick@goodtunes.fm.",
+        code: "INVITE_REQUIRED",
+      });
+    } else if (false) {
+      // (legacy admin branch — preserved for diff context but disabled.)
       const user = await storage.createUser({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
-      // First admin signup on a fresh install is auto-promoted via the
-      // explicit bootstrap endpoint. We do NOT mint an authenticated
-      // session here — the admin still has to pass TOTP enrollment on
-      // their first login. Force them to /login.
       return res.status(201).json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, requiresLogin: true, kind: "admin" });
     } else {
       const c = await storage.createCustomer({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
@@ -524,7 +551,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const state = randomState();
       const linkToUserId = req.query.link === "1" ? (await getAuthFromRequest(req))?.userId : undefined;
-      (req.session as any).oauthState = { state, kind, provider, linkToUserId };
+      // Task #78 — invite-bound sign-in. Carrying the token through OAuth
+      // state lets the recipient accept their partner invite by signing
+      // in with Google/Apple instead of setting a password. The token is
+      // re-validated on callback so a stale state bag can't grant access.
+      const inviteToken = typeof req.query.invite === "string" ? req.query.invite : undefined;
+      (req.session as any).oauthState = { state, kind, provider, linkToUserId, inviteToken };
       const redirectUri = `${callbackOrigin(req, kind)}/api/auth/${provider}/callback`;
       const url = provider === "google"
         ? buildGoogleAuthUrl(redirectUri, state)
@@ -538,7 +570,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   async function handleProviderCallback(provider: "google" | "apple", req: Request, res: Response) {
     const stateBag = (req.session as any).oauthState as
-      | { state: string; kind: "admin" | "customer"; provider: string; linkToUserId?: string }
+      | { state: string; kind: "admin" | "customer"; provider: string; linkToUserId?: string; inviteToken?: string }
       | undefined;
     const incomingState = (req.body?.state as string) || (req.query.state as string);
     if (!stateBag || stateBag.provider !== provider || stateBag.state !== incomingState) {
@@ -581,6 +613,100 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.redirect(`${homePath}?link=ok`);
     }
 
+    // Task #78 — invite-bound OAuth accept. Skips the public-signup
+    // branch entirely: the recipient must end the flow attached to the
+    // invite's role+scope, with their email matching the invite. If the
+    // identity doesn't match the invited email we bail to /invite/:token
+    // so the recipient sees the same friendly "wrong account" screen
+    // instead of an admin shell with someone else's identity attached.
+    if (stateBag.inviteToken && kind === "admin") {
+      const invite = await storage.getAdminInviteByToken(stateBag.inviteToken);
+      if (!invite || invite.usedAt || (invite.expiresAt && invite.expiresAt < new Date())) {
+        return res.redirect(`/invite/${encodeURIComponent(stateBag.inviteToken)}?err=invalid`);
+      }
+      if (!identity.email || identity.email.toLowerCase() !== invite.email.toLowerCase()) {
+        return res.redirect(`/invite/${encodeURIComponent(stateBag.inviteToken)}?err=email_mismatch`);
+      }
+      // Find or create the admin user, then attach the OAuth identity.
+      // We reuse an existing admin if the email already has one (covers
+      // the rare super-admin-re-invites-themselves case); otherwise we
+      // create a fresh row with a placeholder password the recipient
+      // will never use (they sign in via this OAuth identity forever).
+      let userIdInv: string;
+      const byIdent = await storage.findIdentity("admin", provider, identity.sub);
+      const byEmail = await storage.getUserByEmail(invite.email);
+      if (byIdent) {
+        userIdInv = byIdent.userId;
+      } else if (byEmail) {
+        userIdInv = byEmail.id;
+        await storage.linkIdentity("admin", { userId: userIdInv, provider, providerUserId: identity.sub, email: identity.email });
+      } else {
+        const baseLocal = (identity.email.split("@")[0] || "partner").toLowerCase().replace(/[^a-z0-9_]/g, "") || "partner";
+        let username = baseLocal;
+        let n = 0;
+        while (await storage.getUserByUsername(username)) {
+          n += 1;
+          username = `${baseLocal}${n}`;
+          if (n > 999) { username = `${baseLocal}${randomBytes(3).toString("hex")}`; break; }
+        }
+        const placeholderPwd = await hashPassword(randomBytes(16).toString("hex"));
+        const u = await storage.createUser({
+          username,
+          email: invite.email,
+          displayName: identity.email.split("@")[0] || username,
+          realName: null,
+          password: placeholderPwd,
+        });
+        userIdInv = u.id;
+        await storage.linkIdentity("admin", { userId: userIdInv, provider, providerUserId: identity.sub, email: identity.email });
+      }
+      // Grant role+scope, mark used, wire referrer — same shape as the
+      // /api/invites/:token/accept handler so the two paths converge.
+      await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${userIdInv}`);
+      await setUserRole(userIdInv, invite.role as any, invite.roleScopeId ?? null);
+      const referrerKind = (invite as any).referrerKind as string | null;
+      const referrerScopeId = (invite as any).referrerScopeId as string | null;
+      if (invite.role === "artist" && invite.roleScopeId && referrerKind && referrerScopeId) {
+        try {
+          if (referrerKind === "artist") {
+            await db.execute(sql`UPDATE people SET referred_by_person_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_person_id IS NULL`);
+          } else if (referrerKind === "non_profit") {
+            await db.execute(sql`UPDATE people SET referred_by_org_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_org_id IS NULL`);
+          }
+        } catch (e: any) {
+          console.warn(`[invite] referrer wiring failed for ${invite.id}: ${e?.message}`);
+        }
+      }
+      try {
+        await storage.markAdminInviteUsed(invite.id, userIdInv);
+      } catch (e: any) {
+        if (String(e?.message).includes("INVITE_ALREADY_USED")) {
+          return res.redirect(`/invite/${encodeURIComponent(stateBag.inviteToken)}?err=used`);
+        }
+        throw e;
+      }
+      // Fall through to the admin 2FA gate — same policy as a password
+      // sign-in: pendingTotpUserId set, then redirect to /login so the
+      // recipient enrolls a factor or enters their email-OTP code.
+      req.session.pendingTotpUserId = userIdInv;
+      const user = await storage.getUser(userIdInv);
+      const totp = await storage.getAdminTotp(userIdInv);
+      const usesEmail = user?.factorPref === "email";
+      if (!usesEmail) {
+        const params = new URLSearchParams({ oauth: provider, next: totp ? "totp" : "enroll", invite: "1" });
+        return res.redirect(`/login?${params.toString()}`);
+      }
+      const code = gen6();
+      const codeHash = await hashOtp(code);
+      const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
+      await storage.setAdminEmailOtp(userIdInv, codeHash, expiresAt);
+      if (process.env.NODE_ENV !== "production" && user) {
+        console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
+      }
+      const params = new URLSearchParams({ oauth: provider, next: "emailOtp", invite: "1" });
+      return res.redirect(`/login?${params.toString()}`);
+    }
+
     // Sign-in / sign-up flow.
     const existingByIdentity = await storage.findIdentity(kind, provider, identity.sub);
     let userId = existingByIdentity?.userId;
@@ -600,10 +726,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
+    if (!userId && kind === "admin") {
+      // Task #78 — admin/partner OAuth sign-up is invite-only. We will
+      // NOT auto-create an admin user from an OAuth sign-in; the
+      // recipient must come in through /invite/:token (which carries
+      // an inviteToken via stateBag above). Bounce to the dedicated
+      // invite-required landing instead.
+      return res.redirect(`/login?prompt=invite_required&provider=${provider}`);
+    }
+
     if (!userId) {
-      // First-time sign-up via OAuth — create the account on the right
-      // side. Username is derived from the email local-part (or a
-      // random fallback when Apple's private-relay hides everything).
+      // First-time sign-up via OAuth — customer side only. Username is
+      // derived from the email local-part (or a random fallback when
+      // Apple's private-relay hides everything).
       const baseLocal = (identity.email?.split("@")[0] || "user").toLowerCase().replace(/[^a-z0-9_]/g, "") || "user";
       let username = baseLocal;
       let n = 0;
@@ -618,25 +753,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const displayName = identity.email?.split("@")[0] || username;
       const placeholderPwd = await hashPassword(randomBytes(16).toString("hex"));
-      if (kind === "admin") {
-        const u = await storage.createUser({
-          username,
-          email: identity.email ?? `${username}@oauth.local`,
-          displayName,
-          realName: null,
-          password: placeholderPwd,
-        });
-        userId = u.id;
-      } else {
-        const c = await storage.createCustomer({
-          username,
-          email: identity.email ?? `${username}@oauth.local`,
-          displayName,
-          realName: null,
-          password: placeholderPwd,
-        });
-        userId = c.id;
-      }
+      // Admin OAuth sign-up is gated above (Task #78 invite-only); only
+      // customers reach this branch.
+      const c = await storage.createCustomer({
+        username,
+        email: identity.email ?? `${username}@oauth.local`,
+        displayName,
+        realName: null,
+        password: placeholderPwd,
+      });
+      userId = c.id;
       await storage.linkIdentity(kind, { userId, provider, providerUserId: identity.sub, email: identity.email });
     }
 
@@ -763,7 +889,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     req.session.pendingTotpUserId = undefined;
     const u = await storage.getUser(userId);
     const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-    return res.json({ ...shapeAdmin(u, photoUrl), token });
+    // Task #78 — return a role-scoped landing path so the login UI can
+    // drop OAuth-invite recipients into their partner shell directly
+    // (e.g. /non-profit) instead of bouncing through /admin.
+    const landingPath = await landingPathForUser(userId);
+    return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath });
   });
 
   // ─── Admin Email-OTP (Task #57) ────────────────────────────────────
@@ -852,7 +982,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     req.session.pendingTotpUserId = undefined;
     const u = await storage.getUser(userId);
     const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-    return res.json({ ...shapeAdmin(u, photoUrl), token });
+    const landingPath = await landingPathForUser(userId);
+    return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath });
   });
 
   // ─── Admin factor-preference (Task #57) ────────────────────────────
@@ -10030,14 +10161,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { setUserRole, requireRole, getUserRole } = await import("./auth/roles");
   const { adminInvites: _adminInvites, ADMIN_ROLES } = await import("@shared/schema");
 
-  const INVITE_TTL_DAYS = 7;
+  // Task #78 — extended to 14d per spec; was 7 in Task #69.
+  const INVITE_TTL_DAYS = 14;
   const ROLE_LABELS: Record<string, string> = {
     super_admin: "Super Admin",
     label: "Label",
     artist: "Artist",
     manufacturer: "Manufacturer",
     fulfillment: "Fulfillment Partner",
+    non_profit: "Non-profit",
   };
+
+  // Task #78 — Non-profits are stored in the existing `organizations`
+  // table with kind='non_profit'. This endpoint hydrates the scope
+  // picker on the invite sheet and the referrer picker.
+  app.get("/api/non-profits", requireAdmin, async (_req, res) => {
+    const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null }>(
+      sql`SELECT id, name, logo_url, website_url FROM organizations WHERE kind = 'non_profit' ORDER BY name ASC`,
+    );
+    res.json(((rows as any).rows ?? []).map((r: any) => ({
+      id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url,
+    })));
+  });
+  // Create a new non-profit row (super-admin) so the invite sheet can
+  // mint one inline without bouncing to a separate admin page.
+  app.post("/api/non-profits", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const name = String(req.body?.name || "").trim();
+    if (!name) return res.status(400).json({ message: "Name is required" });
+    const websiteUrl = req.body?.websiteUrl ? String(req.body.websiteUrl).trim() : null;
+    const logoUrl = req.body?.logoUrl ? String(req.body.logoUrl).trim() : null;
+    const ins = await db.execute<{ id: string }>(sql`
+      INSERT INTO organizations (name, kind, website_url, logo_url)
+      VALUES (${name}, 'non_profit', ${websiteUrl}, ${logoUrl})
+      RETURNING id
+    `);
+    const id = (ins as any).rows?.[0]?.id;
+    res.json({ id, name, websiteUrl, logoUrl });
+  });
 
   // GET /api/me/role — small helper so the client knows what to render.
   app.get("/api/me/role", requireAdmin, async (req, res) => {
@@ -10056,14 +10216,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const [peopleNeeded, labelsNeeded, mfgNeeded, ffNeeded] = [
       need("artist"), need("label"), need("manufacturer"), need("fulfillment"),
     ];
-    const [people, labels, mfgs, ffs] = await Promise.all([
-      peopleNeeded.length ? Promise.all(peopleNeeded.map((id) => storage.getPersonById(id))) : [],
+    const npoIdsScope = Array.from(new Set(rows.filter((r) => r.role === "non_profit" && r.roleScopeId).map((r) => r.roleScopeId!)));
+    // Referrer ids — both kinds.
+    const refPersonIds = Array.from(new Set(rows.filter((r: any) => r.referrerKind === "artist" && r.referrerScopeId).map((r: any) => r.referrerScopeId as string)));
+    const refOrgIds = Array.from(new Set(rows.filter((r: any) => r.referrerKind === "non_profit" && r.referrerScopeId).map((r: any) => r.referrerScopeId as string)));
+    const allNpoIds = Array.from(new Set([...npoIdsScope, ...refOrgIds]));
+    const allPersonIds = Array.from(new Set([...peopleNeeded, ...refPersonIds]));
+    const [people, labels, mfgs, ffs, npos] = await Promise.all([
+      allPersonIds.length ? Promise.all(allPersonIds.map((id) => storage.getPersonById(id))) : [],
       labelsNeeded.length ? Promise.all(labelsNeeded.map((id) => storage.getLabelById(id))) : [],
       mfgNeeded.length ? Promise.all(mfgNeeded.map((id) => storage.getManufacturerById(id))) : [],
       ffNeeded.length ? Promise.all(ffNeeded.map((id) => storage.getFulfillmentPartnerById(id))) : [],
+      allNpoIds.length
+        ? db.execute<{ id: string; name: string; logo_url: string | null }>(sql`SELECT id, name, logo_url FROM organizations WHERE id = ANY(${allNpoIds}::varchar[])`).then((r: any) => r.rows ?? [])
+        : Promise.resolve([] as any[]),
     ]);
     const idx = (arr: any[]) => new Map(arr.filter(Boolean).map((r: any) => [r.id, r]));
     const peopleIdx = idx(people), labelsIdx = idx(labels), mfgIdx = idx(mfgs), ffIdx = idx(ffs);
+    const npoIdx = new Map((npos as any[]).map((r) => [r.id, { id: r.id, name: r.name, logoUrl: r.logo_url }]));
     function scopeMeta(role: string, scopeId: string | null) {
       if (!scopeId) return { scopeName: null as string | null, scopeThumbUrl: null as string | null };
       let row: any = null;
@@ -10071,20 +10241,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       else if (role === "label") row = labelsIdx.get(scopeId);
       else if (role === "manufacturer") row = mfgIdx.get(scopeId);
       else if (role === "fulfillment") row = ffIdx.get(scopeId);
+      else if (role === "non_profit") row = npoIdx.get(scopeId);
       if (!row) return { scopeName: null, scopeThumbUrl: null };
       return {
         scopeName: row.name ?? null,
         scopeThumbUrl: row.photoUrl ?? row.logoUrl ?? null,
       };
     }
-    res.json(rows.map((r) => ({
+    function refMeta(kind: string | null, scopeId: string | null) {
+      if (!kind || !scopeId) return { referrerName: null as string | null };
+      if (kind === "artist") return { referrerName: peopleIdx.get(scopeId)?.name ?? null };
+      if (kind === "non_profit") return { referrerName: npoIdx.get(scopeId)?.name ?? null };
+      return { referrerName: null };
+    }
+    res.json(rows.map((r: any) => ({
       id: r.id,
       email: r.email,
       role: r.role,
       roleScopeId: r.roleScopeId,
       ...scopeMeta(r.role, r.roleScopeId),
+      referrerKind: r.referrerKind ?? null,
+      referrerScopeId: r.referrerScopeId ?? null,
+      ...refMeta(r.referrerKind ?? null, r.referrerScopeId ?? null),
+      welcomeNote: r.welcomeNote ?? null,
       expiresAt: r.expiresAt,
       createdAt: r.createdAt,
+      resentAt: r.resentAt ?? null,
     })));
   });
 
@@ -10102,17 +10284,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // exists in the matching table. Unscoped roles ignore the field
     // entirely (we null it out so a stray client value can't get
     // persisted and confuse later code paths).
+    const orgExists = async (id: string) => {
+      const r = await db.execute<{ id: string }>(sql`SELECT id FROM organizations WHERE id = ${id} AND kind = 'non_profit' LIMIT 1`);
+      return ((r as any).rows ?? []).length > 0;
+    };
     const SCOPED_ROLES: Record<string, () => Promise<any>> = {
       artist: () => storage.getPersonById(roleScopeId!),
       label: () => storage.getLabelById(roleScopeId!),
       manufacturer: () => storage.getManufacturerById(roleScopeId!),
       fulfillment: () => storage.getFulfillmentPartnerById(roleScopeId!),
+      non_profit: () => orgExists(roleScopeId!),
     };
     const SCOPE_LABEL: Record<string, string> = {
       artist: "an artist",
       label: "a label",
       manufacturer: "a manufacturer",
       fulfillment: "a fulfillment partner",
+      non_profit: "a non-profit",
     };
     if (SCOPED_ROLES[role]) {
       if (!roleScopeId) {
@@ -10120,11 +10308,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const exists = await SCOPED_ROLES[role]();
       if (!exists) {
-        return res.status(400).json({ message: `That ${role} doesn't exist anymore — pick another.` });
+        return res.status(400).json({ message: `That ${role.replace("_", "-")} doesn't exist anymore — pick another.` });
       }
     } else {
       roleScopeId = null;
     }
+
+    // Task #78 — optional referrer (artist or non-profit). Only meaningful
+    // when the new partner is an artist or non-profit themselves; we
+    // accept (and store) for any role though so the audit trail is
+    // intact even if the role changes later.
+    const referrerKindRaw = req.body?.referrerKind ? String(req.body.referrerKind) : null;
+    const referrerScopeId = req.body?.referrerScopeId ? String(req.body.referrerScopeId) : null;
+    const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
+    let referrerKind: "artist" | "non_profit" | null = null;
+    if (referrerKindRaw === "artist" || referrerKindRaw === "non_profit") {
+      if (!referrerScopeId) return res.status(400).json({ message: "Pick a referrer or clear the field" });
+      const ok = referrerKindRaw === "artist"
+        ? !!(await storage.getPersonById(referrerScopeId))
+        : await orgExists(referrerScopeId);
+      if (!ok) return res.status(400).json({ message: "That referrer no longer exists" });
+      referrerKind = referrerKindRaw;
+    }
+
     const existing = await storage.getUserByEmail(email);
     if (existing) return res.status(400).json({ message: "An admin with that email already exists" });
 
@@ -10140,7 +10346,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       token,
       expiresAt,
       createdByUserId: req.session.userId!,
-    });
+      referrerKind,
+      referrerScopeId: referrerKind ? referrerScopeId : null,
+      welcomeNote,
+    } as any);
 
     // Build absolute accept URL from the request host so prod uses the
     // prod hostname and dev uses the preview host without a hard-coded
@@ -10169,10 +10378,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
-  // Revoke a pending invite (super-admin only).
+  // Revoke a pending invite (super-admin only). Soft-revoke so we keep
+  // the audit row; the token is immediately rejected at /api/invites/:token.
   app.delete("/api/admin/invites/:id", requireAdmin, requireRole("super_admin"), async (req, res) => {
-    await storage.deleteAdminInvite(String(req.params.id));
+    await storage.revokeAdminInvite(String(req.params.id));
     res.json({ ok: true });
+  });
+
+  // Task #78 — Resend a pending invite: mint a fresh token, extend the
+  // expiry to a full 14 days, and re-email the magic link.
+  app.post("/api/admin/invites/:id/resend", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const existing = await storage.getAdminInviteById(String(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Invite not found" });
+    if (existing.usedAt) return res.status(410).json({ message: "Invite already accepted" });
+    if ((existing as any).revokedAt) return res.status(410).json({ message: "Invite was revoked — send a new one" });
+    const newToken = generateToken();
+    const newExpiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const updated = await storage.resendAdminInvite(existing.id, newToken, newExpiresAt);
+    if (!updated) return res.status(500).json({ message: "Resend failed" });
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const acceptUrl = `${proto}://${host}/invite/${newToken}`;
+    const inviter = await storage.getUser(req.session.userId!);
+    const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS);
+    res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
   });
 
   // PUBLIC — fetch an invite by token so the accept page can render
@@ -10231,18 +10461,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // dashboard on first login. 410 + a clear message so the super-admin
     // knows to re-issue.
     if (invite.roleScopeId) {
+      const orgExistsForAccept = async (id: string) => {
+        const r = await db.execute<{ id: string }>(sql`SELECT id FROM organizations WHERE id = ${id} AND kind = 'non_profit' LIMIT 1`);
+        return ((r as any).rows ?? []).length > 0 ? { id } : null;
+      };
       const stillExists: Record<string, () => Promise<any>> = {
         artist: () => storage.getPersonById(invite.roleScopeId!),
         label: () => storage.getLabelById(invite.roleScopeId!),
         manufacturer: () => storage.getManufacturerById(invite.roleScopeId!),
         fulfillment: () => storage.getFulfillmentPartnerById(invite.roleScopeId!),
+        non_profit: () => orgExistsForAccept(invite.roleScopeId!),
       };
       const checker = stillExists[invite.role];
       if (checker) {
         const row = await checker();
         if (!row) {
           return res.status(410).json({
-            message: "The artist/label this invite was for has been removed. Ask for a new invite.",
+            message: "The partner this invite was for has been removed. Ask for a new invite.",
           });
         }
       }
@@ -10261,6 +10496,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // direct is_admin update).
     await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${user.id}`);
     await setUserRole(user.id, invite.role as any, invite.roleScopeId ?? null);
+
+    // Task #78 — Wire the referrer onto the artist Person row so the
+    // existing referral-attribution machinery (people.referredByPersonId /
+    // referredByOrgId) lights up immediately. We only do this when the
+    // new partner is an artist with a person scope; non-profit partners
+    // are referrers themselves, never referred.
+    const referrerKind = (invite as any).referrerKind as string | null;
+    const referrerScopeId = (invite as any).referrerScopeId as string | null;
+    if (invite.role === "artist" && invite.roleScopeId && referrerKind && referrerScopeId) {
+      try {
+        if (referrerKind === "artist") {
+          await db.execute(sql`UPDATE people SET referred_by_person_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_person_id IS NULL`);
+        } else if (referrerKind === "non_profit") {
+          await db.execute(sql`UPDATE people SET referred_by_org_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_org_id IS NULL`);
+        }
+      } catch (e: any) {
+        console.warn(`[invite] referrer wiring failed for ${invite.id}: ${e?.message}`);
+      }
+    }
 
     try {
       await storage.markAdminInviteUsed(invite.id, user.id);
@@ -10281,6 +10535,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const token = generateToken();
     await storage.createAuthToken(token, user.id, "admin");
 
+    // Task #78 — Landing path varies by role. Non-profit partners drop
+    // into the non-profit dashboard; everyone else continues to the
+    // admin albums index (the partner shell handles the rest).
+    const landingPath =
+      invite.role === "non_profit" ? "/non-profit"
+      : invite.role === "artist" ? "/artist"
+      : invite.role === "label" ? "/label"
+      : "/admin/albums";
+
     res.json({
       id: user.id,
       username: user.username,
@@ -10290,6 +10553,321 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       kind: "admin",
       role: invite.role,
       token,
+      landingPath,
+    });
+  });
+
+  // ─── Task #78 — Referral summary + Non-profit dashboard ───────────
+  //
+  // Super-admin-only: roll up referral_credits + referred-partners for
+  // a given referrer (artist person id OR non-profit organization id).
+  // Used on partner detail pages (AdminPerson, AdminNonProfit).
+  app.get("/api/admin/partners/:kind/:id/referral-summary", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const kind = String(req.params.kind);
+    const id = String(req.params.id);
+    if (kind !== "artist" && kind !== "non_profit") {
+      return res.status(400).json({ message: "kind must be artist or non_profit" });
+    }
+    const referrerCol = kind === "artist" ? "referred_by_person_id" : "referred_by_org_id";
+    const creditCol = kind === "artist" ? "referrer_person_id" : "referrer_org_id";
+
+    // Paid UNITS sold per referred artist — sum order_items.quantity
+    // on format lines of every paid order on the artist's albums.
+    // SQL is composed via sql.raw because `referrerCol` is a column name
+    // (not a value); `id` is parameterized via sql.identifier-style
+    // escaping below. The kind/id filter is hard-validated above so this
+    // is safe even with sql.raw.
+    const safeId = id.replace(/'/g, "''");
+    const partners = await db.execute<{ id: string; name: string; photo_url: string | null; album_units: number }>(sql.raw(`
+      SELECT p.id, p.name, p.photo_url,
+        COALESCE((
+          SELECT SUM(oi.quantity)::int
+          FROM orders o
+          JOIN albums a ON a.id = o.album_id
+          JOIN order_items oi ON oi.order_id = o.id AND oi.kind = 'format'
+          WHERE a.primary_artist_id = p.id AND o.status = 'paid'
+        ), 0) AS album_units
+      FROM people p
+      WHERE p.${referrerCol} = '${safeId}'
+      ORDER BY p.name ASC
+    `));
+    // pending_count is **paid units**, not credit-row count, so the UI's
+    // "$X / N units" matches what an artist actually sold.
+    const credits = await db.execute<{ pending_cents: number; pending_count: number; paid_cents: number }>(sql.raw(`
+      SELECT
+        COALESCE(SUM(amount_cents) FILTER (WHERE status = 'pending_payout'), 0)::int AS pending_cents,
+        COALESCE(SUM(units) FILTER (WHERE status = 'pending_payout'), 0)::int AS pending_count,
+        COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::int AS paid_cents
+      FROM referral_credits
+      WHERE ${creditCol} = '${safeId}'
+    `));
+    const recent = await db.execute<{ id: string; order_id: string; amount_cents: number; currency: string; status: string; created_at: string; artist_name: string | null }>(sql.raw(`
+      SELECT rc.id, rc.order_id, rc.amount_cents, rc.currency, rc.status, rc.created_at,
+             p.name AS artist_name
+      FROM referral_credits rc
+      LEFT JOIN people p ON p.id = rc.referred_artist_id
+      WHERE rc.${creditCol} = '${id.replace(/'/g, "''")}'
+      ORDER BY rc.created_at DESC LIMIT 20
+    `));
+    const partnerRows = ((partners as any).rows ?? []) as any[];
+    const creditRow = ((credits as any).rows ?? [])[0] ?? { pending_cents: 0, pending_count: 0, paid_cents: 0 };
+
+    // Provenance — "Referred by" + "Invited by" lines for the super-
+    // admin partner detail page. The referrer source depends on partner
+    // kind: artists carry it on people.referred_by_{person,org}_id;
+    // non-profits don't have a column, so we trace the invite that
+    // brought them in (admin_invites.referrer_kind/scope_id).
+    let referredBy:
+      | { kind: "artist" | "non_profit"; id: string; name: string }
+      | null = null;
+    let invitedBy:
+      | { id: string; name: string; email: string; at: string | null }
+      | null = null;
+    if (kind === "artist") {
+      const provRow = await db.execute<any>(sql`
+        SELECT p.referred_by_person_id, p.referred_by_org_id,
+          (SELECT name FROM people WHERE id = p.referred_by_person_id) AS ref_person_name,
+          (SELECT name FROM organizations WHERE id = p.referred_by_org_id) AS ref_org_name
+        FROM people p WHERE p.id = ${id}
+      `);
+      const r = ((provRow as any).rows ?? [])[0];
+      if (r?.referred_by_person_id) {
+        referredBy = { kind: "artist", id: r.referred_by_person_id, name: r.ref_person_name ?? "(unknown artist)" };
+      } else if (r?.referred_by_org_id) {
+        referredBy = { kind: "non_profit", id: r.referred_by_org_id, name: r.ref_org_name ?? "(unknown non-profit)" };
+      }
+    } else {
+      // NPO: trace the invite that brought this organization in.
+      const provRow = await db.execute<any>(sql`
+        SELECT i.referrer_kind, i.referrer_scope_id,
+          CASE WHEN i.referrer_kind = 'artist' THEN (SELECT name FROM people WHERE id = i.referrer_scope_id)
+               WHEN i.referrer_kind = 'non_profit' THEN (SELECT name FROM organizations WHERE id = i.referrer_scope_id)
+               ELSE NULL END AS ref_name
+        FROM admin_invites i
+        WHERE i.role = 'non_profit' AND i.role_scope_id = ${id}
+          AND i.used_at IS NOT NULL AND i.referrer_kind IS NOT NULL
+        ORDER BY i.used_at DESC NULLS LAST LIMIT 1
+      `);
+      const r = ((provRow as any).rows ?? [])[0];
+      if (r?.referrer_kind && r?.referrer_scope_id) {
+        referredBy = {
+          kind: r.referrer_kind === "artist" ? "artist" : "non_profit",
+          id: r.referrer_scope_id,
+          name: r.ref_name ?? "(unknown referrer)",
+        };
+      }
+    }
+    // Invited by — who minted the most-recently-used invite that placed
+    // this partner into their role. Same lookup for both kinds.
+    {
+      const invRoleFilter = kind === "artist" ? "artist" : "non_profit";
+      const inviteRow = await db.execute<any>(sql.raw(`
+        SELECT i.created_by_user_id, i.used_at, u.display_name, u.email
+        FROM admin_invites i
+        LEFT JOIN users u ON u.id = i.created_by_user_id
+        WHERE i.role = '${invRoleFilter}' AND i.role_scope_id = '${safeId}'
+          AND i.used_at IS NOT NULL
+        ORDER BY i.used_at DESC LIMIT 1
+      `));
+      const r = ((inviteRow as any).rows ?? [])[0];
+      if (r?.created_by_user_id) {
+        invitedBy = {
+          id: r.created_by_user_id,
+          name: r.display_name ?? r.email ?? "(super-admin)",
+          email: r.email ?? "",
+          at: r.used_at ?? null,
+        };
+      }
+    }
+    res.json({
+      pendingCents: creditRow.pending_cents,
+      pendingCount: creditRow.pending_count,
+      paidCents: creditRow.paid_cents,
+      referredPartners: partnerRows.map((p) => ({
+        id: p.id, name: p.name, photoUrl: p.photo_url, paidUnits: p.album_units,
+      })),
+      recent: ((recent as any).rows ?? []).map((r: any) => ({
+        id: r.id, orderId: r.order_id, amountCents: r.amount_cents, currency: r.currency,
+        status: r.status, createdAt: r.created_at, artistName: r.artist_name,
+      })),
+      provenance: { referredBy, invitedBy },
+    });
+  });
+
+  // Artist-self referrals tab — uses the user's role scope.
+  app.get("/api/artist/referrals", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    // Super-admin can target a specific artist via ?personId=
+    const personIdParam = typeof req.query.personId === "string" ? req.query.personId.trim() : "";
+    const targetPersonId = info.role === "super_admin"
+      ? (personIdParam || null)
+      : (info.role === "artist" ? info.roleScopeId : null);
+    if (!targetPersonId) {
+      return res.status(info.role === "super_admin" ? 400 : 403).json({ message: "Artist scope required" });
+    }
+    const summary = await db.execute<any>(sql`
+      SELECT
+        COALESCE(SUM(amount_cents) FILTER (WHERE status = 'pending_payout'), 0)::int AS pending_cents,
+        COALESCE(SUM(units) FILTER (WHERE status = 'pending_payout'), 0)::int AS pending_count,
+        COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::int AS paid_cents
+      FROM referral_credits WHERE referrer_person_id = ${targetPersonId}
+    `);
+    const partners = await db.execute<any>(sql`
+      SELECT p.id, p.name, p.photo_url,
+        COALESCE((SELECT SUM(units)::int FROM referral_credits rc WHERE rc.referrer_person_id = ${targetPersonId} AND rc.referred_artist_id = p.id), 0) AS units,
+        COALESCE((SELECT SUM(amount_cents)::int FROM referral_credits rc WHERE rc.referrer_person_id = ${targetPersonId} AND rc.referred_artist_id = p.id AND status = 'pending_payout'), 0) AS pending_cents
+      FROM people p
+      WHERE p.referred_by_person_id = ${targetPersonId}
+      ORDER BY p.name ASC
+    `);
+    // Non-profits referred BY this artist — sourced from admin_invites
+    // where the artist was the referrer and the invitee was a non-profit
+    // (the role-scope_id points at organizations(kind='non_profit')).
+    // We only show invites that have been used (artist actually got a
+    // non-profit onto the platform); pending NPO invites would also be
+    // interesting but aren't required for this surface.
+    const referredNpos = await db.execute<any>(sql`
+      SELECT o.id, o.name, o.logo_url
+      FROM admin_invites i
+      JOIN organizations o ON o.id = i.role_scope_id AND o.kind = 'non_profit'
+      WHERE i.referrer_kind = 'artist' AND i.referrer_scope_id = ${targetPersonId}
+        AND i.role = 'non_profit' AND i.used_at IS NOT NULL
+      ORDER BY o.name ASC
+    `);
+    const s = ((summary as any).rows ?? [])[0] ?? { pending_cents: 0, pending_count: 0, paid_cents: 0 };
+    res.json({
+      pendingCents: s.pending_cents,
+      pendingCount: s.pending_count,
+      paidCents: s.paid_cents,
+      partners: ((partners as any).rows ?? []).map((p: any) => ({
+        id: p.id, name: p.name, photoUrl: p.photo_url, units: p.units, pendingCents: p.pending_cents,
+      })),
+      nonProfits: ((referredNpos as any).rows ?? []).map((o: any) => ({
+        id: o.id, name: o.name, logoUrl: o.logo_url,
+      })),
+    });
+  });
+
+  // Non-profit partner shell — landing data. Restricts to data needed
+  // for the $1/unit credit display: invited-artists list, each artist's
+  // for-sale albums + paid units, total pending payout.
+  app.get("/api/non-profit/me", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    const orgIdParam = typeof req.query.orgId === "string" ? req.query.orgId.trim() : "";
+    const orgId = info.role === "super_admin" ? (orgIdParam || null) : (info.role === "non_profit" ? info.roleScopeId : null);
+    if (!orgId) {
+      return res.status(info.role === "super_admin" ? 400 : 403).json({ message: "Non-profit scope required" });
+    }
+    const r = await db.execute<any>(sql`SELECT id, name, logo_url, website_url FROM organizations WHERE id = ${orgId} AND kind = 'non_profit' LIMIT 1`);
+    const row = ((r as any).rows ?? [])[0];
+    if (!row) return res.status(404).json({ message: "Non-profit not found" });
+    res.json({ id: row.id, name: row.name, logoUrl: row.logo_url, websiteUrl: row.website_url });
+  });
+
+  app.get("/api/non-profit/dashboard", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    const orgIdParam = typeof req.query.orgId === "string" ? req.query.orgId.trim() : "";
+    const orgId = info.role === "super_admin" ? (orgIdParam || null) : (info.role === "non_profit" ? info.roleScopeId : null);
+    if (!orgId) {
+      return res.status(info.role === "super_admin" ? 400 : 403).json({ message: "Non-profit scope required" });
+    }
+    // Task #78 (review-round-4) — unified per-artist roll-up. The NPO's
+    // "Your artists" list needs to show BOTH accepted artists (live
+    // people row, status='active') AND outstanding artist invites the
+    // NPO is the referrer on (no people row yet, status='pending_invite').
+    // Pending email invites for non-artist roles still surface in the
+    // separate "Outstanding invites" panel.
+    const acceptedRows = await db.execute<any>(sql`
+      SELECT p.id, p.name, p.photo_url
+      FROM people p
+      WHERE p.referred_by_org_id = ${orgId}
+      ORDER BY p.name ASC
+    `);
+    const pendingArtistInviteRows = await db.execute<any>(sql`
+      SELECT i.id, i.email, i.role_scope_id
+      FROM admin_invites i
+      WHERE i.referrer_kind = 'non_profit' AND i.referrer_scope_id = ${orgId}
+        AND i.role = 'artist' AND i.used_at IS NULL AND i.revoked_at IS NULL
+      ORDER BY i.created_at DESC
+    `);
+    const acceptedArtistIds = new Set<string>(
+      ((acceptedRows as any).rows ?? []).map((r: any) => r.id),
+    );
+    const artistRows: any[] = [
+      ...(((acceptedRows as any).rows ?? []) as any[]).map((r) => ({
+        id: r.id, name: r.name, photo_url: r.photo_url, status: "active" as const,
+      })),
+      ...(((pendingArtistInviteRows as any).rows ?? []) as any[])
+        // Don't double-count an invite once its target artist row exists.
+        .filter((r) => !r.role_scope_id || !acceptedArtistIds.has(r.role_scope_id))
+        .map((r) => ({
+          id: `invite:${r.id}`, name: r.email, photo_url: null, status: "pending_invite" as const,
+        })),
+    ];
+    // Non-artist pending invites surface separately so the operator
+    // can chase them ("Outstanding invites" panel below the artist list).
+    const pendingInvites = await db.execute<any>(sql`
+      SELECT i.id, i.email, i.role, i.role_scope_id, i.created_at, i.expires_at
+      FROM admin_invites i
+      WHERE i.referrer_kind = 'non_profit' AND i.referrer_scope_id = ${orgId}
+        AND i.role != 'artist'
+        AND i.used_at IS NULL AND i.revoked_at IS NULL
+      ORDER BY i.created_at DESC
+    `);
+    const activeArtistIds = artistRows.filter((a) => a.status === "active").map((a) => a.id);
+    // Albums that are CURRENTLY FOR SALE = have at least one active
+    // album_skus row. Pending-invite artists obviously have no albums
+    // yet so they're skipped from this query entirely.
+    const albumsByArtist: Record<string, any[]> = {};
+    if (activeArtistIds.length > 0) {
+      const albumRows = await db.execute<any>(sql`
+        SELECT a.id, a.title, a.cover_url, a.primary_artist_id,
+          COALESCE((
+            SELECT SUM(oi.quantity)::int
+            FROM orders o
+            JOIN order_items oi ON oi.order_id = o.id AND oi.kind = 'format'
+            WHERE o.album_id = a.id AND o.status = 'paid'
+          ), 0) AS units
+        FROM albums a
+        WHERE a.primary_artist_id = ANY(${activeArtistIds}::varchar[])
+          AND EXISTS (
+            SELECT 1 FROM album_skus s
+            WHERE s.album_id = a.id AND s.active = true
+          )
+        ORDER BY a.title ASC
+      `);
+      for (const ar of ((albumRows as any).rows ?? []) as any[]) {
+        const list = albumsByArtist[ar.primary_artist_id] ?? [];
+        list.push({ id: ar.id, title: ar.title, coverUrl: ar.cover_url, paidUnits: ar.units });
+        albumsByArtist[ar.primary_artist_id] = list;
+      }
+    }
+    // Credit roll-up for this NPO.
+    const credit = await db.execute<any>(sql`
+      SELECT
+        COALESCE(SUM(amount_cents) FILTER (WHERE status = 'pending_payout'), 0)::int AS pending_cents,
+        COALESCE(SUM(units) FILTER (WHERE status = 'pending_payout'), 0)::int AS pending_count,
+        COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::int AS paid_cents
+      FROM referral_credits WHERE referrer_org_id = ${orgId}
+    `);
+    const c = ((credit as any).rows ?? [])[0] ?? { pending_cents: 0, pending_count: 0, paid_cents: 0 };
+    res.json({
+      pendingCents: c.pending_cents,
+      pendingCount: c.pending_count,
+      paidCents: c.paid_cents,
+      artists: artistRows.map((a) => ({
+        id: a.id,
+        name: a.name,
+        photoUrl: a.photo_url,
+        status: a.status,
+        albums: albumsByArtist[a.id] ?? [],
+      })),
+      pendingInvites: ((pendingInvites as any).rows ?? []).map((i: any) => ({
+        id: i.id, email: i.email, role: i.role, createdAt: i.created_at, expiresAt: i.expires_at,
+      })),
     });
   });
 

@@ -19,6 +19,7 @@ import { FavoriteArtists } from "@/pages/FavoriteArtists";
 import { Bookmarks } from "@/pages/Bookmarks";
 import { ArtistDetail } from "@/pages/ArtistDetail";
 import { ArtistDashboard } from "@/pages/ArtistDashboard";
+import { NonProfitDashboard } from "@/pages/NonProfitDashboard";
 import { LabelDashboard } from "@/pages/LabelDashboard";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
@@ -28,6 +29,7 @@ import { AdminAlbums } from "@/pages/AdminAlbums";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { AdminPeople } from "@/pages/AdminPeople";
 import { AdminPerson } from "@/pages/AdminPerson";
+import AdminNonProfit from "@/pages/AdminNonProfit";
 import { AdminInstruments } from "@/pages/AdminInstruments";
 import { AdminInstrument } from "@/pages/AdminInstrument";
 import { AdminVendors } from "@/pages/AdminVendors";
@@ -192,6 +194,10 @@ function Router() {
         <Route path="/artist">
           <ProtectedRoute component={ArtistDashboard} />
         </Route>
+        {/* Task #78 — Non-profit partner shell. Referrers earn $1/unit. */}
+        <Route path="/non-profit">
+          <ProtectedRoute component={NonProfitDashboard} />
+        </Route>
         <Route path="/artist/:slug">
           <ProtectedRoute component={ArtistDetail} />
         </Route>
@@ -239,6 +245,10 @@ function Router() {
         </Route>
         <Route path="/admin/people/:id">
           <ProtectedRoute component={AdminPerson} />
+        </Route>
+        {/* Task #78 — Super-admin detail page for a non-profit partner. */}
+        <Route path="/admin/non-profits/:id">
+          <ProtectedRoute component={AdminNonProfit} />
         </Route>
         <Route path="/admin/people">
           <ProtectedRoute component={AdminPeople} />

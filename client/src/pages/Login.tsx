@@ -273,6 +273,20 @@ export function Login() {
       setMode("login");
       window.history.replaceState({}, "", loginPath);
     }
+    // Task #78 — OAuth admin sign-in for an email with no existing
+    // invite-bound account. The callback bounces here with
+    // ?prompt=invite_required; explain the situation and direct the
+    // recipient to ask for an invite.
+    if (prompt === "invite_required") {
+      toast({
+        title: "Invite required",
+        description:
+          "Partner accounts are invite-only. Ask a super-admin for an invite link, or email nick@goodtunes.fm.",
+        variant: "destructive",
+      });
+      setMode("login");
+      window.history.replaceState({}, "", loginPath);
+    }
     if (oauth && (next === "totp" || next === "enroll")) {
       setAdminPhase(next === "enroll" ? "enroll" : "totp");
       window.history.replaceState({}, "", loginPath);
@@ -500,7 +514,9 @@ export function Login() {
       const j = await res.json();
       if (j.token) setAuthToken(j.token);
       queryClient.invalidateQueries();
-      navigate("/admin");
+      // Task #78 — honor server-supplied role-scoped landing so OAuth
+      // invite recipients land in their partner shell (/non-profit etc).
+      navigate(typeof j.landingPath === "string" && j.landingPath.startsWith("/") ? j.landingPath : "/admin");
     } catch (e: any) {
       setTotpError(e?.message ?? "Code didn't match");
     } finally {
@@ -515,7 +531,7 @@ export function Login() {
       const j = await res.json();
       if (j.token) setAuthToken(j.token);
       queryClient.invalidateQueries();
-      navigate("/admin");
+      navigate(typeof j.landingPath === "string" && j.landingPath.startsWith("/") ? j.landingPath : "/admin");
     } catch (e: any) {
       setEmailOtpError(e?.message ?? "Code didn't match");
     } finally {
@@ -765,15 +781,30 @@ export function Login() {
           >
             Sign In
           </button>
-          <button
-            type="button"
-            onClick={() => switchMode("register")}
-            className={s.segmentedBtn(mode === "register")}
-            data-testid="tab-register"
-          >
-            Create Account
-          </button>
+          {/* Task #78 — admin/partner accounts are invite-only; the
+              public "Create Account" tab is only rendered on the
+              customer shell. Admins arrive via /invite/:token. */}
+          {!isAdmin && (
+            <button
+              type="button"
+              onClick={() => switchMode("register")}
+              className={s.segmentedBtn(mode === "register")}
+              data-testid="tab-register"
+            >
+              Create Account
+            </button>
+          )}
         </div>
+        {isAdmin && (
+          <p
+            className="mt-3 mb-5 rounded-lg bg-slate-100 px-3 py-2 text-[12px] leading-snug text-slate-700"
+            data-testid="text-invite-only-notice"
+          >
+            Partner accounts are invite-only. If you were promised access, check your email for an
+            invite link, or contact{" "}
+            <a className="font-semibold underline" href="mailto:nick@goodtunes.fm">nick@goodtunes.fm</a>.
+          </p>
+        )}
 
         {mode === "register" && (
           <div className="flex items-center justify-center gap-2 mb-5">

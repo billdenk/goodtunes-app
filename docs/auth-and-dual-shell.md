@@ -27,3 +27,16 @@ When Apple Sign-In returns `@privaterelay.appleid.com`, the customer is prompted
 - `*.replit.app` works as dev with both shells reachable
 
 CNAMEs at the user's DNS provider point both subdomains at the deployment. Apple domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts via the `APPLE_DOMAIN_ASSOCIATION` env var.
+
+## Partner invites + referrals (Task #78)
+
+Single invite sheet at `/admin/invites` (super-admin only) covers every partner role: super-admin, label, artist, manufacturer, fulfillment, **and non-profit**. Non-profits live in the existing `organizations` table with `kind='non_profit'` — they share the org schema with labels/manufacturers rather than getting a parallel table, which keeps `people.referredByOrgId` pointing at one place.
+
+- **Invite fields.** Email + role + optional scope picker (validated against the matching entity table) + **optional referrer** (artist or non-profit) + free-form welcome note (≤1000 chars).
+- **Token lifetime.** 14 days. The DELETE button soft-revokes (writes `admin_invites.revoked_at`); the refresh button mints a fresh token, extends to a new 14-day window, re-emails the magic link, and stamps `resent_at` so the row shows when it was last touched.
+- **Accept flow.** `/invite/:token` → set username + password → server promotes the user to admin, writes role + scope, and **wires the referrer onto the artist Person row** (`people.referred_by_person_id` or `referred_by_org_id`) if the new partner is an artist with a referrer attached. Response includes a `landingPath` so non-profits land on `/non-profit`, artists on `/artist`, labels on `/label`, everyone else on `/admin/albums`.
+- **Referral credits.** `referral_credits` is the ledger: every paid order on a referred artist's album mints one row per referrer (artist + non-profit can both be set; both fire), at `people.referrer_per_unit_cents` (default $1). Unique on `(order_id, referrer_kind)` so retries are safe; status starts as `pending_payout`. Surfaces:
+  - `/non-profit` — partner shell with KPIs, per-artist album rollup, outstanding invites.
+  - Artist dashboard → **Referrals** tab — same KPIs scoped to the artist's own referrals.
+  - Admin person Overview — referral summary panel (hidden when empty) for super-admin auditing.
+- **Prod migration.** `scripts/prod-schema-fixups/2026-05-22-task-78-partner-invites.sql` — idempotent (`IF NOT EXISTS` everywhere). Adds `referrer_kind`, `referrer_scope_id`, `welcome_note`, `revoked_at`, `resent_at` to `admin_invites`; creates `referral_credits` + the unique index + the two referrer-by-kind partial indexes.

@@ -503,6 +503,9 @@ export interface IStorage {
   getAdminInviteByToken(token: string): Promise<AdminInvite | undefined>;
   markAdminInviteUsed(id: string, acceptedUserId: string): Promise<void>;
   deleteAdminInvite(id: string): Promise<void>;
+  revokeAdminInvite(id: string): Promise<void>;
+  resendAdminInvite(id: string, newToken: string, newExpiresAt: Date): Promise<AdminInvite | undefined>;
+  getAdminInviteById(id: string): Promise<AdminInvite | undefined>;
 }
 
 // Seed catalog (albums + songs). Kept inline rather than imported from the
@@ -2334,18 +2337,40 @@ export class DbStorage implements IStorage {
       token: data.token,
       expiresAt: data.expiresAt,
       createdByUserId: data.createdByUserId,
+      referrerKind: (data as any).referrerKind ?? null,
+      referrerScopeId: (data as any).referrerScopeId ?? null,
+      welcomeNote: (data as any).welcomeNote ?? null,
     }).returning();
+    return row;
+  }
+  async getAdminInviteById(id: string): Promise<AdminInvite | undefined> {
+    const [row] = await db.select().from(adminInvites).where(eq(adminInvites.id, id)).limit(1);
+    return row;
+  }
+  async revokeAdminInvite(id: string): Promise<void> {
+    await db.update(adminInvites)
+      .set({ revokedAt: new Date() })
+      .where(eq(adminInvites.id, id));
+  }
+  async resendAdminInvite(id: string, newToken: string, newExpiresAt: Date): Promise<AdminInvite | undefined> {
+    const [row] = await db.update(adminInvites)
+      .set({ token: newToken, expiresAt: newExpiresAt, resentAt: new Date() })
+      .where(eq(adminInvites.id, id))
+      .returning();
     return row;
   }
   async listPendingAdminInvites(): Promise<AdminInvite[]> {
     return db
       .select()
       .from(adminInvites)
-      .where(sql`${adminInvites.usedAt} IS NULL`)
+      .where(sql`${adminInvites.usedAt} IS NULL AND ${adminInvites.revokedAt} IS NULL`)
       .orderBy(desc(adminInvites.createdAt));
   }
   async getAdminInviteByToken(token: string): Promise<AdminInvite | undefined> {
     const [row] = await db.select().from(adminInvites).where(eq(adminInvites.token, token)).limit(1);
+    if (!row) return undefined;
+    // Revoked invites stay in the table for audit but can't be accepted.
+    if ((row as any).revokedAt) return undefined;
     return row;
   }
   async markAdminInviteUsed(id: string, acceptedUserId: string): Promise<void> {

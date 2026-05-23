@@ -501,6 +501,7 @@ function OverviewPanel({
   ];
   return (
     <div className="space-y-5">
+      <ReferralSummaryPanel kind="artist" id={person.id} />
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"
@@ -1515,3 +1516,134 @@ function GearPanel({ person }: { person: PersonFull }) {
     </ul>
   );
 }
+
+// ─── Referral summary (Task #78) ───────────────────────────────────────
+// Super-admin only — shows who this artist has referred + accrued
+// $1/unit credits + recent ledger. Rendered above the Identity panel
+// on Overview.
+function ReferralSummaryPanel({ kind, id }: { kind: "artist" | "non_profit"; id: string }) {
+  const { data, isLoading } = useQuery<{
+    pendingCents: number;
+    pendingCount: number;
+    paidCents: number;
+    referredPartners: { id: string; name: string; photoUrl: string | null; paidUnits: number }[];
+    recent: { id: string; orderId: string; amountCents: number; currency: string; status: string; createdAt: string; artistName: string | null }[];
+    provenance: {
+      referredBy: { kind: "artist" | "non_profit"; id: string; name: string } | null;
+      invitedBy: { id: string; name: string; email: string; at: string | null } | null;
+    };
+  }>({
+    queryKey: [`/api/admin/partners/${kind}/${id}/referral-summary`],
+    retry: false,
+  });
+  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+  if (isLoading) return null;
+  if (!data) return null;
+  const hasProvenance = !!(data.provenance?.referredBy || data.provenance?.invitedBy);
+  // Hide entirely when there's nothing to show — keeps the Overview
+  // tab clean for the 99% of artists who aren't acting as referrers.
+  // Provenance counts as "something to show" — super-admins want to
+  // know who invited/referred a partner even if they haven't earned
+  // credits yet.
+  if (
+    data.referredPartners.length === 0 &&
+    data.pendingCents === 0 &&
+    data.paidCents === 0 &&
+    !hasProvenance
+  ) return null;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5" data-testid="panel-referral-summary">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-slate-900">Referral credits</h3>
+        <span className="text-[11px] uppercase tracking-wide font-semibold text-[#FF5470]">$1 per unit</span>
+      </div>
+      {hasProvenance && (
+        <dl className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12.5px]" data-testid="dl-provenance">
+          {data.provenance.referredBy && (
+            <div className="rounded-lg bg-slate-50 px-3 py-2" data-testid="row-referred-by">
+              <dt className="text-[10px] uppercase tracking-wide font-semibold text-slate-500">Referred by</dt>
+              <dd className="mt-0.5 text-slate-900 font-medium">
+                <Link
+                  href={data.provenance.referredBy.kind === "artist"
+                    ? `/admin/people/${data.provenance.referredBy.id}`
+                    : `/admin/non-profits/${data.provenance.referredBy.id}`}
+                  className="hover:text-[var(--brand-blue)] hover:underline"
+                >
+                  {data.provenance.referredBy.name}
+                </Link>
+                <span className="ml-2 text-[10px] uppercase tracking-wide text-slate-500">
+                  {data.provenance.referredBy.kind === "artist" ? "Artist" : "Non-profit"}
+                </span>
+              </dd>
+            </div>
+          )}
+          {data.provenance.invitedBy && (
+            <div className="rounded-lg bg-slate-50 px-3 py-2" data-testid="row-invited-by">
+              <dt className="text-[10px] uppercase tracking-wide font-semibold text-slate-500">Invited by</dt>
+              <dd className="mt-0.5 text-slate-900 font-medium">
+                {data.provenance.invitedBy.name}
+                {data.provenance.invitedBy.at && (
+                  <span className="ml-2 text-[10px] text-slate-500">
+                    {new Date(data.provenance.invitedBy.at).toLocaleDateString()}
+                  </span>
+                )}
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="rounded-lg bg-slate-50 p-3">
+          <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Pending</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 tabular-nums" data-testid="text-ref-pending">{fmt(data.pendingCents)}</p>
+          <p className="text-[11px] text-slate-500">{data.pendingCount} unit{data.pendingCount === 1 ? "" : "s"}</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3">
+          <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Paid</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 tabular-nums" data-testid="text-ref-paid">{fmt(data.paidCents)}</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3">
+          <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Referred</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 tabular-nums" data-testid="text-ref-count">{data.referredPartners.length}</p>
+          <p className="text-[11px] text-slate-500">artist{data.referredPartners.length === 1 ? "" : "s"}</p>
+        </div>
+      </div>
+      {data.referredPartners.length > 0 && (
+        <ul className="divide-y divide-slate-100" data-testid="list-ref-partners">
+          {data.referredPartners.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 py-2" data-testid={`row-ref-partner-${p.id}`}>
+              {p.photoUrl ? (
+                <img src={p.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover bg-slate-100" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-slate-100" />
+              )}
+              <Link href={`/admin/people/${p.id}`} className="flex-1 min-w-0 text-[13px] font-medium text-slate-900 truncate hover:text-[var(--brand-blue)] hover:underline">
+                {p.name}
+              </Link>
+              <span className="text-[11px] text-slate-500 tabular-nums">{p.paidUnits} paid</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {data.recent.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 mb-2">Recent credits</p>
+          <ul className="divide-y divide-slate-100" data-testid="list-ref-recent">
+            {data.recent.map((r) => (
+              <li key={r.id} className="flex items-center gap-3 py-2 text-[12.5px]" data-testid={`row-ref-recent-${r.id}`}>
+                <span className="flex-1 min-w-0 text-slate-700 truncate">{r.artistName ?? "(unknown artist)"}</span>
+                <span className="text-[11px] text-slate-400">{new Date(r.createdAt).toLocaleDateString()}</span>
+                <span className={`text-[10px] uppercase tracking-wide font-semibold ${r.status === "paid" ? "text-[var(--brand-blue)]" : "text-amber-600"}`}>{r.status === "paid" ? "Paid" : "Pending"}</span>
+                <span className="text-slate-900 tabular-nums font-semibold w-16 text-right">${(r.amountCents / 100).toFixed(2)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Exported so AdminNonProfit can reuse the same panel without
+// re-implementing the layout.
+export { ReferralSummaryPanel };

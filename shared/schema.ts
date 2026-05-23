@@ -1689,7 +1689,13 @@ export type RfqReply = typeof rfqReplies.$inferSelect;
 // but NOT the super-admin-only sensitive cuts (payout reconciliation,
 // raw event explorer). Partner roles (label/artist/manufacturer/
 // fulfillment) only see their own scoped reports via /api/partner/*.
-export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment"] as const;
+// Task #78 — `non_profit` is the new partner role for charity/community
+// orgs that refer artists onto GoodTunes. It binds to a row in
+// `organizations` where `kind = 'non_profit'` (we reuse the existing
+// organizations table rather than minting a parallel scope table).
+// `org` is kept as a historical alias used in reports code; resolved
+// to `non_profit` by getUserRole().
+export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment", "non_profit"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 // ─── Admin invitations ───────────────────────────────────────────────
@@ -1711,6 +1717,17 @@ export const adminInvites = pgTable("admin_invites", {
   acceptedUserId: varchar("accepted_user_id"),
   createdByUserId: varchar("created_by_user_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  // Task #78 — optional referrer captured at invite time. Kind is
+  // "artist" (person) or "non_profit" (organization). Resolved into
+  // people.referredByPersonId / referredByOrgId at accept time so the
+  // existing referral-attribution machinery sees the link.
+  referrerKind: text("referrer_kind"), // "artist" | "non_profit" | null
+  referrerScopeId: varchar("referrer_scope_id"),
+  welcomeNote: text("welcome_note"),
+  // Soft state — revokedAt invalidates immediately, resentAt tracks
+  // the last time the magic link was re-issued.
+  revokedAt: timestamp("revoked_at"),
+  resentAt: timestamp("resent_at"),
 });
 
 export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
@@ -1720,13 +1737,52 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
   usedAt: true,
   acceptedUserId: true,
   createdAt: true,
+  revokedAt: true,
+  resentAt: true,
 }).extend({
   email: z.string().email(),
   role: z.enum(ADMIN_ROLES),
   roleScopeId: z.string().optional().nullable(),
+  referrerKind: z.enum(["artist", "non_profit"]).optional().nullable(),
+  referrerScopeId: z.string().optional().nullable(),
+  welcomeNote: z.string().max(1000).optional().nullable(),
 });
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;
 export type AdminInvite = typeof adminInvites.$inferSelect;
+
+// ─── Task #78 — Referral credit ledger ────────────────────────────────
+// One row per paid unit on an album whose primary artist was referred
+// by another partner. `$1` (100¢) per unit by default — read off
+// people.referrerPerUnitCents. Status starts `pending_payout`; the
+// actual Stripe Connect transfer is a follow-on alongside Task #48 and
+// flips status to `paid`.
+//
+// referrerKind is denormed alongside referrerOrgId / referrerPersonId
+// so we can roll up per kind without joining back to people.
+export const referralCredits = pgTable("referral_credits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull(),
+  referredArtistId: varchar("referred_artist_id").notNull(),
+  referrerKind: text("referrer_kind").notNull(), // "artist" | "non_profit"
+  referrerPersonId: varchar("referrer_person_id"),
+  referrerOrgId: varchar("referrer_org_id"),
+  amountCents: integer("amount_cents").notNull(),
+  // Paid units that backed this credit (sum of order_items.quantity
+  // for the order's format lines). `amountCents = perUnit * units`.
+  // Stored so reporting can sum units without re-joining order_items.
+  units: integer("units").notNull().default(1),
+  currency: text("currency").notNull().default("usd"),
+  status: text("status").notNull().default("pending_payout"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  // One credit per (order, referrer-of-each-kind). A single order can
+  // earn two credits if both an artist AND an NPO referred the artist
+  // — distinct rows because referrerKind differs.
+  orderRefUniq: uniqueIndex("referral_credits_order_kind_uniq")
+    .on(t.orderId, t.referrerKind),
+}));
+
+export type ReferralCredit = typeof referralCredits.$inferSelect;
 
 // ─── Task #128 — Printable GoodDeed certificates ───────────────────────
 // One row per paid order that carries a `signed_cert` add-on. The fan

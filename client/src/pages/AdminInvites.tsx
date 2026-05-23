@@ -4,7 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Copy, Check, X, ChevronDown } from "lucide-react";
+import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart } from "lucide-react";
 
 interface PendingInvite {
   id: string;
@@ -13,8 +13,13 @@ interface PendingInvite {
   roleScopeId: string | null;
   scopeName: string | null;
   scopeThumbUrl: string | null;
+  referrerKind: string | null;
+  referrerScopeId: string | null;
+  referrerName: string | null;
+  welcomeNote: string | null;
   expiresAt: string;
   createdAt: string;
+  resentAt: string | null;
 }
 
 const ROLE_OPTIONS: { value: string; label: string }[] = [
@@ -23,6 +28,7 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "artist", label: "Artist" },
   { value: "manufacturer", label: "Manufacturer" },
   { value: "fulfillment", label: "Fulfillment Partner" },
+  { value: "non_profit", label: "Non-profit" },
 ];
 
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(
@@ -40,27 +46,36 @@ const SCOPE_CONFIG: Record<
   label: { endpoint: "/api/labels", noun: "label", thumbField: "logoUrl" },
   manufacturer: { endpoint: "/api/manufacturers", noun: "manufacturer", thumbField: "logoUrl" },
   fulfillment: { endpoint: "/api/fulfillment-partners", noun: "fulfillment partner", thumbField: "logoUrl" },
+  non_profit: { endpoint: "/api/non-profits", noun: "non-profit", thumbField: "logoUrl" },
 };
+
+// Referrer picker — artist or non-profit only. Same SCOPE_CONFIG entries.
+const REFERRER_CONFIG = {
+  artist: SCOPE_CONFIG.artist,
+  non_profit: SCOPE_CONFIG.non_profit,
+} as const;
 
 type ScopeEntity = { id: string; name: string; photoUrl?: string | null; logoUrl?: string | null };
 
 function ScopePicker({
-  role,
+  cfg,
   value,
   onChange,
+  label,
+  testId,
 }: {
-  role: string;
+  cfg: { endpoint: string; noun: string; thumbField: "photoUrl" | "logoUrl" };
   value: string | null;
   onChange: (id: string | null, name: string | null) => void;
+  label?: string;
+  testId?: string;
 }) {
-  const cfg = SCOPE_CONFIG[role];
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const { data: rows = [], isLoading } = useQuery<ScopeEntity[]>({
     queryKey: [cfg.endpoint],
-    enabled: !!cfg,
   });
 
   const selected = useMemo(() => rows.find((r) => r.id === value) ?? null, [rows, value]);
@@ -72,7 +87,6 @@ function ScopePicker({
     return sorted.filter((r) => r.name.toLowerCase().includes(q)).slice(0, 50);
   }, [rows, query]);
 
-  // Close on outside click.
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
@@ -86,12 +100,12 @@ function ScopePicker({
   return (
     <div className="mt-3" ref={wrapRef}>
       <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-        {cfg.noun.charAt(0).toUpperCase() + cfg.noun.slice(1)}
+        {label || cfg.noun.charAt(0).toUpperCase() + cfg.noun.slice(1)}
       </label>
       {selected ? (
         <div
           className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-300 bg-white"
-          data-testid="invite-scope-selected"
+          data-testid={testId ? `${testId}-selected` : "invite-scope-selected"}
         >
           {thumb(selected) ? (
             <img src={thumb(selected)!} alt="" className="w-8 h-8 rounded-full object-cover bg-slate-100" />
@@ -108,7 +122,7 @@ function ScopePicker({
             }}
             className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
             aria-label="Clear selection"
-            data-testid="button-clear-scope"
+            data-testid={testId ? `${testId}-clear` : "button-clear-scope"}
           >
             <X className="w-4 h-4" />
           </button>
@@ -126,14 +140,14 @@ function ScopePicker({
               onFocus={() => setOpen(true)}
               placeholder={`Search ${cfg.noun}s…`}
               className="flex-1 px-3 py-2 bg-transparent focus:outline-none"
-              data-testid="input-scope-search"
+              data-testid={testId ? `${testId}-input` : "input-scope-search"}
             />
             <ChevronDown className="w-4 h-4 text-slate-400 mr-3" />
           </div>
           {open && (
             <div
               className="absolute z-20 mt-1 w-full max-h-72 overflow-auto bg-white border border-slate-200 rounded-lg shadow-lg"
-              data-testid="list-scope-options"
+              data-testid={testId ? `${testId}-options` : "list-scope-options"}
             >
               {isLoading ? (
                 <div className="px-3 py-2 text-sm text-slate-500">Loading…</div>
@@ -152,7 +166,7 @@ function ScopePicker({
                       setQuery("");
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50"
-                    data-testid={`option-scope-${r.id}`}
+                    data-testid={`option-${testId || "scope"}-${r.id}`}
                   >
                     {thumb(r) ? (
                       <img src={thumb(r)!} alt="" className="w-7 h-7 rounded-full object-cover bg-slate-100" />
@@ -176,16 +190,20 @@ export function AdminInvites() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("super_admin");
   const [scopeId, setScopeId] = useState<string | null>(null);
+  const [referrerKind, setReferrerKind] = useState<"" | "artist" | "non_profit">("");
+  const [referrerScopeId, setReferrerScopeId] = useState<string | null>(null);
+  const [welcomeNote, setWelcomeNote] = useState("");
   const [lastUrl, setLastUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const needsScope = !!SCOPE_CONFIG[role];
 
-  // Reset the scope picker whenever the role changes so we never
-  // ship a stale id from a previous role selection.
   useEffect(() => {
     setScopeId(null);
   }, [role]);
+  useEffect(() => {
+    setReferrerScopeId(null);
+  }, [referrerKind]);
 
   const {
     data: invites = [],
@@ -198,7 +216,14 @@ export function AdminInvites() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (body: { email: string; role: string; roleScopeId: string | null }) => {
+    mutationFn: async (body: {
+      email: string;
+      role: string;
+      roleScopeId: string | null;
+      referrerKind: string | null;
+      referrerScopeId: string | null;
+      welcomeNote: string | null;
+    }) => {
       const r = await apiRequest("POST", "/api/admin/invites", body);
       return r.json() as Promise<{
         id: string;
@@ -212,6 +237,9 @@ export function AdminInvites() {
       setEmail("");
       setRole("super_admin");
       setScopeId(null);
+      setReferrerKind("");
+      setReferrerScopeId(null);
+      setWelcomeNote("");
       setLastUrl(data.acceptUrl);
       setCopied(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
@@ -237,6 +265,23 @@ export function AdminInvites() {
     },
   });
 
+  const resendMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await apiRequest("POST", `/api/admin/invites/${id}/resend`);
+      return r.json() as Promise<{ acceptUrl: string; emailDelivered: boolean }>;
+    },
+    onSuccess: (data) => {
+      setLastUrl(data.acceptUrl);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
+      toast({
+        title: data.emailDelivered ? "Invite re-sent" : "Re-sent (email failed — copy link)",
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Resend failed", description: e.message, variant: "destructive" });
+    },
+  });
+
   async function copyUrl() {
     if (!lastUrl) return;
     try {
@@ -247,14 +292,17 @@ export function AdminInvites() {
   }
 
   const submitDisabled =
-    createMutation.isPending || !email.trim() || (needsScope && !scopeId);
+    createMutation.isPending || !email.trim() || (needsScope && !scopeId) ||
+    (!!referrerKind && !referrerScopeId);
 
   return (
     <AdminFrame active="albums">
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
         <p className="text-sm text-slate-600 mb-6">
-          Invite a teammate to the admin. They'll receive an email with a one-time link to set their username + password.
+          Invite a teammate or partner to the admin. They'll get a one-time link to set their username + password.
+          Optionally attribute the invite to a referring artist or non-profit — referrers earn $1 per paid unit on
+          the artists they refer.
         </p>
 
         <form
@@ -262,10 +310,14 @@ export function AdminInvites() {
             e.preventDefault();
             if (!email.trim()) return;
             if (needsScope && !scopeId) return;
+            if (!!referrerKind && !referrerScopeId) return;
             createMutation.mutate({
               email: email.trim(),
               role,
               roleScopeId: needsScope ? scopeId : null,
+              referrerKind: referrerKind || null,
+              referrerScopeId: referrerKind ? referrerScopeId : null,
+              welcomeNote: welcomeNote.trim() || null,
             });
           }}
           className="bg-white border border-slate-200 rounded-2xl p-5 mb-6"
@@ -309,11 +361,54 @@ export function AdminInvites() {
 
           {needsScope && (
             <ScopePicker
-              role={role}
+              cfg={SCOPE_CONFIG[role]}
               value={scopeId}
               onChange={(id) => setScopeId(id)}
             />
           )}
+
+          {/* Optional referrer attribution — collapsed unless a kind is chosen. */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+              <span className="inline-flex items-center gap-1">
+                <Heart className="w-3.5 h-3.5 text-[#FF5470]" /> Referrer (optional)
+              </span>
+            </label>
+            <select
+              value={referrerKind}
+              onChange={(e) => setReferrerKind(e.target.value as any)}
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              data-testid="select-referrer-kind"
+            >
+              <option value="">— none —</option>
+              <option value="artist">Artist</option>
+              <option value="non_profit">Non-profit</option>
+            </select>
+            {referrerKind && (
+              <ScopePicker
+                cfg={REFERRER_CONFIG[referrerKind]}
+                value={referrerScopeId}
+                onChange={(id) => setReferrerScopeId(id)}
+                label={`Referring ${REFERRER_CONFIG[referrerKind].noun}`}
+                testId="referrer-scope"
+              />
+            )}
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+              Welcome note (optional)
+            </label>
+            <textarea
+              value={welcomeNote}
+              onChange={(e) => setWelcomeNote(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              placeholder="Hi Jenny — really excited to have you on board. — Nick"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
+              data-testid="textarea-welcome-note"
+            />
+          </div>
 
           {lastUrl && (
             <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-3" data-testid="last-invite-url">
@@ -378,8 +473,33 @@ export function AdminInvites() {
                       <span className={expired ? "text-rose-600" : ""}>
                         {expired ? "expired" : `expires ${expires.toLocaleDateString()}`}
                       </span>
+                      {inv.referrerName && (
+                        <>
+                          <span className="mx-2">·</span>
+                          <span className="inline-flex items-center gap-1" data-testid={`text-referrer-${inv.id}`}>
+                            <Heart className="w-3 h-3 text-[#FF5470]" /> {inv.referrerName}
+                          </span>
+                        </>
+                      )}
+                      {inv.resentAt && (
+                        <>
+                          <span className="mx-2">·</span>
+                          <span className="text-slate-400">re-sent {new Date(inv.resentAt).toLocaleDateString()}</span>
+                        </>
+                      )}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => resendMutation.mutate(inv.id)}
+                    disabled={resendMutation.isPending}
+                    className="p-2 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 transition-colors"
+                    title="Resend invite"
+                    aria-label="Resend invite"
+                    data-testid={`button-resend-${inv.id}`}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => revokeMutation.mutate(inv.id)}
