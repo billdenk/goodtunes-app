@@ -1396,6 +1396,7 @@ export function registerCommerceRoutes(app: Express) {
           ...r.order,
           albumTitle: r.album.title,
           albumArtist: r.album.artist,
+          albumArtwork: r.album.artwork ?? null,
           customerEmail: r.customer.email,
           customerName: r.customer.realName ?? r.customer.displayName ?? null,
           shippingName: ship?.name ?? null,

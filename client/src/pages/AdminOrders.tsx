@@ -16,7 +16,16 @@ import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AlertTriangle, Settings2, RefreshCw, Loader2 } from "lucide-react";
-import type { PayoutSettings } from "@shared/schema";
+import type { PayoutSettings, AlbumFormat } from "@shared/schema";
+import { VinylPreview } from "@/components/VinylPreview";
+import {
+  DEFAULT_JACKET_UPGRADE,
+  DEFAULT_VINYL_COLOR_ID,
+  JACKET_UPGRADE_LABEL,
+  VINYL_COLOR_BY_ID,
+  isVinylFormat,
+  type JacketUpgrade,
+} from "@shared/pressing";
 
 type GiftInfo = {
   id: string;
@@ -39,6 +48,7 @@ type AdminOrderRow = {
   albumId: string;
   albumTitle: string;
   albumArtist: string;
+  albumArtwork: string | null;
   status: string;
   totalCents: number;
   goodDeedNumber: number | null;
@@ -54,7 +64,17 @@ type AdminOrderRow = {
   payoutOwnerId: string | null;
   // Task #49 — order origin. "direct" | "shopify:<storeId>".
   origin?: string;
-  items: { id: string; kind: string; sku: string; label: string; unitPriceCents: number; quantity: number }[];
+  items: {
+    id: string;
+    kind: string;
+    sku: string;
+    label: string;
+    unitPriceCents: number;
+    quantity: number;
+    // Task #212 — pressing snapshot per item; null on non-vinyl rows.
+    vinylColor?: string | null;
+    jacketUpgrade?: JacketUpgrade | null;
+  }[];
   gift: GiftInfo | null;
   // Task #73 — Order Desk fulfillment lifecycle.
   skuKind?: string | null;
@@ -301,12 +321,44 @@ function AdminOrdersInner() {
               key={o.id}
               ref={isFocus ? focusedRef : undefined}
               className={[
-                "px-4 py-4 flex items-center gap-4 transition-colors",
+                "px-4 py-4 flex items-start gap-4 transition-colors",
                 isFocus ? "bg-[var(--brand-blue)]/5 ring-2 ring-inset ring-[var(--brand-blue)]/40" : "",
               ].join(" ")}
               data-testid={`row-admin-order-${o.id}`}
               data-focused={isFocus ? "true" : undefined}
             >
+              {(() => {
+                // Task #212 — if any line item is a pressed vinyl, lead
+                // the row with the colored VinylPreview so Bill can scan
+                // color/jacket without opening every order. Falls back
+                // to plain artwork for non-vinyl orders.
+                const vinylItem = o.items.find(
+                  (it) => it.kind === "format" && isVinylFormat(it.sku as AlbumFormat),
+                );
+                if (vinylItem) {
+                  const color =
+                    VINYL_COLOR_BY_ID[vinylItem.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
+                    VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+                  return (
+                    <div className="w-24 flex-shrink-0" data-testid={`admin-order-vinyl-preview-${o.id}`}>
+                      <VinylPreview
+                        artworkUrl={o.albumArtwork}
+                        color={color}
+                        jacketUpgrade={vinylItem.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
+                        size="sm"
+                      />
+                    </div>
+                  );
+                }
+                return o.albumArtwork ? (
+                  <img
+                    src={o.albumArtwork}
+                    alt=""
+                    className="w-16 h-16 rounded-md object-cover border border-slate-200 flex-shrink-0"
+                    data-testid={`admin-order-artwork-${o.id}`}
+                  />
+                ) : null;
+              })()}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-[11px] flex-wrap">
                   <span className={[
@@ -369,6 +421,55 @@ function AdminOrdersInner() {
                     </span>
                   ))}
                 </div>
+                {/* Task #212 — per-vinyl-line detail. Mirrors the fan-side
+                    Orders detail layout: jacket + colored disc on the left,
+                    color name + jacket upgrade + format label on the right. */}
+                {(() => {
+                  const vinylLines = o.items.filter(
+                    (it) => it.kind === "format" && isVinylFormat(it.sku as AlbumFormat),
+                  );
+                  if (vinylLines.length === 0) return null;
+                  return (
+                    <div className="mt-2 flex flex-col gap-2" data-testid={`admin-order-vinyl-lines-${o.id}`}>
+                      {vinylLines.map((it) => {
+                        const color =
+                          VINYL_COLOR_BY_ID[it.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
+                          VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+                        const jacket = it.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE;
+                        return (
+                          <div
+                            key={`vinyl-line-${it.id}`}
+                            className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-2.5 py-2"
+                            data-testid={`admin-order-vinyl-line-${it.id}`}
+                          >
+                            <div className="w-20 flex-shrink-0">
+                              <VinylPreview
+                                artworkUrl={o.albumArtwork}
+                                color={color}
+                                jacketUpgrade={jacket}
+                                size="sm"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1 text-[12px] leading-snug">
+                              <div className="font-medium text-slate-900">{it.label}</div>
+                              <div className="text-slate-500">
+                                {color.name}
+                                <span className="text-slate-300"> · </span>
+                                {JACKET_UPGRADE_LABEL[jacket]}
+                                {it.quantity > 1 && (
+                                  <>
+                                    <span className="text-slate-300"> · </span>
+                                    ×{it.quantity}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {o.shippingAddress && (
                   <div className="text-[11.5px] text-slate-500 mt-1.5 leading-snug">
                     Ship to: {o.shippingName ?? o.customerName ?? "—"},{" "}
