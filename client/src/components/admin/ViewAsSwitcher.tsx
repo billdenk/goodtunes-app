@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -134,14 +134,13 @@ const PERSONAS: Persona[] = [
     key: "nonprofit",
     label: "Non-profit",
     icon: Heart,
-    // Non-profits live in the labels table today (label.kind="non_profit"),
-    // exposed through /api/labels. Filter on the client so we don't have
-    // to add a new endpoint.
-    endpoint: "/api/labels",
-    filter: (e) => (e as { kind?: string }).kind === "non_profit",
-    // Real portal: NonProfitDashboard backend honors ?orgId= for super_admin.
-    detailPath: (id) => `/non-profit?orgId=${encodeURIComponent(id)}`,
-    listPath: "/admin/labels",
+    // Non-profits live in the `organizations` table (kind='non_profit')
+    // and are exposed through /api/non-profits. The chooser routes to
+    // the canonical admin detail page so opening from a detail URL
+    // round-trips back to the same page.
+    endpoint: "/api/non-profits",
+    detailPath: (id) => `/admin/non-profits/${id}`,
+    listPath: "/admin/non-profits",
     allowCreate: true,
   },
   {
@@ -178,11 +177,67 @@ const PERSONAS: Persona[] = [
   },
 ];
 
+// Inspect the current URL and figure out which persona + entity id the
+// operator is looking at, so the chooser can pre-select that row instead
+// of making them re-search. Covers both the canonical admin detail
+// routes (`/admin/<segment>/:id`) and the partner-portal view-as URLs
+// (`/label?labelId=…`, `/artist?personId=…`, `/non-profit?orgId=…`).
+function detectCurrentEntity(
+  pathname: string,
+  search: string,
+): { personaKey: PersonaKey; id: string } | null {
+  const adminSegmentToPersona: Record<string, PersonaKey> = {
+    labels: "label",
+    manufacturers: "press",
+    people: "artist",
+    "non-profits": "nonprofit",
+    makers: "maker",
+    vendors: "reseller",
+    "fulfillment-partners": "fulfillment",
+  };
+  const adminMatch = pathname.match(/^\/admin\/([^/]+)\/([^/?#]+)/);
+  if (adminMatch) {
+    const seg = adminMatch[1];
+    const id = adminMatch[2];
+    const personaKey = adminSegmentToPersona[seg];
+    if (personaKey && id && id !== "new") return { personaKey, id };
+  }
+  const params = new URLSearchParams(search);
+  if (pathname === "/label" && params.get("labelId"))
+    return { personaKey: "label", id: params.get("labelId")! };
+  if (pathname === "/artist" && params.get("personId"))
+    return { personaKey: "artist", id: params.get("personId")! };
+  if (pathname === "/non-profit" && params.get("orgId"))
+    return { personaKey: "nonprofit", id: params.get("orgId")! };
+  return null;
+}
+
 export function ViewAsSwitcher() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const currentEntity = useMemo(() => {
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    return detectCurrentEntity(location, search);
+  }, [location]);
+
   const [personaOpen, setPersonaOpen] = useState(false);
   const [personaQuery, setPersonaQuery] = useState("");
-  const [persona, setPersona] = useState<Persona>(PERSONAS[0]);
+  const [persona, setPersona] = useState<Persona>(() => {
+    if (currentEntity) {
+      const match = PERSONAS.find((p) => p.key === currentEntity.personaKey);
+      if (match) return match;
+    }
+    return PERSONAS[0];
+  });
+  // When the operator navigates to a different detail page, auto-switch
+  // the persona to match so the entity picker is already on the right
+  // list. They can still override with the persona popover.
+  useEffect(() => {
+    if (!currentEntity) return;
+    if (currentEntity.personaKey === persona.key) return;
+    const match = PERSONAS.find((p) => p.key === currentEntity.personaKey);
+    if (match) setPersona(match);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEntity?.personaKey, currentEntity?.id]);
 
   const [entityOpen, setEntityOpen] = useState(false);
   const [entityQuery, setEntityQuery] = useState("");
@@ -202,6 +257,18 @@ export function ViewAsSwitcher() {
       : rawEntities;
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }, [rawEntities, persona]);
+
+  // The current-entity id (if any) belongs to *this* persona's list —
+  // used to highlight that row and label the trigger button so the
+  // operator instantly sees "you're on this one."
+  const currentEntityId =
+    currentEntity && currentEntity.personaKey === persona.key
+      ? currentEntity.id
+      : null;
+  const currentEntityName = useMemo(() => {
+    if (!currentEntityId) return null;
+    return entities.find((e) => e.id === currentEntityId)?.name ?? null;
+  }, [currentEntityId, entities]);
 
   const choosePersona = (next: Persona) => {
     setPersona(next);
@@ -324,9 +391,18 @@ export function ViewAsSwitcher() {
               aria-haspopup="listbox"
               aria-expanded={entityOpen}
             >
-              <span className="flex-1 truncate text-slate-400 italic">
-                Choose {persona.label.toLowerCase()}…
-              </span>
+              {currentEntityName ? (
+                <span
+                  className="flex-1 truncate font-medium"
+                  data-testid="text-view-as-current-entity"
+                >
+                  {currentEntityName}
+                </span>
+              ) : (
+                <span className="flex-1 truncate text-slate-400 italic">
+                  Choose {persona.label.toLowerCase()}…
+                </span>
+              )}
               <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
             </button>
           </PopoverTrigger>
@@ -368,17 +444,27 @@ export function ViewAsSwitcher() {
                     </CommandEmpty>
                     {entities.length > 0 && (
                       <CommandGroup heading={`${persona.label}s`}>
-                        {entities.map((e) => (
-                          <CommandItem
-                            key={e.id}
-                            value={e.name}
-                            onSelect={() => chooseEntity(e)}
-                            data-testid={`option-view-as-entity-${e.id}`}
-                            className="flex items-center gap-2"
-                          >
-                            <span className="flex-1 truncate">{e.name}</span>
-                          </CommandItem>
-                        ))}
+                        {entities.map((e) => {
+                          const isCurrent = e.id === currentEntityId;
+                          return (
+                            <CommandItem
+                              key={e.id}
+                              value={e.name}
+                              onSelect={() => chooseEntity(e)}
+                              data-testid={`option-view-as-entity-${e.id}`}
+                              className="flex items-center gap-2"
+                            >
+                              <span
+                                className={`flex-1 truncate ${isCurrent ? "font-medium text-slate-900" : ""}`}
+                              >
+                                {e.name}
+                              </span>
+                              {isCurrent && (
+                                <Check className="w-3.5 h-3.5 text-[var(--brand-blue)] flex-shrink-0" />
+                              )}
+                            </CommandItem>
+                          );
+                        })}
                       </CommandGroup>
                     )}
                     {persona.allowCreate && (
