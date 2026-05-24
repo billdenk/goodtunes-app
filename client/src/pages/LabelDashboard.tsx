@@ -17,6 +17,12 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   Tooltip, CartesianGrid, ResponsiveContainer, Legend, Line,
 } from "recharts";
+// Heart for song-favorite metrics, Star for artist-roster metrics —
+// per docs/design-system.md the brand uses these two icons as a quick
+// visual cue for what a count means (favorites vs roster size).
+import { Heart, Star } from "lucide-react";
+import { RangePicker, CompareToggle, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { BRAND, CHART_STACK_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
 type Range = { from: string; to: string };
 type LabelMe = {
@@ -83,20 +89,12 @@ type OrdersPayload = {
   }[];
 };
 
-// Brand palette (replit.md / docs/design-system.md). Kept structurally
-// identical to ArtistDashboard so the two surfaces feel like one product.
-const C = {
-  bg: "#00062B",
-  blue: "#319ED8",
-  purple: "#7F10A7",
-  mint: "#4AFFCA",
-  pink: "#FF5470",
-  amber: "#F5B14C",
-} as const;
+// Brand palette + chart helpers come from the shared token module so
+// LabelDashboard and ArtistDashboard reach the same hexes the CSS
+// vars do (see client/src/lib/brand-tokens.ts).
+const C = BRAND;
 
-// Deterministic color picker for the stacked revenue-by-artist chart.
-const STACK_PALETTE = [C.blue, C.purple, C.mint, C.pink, C.amber, "#9BA8FF", "#7BD8FF", "#FFA1C7", "#A4F0C8", "#F2B6FF", "#FFD590"];
-function colorFor(i: number) { return STACK_PALETTE[i % STACK_PALETTE.length]; }
+function colorFor(i: number) { return CHART_STACK_PALETTE[i % CHART_STACK_PALETTE.length]; }
 
 const dollars = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const dollarsCents = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -140,7 +138,7 @@ export function LabelDashboard() {
   if (me.error) {
     const msg = (me.error as any)?.message ?? "";
     return (
-      <main className="min-h-screen bg-[#00062B] text-white flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[color:var(--brand-bg)] text-white flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="label-dashboard-gate">
           <h1 className="text-2xl font-bold mb-2">Label dashboard</h1>
           <p className="text-white/60 text-sm">
@@ -155,7 +153,7 @@ export function LabelDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-[#00062B] text-white pb-20">
+    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
       <Header
         labelName={me.data?.name ?? "Your dashboard"}
         logoUrl={me.data?.logoUrl ?? null}
@@ -190,13 +188,13 @@ function Header({ labelName, logoUrl, rosterSize, albumCount, invitedPress, hasS
   compare: boolean; onCompare: (c: boolean) => void;
 }) {
   return (
-    <header className="border-b border-white/10 bg-gradient-to-b from-[#0B1457] to-[#00062B]">
+    <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <div className="flex items-center gap-4 mb-6">
           {logoUrl ? (
             <img src={logoUrl} alt="" className="w-14 h-14 rounded-2xl object-cover ring-1 ring-white/15 bg-white/5" data-testid="img-label-logo" />
           ) : (
-            <div className="w-14 h-14 rounded-2xl bg-[#7F10A7]/25 ring-1 ring-white/15 flex items-center justify-center text-xl font-bold">
+            <div className="w-14 h-14 rounded-2xl bg-[color:var(--brand-purple)]/25 ring-1 ring-white/15 flex items-center justify-center text-xl font-bold">
               {labelName.slice(0, 1).toUpperCase()}
             </div>
           )}
@@ -210,25 +208,8 @@ function Header({ labelName, logoUrl, rosterSize, albumCount, invitedPress, hasS
         </div>
         {invitedPress && <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} />}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-full bg-white/5 p-1 ring-1 ring-white/10" data-testid="range-picker">
-            {RANGE_PRESETS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => onPreset(p.id)}
-                className={`px-3 py-1.5 text-[12px] font-semibold rounded-full transition ${preset === p.id ? "bg-white text-[#00062B]" : "text-white/70 hover:text-white"}`}
-                data-testid={`button-range-${p.id}`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => onCompare(!compare)}
-            className={`ml-auto px-3 py-1.5 text-[12px] font-semibold rounded-full ring-1 transition ${compare ? "bg-[#319ED8]/15 text-[#319ED8] ring-[#319ED8]/30" : "bg-transparent text-white/55 ring-white/15"}`}
-            data-testid="button-toggle-compare"
-          >
-            Compare to previous period {compare ? "✓" : ""}
-          </button>
+          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={onPreset} />
+          <CompareToggle active={compare} onToggle={onCompare} />
         </div>
       </div>
     </header>
@@ -261,7 +242,7 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
         <>
           <span className="text-white/25">·</span>
           <Link href="/chat">
-            <a className="text-[12px] font-semibold text-[#319ED8] hover:underline" data-testid="link-message-goodtunes">
+            <a className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline" data-testid="link-message-goodtunes">
               Message GoodTunes to switch
             </a>
           </Link>
@@ -271,29 +252,16 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
   );
 }
 
-function Tabs({ tab, onTab }: { tab: string; onTab: (t: any) => void }) {
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "roster", label: "Roster" },
-    { id: "catalog", label: "Catalog" },
-    { id: "orders", label: "Orders" },
-  ] as const;
-  return (
-    <nav className="sticky top-0 z-10 bg-[#00062B]/95 backdrop-blur border-b border-white/10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-1 overflow-x-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => onTab(t.id)}
-            className={`px-3 py-3 text-[14px] font-semibold whitespace-nowrap border-b-2 transition ${tab === t.id ? "border-[#4AFFCA] text-white" : "border-transparent text-white/55 hover:text-white"}`}
-            data-testid={`tab-${t.id}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-    </nav>
-  );
+const LABEL_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "roster", label: "Roster" },
+  { id: "catalog", label: "Catalog" },
+  { id: "orders", label: "Orders" },
+] as const;
+type LabelTabId = (typeof LABEL_TABS)[number]["id"];
+
+function Tabs({ tab, onTab }: { tab: LabelTabId; onTab: (t: LabelTabId) => void }) {
+  return <DashboardTabs tabs={LABEL_TABS} value={tab} onChange={onTab} />;
 }
 
 // ─── KPI card ─────────────────────────────────────────────────────────
@@ -303,7 +271,7 @@ function delta(cur: number, prev: number | null | undefined): { val: string; pos
   if (!isFinite(change)) return null;
   return { val: `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`, positive: change >= 0 };
 }
-function Kpi({ label, value, sub, prev, testId }: { label: string; value: string; sub?: string; prev?: { cur: number; prev: number | null } | null; testId: string }) {
+function Kpi({ label, value, sub, prev, testId }: { label: React.ReactNode; value: string; sub?: string; prev?: { cur: number; prev: number | null } | null; testId: string }) {
   const d = prev ? delta(prev.cur, prev.prev) : null;
   return (
     <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid={testId}>
@@ -312,7 +280,7 @@ function Kpi({ label, value, sub, prev, testId }: { label: string; value: string
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         {sub && <span className="text-white/55">{sub}</span>}
         {d && (
-          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-[#4AFFCA]/15 text-[#4AFFCA]" : "bg-rose-500/15 text-rose-300"}`} data-testid={`${testId}-delta`}>
+          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]" : "bg-rose-500/15 text-rose-300"}`} data-testid={`${testId}-delta`}>
             {d.val}
           </span>
         )}
@@ -338,7 +306,7 @@ function OverviewTab({ qs }: { qs: string }) {
         <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} testId="kpi-plays" />
         <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} testId="kpi-listeners" />
         <Kpi label="New fans" value={cur ? compact(cur.newFans) : "—"} sub="First-ever play in window" prev={cur ? { cur: cur.newFans, prev: prev?.newFans ?? null } : null} testId="kpi-new-fans" />
-        <Kpi label="Roster" value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
+        <Kpi label={<><Star className="w-3 h-3 inline -mt-0.5 mr-1 text-[color:var(--brand-mint)] fill-[color:var(--brand-mint)]" />Roster</>} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
         <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
         <Kpi label="Avg. revenue / artist" value={cur && cur.rosterSize ? dollars(cur.grossCents / cur.rosterSize) : "—"} testId="kpi-arpa" />
       </section>
@@ -430,12 +398,12 @@ function RosterTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
                   <Link href={drillHref(a.personId)}>
                     <a className="flex items-center gap-2 min-w-0 group" data-testid={`link-artist-${a.personId}`}>
                       {a.photoUrl ? (
-                        <img src={a.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover" />
+                        <img src={a.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover" />
                       ) : (
-                        <div className="w-9 h-9 rounded-full bg-[#319ED8]/20 flex items-center justify-center text-[11px] font-bold">{a.name.slice(0, 1).toUpperCase()}</div>
+                        <div className="w-11 h-11 rounded-full bg-[color:var(--brand-blue)]/20 flex items-center justify-center text-xs font-bold">{a.name.slice(0, 1).toUpperCase()}</div>
                       )}
                       <div className="min-w-0">
-                        <p className="truncate font-semibold group-hover:text-[#4AFFCA]">{a.name}</p>
+                        <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.name}</p>
                         <p className="truncate text-white/45 text-[11px]">{a.albumCount} album{a.albumCount === 1 ? "" : "s"}</p>
                       </div>
                     </a>
@@ -509,7 +477,7 @@ function CatalogTab({ qs }: { qs: string }) {
                       <a className="flex items-center gap-2 min-w-0 group" data-testid={`link-album-${a.albumId}`}>
                         {a.artwork && <img src={a.artwork} alt="" className="w-9 h-9 rounded object-cover" />}
                         <div className="min-w-0">
-                          <p className="truncate font-semibold group-hover:text-[#4AFFCA]">{a.title}</p>
+                          <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.title}</p>
                           <p className="truncate text-white/45 text-[11px]">{a.artist}</p>
                         </div>
                       </a>
@@ -540,7 +508,11 @@ function CatalogTab({ qs }: { qs: string }) {
                 <th className="text-left font-medium py-2 pr-3">Track</th>
                 <th className="text-right font-medium px-2">Plays</th>
                 <th className="text-right font-medium px-2">Completes</th>
-                <th className="text-right font-medium px-2">Favorites</th>
+                <th className="text-right font-medium px-2">
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    <Heart className="w-3 h-3 text-[color:var(--brand-pink)]" /> Favorites
+                  </span>
+                </th>
                 <th className="text-right font-medium px-2">Playlist adds</th>
                 <th className="text-right font-medium pl-2">Shares</th>
               </tr>
@@ -556,7 +528,7 @@ function CatalogTab({ qs }: { qs: string }) {
                   </td>
                   <td className="px-2 text-right tabular-nums">{compact(t.plays)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.completes)}</td>
-                  <td className="px-2 text-right tabular-nums text-[#FF5470]">{compact(t.favorites)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--brand-pink)]">{compact(t.favorites)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.playlistAdds)}</td>
                   <td className="pl-2 text-right tabular-nums">{compact(t.shares)}</td>
                 </tr>
@@ -604,11 +576,11 @@ function OrdersTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
               <tr key={o.id} className="border-t border-white/5" data-testid={`row-order-${o.id}`}>
                 <td className="py-2 pr-3 whitespace-nowrap text-white/75">{new Date(o.createdAt).toLocaleDateString()}</td>
                 <td className="px-2 truncate max-w-[200px]">
-                  <Link href={`/album/${o.albumId}`}><a className="hover:text-[#4AFFCA]">{o.albumTitle}</a></Link>
+                  <Link href={`/album/${o.albumId}`}><a className="transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2">{o.albumTitle}</a></Link>
                 </td>
                 <td className="px-2 truncate max-w-[160px] text-white/75">
                   {o.primaryArtistId ? (
-                    <Link href={drillHref(o.primaryArtistId)}><a className="hover:text-[#4AFFCA]">{o.albumArtist}</a></Link>
+                    <Link href={drillHref(o.primaryArtistId)}><a className="transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2">{o.albumArtist}</a></Link>
                   ) : o.albumArtist}
                 </td>
                 <td className="px-2 text-white/65">{o.country ?? "—"}</td>
@@ -624,13 +596,7 @@ function OrdersTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
 }
 
 // ─── Charts & shared primitives ───────────────────────────────────────
-const tooltipStyle = {
-  background: "#0B1457",
-  border: "1px solid rgba(255,255,255,0.15)",
-  borderRadius: 8,
-  fontSize: 12,
-  color: "white",
-};
+const tooltipStyle = CHART_TOOLTIP_STYLE;
 
 function Card({ title, subtitle, children, testId, action }: { title: string; subtitle?: string; children: React.ReactNode; testId: string; action?: React.ReactNode }) {
   return (
@@ -649,7 +615,7 @@ function Card({ title, subtitle, children, testId, action }: { title: string; su
 
 function CsvButton({ href, label, testId }: { href: string; label: string; testId: string }) {
   return (
-    <a href={href} className="text-[12px] font-semibold text-[#319ED8] hover:text-[#4AFFCA] whitespace-nowrap" data-testid={`button-${testId}`}>
+    <a href={href} className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors whitespace-nowrap" data-testid={`button-${testId}`}>
       ↓ {label}
     </a>
   );
@@ -657,8 +623,8 @@ function CsvButton({ href, label, testId }: { href: string; label: string; testI
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    paid: "bg-[#4AFFCA]/15 text-[#4AFFCA]",
-    shipped: "bg-[#319ED8]/15 text-[#319ED8]",
+    paid: "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]",
+    shipped: "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]",
     refunded: "bg-rose-500/15 text-rose-300",
     pending: "bg-white/10 text-white/55",
   };
@@ -796,10 +762,10 @@ function GeoTable({ buyers, listeners, loading }: { buyers: GeoPayload["buyers"]
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-mono text-white/65 text-[11px] w-7">{r.country}</span>
             <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-              <div className="h-full bg-[#319ED8]" style={{ width: `${(r.buyers / maxBuyers) * 100}%` }} />
+              <div className="h-full bg-[color:var(--brand-blue)]" style={{ width: `${(r.buyers / maxBuyers) * 100}%` }} />
             </div>
             <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-              <div className="h-full bg-[#4AFFCA]" style={{ width: `${(r.listeners / maxListeners) * 100}%` }} />
+              <div className="h-full bg-[color:var(--brand-mint)]" style={{ width: `${(r.listeners / maxListeners) * 100}%` }} />
             </div>
           </div>
           <span className="text-right tabular-nums">{r.buyers}</span>

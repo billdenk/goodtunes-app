@@ -14,6 +14,11 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis,
   Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from "recharts";
+// Heart for song-favorite metrics — keeps the artist dashboard's
+// favourites column visually paired with the player's heart action.
+import { Heart } from "lucide-react";
+import { RangePicker, CompareToggle, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
 type Range = { from: string; to: string };
 type Kpis = {
@@ -42,26 +47,11 @@ type Audience = {
   topFans: { handle: string; plays: number }[];
 };
 
-// Brand palette per the design system in replit.md / docs/design-system.md.
-const C = {
-  bg: "#00062B",
-  blue: "#319ED8",
-  purple: "#7F10A7",
-  mint: "#4AFFCA",
-  pink: "#FF5470",
-  amber: "#F5B14C",
-} as const;
-
-const SKU_COLOR: Record<string, string> = {
-  digital: C.blue,
-  vinyl: C.purple,
-  cassette: C.amber,
-  cd: C.mint,
-  bundle: C.pink,
-  gift: "#9BA8FF",
-  gooddeed: "#7BD8FF",
-  other: "rgba(255,255,255,0.4)",
-};
+// Brand palette + per-SKU chart mapping come from the shared token
+// module so this dashboard reads from the same source as the CSS vars
+// (see client/src/lib/brand-tokens.ts and client/src/index.css).
+const C = BRAND;
+const SKU_COLOR = SKU_COLORS;
 
 const dollars = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const dollarsCents = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -112,7 +102,7 @@ export function ArtistDashboard() {
   if (me.error) {
     const msg = (me.error as any)?.message ?? "";
     return (
-      <main className="min-h-screen bg-[#00062B] text-white flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[color:var(--brand-bg)] text-white flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="artist-dashboard-gate">
           <h1 className="text-2xl font-bold mb-2">Artist dashboard</h1>
           <p className="text-white/60 text-sm">{msg.includes("Super-admin") ? "Pass ?personId= to inspect a specific artist." : msg.includes("Insufficient") ? "This dashboard is for artist accounts. Ask your label admin to invite you." : msg.includes("Unauthorized") ? "Sign in with your artist account to continue." : "We couldn't load your artist scope. Please try again."}</p>
@@ -122,7 +112,7 @@ export function ArtistDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-[#00062B] text-white pb-20">
+    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
       <Header
         artistName={me.data?.name ?? "Your dashboard"}
         photoUrl={me.data?.photoUrl ?? null}
@@ -158,13 +148,13 @@ function Header({ artistName, photoUrl, albumCount, songCount, invitedPress, has
   compare: boolean; onCompare: (c: boolean) => void;
 }) {
   return (
-    <header className="border-b border-white/10 bg-gradient-to-b from-[#0B1457] to-[#00062B]">
+    <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <div className="flex items-center gap-4 mb-6">
           {photoUrl ? (
             <img src={photoUrl} alt="" className="w-14 h-14 rounded-full object-cover ring-1 ring-white/15" data-testid="img-artist-photo" />
           ) : (
-            <div className="w-14 h-14 rounded-full bg-[#319ED8]/20 ring-1 ring-white/15 flex items-center justify-center text-xl font-bold">
+            <div className="w-14 h-14 rounded-full bg-[color:var(--brand-blue)]/20 ring-1 ring-white/15 flex items-center justify-center text-xl font-bold">
               {artistName.slice(0, 1).toUpperCase()}
             </div>
           )}
@@ -176,25 +166,8 @@ function Header({ artistName, photoUrl, albumCount, songCount, invitedPress, has
         </div>
         {invitedPress && <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} />}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-full bg-white/5 p-1 ring-1 ring-white/10" data-testid="range-picker">
-            {RANGE_PRESETS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => onPreset(p.id)}
-                className={`px-3 py-1.5 text-[12px] font-semibold rounded-full transition ${preset === p.id ? "bg-white text-[#00062B]" : "text-white/70 hover:text-white"}`}
-                data-testid={`button-range-${p.id}`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => onCompare(!compare)}
-            className={`ml-auto px-3 py-1.5 text-[12px] font-semibold rounded-full ring-1 transition ${compare ? "bg-[#319ED8]/15 text-[#319ED8] ring-[#319ED8]/30" : "bg-transparent text-white/55 ring-white/15"}`}
-            data-testid="button-toggle-compare"
-          >
-            Compare to previous period {compare ? "✓" : ""}
-          </button>
+          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={onPreset} />
+          <CompareToggle active={compare} onToggle={onCompare} />
         </div>
       </div>
     </header>
@@ -229,7 +202,7 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
           <span className="text-white/25">·</span>
           <a
             href="/chat"
-            className="text-[12px] font-semibold text-[#319ED8] hover:underline"
+            className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline"
             data-testid="link-message-goodtunes"
           >
             Message GoodTunes to switch
@@ -240,30 +213,17 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
   );
 }
 
-function Tabs({ tab, onTab }: { tab: string; onTab: (t: any) => void }) {
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "audience", label: "Audience" },
-    { id: "catalog", label: "Catalog" },
-    { id: "orders", label: "Orders" },
-    { id: "referrals", label: "Referrals" },
-  ] as const;
-  return (
-    <nav className="sticky top-0 z-10 bg-[#00062B]/95 backdrop-blur border-b border-white/10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-1 overflow-x-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => onTab(t.id)}
-            className={`px-3 py-3 text-[14px] font-semibold whitespace-nowrap border-b-2 transition ${tab === t.id ? "border-[#4AFFCA] text-white" : "border-transparent text-white/55 hover:text-white"}`}
-            data-testid={`tab-${t.id}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-    </nav>
-  );
+const ARTIST_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "audience", label: "Audience" },
+  { id: "catalog", label: "Catalog" },
+  { id: "orders", label: "Orders" },
+  { id: "referrals", label: "Referrals" },
+] as const;
+type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
+
+function Tabs({ tab, onTab }: { tab: ArtistTabId; onTab: (t: ArtistTabId) => void }) {
+  return <DashboardTabs tabs={ARTIST_TABS} value={tab} onChange={onTab} />;
 }
 
 // ─── KPI card ─────────────────────────────────────────────────────────
@@ -283,7 +243,7 @@ function Kpi({ label, value, sub, prev, testId }: { label: string; value: string
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         {sub && <span className="text-white/55">{sub}</span>}
         {d && (
-          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-[#4AFFCA]/15 text-[#4AFFCA]" : "bg-rose-500/15 text-rose-300"}`} data-testid={`${testId}-delta`}>
+          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]" : "bg-rose-500/15 text-rose-300"}`} data-testid={`${testId}-delta`}>
             {d.val}
           </span>
         )}
@@ -415,7 +375,7 @@ function CatalogTab({ qs }: { qs: string }) {
                     </div>
                   </td>
                   <td className="px-2 text-right tabular-nums font-semibold">{dollars(a.revenueCents)}</td>
-                  <td className="px-2 text-right tabular-nums text-[#4AFFCA]">{dollars(a.artistShareCents)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--brand-mint)]">{dollars(a.artistShareCents)}</td>
                   <td className="px-2 text-right tabular-nums">{a.units}</td>
                   <td className="px-2 text-right tabular-nums">{a.buyers}</td>
                   <td className="px-2 text-right tabular-nums">{compact(a.plays)}</td>
@@ -440,7 +400,11 @@ function CatalogTab({ qs }: { qs: string }) {
                 <th className="text-left font-medium py-2 pr-3">Track</th>
                 <th className="text-right font-medium px-2">Plays</th>
                 <th className="text-right font-medium px-2">Completes</th>
-                <th className="text-right font-medium px-2">Favorites</th>
+                <th className="text-right font-medium px-2">
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    <Heart className="w-3 h-3 text-[color:var(--brand-pink)]" /> Favorites
+                  </span>
+                </th>
                 <th className="text-right font-medium px-2">Playlist adds</th>
                 <th className="text-right font-medium pl-2">Shares</th>
               </tr>
@@ -456,7 +420,7 @@ function CatalogTab({ qs }: { qs: string }) {
                   </td>
                   <td className="px-2 text-right tabular-nums">{compact(t.plays)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.completes)}</td>
-                  <td className="px-2 text-right tabular-nums text-[#FF5470]">{compact(t.favorites)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--brand-pink)]">{compact(t.favorites)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.playlistAdds)}</td>
                   <td className="pl-2 text-right tabular-nums">{compact(t.shares)}</td>
                 </tr>
@@ -504,7 +468,7 @@ function OrdersTab({ qs }: { qs: string }) {
                 <td className="px-2 text-white/65">{o.country ?? "—"}</td>
                 <td className="px-2"><StatusPill status={o.status} /></td>
                 <td className="px-2 text-right tabular-nums font-semibold">{dollarsCents(o.totalCents)}</td>
-                <td className="pl-2 text-right tabular-nums text-[#4AFFCA]">{o.artistShareCents != null ? dollarsCents(o.artistShareCents) : "—"}</td>
+                <td className="pl-2 text-right tabular-nums text-[color:var(--brand-mint)]">{o.artistShareCents != null ? dollarsCents(o.artistShareCents) : "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -515,13 +479,7 @@ function OrdersTab({ qs }: { qs: string }) {
 }
 
 // ─── Charts & shared primitives ───────────────────────────────────────
-const tooltipStyle = {
-  background: "#0B1457",
-  border: "1px solid rgba(255,255,255,0.15)",
-  borderRadius: 8,
-  fontSize: 12,
-  color: "white",
-};
+const tooltipStyle = CHART_TOOLTIP_STYLE;
 
 function Card({ title, subtitle, children, testId, action }: { title: string; subtitle?: string; children: React.ReactNode; testId: string; action?: React.ReactNode }) {
   return (
@@ -540,7 +498,7 @@ function Card({ title, subtitle, children, testId, action }: { title: string; su
 
 function CsvButton({ href, label, testId }: { href: string; label: string; testId: string }) {
   return (
-    <a href={href} className="text-[12px] font-semibold text-[#319ED8] hover:text-[#4AFFCA] whitespace-nowrap" data-testid={`button-${testId}`}>
+    <a href={href} className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors whitespace-nowrap" data-testid={`button-${testId}`}>
       ↓ {label}
     </a>
   );
@@ -548,8 +506,8 @@ function CsvButton({ href, label, testId }: { href: string; label: string; testI
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    paid: "bg-[#4AFFCA]/15 text-[#4AFFCA]",
-    shipped: "bg-[#319ED8]/15 text-[#319ED8]",
+    paid: "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]",
+    shipped: "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]",
     refunded: "bg-rose-500/15 text-rose-300",
     pending: "bg-white/10 text-white/55",
   };
@@ -651,10 +609,10 @@ function GeoTable({ buyers, listeners, loading }: { buyers: GeoPayload["buyers"]
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-mono text-white/65 text-[11px] w-7">{r.country}</span>
             <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-              <div className="h-full bg-[#319ED8]" style={{ width: `${(r.buyers / maxBuyers) * 100}%` }} />
+              <div className="h-full bg-[color:var(--brand-blue)]" style={{ width: `${(r.buyers / maxBuyers) * 100}%` }} />
             </div>
             <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-              <div className="h-full bg-[#4AFFCA]" style={{ width: `${(r.listeners / maxListeners) * 100}%` }} />
+              <div className="h-full bg-[color:var(--brand-mint)]" style={{ width: `${(r.listeners / maxListeners) * 100}%` }} />
             </div>
           </div>
           <span className="text-right tabular-nums">{r.buyers}</span>
@@ -711,7 +669,7 @@ function ReferralsTab() {
                   <p className="font-semibold truncate">{p.name}</p>
                   <p className="text-[11px] text-white/55">{p.units} unit{p.units === 1 ? "" : "s"} attributed</p>
                 </div>
-                <span className="text-[#4AFFCA] tabular-nums font-semibold text-[13px]">{fmt(p.pendingCents)}</span>
+                <span className="text-[color:var(--brand-mint)] tabular-nums font-semibold text-sm">{fmt(p.pendingCents)}</span>
               </li>
             ))}
           </ul>

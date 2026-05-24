@@ -47,6 +47,11 @@ const FILE_ALLOWLIST: Array<RegExp> = [
   /client\/src\/components\/ui\/button\.tsx$/,
   // shadcn primitives — they wrap radix and own the canonical h-9 sizing.
   /client\/src\/components\/ui\/[a-z-]+\.tsx$/,
+  // Canonical JS-side brand palette — mirrors the CSS vars in
+  // index.css for recharts / other JS consumers that need plain
+  // hex strings. Allowlisted so the tokens it defines aren't
+  // self-flagged as raw hex literals.
+  /client\/src\/lib\/brand-tokens\.ts$/,
 ];
 
 const BRAND_HEX = [

@@ -8,9 +8,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { Link, Redirect } from "wouter";
+import { Redirect } from "wouter";
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
-import { Store } from "lucide-react";
+import { Store, Loader2 } from "lucide-react";
+import { AdminFrame } from "@/components/admin/AdminFrame";
 
 interface MeRole {
   role: string;
@@ -27,7 +28,7 @@ export function VendorPortal() {
   if (authLoading || roleLoading) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
       </main>
     );
   }
@@ -64,31 +65,30 @@ function VendorBody({ vendorId }: { vendorId: string }) {
   });
   const vendor = data?.vendor;
 
+  // Task #285 — the vendor portal now lives inside the shared
+  // `AdminFrame` chrome so it matches the rest of the admin (sidebar,
+  // top bar, light theme tokens) instead of carrying its own bespoke
+  // navy/slate header. `active="none"` keeps every sidebar row in its
+  // resting state since none of the catalog/queue pages are reachable
+  // from a vendor role.
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-3xl mx-auto px-5 py-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-slate-100 ring-1 ring-slate-200 overflow-hidden flex items-center justify-center">
-            {vendor?.logoUrl ? (
-              <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-vendor-logo" />
-            ) : (
-              <Store className="w-5 h-5 text-slate-400" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Vendor portal</div>
-            <h1 className="text-slate-900 text-xl font-bold truncate" data-testid="heading-vendor-name">
-              {vendor?.name ?? "Loading…"}
-            </h1>
-          </div>
-          <Link href="/api/logout" className="text-[12px] text-slate-500 hover:text-slate-900">
-            Sign out
-          </Link>
+    <AdminFrame active="none" contentWidth="narrow">
+      <div className="flex items-center gap-4 mb-6" data-testid="vendor-portal-header">
+        <div className="w-12 h-12 rounded-lg bg-slate-100 ring-1 ring-slate-200 overflow-hidden flex items-center justify-center">
+          {vendor?.logoUrl ? (
+            <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-vendor-logo" />
+          ) : (
+            <Store className="w-5 h-5 text-slate-400" />
+          )}
         </div>
-      </header>
-      <div className="max-w-3xl mx-auto px-5 py-6">
-        <GoodDeedServicesTab vendorId={vendorId} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Vendor portal</div>
+          <h1 className="text-slate-900 text-xl font-bold truncate" data-testid="heading-vendor-name">
+            {vendor?.name ?? "Loading…"}
+          </h1>
+        </div>
       </div>
-    </main>
+      <GoodDeedServicesTab vendorId={vendorId} />
+    </AdminFrame>
   );
 }

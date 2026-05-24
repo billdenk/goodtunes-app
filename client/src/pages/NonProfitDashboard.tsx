@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock } from "lucide-react";
+import { DashboardPanel } from "@/components/partner/dashboard-controls";
 
 // Task #78 — Non-profit partner shell. Single-page dashboard showing
 // the NPO's referred artists, their for-sale albums + paid units, and
@@ -30,7 +31,7 @@ export function NonProfitDashboard() {
   if (me.error) {
     const msg = (me.error as any)?.message || "We couldn't load your non-profit scope.";
     return (
-      <main className="min-h-screen bg-[#00062B] text-white flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[color:var(--brand-bg)] text-white flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="non-profit-gate">
           <h1 className="text-2xl font-bold mb-2">Non-profit dashboard</h1>
           <p className="text-white/60 text-sm">{msg}</p>
@@ -40,22 +41,22 @@ export function NonProfitDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-[#00062B] text-white pb-20">
-      <header className="border-b border-white/10 bg-gradient-to-b from-[#0B1457] to-[#00062B]">
+    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
+      <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
           <div className="flex items-center gap-4">
             {me.data?.logoUrl ? (
               <img src={me.data.logoUrl} alt="" className="w-14 h-14 rounded-xl object-cover bg-white/10 ring-1 ring-white/15" />
             ) : (
-              <div className="w-14 h-14 rounded-xl bg-[#7F10A7]/30 ring-1 ring-white/15 flex items-center justify-center">
-                <Heart className="w-6 h-6 text-[#FF5470]" />
+              <div className="w-14 h-14 rounded-xl bg-[color:var(--brand-purple)]/30 ring-1 ring-white/15 flex items-center justify-center">
+                <Heart className="w-6 h-6 text-[color:var(--brand-pink)]" />
               </div>
             )}
             <div className="min-w-0">
               <p className="text-white/55 text-[12px] uppercase tracking-wider font-semibold">Non-profit dashboard</p>
               <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="text-npo-name">{me.data?.name ?? "Loading…"}</h1>
               {me.data?.websiteUrl && (
-                <a href={me.data.websiteUrl} target="_blank" rel="noreferrer" className="text-[12px] text-[#4AFFCA] hover:underline">
+                <a href={me.data.websiteUrl} target="_blank" rel="noreferrer" className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">
                   {me.data.websiteUrl.replace(/^https?:\/\//, "")}
                 </a>
               )}
@@ -75,17 +76,18 @@ export function NonProfitDashboard() {
         {dash.isLoading ? (
           <p className="py-8 text-center text-white/45 text-[13px]">Loading…</p>
         ) : (dash.data?.artists.length ?? 0) === 0 ? (
-          <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-8 text-center" data-testid="empty-npo-artists">
-            <Heart className="w-8 h-8 text-[#FF5470] mx-auto mb-3" />
+          <DashboardPanel className="p-8 text-center" padding="none" data-testid="empty-npo-artists">
+            <Heart className="w-8 h-8 text-[color:var(--brand-pink)] mx-auto mb-3" />
             <p className="text-sm text-white/65">
               You haven't referred any artists yet. Email <a href="mailto:nick@goodtunes.fm" className="underline">nick@goodtunes.fm</a> to
               get your first artist onboarded — you'll earn $1 on every paid unit they ship.
             </p>
-          </div>
+          </DashboardPanel>
         ) : (
           <ul className="space-y-3" data-testid="list-npo-artists">
             {dash.data!.artists.map((a) => (
-              <li key={a.id} className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid={`row-npo-artist-${a.id}`}>
+              <li key={a.id} data-testid={`row-npo-artist-${a.id}`}>
+              <DashboardPanel>
                 <div className="flex items-center gap-3 mb-3">
                   {a.photoUrl ? (
                     <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-white/5" />
@@ -99,14 +101,14 @@ export function NonProfitDashboard() {
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${
                       a.status === "active"
-                        ? "bg-[#4AFFCA]/15 text-[#4AFFCA] ring-1 ring-[#4AFFCA]/30"
+                        ? "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)] ring-1 ring-[color:var(--brand-mint)]/30"
                         : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
                     }`}
                     data-testid={`status-npo-artist-${a.id}`}
                   >
                     {a.status === "active" ? "Active" : "Pending invite"}
                   </span>
-                  <Link href={`/artist/${a.id}`} className="text-[12px] text-[#319ED8] hover:underline">View →</Link>
+                  <Link href={`/artist/${a.id}`} className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">View →</Link>
                 </div>
                 {a.albums.length > 0 && (
                   <ul className="divide-y divide-white/5">
@@ -119,12 +121,13 @@ export function NonProfitDashboard() {
                         )}
                         <p className="flex-1 min-w-0 text-[13px] truncate">{al.title}</p>
                         <span className="text-[11px] text-white/55 tabular-nums">
-                          {al.paidUnits} paid · <span className="text-[#4AFFCA]">{fmt(al.paidUnits * 100)}</span>
+                          {al.paidUnits} paid · <span className="text-[color:var(--brand-mint)]">{fmt(al.paidUnits * 100)}</span>
                         </span>
                       </li>
                     ))}
                   </ul>
                 )}
+              </DashboardPanel>
               </li>
             ))}
           </ul>
@@ -134,7 +137,7 @@ export function NonProfitDashboard() {
       {(dash.data?.pendingInvites.length ?? 0) > 0 && (
         <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-8">
           <h2 className="text-sm font-semibold text-white/85 mb-3">Outstanding invites</h2>
-          <ul className="divide-y divide-white/5 rounded-2xl bg-white/[0.04] ring-1 ring-white/10" data-testid="list-npo-invites">
+          <DashboardPanel as="ul" padding="none" className="divide-y divide-white/5" data-testid="list-npo-invites">
             {dash.data!.pendingInvites.map((i) => (
               <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-[13px]" data-testid={`row-npo-invite-${i.id}`}>
                 <Mail className="w-4 h-4 text-white/45" />
@@ -144,7 +147,7 @@ export function NonProfitDashboard() {
                 </span>
               </li>
             ))}
-          </ul>
+          </DashboardPanel>
         </section>
       )}
     </main>
@@ -153,10 +156,10 @@ export function NonProfitDashboard() {
 
 function Kpi({ label, value, sub, testId }: { label: string; value: string; sub?: string; testId: string }) {
   return (
-    <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid={testId}>
+    <DashboardPanel data-testid={testId}>
       <p className="text-[11px] uppercase tracking-wider text-white/55 font-semibold">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
       {sub && <p className="mt-1 text-[11px] text-white/55">{sub}</p>}
-    </div>
+    </DashboardPanel>
   );
 }
