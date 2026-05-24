@@ -467,7 +467,7 @@ function LabelCard({
           <img
             src={label.logoUrl}
             alt={label.name}
-            className="w-full h-full object-contain p-1.5"
+            className="w-full h-full object-cover"
           />
         ) : (
           <Tag className="w-6 h-6 text-slate-300" />
@@ -509,7 +509,7 @@ function LabelRow({
           <img
             src={label.logoUrl}
             alt={label.name}
-            className="w-full h-full object-contain p-1"
+            className="w-full h-full object-cover"
           />
         ) : (
           <Tag className="w-4 h-4 text-slate-300" />

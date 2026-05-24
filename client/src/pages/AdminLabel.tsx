@@ -283,7 +283,7 @@ export function AdminLabel() {
               <img
                 src={label.logoUrl}
                 alt={label.name}
-                className="w-full h-full object-contain p-2"
+                className="w-full h-full object-cover"
                 data-testid="img-label-logo"
               />
             ) : (
