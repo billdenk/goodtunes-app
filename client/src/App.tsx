@@ -180,6 +180,11 @@ function Router() {
             reset page validates the token before rendering the form. */}
         <Route path="/admin/forgot-password" component={ForgotPassword} />
         <Route path="/admin/reset-password/:token" component={ResetPassword} />
+        {/* Task #271 — Customer "Forgot password?" flow. Same kind-aware
+            page renders in the dark player chrome on these paths and
+            hits the customer endpoints. */}
+        <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password/:token" component={ResetPassword} />
         {/* Task #44 — post-checkout landing. Public so the Stripe
             return URL works even before the auth cookie has settled
             (Welcome polls /api/checkout/session/:id to confirm the

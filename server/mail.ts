@@ -205,6 +205,40 @@ export async function sendAdminPasswordResetConfirmationEmail(
   return sendViaResend(toEmail, subject, html, text);
 }
 
+// Task #271 — Customer "Forgot password?" reset link. Fan-tone copy on
+// the dark GoodTunes brand palette (mirrors the dark player chrome the
+// /reset-password page renders in). Same neutral 200 + non-enumerating
+// contract as the admin variant — caller logs failures, never leaks.
+export async function sendCustomerPasswordResetEmail(
+  toEmail: string,
+  resetUrl: string,
+  ttlMinutes: number,
+): Promise<SendResult> {
+  const subject = `Reset your GoodTunes password`;
+  const text = [
+    `Someone (hopefully you) asked to reset the password for your GoodTunes account.`,
+    ``,
+    `Open this link to choose a new password (expires in ${ttlMinutes} minutes):`,
+    resetUrl,
+    ``,
+    `If you didn't request this, you can ignore this email — your password is unchanged.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #00062B; color: #ffffff; border-radius: 16px;">
+      <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">GoodTunes</div>
+      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700; color: #ffffff;">Reset your password</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75);">Someone (hopefully you) asked to reset the password for your GoodTunes account.</p>
+      <p style="margin: 28px 0;">
+        <a href="${resetUrl}" style="display: inline-block; background: #319ED8; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 999px; font-weight: 600; font-size: 15px;">Choose a new password</a>
+      </p>
+      <p style="font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #4AFFCA; word-break: break-all;">${resetUrl}</span></p>
+      <p style="font-size: 13px; color: rgba(255,255,255,0.55); margin-top: 24px;">This link expires in <strong style="color: #ffffff;">${ttlMinutes} minutes</strong> and can only be used once.</p>
+      <p style="font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 16px;">If you didn't request this, you can ignore this email — your password is unchanged.</p>
+    </div>
+  `;
+  return sendViaResend(toEmail, subject, html, text);
+}
+
 // Send an admin-invite link. The link points at the public /invite/:token
 // page where the recipient sets a username + password; on submit we
 // provision their users row with the role + scope baked into the invite.

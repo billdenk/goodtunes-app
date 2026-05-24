@@ -47,6 +47,8 @@ import {
   type AdminEmailOtp,
   adminPasswordResetTokens,
   type AdminPasswordResetToken,
+  customerPasswordResetTokens,
+  type CustomerPasswordResetToken,
   albums,
   songs,
   userAlbums,
@@ -503,6 +505,15 @@ export interface IStorage {
   getActiveAdminPasswordResetToken(tokenHash: string): Promise<AdminPasswordResetToken | undefined>;
   consumeAdminPasswordResetToken(tokenHash: string): Promise<string | undefined>;
   invalidateAdminPasswordResetTokensForUser(userId: string): Promise<void>;
+
+  // ---- Customer password reset (Task #271) ------------------------
+  // Mirror of the admin flow against customer_users. OAuth-only fans
+  // (customer_users.password IS NULL) are filtered out at the route
+  // layer — there's no password to reset.
+  createCustomerPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<CustomerPasswordResetToken>;
+  getActiveCustomerPasswordResetToken(tokenHash: string): Promise<CustomerPasswordResetToken | undefined>;
+  consumeCustomerPasswordResetToken(tokenHash: string): Promise<string | undefined>;
+  invalidateCustomerPasswordResetTokensForUser(userId: string): Promise<void>;
 
   // Super-admin grant/revoke (Task #31 step 9). `listAdmins` is the
   // source of truth for the admin-only UI.
@@ -2543,6 +2554,50 @@ export class DbStorage implements IStorage {
         and(
           eq(adminPasswordResetTokens.userId, userId),
           sql`${adminPasswordResetTokens.consumedAt} IS NULL`,
+        ),
+      );
+  }
+
+  // ---- Customer password reset (Task #271) ------------------------
+  async createCustomerPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<CustomerPasswordResetToken> {
+    const [row] = await db
+      .insert(customerPasswordResetTokens)
+      .values({ userId, tokenHash, expiresAt })
+      .returning();
+    return row;
+  }
+  async getActiveCustomerPasswordResetToken(tokenHash: string): Promise<CustomerPasswordResetToken | undefined> {
+    const [row] = await db
+      .select()
+      .from(customerPasswordResetTokens)
+      .where(eq(customerPasswordResetTokens.tokenHash, tokenHash));
+    if (!row) return undefined;
+    if (row.consumedAt) return undefined;
+    if (row.expiresAt.getTime() < Date.now()) return undefined;
+    return row;
+  }
+  async consumeCustomerPasswordResetToken(tokenHash: string): Promise<string | undefined> {
+    const rows = await db
+      .update(customerPasswordResetTokens)
+      .set({ consumedAt: new Date() })
+      .where(
+        and(
+          eq(customerPasswordResetTokens.tokenHash, tokenHash),
+          sql`${customerPasswordResetTokens.consumedAt} IS NULL`,
+          sql`${customerPasswordResetTokens.expiresAt} > now()`,
+        ),
+      )
+      .returning({ userId: customerPasswordResetTokens.userId });
+    return rows[0]?.userId;
+  }
+  async invalidateCustomerPasswordResetTokensForUser(userId: string): Promise<void> {
+    await db
+      .update(customerPasswordResetTokens)
+      .set({ consumedAt: new Date() })
+      .where(
+        and(
+          eq(customerPasswordResetTokens.userId, userId),
+          sql`${customerPasswordResetTokens.consumedAt} IS NULL`,
         ),
       );
   }

@@ -1597,6 +1597,20 @@ export const adminPasswordResetTokens = pgTable("admin_password_reset_tokens", {
 });
 export type AdminPasswordResetToken = typeof adminPasswordResetTokens.$inferSelect;
 
+// Task #271 — Customer "Forgot password?" reset tokens. Mirror of the
+// admin table, pointed at customer_users. Same single-use + SHA-256-hash
+// + 30-minute TTL contract. OAuth-only fans (no password row) are
+// skipped at the route layer, not by a schema constraint.
+export const customerPasswordResetTokens = pgTable("customer_password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => customerUsers.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type CustomerPasswordResetToken = typeof customerPasswordResetTokens.$inferSelect;
+
 export type CustomerUser = typeof customerUsers.$inferSelect;
 export type AdminIdentity = typeof adminIdentities.$inferSelect;
 export type CustomerIdentity = typeof customerIdentities.$inferSelect;

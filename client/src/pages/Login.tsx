@@ -857,16 +857,14 @@ export function Login() {
                 <div>
                   <div className="flex items-baseline justify-between mb-1.5">
                     <label className={`${s.label} mb-0`}>Password</label>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => navigate("/admin/forgot-password")}
-                        className="text-xs font-medium text-[var(--brand-blue)] hover:underline"
-                        data-testid="link-forgot-password"
-                      >
-                        Forgot password?
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => navigate(isAdmin ? "/admin/forgot-password" : "/forgot-password")}
+                      className={`text-xs font-medium hover:underline ${isAdmin ? "text-[var(--brand-blue)]" : "text-[var(--brand-mint)]"}`}
+                      data-testid="link-forgot-password"
+                    >
+                      Forgot password?
+                    </button>
                   </div>
                   <input
                     type="password" value={password} onChange={(e) => setPassword(e.target.value)}
@@ -923,7 +921,7 @@ export function Login() {
                 password.length === 0
                   ? (isAdmin ? "text-slate-400" : "text-white/35")
                   : isValidPassword(password)
-                    ? (isAdmin ? "text-emerald-600" : "text-[#4AFFCA]")
+                    ? (isAdmin ? "text-emerald-600" : "text-[var(--brand-mint)]")
                     : (isAdmin ? "text-slate-600" : "text-white/55")
               }`}>
                 At least 8 characters with a letter and a number.

@@ -110,3 +110,34 @@ SQL
 }
 migrate_password_reset_tokens dev  "${DATABASE_URL:-}"
 migrate_password_reset_tokens prod "${PROD_DATABASE_URL:-}"
+
+# Task #271 — Customer "Forgot password?" reset tokens. Mirror of the
+# admin table against customer_users, same single-use SHA-256-hashed
+# 30-minute TTL contract. Pre-create on both DBs for the same reasons
+# (publish dev→prod diff + fresh-clone dev never 500ing the endpoint).
+migrate_customer_password_reset_tokens() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping customer-password-reset migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS customer_password_reset_tokens (
+  id          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     varchar NOT NULL REFERENCES customer_users(id) ON DELETE CASCADE,
+  token_hash  text NOT NULL UNIQUE,
+  expires_at  timestamp NOT NULL,
+  consumed_at timestamp,
+  created_at  timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS customer_password_reset_tokens_user_id_idx
+  ON customer_password_reset_tokens(user_id);
+SQL
+  then
+    echo "post-merge: customer_password_reset_tokens migration ok on $label"
+  else
+    echo "post-merge: WARNING — customer_password_reset_tokens migration failed on $label (continuing)"
+  fi
+}
+migrate_customer_password_reset_tokens dev  "${DATABASE_URL:-}"
+migrate_customer_password_reset_tokens prod "${PROD_DATABASE_URL:-}"

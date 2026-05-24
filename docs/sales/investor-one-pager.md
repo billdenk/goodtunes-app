@@ -33,7 +33,7 @@ The third-party services GoodTunes already runs against, and what each one unloc
 - **GoodSync™ synced lyrics** — Lyrics scroll in time with the song, tap any line to seek there, and a chorus finder can snap the 30-second preview window to the hook automatically.
 - **SuperCredits™** — Per-track credits down to "1973 Martin D-28," with tappable affiliate links to buy the gear and the artist keeping the lion's share of any sale.
 - **Encrypted adaptive streaming** — Per-play, user-bound tokens deliver encrypted segments, giving Spotify-Web-grade leak resistance with instant playback on any connection.
-- **Dual sign-in shells, one product** — Fans and operators sign in through separate accounts on `my.goodtunes.music` and `admin.goodtunes.music`; admin always requires a second factor.
+- **Dual sign-in shells, one product** — Fans and operators sign in through separate accounts on `my.goodtunes.music` and `admin.goodtunes.music`; admin always requires a second factor. Both shells offer a self-serve **Forgot password?** recovery (single-use, 30-minute, non-enumerating) so locked-out fans and admins reset themselves without operator help.
 - **Typed product-analytics pipeline** — Every meaningful fan interaction flows through a typed event registry, enriched with device/session/user/platform/geo, and forwarded to PostHog as the foundation for every artist and label dashboard.
 
 ### Player — what fans do

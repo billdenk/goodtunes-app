@@ -1277,6 +1277,116 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ok: true });
   });
 
+  // ─── Task #271 — Customer "Forgot password?" reset flow ───────────
+  // Mirror of the admin endpoints above, pointed at customer_users.
+  // Same non-enumerating neutral 200 / 30-minute TTL / SHA-256-hashed
+  // single-use token contract. OAuth-only fans (Google/Apple — their
+  // customer_users.password row is NULL) are silently skipped so we
+  // don't send a "set a new password" mail for an account that has
+  // never had one.
+  const forgotCustomerIpBuckets = new Map<string, { count: number; resetAt: number }>();
+  const forgotCustomerEmailBuckets = new Map<string, { count: number; resetAt: number }>();
+  function forgotCustomerRateLimitOk(ip: string, emailNorm: string): boolean {
+    const now = Date.now();
+    const window = 60 * 60 * 1000;
+    const ipB = forgotCustomerIpBuckets.get(ip);
+    if (!ipB || ipB.resetAt < now) {
+      forgotCustomerIpBuckets.set(ip, { count: 1, resetAt: now + window });
+    } else {
+      ipB.count += 1;
+      if (ipB.count > 20) return false;
+    }
+    if (emailNorm) {
+      const eB = forgotCustomerEmailBuckets.get(emailNorm);
+      if (!eB || eB.resetAt < now) {
+        forgotCustomerEmailBuckets.set(emailNorm, { count: 1, resetAt: now + window });
+      } else {
+        eB.count += 1;
+        if (eB.count > 5) return false;
+      }
+    }
+    return true;
+  }
+  // Prefer the request's own origin so the reset link lands back on the
+  // host the fan started from (helps dev / *.replit.app previews). Falls
+  // back to my.goodtunes.music on the canonical customer host.
+  function customerResetOrigin(req: Request): string {
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = (req.headers["x-forwarded-host"] as string) || req.get("host") || "my.goodtunes.music";
+    return `${proto}://${host}`;
+  }
+
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    const RESET_TTL_MINUTES = 30;
+    const ip = (req.ip || req.socket.remoteAddress || "unknown").trim();
+    const emailRaw = String(req.body?.email ?? "").trim().toLowerCase();
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailRaw);
+    const okRate = forgotCustomerRateLimitOk(ip, looksLikeEmail ? emailRaw : "");
+    const started = Date.now();
+    if (okRate && looksLikeEmail) {
+      try {
+        const c = await storage.getCustomerByEmail(emailRaw);
+        // Skip OAuth-only fans — no password to reset, would be confusing.
+        if (c && c.password) {
+          const raw = randomBytes(32).toString("hex");
+          const hash = hashResetToken(raw);
+          const expiresAt = new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000);
+          await storage.createCustomerPasswordResetToken(c.id, hash, expiresAt);
+          const resetUrl = `${customerResetOrigin(req)}/reset-password/${raw}`;
+          const { sendCustomerPasswordResetEmail } = await import("./mail");
+          const result = await sendCustomerPasswordResetEmail(c.email, resetUrl, RESET_TTL_MINUTES);
+          if (!result.ok) {
+            console.warn(`[forgot-password] customer mail send failed for ${c.email}: ${result.reason}`);
+            if (!process.env.RESEND_API_KEY) {
+              console.log(`[forgot-password] customer dev link: ${resetUrl}`);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[forgot-password] customer internal error: ${e?.message ?? e}`);
+      }
+    }
+    const elapsed = Date.now() - started;
+    if (elapsed < 250) await new Promise((r) => setTimeout(r, 250 - elapsed));
+    return res.json({
+      ok: true,
+      message: "If a GoodTunes account exists for that email, a reset link is on its way.",
+    });
+  });
+
+  app.get("/api/auth/reset-password/:token", async (req, res) => {
+    const raw = String(req.params.token || "");
+    if (!raw) return res.status(400).json({ ok: false, message: "Missing token" });
+    const row = await storage.getActiveCustomerPasswordResetToken(hashResetToken(raw));
+    if (!row) return res.status(410).json({ ok: false, message: "This reset link is invalid or has expired." });
+    return res.json({ ok: true });
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    const schema = z.object({
+      token: z.string().min(10),
+      newPassword: z.string().min(8, "New password must be at least 8 characters"),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    }
+    const { token, newPassword } = parsed.data;
+    const hash = hashResetToken(token);
+    const userId = await storage.consumeCustomerPasswordResetToken(hash);
+    if (!userId) {
+      return res.status(410).json({ message: "This reset link is invalid or has already been used." });
+    }
+    const c = await storage.getCustomer(userId);
+    if (!c) {
+      return res.status(410).json({ message: "This reset link is invalid or has expired." });
+    }
+    const hashed = await hashPassword(newPassword);
+    await db.execute(sql`UPDATE customer_users SET password = ${hashed} WHERE id = ${c.id}`);
+    await storage.invalidateCustomerPasswordResetTokensForUser(c.id);
+    return res.json({ ok: true });
+  });
+
   // ─── Linked identities (profile) ──────────────────────────────────
   app.get("/api/auth/identities", requireAuth, async (req, res) => {
     const list = await storage.listIdentities(req.session.kind!, req.session.userId!);
