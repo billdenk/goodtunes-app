@@ -959,12 +959,12 @@ function PressLogoEditorDialog({
             <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
               Current logo
             </div>
-            <div className="relative rounded-xl overflow-hidden bg-slate-50 ring-1 ring-slate-200 aspect-square">
+            <div className="relative rounded-xl overflow-hidden aspect-square">
               {shownUrl ? (
                 <img
                   src={shownUrl}
                   alt={press.name}
-                  className="w-full h-full object-contain p-3"
+                  className="w-full h-full object-cover"
                   data-testid="img-press-logo-current"
                 />
               ) : (

@@ -653,7 +653,7 @@ function ImageUploadPanel({
   const shownUrl = previewUrl || label[field];
   const aspectClass = aspect === "square" ? "aspect-square" : "aspect-[3/1]";
   const objectFitClass =
-    field === "logoUrl" ? "object-contain p-3" : "object-cover";
+    "object-cover";
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -699,7 +699,7 @@ function ImageUploadPanel({
         </div>
         <div
           className={[
-            "relative rounded-xl overflow-hidden bg-slate-50 ring-1 ring-slate-200",
+            "relative rounded-xl overflow-hidden",
             aspectClass,
           ].join(" ")}
         >
