@@ -141,3 +141,31 @@ SQL
 }
 migrate_customer_password_reset_tokens dev  "${DATABASE_URL:-}"
 migrate_customer_password_reset_tokens prod "${PROD_DATABASE_URL:-}"
+
+# Add-NPO flow — organization↔person join (free-text role) so admins can
+# attach one or more People as contacts on an NPO. Pre-create on both
+# DBs so the publish dev→prod diff stays empty and a fresh-clone dev
+# never 500s the contacts list.
+migrate_organization_people() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping organization_people migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS organization_people (
+  organization_id varchar NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  person_id       varchar NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  role            text,
+  created_at      timestamp DEFAULT now(),
+  PRIMARY KEY (organization_id, person_id)
+);
+SQL
+  then
+    echo "post-merge: organization_people migration ok on $label"
+  else
+    echo "post-merge: WARNING — organization_people migration failed on $label (continuing)"
+  fi
+}
+migrate_organization_people dev  "${DATABASE_URL:-}"
+migrate_organization_people prod "${PROD_DATABASE_URL:-}"

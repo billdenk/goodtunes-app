@@ -1,12 +1,29 @@
+import { useMemo, useState } from "react";
 import { useParams, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ReferralSummaryPanel } from "@/pages/AdminPerson";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
-// Task #78 — Super-admin detail page for a non-profit partner. Keeps the
-// surface deliberately thin (identity card + referral summary panel) —
-// non-profits don't have a CRUD-heavy admin surface like artists or
-// labels, but operators still need a place to audit accrued $1/unit
-// credits and see who's been referred.
+function humanizeApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const m = raw.match(/^\d{3}:\s*(.*)$/);
+  if (m) {
+    try {
+      const body = JSON.parse(m[1]);
+      if (body?.message) return String(body.message);
+    } catch { /* fall through */ }
+    return m[1];
+  }
+  return raw || "Something went wrong.";
+}
+
+// Task #78 — Super-admin detail page for a non-profit partner. Identity
+// card + referral summary + Contacts panel (Task: Add-NPO flow). The
+// People picker is a thin text-filter over /api/people because the NPO
+// contact list is tiny; we don't need a dedicated search endpoint.
 type NonProfit = {
   id: string;
   name: string;
@@ -14,34 +31,36 @@ type NonProfit = {
   websiteUrl: string | null;
 };
 
+type PersonLite = {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+};
+
+type NpoContact = {
+  personId: string;
+  name: string;
+  photoUrl: string | null;
+  role: string | null;
+};
+
 export default function AdminNonProfit() {
   const { id } = useParams<{ id: string }>();
-  const q = useQuery<NonProfit>({
-    queryKey: [`/api/non-profits/${id}`],
-    queryFn: async () => {
-      const r = await fetch(`/api/non-profits`);
-      if (!r.ok) throw new Error("Failed to load non-profits");
-      const list = (await r.json()) as NonProfit[];
-      const row = list.find((o) => o.id === id);
-      if (!row) throw new Error("Non-profit not found");
-      return row;
-    },
-    retry: false,
-  });
+  const npoQ = useQuery<NonProfit>({ queryKey: [`/api/non-profits/${id}`] });
 
-  if (q.isLoading) {
+  if (npoQ.isLoading) {
     return <main className="p-6 text-slate-500">Loading…</main>;
   }
-  if (q.error || !q.data) {
+  if (npoQ.error || !npoQ.data) {
     return (
       <main className="p-6">
-        <p className="text-sm text-rose-700">{(q.error as Error)?.message ?? "Not found"}</p>
-        <Link href="/admin/invites" className="text-sm text-[var(--brand-blue)] hover:underline">← Back to invites</Link>
+        <p className="text-sm text-rose-700">{(npoQ.error as Error)?.message ?? "Not found"}</p>
+        <Link href="/admin/non-profits" className="text-sm text-[var(--brand-blue)] hover:underline">← Back to NPOs</Link>
       </main>
     );
   }
 
-  const npo = q.data;
+  const npo = npoQ.data;
   return (
     <main className="max-w-3xl mx-auto p-6 space-y-5" data-testid="page-admin-non-profit">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 flex items-center gap-4">
@@ -51,16 +70,156 @@ export default function AdminNonProfit() {
           <div className="w-14 h-14 rounded-xl bg-slate-100" />
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Non-profit</p>
+          <p className="text-xs uppercase tracking-wider font-semibold text-slate-500">Non-profit</p>
           <h1 className="text-xl font-bold text-slate-900 truncate" data-testid="text-npo-admin-name">{npo.name}</h1>
           {npo.websiteUrl && (
-            <a href={npo.websiteUrl} target="_blank" rel="noreferrer" className="text-[12px] text-[var(--brand-blue)] hover:underline">
+            <a href={npo.websiteUrl} target="_blank" rel="noreferrer" className="text-xs text-[var(--brand-blue)] hover:underline">
               {npo.websiteUrl.replace(/^https?:\/\//, "")}
             </a>
           )}
         </div>
       </div>
+
+      <ContactsPanel npoId={npo.id} />
+
       <ReferralSummaryPanel kind="non_profit" id={npo.id} />
     </main>
+  );
+}
+
+function ContactsPanel({ npoId }: { npoId: string }) {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("");
+
+  const contactsKey = [`/api/non-profits/${npoId}/people`] as const;
+  const contactsQ = useQuery<NpoContact[]>({ queryKey: contactsKey });
+
+  // /api/people returns the whole directory; we filter client-side. Same
+  // pattern AdminPeople uses for its top-of-page search.
+  const peopleQ = useQuery<PersonLite[]>({ queryKey: ["/api/people"] });
+
+  const attached = useMemo(() => new Set((contactsQ.data ?? []).map((c) => c.personId)), [contactsQ.data]);
+  const matches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [] as PersonLite[];
+    return (peopleQ.data ?? [])
+      .filter((p) => !attached.has(p.id) && p.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [search, peopleQ.data, attached]);
+
+  const attach = useMutation({
+    mutationFn: async (vars: { personId: string; role: string | null }) => {
+      const res = await apiRequest("POST", `/api/non-profits/${npoId}/people`, vars);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: contactsKey });
+      setSearch("");
+      setRole("");
+    },
+    onError: (err) => toast({ title: "Couldn't add contact", description: humanizeApiError(err), variant: "destructive" }),
+  });
+
+  const detach = useMutation({
+    mutationFn: async (personId: string) => {
+      await apiRequest("DELETE", `/api/non-profits/${npoId}/people/${personId}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: contactsKey }),
+    onError: (err) => toast({ title: "Couldn't remove contact", description: humanizeApiError(err), variant: "destructive" }),
+  });
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-npo-contacts">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Contacts</h2>
+          <p className="text-xs text-slate-500">People who represent this NPO. Add as many as you need.</p>
+        </div>
+      </div>
+
+      <ul className="divide-y divide-slate-100 -mx-1">
+        {contactsQ.isLoading ? (
+          <li className="px-1 py-2 text-xs text-slate-500">Loading…</li>
+        ) : (contactsQ.data ?? []).length === 0 ? (
+          <li className="px-1 py-2 text-xs text-slate-500" data-testid="text-no-contacts">No contacts yet.</li>
+        ) : (
+          (contactsQ.data ?? []).map((c) => (
+            <li key={c.personId} className="flex items-center gap-3 px-1 py-2" data-testid={`row-npo-contact-${c.personId}`}>
+              {c.photoUrl ? (
+                <img src={c.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover bg-slate-100" />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-slate-100" />
+              )}
+              <div className="flex-1 min-w-0">
+                <Link href={`/admin/people/${c.personId}`} className="text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] truncate block">
+                  {c.name}
+                </Link>
+                {c.role && <p className="text-xs text-slate-500 truncate">{c.role}</p>}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => detach.mutate(c.personId)}
+                disabled={detach.isPending}
+                data-testid={`button-remove-contact-${c.personId}`}
+              >
+                Remove
+              </Button>
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div className="border-t border-slate-100 pt-3 space-y-2">
+        <p className="text-xs uppercase tracking-wider font-semibold text-slate-500">Add a contact</p>
+        <Input
+          type="text"
+          placeholder="Search people…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          data-testid="input-npo-contact-search"
+        />
+        {search.trim() && (
+          <ul className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+            {peopleQ.isLoading ? (
+              <li className="px-3 py-2 text-xs text-slate-500">Loading people…</li>
+            ) : matches.length === 0 ? (
+              <li className="px-3 py-2 text-xs text-slate-500">No matches.</li>
+            ) : (
+              matches.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50"
+                    onClick={() => attach.mutate({ personId: p.id, role: role.trim() || null })}
+                    disabled={attach.isPending}
+                    data-testid={`button-attach-person-${p.id}`}
+                  >
+                    {p.photoUrl ? (
+                      <img src={p.photoUrl} alt="" className="w-7 h-7 rounded-full object-cover bg-slate-100" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-slate-100" />
+                    )}
+                    <span className="text-sm text-slate-900">{p.name}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+        <Input
+          type="text"
+          placeholder="Role (optional, e.g. Director)"
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          data-testid="input-npo-contact-role"
+        />
+        <p className="text-xs text-slate-500">
+          Don't see them? <Link href="/admin/people" className="text-[var(--brand-blue)] hover:underline">Add the person first</Link>, then come back here.
+        </p>
+      </div>
+    </section>
   );
 }

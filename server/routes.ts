@@ -11244,7 +11244,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       RETURNING id
     `);
     const id = (ins as any).rows?.[0]?.id;
-    res.json({ id, name, websiteUrl, logoUrl });
+    res.status(201).json({ id, name, websiteUrl, logoUrl });
+  });
+
+  // GET a single non-profit by id — used by the admin detail page so it
+  // doesn't have to fetch the whole list and filter client-side.
+  app.get("/api/non-profits/:id", requireAdmin, async (req, res) => {
+    const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null }>(
+      sql`SELECT id, name, logo_url, website_url FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`,
+    );
+    const r = ((rows as any).rows ?? [])[0];
+    if (!r) return res.status(404).json({ message: "Non-profit not found" });
+    res.json({ id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url });
+  });
+
+  // List people attached as contacts/reps for a non-profit. Joined to
+  // the `people` table so the row has enough to render in the admin UI
+  // without a second per-id fetch. Verifies the org exists and is a
+  // non-profit so a stray org id (label, publisher) can't be probed
+  // through this NPO-scoped endpoint.
+  app.get("/api/non-profits/:id/people", requireAdmin, async (req, res) => {
+    const npo = await db.execute(sql`SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`);
+    if (((npo as any).rows ?? []).length === 0) return res.status(404).json({ message: "Non-profit not found" });
+    const rows = await db.execute<{ person_id: string; name: string; photo_url: string | null; role: string | null }>(sql`
+      SELECT op.person_id, p.name, p.photo_url, op.role
+      FROM organization_people op
+      JOIN people p ON p.id = op.person_id
+      WHERE op.organization_id = ${req.params.id}
+      ORDER BY p.name ASC
+    `);
+    res.json(((rows as any).rows ?? []).map((r: any) => ({
+      personId: r.person_id, name: r.name, photoUrl: r.photo_url, role: r.role,
+    })));
+  });
+
+  // Attach a person to a non-profit as a contact/rep. Idempotent — if
+  // the join already exists we update the role and return 200; first
+  // attach returns 201. Verifies both ids so a typo'd id can't insert
+  // an orphan-ish join.
+  app.post("/api/non-profits/:id/people", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const personId = String(req.body?.personId || "").trim();
+    if (!personId) return res.status(400).json({ message: "personId is required" });
+    const role = req.body?.role ? String(req.body.role).trim() || null : null;
+    const npo = await db.execute(sql`SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`);
+    if (((npo as any).rows ?? []).length === 0) return res.status(404).json({ message: "Non-profit not found" });
+    const person = await db.execute(sql`SELECT 1 FROM people WHERE id = ${personId} LIMIT 1`);
+    if (((person as any).rows ?? []).length === 0) return res.status(404).json({ message: "Person not found" });
+    const existing = await db.execute(sql`
+      SELECT 1 FROM organization_people WHERE organization_id = ${req.params.id} AND person_id = ${personId} LIMIT 1
+    `);
+    const isUpdate = ((existing as any).rows ?? []).length > 0;
+    await db.execute(sql`
+      INSERT INTO organization_people (organization_id, person_id, role)
+      VALUES (${req.params.id}, ${personId}, ${role})
+      ON CONFLICT (organization_id, person_id) DO UPDATE SET role = EXCLUDED.role
+    `);
+    res.status(isUpdate ? 200 : 201).json({ organizationId: req.params.id, personId, role });
+  });
+
+  // Detach a person from a non-profit. No-op if the row isn't there.
+  app.delete("/api/non-profits/:id/people/:personId", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    await db.execute(sql`
+      DELETE FROM organization_people
+      WHERE organization_id = ${req.params.id} AND person_id = ${req.params.personId}
+    `);
+    res.status(204).end();
   });
 
   // GET /api/me/role — small helper so the client knows what to render.

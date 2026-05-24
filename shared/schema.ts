@@ -735,6 +735,28 @@ export const organizations = pgTable(
   }),
 );
 
+// ----- Organization ↔ Person contacts -----------------------------------
+// Many-to-many between organizations (currently used for non-profits) and
+// people in the directory. Lets admins attach one or more contacts/reps to
+// an NPO row without inventing a separate `npo_contacts` table — the same
+// join works for any other organization kind we expose later (publishers,
+// PROs, etc.). `role` is a free-text label ("Director", "Program Lead", …)
+// the operator fills in; null is allowed because most attachments just
+// need to say "this person represents this org."
+export const organizationPeople = pgTable(
+  "organization_people",
+  {
+    organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    personId: varchar("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    role: text("role"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.organizationId, t.personId] }),
+  }),
+);
+export type OrganizationPerson = typeof organizationPeople.$inferSelect;
+
 // ----- Mechanical (master-side) splits ----------------------------------
 // Per-track percentage split of the *recording* (master) revenue — the
 // "mechanical" side of the song. Rows can credit either a Person (artist,
