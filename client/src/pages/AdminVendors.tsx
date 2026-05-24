@@ -125,12 +125,70 @@ export function AdminVendors() {
   // same payload plus `parentVendorId`.
   const [subBrandPrompt, setSubBrandPrompt] = useState<
     | {
+        // Auto-detected candidate the server returned with the 409 —
+        // shown as the default selection but the operator can swap to
+        // any other top-level vendor via the picker below.
         parent: { id: string; name: string; domain: string; logoUrl: string | null };
         payload: Record<string, unknown>;
         scrapedName: string | null;
       }
     | null
   >(null);
+  // Task #280 — currently-selected parent for the sub-brand prompt.
+  // Defaults to subBrandPrompt.parent but the operator can swap it for
+  // any other top-level vendor (same list AdminVendor's Parent picker
+  // uses) before confirming.
+  const [subBrandParent, setSubBrandParent] = useState<{
+    id: string;
+    name: string;
+    domain: string;
+    logoUrl: string | null;
+  } | null>(null);
+  const [subBrandPickerOpen, setSubBrandPickerOpen] = useState(false);
+  const [subBrandPickerQuery, setSubBrandPickerQuery] = useState("");
+  useEffect(() => {
+    if (subBrandPrompt) {
+      setSubBrandParent(subBrandPrompt.parent);
+      setSubBrandPickerOpen(false);
+      setSubBrandPickerQuery("");
+    } else {
+      setSubBrandParent(null);
+      setSubBrandPickerOpen(false);
+      setSubBrandPickerQuery("");
+    }
+  }, [subBrandPrompt]);
+
+  // Top-level vendors used as candidate parents in the sub-brand prompt.
+  // Mirrors AdminVendor's LineagePanel: pull /api/vendors, exclude
+  // sub-brands (parentVendorId set). Only fetched while the prompt is
+  // open so the index page itself isn't slowed down.
+  const { data: parentCandidatesAll = [] } = useQuery<
+    Array<{
+      id: string;
+      name: string;
+      domain: string;
+      logoUrl: string | null;
+      parentVendorId?: string | null;
+    }>
+  >({
+    queryKey: ["/api/vendors"],
+    enabled: !!subBrandPrompt,
+  });
+  const parentCandidates = useMemo(() => {
+    const q = subBrandPickerQuery.trim().toLowerCase();
+    const rows = parentCandidatesAll.filter((v) => !v.parentVendorId);
+    const filtered = q
+      ? rows.filter(
+          (v) =>
+            v.name.toLowerCase().includes(q) ||
+            v.domain.toLowerCase().includes(q),
+        )
+      : rows;
+    return filtered
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 50);
+  }, [parentCandidatesAll, subBrandPickerQuery]);
 
   const createVendor = useMutation({
     mutationFn: async (opts: {
@@ -191,9 +249,20 @@ export function AdminVendors() {
           ...(scraped.tagline ? { tagline: scraped.tagline } : {}),
         };
       }
-      const res = await apiRequest("POST", "/api/admin/vendors", payload);
-      const vendor = (await res.json()) as VendorLite;
-      return { vendor, scrapedName, payload };
+      try {
+        const res = await apiRequest("POST", "/api/admin/vendors", payload);
+        const vendor = (await res.json()) as VendorLite;
+        return { vendor, scrapedName, payload };
+      } catch (e) {
+        // Task #280 — attach the built payload + scrapedName to the
+        // thrown error so onError can open the sub-brand prompt on the
+        // FIRST attempt of the URL-scrape and Skip-create-blank paths
+        // (vars.payload is undefined for those entry points because the
+        // payload is built inside the mutationFn, not by the caller).
+        (e as any).__payload = payload;
+        (e as any).__scrapedName = scrapedName;
+        throw e;
+      }
     },
     onSuccess: ({ vendor, scrapedName }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
@@ -214,16 +283,26 @@ export function AdminVendors() {
       // "add as sub-brand?" prompt. Surface it inline instead of as a
       // raw error message; the operator clicks once to re-submit with
       // parentVendorId attached.
+      //
+      // Task #280 — the URL-scrape and Skip-create-blank paths build
+      // their payload inside mutationFn, so vars.payload is undefined
+      // on the first attempt. Fall back to the payload the mutationFn
+      // stashed on the error so the prompt fires on the FIRST try, not
+      // only on re-confirm.
+      const payloadForPrompt =
+        vars?.payload ?? (err && (err as any).__payload) ?? null;
+      const scrapedNameForPrompt =
+        vars?.scrapedName ?? (err && (err as any).__scrapedName) ?? null;
       const raw = err instanceof Error ? err.message : String(err ?? "");
       const m = raw.match(/^(\d{3}):\s*(.*)$/);
       if (m && m[1] === "409") {
         try {
           const body = JSON.parse(m[2]);
-          if (body?.parentCandidate?.id && vars?.payload) {
+          if (body?.parentCandidate?.id && payloadForPrompt) {
             setSubBrandPrompt({
               parent: body.parentCandidate,
-              payload: vars.payload,
-              scrapedName: vars.scrapedName ?? null,
+              payload: payloadForPrompt,
+              scrapedName: scrapedNameForPrompt,
             });
             setPasteError(null);
             return;
@@ -237,9 +316,13 @@ export function AdminVendors() {
   });
 
   const confirmSubBrand = () => {
-    if (!subBrandPrompt || createVendor.isPending) return;
+    if (!subBrandPrompt || !subBrandParent || createVendor.isPending) return;
+    // Task #280 — use whichever parent the operator currently has
+    // selected, not necessarily the auto-detected one from the 409
+    // response. Lets the operator correct a wrong domain guess (e.g.
+    // domain collides with Acme but the real parent is Globex).
     createVendor.mutate({
-      payload: { ...subBrandPrompt.payload, parentVendorId: subBrandPrompt.parent.id },
+      payload: { ...subBrandPrompt.payload, parentVendorId: subBrandParent.id },
       scrapedName: subBrandPrompt.scrapedName,
     });
   };
@@ -442,6 +525,15 @@ export function AdminVendors() {
         open={addOpen}
         onOpenChange={(o) => {
           if (createVendor.isPending) return;
+          // Task #280 — if the sub-brand prompt is active, any close
+          // gesture (X, overlay click, Esc) should behave like Back:
+          // dismiss the prompt and return to the paste step with the
+          // pasted URL still in place, instead of nuking the whole
+          // Add flow and forcing the operator to re-type the URL.
+          if (!o && subBrandPrompt) {
+            setSubBrandPrompt(null);
+            return;
+          }
           setAddOpen(o);
           if (!o) {
             setPasteUrl("");
@@ -464,10 +556,11 @@ export function AdminVendors() {
                   A vendor with that domain already exists. Add this as a
                   sub-brand of{" "}
                   <span className="font-semibold text-slate-700">
-                    {subBrandPrompt.parent.name}
+                    {(subBrandParent ?? subBrandPrompt.parent).name}
                   </span>{" "}
                   — like Epiphone under Gibson — instead of as a duplicate
-                  top-level row.
+                  top-level row. Pick a different parent below if the
+                  detected one isn't right.
                 </>
               ) : (
                 <>
@@ -480,11 +573,14 @@ export function AdminVendors() {
           </DialogHeader>
           {subBrandPrompt ? (
             <div className="pt-1 space-y-3" data-testid="prompt-sub-brand">
-              <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+              <div
+                className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"
+                data-testid="sub-brand-current-parent"
+              >
                 <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
-                  {subBrandPrompt.parent.logoUrl ? (
+                  {(subBrandParent ?? subBrandPrompt.parent).logoUrl ? (
                     <img
-                      src={subBrandPrompt.parent.logoUrl}
+                      src={(subBrandParent ?? subBrandPrompt.parent).logoUrl!}
                       alt=""
                       className="w-full h-full object-cover"
                     />
@@ -494,13 +590,87 @@ export function AdminVendors() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-slate-900 text-[13.5px] font-semibold truncate">
-                    {subBrandPrompt.parent.name}
+                    {(subBrandParent ?? subBrandPrompt.parent).name}
                   </div>
                   <div className="text-slate-400 text-[11.5px] truncate">
-                    {subBrandPrompt.parent.domain}
+                    {(subBrandParent ?? subBrandPrompt.parent).domain}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setSubBrandPickerOpen((o) => !o)}
+                  disabled={createVendor.isPending}
+                  className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  data-testid="button-sub-brand-change-parent"
+                >
+                  {subBrandPickerOpen ? "Cancel" : "Change"}
+                </button>
               </div>
+              {subBrandPickerOpen && (
+                <div
+                  className="rounded-xl border border-slate-200 p-2 space-y-2"
+                  data-testid="sub-brand-parent-picker"
+                >
+                  <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-8">
+                    <Search className="w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={subBrandPickerQuery}
+                      onChange={(e) => setSubBrandPickerQuery(e.target.value)}
+                      placeholder="Search top-level vendors…"
+                      autoFocus
+                      className="flex-1 text-xs bg-transparent outline-none placeholder:text-slate-400"
+                      data-testid="input-sub-brand-parent-search"
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+                    {parentCandidates.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-3 text-center">
+                        No matches.
+                      </p>
+                    ) : (
+                      parentCandidates.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setSubBrandParent({
+                              id: c.id,
+                              name: c.name,
+                              domain: c.domain,
+                              logoUrl: c.logoUrl,
+                            });
+                            setSubBrandPickerOpen(false);
+                            setSubBrandPickerQuery("");
+                          }}
+                          className="w-full text-left flex items-center gap-2.5 px-1.5 py-1.5 hover:bg-slate-50 rounded-md"
+                          data-testid={`button-sub-brand-pick-${c.id}`}
+                        >
+                          <div className="w-7 h-7 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                            {c.logoUrl ? (
+                              <img
+                                src={c.logoUrl}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <copy.Icon className="w-3.5 h-3.5 text-slate-300" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-slate-800 text-xs font-semibold truncate">
+                              {c.name}
+                            </div>
+                            <div className="text-slate-400 text-xs truncate">
+                              {c.domain}
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
               <DialogFooter className="gap-2 sm:gap-2">
                 <button
                   type="button"
