@@ -131,6 +131,18 @@ Pricing edits **bypass the partner-permissions post-sale lock** the way `manage_
 
 Tier-walking rule for printing: at run quantity Q, pick the highest tier whose `qty` floor is ≤ Q; if Q falls below the smallest break, pick that smallest tier (we don't invent a fall-through — the vendor decides their floor charge).
 
+## Admin image uploads — invalidate through the shared helper
+
+Every admin detail page (Vendors / Makers, Presses, Labels, People, Albums, Instruments) renders three surfaces off the same entity row at once: the modal's CURRENT thumbnail, the page-header avatar, and the iPhone live-preview card on the right. After any image write (logo, cover, photo, artwork — upload, paste-URL, remove, lock toggle, scrape-refresh) all three must repaint in roughly one tick without a manual refresh.
+
+The hazard is that each detail page picks its own query-key shape — most use the `["/api/<thing>", id]` tuple, but AdminVendor uses the full URL as a single-element key (`[\`/api/vendors/${id}/profile\`]` or `[\`/api/makers/${id}/profile\`]`) because it switches endpoints based on the maker-vs-reseller route. React Query's partial matcher doesn't bridge those two shapes, so a `["/api/vendors", id, "profile"]` invalidation against the URL-keyed query is a silent no-op and the page goes stale.
+
+**Rule:** never hand-roll `qc.invalidateQueries({ queryKey: [...] })` after a write that touches an entity's image. Call `invalidateAdminEntity(qc, kind, id)` from `client/src/lib/adminEntityInvalidation.ts` instead. The helper owns the full key set per entity in one place; if a future surface starts reading the entity off a new key, add it to the helper and every callsite benefits.
+
+**Why:** because the bug is invisible at write time — the mutation succeeds, the toast fires, no error is logged, the cache simply doesn't know to refetch. Centralizing the key set is the only honest way to keep all three surfaces in sync across six admin pages and the maker/reseller mode-switch.
+
+**How to apply:** image writes go through the helper. For the rare component that takes a static invalidate-array prop (e.g. `EditablePanel`), inline-mirror the same keys the helper would produce so the static prop and the helper agree. When wiring a new admin detail page, add its kind to `AdminEntityKind` and the switch before shipping the upload UI.
+
 ## Person sheet — content guardrails
 
 The public, fan-facing Person sheet (and any artist bio surface we ingest) must **not** include legal-issue, criminal-allegation, lawsuit, or controversy content, even when the source (Wikipedia, Roon, MusicBrainz, etc.) has those sections. When ingesting biographies, filter out sections titled along the lines of "Legal issues", "Allegations", "Controversy", "Lawsuits", or any incident/court coverage — keep early life, career, discography, charity work, family, and music-related content only. This is a product rule, not a one-off Nick decision.

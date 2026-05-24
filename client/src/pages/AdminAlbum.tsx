@@ -82,6 +82,7 @@ import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -9927,8 +9928,7 @@ function ArtworkPanel({
       return url;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
-      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      await invalidateAdminEntity(qc, "album", album.id);
       toast({ title: "Cover updated" });
       exitEdit();
     },
@@ -9949,8 +9949,7 @@ function ArtworkPanel({
       });
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
-      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      await invalidateAdminEntity(qc, "album", album.id);
       toast({ title: "Cover removed" });
       exitEdit();
     },
@@ -9986,8 +9985,7 @@ function ArtworkPanel({
       return url;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
-      await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      await invalidateAdminEntity(qc, "album", album.id);
       toast({ title: "Cover updated" });
       exitEdit();
     },

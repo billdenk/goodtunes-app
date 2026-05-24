@@ -39,6 +39,7 @@ import {
   type LabelPreviewPerson,
 } from "@/components/admin/previews/LabelPreviewCard";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -593,10 +594,7 @@ function ImageUploadPanel({
       return url;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({
-        queryKey: ["/api/labels", label.id],
-      });
-      await qc.invalidateQueries({ queryKey: ["/api/labels"] });
+      await invalidateAdminEntity(qc, "label", label.id);
       setPreviewUrl(null);
       toast({ title: `${fieldLabel} updated` });
     },
@@ -620,8 +618,7 @@ function ImageUploadPanel({
       return nextLocked;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/labels", label.id] });
-      await qc.invalidateQueries({ queryKey: ["/api/labels"] });
+      await invalidateAdminEntity(qc, "label", label.id);
     },
     onError: (e: any) =>
       toast({

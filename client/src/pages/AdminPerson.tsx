@@ -35,6 +35,7 @@ import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -773,8 +774,7 @@ function ImageUploadPanel({
       return nextLocked;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/people", person.id] });
-      await qc.invalidateQueries({ queryKey: ["/api/people"] });
+      await invalidateAdminEntity(qc, "person", person.id);
     },
     onError: (e: any) =>
       toast({
@@ -823,8 +823,7 @@ function ImageUploadPanel({
       return url;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["/api/people", person.id] });
-      await qc.invalidateQueries({ queryKey: ["/api/people"] });
+      await invalidateAdminEntity(qc, "person", person.id);
       setPreviewUrl(null);
       toast({ title: successLabel });
     },

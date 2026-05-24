@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -881,8 +882,7 @@ function PressLogoEditorDialog({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/manufacturers"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/manufacturers", press.id] });
+    void invalidateAdminEntity(queryClient, "manufacturer", press.id);
   };
 
   const upload = useMutation({

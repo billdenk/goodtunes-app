@@ -25,6 +25,7 @@ import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -234,9 +235,7 @@ export function AdminVendor() {
       return (await r2.json()) as Vendor;
     },
     onSuccess: (row) => {
-      qc.invalidateQueries({ queryKey: ["/api/vendors", vendorId, "profile"] });
-      qc.invalidateQueries({ queryKey: ["/api/vendors"] });
-      qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      void invalidateAdminEntity(qc, "vendor", vendorId);
       toast({ title: row ? "Refreshed from website" : "Nothing new to update" });
     },
     onError: (e: any) =>
@@ -595,11 +594,7 @@ function LineagePanel({
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/vendors", vendor.id, "profile"] });
-      qc.invalidateQueries({ queryKey: [`/api/vendors/${vendor.id}/profile`] });
-      qc.invalidateQueries({ queryKey: [`/api/makers/${vendor.id}/profile`] });
-      qc.invalidateQueries({ queryKey: ["/api/vendors"] });
-      qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      void invalidateAdminEntity(qc, "vendor", vendor.id);
     },
     onError: (e: any) =>
       toast({
@@ -751,14 +746,7 @@ function RolesPanel({ vendor }: { vendor: Vendor }) {
       return patch;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/vendors", vendor.id, "profile"] });
-      qc.invalidateQueries({ queryKey: ["/api/vendors"] });
-      qc.invalidateQueries({
-        predicate: (q) =>
-          Array.isArray(q.queryKey) &&
-          typeof q.queryKey[0] === "string" &&
-          q.queryKey[0].startsWith("/api/vendors"),
-      });
+      void invalidateAdminEntity(qc, "vendor", vendor.id);
     },
     onError: (e: any) =>
       toast({
@@ -887,8 +875,12 @@ function RoleToggle({
 /* ─── Overview (inline-editable) ───────────────────────────────────── */
 
 function OverviewPanel({ vendor }: { vendor: Vendor }) {
+  // EditablePanel takes a static list of keys; mirror the helper's
+  // vendor entry by hand so a save invalidates the same surfaces as an
+  // upload (full-URL profile keys, not the never-matching ["/api/vendors", id, "profile"] tuple).
   const invalidate: (readonly unknown[])[] = [
-    ["/api/vendors", vendor.id, "profile"],
+    [`/api/vendors/${vendor.id}/profile`],
+    [`/api/makers/${vendor.id}/profile`],
     ["/api/vendors"],
     ["/api/instruments"],
   ];
@@ -1025,11 +1017,7 @@ function ImageUploadPanel({
       return url;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({
-        queryKey: ["/api/vendors", vendor.id, "profile"],
-      });
-      await qc.invalidateQueries({ queryKey: ["/api/vendors"] });
-      await qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      await invalidateAdminEntity(qc, "vendor", vendor.id);
       setPreviewUrl(null);
       toast({ title: `${fieldLabel} updated` });
     },
@@ -1054,11 +1042,7 @@ function ImageUploadPanel({
       return nextLocked;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({
-        queryKey: ["/api/vendors", vendor.id, "profile"],
-      });
-      await qc.invalidateQueries({ queryKey: ["/api/vendors"] });
-      await qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      await invalidateAdminEntity(qc, "vendor", vendor.id);
     },
     onError: (e: any) =>
       toast({

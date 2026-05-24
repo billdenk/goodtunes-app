@@ -43,6 +43,7 @@ import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPre
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -773,10 +774,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
       return url;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({
-        queryKey: ["/api/instruments", instrument.id],
-      });
-      await qc.invalidateQueries({ queryKey: ["/api/instruments"] });
+      await invalidateAdminEntity(qc, "instrument", instrument.id);
       setPreviewUrl(null);
       toast({ title: "Photo updated" });
     },
