@@ -9940,6 +9940,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // doesn't look like a bare home page. Instagram/Facebook URLs are
   // rejected up front — Meta serves a login shell to non-authenticated
   // server fetches.
+  //
+  // Task #296 — sub-brand pages (e.g. `gibson.com/pages/epiphone`) used
+  // to inherit the parent's identity because og:site_name and
+  // apple-touch-icon are site-wide. For sub-pages we now prefer
+  // page-specific signals (og:title with site_name stripped, h1 text,
+  // body images whose alt/src match the sub-brand name) before falling
+  // back to the site-wide marks. The operator still gets the "Add as
+  // sub-brand?" prompt on domain collision, but with the right name,
+  // logo, cover, and bio already filled in.
   app.post("/api/admin/vendors/scrape", requireAdminBearer, async (req, res) => {
     const url = String(req.body?.url ?? "").trim();
     if (!url || !/^https?:\/\//i.test(url)) {
@@ -9980,35 +9989,116 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!(key in meta)) meta[key] = decodeEntities(m[1]);
       }
 
-      // Logo: prefer apple-touch-icon (clean square brand mark), fall back
-      // to og:image, then favicon as last resort.
+      const absolutize = (u: string | null | undefined): string | null => {
+        if (!u) return null;
+        let s = u.trim();
+        if (!s) return null;
+        if (s.startsWith("//")) return `https:${s}`;
+        if (s.startsWith("/")) return `${parsed.origin}${s}`;
+        if (/^https?:\/\//i.test(s)) return s;
+        try { return new URL(s, url).toString(); } catch { return null; }
+      };
+
+      // Sub-page heuristic: a non-empty path means the operator pasted a
+      // specific page (e.g. /pages/epiphone), not the bare homepage.
+      // Page-specific signals beat site-wide ones for sub-brand pages.
+      const isSubPage = parsed.pathname.replace(/\/+$/, "") !== "";
+      const siteName = (meta["og:site_name"] || "").trim();
+
+      // Strip a trailing " | SiteName" / " — SiteName" / "- SiteName"
+      // suffix from a title so a sub-page like "Epiphone | Gibson" lands
+      // as "Epiphone". Falls back to the original on no-match.
+      const stripSiteName = (raw: string): string => {
+        let s = raw.trim();
+        if (siteName) {
+          const re = new RegExp(
+            `\\s*[|·–—\\-]\\s*${siteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
+            "i",
+          );
+          s = s.replace(re, "").trim();
+        }
+        return s;
+      };
+
+      // First <h1> text content, plain-text, length-capped.
+      const extractH1 = (): string | null => {
+        const mh = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html);
+        if (!mh) return null;
+        const txt = mh[1]
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!txt || txt.length > 80) return null;
+        return decodeEntities(txt);
+      };
+
+      // Name pipeline:
+      //   sub-page → og:title-stripped → twitter:title-stripped → h1 →
+      //              og:site_name (last resort, parent-flavored)
+      //   home    → og:site_name → og:title → twitter:title (legacy order)
+      // Title-suffix cleanup ("- Home", "| Official Site", etc.) always
+      // runs last so either path yields a clean display name.
+      const ogTitle = meta["og:title"] ? stripSiteName(meta["og:title"]) : null;
+      const twTitle = meta["twitter:title"] ? stripSiteName(meta["twitter:title"]) : null;
+      const h1Text = isSubPage ? extractH1() : null;
+      let name: string | null = isSubPage
+        ? (ogTitle || twTitle || h1Text || siteName || null)
+        : (siteName || meta["og:title"] || meta["twitter:title"] || null);
+      if (name) {
+        name = name
+          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|about(?:\s+us)?|store|shop|the\s+official\s+site).*$/i, "")
+          .trim();
+      }
+
+      // Logo. For sub-pages, try to find a body <img> whose alt or src
+      // mentions the resolved name (e.g. Epiphone logo embedded in the
+      // page hero) — that's the sub-brand's own mark. Apple-touch-icon
+      // is the site-wide (parent) logo, so it's only the fallback.
       let logoUrl: string | null = null;
-      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
-      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
-      if (touchA) logoUrl = touchA[1];
-      else if (touchB) logoUrl = touchB[1];
+      if (isSubPage && name) {
+        const tokens = name
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((tok) => tok.length >= 3 && tok !== siteName.toLowerCase());
+        if (tokens.length > 0) {
+          const imgRe = /<img[^>]+>/gi;
+          let im: RegExpExecArray | null;
+          while ((im = imgRe.exec(html))) {
+            const tag = im[0];
+            const altM = /\balt=["']([^"']*)["']/i.exec(tag);
+            const srcM = /\bsrc=["']([^"']+)["']/i.exec(tag);
+            const alt = (altM?.[1] || "").toLowerCase();
+            const src = (srcM?.[1] || "").toLowerCase();
+            const looksLikeLogo = /logo|brand|mark/.test(alt) || /logo|brand|mark/.test(src);
+            const mentionsName = tokens.some((tok) => alt.includes(tok) || src.includes(tok));
+            if (mentionsName && (looksLikeLogo || alt.includes("logo"))) {
+              logoUrl = absolutize(srcM?.[1] ?? null);
+              if (logoUrl) break;
+            }
+          }
+        }
+      }
+      if (!logoUrl) {
+        const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+        if (touchA) logoUrl = touchA[1];
+        else if (touchB) logoUrl = touchB[1];
+      }
       if (!logoUrl) {
         const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
         const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
         if (iconA) logoUrl = iconA[1];
         else if (iconB) logoUrl = iconB[1];
       }
-      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
-      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+      logoUrl = absolutize(logoUrl);
 
-      // Cover: og:image is usually a wide hero shot — perfect for cover.
-      let coverUrl: string | null =
-        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
-      if (coverUrl?.startsWith("//")) coverUrl = `https:${coverUrl}`;
-      if (coverUrl?.startsWith("/")) coverUrl = `${parsed.origin}${coverUrl}`;
+      // Cover: og:image is per-page on most CMSes (Shopify /pages/* hero,
+      // WordPress featured image, etc.) so it's already the sub-brand
+      // hero when present.
+      const coverUrl = absolutize(
+        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null,
+      );
 
-      // Name: og:title or og:site_name — strip common trailing service tags.
-      let name = meta["og:site_name"] || meta["og:title"] || meta["twitter:title"] || null;
-      if (name) {
-        name = name
-          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|about(?:\s+us)?|store|shop|the\s+official\s+site).*$/i, "")
-          .trim();
-      }
       const bio =
         meta["og:description"] ||
         meta["twitter:description"] ||
