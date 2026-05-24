@@ -132,7 +132,7 @@ function snapCatalogLadder(
 
 export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; artworkUrl?: string | null }) {
   const { toast } = useToast();
-  const { data, isLoading } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
+  const { data, isLoading, error } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
   // Live platform-cost feed — used for the "You earn" readout the first
   // time an addon is configured (before a snapshot is written), and as
   // the source of truth for what re-saving will lock in.
@@ -209,7 +209,26 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   // by AlbumFormat. See docs/design-system.md ("Expandable row lists").
   const skuDisclosure = useExclusiveDisclosure<string>();
 
-  if (isLoading || !data) return <div className="text-slate-500 text-sm py-6">Loading…</div>;
+  // Honest loading/error/empty gates so a future schema-drift regression
+  // surfaces as a visible message instead of an infinite spinner
+  // (Task #288). An empty payload (`{skus:[], addons:[]}`) is a valid
+  // success state — the "No physical formats yet" empty card below
+  // handles it. Only fall back to the error state on a real fetch
+  // failure.
+  if (isLoading) return <div className="text-slate-500 text-sm py-6" data-testid="sell-loading">Loading…</div>;
+  if (error || !data) {
+    return (
+      <div
+        className="my-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+        data-testid="sell-error"
+      >
+        <div className="font-semibold mb-0.5">Couldn't load Sell settings</div>
+        <div className="text-rose-800/90">
+          {(error as any)?.message ?? "Unknown error"} — refresh the page; if it persists, ping #goodtunes-eng.
+        </div>
+      </div>
+    );
+  }
 
   const skuByFormat = new Map(data.skus.map((s) => [s.format as AlbumFormat, s]));
   const signedAddon = data.addons.find((a) => a.kind === "signed_cert");

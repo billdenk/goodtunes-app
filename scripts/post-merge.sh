@@ -169,3 +169,32 @@ SQL
 }
 migrate_organization_people dev  "${DATABASE_URL:-}"
 migrate_organization_people prod "${PROD_DATABASE_URL:-}"
+
+# Task #288 — album_addons drift. shared/schema.ts (Task #245) declares
+# five columns on album_addons that drizzle-kit's push silently skipped
+# on both dev and prod, so every Sell-tab open 500s on listAllAddons
+# (column "print_vendor_id" does not exist) and the panel stays stuck
+# on "Loading…". Idempotent ADD COLUMN IF NOT EXISTS sweep on both DBs
+# so a fresh-clone dev never reintroduces the bug.
+migrate_album_addons_vendor_legs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_addons vendor-legs migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE album_addons
+  ADD COLUMN IF NOT EXISTS print_vendor_id     varchar REFERENCES vendors(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS hologram_vendor_id  varchar REFERENCES vendors(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS insertion_vendor_id varchar REFERENCES vendors(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS pricing_snapshot    jsonb,
+  ADD COLUMN IF NOT EXISTS pricing_snapshot_at timestamp;
+SQL
+  then
+    echo "post-merge: album_addons vendor-legs migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_addons vendor-legs migration failed on $label (continuing)"
+  fi
+}
+migrate_album_addons_vendor_legs dev  "${DATABASE_URL:-}"
+migrate_album_addons_vendor_legs prod "${PROD_DATABASE_URL:-}"
