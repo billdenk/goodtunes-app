@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, setAuthToken } from "@/lib/queryClient";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -197,6 +197,29 @@ const profilePhotoKey = (userId: string) => `gt:profile-photo:${userId}`;
 export function Account() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
+  // Customer OAuth callback redirects to `/account#token=<jwt>` (server
+  // sets a session cookie too, but the SPA's Bearer token in
+  // localStorage takes precedence in useAuth — if a stale token from a
+  // previous account is still there, `/api/me` 401s and the page
+  // null-pointers downstream). Parse the hash here the same way
+  // Login.tsx does on the login surface, then strip it from the URL
+  // and invalidate caches so the new identity loads cleanly.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.location.hash.startsWith("#token=")) return;
+    try {
+      const token = decodeURIComponent(window.location.hash.slice("#token=".length));
+      if (token) {
+        setAuthToken(token);
+        window.history.replaceState({}, "", "/account");
+        queryClient.invalidateQueries();
+      }
+    } catch {
+      // Malformed hash — just strip it so the user isn't stuck looking
+      // at a token in the address bar.
+      window.history.replaceState({}, "", "/account");
+    }
+  }, []);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearedToast, setClearedToast] = useState(false);
