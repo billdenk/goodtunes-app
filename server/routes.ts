@@ -11167,62 +11167,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Boot-time Mux backfill — runs once, ~10s after server start, so the
-  // app finishes initializing before we spend cycles on background work.
-  // Sweeps every uploaded song that isn't `ready` on Mux yet and kicks
-  // off ingest with a 250ms pacing gap. This means:
-  //   • Existing albums that pre-date Mux get migrated automatically.
-  //   • If a previous ingest errored, the next boot retries it.
-  //   • New albums uploaded via the admin already auto-ingest at upload
-  //     time, so this loop will find nothing on subsequent boots — a
-  //     cheap no-op idle sweep.
+  // Mux backfill — runs at boot (~10s after server start) AND on a 60s
+  // interval thereafter. The boot pass handles two cases the running
+  // server otherwise can't catch:
+  //   • Existing albums that pre-date Mux get migrated automatically
+  //     (Pass 2 below — ingest songs that never made it onto Mux).
+  //   • Tracks whose previous ingest errored get retried.
+  // The interval pass handles a third case the boot pass can't:
+  //   • A track Mux finished encoding while we were running, but whose
+  //     `video.asset.ready` webhook never landed (Mux delivery hiccup,
+  //     signature mismatch, prod URL misconfig). Without it the only
+  //     recovery is a server restart.
   // No-ops cleanly when Mux isn't configured (dev without secrets).
+  //
+  // Pass 1 of the Mux backfill, extracted so it can run both at boot AND
+  // on a periodic interval. The webhook (`/api/webhooks/mux`) is the
+  // primary signal that flips `preparing`→`ready`, but it can silently
+  // drop a delivery (Mux outage, signature mismatch, prod URL not
+  // wired). Polling every minute means the worst-case drift between
+  // "Mux finished encoding" and "our DB knows it" is ~60s instead of
+  // "next server boot".
+  let muxReconcileInFlight = false;
+  async function reconcileStuckMuxSongs(reason: string): Promise<void> {
+    // Re-entrancy guard. A slow Mux API response (or a large stuck
+    // backlog with the 150ms per-song pacing) can let one pass run
+    // longer than the 60s interval. Without this guard, setInterval
+    // would stack identical sweeps on top of each other, doubling Mux
+    // GET load and racing on the same updateSong() calls.
+    if (muxReconcileInFlight) {
+      console.log(`[mux-reconcile:${reason}] skipped — previous pass still running`);
+      return;
+    }
+    muxReconcileInFlight = true;
+    try {
+      const all = await storage.getAllSongs({ includeHidden: true });
+      const stuck = all.filter(
+        (s: any) =>
+          s.muxAssetId &&
+          s.muxStatus !== "ready" &&
+          s.muxStatus !== "errored",
+      );
+      if (stuck.length === 0) return;
+      console.log(
+        `[mux-reconcile:${reason}] reconciling ${stuck.length} song(s) stuck in preparing/ingesting`,
+      );
+      const { getAsset } = await import("./mux");
+      let healed = 0;
+      for (const s of stuck) {
+        try {
+          const asset: any = await getAsset((s as any).muxAssetId);
+          const realStatus = asset?.status;
+          if (realStatus !== "ready" && realStatus !== "errored") continue;
+          const pb = (asset.playback_ids || []).find(
+            (p: any) => p.policy === "signed",
+          );
+          await storage.updateSong(s.id, {
+            muxStatus: realStatus,
+            muxPlaybackId: pb?.id ?? (s as any).muxPlaybackId,
+          });
+          healed++;
+        } catch (err: any) {
+          console.error(
+            `[mux-reconcile:${reason}] reconcile failed for song ${s.id}: ${err?.message}`,
+          );
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      console.log(
+        `[mux-reconcile:${reason}] reconciled ${healed}/${stuck.length} song(s)`,
+      );
+    } catch (err: any) {
+      console.error(`[mux-reconcile:${reason}] sweep failed`, err?.message);
+    } finally {
+      muxReconcileInFlight = false;
+    }
+  }
+
   if (isMuxConfigured()) {
+    // Periodic reconcile — every 60s. When no songs are stuck this is a
+    // single getAllSongs() + filter (no Mux API calls), so it stays cheap
+    // on an idle catalog. The first run happens 60s after boot, AFTER
+    // the boot-time pass below has already had its chance to heal the
+    // backlog.
+    setInterval(() => {
+      reconcileStuckMuxSongs("interval");
+    }, 60_000).unref();
+
     setTimeout(async () => {
       try {
-        const all = await storage.getAllSongs({ includeHidden: true });
-
-        // Pass 1: reconcile songs stuck in `preparing` / `ingesting` by
-        // polling Mux directly. The normal happy path is the
-        // `/api/webhooks/mux` callback flipping these to `ready`, but
-        // that fails silently when `MUX_WEBHOOK_SECRET` isn't set in
-        // prod, or when Mux's webhook delivery drops a payload. Without
-        // this pass songs sit on `preparing` forever and the player
-        // keeps toasting "Mux is still encoding this track."
-        const stuck = all.filter(
-          (s: any) =>
-            s.muxAssetId &&
-            s.muxStatus !== "ready" &&
-            s.muxStatus !== "errored",
-        );
-        if (stuck.length > 0) {
-          console.log(
-            `[mux-backfill] reconciling ${stuck.length} song(s) stuck in preparing/ingesting`,
-          );
-          const { getAsset } = await import("./mux");
-          let healed = 0;
-          for (const s of stuck) {
-            try {
-              const asset: any = await getAsset((s as any).muxAssetId);
-              const realStatus = asset?.status;
-              if (realStatus !== "ready" && realStatus !== "errored") continue;
-              const pb = (asset.playback_ids || []).find(
-                (p: any) => p.policy === "signed",
-              );
-              await storage.updateSong(s.id, {
-                muxStatus: realStatus,
-                muxPlaybackId: pb?.id ?? (s as any).muxPlaybackId,
-              });
-              healed++;
-            } catch (err: any) {
-              console.error(
-                `[mux-backfill] reconcile failed for song ${s.id}: ${err?.message}`,
-              );
-            }
-            await new Promise((r) => setTimeout(r, 150));
-          }
-          console.log(`[mux-backfill] reconciled ${healed}/${stuck.length} song(s)`);
-        }
+        await reconcileStuckMuxSongs("boot");
 
         // Pass 2: ingest songs that never made it onto Mux (or errored
         // out on a previous attempt). Re-read storage so any song that
