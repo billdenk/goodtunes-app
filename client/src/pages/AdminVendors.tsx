@@ -44,6 +44,46 @@ function humanizeApiError(err: unknown): string {
   return body.trim() || raw;
 }
 
+// Task #292 — derive a sensible sub-brand name from the pasted URL's path.
+// Pastes like `https://www.gibson.com/pages/epiphone` collide on the apex
+// domain (`gibson.com`) and the scraper returns the parent's name
+// ("Gibson"); the path itself ("epiphone") is the real signal for what the
+// operator was trying to add. Returns null when the URL has no meaningful
+// path segment, so callers can fall back to the scraped name.
+function deriveNameFromUrl(rawUrl: string): string | null {
+  const trimmed = (rawUrl ?? "").trim();
+  if (!trimmed) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  const skip = new Set(["pages", "page", "brand", "brands", "collections", "collection", "shop", "store", "category", "categories"]);
+  const segments = parsed.pathname
+    .split("/")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.replace(/\.[a-z0-9]{1,5}$/i, ""))
+    .filter((s) => s.length > 0 && !skip.has(s.toLowerCase()));
+  if (segments.length === 0) return null;
+  const last = segments[segments.length - 1];
+  const words = last
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  if (words.length === 0) return null;
+  return words
+    .map((w) =>
+      /^[A-Z0-9]+$/.test(w)
+        ? w
+        : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+    )
+    .join(" ");
+}
+
 /**
  * Admin home · Vendors (Phase 6e).
  *
@@ -146,16 +186,29 @@ export function AdminVendors() {
   } | null>(null);
   const [subBrandPickerOpen, setSubBrandPickerOpen] = useState(false);
   const [subBrandPickerQuery, setSubBrandPickerQuery] = useState("");
+  // Task #292 — editable name for the new sub-brand. Seeded from the
+  // pasted URL's path (best signal — `/pages/epiphone` → "Epiphone"),
+  // falling back to the scraped name (parent's name on apex collisions),
+  // then blank. Lets the operator confirm with the right name in one go
+  // instead of renaming on the detail page after creation.
+  const [subBrandName, setSubBrandName] = useState("");
   useEffect(() => {
     if (subBrandPrompt) {
       setSubBrandParent(subBrandPrompt.parent);
       setSubBrandPickerOpen(false);
       setSubBrandPickerQuery("");
+      const fromUrl = deriveNameFromUrl(pasteUrl);
+      setSubBrandName(fromUrl || subBrandPrompt.scrapedName || "");
     } else {
       setSubBrandParent(null);
       setSubBrandPickerOpen(false);
       setSubBrandPickerQuery("");
+      setSubBrandName("");
     }
+    // pasteUrl intentionally omitted — we seed once on prompt open, then
+    // let the operator freely edit the name without it snapping back if
+    // they later edit the URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subBrandPrompt]);
 
   // Top-level vendors used as candidate parents in the sub-brand prompt.
@@ -317,12 +370,20 @@ export function AdminVendors() {
 
   const confirmSubBrand = () => {
     if (!subBrandPrompt || !subBrandParent || createVendor.isPending) return;
+    const trimmedName = subBrandName.trim();
+    if (!trimmedName) return;
     // Task #280 — use whichever parent the operator currently has
     // selected, not necessarily the auto-detected one from the 409
     // response. Lets the operator correct a wrong domain guess (e.g.
     // domain collides with Acme but the real parent is Globex).
+    // Task #292 — merge the operator's edited name in last so it wins
+    // over the (often parent-flavored) scraped name in the payload.
     createVendor.mutate({
-      payload: { ...subBrandPrompt.payload, parentVendorId: subBrandParent.id },
+      payload: {
+        ...subBrandPrompt.payload,
+        name: trimmedName,
+        parentVendorId: subBrandParent.id,
+      },
       scrapedName: subBrandPrompt.scrapedName,
     });
   };
@@ -573,6 +634,35 @@ export function AdminVendors() {
           </DialogHeader>
           {subBrandPrompt ? (
             <div className="pt-1 space-y-3" data-testid="prompt-sub-brand">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="input-sub-brand-name"
+                  className="block text-xs font-semibold text-slate-700"
+                >
+                  Name
+                </label>
+                <input
+                  id="input-sub-brand-name"
+                  type="text"
+                  value={subBrandName}
+                  onChange={(e) => setSubBrandName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && subBrandName.trim() && subBrandParent && !createVendor.isPending) {
+                      e.preventDefault();
+                      confirmSubBrand();
+                    }
+                  }}
+                  placeholder="e.g. Epiphone"
+                  disabled={createVendor.isPending}
+                  autoFocus
+                  className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+                  data-testid="input-sub-brand-name"
+                />
+                <p className="text-[11.5px] text-slate-400">
+                  Suggested from the URL — edit before confirming so the new
+                  row saves with the sub-brand's name, not the parent's.
+                </p>
+              </div>
               <div
                 className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"
                 data-testid="sub-brand-current-parent"
@@ -684,7 +774,7 @@ export function AdminVendors() {
                 <Button
                   type="button"
                   onClick={confirmSubBrand}
-                  disabled={createVendor.isPending}
+                  disabled={createVendor.isPending || !subBrandName.trim()}
                   size="sm"
                   className="text-[12.5px] font-semibold"
                   data-testid="button-sub-brand-confirm"
