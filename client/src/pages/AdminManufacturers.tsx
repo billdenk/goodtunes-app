@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Factory, Clock, Loader2 } from "lucide-react";
+import { Search, Factory, Clock, Loader2, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +9,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import {
   Dialog,
   DialogContent,
@@ -60,15 +61,18 @@ function extractDuplicateManufacturer(err: unknown): Manufacturer | null {
 }
 
 /**
- * Admin · Manufacturers (Task #69). One row per pressing plant. Each
- * manufacturer can be invited to bid on RFQs (see AdminAlbum.RFQ
- * section, follow-up) and is the awarded plant for any album whose
+ * Admin · Presses (formerly Manufacturers, Task #69 / #283). One row per
+ * pressing plant. Each press can be invited to bid on RFQs (see
+ * AdminAlbum.RFQ section) and is the awarded plant for any album whose
  * print run was assigned to them.
  *
- * "Add manufacturer" accepts either a plant name *or* a website URL —
- * pasting a URL triggers the server scraper (mirrors Labels/Vendors/Gear)
- * so the record lands with name, domain, logo, cover, bio, and location
+ * "Add press" accepts either a plant name *or* a website URL — pasting
+ * a URL triggers the server scraper (mirrors Labels/Vendors/Gear) so
+ * the record lands with name, domain, logo, cover, bio, and location
  * already filled in.
+ *
+ * Styleguide alignment (Task #283): search-toggle + ViewModeToggle +
+ * grid/list renderer mirroring Labels/Makers/NPOs.
  */
 export function AdminManufacturers() {
   useEffect(() => {
@@ -78,6 +82,9 @@ export function AdminManufacturers() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [view, setView] = useViewMode("presses");
   const [addOpen, setAddOpen] = useState(false);
   const [draftInput, setDraftInput] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -194,24 +201,59 @@ export function AdminManufacturers() {
           title="Presses"
           subtitle="Vinyl pressing plants and duplication houses. Invite them to bid on print runs."
           actions={
-            <AddEntityButton
-              label="Add press"
-              onClick={() => setAddOpen(true)}
-              testId="button-add-manufacturer"
-            />
+            <>
+              {searchOpen ? (
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    ref={searchInputRef}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onBlur={() => {
+                      if (!search) setSearchOpen(false);
+                    }}
+                    placeholder="Search presses"
+                    autoFocus
+                    className="h-9 w-56 pl-8 pr-8 rounded-md border border-slate-200 bg-white text-xs focus:outline-none focus:border-[var(--brand-blue)]"
+                    data-testid="input-search-manufacturers"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setSearchOpen(false);
+                    }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center text-slate-400 hover:text-slate-700"
+                    aria-label="Clear search"
+                    data-testid="button-clear-search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  aria-label="Search"
+                  data-testid="button-open-search"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+              )}
+              <ViewModeToggle
+                value={view}
+                onChange={setView}
+                testIdPrefix="view-mode-presses"
+              />
+              <AddEntityButton
+                label="Add press"
+                onClick={() => setAddOpen(true)}
+                testId="button-add-manufacturer"
+              />
+            </>
           }
         />
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or location"
-            className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-            data-testid="input-search-manufacturers"
-          />
-        </div>
 
         {isLoading ? (
           <div className="py-10 text-slate-500 text-sm">Loading…</div>
@@ -223,55 +265,38 @@ export function AdminManufacturers() {
             testId="admin-manufacturers-error"
           />
         ) : filtered.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-10 text-center">
-            <Factory className="w-8 h-8 mx-auto text-slate-300 mb-2" strokeWidth={1.5} />
-            <div className="text-slate-700 font-medium">No presses yet</div>
-            <div className="text-slate-500 text-[13px] mt-1">
-              Add your first pressing plant to start collecting quotes.
+          <div
+            className="py-16 flex flex-col items-center justify-center text-center"
+            data-testid="empty-manufacturers"
+          >
+            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
+              <Factory className="w-6 h-6" strokeWidth={1.5} />
             </div>
+            <p className="text-slate-700 text-sm font-semibold">
+              {search.trim() ? "No matches" : "No presses yet"}
+            </p>
+            <p className="text-slate-400 text-xs mt-1 max-w-xs">
+              {search.trim()
+                ? "Try a different name or location."
+                : "Add your first pressing plant to start collecting quotes."}
+            </p>
+          </div>
+        ) : view === "grid" ? (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            data-testid="grid-manufacturers"
+          >
+            {filtered.map((m) => (
+              <PressCard key={m.id} press={m} />
+            ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+          <div
+            className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden"
+            data-testid="list-manufacturers"
+          >
             {filtered.map((m) => (
-              <Link
-                key={m.id}
-                href={`/admin/manufacturers/${m.id}`}
-                className="block px-4 py-3 hover:bg-slate-50 transition-colors"
-                data-testid={`row-manufacturer-${m.id}`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-md bg-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
-                    {m.logoUrl ? (
-                      <img src={m.logoUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <Factory className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-slate-900 text-[14px] font-medium truncate">{m.name}</div>
-                    <div className="text-slate-500 text-[12px] truncate">
-                      {m.location || m.domain || "—"}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 text-[11.5px] text-slate-500">
-                    {m.turnaroundDays != null && (
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {m.turnaroundDays}d
-                      </span>
-                    )}
-                    {m.specialties.length > 0 && (
-                      <span className="hidden sm:inline-flex gap-1">
-                        {m.specialties.slice(0, 3).map((s) => (
-                          <span key={s} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                            {s}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </Link>
+              <PressRow key={m.id} press={m} />
             ))}
           </div>
         )}
@@ -294,10 +319,10 @@ export function AdminManufacturers() {
           data-testid="dialog-add-manufacturer"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            <DialogTitle className="text-base font-semibold text-slate-900">
               Add press
             </DialogTitle>
-            <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
+            <DialogDescription className="text-sm text-slate-500 leading-relaxed">
               Paste the plant's website — we'll prefill name, domain, logo,
               cover, and bio from the page's Open Graph metadata. Or just
               type the name to create a blank entry.
@@ -320,12 +345,12 @@ export function AdminManufacturers() {
               }}
               placeholder="https://memphisrecordpressing.com  or  Pirates Press"
               disabled={create.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-new-manufacturer-name"
             />
             {duplicate && (
               <div
-                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
                 data-testid="text-add-manufacturer-duplicate"
               >
                 <span className="font-semibold">{duplicate.name}</span> is
@@ -345,13 +370,13 @@ export function AdminManufacturers() {
             )}
             {pasteError && (
               <p
-                className="text-[12px] text-red-600"
+                className="text-xs text-red-600"
                 data-testid="text-add-manufacturer-error"
               >
                 {pasteError}
               </p>
             )}
-            <p className="text-[11.5px] text-slate-400">
+            <p className="text-xs text-slate-400">
               {inputLooksLikeUrl
                 ? "Reads the page's Open Graph metadata and rehosts the logo + cover."
                 : "Paste an https:// URL to auto-fill, or enter a name to create blank."}
@@ -379,5 +404,83 @@ export function AdminManufacturers() {
         </DialogContent>
       </Dialog>
     </AdminFrame>
+  );
+}
+
+function PressCard({ press }: { press: Manufacturer }) {
+  return (
+    <Link
+      href={`/admin/manufacturers/${press.id}`}
+      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5 underline-offset-2"
+      data-testid={`card-manufacturer-${press.id}`}
+    >
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+        {press.logoUrl ? (
+          <img src={press.logoUrl} alt={press.name} className="w-full h-full object-cover" />
+        ) : (
+          <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-sm font-semibold leading-tight truncate"
+          data-testid={`text-manufacturer-name-${press.id}`}
+        >
+          {press.name}
+        </div>
+        <div className="text-slate-400 text-xs truncate mt-0.5">
+          {press.location || press.domain || "—"}
+        </div>
+        {press.turnaroundDays != null && (
+          <div className="text-slate-500 text-xs mt-1 inline-flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {press.turnaroundDays}d
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function PressRow({ press }: { press: Manufacturer }) {
+  return (
+    <Link
+      href={`/admin/manufacturers/${press.id}`}
+      className="block px-4 py-3 hover:bg-slate-50 transition-colors underline-offset-2"
+      data-testid={`row-manufacturer-${press.id}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-md bg-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+          {press.logoUrl ? (
+            <img src={press.logoUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <Factory className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-slate-900 text-sm font-medium truncate">{press.name}</div>
+          <div className="text-slate-500 text-xs truncate">
+            {press.location || press.domain || "—"}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-500">
+          {press.turnaroundDays != null && (
+            <span className="inline-flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {press.turnaroundDays}d
+            </span>
+          )}
+          {press.specialties.length > 0 && (
+            <span className="hidden sm:inline-flex gap-1">
+              {press.specialties.slice(0, 3).map((s) => (
+                <span key={s} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                  {s}
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
+      </div>
+    </Link>
   );
 }

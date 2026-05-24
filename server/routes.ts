@@ -9441,6 +9441,113 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // Paste-a-URL scrape for the "Add fulfillment partner" modal + the
+  // detail-page "Refresh from website" button. Mirrors the manufacturer
+  // scraper (same OG-meta + apple-touch-icon extraction + image rehost)
+  // so warehouse sites like ShipBob, ShipMonk, and Whiplash come back
+  // with name/logo/cover/bio in one fetch. Source-site redesigns can't
+  // break us later because logo + cover are rehosted to object storage.
+  app.post("/api/admin/fulfillment-partners/scrape", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// partner URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)facebook\.com$/.test(host)) {
+      return res.status(400).json({
+        message: "Instagram/Facebook pages can't be scraped — paste the partner's website instead.",
+      });
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let mm: RegExpExecArray | null;
+      while ((mm = re1.exec(html))) {
+        const key = mm[1].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(mm[2]);
+      }
+      while ((mm = re2.exec(html))) {
+        const key = mm[2].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(mm[1]);
+      }
+
+      let logoUrl: string | null = null;
+      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+      if (touchA) logoUrl = touchA[1];
+      else if (touchB) logoUrl = touchB[1];
+      if (!logoUrl) {
+        const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
+        if (iconA) logoUrl = iconA[1];
+        else if (iconB) logoUrl = iconB[1];
+      }
+      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
+      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+
+      let coverUrl: string | null =
+        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      if (coverUrl?.startsWith("//")) coverUrl = `https:${coverUrl}`;
+      if (coverUrl?.startsWith("/")) coverUrl = `${parsed.origin}${coverUrl}`;
+
+      let name = meta["og:site_name"] || meta["og:title"] || meta["twitter:title"] || null;
+      if (name) {
+        name = name
+          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|fulfillment|warehouse|shipping).*$/i, "")
+          .trim();
+      }
+      const bio =
+        meta["og:description"] ||
+        meta["twitter:description"] ||
+        meta["description"] ||
+        null;
+      const location =
+        meta["business:contact_data:locality"] ||
+        meta["og:locality"] ||
+        meta["geo.placename"] ||
+        null;
+
+      let logoRehosted: string | null = logoUrl;
+      if (logoUrl) {
+        try { logoRehosted = await rehostRemoteImage(logoUrl); }
+        catch { logoRehosted = logoUrl; }
+      }
+      let coverRehosted: string | null = coverUrl;
+      if (coverUrl) {
+        try { coverRehosted = await rehostRemoteImage(coverUrl); }
+        catch { coverRehosted = coverUrl; }
+      }
+
+      return res.json({
+        name,
+        domain: host,
+        logoUrl: logoRehosted,
+        coverUrl: coverRehosted,
+        bio,
+        location,
+        websiteUrl: meta["og:url"] || url,
+      });
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Failed to read page" });
+    }
+  });
+
   app.get("/api/fulfillment-partners", requireAdmin, async (_req, res) => {
     return res.json(await storage.getFulfillmentPartners());
   });
@@ -11246,6 +11353,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const id = (ins as any).rows?.[0]?.id;
     res.status(201).json({ id, name, websiteUrl, logoUrl });
   });
+
+  // PATCH /api/non-profits/:id — partial update for the admin NPO
+  // detail page (logo editor uses PUT-shape `{ logoUrl }`, name +
+  // website edits land here too). We accept both PUT and PATCH so the
+  // shared PressLogoEditorDialog (which fires PUT) works without
+  // per-entity verb forks. Verifies the row exists and is a non-profit
+  // so a stray org id (label, publisher) can't be edited through this
+  // NPO-scoped endpoint.
+  const updateNonProfit: import("express").RequestHandler = async (req, res) => {
+    const b = req.body ?? {};
+    const exists = await db.execute(sql`
+      SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1
+    `);
+    if (((exists as any).rows ?? []).length === 0) {
+      return res.status(404).json({ message: "Non-profit not found" });
+    }
+    // Build SET fragments only for fields actually present in the body,
+    // so a logo-only PUT doesn't null out name/website.
+    const sets: any[] = [];
+    if (b.name !== undefined) {
+      const name = String(b.name).trim();
+      if (!name) return res.status(400).json({ message: "Name cannot be empty" });
+      sets.push(sql`name = ${name}`);
+    }
+    if (b.logoUrl !== undefined) {
+      const v = b.logoUrl == null || String(b.logoUrl).trim() === "" ? null : String(b.logoUrl).trim();
+      sets.push(sql`logo_url = ${v}`);
+    }
+    if (b.websiteUrl !== undefined) {
+      const v = b.websiteUrl == null || String(b.websiteUrl).trim() === "" ? null : String(b.websiteUrl).trim();
+      sets.push(sql`website_url = ${v}`);
+    }
+    if (sets.length === 0) {
+      return res.status(400).json({ message: "Nothing to update" });
+    }
+    const setSql = sets.reduce((acc, frag, i) => (i === 0 ? frag : sql`${acc}, ${frag}`));
+    await db.execute(sql`UPDATE organizations SET ${setSql} WHERE id = ${req.params.id}`);
+    const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null }>(
+      sql`SELECT id, name, logo_url, website_url FROM organizations WHERE id = ${req.params.id} LIMIT 1`,
+    );
+    const r = ((rows as any).rows ?? [])[0];
+    res.json({ id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url });
+  };
+  app.put("/api/non-profits/:id", requireAdmin, requireRole("super_admin"), updateNonProfit);
+  app.patch("/api/non-profits/:id", requireAdmin, requireRole("super_admin"), updateNonProfit);
 
   // GET a single non-profit by id — used by the admin detail page so it
   // doesn't have to fetch the whole list and filter client-side.

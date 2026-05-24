@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -9,14 +9,14 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
-import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -190,9 +190,16 @@ export function AdminManufacturer() {
             </span>
           </button>
           <PressLogoEditorDialog
-            press={m}
+            name={m.name}
+            logoUrl={m.logoUrl}
+            apiPath={`/api/admin/manufacturers/${m.id}`}
             open={logoEditorOpen}
             onOpenChange={setLogoEditorOpen}
+            onInvalidate={() => {
+              void invalidateAdminEntity(queryClient, "manufacturer", m.id);
+            }}
+            FallbackIcon={Factory}
+            testIdPrefix="press"
           />
           <div className="flex-1 min-w-0">
             {m.domain && (
@@ -844,218 +851,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/* ─── Logo editor — drag-drop upload, Replace + Remove ─────────────── */
-
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
-}
-
-function PressLogoEditorDialog({
-  press,
-  open,
-  onOpenChange,
-}: {
-  press: Manufacturer;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  const invalidate = () => {
-    void invalidateAdminEntity(queryClient, "manufacturer", press.id);
-  };
-
-  const upload = useMutation({
-    mutationFn: async (file: File) => {
-      setPreviewUrl(URL.createObjectURL(file));
-      const url = await uploadImageFile(file);
-      await apiRequest("PUT", `/api/admin/manufacturers/${press.id}`, { logoUrl: url });
-      return url;
-    },
-    onSuccess: () => {
-      invalidate();
-      setPreviewUrl(null);
-      toast({ title: "Logo updated" });
-    },
-    onError: (e: any) => {
-      setPreviewUrl(null);
-      toast({
-        title: "Couldn't update the logo",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const removeLogo = useMutation({
-    mutationFn: async () => {
-      await apiRequest("PUT", `/api/admin/manufacturers/${press.id}`, { logoUrl: null });
-    },
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Logo removed" });
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Couldn't remove the logo",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      }),
-  });
-
-  const acceptFile = (file: File | undefined | null) => {
-    if (!file) return;
-    if (!/^image\//.test(file.type)) {
-      toast({ title: "That's not an image", description: "Use a JPG, PNG, or WebP file.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Keep images under 8 MB.", variant: "destructive" });
-      return;
-    }
-    upload.mutate(file);
-  };
-
-  const busy = upload.isPending || removeLogo.isPending;
-  const shownUrl = previewUrl || press.logoUrl;
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
-      <DialogContent
-        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
-        data-testid="dialog-edit-press-logo"
-      >
-        <DialogHeader className="flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-slate-900 text-[14px] font-bold">Logo</DialogTitle>
-          <DialogDescription className="sr-only">
-            Replace the logo for {press.name}.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div
-            className="rounded-2xl shadow-sm border border-slate-200 bg-white p-6"
-            data-testid="panel-press-logo-current"
-          >
-            <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
-              Current logo
-            </div>
-            <div className="relative rounded-xl overflow-hidden aspect-square">
-              {shownUrl ? (
-                <img
-                  src={shownUrl}
-                  alt={press.name}
-                  className="w-full h-full object-cover"
-                  data-testid="img-press-logo-current"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                  <Factory className="w-12 h-12" strokeWidth={1.5} />
-                </div>
-              )}
-              {busy && (
-                <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-                  <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
-                  <span className="text-[12px] text-slate-700 font-semibold">
-                    {upload.isPending ? "Uploading…" : "Removing…"}
-                  </span>
-                </div>
-              )}
-            </div>
-            {press.logoUrl && (
-              <div className="mt-3 flex justify-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => removeLogo.mutate()}
-                  disabled={busy}
-                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2 text-[12px]"
-                  data-testid="button-remove-press-logo"
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1" />
-                  Remove
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <div
-            className="rounded-2xl shadow-sm border border-slate-200 bg-white p-6 flex flex-col"
-            data-testid="panel-press-logo-upload"
-          >
-            <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
-              Replace logo
-            </div>
-            <button
-              type="button"
-              onClick={() => !busy && fileInputRef.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!busy) setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                if (busy) return;
-                acceptFile(e.dataTransfer.files?.[0]);
-              }}
-              disabled={busy}
-              data-testid="dropzone-press-logo"
-              className={[
-                "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
-                dragging
-                  ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-                  : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
-                busy && "opacity-60 cursor-not-allowed",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              <Upload
-                className={["w-7 h-7", dragging ? "text-[var(--brand-blue)]" : "text-slate-400"].join(" ")}
-              />
-              <div className="text-slate-700 text-[13px] font-semibold">
-                {dragging ? "Drop to upload" : "Drag an image here, or click to pick"}
-              </div>
-              <div className="text-slate-400 text-[11.5px]">JPG, PNG, or WebP · up to 8 MB</div>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                acceptFile(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-              data-testid="input-press-logo-file"
-            />
-            <p className="mt-4 text-[11.5px] text-slate-500 leading-relaxed">
-              Square works best — used in the Presses list and anywhere this plant is credited.
-            </p>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+/* PressLogoEditorDialog now lives in
+ * `@/components/admin/PressLogoEditorDialog` so other admin
+ * partner-shaped pages (Fulfillment, etc.) can share the same primitive.
+ */

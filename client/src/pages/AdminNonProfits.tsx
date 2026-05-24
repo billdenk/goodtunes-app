@@ -1,11 +1,23 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Heart, Loader2, Search, X } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
+import { ErrorState } from "@/components/admin/AdminErrorBoundary";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 function humanizeApiError(err: unknown): string {
@@ -15,22 +27,22 @@ function humanizeApiError(err: unknown): string {
     try {
       const body = JSON.parse(m[1]);
       if (body?.message) return String(body.message);
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
     return m[1];
   }
   return raw || "Something went wrong.";
 }
 
-// Task #230 — Lightweight NPO directory so the new "NPOs" sidebar entry
-// has a meaningful landing page. The per-NPO detail surface
-// (AdminNonProfit) already exists; this is just the index.
+// Task #230 — NPO directory landing page. Detail surface lives in
+// AdminNonProfit. Task #283 brings this in line with the admin
+// styleguide (search-toggle, ViewModeToggle, AddEntityButton, and a
+// grid renderer mirroring Labels/Makers).
 //
-// "Add NPO" mirrors the paste-URL pattern used by AdminVendors — paste
-// the NPO's main site, the server scraper prefills name + logo +
-// website, we save immediately and navigate to the detail page where
-// the operator attaches one or more People as contacts. Scraping reuses
-// the generic vendor scraper (`/api/admin/vendors/scrape`) because it's
-// site-agnostic page-metadata extraction; no NPO-specific shape.
+// "Add NPO" mirrors AdminVendors' paste-URL flow: scrape via the
+// generic /api/admin/vendors/scrape endpoint (it's site-agnostic
+// page-metadata extraction; no NPO-specific shape required).
 type NonProfit = {
   id: string;
   name: string;
@@ -46,10 +58,27 @@ type ScrapeResult = {
 };
 
 export function AdminNonProfits() {
+  useEffect(() => {
+    document.body.classList.add("gt-admin");
+    return () => document.body.classList.remove("gt-admin");
+  }, []);
+  const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { data: rows = [], isLoading } = useQuery<NonProfit[]>({
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [view, setView] = useViewMode("nonprofits");
+
+  const {
+    data: rows = [],
+    isLoading,
+    isError: rowsError,
+    error: rowsErrorObj,
+    refetch: refetchRows,
+  } = useQuery<NonProfit[]>({
     queryKey: ["/api/non-profits"],
+    enabled: !!user?.isAdmin,
   });
 
   const [addOpen, setAddOpen] = useState(false);
@@ -81,14 +110,34 @@ export function AdminNonProfits() {
       setPasteUrl("");
       setPasteError(null);
       if (scrapedName) {
-        toast({ title: `Pulled "${scrapedName}"`, description: "Review and add contacts on the detail page." });
+        toast({
+          title: `Pulled "${scrapedName}"`,
+          description: "Review and add contacts on the detail page.",
+        });
       }
       navigate(`/admin/non-profits/${npo.id}`);
     },
     onError: (err) => setPasteError(humanizeApiError(err)),
   });
 
-  function submitPaste(e: React.FormEvent) {
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q
+      ? rows.filter(
+          (n) =>
+            n.name.toLowerCase().includes(q) ||
+            (n.websiteUrl ?? "").toLowerCase().includes(q),
+        )
+      : rows.slice();
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    return list;
+  }, [rows, search]);
+
+  const submitPaste = (e: React.FormEvent) => {
     e.preventDefault();
     if (createNpo.isPending) return;
     setPasteError(null);
@@ -98,121 +147,269 @@ export function AdminNonProfits() {
       return;
     }
     createNpo.mutate({ url: url || undefined });
+  };
+
+  if (authLoading) {
+    return (
+      <AdminFrame active="nonprofits">
+        <div className="py-20 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AdminFrame>
+    );
+  }
+  if (!user?.isAdmin) {
+    return (
+      <AdminFrame active="nonprofits">
+        <div className="py-20 text-center text-slate-500">
+          You need to be signed in as an admin to view this page.
+        </div>
+      </AdminFrame>
+    );
   }
 
   return (
     <AdminFrame active="nonprofits">
       <div className="space-y-5" data-testid="page-admin-nonprofits">
-        <header className="flex items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">NPOs</h1>
-            <p className="text-sm text-slate-500">
-              Non-profit partners. Each referrer earns $1 per paid unit
-              attributed to them.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 tabular-nums">
-              {rows.length} {rows.length === 1 ? "partner" : "partners"}
-            </span>
-            <Button
-              size="sm"
-              onClick={() => { setPasteUrl(""); setPasteError(null); setAddOpen(true); }}
-              data-testid="button-open-add-npo"
-            >
-              Add NPO
-            </Button>
-          </div>
-        </header>
+        <AdminPageHeader
+          title="NPOs"
+          subtitle="Non-profit partners. Each referrer earns $1 per paid unit attributed to them."
+          actions={
+            <>
+              {searchOpen ? (
+                <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+                  <Search className="w-4 h-4 text-slate-400" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search NPOs"
+                    className="w-44 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                    data-testid="input-search-nonprofits"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setSearchOpen(false);
+                    }}
+                    className="text-slate-400 hover:text-slate-700"
+                    aria-label="Close search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  aria-label="Search"
+                  data-testid="button-open-search"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+              )}
+              <ViewModeToggle
+                value={view}
+                onChange={setView}
+                testIdPrefix="view-mode-nonprofits"
+              />
+              <AddEntityButton
+                label="Add NPO"
+                onClick={() => {
+                  setPasteUrl("");
+                  setPasteError(null);
+                  setAddOpen(true);
+                }}
+                disabled={createNpo.isPending}
+                testId="button-open-add-npo"
+              />
+            </>
+          }
+        />
 
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
-        ) : rows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-            <p className="text-sm text-slate-600">No NPO partners yet.</p>
-            <p className="text-xs text-slate-500 mt-1">
-              Click <span className="font-semibold">Add NPO</span> and paste the org's main website, or invite one from the Invites page.
+          <div className="py-20 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : rowsError ? (
+          <ErrorState
+            error={rowsErrorObj}
+            onRetry={() => refetchRows()}
+            title="Couldn't load NPOs"
+            testId="admin-nonprofits-error"
+          />
+        ) : filtered.length === 0 ? (
+          <div
+            className="py-16 flex flex-col items-center justify-center text-center"
+            data-testid="empty-nonprofits"
+          >
+            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
+              <Heart className="w-6 h-6" />
+            </div>
+            <p className="text-slate-700 text-sm font-semibold">
+              {search.trim() ? "No matches" : "No NPO partners yet"}
+            </p>
+            <p className="text-slate-400 text-xs mt-1 max-w-xs">
+              {search.trim()
+                ? "Try a different name or domain."
+                : "Click Add NPO and paste the org's main website, or invite one from the Invites page."}
             </p>
           </div>
-        ) : (
-          <ul className="rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-            {rows.map((npo) => (
-              <li key={npo.id}>
-                <Link href={`/admin/non-profits/${npo.id}`} className="flex items-center gap-4 px-4 py-3 text-inherit hover:bg-slate-50 hover:text-[color:var(--brand-blue)] underline-offset-2 transition-colors" data-testid={`row-npo-${npo.id}`}>
-                  {npo.logoUrl ? (
-                    <img
-                      src={npo.logoUrl}
-                      alt=""
-                      className="w-10 h-10 rounded-lg object-cover bg-slate-100 flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex-shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-sm font-semibold text-slate-900 truncate"
-                      data-testid={`text-npo-name-${npo.id}`}
-                    >
-                      {npo.name}
-                    </p>
-                    {npo.websiteUrl && (
-                      <p className="text-xs text-slate-500 truncate">
-                        {npo.websiteUrl.replace(/^https?:\/\//, "")}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-              </li>
+        ) : view === "grid" ? (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            data-testid="grid-nonprofits"
+          >
+            {filtered.map((npo) => (
+              <NpoCard key={npo.id} npo={npo} />
             ))}
-          </ul>
+          </div>
+        ) : (
+          <div
+            className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+            data-testid="list-nonprofits"
+          >
+            {filtered.map((npo) => (
+              <NpoRow key={npo.id} npo={npo} />
+            ))}
+          </div>
         )}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={(o) => { if (!createNpo.isPending) setAddOpen(o); }}>
-        <DialogContent data-testid="dialog-add-npo">
-          <DialogHeader>
-            <DialogTitle>Add an NPO</DialogTitle>
+      <Dialog
+        open={addOpen}
+        onOpenChange={(o) => {
+          if (createNpo.isPending) return;
+          setAddOpen(o);
+          if (!o) {
+            setPasteUrl("");
+            setPasteError(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-add-npo"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-base font-semibold text-slate-900">
+              Add NPO
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500 leading-relaxed">
+              Paste the org's main website — we'll pull the name, logo, and
+              homepage from the page. You can attach contacts on the detail
+              page.
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={submitPaste} className="space-y-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-700">NPO website</label>
-              <Input
-                type="url"
-                placeholder="https://example.org"
-                value={pasteUrl}
-                onChange={(e) => setPasteUrl(e.target.value)}
-                disabled={createNpo.isPending}
-                data-testid="input-add-npo-url"
-                autoFocus
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                We'll pull the name, logo, and homepage from the site. You can attach contacts on the next page.
-              </p>
-            </div>
+          <form onSubmit={submitPaste} className="space-y-2 pt-1">
+            <input
+              type="url"
+              placeholder="https://example.org"
+              value={pasteUrl}
+              onChange={(e) => {
+                setPasteUrl(e.target.value);
+                if (pasteError) setPasteError(null);
+              }}
+              disabled={createNpo.isPending}
+              autoFocus
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              data-testid="input-add-npo-url"
+            />
             {pasteError && (
-              <p className="text-xs text-rose-700" data-testid="text-add-npo-error">{pasteError}</p>
+              <p className="text-xs text-red-600" data-testid="text-add-npo-error">
+                {pasteError}
+              </p>
             )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
+            <p className="text-xs text-slate-400">
+              Reads the page's Open Graph metadata and rehosts the logo.
+              Instagram and Facebook pages aren't supported — use the NPO's
+              own site instead.
+            </p>
+            <DialogFooter className="gap-2 sm:gap-2 pt-2">
+              <button
                 type="button"
-                variant="ghost"
-                onClick={() => { if (!createNpo.isPending) { createNpo.mutate({}); } }}
+                onClick={() => {
+                  if (!createNpo.isPending) createNpo.mutate({});
+                }}
                 disabled={createNpo.isPending}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 data-testid="button-add-npo-skip"
               >
-                Skip & create blank
-              </Button>
+                Skip — create blank
+              </button>
               <Button
                 type="submit"
                 disabled={createNpo.isPending || !pasteUrl.trim()}
+                size="sm"
+                className="text-xs font-semibold"
                 data-testid="button-add-npo-pull"
               >
-                {createNpo.isPending ? "Pulling…" : "Pull from URL"}
+                {createNpo.isPending && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                )}
+                {createNpo.isPending ? "Reading…" : "Pull from URL"}
               </Button>
-            </div>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
     </AdminFrame>
+  );
+}
+
+function NpoCard({ npo }: { npo: NonProfit }) {
+  return (
+    <Link href={`/admin/non-profits/${npo.id}`} className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5 underline-offset-2" data-testid={`card-npo-${npo.id}`}>
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+        {npo.logoUrl ? (
+          <img src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
+        ) : (
+          <Heart className="w-6 h-6 text-slate-300" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-sm font-semibold leading-tight truncate"
+          data-testid={`text-npo-name-${npo.id}`}
+        >
+          {npo.name}
+        </div>
+        {npo.websiteUrl && (
+          <div className="text-slate-400 text-xs truncate mt-0.5">
+            {npo.websiteUrl.replace(/^https?:\/\//, "")}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function NpoRow({ npo }: { npo: NonProfit }) {
+  return (
+    <Link href={`/admin/non-profits/${npo.id}`} className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors underline-offset-2" data-testid={`row-npo-${npo.id}`}>
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+        {npo.logoUrl ? (
+          <img src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
+        ) : (
+          <Heart className="w-4 h-4 text-slate-300" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-sm font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
+          data-testid={`text-npo-name-${npo.id}`}
+        >
+          {npo.name}
+        </div>
+        {npo.websiteUrl && (
+          <div className="text-slate-400 text-xs truncate">
+            {npo.websiteUrl.replace(/^https?:\/\//, "")}
+          </div>
+        )}
+      </div>
+    </Link>
   );
 }
