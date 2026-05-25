@@ -43,6 +43,21 @@ Circular icon buttons (search, filter, share, close, photo-viewer nav, send, etc
 
 Anywhere a piece of metadata in admin chrome (artist name on an album header, vendor name on an instrument row, label name, etc.) deep-links to its own CMS page, use the shared link treatment: **inherit the surrounding text color at rest, switch to brand blue `#319ED8` + underline on hover/focus.** Don't introduce per-surface accent colors. Pair with `underline-offset-2` and `transition-colors` so the underline doesn't stick to the glyph. Always gate the link on the FK actually being set (e.g. `album.primaryArtistId`) — never render a `<Link>` to `/admin/people/undefined`; fall back to plain `<span>` with the snapshot string. The canonical reference is the artist name in the AdminAlbum header (`client/src/pages/AdminAlbum.tsx` ~line 406).
 
+## Save semantics — default to auto-save, reserve explicit Save for the few cases that need it
+
+Most admin fields **auto-save** as soon as they go dirty + lose focus (typeahead pick, blur, toggle change). Showing a "Save" button on a field that could just save itself is noise: it makes the page louder, demands a second click for nothing, and trains operators to assume nothing is saved until they click a button — which makes auto-save fields feel unsafe.
+
+**Default: no Save button.** Pick the field, change the value, move on. The mutation fires on blur / change and the new value snaps in. A subtle "Saved" toast or the row visibly updating is enough confirmation.
+
+**Use an explicit Save *only* in these cases:**
+
+1. **Destructive or expensive submits** — anything that can't be casually undone (creating an order, sending an invite, kicking off a print run, publishing a release, locking a quote). These belong in an `AlertDialog` / confirm sheet, *not* a bare Save button. The Save sits inside the confirm.
+2. **Multi-field atomic forms** — when a group of fields only makes sense submitted together (a sign-in form, an Add-Album wizard step, an RFQ submission). One primary Save at the bottom of the form, and the fields are not individually auto-saved.
+3. **Post-sale-locked edits** — when the partner-permissions `edit_metadata` lock has frozen the row, editing is gated behind an explicit Save so the operator sees the lock state before submitting. See `docs/admin-conventions.md` → "Partner permissions + post-sale lock."
+4. **Per-row Save in a long list** — formats list, color tiers, GoodDeed signed cert per-row pricing — use the **`SaveLink` ghost-link primitive** at `client/src/components/admin/SellPanel.tsx`. It activates (brand-blue text + soft pill) only when the row is dirty, stays invisible otherwise. **One filled primary action per section, max.** Don't stack a row-level filled Save next to a section-level filled Save — pick one.
+
+**Auto-load reminder for any admin work:** before editing any admin/CMS surface, the design system rules above plus `docs/admin-conventions.md` are mandatory reading. Don't introduce a new Save button without checking the four cases above first. The mechanical linter (`npm run design:lint`) flags new `>Save</Button>` literals on admin surfaces against `.design-lint-baseline.json` — the baseline absorbs existing offenders, but anything new must be justified (and added to the baseline with a commit that explains why it can't auto-save or use `SaveLink`).
+
 ## Destructive actions always confirm
 
 Any trash / delete / "remove forever" button must pop a confirmation sheet naming the thing being destroyed (e.g. "Delete *Storms*? This removes the master, snippet, lyrics, and credits.") with a rose-tinted primary action. Hide / Park / Archive are reversible and do **not** need a confirm — they just toast "Hidden — undo." Destructive buttons must also keep visual breathing room (gap + hairline divider) from any adjacent non-destructive control so a thumb can't slide between them.

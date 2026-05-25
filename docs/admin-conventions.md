@@ -36,11 +36,11 @@ Super-admin can clear or reassign the press at any time via `PATCH /api/admin/{p
 
 **How to apply:** any new partner-onboarding referrer kind that wants a similar lock should mirror this exact shape (referrer-scope column on the partner table, single GET endpoint returning the locked-entity + `hasShippedFirst` flag + merged defaults, super-admin-only override panel on the partner detail page). Do not add a "request to unlock" UI on the partner side — escalation is out-of-band by design.
 
-## Paste-a-URL entry for shop-like entities (vendors, gear, labels, manufacturers)
+## Paste-a-URL entry for shop-like entities (vendors, gear, labels, manufacturers, fulfillment partners)
 
-`AdminVendors.tsx`, `AdminInstruments.tsx`, `AdminLabels.tsx`, and `AdminManufacturers.tsx` all use the same "Add" dialog — operator pastes the entity's website, the server scraper (`POST /api/admin/vendors/scrape`, `/api/admin/instruments/scrape`, `/api/admin/labels/scrape`, `/api/admin/manufacturers/scrape`) returns OG-derived `{name, domain, logoUrl, …}`, and the create POST surfaces a 409 + `{label|vendor|manufacturer}` payload when the domain is already in the catalog so the UI offers "open existing" instead of double-creating.
+`AdminVendors.tsx`, `AdminInstruments.tsx`, `AdminLabels.tsx`, `AdminManufacturers.tsx`, and `AdminFulfillmentPartners.tsx` all use the same "Add" dialog — operator pastes the entity's website, the server scraper (`POST /api/admin/vendors/scrape`, `/api/admin/instruments/scrape`, `/api/admin/labels/scrape`, `/api/admin/manufacturers/scrape`, `/api/admin/fulfillment-partners/scrape`) returns OG-derived `{name, domain, logoUrl, …}`, and the create POST surfaces a 409 + `{label|vendor|manufacturer|partner}` payload when the domain is already in the catalog so the UI offers "open existing" instead of double-creating. Typing a plain name (no `https://`) instead of a URL falls back to creating a blank-shell row.
 
-`labels.domain`, `vendors.domain`, and `manufacturers.domain` are all lowercased / no-`www.` / partial-unique on non-null. When adding a new "shop-like" admin entity, mirror this exact shape — don't invent a new dedup key.
+`labels.domain`, `vendors.domain`, `manufacturers.domain`, and `fulfillment_partners.domain` are all lowercased / no-`www.` / unique on non-null. When adding a new "shop-like" admin entity, mirror this exact shape — don't invent a new dedup key.
 
 ## Vendors carry two role flags — Maker + Reseller (one row, both flags)
 

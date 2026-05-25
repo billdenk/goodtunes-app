@@ -10264,6 +10264,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         message: "Instagram/Facebook pages can't be scraped — paste the partner's website instead.",
       });
     }
+    // Task #344 — surface an existing partner with that domain as a 409
+    // (+ the row) *before* fetching, so paste-of-a-dup never wastes a
+    // network round-trip and the admin sees the dup notice immediately.
+    // Mirrors the manufacturer scraper.
+    const existing = await storage.getFulfillmentPartnerByDomain(host);
+    if (existing) {
+      return res.status(409).json({
+        message: "A fulfillment partner with that domain already exists",
+        partner: existing,
+      });
+    }
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 10_000);
@@ -10363,19 +10374,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/fulfillment-partners", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ message: "name is required" });
-    const f = await storage.createFulfillmentPartner({
-      name: String(b.name),
-      domain: normDomain(b.domain),
-      logoUrl: strOrNull(b.logoUrl),
-      coverUrl: strOrNull(b.coverUrl),
-      bio: strOrNull(b.bio),
-      location: strOrNull(b.location),
-      websiteUrl: strOrNull(b.websiteUrl),
-      contactEmail: strOrNull(b.contactEmail),
-      contactPhone: strOrNull(b.contactPhone),
-      shippingAddress: strOrNull(b.shippingAddress),
-    });
-    return res.status(201).json(f);
+    const dom = normDomain(b.domain);
+    // Task #344 — mirror manufacturers/labels/vendors: surface an
+    // existing partner with that domain as a 409 (+ the row) so the
+    // admin UI can offer "open existing" instead of double-creating.
+    if (dom) {
+      const existing = await storage.getFulfillmentPartnerByDomain(dom);
+      if (existing) {
+        return res.status(409).json({
+          message: "A fulfillment partner with that domain already exists",
+          partner: existing,
+        });
+      }
+    }
+    try {
+      const f = await storage.createFulfillmentPartner({
+        name: String(b.name),
+        domain: dom,
+        logoUrl: strOrNull(b.logoUrl),
+        coverUrl: strOrNull(b.coverUrl),
+        bio: strOrNull(b.bio),
+        location: strOrNull(b.location),
+        websiteUrl: strOrNull(b.websiteUrl),
+        contactEmail: strOrNull(b.contactEmail),
+        contactPhone: strOrNull(b.contactPhone),
+        shippingAddress: strOrNull(b.shippingAddress),
+      });
+      return res.status(201).json(f);
+    } catch (err: any) {
+      // Map the postgres unique-violation on `fulfillment_partners.domain`
+      // to a real 409 — same shape as labels/vendors/manufacturers — so
+      // the client can show a clean dup message instead of a generic 500.
+      if (err?.code === "23505") {
+        return res.status(409).json({ message: "Another fulfillment partner is already using that domain" });
+      }
+      throw err;
+    }
   });
   app.put("/api/admin/fulfillment-partners/:id", requireAdmin, async (req, res) => {
     const b = req.body ?? {};

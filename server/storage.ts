@@ -553,6 +553,7 @@ export interface IStorage {
 
   getFulfillmentPartners(): Promise<FulfillmentPartner[]>;
   getFulfillmentPartnerById(id: string): Promise<FulfillmentPartner | undefined>;
+  getFulfillmentPartnerByDomain(domain: string): Promise<FulfillmentPartner | undefined>;
   createFulfillmentPartner(data: InsertFulfillmentPartner & { id?: string }): Promise<FulfillmentPartner>;
   updateFulfillmentPartner(id: string, data: Partial<FulfillmentPartner>): Promise<FulfillmentPartner | undefined>;
   deleteFulfillmentPartner(id: string): Promise<void>;
@@ -2777,6 +2778,12 @@ export class DbStorage implements IStorage {
   }
   async getFulfillmentPartnerById(id: string): Promise<FulfillmentPartner | undefined> {
     const [f] = await db.select().from(fulfillmentPartners).where(eq(fulfillmentPartners.id, id));
+    return f;
+  }
+  async getFulfillmentPartnerByDomain(domain: string): Promise<FulfillmentPartner | undefined> {
+    const d = (domain ?? "").trim().toLowerCase().replace(/^www\./, "");
+    if (!d) return undefined;
+    const [f] = await db.select().from(fulfillmentPartners).where(eq(fulfillmentPartners.domain, d));
     return f;
   }
   async createFulfillmentPartner(data: InsertFulfillmentPartner & { id?: string }): Promise<FulfillmentPartner> {

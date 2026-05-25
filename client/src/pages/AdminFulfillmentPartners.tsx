@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Truck, X } from "lucide-react";
+import { Search, Truck, X, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,6 +20,46 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { FulfillmentPartner } from "@shared/schema";
+
+// apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` —
+// strip the status prefix and unwrap the JSON `message` so inline
+// dialog errors read like English. Mirrors AdminLabels / AdminVendors /
+// AdminManufacturers.
+function humanizeApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  if (!raw) {
+    return "Couldn't read that page. Try the URL again, or use a partner name to create a blank entry.";
+  }
+  const m = raw.match(/^\d{3}:\s*(.*)$/);
+  const body = m ? m[1] : raw;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return body.trim() || raw;
+}
+
+// Recover the duplicate-partner payload the backend returns on 409 so
+// the "already added" inline notice can deep-link to the existing row
+// instead of just showing a generic error. Mirrors AdminManufacturers.
+function extractDuplicatePartner(err: unknown): FulfillmentPartner | null {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const m = raw.match(/^409:\s*(.*)$/);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1]);
+    if (parsed && parsed.partner && typeof parsed.partner.id === "string") {
+      return parsed.partner as FulfillmentPartner;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return null;
+}
 
 /**
  * Admin · Fulfillment partners (Task #69). Warehouses that receive
@@ -42,8 +82,16 @@ export function AdminFulfillmentPartners() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("fulfillment");
+  // Task #344 — paste-a-URL "Add fulfillment partner" dialog. Mirrors
+  // AdminLabels / AdminManufacturers: paste the warehouse's website →
+  // scraper returns name + domain + logo + cover + bio + location →
+  // operator confirms → row is created with the scraped fields
+  // populated. The name-only fallback still works for partners with no
+  // website.
   const [addOpen, setAddOpen] = useState(false);
-  const [draftName, setDraftName] = useState("");
+  const [draftInput, setDraftInput] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<FulfillmentPartner | null>(null);
   const { toast } = useToast();
 
   const {
@@ -58,19 +106,77 @@ export function AdminFulfillmentPartners() {
   });
 
   const create = useMutation({
-    mutationFn: async (name: string) => {
-      const r = await apiRequest("POST", "/api/admin/fulfillment-partners", { name });
-      return (await r.json()) as FulfillmentPartner;
+    mutationFn: async (input: string) => {
+      const trimmed = input.trim();
+      let payload: Record<string, unknown> = { name: trimmed };
+      let scrapedName: string | null = null;
+      if (/^https?:\/\//i.test(trimmed)) {
+        const sr = await apiRequest("POST", "/api/admin/fulfillment-partners/scrape", {
+          url: trimmed,
+        });
+        const scraped = (await sr.json()) as {
+          name: string | null;
+          domain: string | null;
+          logoUrl: string | null;
+          coverUrl: string | null;
+          bio: string | null;
+          location: string | null;
+          websiteUrl: string | null;
+        };
+        scrapedName = scraped.name;
+        payload = {
+          name: scraped.name || new URL(trimmed).hostname.replace(/^www\./, ""),
+          ...(scraped.domain ? { domain: scraped.domain } : {}),
+          ...(scraped.logoUrl ? { logoUrl: scraped.logoUrl } : {}),
+          ...(scraped.coverUrl ? { coverUrl: scraped.coverUrl } : {}),
+          ...(scraped.bio ? { bio: scraped.bio } : {}),
+          ...(scraped.location ? { location: scraped.location } : {}),
+          ...(scraped.websiteUrl ? { websiteUrl: scraped.websiteUrl } : {}),
+        };
+      }
+      const r = await apiRequest("POST", "/api/admin/fulfillment-partners", payload);
+      const f = (await r.json()) as FulfillmentPartner;
+      return { f, scrapedName };
     },
-    onSuccess: (f) => {
+    onSuccess: ({ f, scrapedName }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/fulfillment-partners"] });
       setAddOpen(false);
-      setDraftName("");
+      setDraftInput("");
+      setPasteError(null);
+      setDuplicate(null);
+      if (scrapedName) {
+        toast({
+          title: `Pulled "${scrapedName}"`,
+          description: "Review and edit on the detail page.",
+        });
+      }
       navigate(`/admin/fulfillment-partners/${f.id}`);
     },
-    onError: (e: any) =>
-      toast({ title: "Couldn't add partner", description: e?.message, variant: "destructive" }),
+    onError: (err: any) => {
+      const dup = extractDuplicatePartner(err);
+      if (dup) {
+        setDuplicate(dup);
+        setPasteError(null);
+      } else {
+        setDuplicate(null);
+        setPasteError(humanizeApiError(err));
+      }
+    },
   });
+
+  const submit = () => {
+    if (create.isPending) return;
+    const trimmed = draftInput.trim();
+    if (!trimmed) {
+      setPasteError("Enter a partner name or paste their website URL.");
+      return;
+    }
+    setPasteError(null);
+    setDuplicate(null);
+    create.mutate(trimmed);
+  };
+
+  const inputLooksLikeUrl = /^https?:\/\//i.test(draftInput.trim());
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus();
@@ -212,32 +318,92 @@ export function AdminFulfillmentPartners() {
         )}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) {
+            setDraftInput("");
+            setPasteError(null);
+            setDuplicate(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add fulfillment partner</DialogTitle>
             <DialogDescription>
-              Start with the warehouse name — fill in the rest on the detail page.
+              Paste the warehouse's website and we'll pull the name, logo, and
+              location. No website? Type the partner name and we'll create a
+              blank row.
             </DialogDescription>
           </DialogHeader>
           <input
             autoFocus
-            value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            placeholder="e.g. Northern Music Fulfillment"
+            value={draftInput}
+            onChange={(e) => {
+              setDraftInput(e.target.value);
+              if (pasteError) setPasteError(null);
+              if (duplicate) setDuplicate(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="https://example-fulfillment.com  —  or  Northern Music Fulfillment"
             className="w-full h-10 px-3 rounded-md border border-slate-200 text-sm focus:outline-none focus:border-[var(--brand-blue)]"
-            data-testid="input-new-fulfillment-name"
+            data-testid="input-new-fulfillment-url"
           />
+          {pasteError && (
+            <p
+              className="text-sm text-rose-600 mt-2"
+              data-testid="text-fulfillment-paste-error"
+            >
+              {pasteError}
+            </p>
+          )}
+          {duplicate && (
+            <div
+              className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              data-testid="notice-fulfillment-duplicate"
+            >
+              <span className="font-medium">{duplicate.name}</span> is already
+              in the directory.{" "}
+              <Link
+                href={`/admin/fulfillment-partners/${duplicate.id}`}
+                className="underline underline-offset-2"
+                onClick={() => {
+                  setAddOpen(false);
+                  setDraftInput("");
+                  setDuplicate(null);
+                }}
+                data-testid={`link-open-existing-fulfillment-${duplicate.id}`}
+              >
+                Open the existing partner →
+              </Link>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
             <Button
-              onClick={() => draftName.trim() && create.mutate(draftName.trim())}
-              disabled={!draftName.trim() || create.isPending}
+              onClick={submit}
+              disabled={!draftInput.trim() || create.isPending}
               data-testid="button-confirm-add-fulfillment"
             >
-              {create.isPending ? "Adding…" : "Add"}
+              {create.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {inputLooksLikeUrl ? "Pulling…" : "Adding…"}
+                </>
+              ) : inputLooksLikeUrl ? (
+                "Pull from URL"
+              ) : (
+                "Add"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

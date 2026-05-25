@@ -273,6 +273,35 @@ function lintFile(rel: string, src: string): Violation[] {
     });
   }
 
+  // R11: explicit "Save" buttons on admin surfaces (Task #344). The
+  // design system defaults to **auto-save** on field blur/change; an
+  // explicit `<Button …>Save</Button>` is reserved for destructive /
+  // multi-field / post-sale-locked submits, or for per-row Save which
+  // must use the `SaveLink` primitive (brand-blue ghost link, dirty-
+  // only). Naked admin Save buttons train operators to expect nothing
+  // is saved until clicked, which undermines the auto-save fields
+  // around them. Heuristic: literal `>Save</Button>` text on admin
+  // files. The baseline absorbs existing legitimate uses (forms,
+  // confirms) — only NEW additions fail and must be justified in the
+  // baseline refresh.
+  if (isAdmin) {
+    const saveBtnRe = />\s*Save(?:\s+[A-Za-z]+){0,2}\s*<\/Button>/g;
+    let sm: RegExpExecArray | null;
+    while ((sm = saveBtnRe.exec(src)) !== null) {
+      const lineNum = src.slice(0, sm.index).split("\n").length;
+      const snippet = lines[lineNum - 1]?.trim().slice(0, 200) ?? "";
+      // SaveLink is the canonical per-row primitive — don't flag it.
+      if (/SaveLink/.test(snippet)) continue;
+      out.push({
+        rule: "admin-explicit-save-button",
+        file: rel,
+        line: lineNum,
+        message: `Admin <Button>Save</Button> — default is auto-save on blur/change; reserve explicit Save for destructive / multi-field / post-sale-locked submits, or use SaveLink for per-row. See docs/design-system.md → Save semantics.`,
+        snippet,
+      });
+    }
+  }
+
   // R6: destructive button without a confirm primitive in the same file.
   // Heuristic: file contains "Trash" import from lucide-react AND a string
   // like "Delete" / "Remove forever" inside a Button label/text, but no
