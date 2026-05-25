@@ -19,6 +19,8 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
+import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -57,6 +59,11 @@ export function AdminManufacturer() {
   const id = params?.id ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  // Task #295 — Overview / People / Albums / Analytics parity with
+  // the Maker template. Overview keeps the editable profile + press
+  // catalog + permissions cards; the other three tabs are shared
+  // components driven by `/api/admin/manufacturers/:id/...` endpoints.
+  const [tab, setTab] = useState<"overview" | "people" | "albums" | "catalog" | "analytics">("overview");
 
   const { data: m, isLoading } = useQuery<Manufacturer>({
     queryKey: ["/api/manufacturers", id],
@@ -232,20 +239,37 @@ export function AdminManufacturer() {
           </div>
         </div>
 
-        {/* TAB BAR — Overview only for now; Refresh + Delete sit on the right. */}
+        {/* TAB BAR — Overview / People / Albums / Analytics; Refresh + Delete sit on the right. */}
         <div
           className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-press"
         >
           <div className="flex items-center gap-5 overflow-x-auto">
-            <button
-              type="button"
-              className="relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap text-slate-900"
-              data-testid="tab-overview"
-            >
-              Overview
-              <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
-            </button>
+            {([
+              { key: "overview", label: "Overview" },
+              { key: "people", label: "People" },
+              { key: "albums", label: "Albums" },
+              { key: "catalog", label: "Catalog" },
+              { key: "analytics", label: "Analytics" },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                )}
+              </button>
+            ))}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
@@ -278,26 +302,43 @@ export function AdminManufacturer() {
           </div>
         </div>
 
-        <PartnerProfileForm
-          initial={m}
-          partners={partners}
-          onSave={(patch) => save.mutate(patch)}
-          saving={save.isPending}
-        />
+        {tab === "overview" && (
+          <>
+            <PartnerProfileForm
+              initial={m}
+              partners={partners}
+              onSave={(patch) => save.mutate(patch)}
+              saving={save.isPending}
+            />
 
-        <PressCatalogPanel pressId={id} />
-
-        <OrganizationPeople
-          apiPath={`/api/manufacturers/${m.id}/people`}
-          testIdPrefix="press"
-          blurb="People at this plant — production manager, account rep, whoever you need to reach."
-        />
-
-        <PartnerPermissionsPanel
-          scopeKind="manufacturer"
-          scopeId={m.id}
-          scopeName={m.name}
-        />
+            <PartnerPermissionsPanel
+              scopeKind="manufacturer"
+              scopeId={m.id}
+              scopeName={m.name}
+            />
+          </>
+        )}
+        {tab === "people" && (
+          <OrganizationPeople
+            apiPath={`/api/manufacturers/${m.id}/people`}
+            testIdPrefix="press"
+            blurb="People at this plant — production manager, account rep, whoever you need to reach."
+          />
+        )}
+        {tab === "albums" && (
+          <EntityAlbumsTab
+            apiPath={`/api/admin/manufacturers/${m.id}/albums`}
+            testIdPrefix="press"
+            emptyHint="No pressing-order requests have resolved to this press yet."
+          />
+        )}
+        {tab === "catalog" && <PressCatalogPanel pressId={id} />}
+        {tab === "analytics" && (
+          <EntityAnalyticsTab
+            apiPath={`/api/admin/manufacturers/${m.id}/analytics`}
+            testIdPrefix="press"
+          />
+        )}
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

@@ -11692,6 +11692,521 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ---------------------------------------------------------------------
+  // Task #295 — entity-detail Albums + Analytics tabs (NPO / Reseller /
+  // Press). Each entity has its own connection-to-album semantics; the
+  // response shape is identical so the same client component renders
+  // them. Pipeline stage state is derived per-album from album/song
+  // columns (artwork, audio, mux, skus/price, release flags) and the
+  // first-sold timestamp partitions In queue vs Released.
+  // ---------------------------------------------------------------------
+
+  type AlbumPipelineRow = {
+    id: string;
+    title: string;
+    artist_name: string | null;
+    cover_url: string | null;
+    first_sold_at: Date | null;
+    is_goodtunes_release: boolean;
+    is_hidden: boolean;
+    price_cents: number | null;
+    sku_count: number;
+    song_count: number;
+    songs_with_audio: number;
+    songs_mux_ready: number;
+    connection_reason: string | null;
+  };
+
+  type AlbumPressLink = { id: string; name: string; status: string };
+
+  function shapePipelineAlbum(row: AlbumPipelineRow) {
+    const state = {
+      hasArtwork: !!row.cover_url,
+      songCount: Number(row.song_count) || 0,
+      songsWithAudio: Number(row.songs_with_audio) || 0,
+      songsMuxReady: Number(row.songs_mux_ready) || 0,
+      hasSkusOrPrice: Number(row.sku_count) > 0 || row.price_cents != null,
+      isGoodTunesRelease: !!row.is_goodtunes_release,
+      isHidden: !!row.is_hidden,
+    };
+    return {
+      id: row.id,
+      title: row.title,
+      artistName: row.artist_name,
+      coverUrl: row.cover_url,
+      firstSoldAt: row.first_sold_at ? row.first_sold_at.toISOString() : null,
+      connectionReason: row.connection_reason,
+      state,
+      presses: [] as AlbumPressLink[],
+    };
+  }
+
+  // For a set of album ids, return a map albumId → presses[] derived
+  // from pressing_order_requests.package_snapshot. Used by the Reseller
+  // Albums tab to show "Pressed at: X, Y" under each row. Cancelled /
+  // rejected submissions are excluded — they were never a real plant
+  // routing decision.
+  async function pressesForAlbums(albumIds: string[]): Promise<Record<string, AlbumPressLink[]>> {
+    const out: Record<string, AlbumPressLink[]> = {};
+    if (albumIds.length === 0) return out;
+    const rows = await db.execute<{ album_id: string; press_id: string; press_name: string | null; status: string }>(sql`
+      SELECT por.album_id,
+             (por.package_snapshot->>'pressId') AS press_id,
+             COALESCE((por.package_snapshot->>'pressName'), m.name) AS press_name,
+             por.status
+      FROM pressing_order_requests por
+      LEFT JOIN manufacturers m ON m.id = (por.package_snapshot->>'pressId')
+      WHERE por.album_id = ANY(${albumIds})
+        AND por.status IN ('pending','approved')
+        AND (por.package_snapshot->>'pressId') IS NOT NULL
+    `).catch(() => ({ rows: [] }) as any);
+    const dedupe = new Set<string>();
+    for (const r of ((rows as any).rows ?? []) as any[]) {
+      const key = `${r.album_id}::${r.press_id}::${r.status}`;
+      if (dedupe.has(key)) continue;
+      dedupe.add(key);
+      (out[r.album_id] ||= []).push({
+        id: String(r.press_id),
+        name: r.press_name ?? r.press_id,
+        status: r.status,
+      });
+    }
+    return out;
+  }
+
+  // Fetches album+stage data for a fixed set of album ids, then
+  // returns the In queue / Released split. Empty input short-circuits.
+  async function loadConnectedAlbums(
+    albumIds: string[],
+    reasonFor: (id: string) => string | null = () => null,
+    opts: { includePresses?: boolean } = {},
+  ) {
+    if (albumIds.length === 0) return { inQueue: [], released: [] };
+    const rows = await db.execute<AlbumPipelineRow>(sql`
+      SELECT
+        a.id,
+        a.title,
+        a.cover_url,
+        a.first_sold_at,
+        a.is_goodtunes_release,
+        a.is_hidden,
+        a.price_cents,
+        (SELECT name FROM people WHERE id = a.primary_artist_id) AS artist_name,
+        (SELECT COUNT(*)::int FROM album_skus WHERE album_id = a.id) AS sku_count,
+        (SELECT COUNT(*)::int FROM songs WHERE album_id = a.id) AS song_count,
+        (SELECT COUNT(*)::int FROM songs WHERE album_id = a.id AND audio_url IS NOT NULL AND audio_url <> '') AS songs_with_audio,
+        (SELECT COUNT(*)::int FROM songs WHERE album_id = a.id AND mux_status = 'ready') AS songs_mux_ready,
+        NULL::text AS connection_reason
+      FROM albums a
+      WHERE a.id = ANY(${albumIds})
+      ORDER BY a.first_sold_at DESC NULLS LAST, a.title ASC
+    `);
+    const list = ((rows as any).rows ?? []).map((r: AlbumPipelineRow) => {
+      const shaped = shapePipelineAlbum(r);
+      shaped.connectionReason = reasonFor(r.id);
+      return shaped;
+    });
+    if (opts.includePresses) {
+      const map = await pressesForAlbums(list.map((a) => a.id));
+      for (const a of list) a.presses = map[a.id] ?? [];
+    }
+    const inQueue: any[] = [];
+    const released: any[] = [];
+    for (const a of list) {
+      const isReleased = !!a.firstSoldAt || (a.state.isGoodTunesRelease && !a.state.isHidden);
+      (isReleased ? released : inQueue).push(a);
+    }
+    return { inQueue, released };
+  }
+
+  // Builds the analytics response from analytics_events for the given
+  // connected album / person / gear scopes. Counts plays + views by
+  // album, and clicks per person/gear scope. Each bucket is capped so
+  // a noisy partner can't blow up the tab.
+  async function loadConnectedAnalytics(opts: {
+    albumIds: string[];
+    personIds: string[];
+    gearVendorId?: string | null;
+    albumTitles?: Record<string, string>;
+    personNames?: Record<string, string>;
+    fromTs?: Date | null;
+    toTs?: Date | null;
+  }) {
+    const { albumIds, personIds, gearVendorId } = opts;
+    let views = 0;
+    let plays = 0;
+    let clicks = 0;
+    const byAlbum: { id: string; label: string; href?: string; count: number }[] = [];
+    const byPerson: { id: string; label: string; href?: string; count: number }[] = [];
+    const byTrack: { id: string; label: string; href?: string; count: number }[] = [];
+    const byGear: { id: string; label: string; href?: string; count: number }[] = [];
+    // Date-range gate. Range is inclusive on the lower bound and
+    // exclusive on the upper. Both default to open-ended; the routes
+    // below default fromTs to "30 days ago" when no ?from is passed.
+    const fromSql = opts.fromTs ? sql`AND ts >= ${opts.fromTs}` : sql``;
+    const toSql = opts.toTs ? sql`AND ts <  ${opts.toTs}` : sql``;
+    const fromSqlAe = opts.fromTs ? sql`AND ae.ts >= ${opts.fromTs}` : sql``;
+    const toSqlAe = opts.toTs ? sql`AND ae.ts <  ${opts.toTs}` : sql``;
+
+    if (albumIds.length > 0) {
+      const r = await db.execute<{ album_id: string; views: number; plays: number }>(sql`
+        SELECT (payload->>'albumId') AS album_id,
+               COUNT(*) FILTER (WHERE name = 'album_viewed')::int AS views,
+               COUNT(*) FILTER (WHERE name = 'play_start')::int AS plays
+        FROM analytics_events
+        WHERE (payload->>'albumId') = ANY(${albumIds})
+        ${fromSql}
+        ${toSql}
+        GROUP BY (payload->>'albumId')
+      `);
+      const titleMap = opts.albumTitles ?? {};
+      for (const row of ((r as any).rows ?? []) as any[]) {
+        views += Number(row.views) || 0;
+        plays += Number(row.plays) || 0;
+        const total = (Number(row.views) || 0) + (Number(row.plays) || 0);
+        if (total > 0) {
+          byAlbum.push({
+            id: row.album_id,
+            label: titleMap[row.album_id] ?? row.album_id,
+            href: `/admin/albums/${row.album_id}`,
+            count: total,
+          });
+        }
+      }
+      byAlbum.sort((a, b) => b.count - a.count);
+
+      // Per-track plays. Songs in this entity's connected albums; we
+      // count any play_start-family event with a payload.songId that
+      // resolves back to one of those songs.
+      const tr = await db.execute<{ song_id: string; title: string | null; album_id: string | null; plays: number }>(sql`
+        SELECT (ae.payload->>'songId') AS song_id,
+               (SELECT title FROM songs WHERE id = (ae.payload->>'songId')) AS title,
+               (SELECT album_id FROM songs WHERE id = (ae.payload->>'songId')) AS album_id,
+               COUNT(*)::int AS plays
+        FROM analytics_events ae
+        WHERE ae.name = 'play_start'
+          AND (ae.payload->>'songId') IS NOT NULL
+          AND (SELECT album_id FROM songs WHERE id = (ae.payload->>'songId')) = ANY(${albumIds})
+        ${fromSqlAe}
+        ${toSqlAe}
+        GROUP BY (ae.payload->>'songId')
+        ORDER BY plays DESC
+        LIMIT 50
+      `);
+      for (const row of ((tr as any).rows ?? []) as any[]) {
+        const c = Number(row.plays) || 0;
+        if (c <= 0) continue;
+        byTrack.push({
+          id: row.song_id,
+          label: row.title ?? row.song_id,
+          href: row.album_id ? `/admin/albums/${row.album_id}` : undefined,
+          count: c,
+        });
+      }
+    }
+
+    if (personIds.length > 0) {
+      // `artist_viewed` carries the person id in payload.artistId (the
+      // artist IS a person in GoodTunes — see shared/analytics.ts).
+      // `credits_person_clicked` uses payload.personId. We coalesce so a
+      // single person row picks up both surfaces of attention.
+      const r = await db.execute<{ person_id: string; clicks: number }>(sql`
+        SELECT COALESCE(payload->>'personId', payload->>'artistId') AS person_id,
+               COUNT(*)::int AS clicks
+        FROM analytics_events
+        WHERE name IN ('credits_person_clicked','artist_viewed')
+          AND COALESCE(payload->>'personId', payload->>'artistId') = ANY(${personIds})
+        ${fromSql}
+        ${toSql}
+        GROUP BY COALESCE(payload->>'personId', payload->>'artistId')
+      `);
+      const nameMap = opts.personNames ?? {};
+      for (const row of ((r as any).rows ?? []) as any[]) {
+        const c = Number(row.clicks) || 0;
+        clicks += c;
+        if (c > 0) {
+          byPerson.push({
+            id: row.person_id,
+            label: nameMap[row.person_id] ?? row.person_id,
+            href: `/admin/people/${row.person_id}`,
+            count: c,
+          });
+        }
+      }
+      byPerson.sort((a, b) => b.count - a.count);
+    }
+
+    if (gearVendorId) {
+      const r = await db.execute<{ instrument_id: string | null; name: string | null; clicks: number }>(sql`
+        SELECT (ae.payload->>'instrumentId') AS instrument_id,
+               (SELECT name FROM instruments WHERE id = (ae.payload->>'instrumentId')) AS name,
+               COUNT(*)::int AS clicks
+        FROM analytics_events ae
+        WHERE ae.name = 'gear_vendor_clicked'
+          AND (ae.payload->>'vendorId') = ${gearVendorId}
+        ${fromSqlAe}
+        ${toSqlAe}
+        GROUP BY (ae.payload->>'instrumentId')
+        ORDER BY clicks DESC
+        LIMIT 25
+      `);
+      for (const row of ((r as any).rows ?? []) as any[]) {
+        const c = Number(row.clicks) || 0;
+        clicks += c;
+        byGear.push({
+          id: row.instrument_id ?? "unknown",
+          label: row.name ?? row.instrument_id ?? "(unknown gear)",
+          count: c,
+        });
+      }
+    }
+
+    return {
+      totals: { views, plays, clicks },
+      range: {
+        from: opts.fromTs ? opts.fromTs.toISOString() : null,
+        to: opts.toTs ? opts.toTs.toISOString() : null,
+      },
+      byAlbum: byAlbum.slice(0, 25),
+      byTrack: byTrack.slice(0, 25),
+      byPerson: byPerson.slice(0, 25),
+      byGear,
+    };
+  }
+
+  // Parse ?from / ?to query params into a clamped Date pair. Defaults
+  // to a rolling 30-day window so a brand-new partner doesn't appear
+  // dead-equal to a years-old one.
+  function parseRangeFromQuery(q: any): { fromTs: Date | null; toTs: Date | null } {
+    const fromRaw = typeof q?.from === "string" ? q.from : null;
+    const toRaw = typeof q?.to === "string" ? q.to : null;
+    let fromTs: Date | null = null;
+    let toTs: Date | null = null;
+    if (fromRaw) {
+      const d = new Date(fromRaw);
+      if (!isNaN(d.getTime())) fromTs = d;
+    }
+    if (toRaw) {
+      const d = new Date(toRaw);
+      if (!isNaN(d.getTime())) toTs = d;
+    }
+    if (fromRaw === "all" || q?.range === "all") {
+      return { fromTs: null, toTs: null };
+    }
+    if (!fromTs && !toTs) {
+      fromTs = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    }
+    return { fromTs, toTs };
+  }
+
+  // NPO — connected albums = albums whose primary artist this NPO referred,
+  // plus any album an order routed to this NPO as gooddeed referrer.
+  app.get("/api/admin/non-profits/:id/albums", requireAdmin, async (req, res) => {
+    const npo = await db.execute(sql`SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`);
+    if (((npo as any).rows ?? []).length === 0) return res.status(404).json({ message: "Non-profit not found" });
+    const referred = await db.execute<{ album_id: string }>(sql`
+      SELECT DISTINCT a.id AS album_id
+      FROM albums a
+      JOIN people p ON p.id = a.primary_artist_id
+      WHERE p.referred_by_org_id = ${req.params.id}
+    `);
+    const routed = await db.execute<{ album_id: string }>(sql`
+      SELECT DISTINCT album_id FROM orders WHERE album_id IS NOT NULL
+        AND id IN (SELECT order_id FROM referral_credits WHERE referrer_org_id = ${req.params.id})
+    `).catch(() => ({ rows: [] }) as any);
+    const referredIds = new Set<string>(((referred as any).rows ?? []).map((r: any) => r.album_id));
+    const routedIds = new Set<string>(((routed as any).rows ?? []).map((r: any) => r.album_id));
+    const allIds: string[] = [];
+    const seen = new Set<string>();
+    referredIds.forEach((v) => { if (!seen.has(v)) { seen.add(v); allIds.push(v); } });
+    routedIds.forEach((v) => { if (!seen.has(v)) { seen.add(v); allIds.push(v); } });
+    const reasonFor = (id: string) => {
+      if (referredIds.has(id) && routedIds.has(id)) return "Referrer · GoodDeed";
+      if (referredIds.has(id)) return "Referrer";
+      if (routedIds.has(id)) return "GoodDeed";
+      return null;
+    };
+    res.json(await loadConnectedAlbums(allIds, reasonFor));
+  });
+
+  app.get("/api/admin/non-profits/:id/analytics", requireAdmin, async (req, res) => {
+    const npo = await db.execute(sql`SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`);
+    if (((npo as any).rows ?? []).length === 0) return res.status(404).json({ message: "Non-profit not found" });
+    // Mirror the union the NPO Albums endpoint uses so the Analytics
+    // and Albums tabs report attribution for the same connected set:
+    //   (a) albums whose primary artist this NPO referred, plus
+    //   (b) albums that an order routed to this NPO as GoodDeed referrer.
+    // Without this union the analytics tab silently undercounts every
+    // GoodDeed-routed project a fan listens to or shares.
+    const referredAlbums = await db.execute<{ id: string; title: string }>(sql`
+      SELECT a.id, a.title
+      FROM albums a
+      JOIN people p ON p.id = a.primary_artist_id
+      WHERE p.referred_by_org_id = ${req.params.id}
+    `);
+    const routedAlbums = await db.execute<{ id: string; title: string }>(sql`
+      SELECT DISTINCT a.id, a.title
+      FROM albums a
+      JOIN orders o ON o.album_id = a.id
+      WHERE o.id IN (SELECT order_id FROM referral_credits WHERE referrer_org_id = ${req.params.id})
+    `).catch(() => ({ rows: [] }) as any);
+    const titles: Record<string, string> = {};
+    const albumIds: string[] = [];
+    const pushAlbum = (r: any) => {
+      if (!titles[r.id]) { titles[r.id] = r.title; albumIds.push(r.id); }
+    };
+    for (const r of ((referredAlbums as any).rows ?? []) as any[]) pushAlbum(r);
+    for (const r of ((routedAlbums as any).rows ?? []) as any[]) pushAlbum(r);
+    // People scope = referred people + primary artists of any routed
+    // album (so GoodDeed-only NPOs still get a by-person breakdown).
+    const referredPeople = await db.execute<{ id: string; name: string }>(sql`
+      SELECT id, name FROM people WHERE referred_by_org_id = ${req.params.id}
+    `);
+    const routedArtists = albumIds.length > 0
+      ? await db.execute<{ id: string; name: string }>(sql`
+          SELECT DISTINCT p.id, p.name
+          FROM people p
+          JOIN albums a ON a.primary_artist_id = p.id
+          WHERE a.id = ANY(${albumIds})
+        `)
+      : ({ rows: [] } as any);
+    const names: Record<string, string> = {};
+    const personIds: string[] = [];
+    const pushPerson = (r: any) => {
+      if (!names[r.id]) { names[r.id] = r.name; personIds.push(r.id); }
+    };
+    for (const r of ((referredPeople as any).rows ?? []) as any[]) pushPerson(r);
+    for (const r of ((routedArtists as any).rows ?? []) as any[]) pushPerson(r);
+    const range = parseRangeFromQuery(req.query);
+    res.json(await loadConnectedAnalytics({ albumIds, personIds, albumTitles: titles, personNames: names, ...range }));
+  });
+
+  // Vendor (Reseller) — connected albums = albums whose songs credit
+  // instruments this vendor carries. Vendor must be flagged is_reseller
+  // for the connection to be meaningful (a maker-only vendor has no
+  // instrument_vendors rows by definition). includePresses is on so
+  // the client can render the per-row "Pressed at: X, Y" treatment the
+  // Reseller Albums tab requires (Task #295 spec).
+  app.get("/api/admin/vendors/:id/albums", requireAdmin, async (req, res) => {
+    const v = await db.execute(sql`SELECT 1 FROM vendors WHERE id = ${req.params.id} LIMIT 1`);
+    if (((v as any).rows ?? []).length === 0) return res.status(404).json({ message: "Vendor not found" });
+    const rows = await db.execute<{ album_id: string }>(sql`
+      SELECT DISTINCT s.album_id
+      FROM track_performers tp
+      JOIN songs s ON s.id = tp.song_id
+      JOIN instrument_vendors iv ON iv.instrument_id = tp.instrument_id
+      WHERE iv.vendor_id = ${req.params.id} AND s.album_id IS NOT NULL
+    `);
+    const ids = ((rows as any).rows ?? []).map((r: any) => r.album_id);
+    res.json(await loadConnectedAlbums(ids, () => "Gear carried", { includePresses: true }));
+  });
+
+  app.get("/api/admin/vendors/:id/analytics", requireAdmin, async (req, res) => {
+    const v = await db.execute(sql`SELECT 1 FROM vendors WHERE id = ${req.params.id} LIMIT 1`);
+    if (((v as any).rows ?? []).length === 0) return res.status(404).json({ message: "Vendor not found" });
+    const albumRows = await db.execute<{ id: string; title: string }>(sql`
+      SELECT DISTINCT a.id, a.title
+      FROM albums a
+      JOIN songs s ON s.album_id = a.id
+      JOIN track_performers tp ON tp.song_id = s.id
+      JOIN instrument_vendors iv ON iv.instrument_id = tp.instrument_id
+      WHERE iv.vendor_id = ${req.params.id}
+    `);
+    const titles: Record<string, string> = {};
+    const albumIds: string[] = [];
+    for (const r of ((albumRows as any).rows ?? []) as any[]) { titles[r.id] = r.title; albumIds.push(r.id); }
+    // People scope for a reseller = the artists/performers whose work
+    // is the reason the album is connected at all: the primary artist
+    // of each connected album, plus any track_performer who actually
+    // played the reseller's gear on that album. Without this the
+    // "By person" table is always empty even when fans are clearly
+    // tapping into credits.
+    const personRows = albumIds.length > 0
+      ? await db.execute<{ id: string; name: string }>(sql`
+          SELECT DISTINCT p.id, p.name FROM people p
+          WHERE p.id IN (
+            SELECT primary_artist_id FROM albums WHERE id = ANY(${albumIds}) AND primary_artist_id IS NOT NULL
+            UNION
+            SELECT tp.person_id
+            FROM track_performers tp
+            JOIN songs s ON s.id = tp.song_id
+            JOIN instrument_vendors iv ON iv.instrument_id = tp.instrument_id
+            WHERE iv.vendor_id = ${req.params.id}
+              AND s.album_id = ANY(${albumIds})
+              AND tp.person_id IS NOT NULL
+          )
+        `)
+      : ({ rows: [] } as any);
+    const names: Record<string, string> = {};
+    const personIds: string[] = [];
+    for (const r of ((personRows as any).rows ?? []) as any[]) { names[r.id] = r.name; personIds.push(r.id); }
+    const range = parseRangeFromQuery(req.query);
+    res.json(await loadConnectedAnalytics({
+      albumIds, personIds, gearVendorId: String(req.params.id), albumTitles: titles, personNames: names, ...range,
+    }));
+  });
+
+  // Press (manufacturer) — connected albums = albums whose pressing-
+  // order request resolved to this press. Source of truth is
+  // pressing_order_requests.package_snapshot.pressId (the artist Sell
+  // tab snapshots the picked press at submit time so later catalog
+  // edits never re-route a pending order). "In queue" naturally
+  // includes pending submissions still awaiting GoodTunes review
+  // because the album hasn't had a first_sold_at written yet.
+  app.get("/api/admin/manufacturers/:id/albums", requireAdmin, async (req, res) => {
+    const m = await db.execute(sql`SELECT 1 FROM manufacturers WHERE id = ${req.params.id} LIMIT 1`);
+    if (((m as any).rows ?? []).length === 0) return res.status(404).json({ message: "Press not found" });
+    const rows = await db.execute<{ album_id: string; status: string }>(sql`
+      SELECT DISTINCT por.album_id, por.status
+      FROM pressing_order_requests por
+      WHERE (por.package_snapshot->>'pressId') = ${req.params.id}
+        AND por.status IN ('pending','approved')
+    `).catch(() => ({ rows: [] }) as any);
+    const reasonMap: Record<string, string> = {};
+    const ids: string[] = [];
+    for (const row of ((rows as any).rows ?? []) as any[]) {
+      if (!ids.includes(row.album_id)) ids.push(row.album_id);
+      // "approved" beats "pending" in the reason chip if both exist.
+      const prev = reasonMap[row.album_id];
+      const next = row.status === "approved" ? "Approved order" : "Awaiting review";
+      if (!prev || (prev === "Awaiting review" && next === "Approved order")) {
+        reasonMap[row.album_id] = next;
+      }
+    }
+    res.json(await loadConnectedAlbums(ids, (id) => reasonMap[id] ?? null));
+  });
+
+  app.get("/api/admin/manufacturers/:id/analytics", requireAdmin, async (req, res) => {
+    const m = await db.execute(sql`SELECT 1 FROM manufacturers WHERE id = ${req.params.id} LIMIT 1`);
+    if (((m as any).rows ?? []).length === 0) return res.status(404).json({ message: "Press not found" });
+    const albumRows = await db.execute<{ id: string; title: string }>(sql`
+      SELECT DISTINCT a.id, a.title
+      FROM albums a
+      JOIN pressing_order_requests por ON por.album_id = a.id
+      WHERE (por.package_snapshot->>'pressId') = ${req.params.id}
+        AND por.status IN ('pending','approved')
+    `).catch(() => ({ rows: [] }) as any);
+    const titles: Record<string, string> = {};
+    const albumIds: string[] = [];
+    for (const r of ((albumRows as any).rows ?? []) as any[]) { titles[r.id] = r.title; albumIds.push(r.id); }
+    // For analytics, the press's "people" scope is the primary artists
+    // of every album it's queued to press — that's who fans actually
+    // click on inside the player.
+    const personRows = albumIds.length > 0
+      ? await db.execute<{ id: string; name: string }>(sql`
+          SELECT DISTINCT p.id, p.name
+          FROM people p
+          JOIN albums a ON a.primary_artist_id = p.id
+          WHERE a.id = ANY(${albumIds})
+        `)
+      : ({ rows: [] } as any);
+    const names: Record<string, string> = {};
+    const personIds: string[] = [];
+    for (const r of ((personRows as any).rows ?? []) as any[]) { names[r.id] = r.name; personIds.push(r.id); }
+    const range = parseRangeFromQuery(req.query);
+    res.json(await loadConnectedAnalytics({ albumIds, personIds, albumTitles: titles, personNames: names, ...range }));
+  });
+
+  // ---------------------------------------------------------------------
   // Task #294 — generic per-entity contacts. Same contract as the NPO
   // people endpoints above, but shared across vendor / manufacturer /
   // label / fulfillment_partner. NPOs intentionally keep using the

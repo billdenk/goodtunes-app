@@ -7,6 +7,8 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
+import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { queryClient } from "@/lib/queryClient";
 
 // Task #78 — Super-admin detail page for a non-profit partner.
@@ -28,6 +30,12 @@ export default function AdminNonProfit() {
   const { id } = useParams<{ id: string }>();
   const npoQ = useQuery<NonProfit>({ queryKey: [`/api/non-profits/${id}`] });
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  // Task #295 — Overview / People / Albums / Analytics parity with
+  // the Maker template. Overview keeps Identity + ReferralSummary; the
+  // other three tabs are shared components driven by
+  // `/api/admin/non-profits/:id/...` endpoints (plus the existing
+  // contacts endpoint for People).
+  const [tab, setTab] = useState<"overview" | "people" | "albums" | "analytics">("overview");
 
   if (npoQ.isLoading) {
     return (
@@ -129,36 +137,85 @@ export default function AdminNonProfit() {
           </div>
         </div>
 
-        <EditablePanel
-          title="Identity"
-          testId="panel-npo-identity"
-          endpoint={`/api/non-profits/${npo.id}`}
-          values={{
-            name: npo.name,
-            websiteUrl: npo.websiteUrl,
-          }}
-          invalidate={[
-            [`/api/non-profits/${npo.id}`],
-            ["/api/non-profits"],
-          ]}
-          fields={[
-            { key: "name", label: "Name", type: "text", required: true },
-            {
-              key: "websiteUrl",
-              label: "Website",
-              type: "url",
-              placeholder: "https://example.org",
-            },
-          ]}
-        />
+        <div
+          className="flex items-end gap-5 border-b border-slate-200"
+          data-testid="tabs-admin-npo"
+        >
+          <div className="flex items-center gap-5 overflow-x-auto">
+            {([
+              { key: "overview", label: "Overview" },
+              { key: "people", label: "People" },
+              { key: "albums", label: "Albums" },
+              { key: "analytics", label: "Analytics" },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        <OrganizationPeople
-          apiPath={`/api/non-profits/${npo.id}/people`}
-          testIdPrefix="npo"
-          blurb="People who represent this NPO. Add as many as you need."
-        />
-
-        <ReferralSummaryPanel kind="non_profit" id={npo.id} />
+        {tab === "overview" && (
+          <>
+            <EditablePanel
+              title="Identity"
+              testId="panel-npo-identity"
+              endpoint={`/api/non-profits/${npo.id}`}
+              values={{
+                name: npo.name,
+                websiteUrl: npo.websiteUrl,
+              }}
+              invalidate={[
+                [`/api/non-profits/${npo.id}`],
+                ["/api/non-profits"],
+              ]}
+              fields={[
+                { key: "name", label: "Name", type: "text", required: true },
+                {
+                  key: "websiteUrl",
+                  label: "Website",
+                  type: "url",
+                  placeholder: "https://example.org",
+                },
+              ]}
+            />
+            <ReferralSummaryPanel kind="non_profit" id={npo.id} />
+          </>
+        )}
+        {tab === "people" && (
+          <OrganizationPeople
+            apiPath={`/api/non-profits/${npo.id}/people`}
+            testIdPrefix="npo"
+            blurb="People who represent this NPO. Add as many as you need."
+          />
+        )}
+        {tab === "albums" && (
+          <EntityAlbumsTab
+            apiPath={`/api/admin/non-profits/${npo.id}/albums`}
+            testIdPrefix="npo"
+            emptyHint="No albums tied to this NPO yet — no referred artists or GoodDeed-routed orders."
+          />
+        )}
+        {tab === "analytics" && (
+          <EntityAnalyticsTab
+            apiPath={`/api/admin/non-profits/${npo.id}/analytics`}
+            testIdPrefix="npo"
+          />
+        )}
       </div>
     </AdminFrame>
   );

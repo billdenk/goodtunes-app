@@ -26,6 +26,8 @@ import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
+import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
@@ -124,9 +126,16 @@ interface VendorProfile {
   children?: ChildLite[];
 }
 
-type Tab = "overview" | "cover" | "instruments" | "gooddeed" | "permissions";
+type Tab = "overview" | "people" | "albums" | "analytics" | "cover" | "instruments" | "gooddeed" | "permissions";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
+  // Task #295 — entity-detail parity (People / Albums / Analytics)
+  // mirroring the Maker template. People moved out of Overview into
+  // its own tab so the Identity/Roles/Lineage cards aren't competing
+  // for height with a long contacts list.
+  { key: "people", label: "People" },
+  { key: "albums", label: "Albums" },
+  { key: "analytics", label: "Analytics" },
   { key: "cover", label: "Cover" },
   { key: "instruments", label: "Instruments" },
   // Task #245 — vendor-quoted GoodDeed pricing (printing / hologram /
@@ -482,11 +491,25 @@ export function AdminVendor() {
             childRows={profile.children ?? []}
           />
         )}
-        {tab === "overview" && (
+        {tab === "people" && (
           <OrganizationPeople
             apiPath={`/api/vendors/${vendor.id}/people`}
             testIdPrefix="vendor"
             blurb="People at this vendor — buyer, A&R, accounts payable, whoever you need to reach."
+          />
+        )}
+        {tab === "albums" && (
+          <EntityAlbumsTab
+            apiPath={`/api/admin/vendors/${vendor.id}/albums`}
+            testIdPrefix="vendor"
+            emptyHint="No albums credit gear this reseller carries yet."
+            showPressesSubsection
+          />
+        )}
+        {tab === "analytics" && (
+          <EntityAnalyticsTab
+            apiPath={`/api/admin/vendors/${vendor.id}/analytics`}
+            testIdPrefix="vendor"
           />
         )}
         {tab === "cover" && <CoverPanel vendor={vendor} />}
