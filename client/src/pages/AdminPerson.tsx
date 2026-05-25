@@ -369,7 +369,7 @@ export function AdminPerson() {
             hover reveals a "Delete" label; opens a rose-tinted confirm
             sheet per the replit.md destructive-actions rule. */}
         <div
-          className="sticky top-0 z-20 bg-white flex items-end justify-between gap-5 border-b border-slate-200"
+          className="bg-white flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-person"
         >
           <div className="flex items-center gap-5 overflow-x-auto">

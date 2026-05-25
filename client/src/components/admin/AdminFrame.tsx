@@ -618,7 +618,7 @@ export function AdminFrame({
             three columns. The Admin chip lives here on the right;
             pages can use AdminPageHeader inside the body to render
             their own breadcrumb/title beneath this strip. */}
-        <div className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-between gap-3 px-4 sm:px-6">
+        <div className="sticky top-0 z-30 h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-between gap-3 px-4 sm:px-6">
           <ViewAsSwitcher />
           <AdminUserMenu />
         </div>
