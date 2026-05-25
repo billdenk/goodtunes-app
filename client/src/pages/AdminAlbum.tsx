@@ -60,6 +60,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -5585,9 +5590,33 @@ function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: strin
       <span className="text-[11.5px] text-slate-600 font-medium">
         Explicit
       </span>
-      <span className="text-[10.5px] text-slate-400">
-        · shows an E next to the title
-      </span>
+      <Popover>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="What Explicit means"
+                className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                data-testid={`info-explicit-${song.id}`}
+              >
+                <Info className="w-3 h-3" aria-hidden="true" />
+                <span className="sr-only">What Explicit means</span>
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            shows an E next to the title
+          </TooltipContent>
+        </Tooltip>
+        <PopoverContent
+          side="top"
+          align="center"
+          className="w-56 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+        >
+          shows an E next to the title
+        </PopoverContent>
+      </Popover>
       <Switch
         checked={checked}
         disabled={toggleMut.isPending}
@@ -5633,7 +5662,33 @@ function PreviewableTrackToggle({ song }: { song: SongLite }) {
     >
       <Play className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 fill-current" aria-hidden="true" />
       <span className="text-[11.5px] text-slate-600 font-medium">Preview</span>
-      <span className="text-[10.5px] text-slate-400">· playable pre-purchase</span>
+      <Popover>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="What Preview means"
+                className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                data-testid={`info-previewable-${song.id}`}
+              >
+                <Info className="w-3 h-3" aria-hidden="true" />
+                <span className="sr-only">What Preview means</span>
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            playable pre-purchase
+          </TooltipContent>
+        </Tooltip>
+        <PopoverContent
+          side="top"
+          align="center"
+          className="w-56 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+        >
+          playable pre-purchase
+        </PopoverContent>
+      </Popover>
       <Switch
         checked={checked}
         disabled={toggleMut.isPending}
@@ -5689,11 +5744,37 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
       <span className="text-[11.5px] text-slate-600 font-medium">
         Instrumental
       </span>
-      <span className="text-[10.5px] text-slate-400">
-        {lockedOn
-          ? "· clear the lyrics first to mark instrumental"
-          : "· no lyrics or singer credits"}
-      </span>
+      <Popover>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="What Instrumental means"
+                className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                data-testid={`info-instrumental-${song.id}`}
+              >
+                <Info className="w-3 h-3" aria-hidden="true" />
+                <span className="sr-only">What Instrumental means</span>
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {lockedOn
+              ? "clear the lyrics first to mark instrumental"
+              : "no lyrics or singer credits"}
+          </TooltipContent>
+        </Tooltip>
+        <PopoverContent
+          side="top"
+          align="center"
+          className="w-60 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+        >
+          {lockedOn
+            ? "clear the lyrics first to mark instrumental"
+            : "no lyrics or singer credits"}
+        </PopoverContent>
+      </Popover>
       {/* Apple HIG Switch — pinned explicitly because shadcn's
           defaults pull `bg-input` (our dark-navy player token) for the
           track and `bg-background` (also dark navy) for the thumb,
