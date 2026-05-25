@@ -30,6 +30,7 @@ import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { ViewAsSwitcher } from "@/components/admin/ViewAsSwitcher";
 import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
 import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
+import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 const PREVIEW_OPEN_KEY = "gt:admin-preview-open";
@@ -403,6 +404,12 @@ export function AdminFrame({
             <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
           </Link>
         </div>
+        {/* Task #336 — Global admin search. Sits above Dashboard so it
+            anchors the top of the sidebar; ⌘K opens/focuses from
+            anywhere in the admin shell. */}
+        <div className="px-2 pt-2 border-r border-slate-200">
+          <AdminSearchBar />
+        </div>
         <nav className="flex-1 px-2 pt-2 pb-3 space-y-0.5 border-r border-slate-200 overflow-y-auto" data-testid="nav-admin-entities">
             {/* Task #140 — Dashboard sits above the labelled sections as
                 the admin's at-a-glance home. No section header; it's a
@@ -619,6 +626,15 @@ export function AdminFrame({
             pages can use AdminPageHeader inside the body to render
             their own breadcrumb/title beneath this strip. */}
         <div className="sticky top-0 z-30 h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-between gap-3 px-4 sm:px-6">
+          {/* Task #336 — On mobile the sidebar (and its search bar) is
+              hidden, so render a second copy of the search input in the
+              top strip so admins on phones still have a way in. */}
+          <div className="flex-1 max-w-xs md:hidden">
+            {/* registerShortcut=false — only the desktop sidebar copy
+                owns the ⌘K window listener so the two mounted instances
+                don't race for focus/open state. */}
+            <AdminSearchBar registerShortcut={false} />
+          </div>
           <ViewAsSwitcher />
           <AdminUserMenu />
         </div>

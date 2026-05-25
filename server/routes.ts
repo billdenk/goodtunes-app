@@ -14040,6 +14040,91 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // ─── Task #336 — Global admin search ────────────────────────────────
+  // Single grouped payload used by the admin sidebar SearchBar. Caps
+  // per-group results so a 2-letter query can't return thousands of
+  // rows; an empty `q` short-circuits to {} so debounced callers don't
+  // need to special-case it.
+  app.get("/api/admin/search", requireAdmin, async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    const perGroup = Math.min(Math.max(Number(req.query.limit) || 5, 1), 10);
+    if (q.length < 1) {
+      return res.json({
+        people: [], vendors: [], labels: [], nonprofits: [], albums: [],
+        gear: [], customers: [], manufacturers: [], fulfillment: [],
+      });
+    }
+    const [
+      people, vendors, labelsRows, nonprofits, albumsRows,
+      gear, customers, manufacturers, fulfillment,
+    ] = await Promise.all([
+      storage.searchPeople(q, perGroup),
+      storage.searchVendorsAdmin(q, perGroup),
+      storage.searchLabelsAdmin(q, perGroup),
+      storage.searchNonProfitsAdmin(q, perGroup),
+      storage.searchAlbumsAdmin(q, perGroup),
+      storage.searchInstrumentsAdmin(q, perGroup),
+      storage.searchCustomersAdmin(q, perGroup),
+      storage.searchManufacturersAdmin(q, perGroup),
+      storage.searchFulfillmentAdmin(q, perGroup),
+    ]);
+    res.json({
+      people: people.map((p) => ({
+        kind: "person", id: p.id, title: p.name,
+        subtitle: null, badge: "Person", photoUrl: p.photoUrl,
+        href: `/admin/people/${p.id}`,
+      })),
+      vendors: vendors.map((v) => {
+        const roles: string[] = [];
+        if (v.isMaker) roles.push("Maker");
+        if (v.isReseller) roles.push("Reseller");
+        const badge = roles.join(" · ") || "Vendor";
+        // Maker rows route to the Makers detail page; otherwise the
+        // Resellers detail page. Same vendor row, two URLs depending on
+        // which hat the admin most likely cares about.
+        const href = v.isMaker && !v.isReseller
+          ? `/admin/makers/${v.id}`
+          : `/admin/vendors/${v.id}`;
+        return { kind: "vendor", id: v.id, title: v.name, subtitle: null, badge, href };
+      }),
+      labels: labelsRows.map((l) => ({
+        kind: "label", id: l.id, title: l.name,
+        subtitle: null, badge: "Label",
+        href: `/admin/labels/${l.id}`,
+      })),
+      nonprofits: nonprofits.map((n) => ({
+        kind: "nonprofit", id: n.id, title: n.name,
+        subtitle: null, badge: "NPO",
+        href: `/admin/non-profits/${n.id}`,
+      })),
+      albums: albumsRows.map((a) => ({
+        kind: "album", id: a.id, title: a.title,
+        subtitle: a.artist, badge: "Album",
+        href: `/admin/albums/${a.id}`,
+      })),
+      gear: gear.map((g) => ({
+        kind: "gear", id: g.id, title: g.name,
+        subtitle: g.category, badge: "Gear",
+        href: `/admin/instruments/${g.id}`,
+      })),
+      customers: customers.map((c) => ({
+        kind: "customer", id: c.id, title: c.displayName,
+        subtitle: c.email, badge: "Customer",
+        href: `/admin/customers/${c.id}`,
+      })),
+      manufacturers: manufacturers.map((m) => ({
+        kind: "manufacturer", id: m.id, title: m.name,
+        subtitle: null, badge: "Press",
+        href: `/admin/manufacturers/${m.id}`,
+      })),
+      fulfillment: fulfillment.map((f) => ({
+        kind: "fulfillment", id: f.id, title: f.name,
+        subtitle: null, badge: "Fulfillment",
+        href: `/admin/fulfillment-partners/${f.id}`,
+      })),
+    });
+  });
+
   // ─── Admin Customers directory (Task #131) ──────────────────────────
   // Read-only fan-account browser. Search matches display/real name,
   // email, and username. Each row carries an order count + lifetime

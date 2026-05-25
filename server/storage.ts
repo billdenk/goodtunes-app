@@ -635,6 +635,17 @@ export interface IStorage {
       sizeBytes: number;
     }>;
   }): Promise<PrintGenerationWithArtifacts>;
+
+  // ---- Task #336 — Global admin search -----------------------------
+  searchPeople(q: string, limit: number): Promise<Array<{ id: string; name: string; photoUrl: string | null }>>;
+  searchVendorsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string; isMaker: boolean; isReseller: boolean }>>;
+  searchLabelsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>>;
+  searchAlbumsAdmin(q: string, limit: number): Promise<Array<{ id: string; title: string; artist: string }>>;
+  searchInstrumentsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string; category: string | null }>>;
+  searchCustomersAdmin(q: string, limit: number): Promise<Array<{ id: string; displayName: string; email: string }>>;
+  searchManufacturersAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>>;
+  searchFulfillmentAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>>;
+  searchNonProfitsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>>;
 }
 
 export type PrintGenerationWithArtifacts = {
@@ -3152,6 +3163,96 @@ export class DbStorage implements IStorage {
         sizeBytes: a.sizeBytes,
       })),
     };
+  }
+
+  // ---- Task #336 — Global admin search -----------------------------
+  // Each entity exposes a tiny shape just rich enough to render a row
+  // in the dropdown (id + display + a secondary line where useful) +
+  // build an admin href. Case-insensitive substring on the obvious
+  // columns; per-group limit is capped by the caller.
+  async searchPeople(q: string, limit: number): Promise<Array<{ id: string; name: string; photoUrl: string | null }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: people.id, name: people.name, photoUrl: people.photoUrl })
+      .from(people)
+      .where(sql`lower(${people.name}) LIKE ${like}`)
+      .orderBy(asc(people.name))
+      .limit(limit);
+  }
+  async searchVendorsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string; isMaker: boolean; isReseller: boolean }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: vendors.id, name: vendors.name, isMaker: vendors.isMaker, isReseller: vendors.isReseller })
+      .from(vendors)
+      .where(sql`lower(${vendors.name}) LIKE ${like} OR lower(coalesce(${vendors.domain}, '')) LIKE ${like}`)
+      .orderBy(asc(vendors.name))
+      .limit(limit);
+  }
+  async searchLabelsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: labels.id, name: labels.name })
+      .from(labels)
+      .where(sql`lower(${labels.name}) LIKE ${like}`)
+      .orderBy(asc(labels.name))
+      .limit(limit);
+  }
+  async searchAlbumsAdmin(q: string, limit: number): Promise<Array<{ id: string; title: string; artist: string }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: albums.id, title: albums.title, artist: albums.artist })
+      .from(albums)
+      .where(sql`(lower(${albums.title}) LIKE ${like} OR lower(${albums.artist}) LIKE ${like}) AND ${albums.isGoodTunesRelease} = true`)
+      .orderBy(asc(albums.title))
+      .limit(limit);
+  }
+  async searchInstrumentsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string; category: string | null }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: instruments.id, name: instruments.name, category: instruments.shortCategory })
+      .from(instruments)
+      .where(sql`lower(${instruments.name}) LIKE ${like}`)
+      .orderBy(asc(instruments.name))
+      .limit(limit);
+  }
+  async searchCustomersAdmin(q: string, limit: number): Promise<Array<{ id: string; displayName: string; email: string }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: customerUsers.id, displayName: customerUsers.displayName, email: customerUsers.email })
+      .from(customerUsers)
+      .where(sql`lower(${customerUsers.displayName}) LIKE ${like}
+             OR lower(${customerUsers.email}) LIKE ${like}
+             OR lower(${customerUsers.username}) LIKE ${like}`)
+      .orderBy(asc(customerUsers.displayName))
+      .limit(limit);
+  }
+  async searchManufacturersAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: manufacturers.id, name: manufacturers.name })
+      .from(manufacturers)
+      .where(sql`lower(${manufacturers.name}) LIKE ${like}`)
+      .orderBy(asc(manufacturers.name))
+      .limit(limit);
+  }
+  async searchFulfillmentAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({ id: fulfillmentPartners.id, name: fulfillmentPartners.name })
+      .from(fulfillmentPartners)
+      .where(sql`lower(${fulfillmentPartners.name}) LIKE ${like}`)
+      .orderBy(asc(fulfillmentPartners.name))
+      .limit(limit);
+  }
+  async searchNonProfitsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>> {
+    const like = `%${q.toLowerCase()}%`;
+    const rows = await db.execute<{ id: string; name: string }>(sql`
+      SELECT id, name FROM organizations
+      WHERE kind = 'non_profit' AND lower(name) LIKE ${like}
+      ORDER BY name ASC
+      LIMIT ${limit}
+    `);
+    return ((rows as any).rows ?? []) as Array<{ id: string; name: string }>;
   }
 }
 
