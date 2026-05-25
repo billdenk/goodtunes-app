@@ -284,7 +284,7 @@ export function Orders() {
                           VINYL_COLOR_BY_ID[vinylItem.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
                           VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
                         return (
-                          <div className="w-24 flex-shrink-0" data-testid={`order-vinyl-preview-${o.id}`}>
+                          <div className="flex-shrink-0" data-testid={`order-vinyl-preview-${o.id}`}>
                             <VinylPreview
                               artworkUrl={o.albumArtwork}
                               color={color}
@@ -712,7 +712,7 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
                   return (
                     <div key={it.id} className="flex items-center gap-3 px-4 py-3" data-testid={`detail-item-${it.id}`}>
                       {isVinyl && color && (
-                        <div className="w-24 flex-shrink-0" data-testid={`detail-vinyl-preview-${it.id}`}>
+                        <div className="flex-shrink-0" data-testid={`detail-vinyl-preview-${it.id}`}>
                           <VinylPreview
                             artworkUrl={order.albumArtwork}
                             color={color}
