@@ -448,15 +448,16 @@ export function SellPanel({
   );
 }
 
-/* ─── Task #335 / #373 — Printer chips + single press detail ──────── */
-/* The artist picks a printer with the chips on top; the matching press
- * detail card renders directly below — no horizontal scroll, no
- * directory carousel. Today Hellbender is the only live chip; MRP and
- * PMP show as "Soon" so the catalog roadmap is visible without letting
- * the artist pick a plant we can't route to. When the album's
- * artist/label was invited by a specific press and hasn't shipped their
- * first run, the chip row collapses to just that press (legacy hard
- * lock from task #199 is preserved).                                  */
+/* ─── Task #335 / #373 / #389 — Compact printer selector ──────────── */
+/* The printer is usually already decided (GoodTunes routes the run, or
+ * the partner was invited by a specific press), so the picker sits as a
+ * small inline row above the quote controls — selected press name + an
+ * Info button that opens the press detail in a popover. When more than
+ * one printer is selectable the other options render inline as small
+ * chips next to the selected name; when only one is selectable (locked
+ * invited press, or only Hellbender live) the row is read-only with no
+ * chips. The invited-press hard lock from task #199 still surfaces, as
+ * a muted caption under the row.                                      */
 function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | null }) {
   const invitedPress = invited?.press ?? null;
   const locked = !!invitedPress && !invited?.hasShippedFirst;
@@ -482,46 +483,178 @@ function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | nul
   const selectedChip = chips.find((c) => c.id === selectedId) ?? chips[0];
   const selectedPress = selectedChip.press;
 
+  // Only one printer truly selectable → no chip row at all (just the
+  // selected label + Info). "Selectable" means live; coming-soon chips
+  // don't count for this decision (otherwise the disabled MRP/PMP would
+  // force chips to render in the free flow even though the operator can
+  // only pick Hellbender today).
+  const otherLiveChips = chips.filter((c) => c.id !== selectedChip.id && c.status === "live");
+  const otherComingSoonChips = chips.filter((c) => c.id !== selectedChip.id && c.status !== "live");
+  const showChips = otherLiveChips.length > 0;
+
   return (
-    <div className="mb-8" data-testid="panel-printer-and-press">
-      <div className="text-sm font-semibold text-slate-900 mb-1.5">Choose your printer</div>
-      <p className="text-sm text-slate-500 mb-3">
-        {locked
-          ? `You were invited by ${invitedPress!.name}. The full pressing-plant directory unlocks once your first run ships — message GoodTunes if you need to switch sooner.`
-          : "Pressing plants GoodTunes works with. Today the Cost on every vinyl format uses Hellbender Vinyl's public rate sheet as the default — per-plant quote plumbing wires in next so you can compare side-by-side."}
-      </p>
-      <div className="flex flex-wrap gap-2 mb-4" data-testid="printer-chips">
-        {chips.map((c) => {
-          const live = c.status === "live";
-          const isSelected = live && selectedId === c.id;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              disabled={!live}
-              aria-pressed={isSelected}
-              data-testid={`printer-${c.id}`}
-              onClick={() => live && setSelectedId(c.id)}
-              className={[
-                "rounded-full px-3 py-1.5 text-xs font-semibold border transition-colors text-left",
-                isSelected
-                  ? "bg-[color:var(--brand-blue)] text-white border-[color:var(--brand-blue)] shadow-sm"
-                  : live
-                  ? "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
-                  : "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed",
-              ].join(" ")}
-              title={live ? c.label : "Coming soon"}
-            >
-              {c.label}
-              {!live && (
-                <span className="ml-1.5 opacity-80 text-xs font-normal">Soon</span>
-              )}
-            </button>
-          );
-        })}
+    <div className="mb-4" data-testid="panel-printer-and-press">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-slate-500">Printer</span>
+        <span
+          className="font-semibold text-slate-900"
+          data-testid="text-selected-printer"
+        >
+          {selectedChip.label}
+        </span>
+        {selectedPress && <PressInfoPopover press={selectedPress} />}
+        {showChips && (
+          <div className="flex flex-wrap items-center gap-1.5 ml-1" data-testid="printer-chips">
+            <span className="text-slate-300">·</span>
+            {otherLiveChips.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                aria-pressed={false}
+                data-testid={`printer-${c.id}`}
+                onClick={() => setSelectedId(c.id)}
+                className="rounded-full px-2 py-0.5 text-xs font-semibold border bg-white text-slate-700 border-slate-200 hover:border-slate-300 transition-colors"
+                title={c.label}
+              >
+                {c.label}
+              </button>
+            ))}
+            {otherComingSoonChips.map((c) => (
+              <span
+                key={c.id}
+                data-testid={`printer-${c.id}`}
+                className="rounded-full px-2 py-0.5 text-xs font-semibold border bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed"
+                title="Coming soon"
+              >
+                {c.label}
+                <span className="ml-1 opacity-80 font-normal">Soon</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-      {selectedPress && <PressCard press={selectedPress} highlight={locked} />}
+      {locked && (
+        <p className="text-xs text-slate-500 mt-1" data-testid="text-printer-lock-note">
+          You were invited by {invitedPress!.name}. The full pressing-plant directory
+          unlocks once your first run ships — message GoodTunes if you need to switch
+          sooner.
+        </p>
+      )}
     </div>
+  );
+}
+
+/* Task #389 — press detail moved out of the always-on PressCard and
+ * into an on-demand popover triggered by an `i` button next to the
+ * selected printer name. Preserves every data-testid the old card
+ * exposed so any selectors keep resolving.                            */
+function PressInfoPopover({ press }: { press: Manufacturer }) {
+  const turnaroundLabel = pressTurnaroundLabel(press);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`About ${press.name}`}
+          className="inline-flex items-center justify-center w-5 h-5 rounded-full text-slate-400 hover:text-[color:var(--brand-blue)] transition-colors"
+          data-testid={`button-press-info-${press.id}`}
+        >
+          <Info className="w-4 h-4" />
+          <span className="sr-only">Printer details</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-80 p-4"
+        align="start"
+        data-testid={`card-press-${press.id}`}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            {press.logoUrl ? (
+              <img
+                src={press.logoUrl}
+                alt=""
+                className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
+                data-testid={`img-press-logo-${press.id}`}
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 shrink-0" />
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <div
+                  className="text-[13.5px] font-semibold text-slate-900 truncate"
+                  data-testid={`text-press-name-${press.id}`}
+                >
+                  {press.name}
+                </div>
+                <span
+                  className="text-[9.5px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded-sm px-1 py-[1px] shrink-0"
+                  title="Today every vinyl Cost uses Hellbender Vinyl's published rate sheet as the default. Per-plant quotes wire in next."
+                  data-testid={`pill-press-source-${press.id}`}
+                >
+                  Hellbender reference rates
+                </span>
+              </div>
+              {press.location && (
+                <div
+                  className="text-xs text-slate-500 inline-flex items-center gap-1 mt-0.5"
+                  data-testid={`text-press-location-${press.id}`}
+                >
+                  <MapPin className="w-3 h-3" />
+                  {press.location}
+                </div>
+              )}
+            </div>
+          </div>
+          {press.bio && (
+            <div
+              className="text-xs text-slate-600 leading-relaxed"
+              data-testid={`text-press-bio-${press.id}`}
+            >
+              {press.bio}
+            </div>
+          )}
+          {turnaroundLabel && (
+            <div
+              className="text-xs text-slate-500 inline-flex items-center gap-1"
+              data-testid={`text-press-turnaround-${press.id}`}
+            >
+              <Clock className="w-3 h-3" />
+              {turnaroundLabel}
+            </div>
+          )}
+          {press.specialties.length > 0 && (
+            <div
+              className="flex flex-wrap gap-1"
+              data-testid={`chips-press-specialties-${press.id}`}
+            >
+              {press.specialties.map((s, i) => (
+                <span
+                  key={`${press.id}-spec-${i}`}
+                  className="text-[11px] rounded-full bg-slate-100 text-slate-700 px-2 py-0.5"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+          {press.websiteUrl && (
+            <div className="pt-2 border-t border-slate-100">
+              <a
+                href={press.websiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-slate-700 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+                data-testid={`link-press-website-${press.id}`}
+              >
+                Visit website ↗
+              </a>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -734,113 +867,6 @@ function AddPhysicalGoodButton({
         </>
       )}
     </div>
-  );
-}
-
-function PressCard({ press, highlight = false }: { press: Manufacturer; highlight?: boolean }) {
-  // Clickable card per task #194 — opens the press's website in a new
-  // tab. `noopener noreferrer` prevents the opened page from gaining a
-  // window.opener back-reference. When a press has no website URL we
-  // fall back to a non-interactive container so the card still renders.
-  const Wrapper: any = press.websiteUrl ? "a" : "div";
-  const wrapperProps = press.websiteUrl
-    ? {
-        href: press.websiteUrl,
-        target: "_blank" as const,
-        rel: "noopener noreferrer",
-      }
-    : {};
-  return (
-    <Wrapper
-      {...wrapperProps}
-      className={[
-        "block w-full rounded-xl border bg-white p-5 sm:p-6 flex flex-col gap-4",
-        highlight
-          ? "border-[color:var(--brand-blue)] ring-1 ring-[color:var(--brand-blue)]/30"
-          : "border-slate-200",
-        press.websiteUrl
-          ? "hover:border-[color:var(--brand-blue)] hover:shadow-sm transition-all cursor-pointer no-underline"
-          : "",
-      ].join(" ")}
-      data-testid={`card-press-${press.id}`}
-    >
-      <div className="flex items-start gap-3">
-        {press.logoUrl ? (
-          <img
-            src={press.logoUrl}
-            alt=""
-            className="w-12 h-12 rounded-md object-cover border border-slate-200 shrink-0"
-            data-testid={`img-press-logo-${press.id}`}
-          />
-        ) : (
-          <div className="w-12 h-12 rounded-md bg-slate-100 border border-slate-200 shrink-0" />
-        )}
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <div
-              className="text-[13.5px] font-semibold text-slate-900 truncate"
-              data-testid={`text-press-name-${press.id}`}
-            >
-              {press.name}
-            </div>
-            {/* Until per-press RFQ pricing ships, every vinyl SKU
-                prices off Hellbender's published rate sheet — even
-                cards for other plants. Pill calls that out so the
-                operator isn't confused why "Memphis" and "Precision"
-                show identical Cost numbers. */}
-            <span
-              className="text-[9.5px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded-sm px-1 py-[1px] shrink-0"
-              title="Today every vinyl Cost uses Hellbender Vinyl's published rate sheet as the default. Per-plant quotes wire in next."
-              data-testid={`pill-press-source-${press.id}`}
-            >
-              Hellbender reference rates
-            </span>
-          </div>
-          {press.location && (
-            <div
-              className="text-xs text-slate-500 inline-flex items-center gap-1 mt-0.5"
-              data-testid={`text-press-location-${press.id}`}
-            >
-              <MapPin className="w-3 h-3" />
-              {press.location}
-            </div>
-          )}
-        </div>
-      </div>
-      {press.bio && (
-        <div
-          className="text-sm text-slate-600 leading-relaxed"
-          data-testid={`text-press-bio-${press.id}`}
-        >
-          {press.bio}
-        </div>
-      )}
-      {(() => {
-        const label = pressTurnaroundLabel(press);
-        if (!label) return null;
-        return (
-          <div
-            className="text-xs text-slate-500 inline-flex items-center gap-1"
-            data-testid={`text-press-turnaround-${press.id}`}
-          >
-            <Clock className="w-3 h-3" />
-            {label}
-          </div>
-        );
-      })()}
-      {press.specialties.length > 0 && (
-        <div className="flex flex-wrap gap-1" data-testid={`chips-press-specialties-${press.id}`}>
-          {press.specialties.map((s, i) => (
-            <span
-              key={`${press.id}-spec-${i}`}
-              className="text-[11px] rounded-full bg-slate-100 text-slate-700 px-2 py-0.5"
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-      )}
-    </Wrapper>
   );
 }
 
