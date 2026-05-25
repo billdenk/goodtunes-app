@@ -29,6 +29,7 @@ import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
@@ -42,6 +43,8 @@ import {
   VINYL_COLORS,
   VINYL_COLOR_BY_ID,
   VINYL_COLOR_TIER_LABEL,
+  VINYL_COLOR_TIER_ORDER,
+  VINYL_QUANTITY_TIERS,
   JACKET_UPGRADE_LABEL,
   DEFAULT_VINYL_COLOR_ID,
   DEFAULT_VINYL_QUANTITY,
@@ -330,13 +333,13 @@ export function SellPanel({
               />
             )}
           </div>
-          <p className="text-[13px] text-slate-500 mb-4">
+          <p className="text-sm text-slate-500 mb-4">
             Toggle a format on and set its price. Only enabled formats appear on the fan's Buy sheet.
           </p>
           {configuredFormats.length === 0 && liveDrafts.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-200 bg-white p-8 text-center">
               <div className="text-slate-700 text-[13.5px] font-medium">No physical formats yet</div>
-              <div className="text-slate-500 text-[12.5px] mt-1">
+              <div className="text-slate-500 text-xs mt-1">
                 Add a vinyl, cassette, or CD to start selling.
               </div>
             </div>
@@ -385,7 +388,7 @@ export function SellPanel({
         {/* Signed cert */}
         <div className="mb-8">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Printed & Signed GoodDeed®</h2>
-          <p className="text-[13px] text-slate-500 mb-4">
+          <p className="text-sm text-slate-500 mb-4">
             Optional add-on for every order. Fans see a single toggle on the Buy sheet with this price.
             Your per-unit earnings are computed live against the platform's certificate cost — the
             platform price locks in when you Save.
@@ -481,7 +484,7 @@ function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | nul
 
   return (
     <div className="mb-8" data-testid="panel-printer-and-press">
-      <div className="text-[13px] font-semibold text-slate-900 mb-1.5">Choose your printer</div>
+      <div className="text-sm font-semibold text-slate-900 mb-1.5">Choose your printer</div>
       <p className="text-sm text-slate-500 mb-3">
         {locked
           ? `You were invited by ${invitedPress!.name}. The full pressing-plant directory unlocks once your first run ships — message GoodTunes if you need to switch sooner.`
@@ -500,7 +503,7 @@ function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | nul
               data-testid={`printer-${c.id}`}
               onClick={() => live && setSelectedId(c.id)}
               className={[
-                "rounded-full px-3 py-1.5 text-[12.5px] font-semibold border transition-colors text-left",
+                "rounded-full px-3 py-1.5 text-xs font-semibold border transition-colors text-left",
                 isSelected
                   ? "bg-[color:var(--brand-blue)] text-white border-[color:var(--brand-blue)] shadow-sm"
                   : live
@@ -543,7 +546,7 @@ function LockQuoteCTA({
                 ? "Finish your quote to lock it in."
                 : "Lock in this quote to keep going."}
           </div>
-          <div className="text-[12px] text-slate-500 mt-0.5">
+          <div className="text-xs text-slate-500 mt-0.5">
             {locked
               ? "Press + Bonus tabs are unlocked. Unlock to keep editing the quote."
               : disabled
@@ -557,7 +560,7 @@ function LockQuoteCTA({
           disabled={disabled}
           data-testid={locked ? "button-unlock-quote" : "button-lock-quote"}
           className={[
-            "h-10 px-4 rounded-full text-[13px] font-bold transition-all",
+            "h-10 px-4 rounded-full text-sm font-bold transition-all",
             locked
               ? "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
               : disabled
@@ -600,7 +603,7 @@ function ShopifySlimPanel({
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 flex items-center justify-between gap-3">
         <div>
           <div className="text-[14px] font-semibold text-slate-900">Selling through Shopify</div>
-          <div className="text-[12px] text-slate-500 mt-0.5">
+          <div className="text-xs text-slate-500 mt-0.5">
             You fulfill the physical product on your Shopify store. GoodTunes sells the
             digital album + (optional) Printed &amp; Signed GoodDeed certificate.
           </div>
@@ -610,7 +613,7 @@ function ShopifySlimPanel({
             type="button"
             onClick={onChangeMode}
             data-testid="button-change-sell-mode"
-            className="text-[12px] font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0"
+            className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0"
           >
             Change mode
           </button>
@@ -618,7 +621,7 @@ function ShopifySlimPanel({
       </div>
       <div className="mb-8">
         <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Printed &amp; Signed GoodDeed®</h2>
-        <p className="text-[13px] text-slate-500 mb-4">
+        <p className="text-sm text-slate-500 mb-4">
           Optional addon. Fans see a single toggle on the Buy sheet; your earnings are
           computed live against the platform's certificate cost.
         </p>
@@ -653,7 +656,7 @@ function ShopifySlimPanel({
 // Shared form-control styling so every input on this panel matches
 // the admin token set (hairline border, brand-blue focus ring).
 const fieldClass =
-  "h-8 rounded-md border border-slate-200 bg-white px-2 text-[13px] text-slate-900 " +
+  "h-8 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 " +
   "focus:outline-none focus:border-[color:var(--brand-blue)] focus:ring-1 focus:ring-[color:var(--brand-blue)]";
 
 // Quiet "Save" affordance. At rest: slate-500 link. When the row has
@@ -673,7 +676,7 @@ function SaveLink({
       onClick={onClick}
       disabled={!dirty}
       className={
-        "h-8 px-2.5 rounded-md text-[12px] font-medium transition-colors " +
+        "h-8 px-2.5 rounded-md text-xs font-medium transition-colors " +
         (dirty
           ? "text-[color:var(--brand-blue)] hover:bg-[color:var(--brand-blue-soft)]"
           : "text-slate-400 cursor-default")
@@ -720,7 +723,7 @@ function AddPhysicalGoodButton({
                   onAdd(f);
                   setOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 text-[13px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
                 data-testid={`menu-item-add-${f}`}
               >
                 <Plus className="w-3 h-3 text-slate-400" />
@@ -795,7 +798,7 @@ function PressCard({ press, highlight = false }: { press: Manufacturer; highligh
           </div>
           {press.location && (
             <div
-              className="text-[12px] text-slate-500 inline-flex items-center gap-1 mt-0.5"
+              className="text-xs text-slate-500 inline-flex items-center gap-1 mt-0.5"
               data-testid={`text-press-location-${press.id}`}
             >
               <MapPin className="w-3 h-3" />
@@ -817,7 +820,7 @@ function PressCard({ press, highlight = false }: { press: Manufacturer; highligh
         if (!label) return null;
         return (
           <div
-            className="text-[12px] text-slate-500 inline-flex items-center gap-1"
+            className="text-xs text-slate-500 inline-flex items-center gap-1"
             data-testid={`text-press-turnaround-${press.id}`}
           >
             <Clock className="w-3 h-3" />
@@ -862,7 +865,7 @@ function CostTooltip({
   const Row = ({ label, cents, bold }: { label: string; cents: number; bold?: boolean }) => (
     <div
       className={[
-        "flex items-center justify-between gap-6 text-[12.5px]",
+        "flex items-center justify-between gap-6 text-xs",
         bold ? "text-slate-900 font-semibold pt-1.5 border-t border-slate-100 mt-1" : "text-slate-600",
       ].join(" ")}
     >
@@ -956,17 +959,22 @@ function SkuRow({
   }, []);
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
+  // Task #385 — vinyl rows lose Stock + the unlimited radio. Non-vinyl
+  // rows (CD / cassette / merch) keep the legacy fixed/unlimited mode
+  // and the Stock input untouched (out of scope for #385).
   const [stockStr, setStockStr] = useState(existing?.stock?.toString() ?? "");
-  // Task #194 — planned quantity, same shape as the signed_cert addon.
-  // Existing rows without a planned quantity default to "unlimited".
-  const initialMode: "fixed" | "unlimited" =
+  const initialQtyMode: "fixed" | "unlimited" =
     existing?.plannedQuantity != null ? "fixed" : "unlimited";
-  const [qtyMode, setQtyMode] = useState<"fixed" | "unlimited">(initialMode);
+  const [qtyMode, setQtyMode] = useState<"fixed" | "unlimited">(initialQtyMode);
   const [qtyInput, setQtyInput] = useState<string>(
     existing?.plannedQuantity != null
       ? String(existing.plannedQuantity)
       : String(DEFAULT_VINYL_QUANTITY),
   );
+  const legacyParsedQty = useMemo(() => {
+    const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [qtyInput]);
   // Task #200 — vinyl picks. Initialised from the SKU snapshot (when
   // present) so a saved row re-opens with the picks the artist locked
   // in. New / non-vinyl rows fall back to platform defaults.
@@ -975,10 +983,22 @@ function SkuRow({
       ? existing.vinylColor
       : DEFAULT_VINYL_COLOR_ID,
   );
-  const [jacketUpgrade, setJacketUpgrade] = useState<JacketUpgrade>(
-    (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE,
-  );
   const vinylColor: VinylColorOption = VINYL_COLOR_BY_ID[vinylColorId] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+  // Task #385 — legacy color "section" (tier). Picking a section
+  // filters the swatch row to that tier and auto-selects its first
+  // color.
+  const [legacyColorTier, setLegacyColorTier] = useState<import("@shared/pressing").VinylColorTier>(
+    vinylColor.tier,
+  );
+  // Task #385 — 12"LP always ships with the standard jacket. For 7"
+  // we still allow the jacket-upgrade picker since Hellbender's 7"
+  // ladders price gatefold + insert variants too.
+  const jacketDropdownAllowed = isVinyl && format !== "12_lp";
+  const [jacketUpgrade, setJacketUpgrade] = useState<JacketUpgrade>(
+    jacketDropdownAllowed
+      ? ((existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE)
+      : DEFAULT_JACKET_UPGRADE,
+  );
 
   // Task #218 — catalog picks (only when an invited press's catalog
   // covers this format). Initial tier defaults to the first one; if
@@ -1018,28 +1038,51 @@ function SkuRow({
 
   const usingCatalog = !!catalogFormat && !!pickedTier;
 
-  const parsedQty = useMemo(() => {
-    const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }, [qtyInput]);
+  // Task #385 — quantity rungs the dropdown offers. Catalog flow reads
+  // them off the picked tier's price ladder; legacy Hellbender flow
+  // uses the published quantity tiers; non-vinyl has no rung concept
+  // so the picker falls back to a number input.
+  const quantityRungs = useMemo<number[]>(() => {
+    if (usingCatalog && pickedTier) {
+      return [...pickedTier.priceLadder].sort((a, b) => a.qty - b.qty).map((r) => r.qty);
+    }
+    if (isVinyl) return [...VINYL_QUANTITY_TIERS];
+    return [];
+  }, [usingCatalog, pickedTier, isVinyl]);
 
-  // Task #200 — snap the typed quantity up to the next published
-  // Hellbender tier (50/100/200/300/500/1000). The matrix is keyed
-  // by tier, so this is also what gets snapshotted on save. Anything
-  // above 1000 stays at 1000 and flips `requiresQuote` so the row
-  // can show a "3000+ — request custom quote" caveat (top of the
-  // current Hellbender ladder).
-  const qtySnap = useMemo(
-    () => snapToQuantityTier(parsedQty ?? DEFAULT_VINYL_QUANTITY),
-    [parsedQty],
-  );
-  // Task #218 — catalog ladder snap (parallel to qtySnap but driven by
-  // the picked tier's price ladder, not the Hellbender matrix).
+  // Picked quantity (the rung itself, in vinyl/catalog flows). Snaps
+  // existing rows to the nearest available rung on first mount so a
+  // legacy SKU with a weird qty (75) opens at the next-up rung (100).
+  const initialQty = useMemo<number>(() => {
+    const saved = existing?.plannedQuantity;
+    if (usingCatalog && pickedTier) {
+      const snapped = snapCatalogLadder(pickedTier.priceLadder, saved ?? DEFAULT_VINYL_QUANTITY);
+      return snapped?.qty ?? DEFAULT_VINYL_QUANTITY;
+    }
+    if (isVinyl) return snapToQuantityTier(saved ?? DEFAULT_VINYL_QUANTITY).tier;
+    return saved ?? DEFAULT_VINYL_QUANTITY;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [parsedQty, setParsedQty] = useState<number>(initialQty);
+  // When the user switches tier (catalog flow), snap the current qty
+  // onto the new tier's ladder so the picker stays in sync.
+  useEffect(() => {
+    if (!usingCatalog || !pickedTier) return;
+    const inLadder = pickedTier.priceLadder.some((r) => r.qty === parsedQty);
+    if (!inLadder) {
+      const snapped = snapCatalogLadder(pickedTier.priceLadder, parsedQty);
+      if (snapped) setParsedQty(snapped.qty);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedTier?.id]);
+
+  // Snap helpers for the cost calculator (identity when the user is
+  // picking from the rungs directly, but still useful so the legacy
+  // path keeps the same "request a custom quote" caveat above the cap).
+  const qtySnap = useMemo(() => snapToQuantityTier(parsedQty), [parsedQty]);
   const catalogSnap = useMemo(
     () =>
-      usingCatalog && pickedTier
-        ? snapCatalogLadder(pickedTier.priceLadder, parsedQty ?? DEFAULT_VINYL_QUANTITY)
-        : null,
+      usingCatalog && pickedTier ? snapCatalogLadder(pickedTier.priceLadder, parsedQty) : null,
     [usingCatalog, pickedTier, parsedQty],
   );
 
@@ -1153,15 +1196,33 @@ function SkuRow({
   const profitCents =
     priceCents !== null && totalCostCents !== null ? priceCents - totalCostCents : null;
 
-  const totalCents =
-    qtyMode === "fixed" && profitCents !== null && parsedQty !== null
-      ? profitCents * parsedQty
-      : null;
+  // Task #385 — Estimated sold control. 25/50/75 chips plus a "Custom"
+  // numeric input. Default is 25% of the picked quantity. Total =
+  // profit × estimated sold (rounded down). Purely a display control —
+  // it doesn't get persisted; the SKU still stores `plannedQuantity`.
+  type EstPct = 25 | 50 | 75 | "custom";
+  const [estPct, setEstPct] = useState<EstPct>(25);
+  const [estCustomStr, setEstCustomStr] = useState<string>("");
+  const estimatedSold = useMemo(() => {
+    if (estPct === "custom") {
+      const n = Number.parseInt(estCustomStr.replace(/[^0-9]/g, ""), 10);
+      if (!Number.isFinite(n) || n < 0) return null;
+      return Math.min(n, parsedQty);
+    }
+    return Math.max(0, Math.floor((parsedQty * estPct) / 100));
+  }, [estPct, estCustomStr, parsedQty]);
+
+  // Vinyl uses the new Estimated-sold control; non-vinyl keeps the
+  // legacy fixed×qty (or TBD when unlimited).
+  const totalCents = isVinyl
+    ? (profitCents !== null && estimatedSold !== null ? profitCents * estimatedSold : null)
+    : (qtyMode === "fixed" && profitCents !== null && legacyParsedQty !== null
+        ? profitCents * legacyParsedQty
+        : null);
 
   const storedActive = existing?.active ?? false;
   const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "";
   const storedStock = existing?.stock?.toString() ?? "";
-  const storedMode: "fixed" | "unlimited" = initialMode;
   const storedQty = existing?.plannedQuantity ?? null;
   const storedColor = existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID;
   const storedJacket = (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE;
@@ -1174,30 +1235,45 @@ function SkuRow({
   const dirty =
     active !== storedActive ||
     priceStr !== storedPrice ||
-    stockStr !== storedStock ||
-    qtyMode !== storedMode ||
-    (qtyMode === "fixed" && parsedQty !== storedQty) ||
+    (isVinyl
+      ? parsedQty !== storedQty
+      : (stockStr !== storedStock ||
+         qtyMode !== initialQtyMode ||
+         (qtyMode === "fixed" && legacyParsedQty !== storedQty))) ||
     (isVinyl && !usingCatalog && (vinylColorId !== storedColor || jacketUpgrade !== storedJacket)) ||
     catalogDirty;
 
   const submit = () => {
     const cents = parseDollars(priceStr);
     if (cents === null) return;
-    const stock = stockStr.trim() === "" ? null : Math.max(0, Math.floor(Number(stockStr)));
-    const plannedQuantity = qtyMode === "fixed" ? parsedQty : null;
-    if (qtyMode === "fixed" && plannedQuantity === null) return;
+    if (isVinyl) {
+      if (parsedQty <= 0) return;
+    } else if (qtyMode === "fixed" && legacyParsedQty === null) {
+      return;
+    }
     onSave({
       format,
       priceCents: cents,
-      stock,
+      // Task #385 — Stock removed for vinyl only; non-vinyl keeps the
+      // per-album inventory cap.
+      stock: isVinyl
+        ? null
+        : (stockStr.trim() === "" ? null : Math.max(0, Math.floor(Number(stockStr)))),
       active,
-      plannedQuantity,
+      plannedQuantity: isVinyl
+        ? parsedQty
+        : (qtyMode === "fixed" ? legacyParsedQty : null),
       // Catalog mode wins: the server resolves picks via pressTierId /
       // pressColorId and snapshots the tier name + color name itself.
       // Legacy vinyl picks are skipped (jacket upgrade was dropped
-      // from the catalog model).
+      // from the catalog model). For 12"LP we always force the
+      // standard jacket — see Task #385.
       vinylColor: usingCatalog ? null : isVinyl ? vinylColorId : null,
-      jacketUpgrade: usingCatalog ? null : isVinyl ? jacketUpgrade : null,
+      jacketUpgrade: usingCatalog
+        ? null
+        : isVinyl
+          ? (jacketDropdownAllowed ? jacketUpgrade : DEFAULT_JACKET_UPGRADE)
+          : null,
       pressTierId: usingCatalog ? pressTierId : null,
       pressColorId: usingCatalog ? pressColorId : null,
     });
@@ -1232,7 +1308,7 @@ function SkuRow({
             {ALBUM_FORMAT_LABEL[format]}
           </span>
           {!expanded && (
-            <span className="text-[12px] text-slate-500 ml-2" data-testid={`text-sku-summary-${format}`}>
+            <span className="text-xs text-slate-500 ml-2" data-testid={`text-sku-summary-${format}`}>
               {priceStr ? `$${priceStr}` : "no price"}
               {active ? "" : " · off"}
             </span>
@@ -1264,7 +1340,33 @@ function SkuRow({
 
       {expanded && (
       <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+      {/* Task #385 — vinyl picker sits ABOVE the cost grid so the
+          section/color/quantity picks visibly drive the numbers
+          below. Non-vinyl formats have no picker. */}
+      {usingCatalog && pickedTier ? (
+        <CatalogPicksBlock
+          format={format}
+          tiers={tiers}
+          pickedTier={pickedTier}
+          pickedColorId={pressColorId}
+          onPickTier={setPressTierId}
+          onPickColor={setPressColorId}
+        />
+      ) : isVinyl ? (
+        <VinylPicksBlock
+          format={format}
+          artworkUrl={artworkUrl}
+          color={vinylColor}
+          colorTier={legacyColorTier}
+          onPickColorTier={setLegacyColorTier}
+          onPickColor={(id) => setVinylColorId(id)}
+          jacketUpgrade={jacketUpgrade}
+          onPickJacket={setJacketUpgrade}
+          jacketAllowed={jacketDropdownAllowed}
+        />
+      ) : null}
+
+      <div className={["grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4", isVinyl ? "mt-4 pt-4 border-t border-slate-100" : ""].join(" ")}>
         {/* Left column — Price / Cost / Profit */}
         <div className="space-y-3">
           <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
@@ -1272,7 +1374,7 @@ function SkuRow({
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px]">Price $</span>
+            <span className="text-slate-500 text-xs">Price $</span>
             <input
               type="text"
               value={priceStr}
@@ -1285,7 +1387,7 @@ function SkuRow({
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px] inline-flex items-center gap-1">
+            <span className="text-slate-500 text-xs inline-flex items-center gap-1">
               Cost $
               {breakdown && (
                 <CostTooltip format={format} breakdown={breakdown} />
@@ -1318,7 +1420,7 @@ function SkuRow({
           )}
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px]">
+            <span className="text-slate-500 text-xs">
               Profit ${" "}
               <span className="text-slate-400 text-[11px]">Per unit sold</span>
             </span>
@@ -1333,23 +1435,176 @@ function SkuRow({
             </span>
           </div>
 
-          {/* Stock — preserved here so the per-album cap on physical
-              inventory keeps its admin affordance. Small + quiet. */}
-          <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
-            <span className="text-slate-400 text-[11.5px]">Stock</span>
-            <input
-              type="text"
-              value={stockStr}
-              onChange={(e) => setStockStr(e.target.value.replace(/[^0-9]/g, ""))}
-              placeholder="∞"
-              inputMode="numeric"
-              className={`w-20 ${fieldClass} text-[12px]`}
-              data-testid={`input-stock-${format}`}
-            />
-          </div>
+          {/* Non-vinyl keeps the per-album Stock cap — vinyl drops it
+              entirely per Task #385. */}
+          {!isVinyl && (
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+              <span className="text-slate-400 text-[11.5px]">Stock</span>
+              <input
+                type="text"
+                value={stockStr}
+                onChange={(e) => setStockStr(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="∞"
+                inputMode="numeric"
+                className={`w-20 ${fieldClass} text-xs`}
+                data-testid={`input-stock-${format}`}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Right column — Sold (planned qty) / Profit echo / Total */}
+        {/* Right column — vinyl: Quantity dropdown + Estimated sold +
+            Total. Non-vinyl keeps the legacy Sold radio + free-text
+            qty + TBD branch (out of scope for Task #385). */}
+        {isVinyl ? (
+        <div className="space-y-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+            Quantity · Estimated sold · Total
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-xs">Quantity</span>
+            {quantityRungs.length > 0 ? (
+              <Select
+                value={String(parsedQty)}
+                onValueChange={(v) => setParsedQty(Number.parseInt(v, 10))}
+              >
+                <SelectTrigger
+                  className="h-8 w-28 text-sm"
+                  data-testid={`select-sku-quantity-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {quantityRungs.map((q) => (
+                    <SelectItem key={q} value={String(q)} data-testid={`option-sku-quantity-${format}-${q}`}>
+                      {q.toLocaleString()} units
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <input
+                type="text"
+                value={String(parsedQty)}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                  if (Number.isFinite(n) && n > 0) setParsedQty(n);
+                  else if (e.target.value === "") setParsedQty(0);
+                }}
+                inputMode="numeric"
+                className={`w-24 ${fieldClass}`}
+                data-testid={`input-sku-quantity-${format}`}
+              />
+            )}
+          </div>
+
+          {/* Estimated sold — 25/50/75 chips + Custom number. */}
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span className="text-slate-500 text-xs">Estimated sold</span>
+            <div
+              className="inline-flex items-center gap-1.5"
+              role="radiogroup"
+              data-testid={`picker-sku-est-sold-${format}`}
+            >
+              {([25, 50, 75] as const).map((pct) => {
+                const on = estPct === pct;
+                return (
+                  <button
+                    key={pct}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setEstPct(pct)}
+                    className={[
+                      "h-7 rounded-full px-2.5 text-xs border transition-colors",
+                      on
+                        ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300",
+                    ].join(" ")}
+                    data-testid={`chip-sku-est-${format}-${pct}`}
+                  >
+                    {pct}%
+                  </button>
+                );
+              })}
+              <input
+                type="text"
+                value={estPct === "custom" ? estCustomStr : ""}
+                placeholder="Custom"
+                inputMode="numeric"
+                onChange={(e) => {
+                  setEstCustomStr(e.target.value.replace(/[^0-9]/g, ""));
+                  if (estPct !== "custom") setEstPct("custom");
+                }}
+                onFocus={() => setEstPct("custom")}
+                className={`w-20 ${fieldClass} text-xs`}
+                data-testid={`input-sku-est-custom-${format}`}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span className="text-slate-500 text-xs">
+              Profit ${" "}
+              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+            </span>
+            <span
+              className={[
+                "w-28 text-right tabular-nums text-[13.5px]",
+                lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-700",
+              ].join(" ")}
+              data-testid={`text-profit-echo-${format}`}
+            >
+              {profitLabel}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-500 text-xs">Total $</span>
+            <span
+              className={[
+                "w-28 text-right tabular-nums text-[15px] font-semibold",
+                totalCents !== null && totalCents < 0
+                  ? "text-[color:var(--brand-pink)]"
+                  : "text-slate-900",
+              ].join(" ")}
+              data-testid={`text-total-${format}`}
+            >
+              {totalCents === null
+                ? "—"
+                : totalCents < 0
+                  ? `-${dollars(Math.abs(totalCents))}`
+                  : dollars(totalCents)}
+            </span>
+          </div>
+
+          {estimatedSold !== null && (
+            <div
+              className="text-[11.5px] text-slate-400 text-right"
+              data-testid={`text-total-caveat-${format}`}
+            >
+              If {estPct === "custom" ? estimatedSold : `${estPct}%`} ({estimatedSold.toLocaleString()} {estimatedSold === 1 ? "unit" : "units"}) sell.
+            </div>
+          )}
+          {!usingCatalog && qtySnap.requiresQuote && (
+            <div
+              className="text-[11.5px] text-slate-500 text-right"
+              data-testid={`text-qty-tier-${format}`}
+            >
+              {qtySnap.tier}+ — request a custom quote
+            </div>
+          )}
+          {usingCatalog && catalogSnap?.requiresQuote && (
+            <div
+              className="text-[11.5px] text-slate-500 text-right"
+              data-testid={`text-qty-tier-${format}`}
+            >
+              {catalogSnap.qty}+ — request a custom quote
+            </div>
+          )}
+        </div>
+        ) : (
         <div className="space-y-3">
           <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
             Sold · Profit · Total
@@ -1381,7 +1636,7 @@ function SkuRow({
                 className={`w-24 ${fieldClass} ${qtyMode !== "fixed" ? "opacity-50" : ""}`}
                 data-testid={`input-sold-${format}`}
               />
-              <span className="text-[12.5px] text-slate-500">units</span>
+              <span className="text-xs text-slate-500">units</span>
             </label>
             <label className="inline-flex items-center gap-2">
               <input
@@ -1392,12 +1647,12 @@ function SkuRow({
                 className="h-4 w-4 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
                 data-testid={`radio-sku-qty-unlimited-${format}`}
               />
-              <span className="text-[13px] text-slate-700">As many as will sell</span>
+              <span className="text-sm text-slate-700">As many as will sell</span>
             </label>
           </div>
 
           <div className="flex items-center justify-between gap-3 pt-1">
-            <span className="text-slate-500 text-[12px]">
+            <span className="text-slate-500 text-xs">
               Profit ${" "}
               <span className="text-slate-400 text-[11px]">Per unit sold</span>
             </span>
@@ -1413,7 +1668,7 @@ function SkuRow({
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px]">Total $</span>
+            <span className="text-slate-500 text-xs">Total $</span>
             {qtyMode === "unlimited" ? (
               <span
                 className="w-28 text-right tabular-nums text-[15px] font-semibold text-slate-400"
@@ -1440,64 +1695,17 @@ function SkuRow({
             )}
           </div>
 
-          {qtyMode === "fixed" && parsedQty !== null && (
+          {qtyMode === "fixed" && legacyParsedQty !== null && (
             <div
               className="text-[11.5px] text-slate-400 text-right"
               data-testid={`text-total-caveat-${format}`}
             >
-              Only if all {parsedQty} sell.
-            </div>
-          )}
-          {isVinyl && !usingCatalog && qtyMode === "fixed" && parsedQty !== null && (
-            <div
-              className="text-[11.5px] text-slate-500 text-right"
-              data-testid={`text-qty-tier-${format}`}
-            >
-              {qtySnap.requiresQuote ? (
-                <>{qtySnap.tier}+ — request a custom quote</>
-              ) : parsedQty === qtySnap.tier ? (
-                <>Priced at the {qtySnap.tier}-unit tier.</>
-              ) : (
-                <>Priced at the next tier up: {qtySnap.tier} units.</>
-              )}
-            </div>
-          )}
-          {usingCatalog && qtyMode === "fixed" && parsedQty !== null && catalogSnap && (
-            <div
-              className="text-[11.5px] text-slate-500 text-right"
-              data-testid={`text-qty-tier-${format}`}
-            >
-              {catalogSnap.requiresQuote ? (
-                <>{catalogSnap.qty}+ — request a custom quote</>
-              ) : parsedQty === catalogSnap.qty ? (
-                <>Priced at the {catalogSnap.qty}-unit rung.</>
-              ) : (
-                <>Priced at the next rung up: {catalogSnap.qty} units.</>
-              )}
+              Only if all {legacyParsedQty} sell.
             </div>
           )}
         </div>
+        )}
       </div>
-
-      {usingCatalog && pickedTier ? (
-        <CatalogPicksBlock
-          format={format}
-          tiers={tiers}
-          pickedTier={pickedTier}
-          pickedColorId={pressColorId}
-          onPickTier={setPressTierId}
-          onPickColor={setPressColorId}
-        />
-      ) : isVinyl ? (
-        <VinylPicksBlock
-          format={format}
-          artworkUrl={artworkUrl}
-          color={vinylColor}
-          onPickColor={(id) => setVinylColorId(id)}
-          jacketUpgrade={jacketUpgrade}
-          onPickJacket={setJacketUpgrade}
-        />
-      ) : null}
       </>
       )}
     </div>
@@ -1530,38 +1738,33 @@ function CatalogPicksBlock({
       className="mt-3 pt-3 border-t border-slate-100 space-y-3"
       data-testid={`catalog-picks-${format}`}
     >
-      <div>
-        <div className="text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
-          Color tier
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {tiers.map((t) => {
-            const on = t.id === pickedTier.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => onPickTier(t.id)}
-                className={[
-                  "h-7 rounded-full px-3 text-[12px] border transition-colors",
-                  on
-                    ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]"
-                    : "border-slate-200 text-slate-600 hover:border-slate-300",
-                ].join(" ")}
-                data-testid={`chip-tier-${format}-${t.id}`}
-              >
+      {/* Task #385 — Color "section" is now a shadcn Select (the
+          mechanical linter forbids the native element, and a dropdown
+          scales past the row width when a press publishes 5+ tiers). */}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-slate-500">Color section</span>
+        <Select value={pickedTier.id} onValueChange={(v) => onPickTier(v)}>
+          <SelectTrigger
+            className="h-8 w-56 text-sm"
+            data-testid={`select-tier-${format}`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-white text-slate-900 border-slate-200">
+            {tiers.map((t) => (
+              <SelectItem key={t.id} value={t.id} data-testid={`option-tier-${format}-${t.id}`}>
                 {t.name}
-              </button>
-            );
-          })}
-        </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div>
         <div className="text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
           Color
         </div>
         {pickedTier.colors.length === 0 ? (
-          <div className="text-[12px] text-slate-400">
+          <div className="text-xs text-slate-400">
             No colors set on this tier yet — ask the press to fill in their catalog.
           </div>
         ) : (
@@ -1586,7 +1789,7 @@ function CatalogPicksBlock({
                     className="w-5 h-5 rounded-full border border-slate-200"
                     style={{ background: c.swatchHex ?? "#ccc" }}
                   />
-                  <span className="text-[12px] text-slate-700">{c.name}</span>
+                  <span className="text-xs text-slate-700">{c.name}</span>
                 </button>
               );
             })}
@@ -1607,20 +1810,40 @@ function VinylPicksBlock({
   format,
   artworkUrl,
   color,
+  colorTier,
+  onPickColorTier,
   onPickColor,
   jacketUpgrade,
   onPickJacket,
+  jacketAllowed,
 }: {
   format: AlbumFormat;
   artworkUrl: string | null;
   color: VinylColorOption;
+  colorTier: import("@shared/pressing").VinylColorTier;
+  onPickColorTier: (t: import("@shared/pressing").VinylColorTier) => void;
   onPickColor: (id: string) => void;
   jacketUpgrade: JacketUpgrade;
   onPickJacket: (j: JacketUpgrade) => void;
+  jacketAllowed: boolean;
 }) {
+  const swatchesInTier = useMemo(
+    () => VINYL_COLORS.filter((c) => c.tier === colorTier),
+    [colorTier],
+  );
+  // Task #385 — when the user changes section, snap the picked color
+  // to the first color in that section (mirrors the catalog
+  // tier→color auto-reset effect above).
+  useEffect(() => {
+    if (color.tier === colorTier) return;
+    const first = swatchesInTier[0];
+    if (first) onPickColor(first.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorTier]);
+
   return (
     <div
-      className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-4 items-start"
+      className="grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-4 items-start"
       data-testid={`vinyl-picks-${format}`}
     >
       <div className="space-y-3">
@@ -1628,19 +1851,38 @@ function VinylPicksBlock({
           Vinyl
         </div>
 
-        {/* Color picker — swatch grid. Wraps + scrolls so the whole
-            Hellbender palette is one click away. */}
+        {/* Color section — shadcn Select, mirrors the catalog flow. */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-500">Color section</span>
+          <Select
+            value={colorTier}
+            onValueChange={(v) => onPickColorTier(v as import("@shared/pressing").VinylColorTier)}
+          >
+            <SelectTrigger
+              className="h-8 w-56 text-sm"
+              data-testid={`select-vinyl-color-tier-${format}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-white text-slate-900 border-slate-200">
+              {VINYL_COLOR_TIER_ORDER.map((t) => (
+                <SelectItem key={t} value={t} data-testid={`option-vinyl-color-tier-${format}-${t}`}>
+                  {VINYL_COLOR_TIER_LABEL[t]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Color picker — swatches filtered to the picked section. */}
         <div>
           <div className="flex items-baseline justify-between gap-2 mb-1.5">
-            <span className="text-[12px] text-slate-500">Color</span>
+            <span className="text-xs text-slate-500">Color</span>
             <span
-              className="text-[12px] text-slate-700 font-medium"
+              className="text-xs text-slate-700 font-medium"
               data-testid={`text-vinyl-color-name-${format}`}
             >
               {color.name}
-              <span className="text-[11px] text-slate-400 ml-1.5">
-                · {VINYL_COLOR_TIER_LABEL[color.tier]}
-              </span>
             </span>
           </div>
           <div
@@ -1649,7 +1891,7 @@ function VinylPicksBlock({
             aria-label="Vinyl color"
             data-testid={`picker-vinyl-color-${format}`}
           >
-            {VINYL_COLORS.map((c) => {
+            {swatchesInTier.map((c) => {
               const selected = c.id === color.id;
               return (
                 <button
@@ -1657,7 +1899,7 @@ function VinylPicksBlock({
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  title={`${c.name} (${VINYL_COLOR_TIER_LABEL[c.tier]})`}
+                  title={c.name}
                   onClick={() => onPickColor(c.id)}
                   className={[
                     "w-7 h-7 rounded-full border-2 transition-transform",
@@ -1675,22 +1917,49 @@ function VinylPicksBlock({
           </div>
         </div>
 
-        {/* Jacket select */}
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[12px] text-slate-500">Jacket</span>
-          <select
-            value={jacketUpgrade}
-            onChange={(e) => onPickJacket(e.target.value as JacketUpgrade)}
-            className={`${fieldClass} pr-8 w-56`}
-            data-testid={`select-jacket-${format}`}
-          >
-            {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
-              <option key={j} value={j}>
-                {JACKET_UPGRADE_LABEL[j]}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Jacket — shadcn Select for 7"; for 12"LP we reserve a
+            standard-jacket image slot (future: real product shot). */}
+        {jacketAllowed ? (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-500">Jacket</span>
+            <Select
+              value={jacketUpgrade}
+              onValueChange={(v) => onPickJacket(v as JacketUpgrade)}
+            >
+              <SelectTrigger
+                className="h-8 w-56 text-sm"
+                data-testid={`select-jacket-${format}`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white text-slate-900 border-slate-200">
+                {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
+                  <SelectItem key={j} value={j} data-testid={`option-jacket-${format}-${j}`}>
+                    {JACKET_UPGRADE_LABEL[j]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-500">Jacket</span>
+            <div
+              className="flex items-center gap-2"
+              data-testid={`text-jacket-standard-${format}`}
+            >
+              <div
+                className="w-10 h-10 rounded-md border border-dashed border-slate-300 bg-slate-50"
+                aria-hidden
+                data-testid={`img-jacket-standard-placeholder-${format}`}
+              />
+              <span className="text-xs text-slate-600">
+                Standard jacket
+                <span className="block text-xs text-slate-400">Every 12&quot;LP ships in the standard jacket.</span>
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Live preview — album jacket + colored disc peeking out. The
@@ -1808,7 +2077,7 @@ function AddonForm({
           </label>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px]">Price $</span>
+            <span className="text-slate-500 text-xs">Price $</span>
             <input
               type="text"
               value={price}
@@ -1820,7 +2089,7 @@ function AddonForm({
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px]">
+            <span className="text-slate-500 text-xs">
               Cost ${" "}
               <span className="text-slate-400 text-[11px]">
                 ({lockedCost === null ? "live" : "locked at last save"})
@@ -1835,7 +2104,7 @@ function AddonForm({
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px]">
+            <span className="text-slate-500 text-xs">
               Profit ${" "}
               <span className="text-slate-400 text-[11px]">Per unit sold</span>
             </span>
@@ -1883,7 +2152,7 @@ function AddonForm({
                 className={`w-24 ${fieldClass} ${qtyMode !== "fixed" ? "opacity-50" : ""}`}
                 data-testid="input-addon-quantity"
               />
-              <span className="text-[12.5px] text-slate-500">units</span>
+              <span className="text-xs text-slate-500">units</span>
             </label>
             <label className="inline-flex items-center gap-2">
               <input
@@ -1894,12 +2163,12 @@ function AddonForm({
                 className="h-4 w-4 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
                 data-testid="radio-addon-qty-unlimited"
               />
-              <span className="text-[13px] text-slate-700">As many as will sell</span>
+              <span className="text-sm text-slate-700">As many as will sell</span>
             </label>
           </div>
 
           <div className="flex items-center justify-between gap-3 pt-1">
-            <span className="text-slate-500 text-[12px]">
+            <span className="text-slate-500 text-xs">
               Profit ${" "}
               <span className="text-slate-400 text-[11px]">Per unit sold</span>
             </span>
@@ -1915,7 +2184,7 @@ function AddonForm({
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-[12px]">Total $</span>
+            <span className="text-slate-500 text-xs">Total $</span>
             {qtyMode === "unlimited" ? (
               <span
                 className="w-28 text-right tabular-nums text-[15px] font-semibold text-slate-400"
@@ -1962,7 +2231,7 @@ function AddonForm({
           value={floor}
           onChange={(e) => setFloor(e.target.value)}
           inputMode="decimal"
-          className={`w-20 ${fieldClass} text-[12px]`}
+          className={`w-20 ${fieldClass} text-xs`}
           data-testid="input-addon-floor"
         />
         <span className="text-slate-400 text-[11px]">
