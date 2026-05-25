@@ -694,7 +694,7 @@ export function AdminAlbum() {
             reveals a "Delete" label on its left (Apple-Mac toolbar
             pattern). Opens a rose-tinted confirm sheet per replit.md. */}
         <div
-          className="bg-white flex items-end justify-between gap-5 border-b border-slate-200"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-album"
         >
           <div className="flex items-center gap-5 overflow-x-auto overflow-y-hidden">
@@ -774,14 +774,15 @@ export function AdminAlbum() {
             <>
             <DropdownMenu>
               <DropdownMenuTrigger
-                className="px-2.5 py-1.5 mb-1 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100 flex-shrink-0"
+                className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 data-[state=open]:text-rose-600 data-[state=open]:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
                 data-testid="button-delete-options"
                 aria-label="Delete options"
                 disabled={deleteAlbum.isPending}
               >
-                <Trash2 className="w-3 h-3" />
-                Delete options
-                <ChevronDown className="w-3 h-3 -mr-0.5 text-slate-400" />
+                <span className="text-xs font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:opacity-100 transition-opacity">
+                  Delete
+                </span>
+                <Trash2 className="w-3.5 h-3.5" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
