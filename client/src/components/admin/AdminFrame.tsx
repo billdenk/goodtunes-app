@@ -1,6 +1,7 @@
 import { isValidElement, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Disc3,
   User,
@@ -756,6 +757,21 @@ function Section({
   children: ReactNode;
 }) {
   const highlightParent = containsActive && !expanded;
+  const reduceMotion = useReducedMotion();
+  // Stripe-style spring: short, slight overshoot on open; quick settle
+  // on close. Reduced-motion users get an instant toggle (duration 0).
+  const openTransition = reduceMotion
+    ? { duration: 0 }
+    : {
+        height: { type: "spring" as const, stiffness: 520, damping: 28, mass: 0.9 },
+        opacity: { duration: 0.18, ease: "easeOut" as const },
+      };
+  const closeTransition = reduceMotion
+    ? { duration: 0 }
+    : {
+        height: { duration: 0.18, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
+        opacity: { duration: 0.12, ease: "easeIn" as const },
+      };
   return (
     <div className="pt-2 first:pt-0">
       <button
@@ -765,24 +781,45 @@ function Section({
         data-testid={`nav-section-${id}`}
         data-active={highlightParent ? "true" : "false"}
         className={[
-          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors",
+          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
+          expanded ? "font-semibold" : "font-medium",
           highlightParent
             ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
             : "text-slate-700 hover:bg-slate-100",
         ].join(" ")}
       >
-        <ChevronRight
-          className={[
-            "w-4 h-4 flex-shrink-0 transition-transform",
-            expanded ? "rotate-90" : "",
-            highlightParent ? "text-[var(--brand-blue)]" : "text-slate-400",
-          ].join(" ")}
-        />
+        <motion.span
+          animate={{ rotate: expanded ? 90 : 0 }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 520, damping: 28, mass: 0.9 }
+          }
+          className="flex-shrink-0"
+        >
+          <ChevronRight
+            className={[
+              "w-4 h-4",
+              highlightParent ? "text-[var(--brand-blue)]" : "text-slate-400",
+            ].join(" ")}
+          />
+        </motion.span>
         <span className="flex-1 text-left">{label}</span>
       </button>
-      {expanded && (
-        <div className="pl-4 mt-0.5 space-y-0.5">{children}</div>
-      )}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={expanded ? openTransition : closeTransition}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="pl-4 mt-0.5 space-y-0.5">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
