@@ -697,7 +697,7 @@ export function AdminAlbum() {
           className="bg-white flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-album"
         >
-          <div className="flex items-center gap-5 overflow-x-auto">
+          <div className="flex items-center gap-5 overflow-x-auto overflow-y-hidden">
             {visibleTabsFor(album).map((t) => (
               <button
                 key={t.key}
@@ -712,7 +712,7 @@ export function AdminAlbum() {
               >
                 {t.label}
                 {tab === t.key && (
-                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
                 )}
               </button>
             ))}
