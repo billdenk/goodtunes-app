@@ -583,3 +583,30 @@ SQL
 }
 migrate_team_invites dev  "${DATABASE_URL:-}"
 migrate_team_invites prod "${PROD_DATABASE_URL:-}"
+
+# Task #366 — Backfill turnaround_weeks_min/max for hand-added presses
+# still on the legacy turnaround_days value. Mirrors deriveWeeksFromDays
+# in client/src/lib/pressTurnaround.ts. Idempotent: only touches rows
+# where both week columns are NULL and a day count exists.
+backfill_press_turnaround_weeks() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press-turnaround backfill on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+UPDATE manufacturers
+   SET turnaround_weeks_min = GREATEST(1, GREATEST(1, ROUND(turnaround_days::numeric / 7))::int - 1),
+       turnaround_weeks_max = GREATEST(1, ROUND(turnaround_days::numeric / 7))::int + 1
+ WHERE turnaround_weeks_min IS NULL
+   AND turnaround_weeks_max IS NULL
+   AND turnaround_days IS NOT NULL;
+SQL
+  then
+    echo "post-merge: press-turnaround backfill ok on $label"
+  else
+    echo "post-merge: WARNING — press-turnaround backfill failed on $label (continuing)"
+  fi
+}
+backfill_press_turnaround_weeks dev  "${DATABASE_URL:-}"
+backfill_press_turnaround_weeks prod "${PROD_DATABASE_URL:-}"

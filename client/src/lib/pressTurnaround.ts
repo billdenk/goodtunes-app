@@ -1,14 +1,11 @@
 // Task #363 — single source of truth for the press turnaround label.
 // Labels and artists think in weeks when planning a pressing campaign,
 // so every press card renders the range as e.g. "12–14 wks" instead of
-// a raw day count like "75d" or "90-day turnaround". Rows that only
-// carry the legacy `turnaroundDays` value (presses added before the
-// week-range pair shipped) auto-derive a ±1-week range from the day
-// count so they keep showing something useful until the operator
-// edits the row.
+// a raw day count like "75d" or "90-day turnaround". Task #366 backfilled
+// the week-range columns for every legacy row, so the columns are now the
+// only source of truth — no on-the-fly derivation from `turnaroundDays`.
 
 export type PressTurnaroundLike = {
-  turnaroundDays?: number | null;
   turnaroundWeeksMin?: number | null;
   turnaroundWeeksMax?: number | null;
 };
@@ -18,23 +15,20 @@ export type PressTurnaroundRange = {
   max: number | null;
 };
 
-/** Round a day count to a sensible ±1-week range. Used both for
- * display fallback on legacy rows and for pre-filling the admin form
- * inputs so the operator isn't staring at empty fields. */
+/** Round a day count to a sensible ±1-week range. Kept exported so the
+ * admin edit form (and the one-shot backfill) share the same math. */
 export function deriveWeeksFromDays(days: number): PressTurnaroundRange {
   const weeks = Math.max(1, Math.round(days / 7));
   return { min: Math.max(1, weeks - 1), max: weeks + 1 };
 }
 
-/** Returns the inclusive week range for a press, deriving from the
- * legacy day count when min/max aren't explicitly set. Either side
- * can be null; the caller decides how to render. */
+/** Returns the inclusive week range for a press. Either side can be
+ * null; the caller decides how to render. */
 export function pressTurnaroundRange(p: PressTurnaroundLike): PressTurnaroundRange {
-  const min = p.turnaroundWeeksMin ?? null;
-  const max = p.turnaroundWeeksMax ?? null;
-  if (min != null || max != null) return { min, max };
-  if (p.turnaroundDays != null) return deriveWeeksFromDays(p.turnaroundDays);
-  return { min: null, max: null };
+  return {
+    min: p.turnaroundWeeksMin ?? null,
+    max: p.turnaroundWeeksMax ?? null,
+  };
 }
 
 /** Human label: "12–14 wks" / "12 wks" / null. */
