@@ -33,6 +33,7 @@ import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import {
   LabelPreviewCard,
   type LabelPreviewAlbum,
@@ -386,6 +387,13 @@ export function AdminLabel() {
         </div>
 
         {tab === "overview" && <OverviewPanel label={label} />}
+        {tab === "overview" && (
+          <OrganizationPeople
+            apiPath={`/api/labels/${label.id}/people`}
+            testIdPrefix="label"
+            blurb="People at this label — A&R, label manager, accounts, anyone you need to reach."
+          />
+        )}
         {tab === "logo" && <LogoPanel label={label} />}
         {tab === "cover" && <CoverPanel label={label} />}
         {tab === "releases" && <ReleasesPanel releases={releases} />}

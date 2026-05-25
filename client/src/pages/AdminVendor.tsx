@@ -25,6 +25,7 @@ import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
@@ -479,6 +480,13 @@ export function AdminVendor() {
             vendor={vendor}
             parent={profile.parent ?? null}
             childRows={profile.children ?? []}
+          />
+        )}
+        {tab === "overview" && (
+          <OrganizationPeople
+            apiPath={`/api/vendors/${vendor.id}/people`}
+            testIdPrefix="vendor"
+            blurb="People at this vendor — buyer, A&R, accounts payable, whoever you need to reach."
           />
         )}
         {tab === "cover" && <CoverPanel vendor={vendor} />}

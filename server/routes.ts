@@ -8265,6 +8265,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       blueskyUrl: opt(b.blueskyUrl),
       facebookUrl: opt(b.facebookUrl),
       websiteUrl: opt(b.websiteUrl),
+      linkedinUrl: opt(b.linkedinUrl),
       labelId: opt(b.labelId),
       isGroup: b.isGroup === true || b.isGroup === "true",
       groupKind: opt(b.groupKind),
@@ -8319,6 +8320,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.blueskyUrl !== undefined) updates.blueskyUrl = opt(b.blueskyUrl);
     if (b.facebookUrl !== undefined) updates.facebookUrl = opt(b.facebookUrl);
     if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
+    if (b.linkedinUrl !== undefined) updates.linkedinUrl = opt(b.linkedinUrl);
     if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
     // Task #190 — bands & members. `groupKind` is the surfaced control in
     // the admin (a select like Band / Duo / Orchestra / "Solo artist");
@@ -11584,6 +11586,182 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       WHERE organization_id = ${req.params.id} AND person_id = ${req.params.personId}
     `);
     res.status(204).end();
+  });
+
+  // ---------------------------------------------------------------------
+  // Task #294 — generic per-entity contacts. Same contract as the NPO
+  // people endpoints above, but shared across vendor / manufacturer /
+  // label / fulfillment_partner. NPOs intentionally keep using the
+  // older organization_people table because too many reports already
+  // join against it.
+  // ---------------------------------------------------------------------
+  async function _entityExists(kind: "vendor" | "manufacturer" | "label" | "fulfillment_partner", id: string): Promise<boolean> {
+    const r =
+      kind === "vendor"        ? await db.execute(sql`SELECT 1 FROM vendors             WHERE id = ${id} LIMIT 1`) :
+      kind === "manufacturer"  ? await db.execute(sql`SELECT 1 FROM manufacturers       WHERE id = ${id} LIMIT 1`) :
+      kind === "label"         ? await db.execute(sql`SELECT 1 FROM labels              WHERE id = ${id} LIMIT 1`) :
+                                 await db.execute(sql`SELECT 1 FROM fulfillment_partners WHERE id = ${id} LIMIT 1`);
+    return ((r as any).rows ?? []).length > 0;
+  }
+  function _registerEntityContacts(basePath: string, kind: "vendor" | "manufacturer" | "label" | "fulfillment_partner") {
+    app.get(`${basePath}/:id/people`, requireAdmin, async (req, res) => {
+      if (!(await _entityExists(kind, req.params.id))) return res.status(404).json({ message: "Not found" });
+      const rows = await db.execute<{ person_id: string; name: string; photo_url: string | null; linkedin_url: string | null; role: string | null }>(sql`
+        SELECT ec.person_id, p.name, p.photo_url, p.linkedin_url, ec.role
+        FROM entity_contacts ec
+        JOIN people p ON p.id = ec.person_id
+        WHERE ec.entity_kind = ${kind} AND ec.entity_id = ${req.params.id}
+        ORDER BY p.name ASC
+      `);
+      res.json(((rows as any).rows ?? []).map((r: any) => ({
+        personId: r.person_id, name: r.name, photoUrl: r.photo_url, linkedinUrl: r.linkedin_url, role: r.role,
+      })));
+    });
+    app.post(`${basePath}/:id/people`, requireAdmin, requireRole("super_admin"), async (req, res) => {
+      const personId = String(req.body?.personId || "").trim();
+      if (!personId) return res.status(400).json({ message: "personId is required" });
+      const role = req.body?.role ? String(req.body.role).trim() || null : null;
+      if (!(await _entityExists(kind, req.params.id))) return res.status(404).json({ message: "Not found" });
+      const person = await db.execute(sql`SELECT 1 FROM people WHERE id = ${personId} LIMIT 1`);
+      if (((person as any).rows ?? []).length === 0) return res.status(404).json({ message: "Person not found" });
+      const existing = await db.execute(sql`
+        SELECT 1 FROM entity_contacts
+        WHERE entity_kind = ${kind} AND entity_id = ${req.params.id} AND person_id = ${personId}
+        LIMIT 1
+      `);
+      const isUpdate = ((existing as any).rows ?? []).length > 0;
+      await db.execute(sql`
+        INSERT INTO entity_contacts (entity_kind, entity_id, person_id, role)
+        VALUES (${kind}, ${req.params.id}, ${personId}, ${role})
+        ON CONFLICT (entity_kind, entity_id, person_id) DO UPDATE SET role = EXCLUDED.role
+      `);
+      res.status(isUpdate ? 200 : 201).json({ entityKind: kind, entityId: req.params.id, personId, role });
+    });
+    app.delete(`${basePath}/:id/people/:personId`, requireAdmin, requireRole("super_admin"), async (req, res) => {
+      await db.execute(sql`
+        DELETE FROM entity_contacts
+        WHERE entity_kind = ${kind} AND entity_id = ${req.params.id} AND person_id = ${req.params.personId}
+      `);
+      res.status(204).end();
+    });
+  }
+  _registerEntityContacts("/api/vendors",              "vendor");
+  _registerEntityContacts("/api/manufacturers",        "manufacturer");
+  _registerEntityContacts("/api/labels",               "label");
+  _registerEntityContacts("/api/fulfillment-partners", "fulfillment_partner");
+
+  // Canonicalize a LinkedIn URL so re-paste of the same profile (with or
+  // without `www.`, trailing slash, tracking params, locale prefix) maps
+  // to the same Person row.
+  function _canonicalLinkedinUrl(input: string): string {
+    try {
+      const u = new URL(input);
+      if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) return input.trim();
+      u.hostname = "www.linkedin.com";
+      u.protocol = "https:";
+      u.search = "";
+      u.hash = "";
+      u.pathname = u.pathname.replace(/\/+$/, "");
+      return u.toString();
+    } catch {
+      return input.trim();
+    }
+  }
+
+  // LinkedIn paste-to-add. Public profile pages are aggressively guarded
+  // — most requests bounce off an auth wall — so this endpoint returns a
+  // best-effort scrape and gracefully falls back to a name-derived-from-
+  // slug stub when blocked. Either way the client can call
+  // /api/admin/people/from-linkedin to materialize the Person.
+  app.post("/api/admin/people/scrape-linkedin", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// LinkedIn URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (!/(^|\.)linkedin\.com$/i.test(host)) {
+      return res.status(400).json({ message: "URL must be a linkedin.com profile" });
+    }
+    const canonical = _canonicalLinkedinUrl(url);
+    const slugMatch = parsed.pathname.match(/\/in\/([^/]+)/i);
+    const slug = slugMatch ? decodeURIComponent(slugMatch[1]) : null;
+    const slugName = slug
+      ? slug.replace(/-[a-f0-9]{6,}$/i, "").split("-")
+          .map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ").trim() || null
+      : null;
+
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8_000);
+      const r = await safeFetchWithUaFallback(canonical, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+      if (!r.ok) throw new Error(`LinkedIn returned ${r.status}`);
+      const html = await r.text();
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) { const k = m[1].toLowerCase(); if (!(k in meta)) meta[k] = decodeEntities(m[2]); }
+      while ((m = re2.exec(html))) { const k = m[2].toLowerCase(); if (!(k in meta)) meta[k] = decodeEntities(m[1]); }
+      let name = meta["og:title"] || meta["twitter:title"] || meta["profile:first_name"] || null;
+      if (name) name = name.replace(/\s*[|·\-–—]\s*LinkedIn\s*$/i, "").trim();
+      const headline = meta["og:description"] || meta["twitter:description"] || meta["description"] || null;
+      let rawImage = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
+      // LinkedIn's generic "blank profile" share card is the same URL for
+      // every blocked fetch — don't rehost it as the person's avatar.
+      if (rawImage && /static\.licdn\.com\/.+\/sysimg\//i.test(rawImage)) rawImage = null;
+      let photoUrl: string | null = null;
+      if (rawImage) {
+        try { photoUrl = await rehostRemoteImage(rawImage); }
+        catch { photoUrl = rawImage; }
+      }
+      if (!name) throw new Error("blocked");
+      return res.json({
+        linkedinUrl: canonical,
+        name,
+        headline,
+        photoUrl,
+        fellBack: false,
+      });
+    } catch {
+      return res.json({
+        linkedinUrl: canonical,
+        name: slugName,
+        headline: null,
+        photoUrl: null,
+        fellBack: true,
+      });
+    }
+  });
+
+  // Find-or-create a Person by canonical linkedinUrl. The client calls
+  // this after the scrape preview is confirmed, so the round-trip is
+  // scrape → confirm → create+attach in a single user step.
+  app.post("/api/admin/people/from-linkedin", requireAdmin, async (req, res) => {
+    const rawUrl = String(req.body?.linkedinUrl ?? "").trim();
+    if (!rawUrl) return res.status(400).json({ message: "linkedinUrl is required" });
+    const canonical = _canonicalLinkedinUrl(rawUrl);
+    const name = req.body?.name ? String(req.body.name).trim() : "";
+    if (!name) return res.status(400).json({ message: "name is required" });
+    const photoUrl = req.body?.photoUrl ? String(req.body.photoUrl).trim() || null : null;
+    const bio = req.body?.headline ? String(req.body.headline).trim() || null : null;
+    const existing = await db.execute<{ id: string }>(sql`
+      SELECT id FROM people WHERE linkedin_url = ${canonical} LIMIT 1
+    `);
+    const existingId = ((existing as any).rows ?? [])[0]?.id;
+    if (existingId) {
+      const p = await storage.getPersonById(existingId);
+      return res.json(p);
+    }
+    const created = await storage.createPerson({
+      name,
+      photoUrl,
+      bio,
+      linkedinUrl: canonical,
+    } as any);
+    return res.status(201).json(created);
   });
 
   // GET /api/me/role — small helper so the client knows what to render.

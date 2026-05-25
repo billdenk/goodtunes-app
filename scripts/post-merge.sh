@@ -198,3 +198,35 @@ SQL
 }
 migrate_album_addons_vendor_legs dev  "${DATABASE_URL:-}"
 migrate_album_addons_vendor_legs prod "${PROD_DATABASE_URL:-}"
+
+# Task #294 — shared per-entity contacts table + LinkedIn URL on people.
+# The same Add-a-contact surface now ships on vendor / press / label /
+# fulfillment detail pages and they all write here. NPOs keep using the
+# older `organization_people` join. Pre-create on both DBs so a
+# fresh-clone dev never 500s the new contacts endpoints and the publish
+# dev→prod diff stays empty.
+migrate_entity_contacts() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping entity_contacts migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS entity_contacts (
+  entity_kind text     NOT NULL,
+  entity_id   varchar  NOT NULL,
+  person_id   varchar  NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  role        text,
+  created_at  timestamp DEFAULT now(),
+  PRIMARY KEY (entity_kind, entity_id, person_id)
+);
+ALTER TABLE people ADD COLUMN IF NOT EXISTS linkedin_url text;
+SQL
+  then
+    echo "post-merge: entity_contacts migration ok on $label"
+  else
+    echo "post-merge: WARNING — entity_contacts migration failed on $label (continuing)"
+  fi
+}
+migrate_entity_contacts dev  "${DATABASE_URL:-}"
+migrate_entity_contacts prod "${PROD_DATABASE_URL:-}"

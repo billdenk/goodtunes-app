@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -285,6 +286,12 @@ export function AdminManufacturer() {
         />
 
         <PressCatalogPanel pressId={id} />
+
+        <OrganizationPeople
+          apiPath={`/api/manufacturers/${m.id}/people`}
+          testIdPrefix="press"
+          blurb="People at this plant — production manager, account rep, whoever you need to reach."
+        />
 
         <PartnerPermissionsPanel
           scopeKind="manufacturer"

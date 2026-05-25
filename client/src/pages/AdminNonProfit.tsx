@@ -1,30 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, ExternalLink, Heart, Pencil } from "lucide-react";
 import { ReferralSummaryPanel } from "@/pages/AdminPerson";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-
-function humanizeApiError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err ?? "");
-  const m = raw.match(/^\d{3}:\s*(.*)$/);
-  if (m) {
-    try {
-      const body = JSON.parse(m[1]);
-      if (body?.message) return String(body.message);
-    } catch {
-      /* fall through */
-    }
-    return m[1];
-  }
-  return raw || "Something went wrong.";
-}
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { queryClient } from "@/lib/queryClient";
 
 // Task #78 — Super-admin detail page for a non-profit partner.
 // Task #283 brings it under AdminFrame (narrow) with the standard
@@ -35,19 +18,6 @@ type NonProfit = {
   name: string;
   logoUrl: string | null;
   websiteUrl: string | null;
-};
-
-type PersonLite = {
-  id: string;
-  name: string;
-  photoUrl: string | null;
-};
-
-type NpoContact = {
-  personId: string;
-  name: string;
-  photoUrl: string | null;
-  role: string | null;
 };
 
 export default function AdminNonProfit() {
@@ -182,7 +152,11 @@ export default function AdminNonProfit() {
           ]}
         />
 
-        <ContactsPanel npoId={npo.id} />
+        <OrganizationPeople
+          apiPath={`/api/non-profits/${npo.id}/people`}
+          testIdPrefix="npo"
+          blurb="People who represent this NPO. Add as many as you need."
+        />
 
         <ReferralSummaryPanel kind="non_profit" id={npo.id} />
       </div>
@@ -190,175 +164,3 @@ export default function AdminNonProfit() {
   );
 }
 
-function ContactsPanel({ npoId }: { npoId: string }) {
-  const { toast } = useToast();
-  const [search, setSearch] = useState("");
-  const [role, setRole] = useState("");
-
-  const contactsKey = [`/api/non-profits/${npoId}/people`] as const;
-  const contactsQ = useQuery<NpoContact[]>({ queryKey: contactsKey });
-
-  // /api/people returns the whole directory; we filter client-side. Same
-  // pattern AdminPeople uses for its top-of-page search.
-  const peopleQ = useQuery<PersonLite[]>({ queryKey: ["/api/people"] });
-
-  const attached = useMemo(
-    () => new Set((contactsQ.data ?? []).map((c) => c.personId)),
-    [contactsQ.data],
-  );
-  const matches = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [] as PersonLite[];
-    return (peopleQ.data ?? [])
-      .filter((p) => !attached.has(p.id) && p.name.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [search, peopleQ.data, attached]);
-
-  const attach = useMutation({
-    mutationFn: async (vars: { personId: string; role: string | null }) => {
-      const res = await apiRequest("POST", `/api/non-profits/${npoId}/people`, vars);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: contactsKey });
-      setSearch("");
-      setRole("");
-    },
-    onError: (err) =>
-      toast({
-        title: "Couldn't add contact",
-        description: humanizeApiError(err),
-        variant: "destructive",
-      }),
-  });
-
-  const detach = useMutation({
-    mutationFn: async (personId: string) => {
-      await apiRequest("DELETE", `/api/non-profits/${npoId}/people/${personId}`);
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: contactsKey }),
-    onError: (err) =>
-      toast({
-        title: "Couldn't remove contact",
-        description: humanizeApiError(err),
-        variant: "destructive",
-      }),
-  });
-
-  return (
-    <section
-      className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
-      data-testid="panel-npo-contacts"
-    >
-      <div>
-        <h2 className="text-sm font-bold text-slate-900">Contacts</h2>
-        <p className="text-xs text-slate-500">
-          People who represent this NPO. Add as many as you need.
-        </p>
-      </div>
-
-      <ul className="divide-y divide-slate-100 -mx-1">
-        {contactsQ.isLoading ? (
-          <li className="px-1 py-2 text-xs text-slate-500">Loading…</li>
-        ) : (contactsQ.data ?? []).length === 0 ? (
-          <li className="px-1 py-2 text-xs text-slate-500" data-testid="text-no-contacts">
-            No contacts yet.
-          </li>
-        ) : (
-          (contactsQ.data ?? []).map((c) => (
-            <li
-              key={c.personId}
-              className="flex items-center gap-3 px-1 py-2"
-              data-testid={`row-npo-contact-${c.personId}`}
-            >
-              {c.photoUrl ? (
-                <img
-                  src={c.photoUrl}
-                  alt=""
-                  className="w-9 h-9 rounded-full object-cover bg-slate-100"
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-slate-100" />
-              )}
-              <div className="flex-1 min-w-0">
-                <Link href={`/admin/people/${c.personId}`} className="text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 truncate block">
-                  {c.name}
-                </Link>
-                {c.role && <p className="text-xs text-slate-500 truncate">{c.role}</p>}
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => detach.mutate(c.personId)}
-                disabled={detach.isPending}
-                data-testid={`button-remove-contact-${c.personId}`}
-              >
-                Remove
-              </Button>
-            </li>
-          ))
-        )}
-      </ul>
-
-      <div className="border-t border-slate-100 pt-3 space-y-2">
-        <p className="text-xs uppercase tracking-wider font-semibold text-slate-500">
-          Add a contact
-        </p>
-        <Input
-          type="text"
-          placeholder="Search people…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          data-testid="input-npo-contact-search"
-        />
-        {search.trim() && (
-          <ul className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-            {peopleQ.isLoading ? (
-              <li className="px-3 py-2 text-xs text-slate-500">Loading people…</li>
-            ) : matches.length === 0 ? (
-              <li className="px-3 py-2 text-xs text-slate-500">No matches.</li>
-            ) : (
-              matches.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50"
-                    onClick={() => attach.mutate({ personId: p.id, role: role.trim() || null })}
-                    disabled={attach.isPending}
-                    data-testid={`button-attach-person-${p.id}`}
-                  >
-                    {p.photoUrl ? (
-                      <img
-                        src={p.photoUrl}
-                        alt=""
-                        className="w-7 h-7 rounded-full object-cover bg-slate-100"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 rounded-full bg-slate-100" />
-                    )}
-                    <span className="text-sm text-slate-900">{p.name}</span>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        )}
-        <Input
-          type="text"
-          placeholder="Role (optional, e.g. Director)"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          data-testid="input-npo-contact-role"
-        />
-        <p className="text-xs text-slate-500">
-          Don't see them?{" "}
-          <Link href="/admin/people" className="text-[var(--brand-blue)] hover:underline underline-offset-2">
-            Add the person first
-          </Link>
-          , then come back here.
-        </p>
-      </div>
-    </section>
-  );
-}

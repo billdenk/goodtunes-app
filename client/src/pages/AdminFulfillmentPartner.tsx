@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -218,6 +219,12 @@ export function AdminFulfillmentPartner() {
         </div>
 
         <FpForm initial={f} onSave={(p) => save.mutate(p)} saving={save.isPending} />
+
+        <OrganizationPeople
+          apiPath={`/api/fulfillment-partners/${f.id}/people`}
+          testIdPrefix="fulfillment"
+          blurb="People at this fulfillment partner — operations lead, account rep, whoever you need to reach."
+        />
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

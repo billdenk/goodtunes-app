@@ -421,6 +421,12 @@ export const people = pgTable("people", {
   blueskyUrl: text("bluesky_url"),
   facebookUrl: text("facebook_url"),
   websiteUrl: text("website_url"),
+  // LinkedIn profile URL — captured by the per-entity "Add a contact"
+  // paste flow (Task #294). Stored as the canonical public profile URL
+  // so re-paste matches the same Person row instead of creating a
+  // duplicate. Used by `POST /api/admin/people/from-linkedin` as the
+  // dedup key.
+  linkedinUrl: text("linkedin_url"),
   // Optional muso.ai profile UUID — captured when a Person is imported from a
   // muso credits dump so re-imports can match this row instantly. muso.ai
   // splits the same human across multiple UUIDs (e.g. "Nick Carter", "Nick
@@ -756,6 +762,31 @@ export const organizationPeople = pgTable(
   }),
 );
 export type OrganizationPerson = typeof organizationPeople.$inferSelect;
+
+// ----- Generic entity ↔ Person contacts ---------------------------------
+// Task #294 — every entity kind that has contacts (vendor / manufacturer /
+// label / fulfillment_partner) shares a single join table here so the
+// admin "Add a contact" surface looks and writes the same on each detail
+// page. NPOs keep using the older `organization_people` table because
+// that join is already wired everywhere (referrer reports, etc.).
+// `entityKind` is a free-text discriminator validated at the API layer.
+// Composite PK on (entityKind, entityId, personId) prevents dup rows.
+// No FK on `entityId` — the column is polymorphic so we can't reference
+// a single table; the API guards by checking the matching table exists.
+export const entityContacts = pgTable(
+  "entity_contacts",
+  {
+    entityKind: text("entity_kind").notNull(),
+    entityId: varchar("entity_id").notNull(),
+    personId: varchar("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    role: text("role"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.entityKind, t.entityId, t.personId] }),
+  }),
+);
+export type EntityContact = typeof entityContacts.$inferSelect;
 
 // ----- Mechanical (master-side) splits ----------------------------------
 // Per-track percentage split of the *recording* (master) revenue — the
