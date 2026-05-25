@@ -123,18 +123,23 @@ export function PressingOrderStepper({
           {slimStages.map((s) => {
             const Icon = s.icon;
             return (
-              <div
+              <button
                 key={s.key}
+                type="button"
                 role="listitem"
+                aria-label={s.label}
                 className={[
                   "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0 px-2.5 py-1.5",
-                  s.done ? "bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)]" : "text-slate-500",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]/40",
+                  s.done
+                    ? "bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)]"
+                    : "text-slate-500 hover:bg-slate-200/70 focus:bg-slate-200/70",
                 ].join(" ")}
                 data-testid={`stage-${s.key}-${s.done ? "done" : "pending"}`}
               >
                 {s.done ? <Check className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5 opacity-70" />}
                 <span className="text-xs font-semibold truncate">{s.label}</span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -192,30 +197,60 @@ export function PressingOrderStepper({
         {stages.map((s, i) => {
           const active = i === currentIdx && !s.done;
           const Icon = s.icon;
-          return (
-            <div
-              key={s.key}
-              role="listitem"
-              className={[
-                "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0",
-                active
-                  ? "flex-1 px-3 py-1.5 bg-[color:var(--brand-blue)] text-white shadow-sm"
-                  : s.done
-                    ? "px-2.5 py-1.5 bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)]"
-                    : "px-2.5 py-1.5 text-slate-500",
-              ].join(" ")}
-              title={s.label}
-              data-testid={`stage-${s.key}-${s.done ? "done" : active ? "active" : "pending"}`}
-            >
-              {s.done ? (
-                <Check className="w-3.5 h-3.5 flex-shrink-0" />
-              ) : (
-                <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${active ? "" : "opacity-70"}`} />
-              )}
-              {(active || s.done) && (
+          if (active || s.done) {
+            return (
+              <button
+                key={s.key}
+                type="button"
+                role="listitem"
+                aria-label={s.label}
+                aria-current={active ? "step" : undefined}
+                className={[
+                  "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-100",
+                  active
+                    ? "flex-1 px-3 py-1.5 bg-[color:var(--brand-blue)] text-white shadow-sm focus-visible:ring-[color:var(--brand-blue)]"
+                    : "px-2.5 py-1.5 bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] focus-visible:ring-[color:var(--brand-mint)]",
+                ].join(" ")}
+                data-testid={`stage-${s.key}-${s.done ? "done" : "active"}`}
+              >
+                {s.done ? (
+                  <Check className="w-3.5 h-3.5 flex-shrink-0" />
+                ) : (
+                  <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                )}
                 <span className="text-xs font-semibold truncate">{s.label}</span>
-              )}
-            </div>
+              </button>
+            );
+          }
+          return (
+            <button
+              key={s.key}
+              type="button"
+              role="listitem"
+              aria-label={s.label}
+              className={[
+                "group flex items-center rounded-full transition-all duration-200 min-w-0",
+                "px-2.5 py-1.5 text-slate-500",
+                "hover:bg-slate-200/70 hover:text-slate-700",
+                "focus:bg-slate-200/70 focus:text-slate-700",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]/40",
+              ].join(" ")}
+              data-testid={`stage-${s.key}-pending`}
+            >
+              <Icon className="w-3.5 h-3.5 flex-shrink-0 opacity-70 group-hover:opacity-100 group-focus:opacity-100 transition-opacity duration-200" />
+              <span
+                className={[
+                  "text-xs font-semibold whitespace-nowrap overflow-hidden",
+                  "max-w-0 ml-0",
+                  "group-hover:max-w-[160px] group-hover:ml-1.5",
+                  "group-focus:max-w-[160px] group-focus:ml-1.5",
+                  "transition-all duration-200",
+                ].join(" ")}
+              >
+                {s.label}
+              </span>
+            </button>
           );
         })}
       </div>
