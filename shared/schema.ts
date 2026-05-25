@@ -405,6 +405,16 @@ export const songs = pgTable("songs", {
   // without needing to open the Mux dashboard. Cleared back to null the
   // moment a retry succeeds (status flips to `ready`).
   muxLastError: text("mux_last_error"),
+  // Task #370 — Persisted Mux auto-retry ladder. The backfill sweep
+  // used to track attempts in an in-memory Map, which meant every
+  // deploy or crash forgot the ladder and granted every `errored`
+  // song a fresh round of retries. Persisting the count + last-attempt
+  // timestamp on the row makes the BACKFILL_MAX_ATTEMPTS cap meaningful
+  // across restarts, so a permanently-broken master ages out cleanly
+  // instead of re-hitting Mux on every flapping deploy. Both reset to
+  // 0/null the moment an ingest succeeds (status flips to `ready`).
+  muxRetryCount: integer("mux_retry_count").notNull().default(0),
+  muxLastRetryAt: timestamp("mux_last_retry_at"),
   // Master tech specs — populated at upload time by ffprobe so the
   // admin track UI can surface a one-line `format · sample rate ·
   // bit depth · channels · bytes · duration` readout (Task #317) and

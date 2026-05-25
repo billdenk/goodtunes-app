@@ -729,7 +729,7 @@ const SEED_ALBUMS: SeedAlbum[] = [
 // them loosely and supply the defaults at the insert-site below.
 type SeedSong = Omit<
   Song,
-  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform" | "audioSourceUrl" | "isExplicit" | "isPreviewable" | "previewHidden" | "previewHiddenUntil" | "playlistCount" | "muxAssetId" | "muxPlaybackId" | "muxStatus"
+  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform" | "audioSourceUrl" | "isExplicit" | "isPreviewable" | "previewHidden" | "previewHiddenUntil" | "playlistCount" | "muxAssetId" | "muxPlaybackId" | "muxStatus" | "muxRetryCount" | "muxLastRetryAt"
 > & {
   syncedLyrics?: Song["syncedLyrics"];
   instrumental?: Song["instrumental"];

@@ -104,6 +104,32 @@ SQL
 migrate_songs_mux_last_error dev  "${DATABASE_URL:-}"
 migrate_songs_mux_last_error prod "${PROD_DATABASE_URL:-}"
 
+# Task #370 — Persist the Mux auto-retry ladder on the song row so the
+# BACKFILL_MAX_ATTEMPTS cap survives server restarts. Without these
+# columns the backfill sweep falls back to an in-memory Map and every
+# deploy grants every errored master another full round of retries.
+# Pre-create on both DBs to keep the publish dev→prod diff empty and
+# stop the boot backfill from 500'ing on a freshly-cloned dev.
+migrate_songs_mux_retry_ladder() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping songs.mux_retry_count migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE songs
+  ADD COLUMN IF NOT EXISTS mux_retry_count   integer   NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS mux_last_retry_at timestamp;
+SQL
+  then
+    echo "post-merge: songs.mux_retry_count migration ok on $label"
+  else
+    echo "post-merge: WARNING — songs.mux_retry_count migration failed on $label (continuing)"
+  fi
+}
+migrate_songs_mux_retry_ladder dev  "${DATABASE_URL:-}"
+migrate_songs_mux_retry_ladder prod "${PROD_DATABASE_URL:-}"
+
 # Task #269 — Admin "Forgot password?" reset tokens. Pre-create on both
 # DBs so the publish dev→prod diff doesn't try to invent the table
 # (and so signing in on a freshly-cloned dev DB never 500s the

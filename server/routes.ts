@@ -11967,6 +11967,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // Clear any previous error reason — this attempt cleared the bar
           // far enough to get an asset ID back.
           muxLastError: null,
+          // Task #370 — clear the persisted retry ladder once we're
+          // playable so any future error starts the backoff from zero.
+          ...(asset.status === "ready"
+            ? { muxRetryCount: 0, muxLastRetryAt: null }
+            : {}),
         });
         console.log(`[mux-auto] song=${songId} asset=${asset.assetId} status=${asset.status}`);
       } catch (err: any) {
@@ -12018,6 +12023,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         muxPlaybackId: asset.playbackId,
         muxStatus: asset.status,
         muxLastError: null,
+        // Task #370 — clear the persisted retry ladder on success so
+        // any future error starts the backoff from zero.
+        ...(asset.status === "ready"
+          ? { muxRetryCount: 0, muxLastRetryAt: null }
+          : {}),
       });
       console.log(`[mux-ingest] song=${song.id} asset=${asset.assetId} status=${asset.status}`);
       res.json({ ok: true, song: updated });
@@ -12206,6 +12216,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.updateSong(song.id, {
         muxStatus: newStatus,
         muxPlaybackId: pb?.id ?? song.muxPlaybackId,
+        // Task #370 — clear the persisted retry ladder on success.
+        ...(newStatus === "ready"
+          ? { muxRetryCount: 0, muxLastRetryAt: null, muxLastError: null }
+          : {}),
       });
       res.json({ ok: true });
     } catch (err: any) {
@@ -12285,6 +12299,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               realStatus === "errored"
                 ? errMsg ?? (s as any).muxLastError ?? "errored (no reason returned)"
                 : null,
+            // Task #370 — clear the persisted retry ladder on success.
+            ...(realStatus === "ready"
+              ? { muxRetryCount: 0, muxLastRetryAt: null }
+              : {}),
           });
           healed++;
         } catch (err: any) {
@@ -12304,21 +12322,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }
 
-  // Task #367 — Per-song retry tracker for the periodic backfill. Mux
-  // failures fall into two camps:
+  // Task #367 / Task #370 — Per-song retry tracker for the periodic
+  // backfill. Mux failures fall into two camps:
   //   • Transient (5xx, download timeout, signing-key flap) — clear up
   //     on retry within minutes.
   //   • Permanent (invalid_input, corrupt header, unsupported codec) —
   //     will never succeed without an admin re-uploading the master.
   // We can't tell them apart from a single failure, so we retry with
-  // exponential backoff and cap attempts. The map is in-memory by
-  // design: a server restart triggers the boot sweep which is allowed
-  // one fresh attempt per song regardless of prior history (the
-  // operator may have re-uploaded the master between deploys).
-  const muxBackfillState = new Map<
-    string,
-    { attempts: number; lastAttemptAt: number }
-  >();
+  // exponential backoff and cap attempts. The attempt count + last-
+  // attempt timestamp live on `songs.mux_retry_count` /
+  // `mux_last_retry_at` so the ladder survives server restarts — a
+  // flapping deploy day used to forget the ladder and re-hammer Mux
+  // for every permanently-broken master on every boot. Both columns
+  // reset to 0/null the moment a song successfully ingests
+  // (status flips to `ready`).
   const BACKFILL_MAX_ATTEMPTS = 6;
   function nextBackfillDelayMs(attempts: number): number {
     // 15m, 30m, 1h, 2h, 4h, then 6h cap.
@@ -12346,41 +12363,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           (!s.muxAssetId || s.muxStatus === "errored"),
       );
 
-      // Forget tracked attempts for any song that has since gone ready
-      // (so a fresh failure later starts the backoff ladder from zero).
-      const candidateIds = new Set(candidates.map((s: any) => s.id));
-      for (const id of Array.from(muxBackfillState.keys())) {
-        if (!candidateIds.has(id)) muxBackfillState.delete(id);
-      }
-
       const now = Date.now();
       const isBoot = reason === "boot";
       const eligible: any[] = [];
       let skippedBackoff = 0;
       let skippedExhausted = 0;
       for (const s of candidates) {
-        const tracked = muxBackfillState.get(s.id);
-        // Errored songs respect the backoff ladder. Never-ingested songs
-        // (no muxAssetId yet, status null) get retried every sweep until
-        // they enter the errored/ready state — the per-song
+        // Errored songs respect the backoff ladder, persisted on the
+        // row so the cap survives server restarts. Never-ingested songs
+        // (no muxAssetId yet, status null) get retried every sweep
+        // until they enter the errored/ready state — the per-song
         // maybeIngestToMux guard already prevents duplicate work.
         const isErrored = s.muxStatus === "errored";
-        if (!isErrored || isBoot) {
+        if (!isErrored) {
           eligible.push(s);
           continue;
         }
-        if (!tracked) {
-          eligible.push(s);
-          continue;
-        }
-        if (tracked.attempts >= BACKFILL_MAX_ATTEMPTS) {
+        const attempts = Number((s as any).muxRetryCount ?? 0);
+        const lastAt = (s as any).muxLastRetryAt
+          ? new Date((s as any).muxLastRetryAt).getTime()
+          : 0;
+        if (attempts >= BACKFILL_MAX_ATTEMPTS) {
           skippedExhausted++;
           continue;
         }
-        const wait = nextBackfillDelayMs(tracked.attempts);
-        if (now - tracked.lastAttemptAt < wait) {
-          skippedBackoff++;
-          continue;
+        // First-ever retry (no prior stamp) is always eligible — covers
+        // both fresh errored songs and the legacy rows from before
+        // Task #370 that never had a count persisted.
+        if (attempts > 0 && !isBoot) {
+          const wait = nextBackfillDelayMs(attempts);
+          if (now - lastAt < wait) {
+            skippedBackoff++;
+            continue;
+          }
         }
         eligible.push(s);
       }
@@ -12399,17 +12414,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let done = 0;
       for (const s of eligible) {
         // Stamp the attempt for errored retries so subsequent sweeps
-        // honour the backoff. Boot retries also bump the counter so a
-        // single boot doesn't immediately re-fire the interval pass.
+        // (and the next deploy) honour the backoff. Persisted on the
+        // row so the ladder survives server restarts. Boot retries
+        // also bump the counter so a single boot doesn't immediately
+        // re-fire the interval pass against the same song.
         if (s.muxStatus === "errored") {
-          const tracked = muxBackfillState.get(s.id) ?? {
-            attempts: 0,
-            lastAttemptAt: 0,
-          };
-          muxBackfillState.set(s.id, {
-            attempts: tracked.attempts + 1,
-            lastAttemptAt: Date.now(),
-          });
+          try {
+            await storage.updateSong(s.id, {
+              muxRetryCount: Number((s as any).muxRetryCount ?? 0) + 1,
+              muxLastRetryAt: new Date(),
+            });
+          } catch (err: any) {
+            console.error(
+              `[mux-backfill:${reason}] failed to stamp retry on song ${s.id}: ${err?.message}`,
+            );
+          }
         }
         maybeIngestToMux(s.id, (s as any).audioUrl);
         done++;
