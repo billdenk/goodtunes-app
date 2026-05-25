@@ -5434,6 +5434,41 @@ function TrackRow({
             {formatDuration(song.duration)}
           </span>
         )}
+        {/* Task #364 — per-track Mux state pill. Only shown when a
+            master exists (no master → the Upload chip above owns the
+            row). Title carries the captured error reason on hover so
+            the operator doesn't need to open the track row to read it. */}
+        {!expanded && !!song.audioUrl && (() => {
+          const ready = song.muxStatus === "ready" && !!song.muxPlaybackId;
+          const errored = song.muxStatus === "errored";
+          const preparing = !ready && !errored && (!!song.muxAssetId || song.muxStatus === "preparing" || song.muxStatus === "ingesting");
+          const notIngested = !ready && !errored && !preparing;
+          const label = ready ? "Mux" : errored ? "Mux err" : preparing ? "Mux…" : "No Mux";
+          const cls = ready
+            ? "bg-emerald-50 text-emerald-700"
+            : errored
+              ? "bg-rose-50 text-rose-700"
+              : preparing
+                ? "bg-sky-50 text-sky-700"
+                : "bg-amber-50 text-amber-700";
+          const title = ready
+            ? "Streaming via Mux"
+            : errored
+              ? `Mux ingest errored${(song as any).muxLastError ? ` — ${(song as any).muxLastError}` : ""}`
+              : preparing
+                ? "Mux is encoding this master"
+                : "Master not yet ingested to Mux";
+          return (
+            <span
+              className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${cls}`}
+              title={title}
+              data-testid={`badge-mux-${song.id}`}
+              data-mux-state={ready ? "ready" : errored ? "errored" : preparing ? "preparing" : "not-ingested"}
+            >
+              {label}
+            </span>
+          );
+        })()}
         {/* Per-row master download — quiet slate icon, only shown when
             a master actually exists. Same-origin /objects/uploads link
             with `download` attribute fires the browser save dialog

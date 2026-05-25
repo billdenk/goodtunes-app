@@ -231,6 +231,27 @@ async function bootstrapAccessGuard() {
     log(`saleWindow scheduler init failed: ${e?.message ?? e}`, "sale-window");
   }
 
+  // Task #364 — Loud one-line warning at boot when Mux isn't fully
+  // configured. The pipeline degrades to "raw audio only" without these
+  // keys, so the operator needs to see the gap on the next deploy log
+  // rather than discovering it when a fan presses Play. Listed secrets
+  // are the *missing* ones; if all four are set the line is silent.
+  try {
+    const { muxMissingSecrets } = await import("./mux");
+    const missing = muxMissingSecrets();
+    if (missing.length > 0) {
+      log(
+        `WARNING — Mux is NOT fully configured. Missing: ${missing.join(", ")}. ` +
+          `Songs will fall back to raw-audio mode for admin previews and refuse customer playback.`,
+        "mux",
+      );
+    } else {
+      log("mux: configured (token + signing key present)", "mux");
+    }
+  } catch (e: any) {
+    log(`mux status check failed: ${e?.message ?? e}`, "mux");
+  }
+
   // One-line OAuth provider status so operators can confirm at-a-glance
   // that the Apple/Google sign-in buttons will actually work in this
   // environment (env var present + key normalised). No secret values

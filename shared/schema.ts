@@ -398,6 +398,13 @@ export const songs = pgTable("songs", {
   muxAssetId: text("mux_asset_id"),
   muxPlaybackId: text("mux_playback_id"),
   muxStatus: text("mux_status"),
+  // Task #364 — human-readable reason captured from Mux when an ingest
+  // errors out (e.g. "invalid_input · could not download the asset"). The
+  // boot reconcile sweep fetches the Mux asset for every `errored` song
+  // and pins the message here so admins see WHY the track isn't streaming
+  // without needing to open the Mux dashboard. Cleared back to null the
+  // moment a retry succeeds (status flips to `ready`).
+  muxLastError: text("mux_last_error"),
   // Master tech specs — populated at upload time by ffprobe so the
   // admin track UI can surface a one-line `format · sample rate ·
   // bit depth · channels · bytes · duration` readout (Task #317) and

@@ -5,7 +5,6 @@ import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { track } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
-import { offlineSrcFor } from "@/lib/nativeDownloads";
 
 export interface PlayerSong extends Song {
   album: Album;
@@ -219,7 +218,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
   }, [fullCurrent, currentSongId]);
 
-  const hasRealAudio = !!currentSong?.audioUrl;
+  // Fan playback is Mux-only — "real audio" means the master is Mux-ready
+  // and has a playback id we can sign. Songs with only a raw `audioUrl`
+  // (legacy / not-yet-ingested) are not playable by fans; they fall back
+  // to the simulated-timer path so the UI still ticks instead of stalling.
+  const hasRealAudio =
+    !!currentSong?.muxPlaybackId && currentSong?.muxStatus === "ready";
   const duration = (hasRealAudio && audioDuration != null && audioDuration > 0)
     ? audioDuration
     : (currentSong?.duration ?? 0);
@@ -417,8 +421,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    if (!currentSong || (!currentSong.audioUrl && !currentSong.muxPlaybackId)) {
-      // No real audio for this song — pause and clear any in-flight source.
+    if (!currentSong || !currentSong.muxPlaybackId || currentSong.muxStatus !== "ready") {
+      // No streamable master for this song (Mux not ingested yet, or
+      // preparing, or errored) — pause and clear any in-flight source.
+      // Fan playback is Mux-only; we never attach a raw audioUrl from
+      // the fan player (see comment in the Mux branch below). If a
+      // master exists but just isn't Mux-ready, also flip play state
+      // off so the UI doesn't sit in a phantom "playing" state with no
+      // audio — the dock + Mux banner + per-track pill surface why.
       a.pause();
       teardownHls();
       if (a.src) {
@@ -426,6 +436,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         a.load();
       }
       setAudioDuration(null);
+      const hasMasterButNotReady =
+        !!currentSong && (!!currentSong.audioUrl || !!currentSong.muxAssetId || !!currentSong.muxStatus);
+      if (hasMasterButNotReady) setIsPlaying(false);
       return;
     }
 
@@ -464,6 +477,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     if (useMux) {
       // Async: fetch a signed 1-hour HLS URL, then attach.
+      // Task #364 — no raw `audioUrl` fallback in the fan player. The
+      // raw master is admin-only (legal + bandwidth); falling back to
+      // it would let any signed-in fan grab the unprotected file the
+      // moment Mux signing hiccuped. If the signed URL fetch fails the
+      // player just stops — the AdminAlbum row + Mux banner will show
+      // the operator why, and a successful retry will flip
+      // `muxStatus === "ready"` and re-enter this branch.
       (async () => {
         try {
           const r = await apiRequest("POST", `/api/songs/${currentSong.id}/playback-url`);
@@ -471,25 +491,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           if (json?.url) attachSrc(json.url);
           else throw new Error(json?.message || "no url");
         } catch (e) {
-          // Fall back to the raw audioUrl if Mux signing fails so admins
-          // aren't locked out while the asset finishes encoding / a creds
-          // mishap gets fixed.
-          if (currentSong.audioUrl) attachSrc(currentSong.audioUrl);
-          else setIsPlaying(false);
+          console.warn("[player] Mux signed URL fetch failed — refusing raw fallback", e);
+          setIsPlaying(false);
         }
       })();
-    } else if (currentSong.audioUrl) {
-      // On native, prefer a Capacitor-Filesystem copy when one exists so
-      // the song plays in airplane mode. Falls back to the network URL on
-      // web (offlineSrcFor returns null) or when the file is missing.
-      (async () => {
-        const offline = await offlineSrcFor(currentSong.id, currentSong.audioUrl);
-        const src = offline ?? currentSong.audioUrl!;
-        if (srcTokenRef.current !== token) return;
-        if (a.src !== src) attachSrc(src);
-      })();
+    } else {
+      // Master not Mux-ready (preparing, errored, or never ingested).
+      // Refuse to play — see comment above. The dock + row UI surface
+      // the "preparing / errored / not-ingested" state separately, and
+      // admin sees the backlog via the Mux status banner.
+      setIsPlaying(false);
     }
-  }, [currentSong?.id, currentSong?.audioUrl, currentSong?.muxPlaybackId, currentSong?.muxStatus]);
+  }, [currentSong?.id, currentSong?.muxPlaybackId, currentSong?.muxStatus]);
 
   // Play/pause toggle — operates on the already-attached source without
   // re-fetching or re-loading. Keeps tap-pause-tap-play seamless.

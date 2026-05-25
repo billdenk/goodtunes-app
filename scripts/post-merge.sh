@@ -80,6 +80,30 @@ SQL
 migrate_auth_tokens dev  "${DATABASE_URL:-}"
 migrate_auth_tokens prod "${PROD_DATABASE_URL:-}"
 
+# Task #364 — songs.mux_last_error captures the human-readable reason
+# from a failed Mux ingest (e.g. "invalid_input · could not download
+# the asset"). Schema declares it; drizzle-kit push has been unreliable
+# on additive song columns historically (see albums-schema-drift.md),
+# so we pre-create on both DBs to keep the publish dev→prod diff empty
+# and prevent /api/admin/mux-status from 500'ing on a freshly-cloned dev.
+migrate_songs_mux_last_error() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping songs.mux_last_error migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS mux_last_error text;
+SQL
+  then
+    echo "post-merge: songs.mux_last_error migration ok on $label"
+  else
+    echo "post-merge: WARNING — songs.mux_last_error migration failed on $label (continuing)"
+  fi
+}
+migrate_songs_mux_last_error dev  "${DATABASE_URL:-}"
+migrate_songs_mux_last_error prod "${PROD_DATABASE_URL:-}"
+
 # Task #269 — Admin "Forgot password?" reset tokens. Pre-create on both
 # DBs so the publish dev→prod diff doesn't try to invent the table
 # (and so signing in on a freshly-cloned dev DB never 500s the

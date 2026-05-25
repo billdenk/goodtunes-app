@@ -17,12 +17,41 @@ function client(): Mux {
 }
 
 export function isMuxConfigured(): boolean {
-  return Boolean(
-    process.env.MUX_TOKEN_ID &&
-      process.env.MUX_TOKEN_SECRET &&
-      process.env.MUX_SIGNING_KEY_ID &&
-      process.env.MUX_SIGNING_KEY_PRIVATE,
-  );
+  return muxMissingSecrets().length === 0;
+}
+
+/**
+ * Which of the four Mux secrets are missing? Used by the boot-time
+ * warning + the `/api/admin/mux-status` admin banner so the operator
+ * sees exactly which key to add rather than a generic "not configured".
+ * MUX_WEBHOOK_SECRET is intentionally NOT required — the reconcile
+ * sweep heals webhook drops, so a missing webhook secret degrades but
+ * does not break the pipeline.
+ */
+export function muxMissingSecrets(): string[] {
+  const required = [
+    "MUX_TOKEN_ID",
+    "MUX_TOKEN_SECRET",
+    "MUX_SIGNING_KEY_ID",
+    "MUX_SIGNING_KEY_PRIVATE",
+  ] as const;
+  return required.filter((k) => !process.env[k]);
+}
+
+/**
+ * Pull a human-readable error string off a Mux asset, or null if the
+ * asset has no errors recorded. Mux returns `{ type, messages }` on
+ * a failed asset; we flatten to a single line so it fits in a status
+ * badge and a log line.
+ */
+export function extractMuxAssetError(asset: any): string | null {
+  const e = asset?.errors;
+  if (!e) return null;
+  const type = e.type ? String(e.type) : null;
+  const messages = Array.isArray(e.messages) ? e.messages.filter(Boolean) : [];
+  if (!type && messages.length === 0) return null;
+  const msg = messages.join("; ");
+  return [type, msg].filter(Boolean).join(" · ") || null;
 }
 
 /**

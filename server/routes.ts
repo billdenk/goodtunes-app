@@ -11914,7 +11914,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // userAlbums purchase records. For now, we gate behind `requireAuth`
   // so at least anonymous traffic can't mint signed URLs.
   // ───────────────────────────────────────────────────────────────────
-  const { createAssetFromUrl, getAsset, signPlaybackUrl, isMuxConfigured, verifyWebhook } =
+  const { createAssetFromUrl, getAsset, signPlaybackUrl, isMuxConfigured, muxMissingSecrets, extractMuxAssetError, verifyWebhook } =
     await import("./mux");
 
   function absoluteUploadUrl(req: Request, audioUrl: string): string {
@@ -11953,13 +11953,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           muxAssetId: asset.assetId,
           muxPlaybackId: asset.playbackId,
           muxStatus: asset.status,
+          // Clear any previous error reason — this attempt cleared the bar
+          // far enough to get an asset ID back.
+          muxLastError: null,
         });
         console.log(`[mux-auto] song=${songId} asset=${asset.assetId} status=${asset.status}`);
       } catch (err: any) {
         // Mark errored so the next boot-backfill or admin retry can pick
         // it back up — without this we'd be stranded in "ingesting".
         try {
-          await storage.updateSong(songId, { muxStatus: "errored" });
+          await storage.updateSong(songId, {
+            muxStatus: "errored",
+            muxLastError: `ingest-create: ${err?.message ?? "unknown"}`.slice(0, 500),
+          });
         } catch { /* secondary failure — already logged below */ }
         console.error(`[mux-auto] song=${songId} failed`, err?.message);
       }
@@ -12000,12 +12006,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         muxAssetId: asset.assetId,
         muxPlaybackId: asset.playbackId,
         muxStatus: asset.status,
+        muxLastError: null,
       });
       console.log(`[mux-ingest] song=${song.id} asset=${asset.assetId} status=${asset.status}`);
       res.json({ ok: true, song: updated });
     } catch (err: any) {
       // Release the claim so the next retry / boot-backfill can pick it up.
-      try { await storage.updateSong(song.id, { muxStatus: "errored" }); } catch {}
+      try {
+        await storage.updateSong(song.id, {
+          muxStatus: "errored",
+          muxLastError: `ingest-create: ${err?.message ?? "unknown"}`.slice(0, 500),
+        });
+      } catch {}
       console.error("[mux-ingest] failed", err?.message, err?.stack);
       res.status(500).json({ message: err?.message || "Mux ingest failed" });
     }
@@ -12051,9 +12063,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const asset = await getAsset(song.muxAssetId);
       const pb = (asset.playback_ids || []).find((p: any) => p.policy === "signed");
+      const errMsg = extractMuxAssetError(asset);
       const updated = await storage.updateSong(song.id, {
         muxPlaybackId: pb?.id ?? song.muxPlaybackId,
         muxStatus: asset.status,
+        // Capture the Mux-reported reason when the asset is errored,
+        // and clear it the moment the asset comes back ready.
+        muxLastError:
+          asset.status === "errored"
+            ? errMsg ?? song.muxLastError ?? "errored (no reason returned)"
+            : asset.status === "ready"
+              ? null
+              : song.muxLastError,
       });
       res.json({ ok: true, song: updated });
     } catch (err: any) {
@@ -12062,12 +12083,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Task #364 — Admin-facing Mux pipeline status. One GET that the
+  // AdminFrame banner polls every few minutes. Returns:
+  //   • configured + which secrets (if any) are missing
+  //   • catalog-wide counts: with_audio / ready / preparing / errored
+  //     / missing (has audioUrl but no mux asset id)
+  //   • a small sample of the most recent errored songs with their
+  //     reason so the banner can deep-link Nick to whatever's broken.
+  app.get("/api/admin/mux-status", requireAdminBearer, async (_req, res) => {
+    try {
+      const missing = muxMissingSecrets();
+      const all = await storage.getAllSongs({ includeHidden: true });
+      const withAudio = all.filter((s: any) => typeof s.audioUrl === "string" && s.audioUrl);
+      let ready = 0, preparing = 0, errored = 0, notIngested = 0;
+      const erroredSample: Array<{ id: string; title: string | null; albumId: string | null; reason: string | null }> = [];
+      for (const s of withAudio as any[]) {
+        if (s.muxStatus === "ready" && s.muxPlaybackId) ready++;
+        else if (s.muxStatus === "errored") {
+          errored++;
+          if (erroredSample.length < 10) {
+            erroredSample.push({
+              id: s.id,
+              title: s.title ?? null,
+              albumId: s.albumId ?? null,
+              reason: s.muxLastError ?? null,
+            });
+          }
+        } else if (s.muxAssetId) preparing++;
+        else notIngested++;
+      }
+      res.json({
+        configured: missing.length === 0,
+        missingSecrets: missing,
+        counts: {
+          songsWithAudio: withAudio.length,
+          ready,
+          preparing,
+          errored,
+          notIngested,
+        },
+        erroredSample,
+      });
+    } catch (err: any) {
+      console.error("[mux-status] failed", err?.message);
+      res.status(500).json({ message: err?.message || "mux-status failed" });
+    }
+  });
+
   app.post("/api/songs/:id/playback-url", requireAuth, async (req, res) => {
     if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
     const song = await storage.getSongById(req.params.id as string);
-    if (!song?.muxPlaybackId) return res.status(404).json({ message: "No Mux playback for this song" });
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    if (!song.muxPlaybackId) {
+      // Task #364 — surface the pipeline state to the client so the
+      // player can render "This track is being prepared / errored:
+      // <reason>" instead of falling back to the raw master.
+      return res.status(409).json({
+        message: "No Mux playback for this song",
+        status: song.muxStatus ?? (song.audioUrl ? "not_ingested" : "no_master"),
+        lastError: (song as any).muxLastError ?? null,
+      });
+    }
     if (song.muxStatus !== "ready") {
-      return res.status(409).json({ message: "Mux asset not ready", status: song.muxStatus });
+      return res.status(409).json({
+        message: "Mux asset not ready",
+        status: song.muxStatus,
+        lastError: (song as any).muxLastError ?? null,
+      });
     }
     // TODO(phase 4): verify the requesting user owns the album OR the
     // song is a free preview. Until ownership records exist, gate on
@@ -12155,17 +12237,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     muxReconcileInFlight = true;
     try {
       const all = await storage.getAllSongs({ includeHidden: true });
+      // Reconcile two buckets in one pass:
+      //   1. `preparing`/`ingesting` — webhook may have dropped, fetch
+      //      from Mux and flip to ready/errored as truth dictates.
+      //   2. `errored` WITHOUT a captured `muxLastError` — Task #364
+      //      triage path: fetch the asset, pull `errors.{type,messages}`,
+      //      and persist so the admin badge shows the real reason
+      //      instead of a bare "errored".
       const stuck = all.filter(
         (s: any) =>
           s.muxAssetId &&
-          s.muxStatus !== "ready" &&
-          s.muxStatus !== "errored",
+          (
+            (s.muxStatus !== "ready" && s.muxStatus !== "errored") ||
+            (s.muxStatus === "errored" && !s.muxLastError)
+          ),
       );
       if (stuck.length === 0) return;
       console.log(
-        `[mux-reconcile:${reason}] reconciling ${stuck.length} song(s) stuck in preparing/ingesting`,
+        `[mux-reconcile:${reason}] reconciling ${stuck.length} song(s) (preparing or errored-without-reason)`,
       );
-      const { getAsset } = await import("./mux");
+      const { getAsset, extractMuxAssetError } = await import("./mux");
       let healed = 0;
       for (const s of stuck) {
         try {
@@ -12175,9 +12266,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const pb = (asset.playback_ids || []).find(
             (p: any) => p.policy === "signed",
           );
+          const errMsg = extractMuxAssetError(asset);
           await storage.updateSong(s.id, {
             muxStatus: realStatus,
             muxPlaybackId: pb?.id ?? (s as any).muxPlaybackId,
+            muxLastError:
+              realStatus === "errored"
+                ? errMsg ?? (s as any).muxLastError ?? "errored (no reason returned)"
+                : null,
           });
           healed++;
         } catch (err: any) {

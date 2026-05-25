@@ -29,6 +29,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { ViewAsSwitcher } from "@/components/admin/ViewAsSwitcher";
 import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
+import { MuxStatusBanner } from "@/components/admin/MuxStatusBanner";
 import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
 import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
@@ -651,6 +652,10 @@ export function AdminFrame({
             the page-content max-width wrapper so it spans uniformly
             across every admin page without each page having to opt in. */}
         <AutoSyncAlertBanner />
+        {/* Task #364 — Mux pipeline health (missing secrets, errored
+            ingests, large not-ingested backlog). Same passive +
+            per-set-dismissible pattern as AutoSyncAlertBanner. */}
+        <MuxStatusBanner />
         <div
           className={[
             "mx-auto w-full px-6 sm:px-8 pt-6 pb-[120px]",
