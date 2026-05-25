@@ -628,7 +628,7 @@ export function AdminFrame({
         <AutoSyncAlertBanner />
         <div
           className={[
-            "mx-auto w-full px-6 sm:px-8 pt-6 pb-8",
+            "mx-auto w-full px-6 sm:px-8 pt-6 pb-[120px]",
             contentWidth === "narrow" ? "max-w-[960px]" : "max-w-[1440px]",
           ].join(" ")}
         >
