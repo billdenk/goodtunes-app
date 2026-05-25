@@ -647,6 +647,13 @@ export interface IStorage {
   searchManufacturersAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>>;
   searchFulfillmentAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>>;
   searchNonProfitsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string }>>;
+  // Task #338 — songs, playlists, and orders.
+  searchSongsAdmin(q: string, limit: number): Promise<Array<{ id: string; title: string; albumId: string; albumTitle: string; albumArtist: string }>>;
+  searchPlaylistsAdmin(q: string, limit: number): Promise<Array<{ id: string; name: string; ownerId: string; ownerName: string | null }>>;
+  searchOrdersAdmin(q: string, limit: number): Promise<{
+    fan: Array<{ id: string; goodDeedNumber: number | null; buyerName: string | null; buyerEmail: string | null; status: string; albumTitle: string | null }>;
+    pressing: Array<{ id: string; status: string; albumTitle: string | null; quantity: number }>;
+  }>;
 }
 
 export type PrintGenerationWithArtifacts = {
@@ -3260,6 +3267,105 @@ export class DbStorage implements IStorage {
       LIMIT ${limit}
     `);
     return ((rows as any).rows ?? []) as Array<{ id: string; name: string }>;
+  }
+
+  // Task #338 — songs, playlists, orders for the global admin search.
+  // Songs are joined to their parent album so the dropdown can show
+  // "Song · Album · Artist" and deep-link to /admin/albums/:id?track=:songId.
+  // Mirrors the GoodTunes-release filter on albums so streaming-only
+  // rows don't pollute results (admins don't manage those tracks here).
+  async searchSongsAdmin(
+    q: string,
+    limit: number,
+  ): Promise<Array<{ id: string; title: string; albumId: string; albumTitle: string; albumArtist: string }>> {
+    const like = `%${q.toLowerCase()}%`;
+    return await db
+      .select({
+        id: songs.id,
+        title: songs.title,
+        albumId: albums.id,
+        albumTitle: albums.title,
+        albumArtist: albums.artist,
+      })
+      .from(songs)
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .where(sql`lower(${songs.title}) LIKE ${like} AND ${albums.isGoodTunesRelease} = true`)
+      .orderBy(asc(songs.title))
+      .limit(limit);
+  }
+
+  // Playlists are customer-owned, so the deep link lands on the
+  // owning customer's admin profile (which renders the playlist list).
+  // Owner display name is left-joined so an orphaned playlist still
+  // surfaces with a null owner instead of disappearing.
+  async searchPlaylistsAdmin(
+    q: string,
+    limit: number,
+  ): Promise<Array<{ id: string; name: string; ownerId: string; ownerName: string | null }>> {
+    const like = `%${q.toLowerCase()}%`;
+    const rows = await db.execute<{ id: string; name: string; owner_id: string; owner_name: string | null }>(sql`
+      SELECT p.id, p.name, p.user_id AS owner_id, c.display_name AS owner_name
+      FROM playlists p
+      LEFT JOIN customer_users c ON c.id = p.user_id
+      WHERE lower(p.name) LIKE ${like}
+      ORDER BY p.name ASC
+      LIMIT ${limit}
+    `);
+    return ((rows as any).rows ?? []).map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      ownerId: r.owner_id,
+      ownerName: r.owner_name ?? null,
+    }));
+  }
+
+  // Orders: fan orders match on numeric goodDeedNumber, id prefix,
+  // buyer name, or buyer email; pressing requests match on id prefix
+  // or joined album title. Returns both lists so the route can render
+  // them as separate groups.
+  async searchOrdersAdmin(q: string, limit: number): Promise<{
+    fan: Array<{ id: string; goodDeedNumber: number | null; buyerName: string | null; buyerEmail: string | null; status: string; albumTitle: string | null }>;
+    pressing: Array<{ id: string; status: string; albumTitle: string | null; quantity: number }>;
+  }> {
+    const lower = q.toLowerCase();
+    const like = `%${lower}%`;
+    const numeric = /^\d+$/.test(q) ? Number(q) : null;
+    const fanRows = await db.execute<any>(sql`
+      SELECT o.id, o.good_deed_number, o.buyer_name, o.buyer_email, o.status, a.title AS album_title
+      FROM orders o
+      LEFT JOIN albums a ON a.id = o.album_id
+      WHERE lower(o.id) LIKE ${`${lower}%`}
+         OR lower(coalesce(o.buyer_name, '')) LIKE ${like}
+         OR lower(coalesce(o.buyer_email, '')) LIKE ${like}
+         ${numeric !== null ? sql`OR o.good_deed_number = ${numeric}` : sql``}
+      ORDER BY o.created_at DESC NULLS LAST
+      LIMIT ${limit}
+    `);
+    const pressingRows = await db.execute<any>(sql`
+      SELECT r.id, r.status, r.quantity, a.title AS album_title
+      FROM pressing_order_requests r
+      LEFT JOIN albums a ON a.id = r.album_id
+      WHERE lower(r.id) LIKE ${`${lower}%`}
+         OR lower(coalesce(a.title, '')) LIKE ${like}
+      ORDER BY r.submitted_at DESC
+      LIMIT ${limit}
+    `);
+    return {
+      fan: ((fanRows as any).rows ?? []).map((r: any) => ({
+        id: r.id,
+        goodDeedNumber: r.good_deed_number ?? null,
+        buyerName: r.buyer_name ?? null,
+        buyerEmail: r.buyer_email ?? null,
+        status: r.status,
+        albumTitle: r.album_title ?? null,
+      })),
+      pressing: ((pressingRows as any).rows ?? []).map((r: any) => ({
+        id: r.id,
+        status: r.status,
+        albumTitle: r.album_title ?? null,
+        quantity: r.quantity,
+      })),
+    };
   }
 }
 

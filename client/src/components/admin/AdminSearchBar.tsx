@@ -29,7 +29,11 @@ export type SearchResult = {
     | "gear"
     | "customer"
     | "manufacturer"
-    | "fulfillment";
+    | "fulfillment"
+    | "song"
+    | "playlist"
+    | "fanOrder"
+    | "pressingOrder";
   id: string;
   title: string;
   subtitle?: string | null;
@@ -47,6 +51,10 @@ type ServerPayload = {
   customers: SearchResult[];
   manufacturers: SearchResult[];
   fulfillment: SearchResult[];
+  songs: SearchResult[];
+  playlists: SearchResult[];
+  fanOrders: SearchResult[];
+  pressingOrders: SearchResult[];
 };
 
 // Static nav config — mirrors AdminFrame's sidebar order. Keeping the
@@ -122,6 +130,10 @@ const GROUP_ORDER: Array<{ key: keyof ServerPayload | "pages"; label: string }> 
   { key: "customers", label: "Customers" },
   { key: "manufacturers", label: "Presses" },
   { key: "fulfillment", label: "Fulfillment" },
+  { key: "songs", label: "Songs" },
+  { key: "playlists", label: "Playlists" },
+  { key: "fanOrders", label: "Fan orders" },
+  { key: "pressingOrders", label: "Pressing orders" },
 ];
 
 export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?: boolean } = {}) {

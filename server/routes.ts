@@ -14099,6 +14099,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.json({
         people: [], vendors: [], labels: [], nonprofits: [], albums: [],
         gear: [], customers: [], manufacturers: [], fulfillment: [],
+        songs: [], playlists: [], fanOrders: [], pressingOrders: [],
       });
     }
     const cacheKey = `${q.toLowerCase()}|${perGroup}`;
@@ -14122,6 +14123,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const [
       people, vendors, labelsRows, nonprofits, albumsRows,
       gear, customers, manufacturers, fulfillment,
+      songsRows, playlistsRows, ordersRows,
     ] = await Promise.all([
       storage.searchPeople(q, perGroup),
       storage.searchVendorsAdmin(q, perGroup),
@@ -14132,6 +14134,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       storage.searchCustomersAdmin(q, perGroup),
       storage.searchManufacturersAdmin(q, perGroup),
       storage.searchFulfillmentAdmin(q, perGroup),
+      storage.searchSongsAdmin(q, perGroup),
+      storage.searchPlaylistsAdmin(q, perGroup),
+      storage.searchOrdersAdmin(q, perGroup),
     ]);
     return {
       people: people.map((p) => ({
@@ -14187,6 +14192,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         subtitle: null, badge: "Fulfillment",
         href: `/admin/fulfillment-partners/${f.id}`,
       })),
+      songs: songsRows.map((s) => ({
+        kind: "song", id: s.id, title: s.title,
+        subtitle: `${s.albumTitle} · ${s.albumArtist}`,
+        badge: "Song",
+        href: `/admin/albums/${s.albumId}?track=${s.id}`,
+      })),
+      playlists: playlistsRows.map((p) => ({
+        kind: "playlist", id: p.id, title: p.name,
+        subtitle: p.ownerName ? `Owned by ${p.ownerName}` : null,
+        badge: "Playlist",
+        href: `/admin/playlists/${p.id}`,
+      })),
+      fanOrders: ordersRows.fan.map((o) => {
+        const idShort = o.id.slice(0, 8);
+        const label = o.goodDeedNumber != null
+          ? `GoodDeed #${o.goodDeedNumber}`
+          : `Order ${idShort}`;
+        const subtitleBits = [o.buyerName || o.buyerEmail, o.albumTitle, o.status].filter(Boolean) as string[];
+        return {
+          kind: "fanOrder", id: o.id, title: label,
+          subtitle: subtitleBits.join(" · ") || null,
+          badge: "Fan order",
+          href: `/admin/fan-orders`,
+        };
+      }),
+      pressingOrders: ordersRows.pressing.map((o) => {
+        const idShort = o.id.slice(0, 8);
+        const subtitleBits = [o.albumTitle, `Qty ${o.quantity}`, o.status].filter(Boolean) as string[];
+        return {
+          kind: "pressingOrder", id: o.id, title: `Pressing ${idShort}`,
+          subtitle: subtitleBits.join(" · ") || null,
+          badge: "Pressing order",
+          href: `/admin/pressing-orders`,
+        };
+      }),
     };
     })();
     searchInflight.set(cacheKey, build);
@@ -14205,6 +14245,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } finally {
       searchInflight.delete(cacheKey);
     }
+  });
+
+  // ─── Task #338 — Admin playlist detail ────────────────────────────
+  // Read-only view of any customer playlist (admin override of the
+  // user-scoped /api/playlists/:id/songs route). Reuses the existing
+  // storage methods + joins the owner so the page can show "by <name>".
+  app.get("/api/admin/playlists/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const playlist = await storage.getPlaylistById(id);
+    if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+    const owner = playlist.userId ? await storage.getCustomer(playlist.userId) : undefined;
+    const items = await storage.getPlaylistSongs(id);
+    res.json({
+      id: playlist.id,
+      name: playlist.name,
+      createdAt: playlist.createdAt,
+      owner: owner
+        ? { id: owner.id, displayName: owner.displayName, email: owner.email }
+        : null,
+      songs: items.map((row) => ({
+        id: row.song.id,
+        title: row.song.title,
+        trackNumber: row.song.trackNumber,
+        duration: row.song.duration,
+        position: row.position,
+        album: {
+          id: row.song.album.id,
+          title: row.song.album.title,
+          artist: row.song.album.artist,
+          artwork: row.song.album.artwork,
+        },
+      })),
+    });
   });
 
   // ─── Admin Customers directory (Task #131) ──────────────────────────

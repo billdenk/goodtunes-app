@@ -29,6 +29,7 @@ import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { Admin } from "@/pages/Admin";
 import { AdminCustomers } from "@/pages/AdminCustomers";
 import { AdminCustomerDetail } from "@/pages/AdminCustomerDetail";
+import { AdminPlaylist } from "@/pages/AdminPlaylist";
 import { AdminAlbums } from "@/pages/AdminAlbums";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { AdminPeople } from "@/pages/AdminPeople";
@@ -216,6 +217,11 @@ function Router() {
         </Route>
         <Route path="/admin/customers">
           <ProtectedRoute component={AdminCustomers} />
+        </Route>
+        {/* Task #338 — Admin playlist detail (deep-linked from global
+            admin search). Read-only view of any customer playlist. */}
+        <Route path="/admin/playlists/:id">
+          <ProtectedRoute component={AdminPlaylist} />
         </Route>
         {/* Task #128 — Printable GoodDeed certificate print queue. */}
         <Route path="/admin/print-queue">
