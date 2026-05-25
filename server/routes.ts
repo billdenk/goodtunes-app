@@ -12293,6 +12293,125 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }
 
+  // Task #367 — Per-song retry tracker for the periodic backfill. Mux
+  // failures fall into two camps:
+  //   • Transient (5xx, download timeout, signing-key flap) — clear up
+  //     on retry within minutes.
+  //   • Permanent (invalid_input, corrupt header, unsupported codec) —
+  //     will never succeed without an admin re-uploading the master.
+  // We can't tell them apart from a single failure, so we retry with
+  // exponential backoff and cap attempts. The map is in-memory by
+  // design: a server restart triggers the boot sweep which is allowed
+  // one fresh attempt per song regardless of prior history (the
+  // operator may have re-uploaded the master between deploys).
+  const muxBackfillState = new Map<
+    string,
+    { attempts: number; lastAttemptAt: number }
+  >();
+  const BACKFILL_MAX_ATTEMPTS = 6;
+  function nextBackfillDelayMs(attempts: number): number {
+    // 15m, 30m, 1h, 2h, 4h, then 6h cap.
+    const base = 15 * 60 * 1000;
+    const capped = Math.min(attempts, 5);
+    return Math.min(base * 2 ** capped, 6 * 60 * 60 * 1000);
+  }
+
+  let muxBackfillInFlight = false;
+  async function backfillMuxIngest(reason: string): Promise<void> {
+    if (muxBackfillInFlight) {
+      console.log(
+        `[mux-backfill:${reason}] skipped — previous pass still running`,
+      );
+      return;
+    }
+    muxBackfillInFlight = true;
+    try {
+      const all2 = await storage.getAllSongs({ includeHidden: true });
+      const candidates = all2.filter(
+        (s: any) =>
+          typeof s.audioUrl === "string" &&
+          s.audioUrl.startsWith("/objects/") &&
+          (s.muxStatus !== "ready" || !s.muxPlaybackId) &&
+          (!s.muxAssetId || s.muxStatus === "errored"),
+      );
+
+      // Forget tracked attempts for any song that has since gone ready
+      // (so a fresh failure later starts the backoff ladder from zero).
+      const candidateIds = new Set(candidates.map((s: any) => s.id));
+      for (const id of Array.from(muxBackfillState.keys())) {
+        if (!candidateIds.has(id)) muxBackfillState.delete(id);
+      }
+
+      const now = Date.now();
+      const isBoot = reason === "boot";
+      const eligible: any[] = [];
+      let skippedBackoff = 0;
+      let skippedExhausted = 0;
+      for (const s of candidates) {
+        const tracked = muxBackfillState.get(s.id);
+        // Errored songs respect the backoff ladder. Never-ingested songs
+        // (no muxAssetId yet, status null) get retried every sweep until
+        // they enter the errored/ready state — the per-song
+        // maybeIngestToMux guard already prevents duplicate work.
+        const isErrored = s.muxStatus === "errored";
+        if (!isErrored || isBoot) {
+          eligible.push(s);
+          continue;
+        }
+        if (!tracked) {
+          eligible.push(s);
+          continue;
+        }
+        if (tracked.attempts >= BACKFILL_MAX_ATTEMPTS) {
+          skippedExhausted++;
+          continue;
+        }
+        const wait = nextBackfillDelayMs(tracked.attempts);
+        if (now - tracked.lastAttemptAt < wait) {
+          skippedBackoff++;
+          continue;
+        }
+        eligible.push(s);
+      }
+
+      if (eligible.length === 0) {
+        if (skippedBackoff || skippedExhausted) {
+          console.log(
+            `[mux-backfill:${reason}] no eligible songs (${skippedBackoff} backing off, ${skippedExhausted} retry-capped)`,
+          );
+        }
+        return;
+      }
+      console.log(
+        `[mux-backfill:${reason}] starting — ${eligible.length} song(s) need Mux ingest (${skippedBackoff} backing off, ${skippedExhausted} retry-capped)`,
+      );
+      let done = 0;
+      for (const s of eligible) {
+        // Stamp the attempt for errored retries so subsequent sweeps
+        // honour the backoff. Boot retries also bump the counter so a
+        // single boot doesn't immediately re-fire the interval pass.
+        if (s.muxStatus === "errored") {
+          const tracked = muxBackfillState.get(s.id) ?? {
+            attempts: 0,
+            lastAttemptAt: 0,
+          };
+          muxBackfillState.set(s.id, {
+            attempts: tracked.attempts + 1,
+            lastAttemptAt: Date.now(),
+          });
+        }
+        maybeIngestToMux(s.id, (s as any).audioUrl);
+        done++;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      console.log(`[mux-backfill:${reason}] queued ${done} song(s)`);
+    } catch (err: any) {
+      console.error(`[mux-backfill:${reason}] sweep failed`, err?.message);
+    } finally {
+      muxBackfillInFlight = false;
+    }
+  }
+
   if (isMuxConfigured()) {
     // Periodic reconcile — every 60s. When no songs are stuck this is a
     // single getAllSongs() + filter (no Mux API calls), so it stays cheap
@@ -12303,33 +12422,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       reconcileStuckMuxSongs("interval");
     }, 60_000).unref();
 
+    // Task #367 — Periodic backfill every 30 minutes. The boot pass
+    // catches the deploy-time backlog; the interval pass catches masters
+    // that errored mid-day (Mux outage, transient download failure) so
+    // they get retried without waiting for the next deploy. Backoff
+    // logic inside backfillMuxIngest prevents hammering permanently
+    // broken assets.
+    setInterval(() => {
+      backfillMuxIngest("interval");
+    }, 30 * 60 * 1000).unref();
+
     setTimeout(async () => {
       try {
         await reconcileStuckMuxSongs("boot");
-
         // Pass 2: ingest songs that never made it onto Mux (or errored
         // out on a previous attempt). Re-read storage so any song that
         // pass 1 just discovered to be `errored` is eligible for retry
         // in the same boot run — not just on the next restart.
-        const all2 = await storage.getAllSongs({ includeHidden: true });
-        const eligible = all2.filter(
-          (s: any) =>
-            typeof s.audioUrl === "string" &&
-            s.audioUrl.startsWith("/objects/") &&
-            (s.muxStatus !== "ready" || !s.muxPlaybackId) &&
-            (!s.muxAssetId || s.muxStatus === "errored"),
-        );
-        if (eligible.length === 0) return;
-        console.log(`[mux-backfill] starting — ${eligible.length} song(s) need Mux ingest`);
-        let done = 0;
-        for (const s of eligible) {
-          maybeIngestToMux(s.id, (s as any).audioUrl);
-          done++;
-          await new Promise((r) => setTimeout(r, 250));
-        }
-        console.log(`[mux-backfill] queued ${done} song(s)`);
+        await backfillMuxIngest("boot");
       } catch (err: any) {
-        console.error("[mux-backfill] sweep failed", err?.message);
+        console.error("[mux-backfill] boot sweep failed", err?.message);
       }
     }, 10_000);
   }

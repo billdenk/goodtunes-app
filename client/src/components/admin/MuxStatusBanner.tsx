@@ -13,7 +13,9 @@ import { AlertTriangle, X } from "lucide-react";
  *     reconcile sweep already did its best; what's left needs human
  *     triage in AdminAlbum.
  *
- * Polls `/api/admin/mux-status` every 5 minutes. Dismissal is per-set:
+ * Polls `/api/admin/mux-status` every 60s so the auto-retry sweep
+ * (Task #367, every 30min + per-minute reconcile) shows up here
+ * without an admin reloading. Dismissal is per-set:
  * we hash the {missingSecrets, erroredCount, notIngestedCount} tuple
  * and stash it in localStorage, so the banner returns the moment the
  * shape of the problem changes (e.g. a new errored song joins).
@@ -50,7 +52,7 @@ function signatureFor(s: MuxStatusResponse): string {
 export function MuxStatusBanner() {
   const { data } = useQuery<MuxStatusResponse>({
     queryKey: ["/api/admin/mux-status"],
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: 60 * 1000,
   });
 
   const signature = useMemo(() => (data ? signatureFor(data) : ""), [data]);
