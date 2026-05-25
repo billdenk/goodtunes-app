@@ -1,0 +1,35 @@
+{
+  "ranAt": "2026-05-25T07:53:20.201Z",
+  "target": "PROD_DATABASE_URL",
+  "task": "#345 — re-host Dropbox masters into object storage",
+  "notes": [
+    "Ran the script in chunks (long-running, exceeded a single tool-call timeout); the script is idempotent — it only scans rows whose audio_url still starts with http(s)://, so each chunk picked up where the last one left off. The chunked nature is why earlier per-chunk summary files reported small `scanned` numbers; this rolled-up summary reflects the full task.",
+    "Source list: docs/master-specs-backfill-prod-2026-05-25.json — `needsArtistReSupplyByAlbum` (243 songs across 30 albums).",
+    "Re-running the script after this is a no-op: SELECT count(*) FROM songs WHERE audio_url LIKE 'http%' returns 0.",
+    "audio_container_ext was originally written as `.download` (the tempfile suffix) due to a probe bug; that bug was fixed in the script AND remediated in prod via UPDATE songs SET audio_container_ext = lower(substring(audio_url FROM '\\.([A-Za-z0-9]+)$')) — values now match the actual file extension (.wav/.mp3/.flac/.m4a)."
+  ],
+  "totals": {
+    "scopeFromBackfillReport": 243,
+    "scanned": 243,
+    "rehosted": 243,
+    "probedWithSpecs": 243,
+    "remainingOffBucket": 0,
+    "needsArtistReSupply": 0,
+    "errored": 0
+  },
+  "verification": {
+    "stillOffBucketQuery": "SELECT count(*) FROM songs WHERE audio_url LIKE 'http%'",
+    "stillOffBucketResult": 0,
+    "missingSpecsQuery": "SELECT count(*) FROM songs WHERE audio_url LIKE '/objects/%' AND (audio_format IS NULL OR audio_sample_rate IS NULL OR audio_bytes IS NULL)",
+    "missingSpecsResult": 0,
+    "containerExtDistribution": {
+      ".wav": 275,
+      ".mp3": 73,
+      ".flac": 50,
+      ".m4a": 16,
+      ".bin": 10
+    }
+  },
+  "needsReSupply": [],
+  "errored": []
+}
