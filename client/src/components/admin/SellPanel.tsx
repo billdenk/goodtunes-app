@@ -210,6 +210,19 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   // by AlbumFormat. See docs/design-system.md ("Expandable row lists").
   const skuDisclosure = useExclusiveDisclosure<string>();
 
+  // Task #218 — when this album is invited by a press that has built
+  // its catalog, restrict the Add-Physical menu to the formats that
+  // catalog offers. Free / non-invited albums keep the full
+  // ALBUM_FORMATS list so the SellPanel still works without a press.
+  // NOTE: This hook MUST run unconditionally on every render — keep it
+  // above the loading/error early-returns below, or the hook count
+  // changes between renders and React throws #310 (Task #321).
+  const catalogByFormat = useMemo(() => {
+    const m = new Map<AlbumFormat, CatalogFormatRow>();
+    (invitedPress?.catalog?.formats ?? []).forEach((f) => m.set(f.format, f));
+    return m;
+  }, [invitedPress]);
+
   // Honest loading/error/empty gates so a future schema-drift regression
   // surfaces as a visible message instead of an infinite spinner
   // (Task #288). An empty payload (`{skus:[], addons:[]}`) is a valid
@@ -234,15 +247,6 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   const skuByFormat = new Map(data.skus.map((s) => [s.format as AlbumFormat, s]));
   const signedAddon = data.addons.find((a) => a.kind === "signed_cert");
 
-  // Task #218 — when this album is invited by a press that has built
-  // its catalog, restrict the Add-Physical menu to the formats that
-  // catalog offers. Free / non-invited albums keep the full
-  // ALBUM_FORMATS list so the SellPanel still works without a press.
-  const catalogByFormat = useMemo(() => {
-    const m = new Map<AlbumFormat, CatalogFormatRow>();
-    (invitedPress?.catalog?.formats ?? []).forEach((f) => m.set(f.format, f));
-    return m;
-  }, [invitedPress]);
   const catalogScoped = !!invitedPress?.press && catalogByFormat.size > 0;
   const offeredFormats = catalogScoped
     ? ALBUM_FORMATS.filter((f) => catalogByFormat.has(f))
