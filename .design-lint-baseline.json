@@ -6216,63 +6216,13 @@
   },
   {
     "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "<p className=\"text-[#319ED8] text-[15px] font-semibold mt-0.5 truncate\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "style={{ background: \"#fff\", color: \"#00062B\" }}"
+    "file": "client/src/components/admin/previews/AlbumDesktopPreviewCard.tsx",
+    "snippet": "className=\"flex flex-col h-full bg-[#00062B]\""
   },
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
     "snippet": "style={{ color: it.active ? \"#319ED8\" : \"rgba(255,255,255,0.35)\" }}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2.5 flex-wrap\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "<p className=\"text-[#319ED8] text-[15px] font-semibold mt-0.5 truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"text-[12px] mt-1 flex items-center justify-center gap-1.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"mt-4 text-[12.5px] leading-relaxed line-clamp-4 self-stretch\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"text-[13px] py-6 text-center\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"text-[15px] tabular-nums w-6 text-right flex-shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "<span className=\"text-white text-[15px] font-medium truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"mt-6 self-stretch text-[11px] leading-relaxed\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -6712,11 +6662,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"ml-1.5 opacity-80 text-[10.5px] font-normal\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">"
   },
   {
@@ -6762,21 +6707,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Your press</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mb-4 inline-flex items-center gap-1.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Presses</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "className=\"text-[13.5px] font-semibold text-slate-900 truncate\""
   },
   {
@@ -6788,11 +6718,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "className=\"text-[12px] text-slate-500 inline-flex items-center gap-1 mt-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[12.5px] text-slate-600 leading-snug line-clamp-3\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -7898,6 +7823,106 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/components/ui/AlbumDesktopTrackRow.tsx",
     "snippet": "className=\"w-7 h-7 -mr-1 inline-flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-opacity\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "stroke=\"#4AFFCA\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "stroke=\"#319ED8\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "<div style={{ background: \"#00062B\" }}>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "style={{ color: \"#319ED8\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "style={{ background: \"#fff\", color: \"#00062B\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "style={{ background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"bg-[#00062B] px-5 mt-5 border-t\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "background: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className={`text-[15px] font-medium truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "stroke=\"#00062B\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "color: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "\"linear-gradient(to right, rgba(0,6,43,0) 0%, #00062B 40%, #00062B 100%)\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"mt-1 text-[17px] font-medium active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"text-[13px] mt-1 flex items-center justify-center gap-1.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px] active:scale-[0.98] transition-transform\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"text-[15px] tabular-nums\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className={`text-[15px] font-medium truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"text-[11px] leading-relaxed\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -13632,56 +13657,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#4AFFCA\" strokeWidth=\"2\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"2\" strokeLinecap=\"round\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<div style={{ background: \"#00062B\" }}>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "style={{ color: \"#319ED8\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "style={{ background: \"#fff\", color: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "style={{ background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<div className=\"bg-[#00062B] px-5 mt-5 border-t\" style={{ borderColor: \"rgba(255,255,255,0.08)\" }}>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "background: \"#319ED8\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className={`text-[15px] font-medium truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<path d=\"M8 12.5l2.8 2.8L16.5 9.5\" stroke=\"#00062B\" strokeWidth=\"2.2\" strokeLinecap=\"round\" strokeLinejoin=\"round\" fill=\"none\" />"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "{ date: \"2025-11-21\", actor: ownerName, action: \"Acquired via secondary transfer\", color: \"#4AFFCA\" },"
   },
   {
@@ -13718,6 +13693,11 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill={isFavorite ? \"#FF5470\" : \"none\"} stroke={isFavorite ? \"#FF5470\" : \"#000\"} strokeWidth=\"1.8\" strokeLinecap=\"round\" strokeLinejoin=\"round\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "background: \"#319ED8\","
   },
   {
     "rule": "brand-hex-literal",
@@ -13802,6 +13782,11 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "style={{ color: \"#319ED8\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<div className=\"flex-1 min-h-0 relative overflow-hidden\" style={{ background: \"#00062B\" }}>"
   },
   {
@@ -13828,46 +13813,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "className=\"fixed inset-0 z-[120] bg-[#00062B] flex flex-col\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"mt-1 text-[17px] font-medium active:opacity-70\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"text-[13px] mt-1 flex items-center justify-center gap-1.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px] active:scale-[0.98] transition-transform\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"text-[15px] tabular-nums\" style={{ color: \"rgba(255,255,255,0.32)\" }}>{song.trackNumber}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className={`text-[15px] font-medium truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[11px] leading-relaxed\" style={{ color: \"rgba(255,255,255,0.32)\" }}>"
   },
   {
     "rule": "hardcoded-font-size",

@@ -1,51 +1,40 @@
-import { useState } from "react";
-import { DesktopAlbumView, type DesktopAlbumTab } from "@/components/ui/DesktopAlbumView";
+import { useLocation } from "wouter";
 import { TabletBezel } from "./TabletBezel";
-import type { AlbumPreviewAlbum } from "./AlbumPreviewCard";
+import {
+  PreviewBottomNav,
+  adminAlbumToSurface,
+  albumPreviewSummary,
+  type AlbumPreviewAlbum,
+} from "./AlbumPreviewCard";
+import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
+import { AlbumBonusContent, AlbumLineupRail } from "@/pages/AlbumDetail";
 
 /**
- * Admin-side tablet preview of the fan-facing album page.
- * Wraps the shared `DesktopAlbumView` primitive inside a landscape
- * `TabletBezel` so the editor sees the same thing fans see on a real
- * iPad — pixel-for-pixel, in a believable device frame.
+ * Admin-side tablet preview of the fan-facing AlbumDetail page.
  *
- * Why a transform-scale and not a media query? `DesktopAlbumView` has
- * a real md layout (220px cover, 32px title, tighter padding) that
- * fans hit on iPads at 768–1023px. We render it at an 810-wide
- * virtual canvas (a typical portrait-iPad width) and scale to fit the
- * bezel. To make sure the *md* layout actually triggers — Tailwind
- * `lg:` breakpoints are viewport-based, not parent-width-based, so a
- * desktop monitor would otherwise always pick the lg styles — we pass
- * `compact` so DesktopAlbumView force-renders its md sizing
- * regardless of the host viewport.
+ * Per `replit.md`, the GoodTunes player is Apple-Music mobile chrome —
+ * the same surface fans see on every device class. The preview wraps
+ * the shared `AlbumDetailMobileSurface` (the single visual source of
+ * truth — also rendered by the live fan route and the phone-bezel
+ * preview) inside a landscape `TabletBezel`, so the tablet variant of
+ * the preview shows the exact same chrome the phone variant does and
+ * matches what fans see in the live app.
  *
  * Interactivity is suppressed (`pointer-events-none`) — this is a
  * preview, not a live surface. Editors interact with the form on the
  * left, not the preview itself.
  */
 export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum }) {
-  // Local UI state — preview is non-interactive but the tab strip
-  // still needs SOME `tab` value. Keep a state hook so future tweaks
-  // (e.g. an admin "preview Videos tab" affordance) plug in easily.
-  const [tab, setTab] = useState<DesktopAlbumTab>("music");
+  const { trackCount, totalMinutes } = albumPreviewSummary(album);
+  const { album: surfaceAlbum, songs: surfaceSongs } = adminAlbumToSurface(album);
+  const [, navigate] = useLocation();
 
-  // TabletBezel inner display is 676×501. Render the album view at an
-  // 810-wide virtual canvas (representative portrait-iPad width) and
-  // scale to fit. The scaled height is clipped by the bezel's
-  // overflow-hidden so the editor sees the above-the-fold of the real
-  // fan layout — same contract as the PhoneBezel, which also
-  // scrolls/clips internally.
-  const VIRTUAL_W = 810;
-  const SCALE = 676 / VIRTUAL_W;
-
-  // Footer caption — mirrors AlbumPreviewCard's footer so the two
-  // previews read as siblings.
-  const sorted = [...(album.songs ?? [])].sort(
-    (a, b) => a.trackNumber - b.trackNumber,
-  );
-  const totalSeconds = sorted.reduce((sum, s) => sum + (s.duration || 0), 0);
-  const totalMinutes = Math.round(totalSeconds / 60);
-  const trackCount = sorted.length;
+  // TabletBezel inner display is 676×501. Render the mobile shell at
+  // its natural ~440px width, centered, so the chrome reads as the same
+  // Apple-Music surface fans see — just framed in a tablet bezel. The
+  // bezel's `overflow-hidden` clips below the fold; same scroll/clip
+  // contract as the PhoneBezel.
+  const COLUMN_W = 440;
 
   return (
     <TabletBezel
@@ -59,64 +48,33 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
       }
     >
       <div
-        style={{
-          width: VIRTUAL_W,
-          transform: `scale(${SCALE})`,
-          transformOrigin: "top left",
-          pointerEvents: "none",
-        }}
+        className="w-full h-full flex justify-center"
+        style={{ pointerEvents: "none" }}
       >
-        <DesktopAlbumView
-          album={{
-            id: album.id,
-            title: album.title,
-            artist: album.artist,
-            // PreviewAlbum allows null artwork — DesktopAlbumView wants
-            // a string. Empty string renders a broken-image fallback,
-            // which is the same signal the editor needs to see ("art
-            // missing, fix the upload").
-            artwork: album.artwork ?? "",
-            year: album.year,
-            // PreviewAlbum's "Duo" type doesn't exist on the desktop
-            // view (the fan API doesn't model it yet). Coerce to "EP"
-            // for preview purposes; the desktop fan route never sees
-            // Duo, so this only affects the META line in admin.
-            type: album.type === "Duo" ? "EP" : album.type,
-            description: album.description,
-            // PreviewAlbum doesn't carry these — DesktopAlbumView
-            // gracefully hides the artist link / Buy Bundle / genre
-            // meta when they're absent.
-            genre: null,
-            priceCents: null,
-            primaryArtistId: null,
-          }}
-          songs={(album.songs ?? []).map((s) => ({
-            id: s.id,
-            title: s.title,
-            trackNumber: s.trackNumber,
-            duration: s.duration,
-            isExplicit: !!s.isExplicit,
-            // Task #326: previewable-by-default. The admin tablet preview
-            // shows the post-purchase ("owned") variant anyway, so this
-            // flag is effectively decorative here — set to true to match
-            // the new fan-side default.
-            isPreviewable: true,
-          }))}
-          videos={[]}
-          photos={[]}
-          // Preview always shows the owned (no Buy CTA, no locked rows)
-          // variant — that's the surface fans land on after purchase,
-          // which is what editors typically want to QA against. Also
-          // ensures the brand-blue Play pill renders instead of the
-          // rose preview pill.
-          isOwned
-          canPlay
-          tab={tab}
-          onTabChange={setTab}
-          currentSongId={null}
-          isPlaying={false}
-          compact
-        />
+        <div
+          className="flex flex-col h-full bg-[#00062B]"
+          style={{ width: COLUMN_W, maxWidth: "100%" }}
+        >
+          <div className="flex-1 overflow-hidden">
+            <AlbumDetailMobileSurface
+              album={surfaceAlbum}
+              songs={surfaceSongs}
+              ownedNums={[1]}
+              currentSongId={null}
+              isPlaying={false}
+              bonusSlot={<AlbumBonusContent albumId={album.id} />}
+              lineupSlot={
+                <AlbumLineupRail
+                  albumId={album.id}
+                  onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)}
+                />
+              }
+            />
+          </div>
+          <div className="flex-shrink-0" aria-hidden>
+            <PreviewBottomNav />
+          </div>
+        </div>
       </div>
     </TabletBezel>
   );

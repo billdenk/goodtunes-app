@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
@@ -111,7 +112,6 @@ function AlbumDetailMobile() {
   const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const [shareToast, setShareToast] = useState("");
   const [showPlaylistPicker, setShowPlaylistPicker] = useState<Song | null>(null);
   const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
@@ -410,347 +410,174 @@ function AlbumDetailMobile() {
   const hasPhotos = !!album.photos?.length;
   const hasMoreBy = moreByArtist.length > 0;
 
+  const handleShare = async () => {
+    const url = `${window.location.origin}/album/${album.id}`;
+    const shareData = { title: album.title, text: `${album.title} by ${album.artist}`, url };
+    const hasNativeShare = typeof navigator.share === "function";
+    const destination: "native" | "copy" = hasNativeShare ? "native" : "copy";
+    track("share_initiated", { albumId: album.id, destination });
+    try {
+      if (hasNativeShare) {
+        await navigator.share(shareData);
+        track("share_completed", { albumId: album.id, destination: "native" });
+      } else {
+        await navigator.clipboard.writeText(url);
+        track("share_completed", { albumId: album.id, destination: "copy" });
+        setShareToast("Link copied");
+        setTimeout(() => setShareToast(""), 2000);
+      }
+    } catch {}
+  };
+  const handleToggleAlbumDownload = async () => {
+    const allDownloaded = songs.length > 0 && songs.every((s) => downloadedSongs.has(s.id));
+    try {
+      for (const s of songs) {
+        if (allDownloaded) await removeDownload(album.id, s.id, s.audioUrl ?? undefined);
+        else if (!downloadedSongs.has(s.id)) await downloadSong(album.id, s.id, s.audioUrl ?? undefined);
+      }
+      setDownloadedSongs(listDownloadedSongs(album.id));
+    } catch (e) {
+      toast({ title: "Download failed", description: (e as Error).message });
+    }
+  };
+  const handleViewProvenance = () => {
+    if (isMulti) setShowOwnership(true);
+    else setProvenanceCertNum(ownedNums[0] ?? album.certificateNumber ?? 1);
+  };
+  const editorialPanel = (hasVideos || hasPhotos || hasMoreBy) ? (
+    <div
+      className="mt-8 pt-7 pb-4"
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        borderTop: "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
+      {hasVideos && (
+        <div>
+          <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Videos</h2>
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2" data-testid="section-videos">
+            {album.videos!.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setActiveVideo(v)}
+                className="relative flex-shrink-0 rounded-2xl overflow-hidden text-left active:opacity-90"
+                style={{ width: 280, aspectRatio: "16 / 9" }}
+                data-testid={`video-${v.id}`}
+              >
+                <img src={v.thumbnail} alt={v.title} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85) 0%, rgba(0,6,43,0.05) 60%)" }} />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-13 h-13 w-[52px] h-[52px] rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.3)" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
+                      <path d="M8 5.14v14l11-7-11-7z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="absolute bottom-2.5 left-3 right-3 flex items-end justify-between gap-2">
+                  <p className="text-white text-xs font-semibold leading-tight line-clamp-2">{v.title}</p>
+                  {v.duration && (
+                    <span className="text-[10px] font-semibold text-white px-1.5 py-0.5 rounded-md flex-shrink-0" style={{ background: "rgba(0,0,0,0.55)" }}>
+                      {v.duration}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {hasPhotos && (
+        <div className={hasVideos ? "mt-9" : ""}>
+          <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Photos</h2>
+          <div className="px-5 grid grid-cols-3 gap-1.5" data-testid="section-photos">
+            {album.photos!.map((p, idx) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPhotoIndex(idx)}
+                className="relative rounded-xl overflow-hidden active:opacity-80"
+                style={{ aspectRatio: "1 / 1" }}
+                data-testid={`photo-${p.id}`}
+              >
+                <img src={p.url} alt={p.caption ?? ""} className="absolute inset-0 w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {hasMoreBy && (
+        <div className={hasVideos || hasPhotos ? "mt-9" : ""}>
+          <button
+            type="button"
+            onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
+            className="flex items-center gap-1 px-5 mb-3 active:opacity-70"
+            data-testid="link-more-by-artist"
+          >
+            <h2 className="text-white text-xl font-bold tracking-tight">More By {album.artist}</h2>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2" data-testid="section-more-by">
+            {moreByArtist.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => navigate(`/album/${a.id}`)}
+                className="flex-shrink-0 flex flex-col text-left active:scale-[0.97] transition-transform"
+                style={{ width: 130 }}
+                data-testid={`more-by-${a.id}`}
+              >
+                <div className="w-full aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
+                  <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
+                </div>
+                <p className="text-white text-xs font-semibold leading-tight truncate mt-2">{a.title}</p>
+                <p className="text-white/45 text-[11px] truncate mt-0.5">{a.year}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
       <section className="relative w-full h-screen text-white flex flex-col">
-        {/* Apple-Music-style top chrome:
-            • back is a stand-alone 44px IconButton on the left (glass — same
-              primitive Collection's search/filter use, same opacity, same
-              size, same press feedback)
-            • share + ⋯ live on the right inside a connected pill (one
-              rounded glass background, thin divider between glyphs). The
-              pill is a deliberate variation we kept — Apple Music does the
-              same on its Now Playing chrome. Both halves are 44px tall so
-              the touch target matches the rest of the surface.
-            • both groups sit at top-14 (~56px) so they clear the status bar
-              / Dynamic Island cleanly. */}
-        <IconButton
-          variant="glass"
-          label="Back to collection"
-          onClick={() => navigate("/collection")}
-          className="absolute top-14 left-4 z-50"
-          data-testid="button-back-album"
-        >
-          {/* Nudge 1px left — Lucide's ChevronLeft glyph sits in the
-              right two-thirds of its viewbox, so geometric centering
-              looks visually off-center. Same trick Apple uses for
-              its back chevron. */}
-          <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
-        </IconButton>
-
-        <div
-          className="absolute top-14 right-4 z-50 flex items-center rounded-full backdrop-blur-md"
-          style={{ background: "rgba(255,255,255,0.17)" }}
-        >
-          <button
-            type="button"
-            onClick={async () => {
-              const url = `${window.location.origin}/album/${album.id}`;
-              const shareData = { title: album.title, text: `${album.title} by ${album.artist}`, url };
-              const hasNativeShare = typeof navigator.share === "function";
-              const destination: "native" | "copy" = hasNativeShare ? "native" : "copy";
-              track("share_initiated", { albumId: album.id, destination });
-              try {
-                if (hasNativeShare) {
-                  await navigator.share(shareData);
-                  track("share_completed", { albumId: album.id, destination: "native" });
-                } else {
-                  await navigator.clipboard.writeText(url);
-                  track("share_completed", { albumId: album.id, destination: "copy" });
-                  setShareToast("Link copied");
-                  setTimeout(() => setShareToast(""), 2000);
-                }
-              } catch {}
-            }}
-            aria-label="Share album"
-            className="w-11 h-11 flex items-center justify-center text-white active:scale-[0.94] transition-transform"
-            data-testid="button-share-album"
-          >
-            <Share className="w-[19px] h-[19px]" strokeWidth={2} />
-          </button>
-          <div className="w-px h-4 bg-white/25" aria-hidden />
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowMenu((s) => !s)}
-              aria-label="Album options"
-              aria-haspopup="menu"
-              aria-expanded={showMenu}
-              className="w-11 h-11 flex items-center justify-center text-white active:scale-[0.94] transition-transform"
-              data-testid="button-album-menu"
-            >
-              <MoreHorizontal className="w-[19px] h-[19px]" strokeWidth={2} />
-            </button>
-          </div>
-          {showMenu && (
-            <>
-              <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
-              <div
-                role="menu"
-                className="absolute right-0 top-full mt-2 z-40 rounded-2xl py-1 min-w-[230px] overflow-hidden"
-                style={{
-                  background: "rgba(28, 30, 38, 0.96)",
-                  backdropFilter: "blur(28px) saturate(180%)",
-                  WebkitBackdropFilter: "blur(28px) saturate(180%)",
-                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => { setShowMenu(false); setShowCert(true); }}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
-                  data-testid="menu-view-certificate"
-                >
-                  <span>View GoodDeed®</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4AFFCA" strokeWidth="2">
-                    <path d="M9 12l2 2 4-4M7.8 4.7a3.4 3.4 0 001.95-.8 3.4 3.4 0 014.4 0 3.4 3.4 0 001.95.8 3.4 3.4 0 013.15 3.15 3.4 3.4 0 00.8 1.95 3.4 3.4 0 010 4.4 3.4 3.4 0 00-.8 1.95 3.4 3.4 0 01-3.15 3.15 3.4 3.4 0 00-1.95.8 3.4 3.4 0 01-4.4 0 3.4 3.4 0 00-1.95-.8 3.4 3.4 0 01-3.15-3.15 3.4 3.4 0 00-.8-1.95 3.4 3.4 0 010-4.4 3.4 3.4 0 00.8-1.95 3.4 3.4 0 013.15-3.15z" />
-                  </svg>
-                </button>
-                <div className="h-px bg-white/8" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMenu(false);
-                    if (isMulti) setShowOwnership(true);
-                    else setProvenanceCertNum(ownedNums[0] ?? album.certificateNumber ?? 1);
-                  }}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
-                  data-testid="menu-view-provenance"
-                >
-                  <span>{isMulti ? "Ownership" : "View Provenance"}</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 2" />
-                  </svg>
-                </button>
-                <div className="h-px bg-white/8" />
-                <button
-                  type="button"
-                  onClick={() => { setShowMenu(false); setShowAlbumPlaylistPicker(true); }}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
-                  data-testid="menu-add-album-to-playlist"
-                >
-                  <span>Add to Playlist</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="3" y1="6" x2="14" y2="6" />
-                    <line x1="3" y1="12" x2="14" y2="12" />
-                    <line x1="3" y1="18" x2="10" y2="18" />
-                    <line x1="18" y1="9" x2="18" y2="21" />
-                    <line x1="12" y1="15" x2="24" y2="15" />
-                  </svg>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide" style={{ paddingBottom: 160 }} data-testid="scroll-album">
-          {/* Hero region — Apple-Music-style: a centered square artwork
-              with a soft shadow, then the title / artist / meta stack
-              centered below. The previous full-bleed hero + tinted gradient
-              + LP badge + caret-after-artist were dropped to match Apple's
-              album header more literally (per design feedback). The label
-              now lives only in the metadata footer below the tracklist. */}
-          <div style={{ background: "#00062B" }}>
-            {/* Reserves a clear band above the artwork for the floating
-                back / share / ⋯ chrome (anchored at top-14 with 9-unit
-                buttons → ends around 92px). Apple leaves a ~30–40px gap
-                between the chrome row and the top of the cover art —
-                pt-32 (128px) hits that rhythm. */}
-            <div className="pt-32 px-6 flex justify-center">
-              <div
-                className="w-[72%] max-w-[300px] rounded-xl overflow-hidden"
-                style={{
-                  aspectRatio: "1 / 1",
-                  boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
-                }}
-              >
-                <img
-                  src={album.artwork}
-                  alt=""
-                  className="w-full h-full object-cover block"
-                />
-              </div>
-            </div>
-
-            <div className="relative pt-4 pb-3 px-5 text-center">
-              <h1
-                className="text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap"
-                data-testid="text-album-title"
-              >
-                {/* `flex` (not `inline-flex`) so the title row stays
-                    block-level and the artist + meta lines fall under
-                    it. Previously we used inline-flex here AND on the
-                    meta `<p>`, which collapsed all three (title /
-                    artist button / year) onto a single inline row —
-                    Apple-Music's stacked, centered header turned into
-                    a smushed "Love Life Tragedy   Nick Carter2025"
-                    on one line. */}
-                <span>{album.title}</span>
-                {/* The title-row E used to ride here too (Apple
-                    belt-and-braces). Bill called it visual noise once
-                    the same chip also shows in the meta line below —
-                    the meta-line chip wins because it reads as part of
-                    the bulleted "LP · 2025 · E" list rather than
-                    competing with the title for attention. */}
-              </h1>
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/artist/${encodeURIComponent(album.artist)}`)
-                }
-                className="mt-1 text-[17px] font-medium active:opacity-70"
-                style={{ color: "#319ED8" }}
-                data-testid="link-album-artist"
-              >
-                {album.artist}
-              </button>
-              {/* Genre · Year muted meta line — Apple's "Afro-Pop · 1994 ·
-                  Lossless" pattern. Both tokens are optional; we join only
-                  what's available so the line never starts with a bullet. */}
-              {(album.genre || album.type || album.year || album.isExplicit) && (
-                <p
-                  className="text-[13px] mt-1 flex items-center justify-center gap-1.5"
-                  style={{ color: "#98A2B3" }}
-                  data-testid="text-album-meta"
-                >
-                  {/* Apple Music's "Pop · 1994 · E" pattern — bullets ride
-                      between every piece, E included. The chip uses the
-                      `muted` tone so it picks up the same #98A2B3 fill as
-                      the surrounding text and reads as another beat in
-                      the bulleted list, not a second standalone badge.
-                      `flex` (block-level) — see comment on the h1 above
-                      for why we don't use `inline-flex` here.
-                      Each piece + its preceding bullet renders as a single
-                      flex item so the gap-1.5 spacing applies uniformly
-                      between bullets and tokens. */}
-                  {(() => {
-                    const pieces: ReactNode[] = [];
-                    if (album.genre) pieces.push(<span key="genre">{album.genre}</span>);
-                    if (album.type) pieces.push(<span key="type">{album.type}</span>);
-                    if (album.year) pieces.push(<span key="year">{album.year}</span>);
-                    if (album.isExplicit) {
-                      pieces.push(
-                        <ExplicitBadge key="explicit" tone="muted" />,
-                      );
-                    }
-                    return pieces.map((node, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center gap-1.5"
-                      >
-                        {i > 0 && <span aria-hidden>·</span>}
-                        {node}
-                      </span>
-                    ));
-                  })()}
-                </p>
-              )}
-              {album.description && (
-                <ClampedDescription
-                  text={album.description}
-                  onExpand={() => setShowDescription(true)}
-                />
-              )}
-            </div>
-
-          </div>
-
-          {/* Play / Shuffle / Add bar */}
-          <div className="flex items-center justify-center gap-3 px-5 mt-1 mb-3">
-            <button
-              type="button"
-              onClick={handleShuffle}
-              aria-label="Shuffle album"
-              className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
-              style={{ background: "rgba(255,255,255,0.08)" }}
-              data-testid="button-shuffle-album"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={handlePlayAll}
-              className="flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px] active:scale-[0.98] transition-transform"
-              style={{ background: "#fff", color: "#00062B" }}
-              data-testid="button-play-album"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
-                <path d="M8 5.14v14l11-7-11-7z" />
-              </svg>
-              Play
-            </button>
-            {/* Buy CTA — visible only when the fan doesn't already own a copy
-                (Collection = ownership). Sits to the right of Play, same
-                height, label shows the album's real price from
-                `albums.price_cents`. Falls back to a label-only "Buy" if
-                price is unset (back-catalog / non-GoodTunes rows). */}
-            {ownedNums.length === 0 && (album as any).priceCents != null && (
-              <button
-                type="button"
-                onClick={() => setShowBuySheet(true)}
-                className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0"
-                style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
-                data-testid="button-open-buy-sheet"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="9" cy="21" r="1" />
-                  <circle cx="20" cy="21" r="1" />
-                  <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
-                </svg>
-                Buy ${(((album as any).priceCents as number) / 100).toFixed(2)}
-              </button>
-            )}
-            {nativeDownloadsEnabled && (() => {
-              const allDownloaded = songs.length > 0 && songs.every((s) => downloadedSongs.has(s.id));
-              return (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      for (const s of songs) {
-                        if (allDownloaded) await removeDownload(album.id, s.id, s.audioUrl ?? undefined);
-                        else if (!downloadedSongs.has(s.id)) await downloadSong(album.id, s.id, s.audioUrl ?? undefined);
-                      }
-                      setDownloadedSongs(listDownloadedSongs(album.id));
-                    } catch (e) {
-                      toast({ title: "Download failed", description: (e as Error).message });
-                    }
-                  }}
-                  aria-label={allDownloaded ? "Remove album downloads" : "Download album"}
-                  aria-pressed={allDownloaded}
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
-                  style={{ background: "rgba(255,255,255,0.08)" }}
-                  data-testid="button-download-album"
-                >
-                  {allDownloaded ? (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                      <path d="M5 12.5l4 4L19 7.5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  ) : (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 5v12" />
-                      <path d="M7 12.5L12 17.5l5-5" />
-                    </svg>
-                  )}
-                </button>
-              );
-            })()}
-          </div>
-
-          {/* Album-wide production credits (Produced by / Mixed by / etc.) */}
-          {productionCredits.length > 0 && (
+        <AlbumDetailMobileSurface
+          scrollRef={scrollRef}
+          album={{
+            id: album.id,
+            title: album.title,
+            artist: album.artist,
+            artwork: album.artwork,
+            year: album.year,
+            type: album.type,
+            description: album.description,
+            isExplicit: album.isExplicit,
+            genre: album.genre,
+            priceCents: (album as any).priceCents ?? null,
+          }}
+          songs={songs.map((s) => ({
+            id: s.id,
+            title: s.title,
+            trackNumber: s.trackNumber,
+            duration: s.duration,
+            isExplicit: s.isExplicit,
+          }))}
+          label={apiAlbum?.label ?? null}
+          ownedNums={ownedNums}
+          currentSongId={currentSong?.id ?? null}
+          isPlaying={isPlaying}
+          downloadedSongIds={downloadedSongs}
+          nativeDownloadsEnabled={nativeDownloadsEnabled}
+          productionCreditsSlot={productionCredits.length > 0 ? (
             <AlbumProductionCreditsPanelMobile
               rows={productionCredits}
               onOpenPerson={(personId) => {
                 const person = peopleById.get(personId);
                 if (!person) return;
-                // PerformerSheet wants a song context. Prefer the first
-                // album track this person is credited on; fall back to the
-                // first track so the sheet always opens.
                 const ctxSong =
                   songs.find((s) => {
                     const c = getCredits(s.id);
@@ -763,252 +590,34 @@ function AlbumDetailMobile() {
                 setPerformerSheet({ person, song: ctxSong });
               }}
             />
-          )}
-
-          {/* Tracks */}
-          <div className="bg-[#00062B] px-5 mt-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-            {songs.map((song, i) => {
-              const isActive = currentSong?.id === song.id;
-              return (
-                <div
-                  key={song.id}
-                  className="flex items-center gap-3 h-16 active:bg-white/[0.03] transition-colors"
-                  data-testid={`row-track-${song.id}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handlePlaySong({ ...song, album })}
-                    className="flex items-center gap-4 flex-1 min-w-0 h-full text-left"
-                  >
-                    <div className="w-6 flex-shrink-0 flex items-center justify-center">
-                      {isActive ? (
-                        <div className="flex gap-0.5 items-end h-4">
-                          {[1, 2, 3].map((j) => (
-                            <div
-                              key={j}
-                              className="w-0.5 rounded-full"
-                              style={{
-                                background: "#319ED8",
-                                height: isPlaying ? `${40 + j * 20}%` : "40%",
-                                animationName: isPlaying ? "pulse" : "none",
-                                animationDuration: `${0.5 + j * 0.1}s`,
-                                animationIterationCount: "infinite",
-                              }}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[15px] tabular-nums" style={{ color: "rgba(255,255,255,0.32)" }}>{song.trackNumber}</span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
-                      <p className={`text-[15px] font-medium truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}>
-                        {song.title}
-                      </p>
-                      {song.isExplicit && <ExplicitBadge />}
-                      {i > 0 && (
-                        <span
-                          className="absolute left-0 right-0 top-0 h-px pointer-events-none"
-                          style={{ background: "rgba(255,255,255,0.07)" }}
-                        />
-                      )}
-                    </div>
-                  </button>
-                  {nativeDownloadsEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => toggleSongDownload(song.id)}
-                    aria-label={downloadedSongs.has(song.id) ? "Remove download" : "Download to this device"}
-                    aria-pressed={downloadedSongs.has(song.id)}
-                    className="w-9 h-9 flex items-center justify-center flex-shrink-0 active:scale-[0.9] transition-transform"
-                    data-testid={`button-download-song-${song.id}`}
-                  >
-                    {downloadedSongs.has(song.id) ? (
-                      // Downloaded: filled circle with check (Apple's "in library / downloaded")
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" fill="rgba(255,255,255,0.85)" />
-                        <path d="M8 12.5l2.8 2.8L16.5 9.5" stroke="#00062B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                      </svg>
-                    ) : (
-                      // Not downloaded: Apple's outlined circle with down arrow
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 7v8" />
-                        <path d="M8.5 11.5L12 15l3.5-3.5" />
-                      </svg>
-                    )}
-                  </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => setSongMenuFor({ song, rect: e.currentTarget.getBoundingClientRect() })}
-                    aria-label="Song options"
-                    aria-haspopup="menu"
-                    aria-expanded={songMenuFor?.song.id === song.id}
-                    className="w-7 h-9 flex items-center justify-center text-white/40 flex-shrink-0"
-                    data-testid={`button-track-menu-${song.id}`}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="5" cy="12" r="1.6" />
-                      <circle cx="12" cy="12" r="1.6" />
-                      <circle cx="19" cy="12" r="1.6" />
-                    </svg>
-                  </button>
-                </div>
-              );
-            })}
-            <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-          </div>
-
-          {/* Bonus content — surfaces only when the album has uploaded
-              videos/photos. Keeps clean albums looking identical to before. */}
-          <AlbumBonusContent albumId={album.id} />
-
-          {/* Task #190 — per-album Lineup rail. Renders only when the
-              admin has set a lineup snapshot on this album (the API
-              returns [] otherwise, so this stays hidden for solo-artist
-              records and ungrouped bands). Same Apple-Music-density
-              avatar rail used for band members on ArtistDetail. */}
-          <AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />
-
-          {/* Metadata block — Apple-Music-style footer that lives BELOW
-              the tracklist (not above it). Carries release year, total
-              runtime, label, and ownership. Year + label were previously
-              up in the title block; moved here to match Apple's pattern
-              where the date/copyright row sits under the tracks. */}
-          <div className="px-5 mt-7">
-            <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.32)" }}>
-              <span className="block" data-testid="text-album-year-footer">{album.year}</span>
-              <span className="block mt-0.5">{songs.length} {songs.length === 1 ? "song" : "songs"}, {runtime}</span>
-              {apiAlbum?.label && (
-                <span
-                  className="mt-1 inline-flex items-center gap-1.5"
-                  data-testid={`text-album-label-footer-${apiAlbum.label.id}`}
-                >
-                  {apiAlbum.label.logoUrl && (
-                    <img
-                      src={apiAlbum.label.logoUrl}
-                      alt=""
-                      className="w-3.5 h-3.5 rounded-sm object-contain bg-white/10"
-                    />
-                  )}
-                  <span>{apiAlbum.label.name}</span>
-                </span>
-              )}
-              {ownedNums.length > 0 && (
-                <span className="block mt-1">
-                  {ownedNums.length === 1
-                    ? `You own No. ${(ownedNums[0]).toString().padStart(2, "0")} of this ${album.type === "EP" ? "EP" : album.type === "Single" ? "single" : album.type === "Duo" ? "duo" : "LP"}.`
-                    : `You own ${ownedNums.length} ${album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : album.type === "Duo" ? "duos" : "LPs"}.`}
-                </span>
-              )}
-            </p>
-          </div>
-
-          {/* Editorial panel — slightly lighter shelf for Videos / Photos / More By */}
-          {(hasVideos || hasPhotos || hasMoreBy) && (
-          <div
-            className="mt-8 pt-7 pb-4"
-            style={{
-              background: "rgba(255,255,255,0.03)",
-              borderTop: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-          {/* Videos */}
-          {hasVideos && (
-            <div>
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Videos</h2>
-              <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2" data-testid="section-videos">
-                {album.videos!.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setActiveVideo(v)}
-                    className="relative flex-shrink-0 rounded-2xl overflow-hidden text-left active:opacity-90"
-                    style={{ width: 280, aspectRatio: "16 / 9" }}
-                    data-testid={`video-${v.id}`}
-                  >
-                    <img src={v.thumbnail} alt={v.title} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85) 0%, rgba(0,6,43,0.05) 60%)" }} />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-13 h-13 w-[52px] h-[52px] rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.3)" }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
-                          <path d="M8 5.14v14l11-7-11-7z" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="absolute bottom-2.5 left-3 right-3 flex items-end justify-between gap-2">
-                      <p className="text-white text-xs font-semibold leading-tight line-clamp-2">{v.title}</p>
-                      {v.duration && (
-                        <span className="text-[10px] font-semibold text-white px-1.5 py-0.5 rounded-md flex-shrink-0" style={{ background: "rgba(0,0,0,0.55)" }}>
-                          {v.duration}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Photos */}
-          {hasPhotos && (
-            <div className={hasVideos ? "mt-9" : ""}>
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Photos</h2>
-              <div className="px-5 grid grid-cols-3 gap-1.5" data-testid="section-photos">
-                {album.photos!.map((p, idx) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setPhotoIndex(idx)}
-                    className="relative rounded-xl overflow-hidden active:opacity-80"
-                    style={{ aspectRatio: "1 / 1" }}
-                    data-testid={`photo-${p.id}`}
-                  >
-                    <img src={p.url} alt={p.caption ?? ""} className="absolute inset-0 w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* More By Artist */}
-          {hasMoreBy && (
-            <div className={hasVideos || hasPhotos ? "mt-9" : ""}>
-              <button
-                type="button"
-                onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
-                className="flex items-center gap-1 px-5 mb-3 active:opacity-70"
-                data-testid="link-more-by-artist"
-              >
-                <h2 className="text-white text-xl font-bold tracking-tight">More By {album.artist}</h2>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55">
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-              </button>
-              <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2" data-testid="section-more-by">
-                {moreByArtist.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => navigate(`/album/${a.id}`)}
-                    className="flex-shrink-0 flex flex-col text-left active:scale-[0.97] transition-transform"
-                    style={{ width: 130 }}
-                    data-testid={`more-by-${a.id}`}
-                  >
-                    <div className="w-full aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
-                      <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
-                    </div>
-                    <p className="text-white text-xs font-semibold leading-tight truncate mt-2">{a.title}</p>
-                    <p className="text-white/45 text-[11px] truncate mt-0.5">{a.year}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          </div>
-          )}
-        </div>
+          ) : null}
+          bonusSlot={<AlbumBonusContent albumId={album.id} />}
+          lineupSlot={<AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />}
+          onBack={() => navigate("/collection")}
+          onShare={handleShare}
+          onOpenAlbumMenu={() => {}}
+          onPlayAll={handlePlayAll}
+          onShuffle={handleShuffle}
+          onPlaySong={(s) => {
+            const full = songs.find((x) => x.id === s.id);
+            if (full) handlePlaySong({ ...full, album });
+          }}
+          onOpenBuy={() => setShowBuySheet(true)}
+          onToggleAlbumDownload={handleToggleAlbumDownload}
+          onToggleSongDownload={(id) => toggleSongDownload(id)}
+          onOpenSongMenu={(s, rect) => {
+            const full = songs.find((x) => x.id === s.id);
+            if (full) setSongMenuFor({ song: full, rect });
+          }}
+          onArtistClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
+          onExpandDescription={() => setShowDescription(true)}
+          onViewCertificate={() => setShowCert(true)}
+          onViewProvenance={handleViewProvenance}
+          onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
+        >
+          {editorialPanel}
+        </AlbumDetailMobileSurface>
+        {/* legacy chrome removed — see AlbumDetailMobileSurface above */}
 
         <MiniPlayer />
         <BottomNav />
@@ -3954,7 +3563,7 @@ interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: s
 // admin captured on the album's Overview → Lineup panel. Renders
 // nothing when the album has no lineup (solo records and ungrouped
 // bands), so adding this is a no-op for the existing catalog.
-function AlbumLineupRail({
+export function AlbumLineupRail({
   albumId,
   onPickMember,
 }: {
@@ -4016,7 +3625,7 @@ function AlbumLineupRail({
   );
 }
 
-function AlbumBonusContent({ albumId }: { albumId: string }) {
+export function AlbumBonusContent({ albumId }: { albumId: string }) {
   const { data: videos = [] } = useQuery<BonusVideo[]>({
     queryKey: ["/api/albums", albumId, "videos"],
   });
