@@ -891,6 +891,7 @@ export function AdminAlbum() {
                   sellQuoteLockedAt={album.sellQuoteLockedAt ?? null}
                   onLockToggle={(next) => updateAlbumMode.mutate({ sellQuoteLockedAt: next })}
                   onChangeMode={() => setModeDialogOpen(true)}
+                  onEditArtwork={() => setArtworkEditorOpen(true)}
                 />
               )}
               {safeTab === "press" && allowed.has("press") && (

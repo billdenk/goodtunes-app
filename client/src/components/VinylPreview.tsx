@@ -29,7 +29,7 @@ export function VinylPreview({
   artworkUrl: string | null | undefined;
   color: VinylColorOption;
   jacketUpgrade: JacketUpgrade;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }) {
   // Height drives the scale. The width is derived from the aspect
   // ratio of (jacket footprint + disc peek), so the outer wrapper
@@ -40,7 +40,9 @@ export function VinylPreview({
       ? { container: "h-20" }
       : size === "lg"
         ? { container: "h-44" }
-        : { container: "h-28" };
+        : size === "xl"
+          ? { container: "h-56" }
+          : { container: "h-28" };
   const isGatefold = jacketUpgrade === "gatefold" || jacketUpgrade === "gatefold_insert";
   // Jacket aspect: 1:1 standard, 2:1 gatefold (held at every size).
   const jacketAspect = isGatefold ? 2 : 1;

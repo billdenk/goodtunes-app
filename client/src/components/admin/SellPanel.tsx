@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
@@ -143,6 +143,7 @@ export function SellPanel({
   sellQuoteLockedAt = null,
   onLockToggle,
   onChangeMode,
+  onEditArtwork,
 }: {
   albumId: string;
   artworkUrl?: string | null;
@@ -159,6 +160,10 @@ export function SellPanel({
   /** Called by the "Change mode" affordance in the slim Shopify panel
    *  so the operator can re-open the two-step picker without leaving. */
   onChangeMode?: () => void;
+  /** Task #390 — opens the album cover-art editor modal. Wired from
+   *  AdminAlbum so the per-format card's preview hover-pencil opens
+   *  the same drop-zone the page header thumbnail does. */
+  onEditArtwork?: () => void;
 }) {
   const { toast } = useToast();
   const { data, isLoading, error } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
@@ -345,42 +350,71 @@ export function SellPanel({
             </div>
           ) : (
             <div className="space-y-3">
-              {configuredFormats.map((f) => {
-                const existing = skuByFormat.get(f)!;
+              {(() => {
+                // Task #390 — Format dropdown inside each card needs to
+                // know every format the artist could pivot to. We thread
+                // the same `offeredFormats` list every card uses, plus a
+                // single switcher that promotes a not-yet-configured
+                // format into a draft and routes the disclosure to it.
+                const switchFormat = (currentFormat: AlbumFormat, currentKey: string) =>
+                  (target: AlbumFormat) => {
+                    if (target === currentFormat) return;
+                    const isExisting = skuByFormat.has(target);
+                    const isDraftAlready = draftFormats.includes(target);
+                    if (!isExisting && !isDraftAlready) {
+                      setDraftFormats((prev) => [...prev, target]);
+                    }
+                    const targetKey = isExisting ? target : `draft-${target}`;
+                    skuDisclosure.setOpen(currentKey, false);
+                    skuDisclosure.setOpen(targetKey, true);
+                  };
                 return (
-                  <SkuRow
-                    key={f}
-                    format={f}
-                    existing={existing}
-                    liveCost={costByFormat.get(f) ?? null}
-                    catalogFormat={catalogByFormat.get(f) ?? null}
-                    artworkUrl={artworkUrl}
-                    onSave={upsertSku.mutate}
-                    onDelete={() => deleteSku.mutate(f)}
-                    expanded={skuDisclosure.isOpen(f)}
-                    onSetExpanded={(open) => skuDisclosure.setOpen(f, open)}
-                  />
+                  <>
+                    {configuredFormats.map((f) => {
+                      const existing = skuByFormat.get(f)!;
+                      return (
+                        <SkuRow
+                          key={f}
+                          format={f}
+                          existing={existing}
+                          liveCost={costByFormat.get(f) ?? null}
+                          catalogFormat={catalogByFormat.get(f) ?? null}
+                          artworkUrl={artworkUrl}
+                          offeredFormats={offeredFormats}
+                          onSwitchFormat={switchFormat(f, f)}
+                          onEditArtwork={onEditArtwork}
+                          onSave={upsertSku.mutate}
+                          onDelete={() => deleteSku.mutate(f)}
+                          expanded={skuDisclosure.isOpen(f)}
+                          onSetExpanded={(open) => skuDisclosure.setOpen(f, open)}
+                        />
+                      );
+                    })}
+                    {liveDrafts.map((f) => (
+                      <SkuRow
+                        key={`draft-${f}`}
+                        format={f}
+                        existing={null}
+                        liveCost={costByFormat.get(f) ?? null}
+                        catalogFormat={catalogByFormat.get(f) ?? null}
+                        artworkUrl={artworkUrl}
+                        offeredFormats={offeredFormats}
+                        onSwitchFormat={switchFormat(f, `draft-${f}`)}
+                        onEditArtwork={onEditArtwork}
+                        onSave={(body) => {
+                          upsertSku.mutate(body, {
+                            onSuccess: () =>
+                              setDraftFormats((prev) => prev.filter((d) => d !== f)),
+                          });
+                        }}
+                        onDelete={() => setDraftFormats((prev) => prev.filter((d) => d !== f))}
+                        expanded={skuDisclosure.isOpen(`draft-${f}`)}
+                        onSetExpanded={(open) => skuDisclosure.setOpen(`draft-${f}`, open)}
+                      />
+                    ))}
+                  </>
                 );
-              })}
-              {liveDrafts.map((f) => (
-                <SkuRow
-                  key={`draft-${f}`}
-                  format={f}
-                  existing={null}
-                  liveCost={costByFormat.get(f) ?? null}
-                  catalogFormat={catalogByFormat.get(f) ?? null}
-                  artworkUrl={artworkUrl}
-                  onSave={(body) => {
-                    upsertSku.mutate(body, {
-                      onSuccess: () =>
-                        setDraftFormats((prev) => prev.filter((d) => d !== f)),
-                    });
-                  }}
-                  onDelete={() => setDraftFormats((prev) => prev.filter((d) => d !== f))}
-                  expanded={skuDisclosure.isOpen(`draft-${f}`)}
-                  onSetExpanded={(open) => skuDisclosure.setOpen(`draft-${f}`, open)}
-                />
-              ))}
+              })()}
             </div>
           )}
         </div>
@@ -821,6 +855,35 @@ function SaveLink({
   );
 }
 
+// Task #390 — small (i) popover used next to Retail Price, Select Qty,
+// Total and Profit·Per unit sold. Click or hover-equivalent (popover
+// trigger) opens a calm slate caption with the explanatory copy. Same
+// shadcn Popover the CostTooltip uses, just stripped down.
+function InfoTip({ label, text, testId }: { label: string; text: string; testId: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          className="inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-400 hover:text-[color:var(--brand-blue)] transition-colors"
+          data-testid={testId}
+        >
+          <Info className="w-3.5 h-3.5" />
+          <span className="sr-only">{label}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-64 p-3 text-xs text-slate-600 leading-relaxed"
+        align="start"
+        data-testid={`${testId}-content`}
+      >
+        {text}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function AddPhysicalGoodButton({
   availableFormats,
   onAdd,
@@ -943,6 +1006,9 @@ function SkuRow({
   liveCost,
   catalogFormat,
   artworkUrl,
+  offeredFormats,
+  onSwitchFormat,
+  onEditArtwork,
   onSave,
   onDelete,
   expanded,
@@ -956,6 +1022,15 @@ function SkuRow({
   // quantity ladder). Null = free / non-invited flow.
   catalogFormat: CatalogFormatRow | null;
   artworkUrl: string | null;
+  // Task #390 — Format dropdown at the top of the expanded card lets
+  // the artist pivot to any other offered format from inside the
+  // current card. `offeredFormats` is the same list "+ Add physical
+  // good" uses (catalog-restricted for invited presses; full list
+  // otherwise). `onSwitchFormat` flips the disclosure and creates a
+  // draft for not-yet-configured formats.
+  offeredFormats: AlbumFormat[];
+  onSwitchFormat: (target: AlbumFormat) => void;
+  onEditArtwork?: () => void;
   onSave: (b: {
     format: AlbumFormat;
     priceCents: number;
@@ -1016,6 +1091,15 @@ function SkuRow({
   const [legacyColorTier, setLegacyColorTier] = useState<import("@shared/pressing").VinylColorTier>(
     vinylColor.tier,
   );
+  // Task #390 — when the section changes, snap to the first swatch in
+  // that tier (the old behavior lived in VinylPicksBlock, which the
+  // new layout no longer renders for vinyl rows).
+  useEffect(() => {
+    if (vinylColor.tier === legacyColorTier) return;
+    const first = VINYL_COLORS.find((c) => c.tier === legacyColorTier);
+    if (first) setVinylColorId(first.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legacyColorTier]);
   // Task #385 — 12"LP always ships with the standard jacket. For 7"
   // we still allow the jacket-upgrade picker since Hellbender's 7"
   // ladders price gatefold + insert variants too.
@@ -1229,6 +1313,11 @@ function SkuRow({
   type EstPct = 25 | 50 | 75 | "custom";
   const [estPct, setEstPct] = useState<EstPct>(25);
   const [estCustomStr, setEstCustomStr] = useState<string>("");
+  // Task #390 — Profit row is a collapsible disclosure inside the new
+  // vinyl card layout. Closed by default; the chevron reveals the
+  // per-unit cost breakdown inline (replaces the old CostTooltip
+  // popover for vinyl rows).
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const estimatedSold = useMemo(() => {
     if (estPct === "custom") {
       const n = Number.parseInt(estCustomStr.replace(/[^0-9]/g, ""), 10);
@@ -1238,10 +1327,11 @@ function SkuRow({
     return Math.max(0, Math.floor((parsedQty * estPct) / 100));
   }, [estPct, estCustomStr, parsedQty]);
 
-  // Vinyl uses the new Estimated-sold control; non-vinyl keeps the
-  // legacy fixed×qty (or TBD when unlimited).
+  // Task #390 — vinyl Total is now the simple profit × selected qty
+  // (estimated-sold chips are gone from the vinyl card). Non-vinyl
+  // keeps the legacy fixed×qty (or TBD when unlimited) branch.
   const totalCents = isVinyl
-    ? (profitCents !== null && estimatedSold !== null ? profitCents * estimatedSold : null)
+    ? (profitCents !== null && parsedQty > 0 ? profitCents * parsedQty : null)
     : (qtyMode === "fixed" && profitCents !== null && legacyParsedQty !== null
         ? profitCents * legacyParsedQty
         : null);
@@ -1364,35 +1454,473 @@ function SkuRow({
         </div>
       </div>
 
-      {expanded && (
-      <>
-      {/* Task #385 — vinyl picker sits ABOVE the cost grid so the
-          section/color/quantity picks visibly drive the numbers
-          below. Non-vinyl formats have no picker. */}
-      {usingCatalog && pickedTier ? (
-        <CatalogPicksBlock
-          format={format}
-          tiers={tiers}
-          pickedTier={pickedTier}
-          pickedColorId={pressColorId}
-          onPickTier={setPressTierId}
-          onPickColor={setPressColorId}
-        />
-      ) : isVinyl ? (
-        <VinylPicksBlock
-          format={format}
-          artworkUrl={artworkUrl}
-          color={vinylColor}
-          colorTier={legacyColorTier}
-          onPickColorTier={setLegacyColorTier}
-          onPickColor={(id) => setVinylColorId(id)}
-          jacketUpgrade={jacketUpgrade}
-          onPickJacket={setJacketUpgrade}
-          jacketAllowed={jacketDropdownAllowed}
-        />
-      ) : null}
+      {expanded && (isVinyl ? (
+      // Task #390 — new two-column vinyl card. LEFT: format dropdown,
+      // big preview hero with pencil-on-hover (→ cover-art editor),
+      // color section + swatch row + selected color name, jacket.
+      // RIGHT: Retail Price, Select Qty, collapsible Profit with
+      // inline cost breakdown, Total. Non-vinyl rows keep the legacy
+      // grid below (else branch).
+      (() => {
+        const catalogPicked = usingCatalog && pickedTier
+          ? pickedTier.colors.find((c) => c.id === pressColorId) ?? null
+          : null;
+        const previewColor: VinylColorOption = catalogPicked
+          ? {
+              id: catalogPicked.id,
+              name: catalogPicked.name,
+              tier: "black",
+              swatch: catalogPicked.swatchHex ?? "#ccc",
+            }
+          : vinylColor;
+        const formatOptions = Array.from(new Set<AlbumFormat>([format, ...offeredFormats]));
+        return (
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start"
+        data-testid={`vinyl-card-${format}`}
+      >
+        {/* LEFT */}
+        <div className="space-y-3">
+          {/* Format dropdown — pivot to any other offered format */}
+          <div>
+            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+              Format
+            </div>
+            <Select
+              value={format}
+              onValueChange={(v) => onSwitchFormat(v as AlbumFormat)}
+            >
+              <SelectTrigger
+                className="h-8 w-full text-sm"
+                data-testid={`select-card-format-${format}`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white text-slate-900 border-slate-200">
+                {formatOptions.map((f) => (
+                  <SelectItem
+                    key={f}
+                    value={f}
+                    data-testid={`option-card-format-${format}-${f}`}
+                  >
+                    {ALBUM_FORMAT_LABEL[f]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      <div className={["grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4", isVinyl ? "mt-4 pt-4 border-t border-slate-100" : ""].join(" ")}>
+          {/* Preview hero — pencil on hover opens the cover-art editor */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={onEditArtwork}
+              disabled={!onEditArtwork}
+              className="block w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] disabled:cursor-default"
+              aria-label="Edit album artwork"
+              data-testid={`button-edit-artwork-${format}`}
+            >
+              <div className="flex items-center justify-center">
+                <VinylPreview
+                  artworkUrl={artworkUrl}
+                  color={previewColor}
+                  jacketUpgrade={jacketUpgrade}
+                  size="xl"
+                />
+              </div>
+              {onEditArtwork && (
+                <span
+                  className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/90 text-slate-700 shadow opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-hidden
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Color section + swatch row + selected color name */}
+          {usingCatalog && pickedTier ? (
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Color
+              </div>
+              <Select
+                value={pickedTier.id}
+                onValueChange={(v) => setPressTierId(v)}
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-tier-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {tiers.map((t) => (
+                    <SelectItem
+                      key={t.id}
+                      value={t.id}
+                      data-testid={`option-tier-${format}-${t.id}`}
+                    >
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {pickedTier.colors.length === 0 ? (
+                <div className="text-xs text-slate-400">
+                  No colors set on this tier yet — ask the press to fill in their catalog.
+                </div>
+              ) : (
+                <div
+                  className="flex flex-wrap gap-1.5"
+                  role="radiogroup"
+                  aria-label="Vinyl color"
+                  data-testid={`picker-vinyl-color-${format}`}
+                >
+                  {pickedTier.colors.map((c) => {
+                    const selected = c.id === pressColorId;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        title={c.name}
+                        onClick={() => setPressColorId(c.id)}
+                        className={[
+                          "w-7 h-7 rounded-full border-2 transition-transform",
+                          selected
+                            ? "border-[color:var(--brand-blue)] scale-110 shadow"
+                            : "border-slate-200 hover:border-slate-400",
+                        ].join(" ")}
+                        style={{ background: c.swatchHex ?? "#ccc" }}
+                        data-testid={`swatch-vinyl-color-${format}-${c.id}`}
+                      >
+                        <span className="sr-only">{c.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {catalogPicked && (
+                <div
+                  className="text-xs text-slate-700 font-medium"
+                  data-testid={`text-vinyl-color-name-${format}`}
+                >
+                  {catalogPicked.name}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Color
+              </div>
+              <Select
+                value={legacyColorTier}
+                onValueChange={(v) =>
+                  setLegacyColorTier(v as import("@shared/pressing").VinylColorTier)
+                }
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-vinyl-color-tier-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {VINYL_COLOR_TIER_ORDER.map((t) => (
+                    <SelectItem
+                      key={t}
+                      value={t}
+                      data-testid={`option-vinyl-color-tier-${format}-${t}`}
+                    >
+                      {VINYL_COLOR_TIER_LABEL[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div
+                className="flex flex-wrap gap-1.5"
+                role="radiogroup"
+                aria-label="Vinyl color"
+                data-testid={`picker-vinyl-color-${format}`}
+              >
+                {VINYL_COLORS.filter((c) => c.tier === legacyColorTier).map((c) => {
+                  const selected = c.id === vinylColor.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      title={c.name}
+                      onClick={() => setVinylColorId(c.id)}
+                      className={[
+                        "w-7 h-7 rounded-full border-2 transition-transform",
+                        selected
+                          ? "border-[color:var(--brand-blue)] scale-110 shadow"
+                          : "border-slate-200 hover:border-slate-400",
+                      ].join(" ")}
+                      style={{ background: c.swatch }}
+                      data-testid={`swatch-vinyl-color-${format}-${c.id}`}
+                    >
+                      <span className="sr-only">{c.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div
+                className="text-xs text-slate-700 font-medium"
+                data-testid={`text-vinyl-color-name-${format}`}
+              >
+                {vinylColor.name}
+              </div>
+            </div>
+          )}
+
+          {/* Jacket — Select for 7"; de-emphasized tag for 12"LP */}
+          {jacketDropdownAllowed ? (
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Jacket
+              </div>
+              <Select
+                value={jacketUpgrade}
+                onValueChange={(v) => setJacketUpgrade(v as JacketUpgrade)}
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-jacket-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
+                    <SelectItem
+                      key={j}
+                      value={j}
+                      data-testid={`option-jacket-${format}-${j}`}
+                    >
+                      {JACKET_UPGRADE_LABEL[j]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div
+              className="text-xs text-slate-400"
+              data-testid={`text-jacket-standard-${format}`}
+            >
+              Standard jacket — every 12&quot;LP ships in the standard jacket.
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT */}
+        <div className="space-y-4">
+          {/* Retail Price */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                Retail Price
+              </span>
+              <InfoTip
+                label="About retail price"
+                testId={`info-price-${format}`}
+                text="This is the price you want to charge per unit for your vinyl."
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 text-sm">$</span>
+              <input
+                type="text"
+                value={priceStr}
+                onChange={(e) => setPriceStr(e.target.value)}
+                placeholder="0.00"
+                inputMode="decimal"
+                className={`w-28 ${fieldClass}`}
+                data-testid={`input-price-${format}`}
+              />
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              Per unit sold to fans.
+            </div>
+          </div>
+
+          {/* Select Qty */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                Select Qty
+              </span>
+              <InfoTip
+                label="About quantity"
+                testId={`info-qty-${format}`}
+                text="Your margin will improve based on quantity. This estimate is for you to choose the absolute lowest quantity you believe you'll sell — anything above that is more profit due to lower per-unit costs from scale."
+              />
+            </div>
+            {quantityRungs.length > 0 ? (
+              <Select
+                value={String(parsedQty)}
+                onValueChange={(v) => setParsedQty(Number.parseInt(v, 10))}
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-sku-quantity-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {quantityRungs.map((q) => (
+                    <SelectItem
+                      key={q}
+                      value={String(q)}
+                      data-testid={`option-sku-quantity-${format}-${q}`}
+                    >
+                      {q.toLocaleString()} units
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <input
+                type="text"
+                value={String(parsedQty)}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                  if (Number.isFinite(n) && n > 0) setParsedQty(n);
+                  else if (e.target.value === "") setParsedQty(0);
+                }}
+                inputMode="numeric"
+                className={`w-24 ${fieldClass}`}
+                data-testid={`input-sku-quantity-${format}`}
+              />
+            )}
+            {!usingCatalog && qtySnap.requiresQuote && (
+              <div
+                className="text-xs text-slate-500 mt-1"
+                data-testid={`text-qty-tier-${format}`}
+              >
+                {qtySnap.tier}+ — request a custom quote
+              </div>
+            )}
+            {usingCatalog && catalogSnap?.requiresQuote && (
+              <div
+                className="text-xs text-slate-500 mt-1"
+                data-testid={`text-qty-tier-${format}`}
+              >
+                {catalogSnap.qty}+ — request a custom quote
+              </div>
+            )}
+          </div>
+
+          {/* Profit — collapsible inline breakdown */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setBreakdownOpen((o) => !o)}
+              className="w-full flex items-center justify-between gap-2 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 py-0.5 transition-colors"
+              aria-expanded={breakdownOpen}
+              data-testid={`button-toggle-breakdown-${format}`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                  Profit
+                </span>
+                <span className="text-xs text-slate-400 normal-case font-normal">
+                  Per unit sold
+                </span>
+                <ChevronDown
+                  className={[
+                    "w-3.5 h-3.5 text-slate-400 transition-transform",
+                    breakdownOpen ? "rotate-180" : "",
+                  ].join(" ")}
+                />
+              </span>
+              <span
+                className={[
+                  "tabular-nums text-sm font-semibold",
+                  lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-900",
+                ].join(" ")}
+                data-testid={`text-profit-${format}`}
+              >
+                {profitLabel}
+              </span>
+            </button>
+            {breakdownOpen && breakdown && (
+              <div
+                className="mt-2 ml-1 pl-3 border-l border-slate-200 space-y-1"
+                data-testid={`breakdown-${format}`}
+              >
+                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                  <span>Manufacturing</span>
+                  <span className="tabular-nums">{dollars(breakdown.manufacturingCents)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                  <span>Publishing</span>
+                  <span className="tabular-nums">{dollars(breakdown.publishingCents)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                  <span>Payment processing</span>
+                  <span className="tabular-nums">{dollars(breakdown.paymentProcessingCents)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                  <span>GoodTunes</span>
+                  <span className="tabular-nums">{dollars(breakdown.goodtunesCents)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-6 text-xs text-slate-900 font-semibold pt-1.5 border-t border-slate-100 mt-1">
+                  <span>Cost / unit</span>
+                  <span
+                    className="tabular-nums"
+                    data-testid={`text-cost-${format}`}
+                  >
+                    {totalCostCents === null ? "—" : dollars(totalCostCents)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Total */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                  Total
+                </span>
+                <InfoTip
+                  label="About total"
+                  testId={`info-total-${format}`}
+                  text="Estimated total revenue at this quantity and price."
+                />
+              </span>
+              <span
+                className={[
+                  "tabular-nums text-base font-semibold",
+                  totalCents !== null && totalCents < 0
+                    ? "text-[color:var(--brand-pink)]"
+                    : "text-slate-900",
+                ].join(" ")}
+                data-testid={`text-total-${format}`}
+              >
+                {totalCents === null
+                  ? "—"
+                  : totalCents < 0
+                    ? `-${dollars(Math.abs(totalCents))}`
+                    : dollars(totalCents)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+        );
+      })()
+      ) : (
+      <>
+      <div className={["grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4"].join(" ")}>
         {/* Left column — Price / Cost / Profit */}
         <div className="space-y-3">
           <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
@@ -1733,7 +2261,7 @@ function SkuRow({
         )}
       </div>
       </>
-      )}
+      ))}
     </div>
   );
 }
