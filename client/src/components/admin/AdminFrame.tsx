@@ -782,7 +782,7 @@ function Section({
         data-active={highlightParent ? "true" : "false"}
         className={[
           "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
-          expanded ? "font-semibold" : "font-medium",
+          highlightParent ? "font-bold" : "font-medium",
           highlightParent
             ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
             : "text-slate-700 hover:bg-slate-100",
@@ -845,7 +845,8 @@ function SidebarLink({
       onClick={onClick}
       data-testid={testId}
       className={[
-        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors",
+        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
+        active ? "font-bold" : "font-medium",
         active
           ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
           : "text-slate-700 hover:bg-slate-100",
