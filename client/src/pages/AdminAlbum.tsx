@@ -1588,6 +1588,27 @@ function TracksPanel({
     queryKey: ["/api/albums", album.id, "credits"],
   });
 
+  // Task #369 — pull the catalog-wide Mux pipeline status so each
+  // errored track row can show its auto-retry state (next attempt in
+  // Nm / retry cap reached). One query for the whole tracklist; refetch
+  // every 60s so the countdown updates without a page reload.
+  const { data: muxStatus } = useQuery<{
+    retryState?: Record<
+      string,
+      {
+        attempts: number;
+        maxAttempts: number;
+        lastAttemptAt: number;
+        nextRetryAt: number | null;
+        exhausted: boolean;
+      }
+    >;
+    serverNow?: number;
+  }>({
+    queryKey: ["/api/admin/mux-status"],
+    refetchInterval: 60 * 1000,
+  });
+
   // Drag-to-reorder state lives at the panel level so a row knows when
   // another row is being dragged over it. We pair an optimistic cache
   // rewrite with a server POST; on error we roll the cache back to the
@@ -2255,6 +2276,8 @@ function TracksPanel({
                 trackDisclosure.setOpen(song.id, open)
               }
               scrollIntoViewOnMount={initialOpenTrackId === song.id}
+              muxRetry={muxStatus?.retryState?.[song.id] ?? null}
+              muxServerNow={muxStatus?.serverNow ?? null}
             />
           );
         })}
@@ -5029,6 +5052,8 @@ function TrackRow({
   userExpanded,
   onSetUserExpanded,
   scrollIntoViewOnMount,
+  muxRetry,
+  muxServerNow,
 }: {
   song: SongLite;
   albumId: string;
@@ -5062,6 +5087,18 @@ function TrackRow({
   // so the user lands looking at it (smart-back from a credit-tapped
   // Person page). Mount-only, never re-triggered.
   scrollIntoViewOnMount: boolean;
+  // Task #369 — auto-retry state from /api/admin/mux-status for this
+  // song (only present when the backfill sweep has touched it). The
+  // server clock comes alongside so we render the countdown against
+  // the same `now` the backoff was scheduled from, not the browser's.
+  muxRetry: {
+    attempts: number;
+    maxAttempts: number;
+    lastAttemptAt: number;
+    nextRetryAt: number | null;
+    exhausted: boolean;
+  } | null;
+  muxServerNow: number | null;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
   // Seamless tile-expansion: the row collapses into the dot meter at
@@ -5111,6 +5148,26 @@ function TrackRow({
     onError: (e: any) =>
       toast({
         title: "Couldn't delete the track",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  // Task #369 — "Retry now" for an errored Mux ingest. Hits the
+  // existing /mux-ingest route (which also resets the in-memory backoff
+  // counter server-side) and refreshes both the album cache and the
+  // catalog-wide mux-status so the badge + retry tag re-render.
+  const retryMuxMut = useMutation({
+    mutationFn: async () =>
+      apiRequest("POST", `/api/admin/songs/${song.id}/mux-ingest`),
+    onSuccess: async () => {
+      await invalidate();
+      await qc.invalidateQueries({ queryKey: ["/api/admin/mux-status"] });
+      toast({ title: "Re-ingesting on Mux", description: "We'll update the badge as Mux processes it." });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't retry Mux ingest",
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       }),
@@ -5458,14 +5515,65 @@ function TrackRow({
               : preparing
                 ? "Mux is encoding this master"
                 : "Master not yet ingested to Mux";
+          // Task #369 — Render auto-retry state alongside the badge so
+          // the operator can tell at a glance whether the sweep is
+          // still trying (next retry in Nm), has given up (cap reached
+          // → re-upload), or hasn't been tried yet. "Retry now" only
+          // shows for errored rows; success resets the backoff.
+          const showRetryNow = errored && !retryMuxMut.isPending;
+          const retryLabel = (() => {
+            if (!errored || !muxRetry) return null;
+            if (muxRetry.exhausted) return "retry cap reached — re-upload needed";
+            if (muxRetry.nextRetryAt == null) return null;
+            // Render the countdown against the server's clock to avoid
+            // skew confusion ("retry in -3m" when the laptop is fast).
+            // muxServerNow is captured at fetch time; refetch happens
+            // every 60s so the countdown is at most a minute stale.
+            const nowMs = muxServerNow ?? Date.now();
+            const remainingMs = Math.max(0, muxRetry.nextRetryAt - nowMs);
+            if (remainingMs <= 0) return "next auto-retry pending";
+            const mins = Math.round(remainingMs / 60_000);
+            if (mins >= 60) {
+              const hrs = Math.round(mins / 60);
+              return `next auto-retry in ${hrs}h (attempt ${muxRetry.attempts + 1}/${muxRetry.maxAttempts})`;
+            }
+            return `next auto-retry in ${Math.max(1, mins)}m (attempt ${muxRetry.attempts + 1}/${muxRetry.maxAttempts})`;
+          })();
           return (
-            <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${cls}`}
-              title={title}
-              data-testid={`badge-mux-${song.id}`}
-              data-mux-state={ready ? "ready" : errored ? "errored" : preparing ? "preparing" : "not-ingested"}
-            >
-              {label}
+            <span className="inline-flex items-center gap-1.5 flex-shrink-0">
+              <span
+                className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold ${cls}`}
+                title={title}
+                data-testid={`badge-mux-${song.id}`}
+                data-mux-state={ready ? "ready" : errored ? "errored" : preparing ? "preparing" : "not-ingested"}
+              >
+                {label}
+              </span>
+              {retryLabel && (
+                <span
+                  className={`hidden sm:inline text-xs ${muxRetry?.exhausted ? "text-rose-700 font-medium" : "text-slate-500"}`}
+                  data-testid={`text-mux-retry-${song.id}`}
+                  data-mux-retry-state={muxRetry?.exhausted ? "exhausted" : "scheduled"}
+                >
+                  {retryLabel}
+                </span>
+              )}
+              {showRetryNow && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    retryMuxMut.mutate();
+                  }}
+                  disabled={retryMuxMut.isPending}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-rose-700 hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-400/40 disabled:opacity-60"
+                  title="Reset backoff and re-ingest this master on Mux now"
+                  data-testid={`button-mux-retry-${song.id}`}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Retry now
+                </button>
+              )}
             </span>
           );
         })()}

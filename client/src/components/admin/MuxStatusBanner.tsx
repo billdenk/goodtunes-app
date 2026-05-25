@@ -37,6 +37,19 @@ type MuxStatusResponse = {
     albumId: string | null;
     reason: string | null;
   }>;
+  // Task #369 — per-song auto-retry state keyed by songId. Only present
+  // for errored songs the backfill sweep has actually touched.
+  retryState?: Record<
+    string,
+    {
+      attempts: number;
+      maxAttempts: number;
+      lastAttemptAt: number;
+      nextRetryAt: number | null;
+      exhausted: boolean;
+    }
+  >;
+  serverNow?: number;
 };
 
 const DISMISS_KEY = "gt:admin-mux-banner-dismissed";

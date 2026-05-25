@@ -11995,6 +11995,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const song = await storage.getSongById(req.params.id as string);
     if (!song) return res.status(404).json({ message: "Song not found" });
     if (!song.audioUrl) return res.status(400).json({ message: "Song has no audioUrl to ingest" });
+    // Task #369 — a manual retry is the operator's "no, really, try
+    // again" — clear the persisted backoff (Task #370) so the
+    // auto-sweep treats this as a fresh failure window if we fail
+    // again. Without this, hitting Retry on a track that's already at
+    // attempt 5 would still leave it locked out of the auto-sweep
+    // after one more error.
+    try {
+      await storage.updateSong(song.id, {
+        muxRetryCount: 0,
+        muxLastRetryAt: null,
+      });
+    } catch (err: any) {
+      console.error("[mux-ingest] failed to reset retry ladder", err?.message);
+    }
     // Atomic claim — same path as the auto-ingest hook. If the song is
     // already ready/preparing/ingesting, return its current state instead
     // of double-ingesting.
@@ -12111,6 +12125,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   //     / missing (has audioUrl but no mux asset id)
   //   • a small sample of the most recent errored songs with their
   //     reason so the banner can deep-link Nick to whatever's broken.
+  // Task #369 — Also returns the per-song retry-state map so the admin
+  // album row can show "next auto-retry in Nm" / "retry cap reached"
+  // without scraping logs. Sourced from the persisted songs.mux_retry_*
+  // columns (Task #370) so the cap survives restarts.
   app.get("/api/admin/mux-status", requireAdminBearer, async (_req, res) => {
     try {
       const missing = muxMissingSecrets();
@@ -12133,6 +12151,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         } else if (s.muxAssetId) preparing++;
         else notIngested++;
       }
+      // Task #369 — emit the per-song retry map so the album row can
+      // render "next auto-retry in Nm" / "retry cap reached". Sourced
+      // from the persisted songs.mux_retry_* columns (Task #370) so
+      // the cap survives restarts; only present for songs that have
+      // actually been retried at least once.
+      const now = Date.now();
+      const retryState: Record<
+        string,
+        {
+          attempts: number;
+          maxAttempts: number;
+          lastAttemptAt: number;
+          nextRetryAt: number | null;
+          exhausted: boolean;
+        }
+      > = {};
+      for (const s of withAudio as any[]) {
+        const attempts = Number(s.muxRetryCount ?? 0);
+        if (attempts <= 0) continue;
+        const lastAt = s.muxLastRetryAt
+          ? new Date(s.muxLastRetryAt).getTime()
+          : 0;
+        const exhausted = attempts >= BACKFILL_MAX_ATTEMPTS;
+        retryState[s.id] = {
+          attempts,
+          maxAttempts: BACKFILL_MAX_ATTEMPTS,
+          lastAttemptAt: lastAt,
+          nextRetryAt: exhausted ? null : lastAt + nextBackfillDelayMs(attempts),
+          exhausted,
+        };
+      }
       res.json({
         configured: missing.length === 0,
         missingSecrets: missing,
@@ -12144,6 +12193,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           notIngested,
         },
         erroredSample,
+        retryState,
+        serverNow: now,
       });
     } catch (err: any) {
       console.error("[mux-status] failed", err?.message);
@@ -12335,7 +12386,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // flapping deploy day used to forget the ladder and re-hammer Mux
   // for every permanently-broken master on every boot. Both columns
   // reset to 0/null the moment a song successfully ingests
-  // (status flips to `ready`).
+  // (status flips to `ready`), and the manual /mux-ingest retry
+  // route (Task #369) also clears them so an operator can override
+  // the cap without having to wait for the backoff window.
   const BACKFILL_MAX_ATTEMPTS = 6;
   function nextBackfillDelayMs(attempts: number): number {
     // 15m, 30m, 1h, 2h, 4h, then 6h cap.
