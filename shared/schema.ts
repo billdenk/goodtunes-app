@@ -2166,7 +2166,20 @@ export const manufacturers = pgTable("manufacturers", {
   // in calendar days. Admin-entered; surfaces on the RFQ comparison
   // table so the operator can sort by turnaround. Nullable while the
   // record is still being onboarded.
+  // Task #363 — superseded by the week-range pair below for fan-facing
+  // display + admin entry. Kept on the schema so existing rows that
+  // only have a day count don't get nulled out, and so the RFQ
+  // desired-completion-date warning has something to compare against
+  // until min/max weeks are filled in.
   turnaroundDays: integer("turnaround_days"),
+  // Standard turnaround expressed as an inclusive week range (e.g.
+  // 12–14 wks). Labels and artists think in weeks when planning a
+  // pressing campaign, so every press card renders this range instead
+  // of a raw day count. Either column may be null while the record is
+  // still being onboarded; display falls back to the legacy
+  // `turnaroundDays` for back-compat.
+  turnaroundWeeksMin: integer("turnaround_weeks_min"),
+  turnaroundWeeksMax: integer("turnaround_weeks_max"),
   // Free-text array of capabilities this plant handles natively. We
   // keep it loose-text (not a closed enum) so Bill can write "180g
   // black", "splatter / picture disc", "lathe-cut", "Direct Metal

@@ -850,6 +850,11 @@ export function registerCommerceRoutes(app: Express) {
         location: (press as any).location ?? null,
         websiteUrl: (press as any).websiteUrl ?? null,
         turnaroundDays: (press as any).turnaroundDays ?? null,
+        // Task #363 — week-range pair on every press payload. Either
+        // side may be null while onboarding; the SellPanel card falls
+        // back to deriving from the legacy day count for display.
+        turnaroundWeeksMin: (press as any).turnaroundWeeksMin ?? null,
+        turnaroundWeeksMax: (press as any).turnaroundWeeksMax ?? null,
         specialties: (press as any).specialties ?? [],
       },
       hasShippedFirst,

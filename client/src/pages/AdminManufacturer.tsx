@@ -383,9 +383,24 @@ function PartnerProfileForm({
   const [contactPhone, setContactPhone] = useState(initial.contactPhone ?? "");
   const [location, setLocation] = useState(initial.location ?? "");
   const [bio, setBio] = useState(initial.bio ?? "");
-  const [turnaroundDays, setTurnaroundDays] = useState(
-    initial.turnaroundDays != null ? String(initial.turnaroundDays) : "",
-  );
+  // Task #363 — turnaround is captured as a week range. Pre-fill from
+  // the legacy `turnaroundDays` (rounded to ±1 week) when min/max
+  // weren't set, so legacy rows aren't blanked out on first edit.
+  const derivedWeeks = (() => {
+    if (initial.turnaroundWeeksMin != null || initial.turnaroundWeeksMax != null) {
+      return {
+        min: initial.turnaroundWeeksMin != null ? String(initial.turnaroundWeeksMin) : "",
+        max: initial.turnaroundWeeksMax != null ? String(initial.turnaroundWeeksMax) : "",
+      };
+    }
+    if (initial.turnaroundDays != null) {
+      const w = Math.max(1, Math.round(initial.turnaroundDays / 7));
+      return { min: String(Math.max(1, w - 1)), max: String(w + 1) };
+    }
+    return { min: "", max: "" };
+  })();
+  const [turnaroundWeeksMin, setTurnaroundWeeksMin] = useState(derivedWeeks.min);
+  const [turnaroundWeeksMax, setTurnaroundWeeksMax] = useState(derivedWeeks.max);
   const [specialties, setSpecialties] = useState<string[]>(initial.specialties ?? []);
   const [specInput, setSpecInput] = useState("");
   const [defaultFp, setDefaultFp] = useState<string>(initial.defaultFulfillmentPartnerId ?? "");
@@ -407,7 +422,8 @@ function PartnerProfileForm({
       contactPhone: contactPhone.trim() || null,
       location: location.trim() || null,
       bio: bio.trim() || null,
-      turnaroundDays: turnaroundDays === "" ? null : Number(turnaroundDays),
+      turnaroundWeeksMin: turnaroundWeeksMin === "" ? null : Number(turnaroundWeeksMin),
+      turnaroundWeeksMax: turnaroundWeeksMax === "" ? null : Number(turnaroundWeeksMax),
       specialties,
       defaultFulfillmentPartnerId: defaultFp || null,
     });
@@ -434,16 +450,31 @@ function PartnerProfileForm({
         <Field label="Contact phone">
           <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className={INPUT} data-testid="input-mfr-contact-phone" />
         </Field>
-        <Field label="Standard turnaround (days)">
-          <input
-            type="number"
-            min={0}
-            value={turnaroundDays}
-            onChange={(e) => setTurnaroundDays(e.target.value)}
-            className={INPUT}
-            placeholder="90"
-            data-testid="input-mfr-turnaround"
-          />
+        <Field label="Standard turnaround (weeks)">
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              value={turnaroundWeeksMin}
+              onChange={(e) => setTurnaroundWeeksMin(e.target.value)}
+              className={INPUT + " w-20"}
+              placeholder="12"
+              aria-label="Min weeks"
+              data-testid="input-mfr-turnaround-min"
+            />
+            <span className="text-slate-400 text-sm">to</span>
+            <input
+              type="number"
+              min={0}
+              value={turnaroundWeeksMax}
+              onChange={(e) => setTurnaroundWeeksMax(e.target.value)}
+              className={INPUT + " w-20"}
+              placeholder="14"
+              aria-label="Max weeks"
+              data-testid="input-mfr-turnaround-max"
+            />
+            <span className="text-slate-500 text-sm">wks</span>
+          </div>
         </Field>
       </div>
 

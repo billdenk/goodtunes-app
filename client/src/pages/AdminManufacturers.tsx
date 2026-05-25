@@ -3,6 +3,7 @@ import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, Factory, Clock, Loader2, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -431,12 +432,16 @@ function PressCard({ press }: { press: Manufacturer }) {
         <div className="text-slate-400 text-xs truncate mt-0.5">
           {press.location || press.domain || "—"}
         </div>
-        {press.turnaroundDays != null && (
-          <div className="text-slate-500 text-xs mt-1 inline-flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {press.turnaroundDays}d
-          </div>
-        )}
+        {(() => {
+          const label = pressTurnaroundLabel(press);
+          if (!label) return null;
+          return (
+            <div className="text-slate-500 text-xs mt-1 inline-flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {label}
+            </div>
+          );
+        })()}
       </div>
     </Link>
   );
@@ -464,12 +469,16 @@ function PressRow({ press }: { press: Manufacturer }) {
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-500">
-          {press.turnaroundDays != null && (
-            <span className="inline-flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              {press.turnaroundDays}d
-            </span>
-          )}
+          {(() => {
+            const label = pressTurnaroundLabel(press);
+            if (!label) return null;
+            return (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                {label}
+              </span>
+            );
+          })()}
           {press.specialties.length > 0 && (
             <span className="hidden sm:inline-flex gap-1">
               {press.specialties.slice(0, 3).map((s) => (

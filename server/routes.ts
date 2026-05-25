@@ -9957,13 +9957,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // list endpoint so non-seeded environments (a fresh dev DB or a
   // newly-restored prod) get a populated Presses panel on first load.
   // Idempotent: keyed by domain via getManufacturerByDomain.
+  // Task #363 — turnaround is now a week range (min/max) instead of a
+  // raw day count. Precision Pressing was dropped from the seed so the
+  // operator deleting it from the admin Presses panel keeps it gone;
+  // Nick will re-add Precision by hand if/when they become a real
+  // partner.
   const FOUNDING_PRESSES: Array<{
     name: string;
     domain: string;
     websiteUrl: string;
     location: string;
     bio: string;
-    turnaroundDays: number;
+    turnaroundWeeksMin: number;
+    turnaroundWeeksMax: number;
     specialties: string[];
   }> = [
     {
@@ -9972,17 +9978,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       websiteUrl: "https://memphisrecordpressing.com",
       location: "Memphis, TN",
       bio: "High-capacity vinyl pressing plant in Memphis serving major and independent labels worldwide.",
-      turnaroundDays: 90,
+      turnaroundWeeksMin: 12,
+      turnaroundWeeksMax: 14,
       specialties: ["7\" / 10\" / 12\"", "180g black", "Colored vinyl", "Picture disc"],
-    },
-    {
-      name: "Precision Pressing",
-      domain: "precisionpressing.com",
-      websiteUrl: "https://precisionpressing.com",
-      location: "Saginaw, MI",
-      bio: "Boutique vinyl press focused on short-to-mid runs with hands-on QC and color/splatter specialty work.",
-      turnaroundDays: 75,
-      specialties: ["7\" / 12\"", "Splatter", "Marble / swirl", "Eco-friendly bioVinyl"],
     },
     {
       name: "Hellbender Vinyl",
@@ -9990,7 +9988,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       websiteUrl: "https://hellbendervinyl.com",
       location: "Asheville, NC",
       bio: "Independent vinyl pressing plant in Western NC running boutique runs for indie labels and artists.",
-      turnaroundDays: 120,
+      turnaroundWeeksMin: 16,
+      turnaroundWeeksMax: 18,
       specialties: ["7\" / 12\"", "Lathe-cut option", "Recycled vinyl", "Short-run friendly"],
     },
   ];
@@ -10008,7 +10007,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           websiteUrl: p.websiteUrl,
           location: p.location,
           bio: p.bio,
-          turnaroundDays: p.turnaroundDays,
+          turnaroundWeeksMin: p.turnaroundWeeksMin,
+          turnaroundWeeksMax: p.turnaroundWeeksMax,
           specialties: p.specialties,
         } as any);
       }
@@ -10043,8 +10043,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/manufacturers", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ message: "name is required" });
+    // Task #363 — week-range pair. Keep accepting `turnaroundDays` for
+    // back-compat callers, but the admin UI now sends min/max weeks.
     const ta = intOrNull(b.turnaroundDays);
     if (ta === INVALID) return res.status(400).json({ message: "turnaroundDays must be a number" });
+    const tWkMin = intOrNull(b.turnaroundWeeksMin);
+    if (tWkMin === INVALID) return res.status(400).json({ message: "turnaroundWeeksMin must be a number" });
+    const tWkMax = intOrNull(b.turnaroundWeeksMax);
+    if (tWkMax === INVALID) return res.status(400).json({ message: "turnaroundWeeksMax must be a number" });
     const dom = normDomain(b.domain);
     // Mirror vendors/labels: when a domain is supplied, surface an existing
     // manufacturer with that domain as a 409 (+ the row), so the admin UI
@@ -10070,6 +10076,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         contactEmail: strOrNull(b.contactEmail),
         contactPhone: strOrNull(b.contactPhone),
         turnaroundDays: ta,
+        turnaroundWeeksMin: tWkMin,
+        turnaroundWeeksMax: tWkMax,
         specialties: Array.isArray(b.specialties)
           ? b.specialties.map((s: unknown) => String(s)).filter(Boolean)
           : [],
@@ -10232,6 +10240,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ta = intOrNull(b.turnaroundDays);
       if (ta === INVALID) return res.status(400).json({ message: "turnaroundDays must be a number" });
       u.turnaroundDays = ta;
+    }
+    // Task #363 — week-range pair supersedes the day count on the
+    // press card, but both shapes patch through so the legacy day
+    // column doesn't need a forced backfill.
+    if (b.turnaroundWeeksMin !== undefined) {
+      const v = intOrNull(b.turnaroundWeeksMin);
+      if (v === INVALID) return res.status(400).json({ message: "turnaroundWeeksMin must be a number" });
+      u.turnaroundWeeksMin = v;
+    }
+    if (b.turnaroundWeeksMax !== undefined) {
+      const v = intOrNull(b.turnaroundWeeksMax);
+      if (v === INVALID) return res.status(400).json({ message: "turnaroundWeeksMax must be a number" });
+      u.turnaroundWeeksMax = v;
     }
     if (b.specialties !== undefined) {
       u.specialties = Array.isArray(b.specialties)

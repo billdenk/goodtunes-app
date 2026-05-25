@@ -231,6 +231,31 @@ SQL
 migrate_entity_contacts dev  "${DATABASE_URL:-}"
 migrate_entity_contacts prod "${PROD_DATABASE_URL:-}"
 
+# Task #363 — press turnaround is now an inclusive week range (min/max)
+# instead of a raw day count. Additive ALTERs on both DBs so the
+# publish dev→prod diff stays empty and a fresh-clone dev never 500s
+# the admin Presses panel on its first save. Legacy `turnaround_days`
+# is kept on the row so existing values aren't lost.
+migrate_manufacturer_turnaround_weeks() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping manufacturer turnaround-weeks migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS turnaround_weeks_min integer,
+  ADD COLUMN IF NOT EXISTS turnaround_weeks_max integer;
+SQL
+  then
+    echo "post-merge: manufacturer turnaround-weeks migration ok on $label"
+  else
+    echo "post-merge: WARNING — manufacturer turnaround-weeks migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturer_turnaround_weeks dev  "${DATABASE_URL:-}"
+migrate_manufacturer_turnaround_weeks prod "${PROD_DATABASE_URL:-}"
+
 # Task #246 — signed-cert sale-window + reservations + true-up ledger.
 # Additive columns on `albums` plus two new tables. Drizzle push has a
 # habit of silently skipping additive ALTERs once a release ships, so

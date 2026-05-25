@@ -25,6 +25,7 @@ import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, X, Info, MapPin, Clock, Lock, ChevronDown } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -74,6 +75,8 @@ type Manufacturer = {
   location: string | null;
   websiteUrl: string | null;
   turnaroundDays: number | null;
+  turnaroundWeeksMin: number | null;
+  turnaroundWeeksMax: number | null;
   specialties: string[];
 };
 
@@ -854,15 +857,19 @@ function PressCard({ press, highlight = false }: { press: Manufacturer; highligh
           {press.bio}
         </div>
       )}
-      {press.turnaroundDays != null && (
-        <div
-          className="text-[12px] text-slate-500 inline-flex items-center gap-1"
-          data-testid={`text-press-turnaround-${press.id}`}
-        >
-          <Clock className="w-3 h-3" />
-          {press.turnaroundDays}-day turnaround
-        </div>
-      )}
+      {(() => {
+        const label = pressTurnaroundLabel(press);
+        if (!label) return null;
+        return (
+          <div
+            className="text-[12px] text-slate-500 inline-flex items-center gap-1"
+            data-testid={`text-press-turnaround-${press.id}`}
+          >
+            <Clock className="w-3 h-3" />
+            {label}
+          </div>
+        );
+      })()}
       {press.specialties.length > 0 && (
         <div className="flex flex-wrap gap-1" data-testid={`chips-press-specialties-${press.id}`}>
           {press.specialties.map((s, i) => (
