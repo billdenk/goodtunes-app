@@ -22,6 +22,7 @@ import {
 // visual cue for what a count means (favorites vs roster size).
 import { Heart, Star } from "lucide-react";
 import { RangePicker, CompareToggle, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BRAND, CHART_STACK_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
 type Range = { from: string; to: string };
@@ -326,6 +327,8 @@ function OverviewTab({ qs }: { qs: string }) {
       <Card title="Revenue by artist" subtitle="Stacked daily revenue across the roster" testId="chart-rev-by-artist">
         <RevByArtistChart data={byArtist.data} loading={byArtist.isLoading} />
       </Card>
+
+      <CertRunsSection kind="label" qs={qs} />
     </>
   );
 }

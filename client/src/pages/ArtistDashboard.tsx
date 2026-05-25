@@ -18,6 +18,7 @@ import {
 // favourites column visually paired with the player's heart action.
 import { Heart } from "lucide-react";
 import { RangePicker, CompareToggle, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
 type Range = { from: string; to: string };
@@ -284,6 +285,8 @@ function OverviewTab({ qs }: { qs: string }) {
           <GeoTable buyers={geo.data?.buyers ?? []} listeners={geo.data?.listeners ?? []} loading={geo.isLoading} />
         </Card>
       </section>
+
+      <CertRunsSection kind="artist" qs={qs} />
     </>
   );
 }
