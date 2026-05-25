@@ -1,6 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2 } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -218,6 +237,11 @@ export function AdminDashboard() {
     queryKey: ["/api/admin/customers"],
   });
 
+  const { data: role } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const isSuperAdmin = role?.role === "super_admin";
+
   return (
     <AdminFrame active="dashboard">
       <div className="space-y-5">
@@ -229,6 +253,8 @@ export function AdminDashboard() {
         />
 
         {ops && <OpsHealthStrip ops={ops} />}
+
+        {isSuperAdmin && <ReferralPayoutsCard />}
 
         <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
 
@@ -735,5 +761,233 @@ function ActivityIcon({ kind }: { kind: FeedItem["kind"] }) {
     <span className={`w-7 h-7 rounded-md inline-flex items-center justify-center flex-shrink-0 ${map.bg}`}>
       <Icon className={`w-3.5 h-3.5 ${map.color}`} />
     </span>
+  );
+}
+
+// ─── Referral payouts card (super-admin only) ──────────────────────────
+//
+// Task #358 — surfaces the pending referral-payout run on the admin home
+// so a super-admin doesn't have to curl /api/admin/referral-payouts/* to
+// see what's queued. Preview opens a per-payee breakdown (including who
+// is blocked because they haven't connected Stripe); Run hits the live
+// endpoint with a confirm step and toasts paid/skipped/failed counts.
+
+type ReferralPayoutBatch = {
+  ownerKind: "person" | "organization";
+  ownerId: string;
+  ownerName: string | null;
+  stripeAccountId: string | null;
+  payoutsEnabled: boolean;
+  currency: string;
+  creditIds: string[];
+  totalCents: number;
+  units: number;
+};
+type ReferralPayoutsPending = {
+  batches: ReferralPayoutBatch[];
+  totalCents: number;
+  payableCount: number;
+  blockedCount: number;
+};
+type ReferralPayoutsRunResult = {
+  dryRun: boolean;
+  attempted: number;
+  paid: number;
+  skipped: number;
+  failed: number;
+  totalCents: number;
+  batches: Array<{
+    ownerKind: string;
+    ownerId: string;
+    ownerName: string | null;
+    status: "paid" | "skipped" | "failed";
+    amountCents: number;
+    creditCount: number;
+    transferId?: string;
+    error?: string;
+  }>;
+};
+
+function ReferralPayoutsCard() {
+  const { toast } = useToast();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const { data, isLoading } = useQuery<ReferralPayoutsPending>({
+    queryKey: ["/api/admin/referral-payouts/pending"],
+  });
+
+  const run = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", "/api/admin/referral-payouts/run", { dryRun: false });
+      return (await r.json()) as ReferralPayoutsRunResult;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/referral-payouts/pending"] });
+      toast({
+        title: `Referral payouts: ${result.paid} paid · ${result.skipped} skipped · ${result.failed} failed`,
+        description: result.totalCents > 0 ? `Sent ${fmtUsd(result.totalCents)}` : undefined,
+      });
+      setConfirmOpen(false);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't run referral payouts",
+        description: e?.message,
+        variant: "destructive",
+      }),
+  });
+
+  if (isLoading) return null;
+  const totalCents = data?.totalCents ?? 0;
+  const payable = data?.payableCount ?? 0;
+  const blocked = data?.blockedCount ?? 0;
+  if (payable === 0 && blocked === 0) return null;
+
+  return (
+    <>
+      <section
+        className="rounded-lg border border-slate-200 bg-white p-4 flex flex-wrap items-center gap-x-4 gap-y-3"
+        data-testid="card-referral-payouts"
+      >
+        <span
+          className="w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: "rgba(74,255,202,0.2)" }}
+        >
+          <Banknote className="w-4 h-4 text-emerald-600" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-slate-900" data-testid="text-referral-payouts-summary">
+            Referral payouts ready: {fmtUsd(totalCents)} across {payable} payee{payable === 1 ? "" : "s"}
+            {blocked > 0 ? `, ${blocked} blocked` : ""}
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            Stripe Transfers to artists, ambassadors, and non-profits with connected payouts.
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            data-testid="button-referral-payouts-preview"
+          >
+            Preview
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            disabled={payable === 0 || run.isPending}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+            style={{ backgroundColor: "var(--brand-blue)" }}
+            data-testid="button-referral-payouts-run"
+          >
+            {run.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            Run payouts
+          </button>
+        </div>
+      </section>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-referral-payouts-preview">
+          <DialogHeader>
+            <DialogTitle>Referral payouts preview</DialogTitle>
+          </DialogHeader>
+          <ReferralPayoutsPreviewBody data={data} />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent data-testid="dialog-referral-payouts-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Run referral payouts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send {fmtUsd(totalCents)} via Stripe Transfers to {payable} payee
+              {payable === 1 ? "" : "s"}.
+              {blocked > 0
+                ? ` ${blocked} payee${blocked === 1 ? " is" : "s are"} blocked (no connected Stripe account) and will be skipped.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-referral-payouts-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                run.mutate();
+              }}
+              disabled={run.isPending}
+              data-testid="button-referral-payouts-confirm"
+            >
+              {run.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Send payouts
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+function ReferralPayoutsPreviewBody({ data }: { data: ReferralPayoutsPending | undefined }) {
+  if (!data || data.batches.length === 0) {
+    return (
+      <div className="py-6 text-center text-sm text-slate-500" data-testid="text-referral-payouts-empty">
+        No pending referral credits.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <span>{data.batches.length} payee{data.batches.length === 1 ? "" : "s"}</span>
+        <span>
+          Total: <strong className="text-slate-700">{fmtUsd(data.totalCents)}</strong>
+        </span>
+      </div>
+      <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md max-h-[60vh] overflow-y-auto">
+        {data.batches.map((b) => {
+          const blocked = !b.stripeAccountId || !b.payoutsEnabled;
+          const reason = !b.stripeAccountId
+            ? "No connected Stripe account"
+            : !b.payoutsEnabled
+              ? "Stripe account exists but payouts not enabled"
+              : null;
+          const detailHref =
+            b.ownerKind === "person" ? `/admin/people/${b.ownerId}` : `/admin/non-profits/${b.ownerId}`;
+          return (
+            <li
+              key={`${b.ownerKind}-${b.ownerId}`}
+              className="px-3 py-2.5 flex items-center gap-3"
+              data-testid={`row-referral-payout-${b.ownerKind}-${b.ownerId}`}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-slate-900 truncate">
+                  <Link href={detailHref} className="hover:underline">
+                    {b.ownerName || `(unnamed ${b.ownerKind})`}
+                  </Link>
+                  <span className="ml-2 text-xs uppercase tracking-wide text-slate-400">
+                    {b.ownerKind}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {b.creditIds.length} credit{b.creditIds.length === 1 ? "" : "s"} · {b.units} unit
+                  {b.units === 1 ? "" : "s"}
+                  {reason ? <span className="text-amber-700"> · {reason}</span> : null}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-semibold text-slate-900">{fmtUsd(b.totalCents)}</div>
+                <div
+                  className={`text-xs uppercase tracking-wide font-semibold ${blocked ? "text-amber-700" : "text-emerald-700"}`}
+                >
+                  {blocked ? "Blocked" : "Ready"}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
