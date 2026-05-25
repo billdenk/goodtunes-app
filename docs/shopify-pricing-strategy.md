@@ -255,13 +255,164 @@ competitive against the vinyl SKU itself.
 This section is the source-of-truth ladder. The downstream pieces
 that *use* it ship separately:
 
-- The wholesale calculator that auto-charges the label's card on
-  every Shopify order ([auto-charge task](./roadmap.md)).
+- The wholesale calculator that bills the label for every Shopify
+  order via the chosen settlement mechanism (see
+  [Settlement mechanism](#settlement-mechanism--how-goodtunes-gets-paid-per-shopify-order)
+  below).
 - The artist-facing earnings preview that pre-shows the ladder
   picked against their forecast run size.
 - The vendor-managed pricing portal that lets Hoover, Sticker Mule,
   and Spinney quote their own input prices through our admin
   (collapsing the "estimate" lines above into live quotes).
+
+## Settlement mechanism — how GoodTunes gets paid per Shopify order
+
+### The problem
+
+On the fan-side flow (`my.goodtunes.music`) the fan absorbs Stripe's
+fee because GoodTunes is the merchant of record. On the Shopify-side
+flow the **label** is the merchant of record, which makes GoodTunes
+the *payee* — any per-charge processor fee comes straight out of our
+margin. At Stripe's published card rate (2.9% + $0.30) a $10 GoodTunes
+line bleeds $0.59 to Stripe. That's 5.9% on the order. At scale that
+fee drag erases more margin than the entire signed-cert ladder
+generates. We cannot ship a per-order card charge as the settlement
+mechanism — we have to pick something that amortizes or eliminates
+the fixed component.
+
+### Does Stripe allow wires?
+
+Short version: **not as a direct charge**. You can't "charge" a
+customer by wire the way you charge a card or a bank account. But
+Stripe does support wires (and ACH credit transfers) as a **customer
+balance top-up** via its "bank transfer" payment method. The label
+wires money to a virtual account Stripe assigns them, the money lands
+as a credit on their Stripe customer balance, and invoices we issue
+draw down that balance with effectively no per-invoice fee.
+
+Stripe's current published fees for that path (re-confirm before
+quoting to a label):
+
+- US ACH credit transfer into customer balance: ~$1 flat per transfer
+- US domestic wire into customer balance: ~$8 flat per transfer
+- International wire: higher, region-dependent
+
+So wires *are* usable, but only as a top-up — not per order. They only
+pencil out paired with batching (one wire covers many orders).
+
+### Candidates compared
+
+Fee shown is what GoodTunes loses per $10 GoodTunes line. Batched
+options assume a representative $500/week rollup per label.
+
+| # | Mechanism | Fee per $10 line | Settlement latency | Label friction | Our ops lift |
+|---|---|---|---|---|---|
+| A | Card-on-file, per order (original plan) | $0.59 (5.9%) | T+2 | low | low |
+| B | ACH Direct Debit, per order | $0.08 (0.8%, $5 cap) | T+4 | medium (bank connect) | low |
+| C | Weekly net-invoice rollup, card | ~$14.80 on $500 (3.0%) | T+7 to T+9 | low | medium |
+| D | **Weekly net-invoice rollup, ACH Direct Debit** | **$5 max regardless of size** (1.0% on $500, 0.25% on $2,000) | T+7 to T+11 | medium | medium |
+| E | Monthly prepaid wallet, funded by ACH credit / wire into Stripe customer balance | $1 (ACH) or $8 (wire) per top-up, amortized to ~$0.01/order | prepaid | high upfront | medium |
+| F | Merchant-of-record on our slice via Shopify Collective / split-at-checkout | $0 to us (fan absorbs) | T+2 | very high (Collective is US-only and invitation-gated) | high |
+| G | Hybrid: D for ≥$X/mo labels, A for everyone else | mix | mix | tiered | medium |
+
+C and D look bad cell-by-cell because the fixed $0.30 / $5 cap is
+amortized across a batch — the percent shown is calculated against a
+$500/week roll-up. Bigger labels see the percent shrink toward zero.
+
+### Recommendation
+
+**Primary: weekly net-invoice rollup paid by ACH Direct Debit
+(option D).** A single ACH pull at the end of each week settles every
+Shopify order that hit during the window. Stripe caps US ACH at $5
+per transaction, so any rollup above ~$625 the fee is effectively a
+flat $5 (0.8% otherwise). At Compass-scale ($2,000/wk) that's 0.25%
+drag instead of 5.9%. The 1.0%–0.25% range is the kind of fee we can
+absorb without raising per-redemption pricing.
+
+**Fallback for labels that won't connect a bank: card-on-file weekly
+rollup (option C).** Still meaningfully better than per-order
+because the $0.30 fixed component only hits once per week. Default to
+ACH in the wizard and present card as a one-click downgrade.
+
+**Optional power-user lane for the biggest labels: prepaid Stripe
+customer-balance wallet, funded by monthly ACH credit or wire
+(option E).** Every order draws from the balance at zero per-order
+fee; the label gets a monthly statement reconciling the wallet. This
+is the cleanest economics but requires the most label-side trust, so
+it's opt-in, not default.
+
+**Not recommended for v1: merchant-of-record-at-checkout
+(option F).** Shopify Collective is US-only, invitation-gated, and
+gives Shopify a fingerhold on how our slice is priced and presented
+that's hard to back out of. Re-evaluate once we have 50+ labels and
+the integration cost is justified by the fee savings on F.
+
+### What the label experience looks like (recommended path)
+
+1. **Shopify onboarding — Billing step.** Label connects a bank via
+   Plaid / Stripe Financial Connections (ACH Direct Debit mandate).
+   Card-on-file is offered as a secondary "I don't want to connect a
+   bank" option that lands them on option C instead. Either choice
+   unblocks publishing GoodTunes-mapped variants.
+2. **During the week**, every Shopify order webhook computes the
+   GoodTunes line and writes a **pending ledger row** — not a Stripe
+   charge. The fan unlock goes through immediately regardless of
+   billing state; we never punish the fan for label-side billing
+   issues.
+3. **End of week** (Mondays 06:00 UTC, say) a rollup job assembles
+   each label's unbilled items into a single Stripe Invoice and
+   auto-debits the connected bank account. Invoice line items mirror
+   the per-order breakdown so the label can audit line by line.
+4. **Failure mode.** ACH bounces (NSF, closed account) → the existing
+   "fix your billing" banner lights up; new Shopify mappings can't
+   be published until the issue is cured; the unpaid items roll into
+   next week's invoice with a retry counter. Three strikes pauses the
+   integration: orders still unlock for fans, but their items queue
+   and the label is locked out of new Shopify publishes.
+5. **Refunds.** A Shopify void/refund inside the open window simply
+   removes the item from the in-flight invoice (no Stripe call).
+   After the window closes, refunds issue a Stripe credit note that
+   nets against the next week's invoice. Same auto-reversal pattern
+   as the existing fan-unlock refund path, just bookkept against an
+   invoice instead of a single charge.
+
+### Open numbers Nick has to confirm before this goes live
+
+- **Stripe ACH cap at our volume.** Published cap is $5/transaction;
+  Stripe negotiates lower at scale. Ask the rep what the floor is
+  once we're running real volume.
+- **Plaid vs. Stripe Financial Connections.** Per-link / per-month
+  pricing on bank-connect. Confirm which is cheaper for our usage
+  pattern (one connect per label, infrequent re-link).
+- **Stripe customer-balance bank-transfer fees, current.** Published
+  as $1 (US ACH credit) / $8 (US wire) but verify before promising
+  labels free-after-top-up.
+- **Shopify Collective eligibility.** Even though it's deferred,
+  get a yes/no on whether GoodTunes qualifies, so we know whether F
+  is a future lane or off the table.
+
+### Replacing the original implementation task
+
+The original "card-on-file auto-charge per order" task is retired.
+Implementation follow-ups, once the recommendation above is locked:
+
+1. Stripe ACH onboarding (Plaid Link or Stripe Financial
+   Connections) wired into the Shopify-onboarding wizard's Billing
+   step, with card-on-file as a one-click downgrade.
+2. Per-order ledger writer inside the existing Shopify order
+   webhook — pure DB write, no Stripe call, no fee.
+3. Weekly rollup job: assemble each label's Stripe Invoice,
+   attempt ACH debit, persist invoice rows tying back to the line
+   items. Retry + cure flow on bounce.
+4. Admin + label-facing billing surfaces: open-window preview,
+   invoice history, retry actions.
+5. Refund handling: pre-close removes items from the in-flight
+   invoice; post-close issues credit notes that net against the
+   next invoice.
+
+The sibling sale-window batch task (signed-cert wholesale true-up) is
+unchanged — its credit/debit lines just drop into the next week's
+invoice naturally under this model.
 
 ## Open questions to revisit before signing the first label
 
