@@ -340,41 +340,50 @@ export function AdminFrame({
   });
   const isSuperAdmin = roleInfo?.role === "super_admin";
 
-  // Task #273 — Collapsible sidebar sections (Stripe-style). State is
-  // one boolean per section id, persisted to localStorage so the admin's
-  // last layout survives reloads and navigations. On the very first
-  // load (no stored entry yet) we expand only the section that contains
-  // the current page; after that, the stored map is authoritative and
+  // Task #273 + #309 — Collapsible sidebar sections (Stripe-style),
+  // accordion: at most one section open at a time. State persists to
+  // localStorage so the admin's choice survives reloads and route
+  // changes. On first load with no stored value we expand the section
+  // containing the current page; after that the stored value wins and
   // we never auto-expand on navigation.
   const activeSection = SECTION_FOR_ENTITY[active] ?? null;
-  const [openSections, setOpenSections] = useState<
-    Partial<Record<SidebarSectionId, boolean>>
-  >(() => {
-    if (typeof window === "undefined") {
-      return activeSection ? { [activeSection]: true } : {};
-    }
-    try {
-      const raw = window.localStorage.getItem(SIDEBAR_SECTIONS_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
-          return parsed as Partial<Record<SidebarSectionId, boolean>>;
-        }
+  // The stored shape used to be a `{ id: boolean }` map (Task #273);
+  // tolerate that on first read so we don't reset admins who upgraded.
+  const [openSection, setOpenSection] = useState<SidebarSectionId | null>(
+    () => {
+      if (typeof window === "undefined") {
+        return activeSection;
       }
-    } catch {}
-    return activeSection ? { [activeSection]: true } : {};
-  });
+      try {
+        const raw = window.localStorage.getItem(SIDEBAR_SECTIONS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed === "string" || parsed === null) {
+            return parsed as SidebarSectionId | null;
+          }
+          if (parsed && typeof parsed === "object") {
+            const firstOpen = Object.keys(parsed).find(
+              (k) => (parsed as Record<string, unknown>)[k],
+            );
+            if (firstOpen) return firstOpen as SidebarSectionId;
+            return activeSection;
+          }
+        }
+      } catch {}
+      return activeSection;
+    },
+  );
   useEffect(() => {
     try {
       window.localStorage.setItem(
         SIDEBAR_SECTIONS_KEY,
-        JSON.stringify(openSections),
+        JSON.stringify(openSection),
       );
     } catch {}
-  }, [openSections]);
+  }, [openSection]);
   const toggleSection = (id: SidebarSectionId) =>
-    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
-  const isSectionOpen = (id: SidebarSectionId) => !!openSections[id];
+    setOpenSection((prev) => (prev === id ? null : id));
+  const isSectionOpen = (id: SidebarSectionId) => openSection === id;
 
   return (
     <div className="h-screen w-screen overflow-x-hidden bg-slate-50 font-sans antialiased flex">
