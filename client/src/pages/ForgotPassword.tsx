@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useAuthKind } from "@/hooks/useAuthKind";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
+import { ADMIN_CHROME } from "./authChrome";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -41,9 +42,10 @@ export default function ForgotPassword() {
   }
 
   if (isAdmin) {
+    const s = ADMIN_CHROME;
     return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8" data-testid="page-forgot-password">
+      <main className={s.page}>
+        <div className={s.card} data-testid="page-forgot-password">
           <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mb-6" />
           {sent ? (
             <>
@@ -54,7 +56,7 @@ export default function ForgotPassword() {
               <button
                 type="button"
                 onClick={() => navigate(loginPath)}
-                className="w-full bg-[var(--brand-blue)] hover:bg-[var(--brand-blue-hover)] text-white font-semibold rounded-lg py-2.5 transition-colors"
+                className={s.primaryBtn}
                 data-testid="button-back-to-login"
               >
                 Back to sign in
@@ -66,9 +68,10 @@ export default function ForgotPassword() {
               <p className="text-sm text-slate-600 mb-6">
                 Enter the email on your {productLabel} and we'll send you a link to choose a new one.
               </p>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Email</label>
+              <label className={s.label}>Email</label>
               <input
                 type="email"
+                name="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -77,13 +80,13 @@ export default function ForgotPassword() {
                 inputMode="email"
                 autoCapitalize="none"
                 spellCheck={false}
-                className="w-full px-3 py-2.5 mb-6 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                className={`${s.input} gt-admin-autofill mb-4`}
                 data-testid="input-forgot-email"
               />
               <button
                 type="submit"
                 disabled={submitting || !EMAIL_RE.test(email.trim())}
-                className="w-full bg-[var(--brand-blue)] hover:bg-[var(--brand-blue-hover)] disabled:bg-slate-300 text-white font-semibold rounded-lg py-2.5 transition-colors"
+                className={s.primaryBtn}
                 data-testid="button-submit-forgot"
               >
                 {submitting ? "Sending…" : "Send reset link"}
@@ -91,7 +94,7 @@ export default function ForgotPassword() {
               <button
                 type="button"
                 onClick={() => navigate(loginPath)}
-                className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700"
+                className={s.ghostBtn}
                 data-testid="link-back-to-login"
               >
                 ← Back to sign in

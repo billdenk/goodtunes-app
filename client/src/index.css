@@ -282,6 +282,24 @@ body.gt-admin {
   --brand-blue-soft: rgba(31, 127, 184, 0.10);
 }
 
+/* Admin-auth autofill override.
+   Chrome/Safari paint a black-on-yellow fill on `<input>` elements they
+   autofill, which bleeds the UA dark fill straight through our white
+   admin card. The trick is `-webkit-box-shadow: inset 0 0 0 1000px <bg>`
+   — that paints opaque OVER the autofill background without us having to
+   override the actual `background-color` (the UA wins that fight). We
+   scope it to inputs that opt in via `.gt-admin-autofill` so we don't
+   accidentally flatten autofill on the dark fan-player. */
+.gt-admin-autofill:-webkit-autofill,
+.gt-admin-autofill:-webkit-autofill:hover,
+.gt-admin-autofill:-webkit-autofill:focus,
+.gt-admin-autofill:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #0f172a !important; /* slate-900 */
+  caret-color: #0f172a;
+  transition: background-color 5000s ease-in-out 0s; /* defeat the late-mount UA fill */
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;

@@ -1303,11 +1303,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             // caller; that would let an attacker probe whether mail is
             // misconfigured for a given address.
             console.warn(`[forgot-password] mail send failed for ${user.email}: ${result.reason}`);
-            // Dev fallback so the workflow operator can still grab the
-            // link from console output when Resend isn't configured.
-            if (!process.env.RESEND_API_KEY) {
-              console.log(`[forgot-password] dev link: ${resetUrl}`);
-            }
+          }
+          // Dev fallback: always log the link in non-prod so the operator
+          // can still get into their account if Resend rejects the send
+          // (free-tier domain restrictions, bad MAIL_FROM, etc). Was
+          // previously gated on !RESEND_API_KEY, but the common dev case
+          // is `RESEND_API_KEY` set + send failing — same dead-end UX.
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`[forgot-password] dev link: ${resetUrl}`);
           }
         }
       } catch (e: any) {
@@ -1329,7 +1332,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!raw) return res.status(400).json({ ok: false, message: "Missing token" });
     const row = await storage.getActiveAdminPasswordResetToken(hashResetToken(raw));
     if (!row) return res.status(410).json({ ok: false, message: "This reset link is invalid or has expired." });
-    return res.json({ ok: true });
+    // Return the admin's email so the reset form can render a hidden,
+    // readonly `username` input above the new-password fields. Password
+    // managers (Chrome, Safari, 1Password) need that identity to bind
+    // the saved credential to — without it, the new password never
+    // shows up as a saved login on /admin/login. The token proves the
+    // reset link is still valid; leaking the email back is no worse
+    // than the email the recipient already opened.
+    const user = await storage.getUser(row.userId);
+    return res.json({ ok: true, email: user?.email ?? null });
   });
 
   app.post("/api/admin/auth/reset-password", async (req, res) => {

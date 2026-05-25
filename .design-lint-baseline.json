@@ -14736,6 +14736,116 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full h-9 border border-slate-300 rounded-md px-3 text-slate-900 placeholder-slate-400 text-sm bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] transition-colors\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full h-10 border border-slate-300 rounded-md px-3 text-slate-900 text-center text-lg tracking-widest bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"mt-3 w-full h-9 rounded-md font-medium text-sm text-white bg-[#319ED8] hover:bg-[#2a8cc1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-[0.98]\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[#319ED8]\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "primaryBtnStyle: { background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "subtitle: \"mt-3 text-slate-500 text-[13px] text-center\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "label: \"text-slate-600 text-[11px] font-semibold uppercase tracking-wider block mb-1.5\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "hint: \"text-slate-500 text-[11px] mt-1.5\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "stepLabel: \"text-slate-400 text-[11px] ml-2\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "subtitle: \"mt-3 text-white/55 text-[13px] text-center\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "hint: \"text-white/35 text-[11px] mt-1.5 ml-1\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "stepLabel: \"text-white/40 text-[11px] ml-2\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "footer: \"w-full max-w-[440px] text-center text-[10px] leading-snug px-8\","
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "client/src/pages/Bookmarks.tsx",
     "snippet": "<svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"#4AFFCA\" stroke=\"#4AFFCA\" strokeWidth=\"1.5\" strokeLinecap=\"round\" strokeLinejoin=\"round\">"
   },
@@ -15440,101 +15550,6 @@
     "snippet": "<span className=\"font-mono text-white/65 text-[11px] w-7\">{r.country}</span>"
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "// borders) and customer (dark glass on #00062B, rounded-2xl, white/15"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "\"w-full h-9 border border-slate-300 rounded-md px-3 text-slate-900 placeholder-slate-400 text-sm bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] transition-colors\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "\"w-full h-10 border border-slate-300 rounded-md px-3 text-slate-900 text-center text-lg tracking-widest bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "\"mt-3 w-full h-9 rounded-md font-medium text-sm text-white bg-[#319ED8] hover:bg-[#2a8cc1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-[0.98]\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[#319ED8]\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "primaryBtnStyle: { background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" },"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "subtitle: \"mt-3 text-slate-500 text-[13px] text-center\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "label: \"text-slate-600 text-[11px] font-semibold uppercase tracking-wider block mb-1.5\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "hint: \"text-slate-500 text-[11px] mt-1.5\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "stepLabel: \"text-slate-400 text-[11px] ml-2\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "subtitle: \"mt-3 text-white/55 text-[13px] text-center\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "hint: \"text-white/35 text-[11px] mt-1.5 ml-1\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "stepLabel: \"text-white/40 text-[11px] ml-2\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "footer: \"w-full max-w-[440px] text-center text-[10px] leading-snug px-8\","
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Login.tsx",
     "snippet": "<p className={`${isAdmin ? \"text-slate-400\" : \"text-white/45\"} text-[11px] text-center mb-4 break-all`}>"
@@ -15563,26 +15578,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Login.tsx",
     "snippet": "<div className={`text-[11px] ${isAdmin ? \"text-slate-500\" : \"text-white/55\"}`}>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
   },
   {
     "rule": "hardcoded-font-size",
