@@ -606,11 +606,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       | undefined;
     const incomingState = (req.body?.state as string) || (req.query.state as string);
     if (!stateBag || stateBag.provider !== provider || stateBag.state !== incomingState) {
-      return res.status(400).send("OAuth state mismatch — please try signing in again.");
+      const params = new URLSearchParams({
+        source: "oauth",
+        provider,
+        step: "state",
+        message: "OAuth state mismatch — please try signing in again.",
+      });
+      return res.redirect(`/error?${params.toString()}`);
     }
     (req.session as any).oauthState = undefined;
     const code = (req.body?.code as string) || (req.query.code as string);
-    if (!code) return res.status(400).send("OAuth provider did not return a code");
+    if (!code) {
+      const params = new URLSearchParams({
+        source: "oauth",
+        provider,
+        step: "no_code",
+        message: `${provider} didn't return an authorization code.`,
+      });
+      return res.redirect(`/error?${params.toString()}`);
+    }
 
     const kind = stateBag.kind;
     const redirectUri = `${callbackOrigin(req, kind)}/api/auth/${provider}/callback`;
@@ -622,7 +636,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : await exchangeAppleCode(code, redirectUri);
     } catch (err: any) {
       console.error(`[oauth] ${provider} token exchange failed`, err?.message);
-      return res.status(502).send(`Sign-in with ${provider} failed: ${err?.message ?? "unknown error"}`);
+      const params = new URLSearchParams({
+        source: "oauth",
+        provider,
+        step: "token_exchange",
+        message: `Couldn't finish signing in with ${provider}.`,
+        detail: String(err?.message ?? "unknown error").slice(0, 800),
+      });
+      return res.redirect(`/error?${params.toString()}`);
     }
 
     const homePath = kind === "admin" ? "/admin" : "/account";
@@ -856,6 +877,88 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Apple uses form_post on the callback — express.urlencoded is already
   // installed in server/index.ts so req.body works on this POST.
   app.post("/api/auth/apple/callback", (req, res) => handleProviderCallback("apple", req, res));
+
+  // ─── Tap-to-report error capture (Task #284) ───────────────────────
+  // Friendly error cards across the app POST here when the user taps
+  // "Send this to GoodTunes". We attach the authed identity if any,
+  // rate-limit per session+IP so a crash loop can't spam the inbox,
+  // then forward to admin@goodtunes.music via the existing Resend path.
+  // The reporter's email becomes the email's reply_to so a "we shipped
+  // a fix" reply lands straight back in their inbox.
+  const ERROR_REPORT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+  const ERROR_REPORT_LIMIT = 3;                  // per window
+  const errorReportBuckets = new Map<string, number[]>();
+  app.post("/api/error-reports", async (req, res) => {
+    try {
+      const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() || req.ip || "unknown";
+      const sid = (req.session as any)?.id || (req as any).sessionID || "";
+      const bucketKey = `${sid}|${ip}`;
+      const now = Date.now();
+      const recent = (errorReportBuckets.get(bucketKey) || []).filter((t) => now - t < ERROR_REPORT_WINDOW_MS);
+      if (recent.length >= ERROR_REPORT_LIMIT) {
+        return res.status(429).json({ ok: false, message: "Too many reports — give us a minute to catch up." });
+      }
+      const body = req.body ?? {};
+      const reporterEmail = typeof body.reporterEmail === "string" ? body.reporterEmail.trim().slice(0, 320) : "";
+      const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reporterEmail) ? reporterEmail : null;
+
+      const a = await getAuthFromRequest(req).catch(() => null);
+      let identity: { kind?: string | null; id?: string | null; email?: string | null } | null = null;
+      if (a) {
+        try {
+          if (a.kind === "admin") {
+            const u = await storage.getUser(a.userId);
+            identity = { kind: "admin", id: a.userId, email: u?.email ?? null };
+          } else {
+            const c = await storage.getCustomer(a.userId);
+            identity = { kind: "customer", id: a.userId, email: c?.email ?? null };
+          }
+        } catch {
+          identity = { kind: a.kind, id: a.userId, email: null };
+        }
+      }
+
+      const trim = (v: unknown, n = 4000) => (typeof v === "string" ? v.slice(0, n) : null);
+      const { sendErrorReportEmail } = await import("./mail");
+      const toEmail = process.env.MAIL_REPLY_TO?.trim() || "admin@goodtunes.music";
+      const payload = {
+        summary: trim(body.summary, 500) || "Tap-to-report from friendly error card",
+        source: trim(body.source, 80) || "app",
+        provider: trim(body.provider, 40),
+        step: trim(body.step, 80),
+        route: trim(body.route, 500),
+        userAgent: trim(body.userAgent, 500),
+        viewport: trim(body.viewport, 40),
+        timestamp: trim(body.timestamp, 40) || new Date().toISOString(),
+        identity,
+        reporterEmail: validEmail,
+        error: body.error
+          ? {
+              name: trim(body.error.name, 200),
+              message: trim(body.error.message, 2000),
+              stack: trim(body.error.stack, 8000),
+            }
+          : null,
+        serverBody: trim(body.serverBody, 4000),
+      };
+
+      const result = await sendErrorReportEmail(toEmail, payload);
+      // Record AFTER we know we tried to send — failed sends still
+      // count, otherwise an unconfigured RESEND_API_KEY would let a
+      // crash loop hammer the endpoint forever.
+      recent.push(now);
+      errorReportBuckets.set(bucketKey, recent);
+
+      if (!result.ok) {
+        console.warn(`[error-report] send failed: ${result.reason}`);
+        return res.status(502).json({ ok: false, message: "Couldn't send the report from our side." });
+      }
+      return res.json({ ok: true, sentTo: toEmail, replyTo: validEmail || identity?.email || null });
+    } catch (e: any) {
+      console.error("[error-report] threw", e?.message);
+      return res.status(500).json({ ok: false, message: "Couldn't send the report." });
+    }
+  });
 
   // ─── Admin TOTP ────────────────────────────────────────────────────
   const { encryptSecret, decryptSecret, generateRecoveryCodes, hashRecoveryCode, verifyRecoveryCode } =

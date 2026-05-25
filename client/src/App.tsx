@@ -70,6 +70,7 @@ import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { VendorPortal } from "@/pages/VendorPortal";
+import ErrorPage from "@/pages/ErrorPage";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -167,6 +168,10 @@ function Router() {
   return (
     <>
       <Switch>
+        {/* Task #284 — Friendly error landing for OAuth callback failures
+            and any future surface that wants to bounce to a full-page
+            error card. Public route. */}
+        <Route path="/error" component={ErrorPage} />
         <Route path="/login" component={Login} />
         <Route path="/register" component={Login} />
         {/* Mirror routes under /admin so the dev URL can preview the

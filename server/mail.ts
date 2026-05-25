@@ -28,11 +28,17 @@ function getReplyTo(): string | null {
 
 type SendResult = { ok: true } | { ok: false; reason: string };
 
-async function sendViaResend(to: string, subject: string, html: string, text: string): Promise<SendResult> {
+async function sendViaResend(
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+  replyToOverride?: string | null,
+): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, reason: "RESEND_API_KEY not set" };
   try {
-    const replyTo = getReplyTo();
+    const replyTo = (replyToOverride && replyToOverride.trim().length > 0) ? replyToOverride.trim() : getReplyTo();
     const body: Record<string, unknown> = { from: getFromAddress(), to, subject, html, text };
     if (replyTo) body.reply_to = replyTo;
     const r = await fetch(RESEND_ENDPOINT, {
@@ -237,6 +243,90 @@ export async function sendCustomerPasswordResetEmail(
     </div>
   `;
   return sendViaResend(toEmail, subject, html, text);
+}
+
+// Task #284 — Tap-to-report error capture from the friendly error card.
+// The reporter's email (when we know who they are, OR what they typed
+// into the inline email field) is wired up as reply_to so a quick
+// "we've shipped a fix" reply goes straight back to the user.
+export type ErrorReportPayload = {
+  summary: string;
+  source: string;
+  provider?: string | null;
+  step?: string | null;
+  route?: string | null;
+  userAgent?: string | null;
+  viewport?: string | null;
+  timestamp: string;
+  identity?: { kind?: string | null; id?: string | null; email?: string | null } | null;
+  reporterEmail?: string | null;
+  error?: { name?: string | null; message?: string | null; stack?: string | null } | null;
+  serverBody?: string | null;
+};
+
+function esc(s: string): string {
+  return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+}
+
+export async function sendErrorReportEmail(
+  toEmail: string,
+  payload: ErrorReportPayload,
+): Promise<SendResult> {
+  const errName = payload.error?.name || "Error";
+  const errMsg = payload.error?.message || "(no message)";
+  const subjectBits = [payload.source];
+  if (payload.provider) subjectBits.push(payload.provider);
+  if (payload.step) subjectBits.push(payload.step);
+  const subject = `[GoodTunes error] ${subjectBits.join(" / ")} — ${errMsg.slice(0, 80)}`;
+
+  const idLine = payload.identity?.email
+    ? `${payload.identity.email}${payload.identity.kind ? ` (${payload.identity.kind})` : ""}${payload.identity.id ? ` id=${payload.identity.id}` : ""}`
+    : (payload.reporterEmail || "(unknown user)");
+
+  const lines = [
+    payload.summary,
+    "",
+    `When: ${payload.timestamp}`,
+    `Who:  ${idLine}`,
+    `Where: ${payload.route ?? "(unknown route)"}`,
+    payload.provider ? `Provider: ${payload.provider}${payload.step ? ` / step ${payload.step}` : ""}` : null,
+    payload.userAgent ? `UA: ${payload.userAgent}` : null,
+    payload.viewport ? `Viewport: ${payload.viewport}` : null,
+    "",
+    `Error: ${errName}: ${errMsg}`,
+    payload.error?.stack ? `\nStack:\n${payload.error.stack}` : null,
+    payload.serverBody ? `\nServer response body:\n${payload.serverBody}` : null,
+  ].filter(Boolean);
+  const text = lines.join("\n");
+
+  const rowsHtml = [
+    ["When", payload.timestamp],
+    ["Who", idLine],
+    ["Where", payload.route ?? "(unknown route)"],
+    payload.provider ? ["Provider", `${payload.provider}${payload.step ? ` / step ${payload.step}` : ""}`] : null,
+    payload.userAgent ? ["User agent", payload.userAgent] : null,
+    payload.viewport ? ["Viewport", payload.viewport] : null,
+  ].filter(Boolean) as [string, string][];
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 640px; margin: 0 auto; padding: 28px 24px; color: #1a1a1a;">
+      <div style="font-size: 13px; color: #FF5470; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700;">GoodTunes — Tap-to-report</div>
+      <h1 style="font-size: 20px; margin: 8px 0 16px; font-weight: 700;">${esc(subject.replace(/^\[GoodTunes error\] /, ""))}</h1>
+      <p style="font-size: 14px; line-height: 1.5; color: #333;">${esc(payload.summary)}</p>
+      <table style="margin-top: 16px; font-size: 13px; border-collapse: collapse;">
+        ${rowsHtml.map(([k, v]) => `<tr><td style="color:#666;padding:4px 12px 4px 0;vertical-align:top;">${esc(k)}</td><td style="color:#111;padding:4px 0;word-break:break-all;">${esc(v)}</td></tr>`).join("")}
+      </table>
+      <div style="margin-top: 18px; padding: 14px 16px; background: #fff4f6; border-left: 4px solid #FF5470; border-radius: 6px;">
+        <div style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 13px; color: #1a1a1a; word-break: break-all;">${esc(errName)}: ${esc(errMsg)}</div>
+      </div>
+      ${payload.error?.stack ? `<pre style="margin-top: 14px; padding: 12px; background: #f4f4f7; border-radius: 6px; font-size: 11px; line-height: 1.4; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${esc(payload.error.stack)}</pre>` : ""}
+      ${payload.serverBody ? `<div style="margin-top: 14px; font-size: 12px; color: #666;">Server response body</div><pre style="padding: 12px; background: #f4f4f7; border-radius: 6px; font-size: 11px; line-height: 1.4; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${esc(payload.serverBody)}</pre>` : ""}
+      <p style="margin-top: 24px; font-size: 12px; color: #888;">Reply to this email to follow up with ${esc(payload.reporterEmail || payload.identity?.email || "the reporter")}.</p>
+    </div>
+  `;
+
+  const replyTo = payload.reporterEmail || payload.identity?.email || null;
+  return sendViaResend(toEmail, subject, html, text, replyTo);
 }
 
 // Send an admin-invite link. The link points at the public /invite/:token

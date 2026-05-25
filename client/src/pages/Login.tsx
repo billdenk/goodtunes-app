@@ -6,6 +6,7 @@ import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, setAuthToken, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
+import { FriendlyError } from "@/components/FriendlyError";
 
 type Mode = "login" | "register";
 // Step 1: name/email/password (admin) or email+password (customer).
@@ -970,7 +971,19 @@ export function Login() {
                 data-testid="input-verify-code"
               />
             </div>
-            {verifyError && <div className={s.errorBox} data-testid="text-verify-error">{verifyError}</div>}
+            {verifyError && (
+              <div data-testid="text-verify-error">
+                <FriendlyError
+                  headline="That didn't work"
+                  explanation="We couldn't finish creating your account. Double-check the code, try again, or send this to GoodTunes so we can look at it."
+                  context={{ source: "signup-verify", step: "confirm" }}
+                  error={{ name: "SignupVerifyError", message: verifyError }}
+                  knownEmail={email.trim() || null}
+                  variant="inline"
+                  testIdPrefix="verify-error"
+                />
+              </div>
+            )}
             <div className="flex items-center gap-3 mt-2">
               <button
                 type="button"
