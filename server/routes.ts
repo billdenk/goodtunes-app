@@ -14334,11 +14334,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       FROM people p WHERE p.invited_by_press_id = ${pressId}
       ORDER BY p.name ASC
     `);
+    // Per-artist invited projects (album rows in press_invited_albums for
+    // this press), with paid-unit counts so each row can link straight
+    // into the artist's album page with a number worth seeing.
+    const albumsRows = await db.execute<any>(sql`
+      SELECT pia.invitee_person_id AS person_id, a.id, a.title, a.artwork,
+        COALESCE((SELECT SUM(oi.quantity)::int FROM orders o
+          JOIN order_items oi ON oi.order_id = o.id AND oi.kind = 'format'
+          WHERE o.album_id = a.id AND o.status = 'paid'), 0) AS paid_units
+      FROM press_invited_albums pia
+      JOIN albums a ON a.id = pia.album_id
+      WHERE pia.press_id = ${pressId}
+      ORDER BY a.title ASC
+    `);
+    const albumsByPerson = new Map<string, Array<{ id: string; title: string; artwork: string | null; paidUnits: number }>>();
+    for (const r of ((albumsRows as any).rows ?? [])) {
+      const list = albumsByPerson.get(r.person_id) ?? [];
+      list.push({ id: r.id, title: r.title, artwork: r.artwork, paidUnits: r.paid_units });
+      albumsByPerson.set(r.person_id, list);
+    }
     res.json({
       pressId,
       artists: ((artists as any).rows ?? []).map((r: any) => ({
         id: r.id, name: r.name, photoUrl: r.photo_url,
         albumCount: r.album_count, paidUnits: r.paid_units,
+        albums: albumsByPerson.get(r.id) ?? [],
       })),
     });
   });

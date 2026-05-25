@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  UserPlus,
   X,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -316,6 +317,8 @@ export function AdminManufacturer() {
               scopeId={m.id}
               scopeName={m.name}
             />
+
+            <ReferralsPanel pressId={m.id} />
           </>
         )}
         {tab === "people" && (
@@ -553,6 +556,114 @@ const parseDollars = (v: string): number | null => {
   return Math.round(n * 100);
 };
 const formatDollars = (c: number) => (c / 100).toFixed(2);
+
+type InvitedArtist = {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  albumCount: number;
+  paidUnits: number;
+  albums: { id: string; title: string; artwork: string | null; paidUnits: number }[];
+};
+
+function ReferralsPanel({ pressId }: { pressId: string }) {
+  // Same role gate as PressCatalogPanel — only super-admins or the press
+  // itself ever pass the server check, so hide the card for org-admins
+  // who would just see a 403.
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const canView =
+    roleInfo?.role === "super_admin" ||
+    roleInfo?.role === "admin" ||
+    (roleInfo?.role === "manufacturer" && roleInfo?.roleScopeId === pressId);
+  const isSuper = roleInfo?.role === "super_admin" || roleInfo?.role === "admin";
+
+  const { data, isLoading } = useQuery<{ pressId: string; artists: InvitedArtist[] }>({
+    queryKey: ["/api/press/invited-artists", { pressId }],
+    queryFn: async () => {
+      const qs = isSuper ? `?pressId=${encodeURIComponent(pressId)}` : "";
+      const r = await fetch(`/api/press/invited-artists${qs}`, { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load referrals");
+      return r.json();
+    },
+    enabled: !!pressId && !!canView,
+  });
+
+  if (roleInfo && !canView) return null;
+
+  const artists = data?.artists ?? [];
+  const totalPaidUnits = artists.reduce((acc, a) => acc + (a.paidUnits ?? 0), 0);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-referrals">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Referrals</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Artists you've brought onto GoodTunes and the projects they've shipped. Paid units count
+            every format unit sold on those projects — your pending referral credit accrues as those
+            numbers grow.
+          </p>
+        </div>
+        {!isLoading && artists.length > 0 && (
+          <div className="flex-shrink-0 text-right" data-testid="text-referrals-total">
+            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Paid units</div>
+            <div className="text-slate-900 text-xl font-bold tabular-nums">{totalPaidUnits.toLocaleString()}</div>
+          </div>
+        )}
+      </div>
+      {isLoading ? (
+        <div className="text-slate-500 text-sm py-4">Loading…</div>
+      ) : artists.length === 0 ? (
+        <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center" data-testid="empty-referrals">
+          <UserPlus className="w-5 h-5 text-slate-300 mx-auto mb-2" strokeWidth={1.5} />
+          <p className="text-sm text-slate-500">No artists invited yet.</p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {artists.map((a) => (
+            <li key={a.id} className="py-3 first:pt-0 last:pb-0" data-testid={`row-referral-${a.id}`}>
+              <div className="flex items-center gap-3">
+                <Link href={`/admin/people/${a.id}`} className="w-9 h-9 rounded-full overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-referral-artist-photo-${a.id}`}>
+                  {a.photoUrl ? (
+                    <img src={a.photoUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full" />
+                  )}
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <Link href={`/admin/people/${a.id}`} className="text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-referral-artist-${a.id}`}>
+                    {a.name}
+                  </Link>
+                  <div className="text-xs text-slate-500">
+                    {a.albumCount} {a.albumCount === 1 ? "project" : "projects"} ·{" "}
+                    <span className="tabular-nums">{a.paidUnits.toLocaleString()}</span>{" "}
+                    paid {a.paidUnits === 1 ? "unit" : "units"}
+                  </div>
+                </div>
+              </div>
+              {a.albums.length > 0 && (
+                <ul className="mt-2 ml-12 space-y-1">
+                  {a.albums.map((al) => (
+                    <li key={al.id} className="flex items-center justify-between gap-3 text-sm">
+                      <Link href={`/admin/albums/${al.id}`} className="text-slate-700 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate" data-testid={`link-referral-album-${al.id}`}>
+                        {al.title}
+                      </Link>
+                      <span className="text-slate-500 tabular-nums flex-shrink-0" data-testid={`text-referral-album-units-${al.id}`}>
+                        {al.paidUnits.toLocaleString()} {al.paidUnits === 1 ? "unit" : "units"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function PressCatalogPanel({ pressId }: { pressId: string }) {
   // Role gate — server is authoritative; we hide the panel for admins
