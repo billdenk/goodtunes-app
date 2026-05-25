@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, Lock, ChevronDown } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
@@ -310,13 +310,12 @@ export function SellPanel({
           />
         ) : (
         <>
-        {/* Task #335 — Hellbender printer chips. MRP + PMP show as
-            "coming soon" so the artist sees the catalog roadmap but
-            can only pick the press we've actually wired in. */}
-        <PrinterChips />
-
-        {/* Presses */}
-        <PressesPanel albumId={albumId} invited={invitedPress ?? null} />
+        {/* Task #335 / #373 — Printer chips + a single press detail
+            card for the selected chip. Replaces the old horizontal
+            press directory carousel: chips do the choosing, one calm
+            card explains the press. MRP + PMP stay "Soon" until we
+            wire their catalogs. */}
+        <PrinterAndPressPanel invited={invitedPress ?? null} />
 
         {/* SKUs */}
         <div className="mb-8">
@@ -446,46 +445,79 @@ export function SellPanel({
   );
 }
 
-/* ─── Task #335 — Hellbender printer chips ─────────────────────────── */
-/* Public pressing-plant directory. Today Hellbender is the only one
- * we've wired in; MRP + PMP appear as "coming soon" chips so the
- * artist sees where the roadmap is going without being able to pick a
- * plant we can't actually route an order to.                          */
-function PrinterChips() {
-  const printers: { id: string; label: string; status: "live" | "coming-soon"; blurb: string }[] = [
-    { id: "hellbender", label: "Hellbender Vinyl", status: "live", blurb: "Standard catalog · live quote" },
-    { id: "mrp", label: "MRP", status: "coming-soon", blurb: "Coming soon" },
-    { id: "pmp", label: "PMP", status: "coming-soon", blurb: "Coming soon" },
-  ];
+/* ─── Task #335 / #373 — Printer chips + single press detail ──────── */
+/* The artist picks a printer with the chips on top; the matching press
+ * detail card renders directly below — no horizontal scroll, no
+ * directory carousel. Today Hellbender is the only live chip; MRP and
+ * PMP show as "Soon" so the catalog roadmap is visible without letting
+ * the artist pick a plant we can't route to. When the album's
+ * artist/label was invited by a specific press and hasn't shipped their
+ * first run, the chip row collapses to just that press (legacy hard
+ * lock from task #199 is preserved).                                  */
+function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | null }) {
+  const invitedPress = invited?.press ?? null;
+  const locked = !!invitedPress && !invited?.hasShippedFirst;
+
+  const { data } = useQuery<Manufacturer[]>({
+    queryKey: ["/api/manufacturers"],
+    enabled: !locked,
+  });
+  const presses = data ?? [];
+  const hellbender = presses.find((p) => p.name.toLowerCase().includes("hellbender")) ?? null;
+
+  type Chip = { id: string; label: string; status: "live" | "coming-soon"; press: Manufacturer | null };
+  const chips: Chip[] = locked
+    ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
+    : [
+        { id: "hellbender", label: "Hellbender Vinyl", status: "live", press: hellbender },
+        { id: "mrp", label: "MRP", status: "coming-soon", press: null },
+        { id: "pmp", label: "PMP", status: "coming-soon", press: null },
+      ];
+
+  const defaultId = chips[0].id;
+  const [selectedId, setSelectedId] = useState<string>(defaultId);
+  const selectedChip = chips.find((c) => c.id === selectedId) ?? chips[0];
+  const selectedPress = selectedChip.press;
+
   return (
-    <div className="mb-6" data-testid="printer-chips">
+    <div className="mb-8" data-testid="panel-printer-and-press">
       <div className="text-[13px] font-semibold text-slate-900 mb-1.5">Choose your printer</div>
-      <div className="flex flex-wrap gap-2">
-        {printers.map((p) => {
-          const live = p.status === "live";
+      <p className="text-sm text-slate-500 mb-3">
+        {locked
+          ? `You were invited by ${invitedPress!.name}. The full pressing-plant directory unlocks once your first run ships — message GoodTunes if you need to switch sooner.`
+          : "Pressing plants GoodTunes works with. Today the Cost on every vinyl format uses Hellbender Vinyl's public rate sheet as the default — per-plant quote plumbing wires in next so you can compare side-by-side."}
+      </p>
+      <div className="flex flex-wrap gap-2 mb-4" data-testid="printer-chips">
+        {chips.map((c) => {
+          const live = c.status === "live";
+          const isSelected = live && selectedId === c.id;
           return (
             <button
-              key={p.id}
+              key={c.id}
               type="button"
               disabled={!live}
-              aria-pressed={live}
-              data-testid={`printer-${p.id}`}
+              aria-pressed={isSelected}
+              data-testid={`printer-${c.id}`}
+              onClick={() => live && setSelectedId(c.id)}
               className={[
                 "rounded-full px-3 py-1.5 text-[12.5px] font-semibold border transition-colors text-left",
-                live
+                isSelected
                   ? "bg-[color:var(--brand-blue)] text-white border-[color:var(--brand-blue)] shadow-sm"
+                  : live
+                  ? "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
                   : "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed",
               ].join(" ")}
-              title={p.blurb}
+              title={live ? c.label : "Coming soon"}
             >
-              {p.label}
-              <span className="ml-1.5 opacity-80 text-[10.5px] font-normal">
-                {live ? "Selected" : "Soon"}
-              </span>
+              {c.label}
+              {!live && (
+                <span className="ml-1.5 opacity-80 text-xs font-normal">Soon</span>
+              )}
             </button>
           );
         })}
       </div>
+      {selectedPress && <PressCard press={selectedPress} highlight={locked} />}
     </div>
   );
 }
@@ -702,82 +734,6 @@ function AddPhysicalGoodButton({
   );
 }
 
-// Task #194 — Presses panel. Reads the existing manufacturers
-// directory and renders each plant as an info card (logo, name,
-// description, location, turnaround, specialties). Per-press RFQ
-// pricing plumbing is tracked on the roadmap — for now the panel is
-// purely informational so an artist can see who's available before
-// they decide on a pressing plant.
-function PressesPanel({
-  albumId,
-  invited,
-}: {
-  albumId: string;
-  invited: InvitedPressResponse | null;
-}) {
-  const { data, isLoading } = useQuery<Manufacturer[]>({
-    queryKey: ["/api/manufacturers"],
-  });
-  const presses = data ?? [];
-
-  // Task #199 — hard lock until the first run ships. When this album's
-  // artist (or label) was invited to GoodTunes by a specific press,
-  // they only see that press until they've shipped their first paid
-  // run. Once `hasShippedFirst` flips true the panel unlocks to the
-  // full directory (invited press still rendered first, marked).
-  // Super-admin can clear/switch the invited press at any time via
-  // the partner's Identity panel.
-  const invitedPress = invited?.press ?? null;
-  const locked = !!invitedPress && !invited?.hasShippedFirst;
-
-  if (locked) {
-    return (
-      <div className="mb-8" data-testid="panel-presses">
-        <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Your press</h2>
-        <p className="text-[13px] text-slate-500 mb-4 inline-flex items-center gap-1.5">
-          <Lock className="w-3 h-3 text-slate-400" />
-          You were invited by {invitedPress!.name}. The full pressing-plant directory unlocks once your first run ships — message GoodTunes if you need to switch sooner.
-        </p>
-        <div className="flex">
-          <PressCard press={invitedPress!} highlight />
-        </div>
-      </div>
-    );
-  }
-
-  // Hide the whole panel on empty/loading per task #194 spec — a fresh
-  // DB without any presses should not render an empty-state card.
-  if (isLoading || presses.length === 0) return null;
-
-  // Once unlocked (or never locked), render the full directory. When
-  // invited press is set we float it to the front and mark it so the
-  // partner still knows who brought them on.
-  const ordered = invitedPress
-    ? [invitedPress, ...presses.filter((p) => p.id !== invitedPress.id)]
-    : presses;
-  return (
-    <div className="mb-8" data-testid="panel-presses">
-      <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Presses</h2>
-      <p className="text-[13px] text-slate-500 mb-4">
-        {invitedPress
-          ? `Pressing plants GoodTunes works with — ${invitedPress.name} brought you on, but you're free to pick anyone. Today the Cost on every vinyl format uses Hellbender Vinyl's public rate sheet as the default; per-plant quote plumbing wires in next so an artist can compare side-by-side.`
-          : "Pressing plants GoodTunes works with. Today the Cost on every vinyl format uses Hellbender Vinyl's public rate sheet as the default — per-plant quote plumbing wires in next so an artist can compare side-by-side."}
-      </p>
-      <div
-        className="flex flex-col sm:flex-row sm:overflow-x-auto gap-3 sm:pb-2 -mx-4 sm:px-4"
-      >
-        {ordered.map((p) => (
-          <PressCard
-            key={p.id}
-            press={p}
-            highlight={invitedPress?.id === p.id}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function PressCard({ press, highlight = false }: { press: Manufacturer; highlight?: boolean }) {
   // Clickable card per task #194 — opens the press's website in a new
   // tab. `noopener noreferrer` prevents the opened page from gaining a
@@ -795,8 +751,7 @@ function PressCard({ press, highlight = false }: { press: Manufacturer; highligh
     <Wrapper
       {...wrapperProps}
       className={[
-        "rounded-md border bg-white p-4 flex flex-col gap-3",
-        "w-full sm:w-72 sm:shrink-0",
+        "block w-full rounded-xl border bg-white p-5 sm:p-6 flex flex-col gap-4",
         highlight
           ? "border-[color:var(--brand-blue)] ring-1 ring-[color:var(--brand-blue)]/30"
           : "border-slate-200",
@@ -811,14 +766,14 @@ function PressCard({ press, highlight = false }: { press: Manufacturer; highligh
           <img
             src={press.logoUrl}
             alt=""
-            className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
+            className="w-12 h-12 rounded-md object-cover border border-slate-200 shrink-0"
             data-testid={`img-press-logo-${press.id}`}
           />
         ) : (
-          <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 shrink-0" />
+          <div className="w-12 h-12 rounded-md bg-slate-100 border border-slate-200 shrink-0" />
         )}
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <div
               className="text-[13.5px] font-semibold text-slate-900 truncate"
               data-testid={`text-press-name-${press.id}`}
@@ -851,7 +806,7 @@ function PressCard({ press, highlight = false }: { press: Manufacturer; highligh
       </div>
       {press.bio && (
         <div
-          className="text-[12.5px] text-slate-600 leading-snug line-clamp-3"
+          className="text-sm text-slate-600 leading-relaxed"
           data-testid={`text-press-bio-${press.id}`}
         >
           {press.bio}
