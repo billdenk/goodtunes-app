@@ -188,6 +188,11 @@ interface SongLite {
   // Artist-designated preview single — fan-facing Preview & Purchase
   // page renders this row "playable" pre-purchase. Default false.
   isPreviewable?: boolean | null;
+  // Inverted preview gate (Task #326). Every track is previewable by
+  // default; admin flips `previewHidden=true` to embargo a single track.
+  // Optional `previewHiddenUntil` sunrise auto-unhides on schedule.
+  previewHidden?: boolean | null;
+  previewHiddenUntil?: string | null;
   // Mux ingest state — populated by the "Migrate to Mux" admin action.
   // `muxStatus` is `preparing` while encoding, `ready` once playable,
   // `errored` if Mux failed. Player swaps to signed HLS when ready.
@@ -5761,40 +5766,42 @@ function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: strin
 
   return (
     <div
-      className="flex items-center justify-center gap-2.5 w-full"
+      className="flex items-center justify-center gap-3.5 w-full"
       data-testid={`toggle-explicit-${song.id}`}
     >
-      <ExplicitBadge tone="slate" />
-      <span className="text-[11.5px] text-slate-600 font-medium">
-        Explicit
-      </span>
-      <Popover>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label="What Explicit means"
-                className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
-                data-testid={`info-explicit-${song.id}`}
-              >
-                <Info className="w-3 h-3" aria-hidden="true" />
-                <span className="sr-only">What Explicit means</span>
-              </button>
-            </PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <ExplicitBadge tone="slate" />
+        <span className="text-[11.5px] text-slate-600 font-medium">
+          Explicit
+        </span>
+        <Popover>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="What Explicit means"
+                  className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  data-testid={`info-explicit-${song.id}`}
+                >
+                  <Info className="w-3 h-3" aria-hidden="true" />
+                  <span className="sr-only">What Explicit means</span>
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              shows an E next to the title
+            </TooltipContent>
+          </Tooltip>
+          <PopoverContent
+            side="top"
+            align="center"
+            className="w-56 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+          >
             shows an E next to the title
-          </TooltipContent>
-        </Tooltip>
-        <PopoverContent
-          side="top"
-          align="center"
-          className="w-56 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
-        >
-          shows an E next to the title
-        </PopoverContent>
-      </Popover>
+          </PopoverContent>
+        </Popover>
+      </div>
       <Switch
         checked={checked}
         disabled={toggleMut.isPending}
@@ -5815,65 +5822,192 @@ function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: strin
 function PreviewableTrackToggle({ song }: { song: SongLite }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const checked = !!song.isPreviewable;
-  const toggleMut = useMutation({
-    mutationFn: async (next: boolean) =>
-      apiRequest("PUT", `/api/admin/songs/${song.id}`, { isPreviewable: next }),
-    onSuccess: async (_data, next) => {
+  const hidden = !!song.previewHidden;
+  const sunriseIso = song.previewHiddenUntil ?? null;
+  // <input type="datetime-local"> wants a `YYYY-MM-DDTHH:mm` local-time
+  // string (no timezone suffix). Server stores UTC; convert by stripping
+  // the offset out via toLocaleString-style rebuild.
+  const sunriseLocal = useMemo(() => {
+    if (!sunriseIso) return "";
+    const d = new Date(sunriseIso);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }, [sunriseIso]);
+  const [sunriseDraft, setSunriseDraft] = useState(sunriseLocal);
+  const [sunriseError, setSunriseError] = useState<string | null>(null);
+  useEffect(() => {
+    setSunriseDraft(sunriseLocal);
+    setSunriseError(null);
+  }, [sunriseLocal]);
+
+  const updateMut = useMutation({
+    mutationFn: async (body: { previewHidden?: boolean; previewHiddenUntil?: string | null }) =>
+      apiRequest("PUT", `/api/admin/songs/${song.id}`, body),
+    onSuccess: async (_data, body) => {
       await qc.invalidateQueries({ queryKey: ["/api/albums"] });
-      toast({
-        title: next ? "Marked as preview single" : "Preview single removed",
-      });
+      if (body.previewHidden === true && body.previewHiddenUntil === undefined) {
+        toast({ title: "Preview hidden" });
+      } else if (body.previewHidden === false) {
+        toast({ title: "Preview restored" });
+      } else if (body.previewHiddenUntil === null) {
+        toast({ title: "Sunrise cleared" });
+      } else if (body.previewHiddenUntil) {
+        toast({ title: "Sunrise set" });
+      }
     },
     onError: (e: any) =>
       toast({
-        title: "Couldn't update preview flag",
+        title: "Couldn't update preview",
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       }),
   });
 
+  const handleToggle = (next: boolean) => {
+    // Flipping the switch back OFF (preview visible again) also clears
+    // any stored sunrise — the server does this too, but doing it on
+    // the client keeps the UI consistent during the in-flight mutation.
+    if (!next) {
+      setSunriseDraft("");
+      setSunriseError(null);
+      updateMut.mutate({ previewHidden: false, previewHiddenUntil: null });
+    } else {
+      updateMut.mutate({ previewHidden: true });
+    }
+  };
+
+  const handleSunriseChange = (raw: string) => {
+    setSunriseDraft(raw);
+    setSunriseError(null);
+  };
+
+  const commitSunrise = () => {
+    if (!sunriseDraft) {
+      // Empty input = clear sunrise. Only fire the mutation if there was
+      // actually a stored sunrise to clear.
+      if (sunriseIso) updateMut.mutate({ previewHiddenUntil: null });
+      return;
+    }
+    const dt = new Date(sunriseDraft);
+    if (Number.isNaN(dt.getTime())) {
+      setSunriseError("Pick a valid date and time.");
+      return;
+    }
+    if (dt.getTime() <= Date.now()) {
+      setSunriseError("Sunrise must be in the future.");
+      return;
+    }
+    setSunriseError(null);
+    updateMut.mutate({ previewHiddenUntil: dt.toISOString() });
+  };
+
+  const clearSunrise = () => {
+    setSunriseDraft("");
+    setSunriseError(null);
+    if (sunriseIso) updateMut.mutate({ previewHiddenUntil: null });
+  };
+
+  const caption = hidden
+    ? sunriseIso
+      ? `Preview hidden — will return on ${new Date(sunriseIso).toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })}`
+      : "Preview hidden — until manually re-enabled"
+    : "Previewable by default";
+
   return (
-    <div
-      className="flex items-center justify-center gap-2.5 w-full"
-      data-testid={`toggle-previewable-${song.id}`}
-    >
-      <Play className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 fill-current" aria-hidden="true" />
-      <span className="text-[11.5px] text-slate-600 font-medium">Preview</span>
-      <Popover>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
+    <div className="flex flex-col items-stretch gap-1.5 w-full">
+      <div
+        className="flex items-center justify-center gap-3.5 w-full"
+        data-testid={`toggle-previewable-${song.id}`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Play className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 fill-current" aria-hidden="true" />
+          <span className="text-xs text-slate-600 font-medium whitespace-nowrap">Hide preview</span>
+          <Popover>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="What Hide preview means"
+                    className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                    data-testid={`info-previewable-${song.id}`}
+                  >
+                    <Info className="w-3 h-3" aria-hidden="true" />
+                    <span className="sr-only">What Hide preview means</span>
+                  </button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                flip ON to hide the pre-purchase preview
+              </TooltipContent>
+            </Tooltip>
+            <PopoverContent
+              side="top"
+              align="center"
+              className="w-64 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+            >
+              Every track is previewable by default. Flip this ON to hide this track's
+              pre-purchase preview from fans (e.g. an unreleased bonus). Optionally set a
+              sunrise date and the preview will come back on its own.
+            </PopoverContent>
+          </Popover>
+        </div>
+        <Switch
+          checked={hidden}
+          disabled={updateMut.isPending}
+          onCheckedChange={handleToggle}
+          aria-label="Hide this track's pre-purchase preview"
+          className="data-[state=unchecked]:bg-[#E9E9EB] data-[state=checked]:bg-[#34C759] [&>span]:!bg-white [&>span]:!shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        />
+      </div>
+      {hidden && (
+        <div className="flex flex-col items-stretch gap-1 mt-0.5 pt-1.5 border-t border-slate-200/70">
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="whitespace-nowrap">Show preview again on</span>
+            <input
+              type="datetime-local"
+              value={sunriseDraft}
+              onChange={(e) => handleSunriseChange(e.target.value)}
+              onBlur={commitSunrise}
+              disabled={updateMut.isPending}
+              className="flex-1 min-w-0 text-xs px-1 py-0.5 rounded border border-slate-200 bg-white text-slate-700 disabled:opacity-50"
+              data-testid={`input-preview-sunrise-${song.id}`}
+            />
+            {sunriseDraft && (
               <button
                 type="button"
-                aria-label="What Preview means"
-                className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
-                data-testid={`info-previewable-${song.id}`}
+                onClick={clearSunrise}
+                disabled={updateMut.isPending}
+                className="text-xs text-slate-400 hover:text-rose-500 disabled:opacity-50"
+                data-testid={`button-clear-preview-sunrise-${song.id}`}
               >
-                <Info className="w-3 h-3" aria-hidden="true" />
-                <span className="sr-only">What Preview means</span>
+                Clear
               </button>
-            </PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            playable pre-purchase
-          </TooltipContent>
-        </Tooltip>
-        <PopoverContent
-          side="top"
-          align="center"
-          className="w-56 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
-        >
-          playable pre-purchase
-        </PopoverContent>
-      </Popover>
-      <Switch
-        checked={checked}
-        disabled={toggleMut.isPending}
-        onCheckedChange={(next) => toggleMut.mutate(next)}
-        aria-label="Mark this track as a preview single"
-        className="data-[state=unchecked]:bg-[#E9E9EB] data-[state=checked]:bg-[#34C759] [&>span]:!bg-white [&>span]:!shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-      />
+            )}
+          </label>
+          {sunriseError && (
+            <span
+              className="text-xs text-rose-500"
+              data-testid={`error-preview-sunrise-${song.id}`}
+            >
+              {sunriseError}
+            </span>
+          )}
+          <span
+            className="text-xs text-slate-500"
+            data-testid={`status-preview-${song.id}`}
+          >
+            {caption}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -5912,47 +6046,49 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
 
   return (
     <div
-      className="flex items-center justify-center gap-2.5 w-full"
+      className="flex items-center justify-center gap-3.5 w-full"
       data-testid={`toggle-instrumental-${song.id}`}
     >
-      <Ban
-        className="w-3.5 h-3.5 text-slate-400 flex-shrink-0"
-        aria-hidden="true"
-      />
-      <span className="text-[11.5px] text-slate-600 font-medium">
-        Instrumental
-      </span>
-      <Popover>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label="What Instrumental means"
-                className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
-                data-testid={`info-instrumental-${song.id}`}
-              >
-                <Info className="w-3 h-3" aria-hidden="true" />
-                <span className="sr-only">What Instrumental means</span>
-              </button>
-            </PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Ban
+          className="w-3.5 h-3.5 text-slate-400 flex-shrink-0"
+          aria-hidden="true"
+        />
+        <span className="text-[11.5px] text-slate-600 font-medium">
+          Instrumental
+        </span>
+        <Popover>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="What Instrumental means"
+                  className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  data-testid={`info-instrumental-${song.id}`}
+                >
+                  <Info className="w-3 h-3" aria-hidden="true" />
+                  <span className="sr-only">What Instrumental means</span>
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {lockedOn
+                ? "clear the lyrics first to mark instrumental"
+                : "no lyrics or singer credits"}
+            </TooltipContent>
+          </Tooltip>
+          <PopoverContent
+            side="top"
+            align="center"
+            className="w-60 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
+          >
             {lockedOn
               ? "clear the lyrics first to mark instrumental"
               : "no lyrics or singer credits"}
-          </TooltipContent>
-        </Tooltip>
-        <PopoverContent
-          side="top"
-          align="center"
-          className="w-60 text-xs leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
-        >
-          {lockedOn
-            ? "clear the lyrics first to mark instrumental"
-            : "no lyrics or singer credits"}
-        </PopoverContent>
-      </Popover>
+          </PopoverContent>
+        </Popover>
+      </div>
       {/* Apple HIG Switch — pinned explicitly because shadcn's
           defaults pull `bg-input` (our dark-navy player token) for the
           track and `bg-background` (also dark navy) for the thumb,

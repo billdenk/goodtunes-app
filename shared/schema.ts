@@ -306,13 +306,23 @@ export const songs = pgTable("songs", {
   // advisory) so admins can mark the whole record without flipping
   // every song; the album card's "E" badge lights up if either is on.
   isExplicit: boolean("is_explicit").notNull().default(false),
-  // Artist-designated preview single on a pre-release / not-yet-owned
-  // album. When true, the fan-facing Preview & Purchase track row gets
-  // the full Apple-Music treatment (bold title, runtime, ⋯ menu) and the
-  // 30s preview window plays through `PlayerContext`. When false, the
-  // row renders inert + greyed until the fan owns the album. Default
-  // off — operator opts a song into the preview slot per track.
+  // Legacy "opt-in preview single" flag. Superseded by the inverted
+  // `previewHidden` model below — every track is previewable by default
+  // and the admin only flips a switch to hide a preview. Kept in the
+  // schema so the publish dev→prod diff doesn't try to DROP the column.
+  // No code path reads it anymore.
   isPreviewable: boolean("is_previewable").notNull().default(false),
+  // Inverted preview gate — when true, fans CANNOT play the pre-purchase
+  // preview for this track. Default false (every track is previewable
+  // out of the box). Toggle ON in the admin Master tile to embargo a
+  // single track (e.g. an unreleased bonus). Lives alongside
+  // `previewHiddenUntil` (optional sunrise) — a background sweep + lazy
+  // read normalization unhides any track whose sunrise has passed.
+  previewHidden: boolean("preview_hidden").notNull().default(false),
+  // Optional sunrise. NULL while the hide flag is OFF, or when the
+  // operator chose "hide indefinitely". A non-null value means the
+  // server should auto-unhide the preview at that timestamp.
+  previewHiddenUntil: timestamp("preview_hidden_until"),
   // Denormalized "song in N playlists" counter. Incremented in storage's
   // addSongToPlaylist / decremented in removeSongFromPlaylist (and on
   // cascade from deletePlaylist), so the analytics roll-up / admin "most

@@ -710,7 +710,7 @@ const SEED_ALBUMS: SeedAlbum[] = [
 // them loosely and supply the defaults at the insert-site below.
 type SeedSong = Omit<
   Song,
-  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform" | "audioSourceUrl" | "isExplicit" | "isPreviewable" | "playlistCount" | "muxAssetId" | "muxPlaybackId" | "muxStatus"
+  "syncedLyrics" | "instrumental" | "previewStartMs" | "previewEndMs" | "waveform" | "audioSourceUrl" | "isExplicit" | "isPreviewable" | "previewHidden" | "previewHiddenUntil" | "playlistCount" | "muxAssetId" | "muxPlaybackId" | "muxStatus"
 > & {
   syncedLyrics?: Song["syncedLyrics"];
   instrumental?: Song["instrumental"];
@@ -750,6 +750,49 @@ const SEED_SONGS: SeedSong[] = [
   { id: "song-4-4", albumId: "album-4", title: "Sunset Strip", trackNumber: 4, duration: 212, lyrics: "Neon signs and broken dreams\nNothing here is what it seems\nBut I love it all the same\nThis city's always been my flame\n\nSunset Strip, you never sleep\nSunset Strip, your promises keep", audioUrl: null },
   { id: "song-4-5", albumId: "album-4", title: "California Way", trackNumber: 5, duration: 248, lyrics: "This is the California way\nDream it in the light of day\nChase it down the golden road\n\nCalifornia way, California way\nEverything is gonna be okay\nJust live it and breathe it\nBelieve it today\nThe California way", audioUrl: null },
 ];
+
+// Lazy sunrise sweep — when a song's `previewHiddenUntil` has passed,
+// we treat it as no longer hidden in the response AND fire-and-forget
+// an UPDATE that clears both `previewHidden` and `previewHiddenUntil`
+// so the row's stored state matches what fans see. Audited to console
+// so it shows up in the workflow logs alongside other song mutations.
+// Returns the (possibly normalized) row — never mutates the caller's
+// reference in a way that would surprise downstream consumers.
+function normalizePreviewHide(row: any): any {
+  if (!row) return row;
+  let hidden = row.previewHidden === true;
+  let until = row.previewHiddenUntil ? new Date(row.previewHiddenUntil) : null;
+  if (hidden && until && until.getTime() <= Date.now()) {
+    // Sunrise has passed — clear the hide flag in the DB and on the
+    // response copy. Fire-and-forget; if the UPDATE fails, the next
+    // read will retry. The audit log lets ops trace auto-unhides.
+    db.update(songs)
+      .set({ previewHidden: false, previewHiddenUntil: null })
+      .where(eq(songs.id, row.id))
+      .then(() => {
+        console.log(
+          `[song-preview-sunrise] auto-unhid song ${row.id} (sunrise ${until!.toISOString()})`,
+        );
+      })
+      .catch((err) => {
+        console.warn(
+          `[song-preview-sunrise] failed to auto-unhide song ${row.id}: ${err?.message || err}`,
+        );
+      });
+    hidden = false;
+    until = null;
+  }
+  // Fan-facing `isPreviewable` is fully derived from the inverted
+  // hide flag — every track is previewable unless the admin has
+  // explicitly hidden it (and the sunrise, if any, hasn't fired).
+  // The stored `is_previewable` column is legacy and ignored on read.
+  return {
+    ...row,
+    previewHidden: hidden,
+    previewHiddenUntil: until,
+    isPreviewable: !hidden,
+  };
+}
 
 export class DbStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -818,7 +861,8 @@ export class DbStorage implements IStorage {
     return { ...row.albums, label: row.labels ?? null };
   }
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
-    return db.select().from(songs).where(eq(songs.albumId, albumId)).orderBy(asc(songs.trackNumber));
+    const rows = await db.select().from(songs).where(eq(songs.albumId, albumId)).orderBy(asc(songs.trackNumber));
+    return rows.map((r) => normalizePreviewHide(r));
   }
   async getExplicitAlbumIds(): Promise<Set<string>> {
     const rows = await db
@@ -829,7 +873,7 @@ export class DbStorage implements IStorage {
   }
   async getSongById(id: string): Promise<Song | undefined> {
     const [s] = await db.select().from(songs).where(eq(songs.id, id));
-    return s;
+    return s ? normalizePreviewHide(s) : s;
   }
   // Used by the fan-side `/api/songs` endpoint so PlayerContext can build
   // an id→DB-song hydration map. Every entry point that builds a queue
@@ -841,13 +885,16 @@ export class DbStorage implements IStorage {
   // Hidden-album filter mirrors getAlbums: non-admins must not be able to
   // enumerate songs from demo-hidden albums by hitting this endpoint.
   async getAllSongs(opts?: { includeHidden?: boolean }): Promise<Song[]> {
-    if (opts?.includeHidden) return db.select().from(songs);
+    if (opts?.includeHidden) {
+      const all = await db.select().from(songs);
+      return all.map((r) => normalizePreviewHide(r));
+    }
     const rows = await db
       .select({ song: songs })
       .from(songs)
       .innerJoin(albums, eq(songs.albumId, albums.id))
       .where(eq(albums.isHidden, false));
-    return rows.map((r) => r.song);
+    return rows.map((r) => normalizePreviewHide(r.song));
   }
   async createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album> {
     const [a] = await db.insert(albums).values(data as any).returning();

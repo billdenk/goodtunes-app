@@ -96,7 +96,11 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
             trackNumber: s.trackNumber,
             duration: s.duration,
             isExplicit: !!s.isExplicit,
-            isPreviewable: null,
+            // Task #326: previewable-by-default. The admin tablet preview
+            // shows the post-purchase ("owned") variant anyway, so this
+            // flag is effectively decorative here — set to true to match
+            // the new fan-side default.
+            isPreviewable: true,
           }))}
           videos={[]}
           photos={[]}

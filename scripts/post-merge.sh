@@ -339,3 +339,28 @@ SQL
 }
 migrate_song_audio_specs dev  "${DATABASE_URL:-}"
 migrate_song_audio_specs prod "${PROD_DATABASE_URL:-}"
+
+# Task #326 — Preview hide (inverted) + optional sunrise auto-unhide.
+# Every track is previewable by default; admin only flips
+# `preview_hidden=true` to embargo a single track. `preview_hidden_until`
+# is the optional sunrise — a lazy sweep in storage clears the flag
+# once it passes. Additive nullable columns; safe to re-run.
+migrate_song_preview_hide() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping song preview-hide migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE songs
+  ADD COLUMN IF NOT EXISTS preview_hidden       boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS preview_hidden_until timestamp;
+SQL
+  then
+    echo "post-merge: song preview-hide migration ok on $label"
+  else
+    echo "post-merge: WARNING — song preview-hide migration failed on $label (continuing)"
+  fi
+}
+migrate_song_preview_hide dev  "${DATABASE_URL:-}"
+migrate_song_preview_hide prod "${PROD_DATABASE_URL:-}"

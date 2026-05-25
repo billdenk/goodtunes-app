@@ -4116,9 +4116,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     if (isExplicit !== undefined) updates.isExplicit = Boolean(isExplicit);
-    // Preview-single opt-in for the fan-facing Preview & Purchase page.
-    if (req.body?.isPreviewable !== undefined)
-      updates.isPreviewable = Boolean(req.body.isPreviewable);
+    // Inverted preview gate. Default is "previewable" — admin only flips
+    // `previewHidden=true` to embargo a track. Optional `previewHiddenUntil`
+    // sunrise auto-unhides on a schedule.
+    const previewHideTouched =
+      req.body?.previewHidden !== undefined ||
+      req.body?.previewHiddenUntil !== undefined;
+    if (req.body?.previewHidden !== undefined) {
+      updates.previewHidden = Boolean(req.body.previewHidden);
+    }
+    if (req.body?.previewHiddenUntil !== undefined) {
+      const raw = req.body.previewHiddenUntil;
+      if (raw === null || raw === "") {
+        updates.previewHiddenUntil = null;
+      } else {
+        const dt = new Date(raw);
+        if (Number.isNaN(dt.getTime())) {
+          return res.status(400).json({ error: "previewHiddenUntil must be a valid date or null." });
+        }
+        if (dt.getTime() <= Date.now()) {
+          return res.status(400).json({ error: "Sunrise date must be in the future." });
+        }
+        updates.previewHiddenUntil = dt;
+      }
+    }
+    // If the caller sets a sunrise without also flipping the hide, infer
+    // hide=true — scheduling a return-to-preview only makes sense while
+    // the preview is hidden.
+    if (
+      updates.previewHiddenUntil instanceof Date &&
+      updates.previewHidden === undefined
+    ) {
+      updates.previewHidden = true;
+    }
+    // Invariant: a non-hidden track can never carry a sunrise. Enforce
+    // AFTER all field parsing so a contradictory payload (e.g.
+    // `previewHidden=false` + a future `previewHiddenUntil`) can't slip
+    // a stale embargo into the DB regardless of key ordering on the wire.
+    if (updates.previewHidden === false) {
+      updates.previewHiddenUntil = null;
+    }
     // Preview window is atomic: either both fields null (auto-derived
     // from the master, default) or both finite non-negative integers
     // with end > start. We reject partial/NaN updates with a 400 so
@@ -4199,10 +4236,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         updates.muxStatus = "errored";
       }
     }
+    // Snapshot prior preview-hide state BEFORE the write so the audit
+    // line below can report "<old> -> <new>" without a second read.
+    // Matches the tag-prefixed console-log audit pattern used elsewhere
+    // (e.g. `[song-preview-sunrise]` from the lazy auto-unhide sweep).
+    let priorHide: { hidden: boolean; until: string | null } | null = null;
+    if (previewHideTouched) {
+      const prev = await storage.getSongById(id);
+      if (prev) {
+        const untilRaw = (prev as any).previewHiddenUntil ?? null;
+        priorHide = {
+          hidden: Boolean((prev as any).previewHidden),
+          until: untilRaw
+            ? new Date(untilRaw).toISOString()
+            : null,
+        };
+      }
+    }
     const updated = await storage.updateSong(id, updates);
     if (!updated) return res.status(404).json({ message: "Song not found" });
     if (updates.audioUrl !== undefined) {
       void maybeIngestToMux(id, updates.audioUrl);
+    }
+    if (previewHideTouched && priorHide) {
+      const nextHidden =
+        updates.previewHidden !== undefined
+          ? Boolean(updates.previewHidden)
+          : priorHide.hidden;
+      const nextUntil =
+        updates.previewHiddenUntil instanceof Date
+          ? updates.previewHiddenUntil.toISOString()
+          : updates.previewHiddenUntil === null
+            ? null
+            : priorHide.until;
+      if (
+        nextHidden !== priorHide.hidden ||
+        nextUntil !== priorHide.until
+      ) {
+        const actor = (req as any).user?.id ?? "unknown";
+        console.log(
+          `[song-preview-hide] song=${id} actor=${actor} hidden=${priorHide.hidden}->${nextHidden} until=${priorHide.until ?? "none"}->${nextUntil ?? "none"}`,
+        );
+      }
     }
     return res.json(updated);
   });
