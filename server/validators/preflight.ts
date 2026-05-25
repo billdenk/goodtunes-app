@@ -390,4 +390,174 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
   return checks;
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// Task #334 — Spec-driven audio preflight.
+//
+// `validateAudio` above probes a freshly-uploaded buffer with
+// music-metadata. By the time a master lands on the Press tab the
+// authoritative specs are already on the `songs` row (written by the
+// ffprobe pipeline at upload time), so re-downloading + re-probing
+// just to validate is wasted work — and worse, music-metadata's
+// bit-depth reading is flaky on some 24-bit WAVs, so the "Couldn't
+// read bit depth" warn fired even on rows whose stored
+// `audio_bit_depth` was a perfectly good number.
+//
+// `validateAudioFromSpecs` takes the stored columns directly and
+// returns the same `CheckResult[]` shape. Buffer-free, idempotent,
+// safe to call in a loop for batch preflight. A NULL stored field is
+// the only thing that surfaces a "couldn't read" warn — anything else
+// is a hard pass/fail against the picked plant.
+
+export type AudioStoredSpecs = {
+  format: string | null;          // ffprobe codec_name (e.g. "pcm_s24le", "flac")
+  containerExt: string | null;    // ".wav" / ".aiff" / ".flac" (leading dot)
+  sampleRate: number | null;
+  bitDepth: number | null;
+  bytes: number | null;
+  channels: number | null;
+  duration: number | null;        // seconds
+};
+
+export type ValidateAudioFromSpecsOpts = {
+  vendorId: VendorId;
+  vinylSize: VinylSize;
+  rpm: VinylRpm;
+  fileName: string | null;
+  sideBreaks?: SideBreakInput[];
+  side?: string | null;
+};
+
+// Map the stored columns to a (wav | aiff | flac | other) bucket using
+// container ext first (authoritative — that's the wrapping format)
+// and falling back to the codec name (FLAC is both a codec and a
+// container, so it lands either way).
+function classifyStoredFormat(
+  format: string | null,
+  containerExt: string | null,
+): "wav" | "aiff" | "flac" | "unknown" | "other" {
+  const ext = (containerExt || "").toLowerCase().replace(/^\./, "");
+  if (ext === "wav" || ext === "wave") return "wav";
+  if (ext === "aif" || ext === "aiff" || ext === "aifc") return "aiff";
+  if (ext === "flac") return "flac";
+  const f = (format || "").toLowerCase();
+  if (!f && !ext) return "unknown";
+  if (/^pcm_/.test(f) || /wav|wave|riff/.test(f)) return "wav";
+  if (/aiff|aifc/.test(f)) return "aiff";
+  if (/flac/.test(f)) return "flac";
+  return "other";
+}
+
+function prettyStoredFormat(
+  format: string | null,
+  containerExt: string | null,
+): string {
+  const ext = (containerExt || "").toLowerCase().replace(/^\./, "");
+  if (ext) return ext.toUpperCase();
+  if (format) return format.toUpperCase();
+  return "unknown";
+}
+
+export function validateAudioFromSpecs(
+  specs: AudioStoredSpecs,
+  opts: ValidateAudioFromSpecsOpts,
+): CheckResult[] {
+  const spec = getVendorSpec(opts.vendorId);
+  const checks: CheckResult[] = [];
+  if (!spec) {
+    return [{ key: "audio.config", label: "Vendor", status: "fail", message: "Unknown vendor — pick one before uploading." }];
+  }
+
+  // 1. Format
+  const klass = classifyStoredFormat(specs.format, specs.containerExt);
+  const pretty = prettyStoredFormat(specs.format, specs.containerExt);
+  const matches =
+    (klass === "wav" && spec.audio.requiredFormats.includes("wav")) ||
+    (klass === "aiff" && spec.audio.requiredFormats.includes("aiff")) ||
+    (klass === "flac" && spec.audio.requiredFormats.includes("flac"));
+  if (klass === "unknown") {
+    checks.push({ key: "audio.format", label: "Format", status: "warn",
+      message: `Format unknown — ${spec.label} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.` });
+  } else if (matches) {
+    checks.push({ key: "audio.format", label: "Format", status: "pass",
+      message: `${pretty} accepted.` });
+  } else {
+    checks.push({ key: "audio.format", label: "Format", status: "fail",
+      message: `${pretty} — ${spec.label} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.` });
+  }
+
+  // 2. Bit depth — NULL stored value is the ONLY trigger for the
+  // "couldn't read" warn. A populated number always pass/fails
+  // cleanly against the plant's minimum.
+  if (spec.audio.requiredBitDepth != null) {
+    if (specs.bitDepth == null) {
+      checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "warn",
+        message: `Couldn't read bit depth — ${spec.label} requires ${spec.audio.requiredBitDepth}-bit.` });
+    } else if (specs.bitDepth >= spec.audio.requiredBitDepth) {
+      checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "pass",
+        message: `${specs.bitDepth}-bit — meets ${spec.label}'s ${spec.audio.requiredBitDepth}-bit minimum.` });
+    } else {
+      checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "fail",
+        message: `${specs.bitDepth}-bit — ${spec.label} requires ${spec.audio.requiredBitDepth}-bit.` });
+    }
+  }
+
+  // 3. Sample rate present
+  if (specs.sampleRate) {
+    checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "pass",
+      message: `${specs.sampleRate.toLocaleString()} Hz.` });
+  } else {
+    checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "warn",
+      message: "Sample rate not on file — re-probe the master." });
+  }
+
+  // 4. Per-side length (when caller supplies side-breaks)
+  const maxTable = spec.audio.maxSideSecondsBySizeRpm;
+  const maxSide = maxTable?.[opts.vinylSize]?.[opts.rpm] ?? null;
+  if (opts.sideBreaks && opts.sideBreaks.length > 0 && maxSide != null) {
+    let worstOver = 0;
+    let worstSide = "";
+    for (const sb of opts.sideBreaks) {
+      const total = sb.trackTimesSeconds.reduce((a, b) => a + b, 0);
+      if (total > maxSide && total - maxSide > worstOver) {
+        worstOver = total - maxSide;
+        worstSide = sb.side;
+      }
+    }
+    if (worstOver > 0) {
+      checks.push({ key: "audio.side_length", label: "Side length", status: "fail",
+        message: `Side ${worstSide} exceeds ${spec.label}'s ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(worstOver)}.` });
+    } else {
+      checks.push({ key: "audio.side_length", label: "Side length", status: "pass",
+        message: `All sides within ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
+    }
+  } else if (maxSide != null) {
+    checks.push({ key: "audio.side_length", label: "Side length", status: "warn",
+      message: `Supply a side-break tracklist to verify against ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
+  }
+
+  // 5. One file per side
+  if (spec.audio.oneFilePerSide) {
+    if (opts.side && /^[A-Z][0-9]?$/.test(opts.side)) {
+      checks.push({ key: "audio.one_per_side", label: "One file per side", status: "pass",
+        message: `Tagged side ${opts.side}.` });
+    } else {
+      checks.push({ key: "audio.one_per_side", label: "One file per side", status: "warn",
+        message: `${spec.label} requires one file per side — tag this upload with its side (A / B / …).` });
+    }
+  }
+
+  // 6. Side-break tracklist supplied
+  if (spec.audio.requireSideBreakTracklist) {
+    if (opts.sideBreaks && opts.sideBreaks.length > 0) {
+      checks.push({ key: "audio.tracklist", label: "Tracklist", status: "pass",
+        message: `${opts.sideBreaks.length} side(s) supplied with per-track times.` });
+    } else {
+      checks.push({ key: "audio.tracklist", label: "Tracklist", status: "fail",
+        message: `${spec.label} requires a tracklist with side breaks and per-track times.` });
+    }
+  }
+
+  return checks;
+}
+
 export { rollupStatus };

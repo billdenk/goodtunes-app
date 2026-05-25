@@ -14546,7 +14546,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const row of prev) {
         if (row.kind === "audio") await storage.deleteUploadValidation(row.id);
       }
-      const { validateAudio } = await import("./validators/preflight");
+      // Task #334 — validate against the stored specs (written by the
+      // ffprobe pipeline at upload time) instead of re-downloading and
+      // re-probing every master. The "audio_*" columns on the served
+      // file mirror the as-pressed bytes for passthrough uploads, and
+      // the "audio_source_*" columns hold the originals when the
+      // served file was transcoded — pick the source set when present
+      // so the plant's preflight runs against what they actually cut.
+      const { validateAudioFromSpecs } = await import("./validators/preflight");
       const { rollupStatus } = await import("../shared/uploadValidation");
       const sorted = [...songs].sort(
         (a: any, b: any) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
@@ -14554,9 +14561,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let validated = 0;
       let missing = 0;
       for (const song of sorted as any[]) {
-        // Prefer the archival source (pre-transcode master) when set —
-        // a passthrough or transcoded WAV/FLAC is what the plant
-        // actually cuts from, not the browser-friendly stream copy.
         const url: string | null = song.audioSourceUrl || song.audioUrl || null;
         const padded = String(song.trackNumber ?? 0).padStart(2, "0");
         const safeTitle = String(song.title ?? "Untitled").replace(/[\/\\?%*:|"<>]/g, "_");
@@ -14581,49 +14585,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           missing++;
           continue;
         }
-        try {
-          const file = await objectStorage.getObjectEntityFile(url);
-          const [buf] = await file.download();
-          const checks = await validateAudio(buf, {
-            vendorId,
-            vinylSize: vinylSize as any,
-            rpm: rpm as 33 | 45,
-            fileName: `${padded} ${safeTitle}`,
-            side: null,
-          });
-          const extMatch = url.match(/\.(\w+)(?:\?|$)/);
-          const ext = extMatch ? extMatch[0] : "";
-          await storage.insertUploadValidation({
-            albumId,
-            kind: "audio",
-            vendorId,
-            templateId: null,
-            assetUrl: url,
-            fileName: `${padded} ${safeTitle}${ext}`,
-            status: rollupStatus(checks),
-            checks,
-          });
-          validated++;
-        } catch (e: any) {
-          await storage.insertUploadValidation({
-            albumId,
-            kind: "audio",
-            vendorId,
-            templateId: null,
-            assetUrl: url,
-            fileName: `${padded} ${safeTitle}`,
-            status: "fail",
-            checks: [
-              {
-                key: "audio.fetch",
-                label: "Fetch master",
-                status: "fail",
-                message: `Couldn't read master from storage: ${e?.message ?? "unknown error"}`,
-              },
-            ],
-          });
-          validated++;
-        }
+        const useSource = !!song.audioSourceUrl;
+        const specs = {
+          format: (useSource ? song.audioSourceFormat : song.audioFormat) ?? null,
+          containerExt: (useSource ? song.audioSourceContainerExt : song.audioContainerExt) ?? null,
+          sampleRate: (useSource ? song.audioSourceSampleRate : song.audioSampleRate) ?? null,
+          bitDepth: (useSource ? song.audioSourceBitDepth : song.audioBitDepth) ?? null,
+          channels: (useSource ? song.audioSourceChannels : song.audioChannels) ?? null,
+          bytes: (useSource ? song.audioSourceBytes : song.audioBytes) ?? null,
+          duration: song.duration ?? null,
+        };
+        const checks = validateAudioFromSpecs(specs, {
+          vendorId,
+          vinylSize: vinylSize as any,
+          rpm: rpm as 33 | 45,
+          fileName: `${padded} ${safeTitle}`,
+          side: null,
+        });
+        const extMatch = url.match(/\.(\w+)(?:\?|$)/);
+        const ext = extMatch ? extMatch[0] : "";
+        await storage.insertUploadValidation({
+          albumId,
+          kind: "audio",
+          vendorId,
+          templateId: null,
+          assetUrl: url,
+          fileName: `${padded} ${safeTitle}${ext}`,
+          status: rollupStatus(checks),
+          checks,
+        });
+        validated++;
       }
       res.json({ tracksValidated: validated, tracksMissing: missing });
     } catch (e: any) {
