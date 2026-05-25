@@ -28,15 +28,100 @@ function getReplyTo(): string | null {
 
 type SendResult = { ok: true } | { ok: false; reason: string };
 
+// Synthetic recipient guard — Task #380.
+//
+// History: between May 23–24 2026, an ad-hoc QA pass for the customer
+// forgot-password endpoint sent live Resend mail to `reset-test-N@example.com`
+// addresses. Every one of those messages bounced and Resend records the
+// bounces against our sending domain's reputation forever, which silently
+// dragged Workspace deliverability down for real recipients (Bill's
+// `bill@gogoods.com` reset mail was being quarantined as a result).
+//
+// Defense in depth: regardless of where the mail-send call originates
+// from (route handler, script, future test harness), if the recipient
+// domain is one of the IANA-reserved synthetic domains, we drop the
+// send here without touching Resend. The caller still gets a SendResult
+// so its control flow is unchanged.
+const SYNTHETIC_RECIPIENT_DOMAINS = new Set([
+  "example.com",
+  "example.org",
+  "example.net",
+  "test",
+  "invalid",
+  "localhost",
+]);
+function recipientDomain(to: string): string {
+  const at = to.lastIndexOf("@");
+  return at < 0 ? "(no-domain)" : to.slice(at + 1).trim().toLowerCase();
+}
+function isSyntheticRecipient(to: string): boolean {
+  const domain = recipientDomain(to);
+  if (SYNTHETIC_RECIPIENT_DOMAINS.has(domain)) return true;
+  // RFC 2606 reserved TLDs + the common .example second-level sink.
+  return (
+    domain.endsWith(".test") ||
+    domain.endsWith(".invalid") ||
+    domain.endsWith(".example") ||
+    domain.endsWith(".localhost")
+  );
+}
+
+// Ring buffer of recent mail-send failures so an operator can spot a
+// stuck queue without trawling logs. Bounded to keep memory honest in
+// long-running prod processes. `getRecentMailFailures()` is exported
+// for use by an admin debug surface if one wants to render it.
+export type MailFailure = {
+  ts: string;
+  template: string;
+  recipientDomain: string;
+  reason: string;
+};
+const recentMailFailures: MailFailure[] = [];
+const MAX_RECENT_FAILURES = 50;
+function pushFailure(f: MailFailure): void {
+  recentMailFailures.push(f);
+  if (recentMailFailures.length > MAX_RECENT_FAILURES) recentMailFailures.shift();
+}
+export function getRecentMailFailures(): MailFailure[] {
+  return [...recentMailFailures];
+}
+
+function logFailure(template: string, to: string, reason: string): void {
+  const domain = recipientDomain(to);
+  // Structured single-line log so `rg '[mail-failure]'` works in prod
+  // log search and any field can be parsed back out. Recipient address
+  // is intentionally truncated to domain only — the full local-part is
+  // PII we don't need in operator logs.
+  console.warn(
+    `[mail-failure] template=${template} recipient_domain=${domain} reason=${JSON.stringify(reason)}`,
+  );
+  pushFailure({ ts: new Date().toISOString(), template, recipientDomain: domain, reason });
+}
+
 async function sendViaResend(
+  templateName: string,
   to: string,
   subject: string,
   html: string,
   text: string,
   replyToOverride?: string | null,
 ): Promise<SendResult> {
+  if (isSyntheticRecipient(to)) {
+    // Don't even call Resend — bounces from synthetic domains permanently
+    // damage sender reputation. Distinct log line so we can spot a test
+    // path that's still trying to send to a sink.
+    console.log(
+      `[mail-skip] template=${templateName} recipient_domain=${recipientDomain(to)} reason=synthetic-recipient`,
+    );
+    return { ok: false, reason: "synthetic recipient (skipped)" };
+  }
   const key = process.env.RESEND_API_KEY;
-  if (!key) return { ok: false, reason: "RESEND_API_KEY not set" };
+  if (!key) {
+    const reason = "RESEND_API_KEY not set";
+    // Don't push to the failure buffer — this is an expected dev state,
+    // not a deliverability incident worth flagging in an operator UI.
+    return { ok: false, reason };
+  }
   try {
     const replyTo = (replyToOverride && replyToOverride.trim().length > 0) ? replyToOverride.trim() : getReplyTo();
     const body: Record<string, unknown> = { from: getFromAddress(), to, subject, html, text };
@@ -48,11 +133,15 @@ async function sendViaResend(
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
-      return { ok: false, reason: `resend ${r.status}: ${body.slice(0, 200)}` };
+      const reason = `resend ${r.status}: ${body.slice(0, 200)}`;
+      logFailure(templateName, to, reason);
+      return { ok: false, reason };
     }
     return { ok: true };
   } catch (e) {
-    return { ok: false, reason: `resend fetch threw: ${(e as Error).message}` };
+    const reason = `resend fetch threw: ${(e as Error).message}`;
+    logFailure(templateName, to, reason);
+    return { ok: false, reason };
   }
 }
 
@@ -78,7 +167,7 @@ export async function sendAdminOtpEmail(toEmail: string, code: string, ttlMinute
       <p style="font-size: 13px; color: #888; margin-top: 32px; line-height: 1.5;">If you didn't try to sign in, you can ignore this email — your password is still safe.</p>
     </div>
   `;
-  return sendViaResend(toEmail, subject, html, text);
+  return sendViaResend("admin-otp", toEmail, subject, html, text);
 }
 
 // Send a customer signup code. Fan-facing copy ("Welcome to GoodTunes")
@@ -105,7 +194,7 @@ export async function sendCustomerSignupCodeEmail(toEmail: string, code: string,
       <p style="font-size: 13px; color: #888; margin-top: 32px; line-height: 1.5;">If you didn't ask to sign in, you can safely ignore this email — no account will be created.</p>
     </div>
   `;
-  return sendViaResend(toEmail, subject, html, text);
+  return sendViaResend("customer-signup-code", toEmail, subject, html, text);
 }
 
 // Task #256 — Notify super-admins that a customer landed on the admin
@@ -140,7 +229,7 @@ export async function sendAdminAccessRequestEmail(
       <p style="font-size: 13px; color: #888; line-height: 1.5;">If you want to grant access, use the &ldquo;Make admin&hellip;&rdquo; action on their row. Otherwise you can ignore this email — they cannot reach the admin shell without being promoted.</p>
     </div>
   `;
-  return sendViaResend(toEmail, subject, html, text);
+  return sendViaResend("admin-access-request", toEmail, subject, html, text);
 }
 
 // Task #269 — Admin "Forgot password?" reset link. Always called from
@@ -176,7 +265,7 @@ export async function sendAdminPasswordResetEmail(
       <p style="font-size: 13px; color: #888; margin-top: 16px;">If you didn't request this, you can ignore this email — your password is unchanged.</p>
     </div>
   `;
-  return sendViaResend(toEmail, subject, html, text);
+  return sendViaResend("admin-password-reset", toEmail, subject, html, text);
 }
 
 // Task #272 — Confirmation email sent AFTER a successful admin password
@@ -208,7 +297,7 @@ export async function sendAdminPasswordResetConfirmationEmail(
       </div>
     </div>
   `;
-  return sendViaResend(toEmail, subject, html, text);
+  return sendViaResend("admin-password-reset-confirmation", toEmail, subject, html, text);
 }
 
 // Task #271 — Customer "Forgot password?" reset link. Fan-tone copy on
@@ -242,7 +331,7 @@ export async function sendCustomerPasswordResetEmail(
       <p style="font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 16px;">If you didn't request this, you can ignore this email — your password is unchanged.</p>
     </div>
   `;
-  return sendViaResend(toEmail, subject, html, text);
+  return sendViaResend("customer-password-reset", toEmail, subject, html, text);
 }
 
 // Task #284 — Tap-to-report error capture from the friendly error card.
@@ -326,7 +415,7 @@ export async function sendErrorReportEmail(
   `;
 
   const replyTo = payload.reporterEmail || payload.identity?.email || null;
-  return sendViaResend(toEmail, subject, html, text, replyTo);
+  return sendViaResend("error-report", toEmail, subject, html, text, replyTo);
 }
 
 // Send an admin-invite link. The link points at the public /invite/:token
@@ -360,5 +449,5 @@ export async function sendAdminInviteEmail(
       <p style="font-size: 13px; color: #888; margin-top: 24px;">This link expires in <strong>${ttlDays} days</strong>. If you weren't expecting this email, you can ignore it.</p>
     </div>
   `;
-  return sendViaResend(toEmail, subject, html, text);
+  return sendViaResend("admin-invite", toEmail, subject, html, text);
 }

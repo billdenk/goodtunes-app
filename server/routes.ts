@@ -388,8 +388,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const masked = maskEmail(user.email);
       console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
       const { sendAdminOtpEmail: _sendOtp } = await import("./mail");
-      const _mailResult = await _sendOtp(user.email, code, 10);
-      if (!_mailResult.ok) console.warn(`[admin-otp] mail failed for ${user.email}: ${_mailResult.reason}`);
+      await _sendOtp(user.email, code, 10);
+      // Mail failures are logged centrally as `[mail-failure]` from server/mail.ts.
       return res.json({
         requiresEmailCode: true,
         userId: user.id,
@@ -1081,8 +1081,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await storage.setAdminEmailOtp(userId, codeHash, expiresAt);
     console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
     const { sendAdminOtpEmail: _sendOtp } = await import("./mail");
-    const _mailResult = await _sendOtp(user.email, code, 10);
-    if (!_mailResult.ok) console.warn(`[admin-otp] mail failed for ${user.email}: ${_mailResult.reason}`);
+    await _sendOtp(user.email, code, 10);
+    // Mail failures are logged centrally as `[mail-failure]` from server/mail.ts.
     // `totpEnrolled` lets the login UI render the "Use authenticator
     // instead" fallback link when the OAuth-emailOtp branch boots up
     // and the session-restored response from /api/login isn't around.
@@ -1297,13 +1297,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           await storage.createAdminPasswordResetToken(user.id, hash, expiresAt);
           const resetUrl = `${resetOrigin(req)}/admin/reset-password/${raw}`;
           const { sendAdminPasswordResetEmail } = await import("./mail");
-          const result = await sendAdminPasswordResetEmail(user.email, resetUrl, RESET_TTL_MINUTES);
-          if (!result.ok) {
-            // Log server-side only — never leak the reason to the
-            // caller; that would let an attacker probe whether mail is
-            // misconfigured for a given address.
-            console.warn(`[forgot-password] mail send failed for ${user.email}: ${result.reason}`);
-          }
+          await sendAdminPasswordResetEmail(user.email, resetUrl, RESET_TTL_MINUTES);
+          // Failures are logged centrally as `[mail-failure]` from
+          // server/mail.ts — we never leak the reason to the caller,
+          // since that would let an attacker probe whether mail is
+          // misconfigured for a given address.
           // Dev fallback: always log the link in non-prod so the operator
           // can still get into their account if Resend rejects the send
           // (free-tier domain restrictions, bad MAIL_FROM, etc). Was
@@ -1379,13 +1377,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const geo = geoFromRequest(req);
         const contactEmail = process.env.MAIL_REPLY_TO?.trim() || "admin@goodtunes.music";
         const { sendAdminPasswordResetConfirmationEmail } = await import("./mail");
-        const r = await sendAdminPasswordResetConfirmationEmail(user.email, {
+        await sendAdminPasswordResetConfirmationEmail(user.email, {
           whenIso: new Date().toISOString(),
           country: geo.country,
           region: geo.region,
           contactEmail,
         });
-        if (!r.ok) console.warn(`[admin-reset-confirm] mail failed for ${user.email}: ${r.reason}`);
+        // Failures land in the central `[mail-failure]` log via server/mail.ts.
       } catch (e) {
         console.warn(`[admin-reset-confirm] threw for ${user.email}: ${(e as Error).message}`);
       }
@@ -1450,12 +1448,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           await storage.createCustomerPasswordResetToken(c.id, hash, expiresAt);
           const resetUrl = `${customerResetOrigin(req)}/reset-password/${raw}`;
           const { sendCustomerPasswordResetEmail } = await import("./mail");
-          const result = await sendCustomerPasswordResetEmail(c.email, resetUrl, RESET_TTL_MINUTES);
-          if (!result.ok) {
-            console.warn(`[forgot-password] customer mail send failed for ${c.email}: ${result.reason}`);
-            if (!process.env.RESEND_API_KEY) {
-              console.log(`[forgot-password] customer dev link: ${resetUrl}`);
-            }
+          await sendCustomerPasswordResetEmail(c.email, resetUrl, RESET_TTL_MINUTES);
+          // Send failures land in the central `[mail-failure]` log from
+          // server/mail.ts. Always echo the dev link in non-prod so a
+          // local operator can complete the flow even when Resend is
+          // unreachable or unconfigured.
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`[forgot-password] customer dev link: ${resetUrl}`);
           }
         }
       } catch (e: any) {
@@ -13803,7 +13802,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ROLE_LABELS[role] || role,
         INVITE_TTL_DAYS,
       );
-      if (!result.ok) console.warn(`[invite] mail failed for ${email}: ${result.reason}`);
+      // Mail failures are logged centrally as `[mail-failure]` from server/mail.ts.
       emailDelivered = result.ok;
     } else {
       console.log(`[invite] held for review ${email} role=${role} reason=${claimedReason}`);

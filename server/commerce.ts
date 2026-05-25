@@ -947,7 +947,9 @@ export function registerCommerceRoutes(app: Express) {
       const { sendCustomerSignupCodeEmail } = await import("./mail");
       const result = await sendCustomerSignupCodeEmail(email, code, 15);
       if (!result.ok) {
-        console.warn(`[verify] mail failed for ${email}: ${result.reason}`);
+        // Underlying reason is in the central `[mail-failure]` log
+        // (server/mail.ts). Never leak it to the caller — that would
+        // let an attacker probe whether mail is misconfigured.
         return res.status(500).json({ message: "Couldn't send a code right now — please try again in a moment" });
       }
       return res.json({ ok: true });
