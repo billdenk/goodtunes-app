@@ -269,27 +269,6 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
             and what's blocking submission. */}
         <PressingOrderStepper albumId={albumId} skus={data.skus} />
 
-        {/* Task #323 — upload preflight (art + audio against the picked
-            plant's specs) moved to its own Press tab. We leave a quiet
-            pointer here so artists who lived on Sell still find it. */}
-        <div
-          className="mb-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600"
-          data-testid="pointer-press-tab"
-        >
-          Preflight art &amp; audio against the picked plant's specs on the{" "}
-          <span className="font-semibold text-slate-800">Press</span> tab above.
-        </div>
-
-        {/* Task #327 — Print-ready PDFs moved to the Press tab alongside
-            the rest of the plant-facing tooling. Leave a quiet pointer. */}
-        <div
-          className="mb-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600"
-          data-testid="pointer-print-pdfs-press-tab"
-        >
-          Compose print-ready PDFs for the pressing plant on the{" "}
-          <span className="font-semibold text-slate-800">Press</span> tab above.
-        </div>
-
         {/* Presses */}
         <PressesPanel albumId={albumId} invited={invitedPress ?? null} />
 
