@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface LabelLite {
@@ -245,7 +245,25 @@ export function AdminAlbum() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("overview");
+  // Smart-back deep link: `/admin/albums/:id?track=<songId>` lands the
+  // Tracks tab with that row already open + scrolled into view, so a
+  // user returning from a credit-tapped Person page comes back to the
+  // exact row they were inspecting. The param is read ONCE on mount
+  // (and left in the URL so refreshes still work) — we don't fight
+  // the user if they collapse the row afterwards.
+  const search = useSearch();
+  const initialTrackId = useMemo(() => {
+    try {
+      return new URLSearchParams(search).get("track");
+    } catch {
+      return null;
+    }
+    // Only honor the URL on first mount; subsequent search changes
+    // (e.g. tab switches that may one day persist) shouldn't re-open
+    // a row the user already closed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [tab, setTab] = useState<Tab>(initialTrackId ? "tracks" : "overview");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Delete-options dropdown (replaces the standalone trashcan). The
   // dropdown can either delete the whole album, prime a multi-select
@@ -725,6 +743,7 @@ export function AdminAlbum() {
           <TracksPanel
             album={album}
             onEdit={openInClassicAdmin}
+            initialOpenTrackId={initialTrackId}
             selectionMode={selectionMode}
             selectedTrackIds={selectedTrackIds}
             onToggleTrack={(id) =>
@@ -1380,12 +1399,18 @@ type AdminCreditRole = {
 function TracksPanel({
   album,
   onEdit,
+  initialOpenTrackId,
   selectionMode,
   selectedTrackIds,
   onToggleTrack,
 }: {
   album: AlbumFull;
   onEdit: () => void;
+  // When the page was deep-linked with `?track=<id>` (e.g. the smart-back
+  // crumb on a credit-tapped Person page), seed the exclusive-disclosure
+  // hook with that id so the matching row lands already expanded — and
+  // the row itself scrolls into view via the matching prop on TrackRow.
+  initialOpenTrackId: string | null;
   // Multi-select state lives at the page level so the Delete-Options
   // trigger up in the tab strip can re-label itself with the live
   // count. The panel just threads the props down to each TrackRow.
@@ -1416,7 +1441,7 @@ function TracksPanel({
   // previously open (Stripe order-rows pattern). See
   // `client/src/hooks/useExclusiveDisclosure.ts` and the "Expandable
   // row lists" subsection of docs/design-system.md.
-  const trackDisclosure = useExclusiveDisclosure<string>();
+  const trackDisclosure = useExclusiveDisclosure<string>(initialOpenTrackId);
   // Tracks-tab "Advanced" menu — bulk-create N rows + album-wide GoodSync.
   // State lives here (not in the menu) so the dialogs survive the menu
   // close-on-select behavior and so `invalidateAlbum` can be passed in.
@@ -2068,6 +2093,7 @@ function TracksPanel({
               onSetUserExpanded={(open) =>
                 trackDisclosure.setOpen(song.id, open)
               }
+              scrollIntoViewOnMount={initialOpenTrackId === song.id}
             />
           );
         })}
@@ -4841,6 +4867,7 @@ function TrackRow({
   onToggleSelect,
   userExpanded,
   onSetUserExpanded,
+  scrollIntoViewOnMount,
 }: {
   song: SongLite;
   albumId: string;
@@ -4869,6 +4896,11 @@ function TrackRow({
   // row lists").
   userExpanded: boolean;
   onSetUserExpanded: (open: boolean) => void;
+  // True only for the row matched by the page's `?track=<id>` deep
+  // link on initial mount — used to scroll the matched row into view
+  // so the user lands looking at it (smart-back from a credit-tapped
+  // Person page). Mount-only, never re-triggered.
+  scrollIntoViewOnMount: boolean;
 }) {
   const [mode, setMode] = useState<TrackMode>("view");
   // Seamless tile-expansion: the row collapses into the dot meter at
@@ -4961,8 +4993,29 @@ function TrackRow({
     .filter(Boolean)
     .join(" ");
 
+  // Deep-link scroll: when the page was opened with `?track=<id>` and
+  // this is the matched row, glide it into view on mount. `scroll-mt-24`
+  // on the <li> would also work but the panel sits inside the AdminFrame
+  // scroller — calling scrollIntoView on the element is the most
+  // reliable cross-shell option.
+  const rowRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (!scrollIntoViewOnMount) return;
+    const el = rowRef.current;
+    if (!el) return;
+    // Defer a tick so the parent's tab switch + expand state settle
+    // before we measure.
+    const t = setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+    return () => clearTimeout(t);
+    // Mount-only by design — see prop comment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <li
+      ref={rowRef}
       className={liCls}
       data-testid={`row-track-${song.id}`}
       onDragOver={!expanded ? onDragOver : undefined}

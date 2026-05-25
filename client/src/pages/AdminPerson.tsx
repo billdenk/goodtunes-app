@@ -281,13 +281,27 @@ export function AdminPerson() {
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           {backCrumb ? (
-            <Link
-              href={backCrumb.href}
-              className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
-              data-testid={backCrumb.testId}
-            >
-              {backCrumb.name}
-            </Link>
+            <>
+              <Link
+                href={backCrumb.href}
+                className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+                data-testid={backCrumb.testId}
+              >
+                {backCrumb.name}
+              </Link>
+              {backCrumb.track && (
+                <>
+                  <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                  <Link
+                    href={backCrumb.track.href}
+                    className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[260px]"
+                    data-testid={backCrumb.track.testId}
+                  >
+                    {backCrumb.track.name}
+                  </Link>
+                </>
+              )}
+            </>
           ) : (
             <Link
               href="/admin/people"

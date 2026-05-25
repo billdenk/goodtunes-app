@@ -133,6 +133,7 @@ type PersonCard = {
 function PersonColumn({
   p,
   albumId,
+  songId,
   armed,
   editing,
   busy,
@@ -140,19 +141,21 @@ function PersonColumn({
 }: {
   p: PersonCard;
   albumId: string;
+  songId: string;
   armed: boolean;
   editing: boolean;
   busy: boolean;
   onRemove: () => void;
 }) {
   // Cross-section deep link: tapping a credited person jumps to their
-  // /admin/people/:id page with `?from=album&albumId=…` so the smart
-  // back crumb (see useSmartBackCrumb) returns to this album. Mirrors
-  // the same pattern used from gear and vendors. Unlinked snapshot
-  // rows (personId === null) stay as plain text — there's no record
-  // to land on.
+  // /admin/people/:id page with `?from=album&albumId=…&trackId=…` so the
+  // smart back crumb (see useSmartBackCrumb) returns to this album with
+  // the originating track already expanded and scrolled into view, and
+  // the breadcrumb reads `<Album> › <Track> › <Person>`. Mirrors the same
+  // pattern used from gear and vendors. Unlinked snapshot rows
+  // (personId === null) stay as plain text — there's no record to land on.
   const linkHref = p.personId
-    ? `/admin/people/${p.personId}?from=album&albumId=${albumId}`
+    ? `/admin/people/${p.personId}?from=album&albumId=${albumId}&trackId=${songId}`
     : null;
   return (
     <div
@@ -940,6 +943,7 @@ function Section({
             key={c.key}
             p={c}
             albumId={albumId}
+            songId={songId}
             armed={pendingRemoveKey === c.key}
             editing={editing}
             busy={delMut.isPending}
