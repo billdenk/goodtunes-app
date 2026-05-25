@@ -109,52 +109,40 @@ export function PressingOrderStepper({
           </span>
         )}
       </div>
-      <ol className="flex items-stretch gap-2">
+      <div
+        className="rounded-full bg-slate-100 border border-slate-200 p-1 flex items-center gap-1"
+        role="list"
+      >
         {stages.map((s, i) => {
           const active = i === currentIdx && !s.done;
           const Icon = s.icon;
           return (
-            <li
+            <div
               key={s.key}
-              className="flex-1 min-w-0"
+              role="listitem"
+              className={[
+                "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0",
+                active
+                  ? "flex-1 px-3 py-1.5 bg-[color:var(--brand-blue)] text-white shadow-sm"
+                  : s.done
+                    ? "px-2.5 py-1.5 bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)]"
+                    : "px-2.5 py-1.5 text-slate-500",
+              ].join(" ")}
+              title={s.label}
               data-testid={`stage-${s.key}-${s.done ? "done" : active ? "active" : "pending"}`}
             >
-              <div
-                className={[
-                  "h-full rounded-md border px-2.5 py-2 flex items-center gap-2",
-                  s.done
-                    ? "bg-[color:var(--brand-mint)]/10 border-[color:var(--brand-mint)]/40"
-                    : active
-                      ? "bg-[color:var(--brand-blue)]/10 border-[color:var(--brand-blue)]/50"
-                      : "bg-slate-50 border-slate-200",
-                ].join(" ")}
-              >
-                <div
-                  className={[
-                    "w-6 h-6 rounded-full grid place-items-center text-[11px] font-bold flex-shrink-0",
-                    s.done
-                      ? "bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)]"
-                      : active
-                        ? "bg-[color:var(--brand-blue)] text-white"
-                        : "bg-white border border-slate-300 text-slate-500",
-                  ].join(" ")}
-                >
-                  {s.done ? <Check className="w-3.5 h-3.5" /> : i + 1}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10.5px] uppercase tracking-wide text-slate-400 font-semibold">
-                    Step {i + 1}
-                  </div>
-                  <div className="text-[12.5px] font-medium text-slate-800 truncate flex items-center gap-1">
-                    <Icon className="w-3 h-3 text-slate-500" />
-                    {s.label}
-                  </div>
-                </div>
-              </div>
-            </li>
+              {s.done ? (
+                <Check className="w-3.5 h-3.5 flex-shrink-0" />
+              ) : (
+                <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${active ? "" : "opacity-70"}`} />
+              )}
+              {(active || s.done) && (
+                <span className="text-xs font-semibold truncate">{s.label}</span>
+              )}
+            </div>
           );
         })}
-      </ol>
+      </div>
 
       {latest && latest.status === "rejected" && (
         <div className="mt-3 rounded-md border border-[color:var(--brand-heart)]/40 bg-[color:var(--brand-heart)]/5 p-3 flex items-start gap-2">
