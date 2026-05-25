@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart } from "lucide-react";
@@ -38,6 +39,10 @@ const REFERRER_CONFIG = {
   artist: SCOPE_CONFIG.artist,
   non_profit: SCOPE_CONFIG.non_profit,
   manufacturer: SCOPE_CONFIG.manufacturer,
+  // Task #350 — `ambassador` is a Person row with can_invite_ambassadors=true
+  // referred by some NPO. Picker reuses the people endpoint (the server
+  // re-validates the verb at create time).
+  ambassador: SCOPE_CONFIG.ambassador,
 } as const;
 
 // Task #256 — ScopePicker, ROLE_OPTIONS, ROLE_LABEL, SCOPE_CONFIG were
@@ -49,7 +54,8 @@ export function AdminInvites() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("super_admin");
   const [scopeId, setScopeId] = useState<string | null>(null);
-  const [referrerKind, setReferrerKind] = useState<"" | "artist" | "non_profit" | "manufacturer">("");
+  const [referrerKind, setReferrerKind] = useState<"" | "artist" | "non_profit" | "manufacturer" | "ambassador">("");
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{ name: string } | null>(null);
   const [referrerScopeId, setReferrerScopeId] = useState<string | null>(null);
   const [welcomeNote, setWelcomeNote] = useState("");
   const [lastUrl, setLastUrl] = useState<string | null>(null);
@@ -82,6 +88,7 @@ export function AdminInvites() {
       referrerKind: string | null;
       referrerScopeId: string | null;
       welcomeNote: string | null;
+      confirmDuplicate?: boolean;
     }) => {
       const r = await apiRequest("POST", "/api/admin/invites", body);
       return r.json() as Promise<{
@@ -110,6 +117,18 @@ export function AdminInvites() {
       });
     },
     onError: (e: Error) => {
+      // Task #350 — duplicate-in-subtree (409). Body carries
+      // {code:'duplicate_in_subtree', existing:{name}} which we use to
+      // ask the operator to confirm before resubmitting with the
+      // confirmDuplicate flag set.
+      try {
+        const m = e.message.match(/\{[\s\S]*\}/);
+        const payload = m ? JSON.parse(m[0]) : null;
+        if (payload?.code === "duplicate_in_subtree" && payload?.existing?.name) {
+          setDuplicateConfirm({ name: payload.existing.name });
+          return;
+        }
+      } catch { /* fall through */ }
       toast({ title: "Could not send invite", description: e.message, variant: "destructive" });
     },
   });
@@ -243,6 +262,11 @@ export function AdminInvites() {
               <option value="artist">Artist</option>
               <option value="non_profit">Non-profit</option>
               <option value="manufacturer">Press (manufacturer)</option>
+              {/* Task #350 — NPO partners promote contact people to
+                  ambassadors; ambassador-attributed invites give the
+                  ambassador the per-unit credit while still rolling up
+                  to their NPO. */}
+              <option value="ambassador">Ambassador (non-profit contact)</option>
             </select>
             {referrerKind && (
               <ScopePicker
@@ -269,6 +293,45 @@ export function AdminInvites() {
               data-testid="textarea-welcome-note"
             />
           </div>
+
+          {duplicateConfirm && (
+            <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3" data-testid="banner-duplicate-confirm">
+              <div className="text-sm text-amber-900">
+                <strong>{duplicateConfirm.name}</strong> already appears under this
+                referrer in the invite tree. Sending another invite here
+                creates a parallel attribution.
+              </div>
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDuplicateConfirm(null)}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-amber-100 rounded-md"
+                  data-testid="button-duplicate-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDuplicateConfirm(null);
+                    createMutation.mutate({
+                      email: email.trim(),
+                      role,
+                      roleScopeId: needsScope ? scopeId : null,
+                      referrerKind: referrerKind || null,
+                      referrerScopeId: referrerKind ? referrerScopeId : null,
+                      welcomeNote: welcomeNote.trim() || null,
+                      confirmDuplicate: true,
+                    });
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-md"
+                  data-testid="button-duplicate-confirm"
+                >
+                  Send anyway
+                </button>
+              </div>
+            </div>
+          )}
 
           {lastUrl && (
             <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-3" data-testid="last-invite-url">
@@ -375,7 +438,66 @@ export function AdminInvites() {
             })}
           </ul>
         )}
+
+        {/* Task #350 — Super-admin only: $1.50 invitee-charity bonus
+            flag. OFF by default. When ON, the splitter pays NPO
+            referrers $1.50/unit instead of $1.00 — funded out of the
+            platform's margin. Toggle is its own panel so it doesn't
+            crowd the create form; the GET endpoint 403s for non-super
+            admins which simply hides the panel. */}
+        <ReferralFundingPanel />
       </div>
     </AdminFrame>
+  );
+}
+
+function ReferralFundingPanel() {
+  const q = useQuery<{ inviteeCharityBonusEnabled: boolean; updatedAt: string | null }>({
+    queryKey: ["/api/admin/referral-funding-config"],
+    retry: false,
+  });
+  const { toast } = useToast();
+  const m = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const r = await apiRequest("PUT", "/api/admin/referral-funding-config", { inviteeCharityBonusEnabled: enabled });
+      return (await r.json()) as { inviteeCharityBonusEnabled: boolean };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/referral-funding-config"] });
+      toast({ title: "Funding rate updated" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't update", description: e.message, variant: "destructive" });
+    },
+  });
+  // 403 for non-super admins — silently hide the whole panel.
+  if (q.isError) return null;
+  const enabled = !!q.data?.inviteeCharityBonusEnabled;
+  return (
+    <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-5" data-testid="panel-referral-funding">
+      <h2 className="text-sm font-semibold text-slate-900 mb-1">Referral funding</h2>
+      <p className="text-xs text-slate-500 mb-3">
+        Lift the NPO referral rate from <strong>$1.00</strong> to <strong>$1.50</strong> per paid unit.
+        Funded out of GoodTunes margin. Affects all future paid orders — past credits aren't backfilled.
+      </p>
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={q.isLoading || m.isPending}
+          onChange={(e) => m.mutate(e.target.checked)}
+          className="mt-1 w-4 h-4 accent-[var(--brand-blue)]"
+          data-testid="toggle-invitee-charity-bonus"
+        />
+        <span className="text-sm text-slate-700">
+          Pay non-profit referrers <strong>$1.50</strong> per paid unit (default $1.00)
+        </span>
+      </label>
+      <div className="mt-4 pt-3 border-t border-slate-100">
+        <Link href="/admin/invite-tree" className="text-xs font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid="link-invite-tree">
+          Open the invite tree →
+        </Link>
+      </div>
+    </div>
   );
 }

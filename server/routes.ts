@@ -9039,6 +9039,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // under the band name ("Band", "Duo", "Orchestra", …).
     isGroup: !!p.isGroup,
     groupKind: p.groupKind ?? null,
+    // Task #350 — Surface the ambassador verb + their NPO link so the
+    // admin Permissions panel can render the toggle without a second
+    // round-trip. Both are admin-curation flags, not sensitive.
+    canInviteAmbassadors: !!p.canInviteAmbassadors,
+    referredByOrgId: p.referredByOrgId ?? null,
   });
   app.get("/api/people", async (_req, res) => {
     const rows = await storage.getPeople();
@@ -13284,16 +13289,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const referrerKindRaw = req.body?.referrerKind ? String(req.body.referrerKind) : null;
     let referrerScopeId = req.body?.referrerScopeId ? String(req.body.referrerScopeId) : null;
     const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
-    let referrerKind: "artist" | "non_profit" | "manufacturer" | null = null;
-    if (referrerKindRaw === "artist" || referrerKindRaw === "non_profit" || referrerKindRaw === "manufacturer") {
+    let referrerKind: "artist" | "non_profit" | "manufacturer" | "ambassador" | null = null;
+    if (referrerKindRaw === "artist" || referrerKindRaw === "non_profit" || referrerKindRaw === "manufacturer" || referrerKindRaw === "ambassador") {
       if (!referrerScopeId) return res.status(400).json({ message: "Pick a referrer or clear the field" });
-      const ok = referrerKindRaw === "artist"
-        ? !!(await storage.getPersonById(referrerScopeId))
-        : referrerKindRaw === "manufacturer"
-          ? !!(await storage.getManufacturerById(referrerScopeId))
-          : await orgExists(referrerScopeId);
+      let ok = false;
+      if (referrerKindRaw === "artist") {
+        ok = !!(await storage.getPersonById(referrerScopeId));
+      } else if (referrerKindRaw === "manufacturer") {
+        ok = !!(await storage.getManufacturerById(referrerScopeId));
+      } else if (referrerKindRaw === "non_profit") {
+        ok = await orgExists(referrerScopeId);
+      } else {
+        // Task #350 — ambassador must be a Person referred BY an NPO
+        // with can_invite_ambassadors=true. Non-super-admin callers must
+        // be the NPO partner that owns that ambassador (so a press
+        // partner can't quietly credit an NPO ambassador to its invite).
+        const a = await db.execute<{ id: string; org: string | null }>(sql`
+          SELECT id, referred_by_org_id AS org FROM people
+          WHERE id = ${referrerScopeId} AND can_invite_ambassadors = true
+            AND referred_by_org_id IS NOT NULL
+          LIMIT 1
+        `);
+        const amb = ((a as any).rows ?? [])[0];
+        ok = !!amb;
+        if (ok && callerRole.role !== "super_admin") {
+          if (callerRole.role !== "non_profit" || callerRole.roleScopeId !== amb.org) {
+            return res.status(403).json({ message: "Ambassadors can only be credited by the non-profit they belong to" });
+          }
+        }
+      }
       if (!ok) return res.status(400).json({ message: "That referrer no longer exists" });
       referrerKind = referrerKindRaw;
+    }
+
+    // Task #350 — duplicate-in-subtree guard. If an artist is being
+    // invited and the same EMAIL already appears as a person row that
+    // descends from this referrer's subtree, warn the operator rather
+    // than silently creating a parallel attribution. Returns 409 with
+    // {code:'duplicate_in_subtree', existing:{id,name}} so the client
+    // can show a confirmable warning.
+    if (role === "artist" && referrerScopeId && !req.body?.confirmDuplicate) {
+      // Subtree-level duplicate detection. We walk admin_invites
+      // lineage upward from this referrer to find its top-level
+      // ancestor (NPO, press, or root artist), then look for any prior
+      // invite anywhere in that subtree for the same email. Same email
+      // under a different inviter inside the same top-level org is the
+      // case the operator needs warned about (and can override with
+      // confirmDuplicate=true). Phone-based dedup is not implemented
+      // because admin_invites carries no phone column.
+      const ancestors = await db.execute<{ scope_id: string }>(sql`
+        WITH RECURSIVE chain AS (
+          SELECT ${referrerScopeId}::varchar AS scope_id, 0 AS depth
+          UNION ALL
+          SELECT ai.referrer_scope_id AS scope_id, c.depth + 1
+          FROM chain c
+          JOIN admin_invites ai
+            ON ai.role_scope_id = c.scope_id AND ai.referrer_scope_id IS NOT NULL
+          WHERE c.depth < 8
+        )
+        SELECT DISTINCT scope_id FROM chain WHERE scope_id IS NOT NULL
+      `);
+      const scopeIds = ((ancestors as any).rows ?? []).map((r: any) => r.scope_id);
+      if (scopeIds.length > 0) {
+        const dup = await db.execute<{ id: string; name: string }>(sql`
+          SELECT COALESCE(p.id, '') AS id, COALESCE(p.name, ai.email) AS name
+          FROM admin_invites ai
+          LEFT JOIN people p ON p.id = ai.role_scope_id AND ai.role = 'artist'
+          WHERE LOWER(ai.email) = ${email}
+            AND ai.referrer_scope_id = ANY(${scopeIds}::varchar[])
+            AND ai.revoked_at IS NULL
+          LIMIT 1
+        `);
+        const d = ((dup as any).rows ?? [])[0];
+        if (d) {
+          return res.status(409).json({
+            code: "duplicate_in_subtree",
+            message: `${d.name ?? email} is already in this referral subtree. Resend to confirm a fresh invite.`,
+            existing: { id: d.id || null, name: d.name ?? email },
+          });
+        }
+      }
     }
 
     // Task #199 — when a press admin invites a new artist/label,
@@ -13693,8 +13768,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         if (referrerKind === "artist") {
           await db.execute(sql`UPDATE people SET referred_by_person_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_person_id IS NULL`);
+          // Task #350 — open per-album attribution row with album_id NULL
+          // until the invitee starts a release. swap_state defaults to
+          // 'referrer_keeps_full' (commerce splitter flips on first sale
+          // if the invitee elected the swap before then).
+          await db.execute(sql`
+            INSERT INTO artist_referrals (referrer_person_id, invitee_person_id, album_id)
+            VALUES (${referrerScopeId}, ${invite.roleScopeId}, NULL)
+            ON CONFLICT (referrer_person_id, invitee_person_id, COALESCE(album_id, '')) DO NOTHING
+          `);
         } else if (referrerKind === "non_profit") {
           await db.execute(sql`UPDATE people SET referred_by_org_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_org_id IS NULL`);
+        } else if (referrerKind === "ambassador") {
+          // Ambassador is a Person. Point the new artist at the
+          // ambassador person AND inherit the ambassador's NPO so the
+          // NPO's rollup naturally includes the new artist.
+          const o = await db.execute<{ org: string | null }>(sql`
+            SELECT referred_by_org_id AS org FROM people WHERE id = ${referrerScopeId} LIMIT 1
+          `);
+          const ambOrg = ((o as any).rows ?? [])[0]?.org ?? null;
+          await db.execute(sql`UPDATE people SET referred_by_person_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_person_id IS NULL`);
+          if (ambOrg) {
+            await db.execute(sql`UPDATE people SET referred_by_org_id = ${ambOrg} WHERE id = ${invite.roleScopeId} AND referred_by_org_id IS NULL`);
+          }
         }
       } catch (e: any) {
         console.warn(`[invite] referrer wiring failed for ${invite.id}: ${e?.message}`);
@@ -13948,6 +14044,301 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       })),
       nonProfits: ((referredNpos as any).rows ?? []).map((o: any) => ({
         id: o.id, name: o.name, logoUrl: o.logo_url,
+      })),
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Task #350 — Invite tree + multi-level referrals
+  // ────────────────────────────────────────────────────────────────────
+
+  // GET /api/admin/invite-tree/:scopeKind/:scopeId — recursive subtree
+  // anchored at any (kind, id) root. Returns a flat node list with
+  // parent pointers — the client renders it as a collapsible tree.
+  //   scopeKind: 'artist' | 'non_profit' | 'manufacturer'
+  //   nodes: { id, kind, name, photoUrl?, logoUrl?, parentId, paidUnits, pendingCents }
+  app.get("/api/admin/invite-tree/:scopeKind/:scopeId", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    const scopeKind = String(req.params.scopeKind);
+    const scopeId = String(req.params.scopeId);
+    if (!["artist", "non_profit", "manufacturer"].includes(scopeKind)) {
+      return res.status(400).json({ message: "Invalid scope kind" });
+    }
+    // Authorize: super_admin sees anything; partners only their own scope.
+    if (info.role !== "super_admin") {
+      const partnerKindMap: Record<string, string> = { artist: "artist", non_profit: "non_profit", manufacturer: "manufacturer" };
+      if (partnerKindMap[scopeKind] !== info.role || info.roleScopeId !== scopeId) {
+        return res.status(403).json({ message: "Out of scope" });
+      }
+    }
+
+    type Node = {
+      id: string;
+      kind: "artist" | "non_profit" | "manufacturer" | "pending_invite";
+      name: string;
+      photoUrl?: string | null;
+      logoUrl?: string | null;
+      parentId: string | null;
+      paidUnits: number;
+      pendingCents: number;
+      inviteStatus?: "pending" | "accepted" | "revoked" | null;
+      invitedAt?: string | null;
+      acceptedAt?: string | null;
+      duplicate?: boolean;
+    };
+    const emailFingerprint = new Map<string, number>();
+    const markDup = (email?: string | null) => {
+      if (!email) return false;
+      const k = email.toLowerCase();
+      const n = (emailFingerprint.get(k) ?? 0) + 1;
+      emailFingerprint.set(k, n);
+      return n > 1;
+    };
+    const nodes: Node[] = [];
+    const visitedPersons = new Set<string>();
+
+    // Root row
+    if (scopeKind === "artist") {
+      const r = await db.execute<any>(sql`SELECT id, name, photo_url FROM people WHERE id = ${scopeId} LIMIT 1`);
+      const row = ((r as any).rows ?? [])[0];
+      if (!row) return res.status(404).json({ message: "Not found" });
+      nodes.push({ id: row.id, kind: "artist", name: row.name, photoUrl: row.photo_url, parentId: null, paidUnits: 0, pendingCents: 0 });
+      visitedPersons.add(row.id);
+    } else if (scopeKind === "non_profit") {
+      const r = await db.execute<any>(sql`SELECT id, name, logo_url FROM organizations WHERE id = ${scopeId} AND kind = 'non_profit' LIMIT 1`);
+      const row = ((r as any).rows ?? [])[0];
+      if (!row) return res.status(404).json({ message: "Not found" });
+      nodes.push({ id: row.id, kind: "non_profit", name: row.name, logoUrl: row.logo_url, parentId: null, paidUnits: 0, pendingCents: 0 });
+    } else {
+      const r = await db.execute<any>(sql`SELECT id, name, logo_url FROM manufacturers WHERE id = ${scopeId} LIMIT 1`);
+      const row = ((r as any).rows ?? [])[0];
+      if (!row) return res.status(404).json({ message: "Not found" });
+      nodes.push({ id: row.id, kind: "manufacturer", name: row.name, logoUrl: row.logo_url, parentId: null, paidUnits: 0, pendingCents: 0 });
+    }
+
+    // BFS — expand artists/NPOs/presses found in queue. Cap depth at 8.
+    const queue: { id: string; kind: "artist" | "non_profit" | "manufacturer" }[] = [{ id: scopeId, kind: scopeKind as any }];
+    for (let depth = 0; depth < 8 && queue.length > 0; depth++) {
+      const next: typeof queue = [];
+      for (const cur of queue) {
+        // Direct artist children (referred_by_person_id OR referred_by_org_id OR invited_by_press_id).
+        const cond = cur.kind === "artist"
+          ? sql`referred_by_person_id = ${cur.id}`
+          : cur.kind === "non_profit"
+            ? sql`referred_by_org_id = ${cur.id}`
+            : sql`invited_by_press_id = ${cur.id}`;
+        const kidsRes = await db.execute<any>(sql`
+          SELECT p.id, p.name, p.photo_url,
+            COALESCE((SELECT SUM(quantity)::int FROM order_items oi
+              JOIN orders o ON o.id = oi.order_id AND o.status = 'paid' AND o.artist_snapshot_id = p.id
+              WHERE oi.kind = 'format'), 0) AS paid_units,
+            COALESCE((SELECT SUM(amount_cents)::int FROM referral_credits rc
+              WHERE rc.referred_artist_id = p.id AND rc.status = 'pending_payout'), 0) AS pending_cents
+          FROM people p WHERE ${cond}
+        `);
+        for (const kid of ((kidsRes as any).rows ?? [])) {
+          if (visitedPersons.has(kid.id)) continue;
+          visitedPersons.add(kid.id);
+          nodes.push({ id: kid.id, kind: "artist", name: kid.name, photoUrl: kid.photo_url, parentId: cur.id, paidUnits: kid.paid_units, pendingCents: kid.pending_cents });
+          next.push({ id: kid.id, kind: "artist" });
+        }
+        // Also: an artist node can have NPOs they invited (admin_invites lookup).
+        if (cur.kind === "artist") {
+          const nposRes = await db.execute<any>(sql`
+            SELECT o.id, o.name, o.logo_url FROM admin_invites i
+            JOIN organizations o ON o.id = i.role_scope_id AND o.kind = 'non_profit'
+            WHERE i.referrer_kind = 'artist' AND i.referrer_scope_id = ${cur.id}
+              AND i.role = 'non_profit' AND i.used_at IS NOT NULL
+          `);
+          for (const npo of ((nposRes as any).rows ?? [])) {
+            if (nodes.find((n) => n.id === npo.id && n.kind === "non_profit")) continue;
+            nodes.push({ id: npo.id, kind: "non_profit", name: npo.name, logoUrl: npo.logo_url, parentId: cur.id, paidUnits: 0, pendingCents: 0 });
+            next.push({ id: npo.id, kind: "non_profit" });
+          }
+        }
+      }
+      queue.splice(0, queue.length, ...next);
+    }
+
+    // Pending/accepted/revoked invite-row overlay. For every node we
+    // expanded above (plus the root), pull admin_invites where this
+    // node is the referrer and attach unaccepted rows as pending leaves
+    // so the operator sees the full invite-audit picture (not just
+    // already-accepted entities). Accepted invites are already
+    // represented by their resolved entity node — we just flag
+    // duplicates here so the UI can badge them.
+    const referrerIds = nodes.map((n) => n.id);
+    if (referrerIds.length > 0) {
+      const invitesRes = await db.execute<any>(sql`
+        SELECT id, email, role, referrer_scope_id, used_at, revoked_at,
+               created_at, accepted_user_id
+        FROM admin_invites
+        WHERE referrer_scope_id = ANY(${referrerIds}::varchar[])
+        ORDER BY created_at ASC
+      `);
+      for (const inv of ((invitesRes as any).rows ?? [])) {
+        const dup = markDup(inv.email);
+        if (!inv.used_at && !inv.revoked_at) {
+          nodes.push({
+            id: `invite:${inv.id}`,
+            kind: "pending_invite",
+            name: inv.email,
+            parentId: inv.referrer_scope_id,
+            paidUnits: 0,
+            pendingCents: 0,
+            inviteStatus: "pending",
+            invitedAt: inv.created_at,
+            acceptedAt: null,
+            duplicate: dup,
+          });
+        } else if (inv.used_at && dup) {
+          // Flag the resolved entity node as a duplicate-sourced row.
+          const resolved = nodes.find((n) => n.parentId === inv.referrer_scope_id && n.kind !== "pending_invite");
+          if (resolved) resolved.duplicate = true;
+        }
+      }
+    }
+    res.json({ root: { kind: scopeKind, id: scopeId }, nodes });
+  });
+
+  // PATCH /api/admin/people/:id/can-invite-ambassadors — NPO partner or
+  // super_admin toggles the per-person ambassador inviter flag.
+  app.patch("/api/admin/people/:id/can-invite-ambassadors", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    const personId = String(req.params.id);
+    const enabled = !!req.body?.enabled;
+    const p = await db.execute<{ id: string; org: string | null }>(sql`
+      SELECT id, referred_by_org_id AS org FROM people WHERE id = ${personId} LIMIT 1
+    `);
+    const row = ((p as any).rows ?? [])[0];
+    if (!row) return res.status(404).json({ message: "Person not found" });
+    if (info.role !== "super_admin") {
+      if (info.role !== "non_profit" || info.roleScopeId !== row.org) {
+        return res.status(403).json({ message: "Only the non-profit this person belongs to can promote them" });
+      }
+    }
+    // Only persons referred BY an NPO can be ambassadors.
+    if (enabled && !row.org) {
+      return res.status(400).json({ message: "Ambassadors must be tied to a non-profit first" });
+    }
+    await db.execute(sql`UPDATE people SET can_invite_ambassadors = ${enabled} WHERE id = ${personId}`);
+    res.json({ id: personId, canInviteAmbassadors: enabled });
+  });
+
+  // GET /api/admin/referral-funding-config — super_admin reads singleton.
+  app.get("/api/admin/referral-funding-config", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info || info.role !== "super_admin") return res.status(403).json({ message: "Super-admin only" });
+    const r = await db.execute<any>(sql`SELECT invitee_charity_bonus_enabled, updated_at FROM referral_funding_config WHERE id = 'singleton' LIMIT 1`);
+    const row = ((r as any).rows ?? [])[0] ?? { invitee_charity_bonus_enabled: false, updated_at: null };
+    res.json({ inviteeCharityBonusEnabled: !!row.invitee_charity_bonus_enabled, updatedAt: row.updated_at });
+  });
+
+  // PUT /api/admin/referral-funding-config — super_admin writes singleton.
+  app.put("/api/admin/referral-funding-config", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info || info.role !== "super_admin") return res.status(403).json({ message: "Super-admin only" });
+    const enabled = !!req.body?.inviteeCharityBonusEnabled;
+    await db.execute(sql`
+      INSERT INTO referral_funding_config (id, invitee_charity_bonus_enabled, updated_by_user_id, updated_at)
+      VALUES ('singleton', ${enabled}, ${req.session.userId!}, now())
+      ON CONFLICT (id) DO UPDATE
+        SET invitee_charity_bonus_enabled = EXCLUDED.invitee_charity_bonus_enabled,
+            updated_by_user_id = EXCLUDED.updated_by_user_id,
+            updated_at = now()
+    `);
+    res.json({ inviteeCharityBonusEnabled: enabled });
+  });
+
+  // GET /api/artist/referrals/swaps — pending+frozen swap rows for the
+  // calling artist, both as referrer (pre-elect surface) and as invitee
+  // (accept-the-swap surface).
+  app.get("/api/artist/referrals/swaps", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    const personIdParam = typeof req.query.personId === "string" ? req.query.personId.trim() : "";
+    const personId = info.role === "super_admin" ? (personIdParam || null) : (info.role === "artist" ? info.roleScopeId : null);
+    if (!personId) return res.status(info.role === "super_admin" ? 400 : 403).json({ message: "Artist scope required" });
+    const asReferrer = await db.execute<any>(sql`
+      SELECT ar.id, ar.invitee_person_id AS other_id, p.name AS other_name, p.photo_url AS other_photo,
+        ar.album_id, ar.swap_state, ar.pre_elected_at, ar.frozen_at
+      FROM artist_referrals ar
+      JOIN people p ON p.id = ar.invitee_person_id
+      WHERE ar.referrer_person_id = ${personId}
+      ORDER BY ar.created_at DESC
+    `);
+    const asInvitee = await db.execute<any>(sql`
+      SELECT ar.id, ar.referrer_person_id AS other_id, p.name AS other_name, p.photo_url AS other_photo,
+        ar.album_id, ar.swap_state, ar.pre_elected_at, ar.frozen_at
+      FROM artist_referrals ar
+      JOIN people p ON p.id = ar.referrer_person_id
+      WHERE ar.invitee_person_id = ${personId}
+      ORDER BY ar.created_at DESC
+    `);
+    const shape = (rows: any[]) => rows.map((r) => ({
+      id: r.id, otherId: r.other_id, otherName: r.other_name, otherPhotoUrl: r.other_photo,
+      albumId: r.album_id, swapState: r.swap_state,
+      preElectedAt: r.pre_elected_at, frozenAt: r.frozen_at,
+    }));
+    res.json({
+      asReferrer: shape(((asReferrer as any).rows ?? [])),
+      asInvitee: shape(((asInvitee as any).rows ?? [])),
+    });
+  });
+
+  // POST /api/artist/referrals/:id/pre-elect — referrer (or super_admin)
+  // sets the DEFAULT swap state for this row. Locked once frozen_at is
+  // stamped (commerce splitter does that on the first paid sale).
+  app.post("/api/artist/referrals/:id/pre-elect", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    const id = String(req.params.id);
+    const state = String(req.body?.swapState || "");
+    if (!["referrer_keeps_full", "invitee_keeps_full"].includes(state)) {
+      return res.status(400).json({ message: "Invalid swap state" });
+    }
+    const r = await db.execute<any>(sql`SELECT referrer_person_id, invitee_person_id, frozen_at FROM artist_referrals WHERE id = ${id} LIMIT 1`);
+    const row = ((r as any).rows ?? [])[0];
+    if (!row) return res.status(404).json({ message: "Not found" });
+    if (row.frozen_at) return res.status(409).json({ message: "This swap is frozen — the first paid unit has shipped." });
+    if (info.role !== "super_admin") {
+      // Either referrer (pre-elect) or invitee (swap) may flip; the UI
+      // names them differently but the rule is identical.
+      if (info.role !== "artist" || ![row.referrer_person_id, row.invitee_person_id].includes(info.roleScopeId)) {
+        return res.status(403).json({ message: "Out of scope" });
+      }
+    }
+    await db.execute(sql`UPDATE artist_referrals SET swap_state = ${state}, pre_elected_at = now() WHERE id = ${id}`);
+    res.json({ id, swapState: state });
+  });
+
+  // GET /api/press/invited-artists — press portal's invited-artists
+  // report. Project-scoped: only counts albums in press_invited_albums.
+  app.get("/api/press/invited-artists", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.status(401).json({ message: "Unauthorized" });
+    const pressIdParam = typeof req.query.pressId === "string" ? req.query.pressId.trim() : "";
+    const pressId = info.role === "super_admin" ? (pressIdParam || null) : (info.role === "manufacturer" ? info.roleScopeId : null);
+    if (!pressId) return res.status(info.role === "super_admin" ? 400 : 403).json({ message: "Press scope required" });
+
+    // Invited artists (have a people.invited_by_press_id pointing here).
+    const artists = await db.execute<any>(sql`
+      SELECT p.id, p.name, p.photo_url,
+        COALESCE((SELECT COUNT(*)::int FROM press_invited_albums pia WHERE pia.press_id = ${pressId} AND pia.invitee_person_id = p.id), 0) AS album_count,
+        COALESCE((SELECT SUM(oi.quantity)::int FROM press_invited_albums pia
+          JOIN orders o ON o.album_id = pia.album_id AND o.status = 'paid'
+          JOIN order_items oi ON oi.order_id = o.id AND oi.kind = 'format'
+          WHERE pia.press_id = ${pressId} AND pia.invitee_person_id = p.id), 0) AS paid_units
+      FROM people p WHERE p.invited_by_press_id = ${pressId}
+      ORDER BY p.name ASC
+    `);
+    res.json({
+      pressId,
+      artists: ((artists as any).rows ?? []).map((r: any) => ({
+        id: r.id, name: r.name, photoUrl: r.photo_url,
+        albumCount: r.album_count, paidUnits: r.paid_units,
       })),
     });
   });

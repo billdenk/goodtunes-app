@@ -45,6 +45,57 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+// Task #350 — Per-person ambassador toggle. Lives at the bottom of the
+// Permissions tab so it sits next to the other partner verbs. Disabled
+// (with a hint) when the person has no NPO; the server enforces the
+// same rule defensively.
+function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId }: {
+  personId: string;
+  canInviteAmbassadors: boolean;
+  referredByOrgId: string | null;
+}) {
+  const { toast } = useToast();
+  const [enabled, setEnabled] = useState(canInviteAmbassadors);
+  const disabled = !referredByOrgId;
+  const m = useMutation({
+    mutationFn: async (next: boolean) => {
+      await apiRequest("PATCH", `/api/admin/people/${personId}/can-invite-ambassadors`, { enabled: next });
+      return next;
+    },
+    onSuccess: (next) => {
+      setEnabled(next);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people", personId] });
+      toast({ title: next ? "Promoted to ambassador" : "Ambassador verb removed" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't update", description: e.message, variant: "destructive" });
+    },
+  });
+  return (
+    <Card className="p-5 mt-4">
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          id={`amb-toggle-${personId}`}
+          checked={enabled}
+          disabled={disabled || m.isPending}
+          onChange={(e) => m.mutate(e.target.checked)}
+          className="mt-1 w-4 h-4 accent-[var(--brand-blue)]"
+          data-testid="toggle-can-invite-ambassadors"
+        />
+        <label htmlFor={`amb-toggle-${personId}`} className="block">
+          <span className="font-semibold text-slate-900 block">Can invite ambassadors</span>
+          <span className="text-xs text-slate-500 block mt-1">
+            {disabled
+              ? "Person must be linked to a non-profit (referred_by_org) before they can be promoted."
+              : "When ON, the non-profit can attribute invites to this person. Their referred artists' credits flow to them, with the NPO still seeing the roll-up."}
+          </span>
+        </label>
+      </div>
+    </Card>
+  );
+}
+
 /**
  * Admin · Single person. Wrapped in AdminFrame so it shares the top bar +
  * left entity sidebar with /admin/people.
@@ -427,7 +478,16 @@ export function AdminPerson() {
           />
         )}
         {tab === "permissions" && (
-          <PartnerPermissionsPanel scopeKind="artist" scopeId={person.id} scopeName={person.name} />
+          <>
+            <PartnerPermissionsPanel scopeKind="artist" scopeId={person.id} scopeName={person.name} />
+            {/* Task #350 — Per-person ambassador toggle. Only meaningful
+                when the person is tied to a non-profit (server enforces
+                — toggle disabled otherwise). When ON, the NPO partner
+                can attribute invites to this person and the new
+                artist's referral credits flow to the ambassador (with
+                the NPO still seeing them in their roll-up). */}
+            <AmbassadorToggle personId={person.id} canInviteAmbassadors={(person as any).canInviteAmbassadors ?? false} referredByOrgId={(person as any).referredByOrgId ?? null} />
+          </>
         )}
       </div>
 

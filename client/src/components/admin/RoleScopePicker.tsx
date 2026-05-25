@@ -26,6 +26,11 @@ export const SCOPE_CONFIG: Record<
   fulfillment: { endpoint: "/api/fulfillment-partners", noun: "fulfillment partner", thumbField: "logoUrl" },
   non_profit: { endpoint: "/api/non-profits", noun: "non-profit", thumbField: "logoUrl" },
   vendor: { endpoint: "/api/vendors", noun: "vendor", thumbField: "logoUrl" },
+  // Task #350 — ambassador picker reuses the people endpoint; server
+  // validates can_invite_ambassadors=true at invite-create time so a
+  // misclicked non-ambassador surfaces as a 400 rather than silently
+  // attributing to a person without the verb.
+  ambassador: { endpoint: "/api/people", noun: "ambassador", thumbField: "photoUrl" },
 };
 
 export type ScopeEntity = { id: string; name: string; photoUrl?: string | null; logoUrl?: string | null };

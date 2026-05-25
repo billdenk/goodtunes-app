@@ -54,6 +54,7 @@ import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
 import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
+import { AdminInviteTree } from "@/pages/AdminInviteTree";
 import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
@@ -235,6 +236,10 @@ function Router() {
         </Route>
         <Route path="/admin/invites">
           <ProtectedRoute component={AdminInvites} />
+        </Route>
+        {/* Task #350 — Invite tree (multi-level referral visualiser). */}
+        <Route path="/admin/invite-tree">
+          <ProtectedRoute component={AdminInviteTree} />
         </Route>
         {/* Task #79 — Super-admin queue of partner-submitted metadata
             edits awaiting review. */}

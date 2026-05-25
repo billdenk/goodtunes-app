@@ -556,6 +556,14 @@ export const people = pgTable("people", {
   // from that press's pricing. Nullable + SET NULL on delete so a
   // removed press doesn't orphan the artist row.
   invitedByPressId: varchar("invited_by_press_id"),
+  // Task #350 — per-person ambassador inviter flag. NPO partner shells
+  // gate the "Invite an ambassador" action on `inviteSubusers` (org-wide
+  // permission) AND this column on the specific ambassador-Person who
+  // would receive the invite. Default false so promoting a contact
+  // person on an NPO into an ambassador-inviter is an explicit step.
+  // Only meaningful when the person is also referred_by_org_id == some
+  // NPO (otherwise the toggle has no scope to invite into).
+  canInviteAmbassadors: boolean("can_invite_ambassadors").notNull().default(false),
   // Task #190 — bands & members. When `isGroup` is true this Person row
   // represents a band/duo/orchestra/etc. rather than a single human; the
   // join rows in `bandMembers` enumerate who plays in it. `groupKind` is
@@ -2352,7 +2360,13 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
   email: z.string().email(),
   role: z.enum(ADMIN_ROLES),
   roleScopeId: z.string().optional().nullable(),
-  referrerKind: z.enum(["artist", "non_profit", "manufacturer"]).optional().nullable(),
+  // Task #350 — `ambassador` is a Person-scoped referrer (a contact
+  // person on an NPO who's been promoted to invite their own artists).
+  // Accept-flow resolves it to people.referredByPersonId on the new
+  // artist's row + a parent-chain back to the NPO via the ambassador's
+  // own referredByOrgId, so the NPO's roll-up still sees every artist
+  // their ambassadors brought in.
+  referrerKind: z.enum(["artist", "non_profit", "manufacturer", "ambassador"]).optional().nullable(),
   referrerScopeId: z.string().optional().nullable(),
   welcomeNote: z.string().max(1000).optional().nullable(),
 });
@@ -2392,6 +2406,74 @@ export const referralCredits = pgTable("referral_credits", {
 }));
 
 export type ReferralCredit = typeof referralCredits.$inferSelect;
+
+// ─── Task #350 — Per-album artist↔artist attribution ────────────────
+// An artist referring another artist (invite_subusers + artist scope)
+// creates ONE row here per (referrer, invitee, album) — but the album
+// id is filled in only when the invitee actually starts a release on
+// GoodTunes. The pre-release row exists with album_id=null to record
+// the invite + the referrer's pre-elected swap intent.
+//
+// `swapState`:
+//   referrer_keeps_full → referrer earns $1/unit (default behaviour)
+//   invitee_keeps_full  → no credit minted; invitee keeps the slice
+//                         that would otherwise be paid out. Symmetric
+//                         to the press $0 attribution — the row still
+//                         exists so the tree view + provenance reports
+//                         can show the link without a payout.
+//
+// `frozenAt` is stamped at the FIRST paid order on the album. After
+// that the swap state can no longer change for this project (history
+// stays honest). `preElectedAt` records when the referrer toggled
+// their default pre-election (separate from frozenAt — the invitee
+// can still flip it during their draft phase, up until first sale).
+export const artistReferrals = pgTable("artist_referrals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  referrerPersonId: varchar("referrer_person_id").notNull(),
+  inviteePersonId: varchar("invitee_person_id").notNull(),
+  albumId: varchar("album_id"),
+  swapState: text("swap_state").notNull().default("referrer_keeps_full"),
+  preElectedAt: timestamp("pre_elected_at"),
+  frozenAt: timestamp("frozen_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pairUniq: uniqueIndex("artist_referrals_pair_album_uniq")
+    .on(t.referrerPersonId, t.inviteePersonId, t.albumId),
+}));
+export type ArtistReferral = typeof artistReferrals.$inferSelect;
+
+// ─── Task #350 — Press project-scoped attribution ─────────────────────
+// One row per (press, invitee artist, album) — minted with $0 referral
+// credit so the press's invited-artists report shows the album's paid
+// units without paying the press a per-unit slice (presses are paid
+// through manufacturing margin, not referral). Project-scoped: if the
+// invitee's NEXT album goes to a different press, the new press row is
+// not created — only the first invited album rolls up under the press
+// that brought them in.
+export const pressInvitedAlbums = pgTable("press_invited_albums", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull(),
+  inviteePersonId: varchar("invitee_person_id").notNull(),
+  albumId: varchar("album_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pressAlbumUniq: uniqueIndex("press_invited_albums_press_album_uniq")
+    .on(t.pressId, t.albumId),
+}));
+export type PressInvitedAlbum = typeof pressInvitedAlbums.$inferSelect;
+
+// ─── Task #350 — Referral funding config (singleton) ──────────────────
+// Single-row table (id='singleton') holding global referral-funding
+// flags. `inviteeCharityBonusEnabled` adds $0.50 to the NPO referrer
+// credit per paid unit ($1.50 instead of $1) — funded out of GoodTunes'
+// margin, defaults OFF so a launch decision can flip it without code.
+export const referralFundingConfig = pgTable("referral_funding_config", {
+  id: varchar("id").primaryKey().default(sql`'singleton'`),
+  inviteeCharityBonusEnabled: boolean("invitee_charity_bonus_enabled").notNull().default(false),
+  updatedByUserId: varchar("updated_by_user_id"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type ReferralFundingConfig = typeof referralFundingConfig.$inferSelect;
 
 // ─── Task #128 — Printable GoodDeed certificates ───────────────────────
 // One row per paid order that carries a `signed_cert` add-on. The fan

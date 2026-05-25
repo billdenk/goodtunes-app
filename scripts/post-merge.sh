@@ -403,3 +403,69 @@ SQL
 }
 migrate_album_sell_mode dev  "${DATABASE_URL:-}"
 migrate_album_sell_mode prod "${PROD_DATABASE_URL:-}"
+
+# Task #350 — Invite tree + multi-level referrals.
+#   1. people.can_invite_ambassadors — per-person flag NPO partners
+#      toggle on a contact to grant them the ambassador invite verb.
+#   2. artist_referrals — per-album (referrer, invitee, album) row with
+#      swap state and freeze-at-first-sale stamp.
+#   3. press_invited_albums — project-scoped press → invited-artist
+#      album link (no payout; the press's report rolls up units here).
+#   4. referral_funding_config — singleton row holding the $1.50
+#      invitee-charity bonus flag (default OFF).
+#
+# All additive / idempotent. Safe to re-run on both DBs.
+migrate_invite_tree_v1() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping invite-tree v1 migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE people
+  ADD COLUMN IF NOT EXISTS can_invite_ambassadors boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS artist_referrals (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  referrer_person_id  varchar NOT NULL,
+  invitee_person_id   varchar NOT NULL,
+  album_id            varchar,
+  swap_state          text    NOT NULL DEFAULT 'referrer_keeps_full',
+  pre_elected_at      timestamp,
+  frozen_at           timestamp,
+  created_at          timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS artist_referrals_pair_album_uniq
+  ON artist_referrals (referrer_person_id, invitee_person_id, COALESCE(album_id, ''));
+CREATE INDEX IF NOT EXISTS artist_referrals_invitee_idx
+  ON artist_referrals (invitee_person_id);
+
+CREATE TABLE IF NOT EXISTS press_invited_albums (
+  id                 varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id           varchar NOT NULL,
+  invitee_person_id  varchar NOT NULL,
+  album_id           varchar NOT NULL,
+  created_at         timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS press_invited_albums_press_album_uniq
+  ON press_invited_albums (press_id, album_id);
+CREATE INDEX IF NOT EXISTS press_invited_albums_press_idx
+  ON press_invited_albums (press_id);
+
+CREATE TABLE IF NOT EXISTS referral_funding_config (
+  id                              varchar PRIMARY KEY DEFAULT 'singleton',
+  invitee_charity_bonus_enabled   boolean NOT NULL DEFAULT false,
+  updated_by_user_id              varchar,
+  updated_at                      timestamp NOT NULL DEFAULT now()
+);
+INSERT INTO referral_funding_config (id) VALUES ('singleton')
+  ON CONFLICT (id) DO NOTHING;
+SQL
+  then
+    echo "post-merge: invite-tree v1 migration ok on $label"
+  else
+    echo "post-merge: WARNING — invite-tree v1 migration failed on $label (continuing)"
+  fi
+}
+migrate_invite_tree_v1 dev  "${DATABASE_URL:-}"
+migrate_invite_tree_v1 prod "${PROD_DATABASE_URL:-}"

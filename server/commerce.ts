@@ -1864,49 +1864,120 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
         .where(and(eq(albumSkus.albumId, albumId), eq(albumSkus.format, skuFormat), sql`${albumSkus.stock} IS NOT NULL`));
     }
 
-    // Task #78 — Referral credit accrual. If this order's album is by
-    // a referred artist (people.referred_by_person_id or _org_id), we
-    // write a pending_payout credit row per referrer. Idempotent via
-    // the unique (order_id, referrer_kind) index — safe to call twice.
+    // Task #78 + #350 — Referral credit accrual. Writes a pending_payout
+    // credit row per referrer kind, idempotent via the unique
+    // (order_id, referrer_kind) index. Branches:
+    //
+    //   • artist-to-artist (Task #350): looks for an `artist_referrals`
+    //     row pinned to (referrer, invitee, album OR null). If the row
+    //     has swap_state = 'invitee_keeps_full' → SKIP the credit (the
+    //     invitee keeps the full slice). Otherwise mint the $1/unit
+    //     credit as normal AND stamp frozen_at + bind album_id so the
+    //     swap can no longer flip for this project.
+    //
+    //   • NPO referrer (Task #78): per-unit defaults to people.referrer
+    //     _per_unit_cents (100¢). If referral_funding_config.invitee_
+    //     charity_bonus_enabled is true, bump by +50¢ to honour the
+    //     $1.50 funded-up rate (default OFF, super-admin flag).
+    //
+    //   • Press (#199/#350): if the artist was invited by a press AND
+    //     the press is involved in this album, write a project-scoped
+    //     press_invited_albums row at $0 (no payout — presses earn
+    //     through manufacturing margin, this row only powers the
+    //     press portal's invited-artists report).
     if (!wasAlreadyPaid && order.artistSnapshotId) {
       try {
         const r = await db.execute<{
           referred_by_person_id: string | null;
           referred_by_org_id: string | null;
+          invited_by_press_id: string | null;
           referrer_per_unit_cents: number | null;
-        }>(sql`SELECT referred_by_person_id, referred_by_org_id, referrer_per_unit_cents
+        }>(sql`SELECT referred_by_person_id, referred_by_org_id, invited_by_press_id, referrer_per_unit_cents
                FROM people WHERE id = ${order.artistSnapshotId} LIMIT 1`);
         const row = (r as any).rows?.[0];
-        if (row && (row.referred_by_person_id || row.referred_by_org_id)) {
-          const perUnit = row.referrer_per_unit_cents ?? 100;
+        if (row && (row.referred_by_person_id || row.referred_by_org_id || row.invited_by_press_id)) {
+          const basePerUnit = row.referrer_per_unit_cents ?? 100;
           const currency = (order.currency || "usd").toLowerCase();
-          // Credits are $1 PER PAID UNIT. A vinyl + CD bundle (2 units in
-          // one order) accrues $2 to each referrer. Sum the `format`-kind
-          // order_items' quantity — `addon` rows (signed_cert etc.) are
-          // not "units of the album" and don't trigger referral credit.
           const u = await db.execute<{ units: number }>(sql`
             SELECT COALESCE(SUM(quantity), 0)::int AS units
             FROM order_items WHERE order_id = ${order.id} AND kind = 'format'
           `);
           const units = ((u as any).rows?.[0]?.units ?? 0) as number;
-          // Defensive fallback: an order should always have ≥1 format
-          // line, but if order_items is empty for any reason, fall back
-          // to 1 unit so we don't silently zero out the credit.
           const safeUnits = units > 0 ? units : 1;
-          const amountCents = perUnit * safeUnits;
+
+          // ── Artist → artist branch with per-album swap rule ──
           if (row.referred_by_person_id) {
-            await db.execute(sql`
-              INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_person_id, amount_cents, currency, status, units)
-              VALUES (${order.id}, ${order.artistSnapshotId}, 'artist', ${row.referred_by_person_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
-              ON CONFLICT (order_id, referrer_kind) DO NOTHING
+            const ar = await db.execute<{ id: string; swap_state: string; album_id: string | null }>(sql`
+              SELECT id, swap_state, album_id
+              FROM artist_referrals
+              WHERE referrer_person_id = ${row.referred_by_person_id}
+                AND invitee_person_id = ${order.artistSnapshotId}
+                AND (album_id = ${albumId} OR album_id IS NULL)
+              ORDER BY album_id IS NULL ASC
+              LIMIT 1
             `);
+            const arRow = ((ar as any).rows ?? [])[0];
+            const swapKeepsInvitee = arRow?.swap_state === "invitee_keeps_full";
+            if (arRow) {
+              // Pin to this album + freeze the swap on first paid sale.
+              await db.execute(sql`
+                UPDATE artist_referrals
+                   SET album_id = COALESCE(album_id, ${albumId}),
+                       frozen_at = COALESCE(frozen_at, now())
+                 WHERE id = ${arRow.id}
+              `);
+            }
+            if (!swapKeepsInvitee) {
+              const amountCents = basePerUnit * safeUnits;
+              await db.execute(sql`
+                INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_person_id, amount_cents, currency, status, units)
+                VALUES (${order.id}, ${order.artistSnapshotId}, 'artist', ${row.referred_by_person_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
+                ON CONFLICT (order_id, referrer_kind) DO NOTHING
+              `);
+            }
           }
+
+          // ── NPO branch with optional $1.50 funded-up bonus ──
           if (row.referred_by_org_id) {
+            let npoPerUnit = basePerUnit;
+            try {
+              const cfg = await db.execute<{ enabled: boolean }>(sql`
+                SELECT invitee_charity_bonus_enabled AS enabled
+                FROM referral_funding_config WHERE id = 'singleton' LIMIT 1
+              `);
+              if (((cfg as any).rows ?? [])[0]?.enabled) npoPerUnit += 50;
+            } catch { /* missing config row defaults OFF */ }
+            const amountCents = npoPerUnit * safeUnits;
             await db.execute(sql`
               INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_org_id, amount_cents, currency, status, units)
               VALUES (${order.id}, ${order.artistSnapshotId}, 'non_profit', ${row.referred_by_org_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
               ON CONFLICT (order_id, referrer_kind) DO NOTHING
             `);
+          }
+
+          // ── Press project-scoped $0 attribution ──
+          // Only write the press_invited_albums row when THIS album is
+          // actually being pressed by the inviting press — verified via
+          // an approved pressing_order_requests row whose package
+          // snapshot pins to that press. If the artist's next album
+          // routes to a different press, no row is minted and the
+          // original press's invited-artists report won't surface it.
+          if (row.invited_by_press_id) {
+            const pressing = await db.execute<{ ok: number }>(sql`
+              SELECT 1 AS ok
+              FROM pressing_order_requests por
+              WHERE por.album_id = ${albumId}
+                AND por.package_snapshot ->> 'pressId' = ${row.invited_by_press_id}
+                AND por.status IN ('approved', 'pending')
+              LIMIT 1
+            `);
+            if (((pressing as any).rows ?? [])[0]) {
+              await db.execute(sql`
+                INSERT INTO press_invited_albums (press_id, invitee_person_id, album_id)
+                VALUES (${row.invited_by_press_id}, ${order.artistSnapshotId}, ${albumId})
+                ON CONFLICT (press_id, album_id) DO NOTHING
+              `);
+            }
           }
         }
       } catch (e: any) {

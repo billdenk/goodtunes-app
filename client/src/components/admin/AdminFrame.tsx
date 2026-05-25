@@ -614,6 +614,15 @@ export function AdminFrame({
                   onClick={() => navigate("/admin/platform-pricing")}
                   testId="nav-platform-pricing"
                 />
+                {/* Task #350 — Invite tree (multi-level referrals). */}
+                <SidebarLink
+                  icon={Users}
+                  label="Invite tree"
+                  count={-1}
+                  active={active === "invite-tree"}
+                  onClick={() => navigate("/admin/invite-tree")}
+                  testId="nav-invite-tree"
+                />
               </Section>
             )}
           </nav>

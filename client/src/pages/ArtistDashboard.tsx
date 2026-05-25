@@ -9,7 +9,9 @@
 // per table. Mobile-first single column at <640px, three-column dense
 // layout at desktop breakpoints.
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis,
   Tooltip, CartesianGrid, ResponsiveContainer, Legend,
@@ -630,7 +632,47 @@ function GeoTable({ buyers, listeners, loading }: { buyers: GeoPayload["buyers"]
 // Surfaces $1/unit credits the artist has accrued by referring other
 // artists onto the platform. Tab is always visible — empty state nudges
 // the artist to reach out to the GoodTunes team to refer a peer.
+// Task #350 — Swap surface. Artist-to-artist invites are one-project
+// only, with a "swap" rule: the original referrer can pre-elect the
+// invitee for one of *their* projects in return, and the invitee can
+// also pre-elect this referrer for one of theirs. Until either side
+// commits, the credit on the inviter's project follows the default
+// (referrer keeps it). After the album's first paid sale the swap is
+// frozen — no more changes.
+type SwapApiRow = {
+  id: string;
+  otherId: string;
+  otherName: string;
+  otherPhotoUrl: string | null;
+  albumId: string | null;
+  swapState: "referrer_keeps_full" | "invitee_keeps_full";
+  preElectedAt: string | null;
+  frozenAt: string | null;
+};
+type SwapRow = SwapApiRow & { role: "referrer" | "invitee" };
+
 function ReferralsTab() {
+  const swaps = useQuery<{ asReferrer: SwapApiRow[]; asInvitee: SwapApiRow[] }>({
+    queryKey: ["/api/artist/referrals/swaps"],
+  });
+  const swapRows: SwapRow[] = [
+    ...(swaps.data?.asReferrer ?? []).map((r) => ({ ...r, role: "referrer" as const })),
+    ...(swaps.data?.asInvitee ?? []).map((r) => ({ ...r, role: "invitee" as const })),
+  ];
+  const { toast } = useToast();
+  const preElect = useMutation({
+    mutationFn: async ({ id, state }: { id: string; state: "referrer_keeps_full" | "invitee_keeps_full" }) => {
+      await apiRequest("POST", `/api/artist/referrals/${id}/pre-elect`, { swapState: state });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/artist/referrals/swaps"] });
+      toast({ title: "Saved" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
+    },
+  });
+
   const q = useQuery<{
     pendingCents: number;
     pendingCount: number;
@@ -678,6 +720,84 @@ function ReferralsTab() {
           </ul>
         )}
       </Card>
+      {/* Task #350 — pending swaps. Renders only when the artist has
+          active per-album referral rows. */}
+      {swapRows.length > 0 && (
+        <Card title="Project swaps" subtitle="Artist-to-artist referrals — one project each, until a swap is set." testId="table-swaps">
+          <ul className="divide-y divide-white/5">
+            {swapRows.map((s) => {
+              const frozen = !!s.frozenAt;
+              return (
+                <li key={s.id} className="py-3" data-testid={`row-swap-${s.id}`}>
+                  <div className="flex items-center gap-3">
+                    {s.otherPhotoUrl ? (
+                      <img src={s.otherPhotoUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-white/5" />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-white/5" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">{s.otherName}</p>
+                      <p className="text-xs text-white/55">
+                        {s.role === "referrer" ? "You referred them" : "They referred you"}
+                        {s.albumId ? <> · <span className="text-white/70">project bound</span></> : <> · <span className="text-white/70">not yet bound to a project</span></>}
+                        {frozen && <span className="ml-2 text-[color:var(--brand-mint)]">· Frozen (first sale shipped)</span>}
+                      </p>
+                    </div>
+                  </div>
+                  {!frozen && (
+                    <div className="mt-2 pl-14 flex flex-wrap items-center gap-2 text-xs">
+                      {s.role === "invitee" ? (
+                        <>
+                          <span className="text-white/55">Keep the per-unit credit on this project?</span>
+                          <button
+                            type="button"
+                            onClick={() => preElect.mutate({ id: s.id, state: "invitee_keeps_full" })}
+                            disabled={preElect.isPending || s.swapState === "invitee_keeps_full"}
+                            className={`px-2.5 py-1 rounded-md font-semibold ${
+                              s.swapState === "invitee_keeps_full"
+                                ? "bg-[color:var(--brand-mint)]/20 text-[color:var(--brand-mint)]"
+                                : "bg-white/10 hover:bg-white/15 text-white"
+                            }`}
+                            data-testid={`button-swap-keep-${s.id}`}
+                          >
+                            {s.swapState === "invitee_keeps_full" ? "✓ I keep it" : "I keep it"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => preElect.mutate({ id: s.id, state: "referrer_keeps_full" })}
+                            disabled={preElect.isPending || s.swapState !== "invitee_keeps_full"}
+                            className="px-2.5 py-1 rounded-md font-semibold bg-white/5 hover:bg-white/10 text-white/70"
+                            data-testid={`button-swap-default-${s.id}`}
+                          >
+                            Let them keep it
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-white/55">Pre-elect this artist for a project of yours:</span>
+                          <button
+                            type="button"
+                            onClick={() => preElect.mutate({ id: s.id, state: "invitee_keeps_full" })}
+                            disabled={preElect.isPending || s.swapState === "invitee_keeps_full"}
+                            className={`px-2.5 py-1 rounded-md font-semibold ${
+                              s.swapState === "invitee_keeps_full"
+                                ? "bg-[color:var(--brand-blue)]/20 text-[color:var(--brand-blue)]"
+                                : "bg-white/10 hover:bg-white/15 text-white"
+                            }`}
+                            data-testid={`button-swap-pre-elect-${s.id}`}
+                          >
+                            {s.swapState === "invitee_keeps_full" ? "✓ Pre-elected" : "Pre-elect"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
       {d.nonProfits.length > 0 && (
         <Card title="Non-profits you've referred" testId="table-referred-npos">
           <ul className="divide-y divide-white/5" data-testid="list-referred-npos">
