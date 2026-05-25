@@ -208,8 +208,50 @@ export function AdminFrame({
       ? { phone: preview as ReactNode }
       : null;
   const hasTabletVariant = !!devicesPreview?.tablet;
+
+  // Task #299 — Viewport-aware preview sizing. The preview pane is
+  // shown at `lg` and up (≥1024px), but the user's chosen device
+  // (phone 440 / tablet 760) can easily push sidebar+main+preview past
+  // the viewport on a 1280–1440px laptop and force a page-level
+  // horizontal scrollbar that hides the left nav when the operator
+  // scrolls right to see the clipped preview. Cap the user's
+  // preference by what actually fits: tablet needs room for
+  // sidebar(220) + a sensible main minimum + tablet(760); phone needs
+  // the same with phone(440); below that we collapse the pane to its
+  // 44px rail so the toggle stays reachable. The user's manual choice
+  // (previewDevice / previewOpen) is preserved in localStorage and
+  // re-applied as the viewport grows.
+  const SIDEBAR_W = 220;
+  const MAIN_MIN = 520;
+  const TABLET_W = 760;
+  const PHONE_W = 440;
+  const RAIL_W = 44;
+  const [viewportWidth, setViewportWidth] = useState<number>(() =>
+    typeof window === "undefined" ? 1440 : window.innerWidth,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const canFitTablet =
+    viewportWidth >= SIDEBAR_W + MAIN_MIN + TABLET_W;
+  const canFitPhone = viewportWidth >= SIDEBAR_W + MAIN_MIN + PHONE_W;
   const effectiveDevice: PreviewDevice =
-    hasTabletVariant && previewDevice === "tablet" ? "tablet" : "phone";
+    hasTabletVariant && previewDevice === "tablet" && canFitTablet
+      ? "tablet"
+      : "phone";
+  // When the user wants the pane open but even the phone width won't
+  // fit, render the rail (functionally collapsed) without flipping the
+  // stored preference — as soon as the window widens, the pane pops
+  // back open at the chosen device.
+  const previewDisplayOpen = previewOpen && canFitPhone;
+  const previewWidthPx = !previewDisplayOpen
+    ? RAIL_W
+    : effectiveDevice === "tablet"
+      ? TABLET_W
+      : PHONE_W;
   const previewNode = devicesPreview
     ? effectiveDevice === "tablet"
       ? devicesPreview.tablet
@@ -335,7 +377,7 @@ export function AdminFrame({
   const isSectionOpen = (id: SidebarSectionId) => !!openSections[id];
 
   return (
-    <div className="h-screen bg-slate-50 font-sans antialiased flex">
+    <div className="h-screen w-screen overflow-x-hidden bg-slate-50 font-sans antialiased flex">
       <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
         {/* Logo sits at the top of the sidebar column so the right
             preview pane + its vertical divider can reach the very top
@@ -590,40 +632,34 @@ export function AdminFrame({
             tap to bring the preview back. */}
         {devicesPreview && (
           <aside
-            className={[
-              "border-l border-slate-200 bg-white flex-shrink-0 transition-[width] duration-200 ease-out hidden lg:flex flex-col",
-              previewOpen
-                ? effectiveDevice === "tablet"
-                  ? "w-[760px]"
-                  : "w-[440px]"
-                : "w-11",
-            ].join(" ")}
+            className="border-l border-slate-200 bg-white flex-shrink-0 transition-[width] duration-200 ease-out hidden lg:flex flex-col"
+            style={{ width: previewWidthPx }}
             data-testid="admin-preview-pane"
-            data-open={previewOpen ? "true" : "false"}
+            data-open={previewDisplayOpen ? "true" : "false"}
             data-device={effectiveDevice}
           >
             <div
               className={[
                 "h-14 flex-shrink-0 border-b border-slate-200 flex items-center",
-                previewOpen ? "justify-between px-3" : "justify-center px-0",
+                previewDisplayOpen ? "justify-between px-3" : "justify-center px-0",
               ].join(" ")}
             >
               <button
                 type="button"
                 onClick={() => setPreviewOpen((v) => !v)}
                 className="w-8 h-8 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-                title={previewOpen ? "Hide preview" : "Show preview"}
-                aria-label={previewOpen ? "Hide preview" : "Show preview"}
-                aria-pressed={previewOpen}
+                title={previewDisplayOpen ? "Hide preview" : "Show preview"}
+                aria-label={previewDisplayOpen ? "Hide preview" : "Show preview"}
+                aria-pressed={previewDisplayOpen}
                 data-testid="button-toggle-preview"
               >
-                {previewOpen ? (
+                {previewDisplayOpen ? (
                   <PanelRightClose className="w-4 h-4" />
                 ) : (
                   <PanelRightOpen className="w-4 h-4" />
                 )}
               </button>
-              {previewOpen && (
+              {previewDisplayOpen && (
                 <div className="flex items-center gap-2">
                   {hasTabletVariant && (
                     <div
@@ -672,7 +708,7 @@ export function AdminFrame({
                 </div>
               )}
             </div>
-            {previewOpen && (
+            {previewDisplayOpen && (
               <div
                 className="flex-1 overflow-y-auto p-6"
                 data-testid="admin-preview-content"
