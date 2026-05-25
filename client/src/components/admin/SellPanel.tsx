@@ -52,7 +52,6 @@ import {
   type VinylColorOption,
 } from "@shared/pressing";
 import { VinylPreview } from "@/components/VinylPreview";
-import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { SignedCertVendorPanel } from "@/components/admin/SignedCertVendorPanel";
@@ -271,10 +270,16 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
             and what's blocking submission. */}
         <PressingOrderStepper albumId={albumId} skus={data.skus} />
 
-        {/* Task #216 — preflight art/audio against the picked plant's
-            specs. Sits above Presses so failing checks surface BEFORE
-            the operator commits to a vendor below. */}
-        <UploadValidationsPanel albumId={albumId} />
+        {/* Task #323 — upload preflight (art + audio against the picked
+            plant's specs) moved to its own Press tab. We leave a quiet
+            pointer here so artists who lived on Sell still find it. */}
+        <div
+          className="mb-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600"
+          data-testid="pointer-press-tab"
+        >
+          Preflight art &amp; audio against the picked plant's specs on the{" "}
+          <span className="font-semibold text-slate-800">Press</span> tab above.
+        </div>
 
         {/* Task #217 — compose vendor-shaped print PDFs from artwork. */}
         <PrintPdfsPanel albumId={albumId} />

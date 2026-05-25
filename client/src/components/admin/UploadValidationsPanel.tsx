@@ -31,11 +31,26 @@ function StatusIcon({ s, className = "w-3.5 h-3.5" }: { s: CheckStatus; classNam
   return <X className={className} />;
 }
 
-export function UploadValidationsPanel({ albumId }: { albumId: string }) {
+export function UploadValidationsPanel({
+  albumId,
+  kindFilter,
+  title,
+  description,
+}: {
+  albumId: string;
+  // When set, the Kind selector is hidden, the panel is locked to that
+  // kind, and the results list only shows rows of that kind. Used by
+  // PressPanel to split the art and audio flows into two surfaces.
+  kindFilter?: "art" | "audio";
+  // Optional override for the panel header copy. Lets PressPanel re-
+  // frame each surface ("Art preflight" / "Replacement audio").
+  title?: string;
+  description?: string;
+}) {
   const { toast } = useToast();
   const [vendorId, setVendorId] = useState<VendorId>("mrp");
   const [templateId, setTemplateId] = useState<string>(VENDOR_SPECS.mrp.art.templates[0].id);
-  const [kind, setKind] = useState<"art" | "audio">("art");
+  const [kind, setKind] = useState<"art" | "audio">(kindFilter ?? "art");
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
   const [side, setSide] = useState<string>("A");
@@ -94,16 +109,26 @@ export function UploadValidationsPanel({ albumId }: { albumId: string }) {
     setTemplateId(VENDOR_SPECS[v].art.templates[0].id);
   }
 
+  // When kindFilter is set we only render rows of that kind; the run
+  // catalog of audio rows lives on the Press tab next to the on-file
+  // masters runner, while the art rows render in their own panel
+  // above. Both views share the same /upload-validations endpoint.
+  const visibleRows = (validations.data ?? []).filter((r) =>
+    kindFilter ? r.kind === kindFilter : true,
+  );
+
   return (
-    <div className="mb-10" data-testid="panel-upload-validations">
-      <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Upload preflight</h2>
+    <div className="mb-10" data-testid={`panel-upload-validations${kindFilter ? `-${kindFilter}` : ""}`}>
+      <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
+        {title ?? "Upload preflight"}
+      </h2>
       <p className="text-[13px] text-slate-500 mb-4">
-        Validate art &amp; audio against pressing-plant specs before sending it to fulfillment.
-        Failing rows block the order; an admin can override with a justification.
+        {description ??
+          "Validate art & audio against pressing-plant specs before sending it to fulfillment. Failing rows block the order; an admin can override with a justification."}
       </p>
 
       <div className="rounded-md border border-slate-200 bg-white p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid ${kindFilter ? "grid-cols-1" : "grid-cols-2"} gap-3`}>
           <label className="text-[12px] text-slate-600">
             Vendor
             <select
@@ -117,18 +142,20 @@ export function UploadValidationsPanel({ albumId }: { albumId: string }) {
               ))}
             </select>
           </label>
-          <label className="text-[12px] text-slate-600">
-            Kind
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as "art" | "audio")}
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-              data-testid="select-preflight-kind"
-            >
-              <option value="art">Art</option>
-              <option value="audio">Audio</option>
-            </select>
-          </label>
+          {!kindFilter && (
+            <label className="text-[12px] text-slate-600">
+              Kind
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value as "art" | "audio")}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                data-testid="select-preflight-kind"
+              >
+                <option value="art">Art</option>
+                <option value="audio">Audio</option>
+              </select>
+            </label>
+          )}
         </div>
 
         {kind === "art" ? (
@@ -249,10 +276,10 @@ export function UploadValidationsPanel({ albumId }: { albumId: string }) {
       {/* Results list */}
       <div className="mt-4 space-y-2">
         {validations.isLoading && <div className="text-[13px] text-slate-500">Loading…</div>}
-        {validations.data && validations.data.length === 0 && (
+        {validations.data && visibleRows.length === 0 && (
           <div className="text-[13px] text-slate-500 italic">No files validated yet.</div>
         )}
-        {validations.data?.map((row) => (
+        {visibleRows.map((row) => (
           <ValidationRow key={row.id} row={row} />
         ))}
       </div>

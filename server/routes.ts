@@ -14146,6 +14146,117 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(rows);
   });
 
+  // Task #323 — Press tab "Run preflight on on-file masters". Runs
+  // validateAudio against the audio already in object storage (no
+  // re-upload). Replaces any prior audio-kind rows for this album so
+  // the list reflects the latest run. Tracks missing a master come
+  // back as synthetic fail rows so the gap is visible. Art rows are
+  // left untouched.
+  app.post("/api/admin/albums/:id/preflight-masters", requireAdminBearer, async (req, res) => {
+    const albumId = req.params.id;
+    const schema = z.object({
+      vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+      vinylSize: z.enum(['7"', '10"', '12"']),
+      rpm: z.union([z.literal(33), z.literal(45)]),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const { vendorId, vinylSize, rpm } = parsed.data;
+    try {
+      const album = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const songs = await storage.getSongsByAlbum(albumId);
+      // Clear prior audio rows so the run replaces rather than stacks.
+      const prev = await storage.listUploadValidations(albumId);
+      for (const row of prev) {
+        if (row.kind === "audio") await storage.deleteUploadValidation(row.id);
+      }
+      const { validateAudio } = await import("./validators/preflight");
+      const { rollupStatus } = await import("../shared/uploadValidation");
+      const sorted = [...songs].sort(
+        (a: any, b: any) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
+      );
+      let validated = 0;
+      let missing = 0;
+      for (const song of sorted as any[]) {
+        // Prefer the archival source (pre-transcode master) when set —
+        // a passthrough or transcoded WAV/FLAC is what the plant
+        // actually cuts from, not the browser-friendly stream copy.
+        const url: string | null = song.audioSourceUrl || song.audioUrl || null;
+        const padded = String(song.trackNumber ?? 0).padStart(2, "0");
+        const safeTitle = String(song.title ?? "Untitled").replace(/[\/\\?%*:|"<>]/g, "_");
+        if (!url) {
+          await storage.insertUploadValidation({
+            albumId,
+            kind: "audio",
+            vendorId,
+            templateId: null,
+            assetUrl: "",
+            fileName: `${padded} ${safeTitle}`,
+            status: "fail",
+            checks: [
+              {
+                key: "audio.missing",
+                label: "Master on file",
+                status: "fail",
+                message: "No master uploaded for this track. Add one on the Tracks tab.",
+              },
+            ],
+          });
+          missing++;
+          continue;
+        }
+        try {
+          const file = await objectStorage.getObjectEntityFile(url);
+          const [buf] = await file.download();
+          const checks = await validateAudio(buf, {
+            vendorId,
+            vinylSize: vinylSize as any,
+            rpm: rpm as 33 | 45,
+            fileName: `${padded} ${safeTitle}`,
+            side: null,
+          });
+          const extMatch = url.match(/\.(\w+)(?:\?|$)/);
+          const ext = extMatch ? extMatch[0] : "";
+          await storage.insertUploadValidation({
+            albumId,
+            kind: "audio",
+            vendorId,
+            templateId: null,
+            assetUrl: url,
+            fileName: `${padded} ${safeTitle}${ext}`,
+            status: rollupStatus(checks),
+            checks,
+          });
+          validated++;
+        } catch (e: any) {
+          await storage.insertUploadValidation({
+            albumId,
+            kind: "audio",
+            vendorId,
+            templateId: null,
+            assetUrl: url,
+            fileName: `${padded} ${safeTitle}`,
+            status: "fail",
+            checks: [
+              {
+                key: "audio.fetch",
+                label: "Fetch master",
+                status: "fail",
+                message: `Couldn't read master from storage: ${e?.message ?? "unknown error"}`,
+              },
+            ],
+          });
+          validated++;
+        }
+      }
+      res.json({ tracksValidated: validated, tracksMissing: missing });
+    } catch (e: any) {
+      console.error("[preflight-masters]", e);
+      res.status(500).json({ message: e?.message ?? "Preflight failed" });
+    }
+  });
+
   // Rollup used by the Orders queue badge column — returns one entry
   // per album that has any validation rows, with the worst non-overridden
   // status. Empty map = no upload preflight has happened yet.
