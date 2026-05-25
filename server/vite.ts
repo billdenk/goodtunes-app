@@ -5,7 +5,7 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
-import { injectAlbumOg } from "./og";
+import { injectOgForUrl } from "./og";
 
 const viteLogger = createLogger();
 
@@ -53,11 +53,11 @@ export async function setupVite(server: Server, app: Express) {
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
 
-      const albumMatch = (req.originalUrl || "").split("?")[0].match(/^\/album\/([^/]+)\/?$/);
-      if (albumMatch) {
-        const injected = injectAlbumOg(template, req, albumMatch[1]);
-        if (injected) template = injected;
-      }
+      // Per-URL OG injection happens BEFORE Vite's index transform so the
+      // injected tags get the same dev-time HMR rewrites as the rest of the
+      // template. The dispatcher covers album / artist / instrument / admin /
+      // default — same routes as production (see server/static.ts).
+      template = await injectOgForUrl(template, req);
 
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);

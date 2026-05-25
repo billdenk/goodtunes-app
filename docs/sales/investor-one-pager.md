@@ -44,6 +44,7 @@ The third-party services GoodTunes already runs against, and what each one unloc
 - **Play Next / Play Last & playlists** — Queue any song instantly or at the end, build personal playlists, and revisit them across sessions.
 - **Gear bookmarks** — Bookmark any piece of gear spotted in SuperCredits™ for a one-tap return later.
 - **GoodDeed certificates, shares, and gifts** — Every purchase mints a numbered digital certificate; fans share it with their username on social, or convert any order into a gift with a shareable claim link.
+- **Real link previews** — Every shareable GoodTunes URL — albums, artists, gear, the app root — unfurls in iMessage, Slack, Twitter, and email with a proper preview card (real artwork, real title, real description). Admin URLs render a neutral `noindex` card so a mis-pasted admin link never leaks a record.
 - **Printable signed GoodDeed certificates** — Optional print-and-sign add-on at checkout produces a real, artist-signed certificate with a QR-verified provenance page and live status on the Orders page.
 - **Orders page with live fulfillment** — Every album the fan owns, the GoodDeed serial, and the fulfillment pill (Awaiting → Shipped → Delivered) with carrier and tap-to-track.
 - **One-app shell across every fan surface** — Apple-HIG-grade 44-pixel touch targets, shared bottom-nav clearance, and a steady mini-player — ready for the upcoming Capacitor App Store wrap.

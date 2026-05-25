@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { injectAlbumOg } from "./og";
+import { injectOgForUrl } from "./og";
 
 function getDistPath(): string {
   const distPath = path.resolve(__dirname, "public");
@@ -22,6 +22,13 @@ export function serveStaticAssets(app: Express) {
   const distPath = getDistPath();
   app.use(
     express.static(distPath, {
+      // `index: false` keeps express.static from auto-serving the raw
+      // index.html on `GET /`. Without it, the root URL skips the SPA
+      // fallback entirely and unfurl bots get the static template with
+      // no per-route og:url canonicalization. The fallback at the bottom
+      // of the chain still serves index.html for `/` — but through the
+      // OG dispatcher, so the default branded card has a real og:url.
+      index: false,
       // Content-hashed bundles under /assets/* are safe to cache forever;
       // index.html (and any other top-level html) must NEVER be cached so
       // iOS Safari can't get stuck pointing at a deleted bundle hash after
@@ -45,30 +52,26 @@ export function serveStaticAssets(app: Express) {
 export function serveStaticFallback(app: Express) {
   const distPath = getDistPath();
 
-  app.get("/album/:id", (req, res, next) => {
+  // SPA fallback with per-URL OG injection. The dispatcher in server/og.ts
+  // handles album / artist / instrument / admin / default in one place so
+  // dev (Vite) and prod (static) stay in lock-step. no-store so iOS Safari
+  // always asks for the freshest HTML — bundles are content-hashed and
+  // cached forever (see serveStaticAssets), so this is cheap and guarantees
+  // a redeploy reaches the user on next navigation.
+  app.use("/{*path}", async (req, res, next) => {
     try {
       const indexPath = path.resolve(distPath, "index.html");
       const template = fs.readFileSync(indexPath, "utf-8");
-      const injected = injectAlbumOg(template, req, req.params.id);
-      if (!injected) return next();
+      const injected = await injectOgForUrl(template, req);
       res
         .status(200)
         .set({
-          "Content-Type": "text/html",
+          "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store, must-revalidate",
         })
         .end(injected);
     } catch (e) {
       next(e);
     }
-  });
-
-  // fall through to index.html if the file doesn't exist. no-store so iOS
-  // Safari always asks for the freshest HTML — bundles are content-hashed
-  // and cached forever (see serveStaticAssets), so this is cheap and
-  // guarantees a redeploy reaches the user on next navigation.
-  app.use("/{*path}", (_req, res) => {
-    res.setHeader("Cache-Control", "no-store, must-revalidate");
-    res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
