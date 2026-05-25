@@ -1,5 +1,7 @@
 # GoodTunes® — Capabilities
 
+- **Team invites with Person resolution + claimed-Person review** — Super-admin can invite Identity / Manager / Team teammates on a specific artist Person, optionally attaching a pre-flighted album draft so the invitee lands straight in the editor. Identity invites for claimed People (linked login, Spotify artist, group, or shipped GoodTunes release) and any team invite from a non-super-admin to an unknown email are held in a review queue until approved — no email goes out before then. Per-(artist, user) God-View permission matrix lets super-admin pin individual verbs (edit metadata, edit credits + gear, upload masters, map Shopify, manage payouts, invite subusers) on or off for one teammate without changing the scope-wide defaults.
+
 A living, investor-facing catalog of what GoodTunes has actually shipped. Read this when you need to speak to investors, partners, or labels about the product as it exists today — not what's on the roadmap. For future-phase plans and deep-dives, see [`roadmap.md`](./roadmap.md).
 
 > **See also:** [`sales/investor-one-pager.md`](./sales/investor-one-pager.md) — the scannable, deck-grade one-pager Nick sends to investors, organized around integrations + features and the benefit each one unlocks. Keep it in sync with this catalog whenever a customer-visible capability ships.

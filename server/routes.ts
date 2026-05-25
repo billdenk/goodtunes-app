@@ -4529,7 +4529,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
       const albumScope = await resolveAlbumScope(song.albumId);
       if (albumScope?.scope) {
-        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: song.albumId });
+        const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: song.albumId });
         if (outcome === "deny") return;
         if (outcome === "divert") {
           const row = await createPendingChange({
@@ -11292,7 +11292,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!albumScope?.scope) {
       // Unscoped album → admin/super_admin only; requireAdmin already enforced.
     } else {
-      const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: song.albumId });
+      const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: song.albumId });
       if (outcome === "deny") return;
       if (outcome === "divert") {
         const row = await createPendingChange({
@@ -11330,7 +11330,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!albumId) return res.status(404).json({ message: "Writer not found" });
       const albumScope = await resolveAlbumScope(albumId);
       if (albumScope?.scope) {
-        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: albumId });
         if (outcome === "deny") return;
         if (outcome === "divert") {
           const row = await createPendingChange({
@@ -11360,7 +11360,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!albumId) return res.status(404).json({ message: "Writer not found" });
       const albumScope = await resolveAlbumScope(albumId);
       if (albumScope?.scope) {
-        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: albumId });
         if (outcome === "deny") return;
         if (outcome === "divert") {
           const row = await createPendingChange({
@@ -11387,7 +11387,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
       const albumScope = await resolveAlbumScope(song.albumId);
       if (albumScope?.scope) {
-        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: song.albumId });
+        const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: song.albumId });
         if (outcome === "deny") return;
         if (outcome === "divert") {
           const row = await createPendingChange({
@@ -11423,7 +11423,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!albumId) return res.status(404).json({ message: "Performer not found" });
       const albumScope = await resolveAlbumScope(albumId);
       if (albumScope?.scope) {
-        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: albumId });
         if (outcome === "deny") return;
         if (outcome === "divert") {
           const row = await createPendingChange({
@@ -11453,7 +11453,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!albumId) return res.status(404).json({ message: "Performer not found" });
       const albumScope = await resolveAlbumScope(albumId);
       if (albumScope?.scope) {
-        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+        const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: albumId });
         if (outcome === "deny") return;
         if (outcome === "divert") {
           const row = await createPendingChange({
@@ -13386,6 +13386,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const existing = await storage.getUserByEmail(email);
     if (existing) return res.status(400).json({ message: "An admin with that email already exists" });
 
+    // Task #351 — team-invite shape. inviteRole ∈ identity|manager|team,
+    // targetPersonId is the Person the invitee will represent. Resolved
+    // from req.body and validated for existence. preFlightedAlbumId is
+    // an optional album draft to attach so the landing page deep-links
+    // into the album editor instead of an empty dashboard.
+    const inviteRoleRaw = req.body?.inviteRole ? String(req.body.inviteRole) : null;
+    const inviteRole = (inviteRoleRaw === "identity" || inviteRoleRaw === "manager" || inviteRoleRaw === "team")
+      ? inviteRoleRaw : null;
+    const targetPersonId = req.body?.targetPersonId ? String(req.body.targetPersonId) : null;
+    const preFlightedAlbumId = req.body?.preFlightedAlbumId ? String(req.body.preFlightedAlbumId) : null;
+    if (inviteRole && !targetPersonId) {
+      return res.status(400).json({ message: "Team invites require a target Person — search the catalog or pick the artist first." });
+    }
+    let targetPerson: any = null;
+    if (targetPersonId) {
+      targetPerson = await storage.getPersonById(targetPersonId);
+      if (!targetPerson) return res.status(400).json({ message: "That Person no longer exists — pick another." });
+    }
+    if (preFlightedAlbumId) {
+      const pf = await storage.getAlbumById(preFlightedAlbumId);
+      if (!pf) return res.status(400).json({ message: "That pre-flighted album no longer exists." });
+    }
+
+    // Task #351 — Claimed-Person + anti-solicitation review gate.
+    // A Person is "claimed" when it carries a spotify_artist_id, is a
+    // group, has at least one GoodTunes release, or already has a
+    // linked admin login pointing at it. Identity invites for a claimed
+    // Person OR invites issued by a non-super-admin where the supplied
+    // email isn't already a known alias of the target Person fall into
+    // the review queue (no email sent until a super-admin approves).
+    let reviewStatus: "not_required" | "pending_review" = "not_required";
+    let claimedReason: string | null = null;
+    if (targetPerson) {
+      const aliasMatch = await db.execute<{ id: string }>(sql`
+        SELECT 1 AS id FROM person_aliases
+        WHERE person_id = ${targetPerson.id} AND LOWER(alias) = ${email}
+        LIMIT 1
+      `);
+      const aliasHit = ((aliasMatch as any).rows ?? []).length > 0;
+      const linkedAdmin = await db.execute<{ id: string }>(sql`
+        SELECT id FROM users WHERE role = 'artist' AND role_scope_id = ${targetPerson.id} LIMIT 1
+      `);
+      const hasLogin = ((linkedAdmin as any).rows ?? []).length > 0;
+      const releases = await db.execute<{ ct: number }>(sql`
+        SELECT COUNT(*)::int AS ct FROM albums
+        WHERE primary_artist_id = ${targetPerson.id} AND COALESCE(is_good_tunes_release, false) = true
+      `);
+      const hasReleases = (((releases as any).rows ?? [])[0]?.ct ?? 0) > 0;
+      const isClaimed = !!targetPerson.spotifyArtistId || !!targetPerson.isGroup || hasLogin || hasReleases;
+      if (inviteRole === "identity" && isClaimed) {
+        reviewStatus = "pending_review";
+        claimedReason = hasLogin
+          ? "This Person already has a linked admin login."
+          : targetPerson.spotifyArtistId
+            ? "This Person is linked to a Spotify artist (claimed)."
+            : hasReleases
+              ? "This Person has at least one GoodTunes release."
+              : "This Person is a group/band.";
+      }
+      if (callerRole.role !== "super_admin" && !aliasHit) {
+        reviewStatus = "pending_review";
+        claimedReason = claimedReason || "Inviter is not a super-admin and the email isn't on file for this Person.";
+      }
+    }
+
     const token = generateToken();
     const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
     const inviter = await storage.getUser(req.session.userId!);
@@ -13401,6 +13466,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       referrerKind,
       referrerScopeId: referrerKind ? referrerScopeId : null,
       welcomeNote,
+      inviteRole,
+      targetPersonId,
+      preFlightedAlbumId,
+      reviewStatus,
     } as any);
 
     // Build absolute accept URL from the request host so prod uses the
@@ -13410,24 +13479,174 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const host = req.headers["x-forwarded-host"] || req.headers.host;
     const acceptUrl = `${proto}://${host}/invite/${token}`;
 
-    const result = await sendAdminInviteEmail(
-      email,
-      acceptUrl,
-      inviterName,
-      ROLE_LABELS[role] || role,
-      INVITE_TTL_DAYS,
-    );
-    if (!result.ok) {
-      console.warn(`[invite] mail failed for ${email}: ${result.reason}`);
+    // Task #351 — Held-in-review invites never email. The super-admin
+    // approves from /admin/invites (review queue), which sends the
+    // email + flips reviewStatus to 'approved'.
+    let emailDelivered = false;
+    if (reviewStatus === "not_required") {
+      const result = await sendAdminInviteEmail(
+        email,
+        acceptUrl,
+        inviterName,
+        ROLE_LABELS[role] || role,
+        INVITE_TTL_DAYS,
+      );
+      if (!result.ok) console.warn(`[invite] mail failed for ${email}: ${result.reason}`);
+      emailDelivered = result.ok;
+    } else {
+      console.log(`[invite] held for review ${email} role=${role} reason=${claimedReason}`);
     }
-    console.log(`[invite] issued ${email} role=${role} url=${acceptUrl}`);
+    console.log(`[invite] issued ${email} role=${role} url=${acceptUrl} review=${reviewStatus}`);
+    // Task #351 — Security: held invites must NOT expose the accept
+    // URL. The URL is the bearer token, and the accept endpoint also
+    // 423s held invites — but suppressing the URL in the API response
+    // closes the obvious "share link from create-response" bypass.
+    const safeAcceptUrl = reviewStatus === "pending_review" ? null : acceptUrl;
     res.json({
       id: invite.id,
       email: invite.email,
       role: invite.role,
-      acceptUrl,
-      emailDelivered: result.ok,
+      acceptUrl: safeAcceptUrl,
+      emailDelivered,
+      reviewStatus,
+      claimedReason,
     });
+  });
+
+  // Task #351 — Super-admin review queue for held invites. Lists every
+  // invite with review_status='pending_review' that hasn't been used
+  // or revoked, with denormed Person + inviter info so the queue UI
+  // can show the claim heuristic at a glance.
+  app.get("/api/admin/invites/review", requireAdmin, requireRole("super_admin"), async (_req, res) => {
+    const r = await db.execute<any>(sql`
+      SELECT
+        ai.id, ai.email, ai.role, ai.invite_role AS "inviteRole",
+        ai.target_person_id AS "targetPersonId",
+        ai.pre_flighted_album_id AS "preFlightedAlbumId",
+        ai.created_at AS "createdAt", ai.expires_at AS "expiresAt",
+        ai.created_by_user_id AS "createdByUserId",
+        u.display_name AS "createdByName",
+        p.name AS "targetPersonName", p.photo_url AS "targetPersonPhoto",
+        p.is_group AS "targetIsGroup", p.spotify_artist_id AS "targetSpotifyId"
+      FROM admin_invites ai
+      LEFT JOIN users u ON u.id = ai.created_by_user_id
+      LEFT JOIN people p ON p.id = ai.target_person_id
+      WHERE ai.review_status = 'pending_review'
+        AND ai.used_at IS NULL AND ai.revoked_at IS NULL
+      ORDER BY ai.created_at DESC
+    `);
+    res.json(((r as any).rows ?? []));
+  });
+
+  // Approve a held invite → fire the email + flip review_status.
+  app.post("/api/admin/invites/:id/approve", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const id = String(req.params.id);
+    const invite = await storage.getAdminInviteById(id);
+    if (!invite) return res.status(404).json({ message: "Invite not found" });
+    if ((invite as any).reviewStatus !== "pending_review") {
+      return res.status(400).json({ message: "Invite is not pending review" });
+    }
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const acceptUrl = `${proto}://${host}/invite/${invite.token}`;
+    const inviter = await storage.getUser((invite as any).createdByUserId);
+    const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
+    const result = await sendAdminInviteEmail(invite.email, acceptUrl, inviterName, ROLE_LABELS[invite.role] || invite.role, INVITE_TTL_DAYS);
+    await db.execute(sql`
+      UPDATE admin_invites
+      SET review_status = 'approved', reviewed_by_user_id = ${req.session.userId!}, reviewed_at = NOW()
+      WHERE id = ${id}
+    `);
+    res.json({ ok: true, acceptUrl, emailDelivered: result.ok });
+  });
+
+  // Reject (and revoke) a held invite.
+  app.post("/api/admin/invites/:id/reject", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const id = String(req.params.id);
+    const reason = String(req.body?.reason || "").slice(0, 1000) || null;
+    const invite = await storage.getAdminInviteById(id);
+    if (!invite) return res.status(404).json({ message: "Invite not found" });
+    await db.execute(sql`
+      UPDATE admin_invites
+      SET review_status = 'rejected', reviewed_by_user_id = ${req.session.userId!},
+          reviewed_at = NOW(), review_note = ${reason}, revoked_at = NOW()
+      WHERE id = ${id}
+    `);
+    res.json({ ok: true });
+  });
+
+  // Task #351 — Per-(artist scope, user) permission overrides matrix.
+  // GET returns the team (users with role=artist + scope=:id) and any
+  // per-user override rows so the God-View matrix UI can render the
+  // verb checkboxes with the correct tri-state (granted / denied /
+  // inherit scope default).
+  app.get("/api/admin/people/:id/team", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const id = String(req.params.id);
+    const people = await db.execute<{ id: string; display_name: string; email: string; role: string }>(sql`
+      SELECT id, display_name, email, role FROM users
+      WHERE role IN ('artist','manager','team') AND role_scope_id = ${id}
+      ORDER BY display_name ASC NULLS LAST
+    `);
+    const overrides = await db.execute<{ user_id: string; verb: string; granted: boolean }>(sql`
+      SELECT user_id, verb, granted FROM partner_permission_overrides
+      WHERE scope_kind = 'artist' AND scope_id = ${id}
+    `);
+    res.json({
+      users: ((people as any).rows ?? []),
+      overrides: ((overrides as any).rows ?? []),
+    });
+  });
+
+  // Task #351 — Artist-portal invite wrapper. Lets a signed-in artist
+  // partner issue Team/Manager invites scoped to their own artist row
+  // without exposing the super-admin invite surface. Forwards to the
+  // main invite-create logic via a server-side re-call (sets role +
+  // scope from the caller's user_role row + inviteRole from the body).
+  app.post("/api/artist/invites", requireAdmin, async (req, res) => {
+    const userId = req.session.userId!;
+    const role = await getUserRole(userId);
+    if (!role || role.role !== "artist" || !role.roleScopeId) {
+      return res.status(403).json({ message: "Only artist partners can use this endpoint" });
+    }
+    const inviteRole = String(req.body?.inviteRole || "");
+    if (!["identity", "manager", "team"].includes(inviteRole)) {
+      return res.status(400).json({ message: "inviteRole must be identity, manager, or team" });
+    }
+    // Stash + forward — write the request body in the shape /api/admin/invites expects.
+    (req as any).body = {
+      ...req.body,
+      role: "artist",
+      roleScopeId: role.roleScopeId,
+      targetPersonId: role.roleScopeId, // an artist inviting their own team always targets themself
+      inviteRole,
+    };
+    // Re-dispatch through the same handler — keeps the claimed-Person
+    // gate + duplicate-tree checks + email-sending logic in one place.
+    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+  });
+
+  app.put("/api/admin/people/:id/team/:userId/override", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const id = String(req.params.id);
+    const userId = String(req.params.userId);
+    const verb = String(req.body?.verb || "");
+    const granted = req.body?.granted; // true | false | null (clear)
+    const validVerbs = ["edit_metadata","upload_masters","map_shopify","manage_payouts","invite_subusers","edit_credits_and_gear"];
+    if (!validVerbs.includes(verb)) return res.status(400).json({ message: "Invalid verb" });
+    if (granted === null || granted === undefined) {
+      await db.execute(sql`
+        DELETE FROM partner_permission_overrides
+        WHERE scope_kind = 'artist' AND scope_id = ${id} AND user_id = ${userId} AND verb = ${verb}
+      `);
+      return res.json({ ok: true, cleared: true });
+    }
+    const g = !!granted;
+    await db.execute(sql`
+      INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
+      VALUES ('artist', ${id}, ${userId}, ${verb}, ${g}, ${req.session.userId!}, NOW())
+      ON CONFLICT (scope_kind, scope_id, user_id, verb)
+      DO UPDATE SET granted = EXCLUDED.granted, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = NOW()
+    `);
+    res.json({ ok: true, granted: g });
   });
 
   // ─── Task #199 — Invited-by press override (super-admin only) ──────
@@ -13677,10 +13896,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (invite.expiresAt && invite.expiresAt < new Date()) {
       return res.status(410).json({ message: "Invite expired" });
     }
+    // Task #351 — Security: the review gate must hold here too, not
+    // just at create. Pending_review → 423 Locked so the accept page
+    // can render "waiting for GoodTunes approval". Rejected → 410.
+    const rs = (invite as any).reviewStatus as string | undefined;
+    if (rs === "pending_review") {
+      return res.status(423).json({ message: "This invite is waiting for GoodTunes approval.", reviewStatus: rs });
+    }
+    if (rs === "rejected") {
+      return res.status(410).json({ message: "This invite was rejected.", reviewStatus: rs });
+    }
+    // Task #351 — surface team-invite shape + denorm of the target
+    // Person + pre-flighted album so the accept page can render the
+    // right hero copy ("You're joining HAERTS as a Team member"),
+    // and the accept handler can deep-link to the album editor.
+    let targetPersonName: string | null = null;
+    let preFlightedAlbumTitle: string | null = null;
+    if ((invite as any).targetPersonId) {
+      const r = await db.execute<{ name: string }>(sql`SELECT name FROM people WHERE id = ${(invite as any).targetPersonId} LIMIT 1`);
+      targetPersonName = ((r as any).rows ?? [])[0]?.name ?? null;
+    }
+    if ((invite as any).preFlightedAlbumId) {
+      const r = await db.execute<{ title: string }>(sql`SELECT title FROM albums WHERE id = ${(invite as any).preFlightedAlbumId} LIMIT 1`);
+      preFlightedAlbumTitle = ((r as any).rows ?? [])[0]?.title ?? null;
+    }
+    const inviteRoleLabels: Record<string, string> = {
+      identity: "Artist (Identity)",
+      manager: "Manager",
+      team: "Team member",
+    };
+    const ir = (invite as any).inviteRole as string | null;
     res.json({
       email: invite.email,
       role: invite.role,
-      roleLabel: ROLE_LABELS[invite.role] || invite.role,
+      roleLabel: ir ? (inviteRoleLabels[ir] || ROLE_LABELS[invite.role] || invite.role) : (ROLE_LABELS[invite.role] || invite.role),
+      inviteRole: ir,
+      targetPersonId: (invite as any).targetPersonId ?? null,
+      targetPersonName,
+      preFlightedAlbumId: (invite as any).preFlightedAlbumId ?? null,
+      preFlightedAlbumTitle,
     });
   });
 
@@ -13745,6 +13999,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
+    // Task #351 — Security: hard-block accept for held/rejected invites.
+    // The GET endpoint above also blocks, but the accept handler is the
+    // mutation gate and must validate independently.
+    {
+      const rs = (invite as any).reviewStatus as string | undefined;
+      if (rs === "pending_review") {
+        return res.status(423).json({ message: "This invite is waiting for GoodTunes approval." });
+      }
+      if (rs === "rejected") {
+        return res.status(410).json({ message: "This invite was rejected." });
+      }
+    }
     const hashed = await hashPassword(String(password));
     const user = await storage.createUser({
       username: usernameNorm,
@@ -13836,14 +14102,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const token = generateToken();
     await storage.createAuthToken(token, user.id, "admin");
 
-    // Task #78 — Landing path varies by role. Non-profit partners drop
-    // into the non-profit dashboard; everyone else continues to the
-    // admin albums index (the partner shell handles the rest).
-    const landingPath =
-      invite.role === "non_profit" ? "/non-profit"
-      : invite.role === "artist" ? "/artist"
-      : invite.role === "label" ? "/label"
-      : "/admin/albums";
+    // Task #351 — Per-user override grants for Team/Manager invites.
+    // Identity invites get the scope-wide partner_permissions row as
+    // usual. Team invites override edit_credits_and_gear=true for THIS
+    // user only. Manager invites override edit_metadata + invite_subusers
+    // for this user only. Override rows live in partner_permission_overrides
+    // so the scope-wide row is never mutated by an invite accept.
+    // Task #351 — Per-user override grants by invite role.
+    //   • identity → no override rows; inherits the scope-wide
+    //     partner_permissions row (full scope by default).
+    //   • manager  → granted ALL six verbs as user overrides so the
+    //     manager defaults to full scope even when the scope-wide row
+    //     is restrictive or absent.
+    //   • team     → granted only edit_credits_and_gear as a user
+    //     override; everything else stays off for them.
+    const ir = (invite as any).inviteRole as string | null;
+    if (ir && invite.role === "artist" && invite.roleScopeId) {
+      const verbsToGrant = ir === "team"
+        ? ["edit_credits_and_gear"]
+        : ir === "manager"
+          ? ["edit_metadata", "edit_credits_and_gear", "upload_masters", "map_shopify", "manage_payouts", "invite_subusers"]
+          : []; // identity → scope-wide row governs
+      for (const verb of verbsToGrant) {
+        await db.execute(sql`
+          INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
+          VALUES ('artist', ${invite.roleScopeId}, ${user.id}, ${verb}, true, ${(invite as any).createdByUserId}, NOW())
+          ON CONFLICT (scope_kind, scope_id, user_id, verb) DO NOTHING
+        `);
+      }
+    }
+
+    // Task #351 — Landing path priority:
+    //   1. Identity/Manager invites with a pre-flighted album → editor.
+    //      Team invites IGNORE preflight (they can't drive the release).
+    //   2. Any team-invite role → most-recently-touched in-flight or
+    //      released album for the inviting artist (so they land in
+    //      something real if there is one).
+    //   3. Otherwise the legacy role-based landing (Identity/Manager
+    //      with no work waiting falls through to /welcome-invitee, then
+    //      the role landing).
+    const preFlightId = (invite as any).preFlightedAlbumId as string | null;
+    let landingPath: string;
+    if ((ir === "identity" || ir === "manager") && preFlightId) {
+      landingPath = `/admin/albums/${preFlightId}`;
+    } else if ((ir === "team" || ir === "manager" || ir === "identity") && invite.roleScopeId) {
+      // Existing-album fallback — pick the most recent album owned by
+      // the target artist (label scopes don't apply here since team
+      // invites are person-scoped).
+      const a = await db.execute<{ id: string }>(sql`
+        SELECT id FROM albums
+        WHERE primary_artist_id = ${invite.roleScopeId}
+        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+        LIMIT 1
+      `);
+      const existing = ((a as any).rows ?? [])[0]?.id ?? null;
+      landingPath = existing ? `/admin/albums/${existing}` : "/welcome-invitee";
+    } else {
+      landingPath =
+        invite.role === "non_profit" ? "/non-profit"
+        : invite.role === "artist" ? "/artist"
+        : invite.role === "label" ? "/label"
+        : "/admin/albums";
+    }
 
     res.json({
       id: user.id,

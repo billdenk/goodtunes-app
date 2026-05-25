@@ -651,6 +651,88 @@ type SwapApiRow = {
 };
 type SwapRow = SwapApiRow & { role: "referrer" | "invitee" };
 
+// Task #351 — Artist-portal teammate invite. Calls /api/artist/invites
+// which is a server-side wrapper around the super-admin invite create
+// path, locked to the caller's own artist scope. Manager/Team invites
+// flow into the claimed-Person review queue if the target Person is
+// claimed and the caller's email isn't on file.
+function InviteTeammatePanel() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"manager" | "team">("team");
+  // Task #351 — Resolve the caller's Person so the panel can show
+  // "Inviting for {artistName}". Makes it explicit which artist the
+  // invite is scoped to (the server-side wrapper hardcodes the caller's
+  // own scope; we surface it here so the artist can confirm).
+  const meQ = useQuery<{ person?: { name: string } | null } | null>({
+    queryKey: ["/api/artist/me"],
+  });
+  const targetName = (meQ.data as any)?.person?.name ?? null;
+  const m = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", "/api/artist/invites", { email: email.trim(), inviteRole });
+      return r.json() as Promise<{ email: string; emailDelivered: boolean; reviewStatus?: string }>;
+    },
+    onSuccess: (data) => {
+      setEmail("");
+      setOpen(false);
+      toast({
+        title: data.reviewStatus === "pending_review" ? "Held for review" : data.emailDelivered ? "Invite sent" : "Invite created",
+        description: data.reviewStatus === "pending_review"
+          ? "GoodTunes will review and notify you when approved."
+          : `Emailed ${data.email}.`,
+      });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't invite", description: e.message, variant: "destructive" }),
+  });
+  return (
+    <Card title="Your team" subtitle={targetName ? `Inviting for ${targetName}` : "Invite a manager or band member"} testId="invite-teammate-panel">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-xs font-semibold text-white bg-[var(--brand-blue)] hover:opacity-90 rounded-md px-3 py-1.5"
+          data-testid="button-open-invite-teammate"
+        >
+          Invite a teammate
+        </button>
+      ) : (
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (email.trim()) m.mutate(); }}
+          className="flex flex-col sm:flex-row gap-2"
+          data-testid="form-invite-teammate"
+        >
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="teammate@example.com"
+            required
+            className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+            data-testid="input-teammate-email"
+          />
+          <select
+            value={inviteRole}
+            onChange={(e) => setInviteRole(e.target.value as any)}
+            className="px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white text-sm"
+            data-testid="select-teammate-role"
+          >
+            <option value="team">Team (band/team member)</option>
+            <option value="manager">Manager</option>
+          </select>
+          <button type="submit" disabled={m.isPending} className="px-3 py-2 text-sm font-semibold text-white bg-[var(--brand-blue)] hover:opacity-90 rounded-md disabled:opacity-50" data-testid="button-send-teammate-invite">
+            {m.isPending ? "Sending…" : "Send invite"}
+          </button>
+          <button type="button" onClick={() => setOpen(false)} className="px-3 py-2 text-sm text-white/70 hover:text-white" data-testid="button-cancel-teammate-invite">
+            Cancel
+          </button>
+        </form>
+      )}
+    </Card>
+  );
+}
+
 function ReferralsTab() {
   const swaps = useQuery<{ asReferrer: SwapApiRow[]; asInvitee: SwapApiRow[] }>({
     queryKey: ["/api/artist/referrals/swaps"],
@@ -690,6 +772,7 @@ function ReferralsTab() {
   const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
   return (
     <>
+      <InviteTeammatePanel />
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="referrals-kpis">
         <Kpi label="Pending payout" value={fmt(d.pendingCents)} sub={`${d.pendingCount} unit${d.pendingCount === 1 ? "" : "s"} this period`} testId="kpi-ref-pending" />
         <Kpi label="Paid out" value={fmt(d.paidCents)} testId="kpi-ref-paid" />

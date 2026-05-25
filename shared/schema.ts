@@ -2346,6 +2346,22 @@ export const adminInvites = pgTable("admin_invites", {
   referrerKind: text("referrer_kind"), // "artist" | "non_profit" | null
   referrerScopeId: varchar("referrer_scope_id"),
   welcomeNote: text("welcome_note"),
+  // Task #351 — Team-invite shape. inviteRole is one of
+  // "identity"|"manager"|"team" and drives both the permission defaults
+  // applied at accept time AND the landing-page treatment. NULL falls
+  // back to the legacy single-role behaviour. targetPersonId is the
+  // Person the invitee will represent (Identity → that artist; Manager
+  // → managing that artist; Team → bandmate of that artist's group).
+  // preFlightedAlbumId optionally attaches a pre-flighted album draft
+  // so the invitee lands on the album editor instead of an empty
+  // dashboard. reviewStatus drives the claimed-Person review queue.
+  inviteRole: text("invite_role"), // "identity" | "manager" | "team" | null
+  targetPersonId: varchar("target_person_id"),
+  preFlightedAlbumId: varchar("pre_flighted_album_id"),
+  reviewStatus: text("review_status").notNull().default("not_required"), // "not_required"|"pending_review"|"approved"|"rejected"
+  reviewedByUserId: varchar("reviewed_by_user_id"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: text("review_note"),
   // Soft state — revokedAt invalidates immediately, resentAt tracks
   // the last time the magic link was re-issued.
   revokedAt: timestamp("revoked_at"),
@@ -2374,7 +2390,16 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
   referrerKind: z.enum(["artist", "non_profit", "manufacturer", "ambassador"]).optional().nullable(),
   referrerScopeId: z.string().optional().nullable(),
   welcomeNote: z.string().max(1000).optional().nullable(),
+  inviteRole: z.enum(["identity", "manager", "team"]).optional().nullable(),
+  targetPersonId: z.string().optional().nullable(),
+  preFlightedAlbumId: z.string().optional().nullable(),
 });
+
+// Task #351 — Roles a Team invite can take. Identity = "I am this
+// artist", Manager = "I manage this artist", Team = "I'm a member of
+// this band/team". Drives accept-time wiring + landing chrome.
+export const INVITE_ROLES = ["identity", "manager", "team"] as const;
+export type InviteRole = (typeof INVITE_ROLES)[number];
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;
 export type AdminInvite = typeof adminInvites.$inferSelect;
 
@@ -2585,6 +2610,12 @@ export const PARTNER_PERMISSION_VERBS = [
   "map_shopify",
   "manage_payouts",
   "invite_subusers",
+  // Task #351 — Team-role verb. Granted to band members ("Team") so
+  // they can edit per-song credits + the artist gear list without
+  // touching commerce, payouts, or fan-facing metadata. Distinct from
+  // edit_metadata so a Team invite can be productive without unlocking
+  // the full Identity surface.
+  "edit_credits_and_gear",
 ] as const;
 export type PartnerPermissionVerb = (typeof PARTNER_PERMISSION_VERBS)[number];
 
@@ -2597,10 +2628,31 @@ export const partnerPermissions = pgTable("partner_permissions", {
   mapShopify: boolean("map_shopify").notNull().default(false),
   managePayouts: boolean("manage_payouts").notNull().default(false),
   inviteSubusers: boolean("invite_subusers").notNull().default(false),
+  // Task #351 — Team-role verb (see comment on PARTNER_PERMISSION_VERBS).
+  editCreditsAndGear: boolean("edit_credits_and_gear").notNull().default(false),
   metadataEditsRequireApproval: boolean("metadata_edits_require_approval").notNull().default(true),
   updatedByUserId: varchar("updated_by_user_id"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ─── Task #351 — Per-(scope, user) permission overrides ──────────────
+// God-View matrix: super-admin can grant or deny individual verbs for
+// individual users on a specific artist scope, overriding the
+// scope-wide partner_permissions row. NULL `granted` means "fall back
+// to the scope default"; `true`/`false` is an explicit override.
+export const partnerPermissionOverrides = pgTable("partner_permission_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scopeKind: text("scope_kind").notNull(),
+  scopeId: varchar("scope_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  verb: text("verb").notNull(),
+  granted: boolean("granted").notNull(),
+  updatedByUserId: varchar("updated_by_user_id"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  uniq: uniqueIndex("partner_permission_overrides_uniq").on(t.scopeKind, t.scopeId, t.userId, t.verb),
+}));
+export type PartnerPermissionOverride = typeof partnerPermissionOverrides.$inferSelect;
 
 export type PartnerPermissions = typeof partnerPermissions.$inferSelect;
 export type InsertPartnerPermissions = typeof partnerPermissions.$inferInsert;

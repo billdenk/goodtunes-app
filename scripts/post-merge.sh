@@ -501,3 +501,60 @@ SQL
 }
 migrate_referral_payouts dev  "${DATABASE_URL:-}"
 migrate_referral_payouts prod "${PROD_DATABASE_URL:-}"
+
+# Task #351 — Team invites + per-user permission overrides + claimed-
+# Person review queue. All additive / idempotent:
+#   1. admin_invites: invite_role + target_person_id + pre_flighted_album_id
+#      + review_status (default 'not_required') + review audit columns.
+#      Drives Identity/Manager/Team team invites.
+#   2. partner_permissions: edit_credits_and_gear boolean (default
+#      false). Used by Team invites to scope band members to credits
+#      + gear edits without touching commerce.
+#   3. partner_permission_overrides: per-(scope_kind, scope_id, user_id,
+#      verb) granted/denied row. Powers the God-View matrix on a
+#      Person — a super-admin can pin one verb on/off for one user
+#      without touching scope-wide defaults.
+#
+# Pre-create on both DBs so the publish dev→prod diff stays empty and
+# /api/admin/invites + /api/admin/people/:id/team never 500 on a
+# fresh-clone dev DB.
+migrate_team_invites() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping team-invites migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE admin_invites
+  ADD COLUMN IF NOT EXISTS invite_role            text,
+  ADD COLUMN IF NOT EXISTS target_person_id       varchar,
+  ADD COLUMN IF NOT EXISTS pre_flighted_album_id  varchar,
+  ADD COLUMN IF NOT EXISTS review_status          text    NOT NULL DEFAULT 'not_required',
+  ADD COLUMN IF NOT EXISTS reviewed_by_user_id    varchar,
+  ADD COLUMN IF NOT EXISTS reviewed_at            timestamp,
+  ADD COLUMN IF NOT EXISTS review_note            text;
+
+ALTER TABLE partner_permissions
+  ADD COLUMN IF NOT EXISTS edit_credits_and_gear  boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS partner_permission_overrides (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope_kind          text    NOT NULL,
+  scope_id            varchar NOT NULL,
+  user_id             varchar NOT NULL,
+  verb                text    NOT NULL,
+  granted             boolean NOT NULL,
+  updated_by_user_id  varchar,
+  updated_at          timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS partner_permission_overrides_uniq
+  ON partner_permission_overrides (scope_kind, scope_id, user_id, verb);
+SQL
+  then
+    echo "post-merge: team-invites migration ok on $label"
+  else
+    echo "post-merge: WARNING — team-invites migration failed on $label (continuing)"
+  fi
+}
+migrate_team_invites dev  "${DATABASE_URL:-}"
+migrate_team_invites prod "${PROD_DATABASE_URL:-}"

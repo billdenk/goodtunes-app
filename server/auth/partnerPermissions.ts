@@ -134,6 +134,57 @@ async function resolveTarget(targetTable: "albums" | "songs", targetId: string):
   return { scope, albumId: row.albumId, firstSoldAt: row.firstSoldAt ?? null };
 }
 
+// Task #351 — verb → partner_permissions column name.
+type VerbCol = "editMetadata" | "uploadMasters" | "mapShopify" | "managePayouts" | "inviteSubusers" | "editCreditsAndGear";
+export function verbToColumn(verb: PartnerVerb): VerbCol {
+  switch (verb) {
+    case "edit_metadata": return "editMetadata";
+    case "upload_masters": return "uploadMasters";
+    case "map_shopify": return "mapShopify";
+    case "manage_payouts": return "managePayouts";
+    case "invite_subusers": return "inviteSubusers";
+    case "edit_credits_and_gear": return "editCreditsAndGear";
+  }
+}
+
+// Task #351 — Per-(scope, user, verb) override lookup. Returns null
+// when no override row exists (caller falls back to the scope-wide
+// partner_permissions row).
+//
+// Implication rule: an override on `edit_metadata` is treated as
+// implying `edit_credits_and_gear` (credits + gear ARE metadata; the
+// narrow verb only exists so a Team member can be limited to credits
+// without also being able to retitle the album). The implication is
+// one-way — an `edit_credits_and_gear` override does NOT grant
+// `edit_metadata`.
+export async function getUserPermissionOverride(
+  scopeKind: PartnerScopeKind,
+  scopeId: string,
+  userId: string,
+  verb: PartnerVerb,
+): Promise<boolean | null> {
+  const r = await db.execute<{ granted: boolean }>(sql`
+    SELECT granted FROM partner_permission_overrides
+    WHERE scope_kind = ${scopeKind} AND scope_id = ${scopeId}
+      AND user_id = ${userId} AND verb = ${verb}
+    LIMIT 1
+  `);
+  const row = (r as any).rows?.[0];
+  if (row) return !!row.granted;
+  // Implication: edit_metadata override → edit_credits_and_gear.
+  if (verb === "edit_credits_and_gear") {
+    const r2 = await db.execute<{ granted: boolean }>(sql`
+      SELECT granted FROM partner_permission_overrides
+      WHERE scope_kind = ${scopeKind} AND scope_id = ${scopeId}
+        AND user_id = ${userId} AND verb = 'edit_metadata'
+      LIMIT 1
+    `);
+    const row2 = (r2 as any).rows?.[0];
+    if (row2 && row2.granted) return true;
+  }
+  return null;
+}
+
 export async function getPartnerPermissions(
   scopeKind: PartnerScopeKind,
   scopeId: string,
@@ -154,6 +205,7 @@ export async function upsertPartnerPermissions(
     mapShopify: boolean;
     managePayouts: boolean;
     inviteSubusers: boolean;
+    editCreditsAndGear: boolean;
     metadataEditsRequireApproval: boolean;
   }>,
   updatedByUserId: string,
@@ -177,6 +229,7 @@ export async function upsertPartnerPermissions(
       mapShopify: patch.mapShopify ?? false,
       managePayouts: patch.managePayouts ?? false,
       inviteSubusers: patch.inviteSubusers ?? false,
+      editCreditsAndGear: patch.editCreditsAndGear ?? false,
       metadataEditsRequireApproval: patch.metadataEditsRequireApproval ?? true,
       updatedByUserId,
     })
@@ -279,17 +332,13 @@ export function requirePartnerPermission(
     }
 
     const perms = await getPartnerPermissions(target.scope.kind, target.scope.id);
-    const verbCol: "editMetadata" | "uploadMasters" | "mapShopify" | "managePayouts" | "inviteSubusers" =
-      verb === "edit_metadata"
-        ? "editMetadata"
-        : verb === "upload_masters"
-          ? "uploadMasters"
-          : verb === "map_shopify"
-            ? "mapShopify"
-            : verb === "manage_payouts"
-              ? "managePayouts"
-              : "inviteSubusers";
-    if (!perms || !perms[verbCol]) {
+    const verbCol = verbToColumn(verb);
+    // Task #351 — per-(scope, user) override layer. An explicit override
+    // (granted=true or false) wins over the scope default. NULL row =>
+    // fall back to the scope verb.
+    const override = await getUserPermissionOverride(target.scope.kind, target.scope.id, userId, verb);
+    const allowed = override !== null ? override : !!(perms && perms[verbCol]);
+    if (!allowed) {
       return res.status(403).json({ message: `Missing permission: ${verb}` });
     }
 
@@ -448,17 +497,10 @@ export async function partnerEditGate(
   }
 
   const perms = await getPartnerPermissions(scope.kind, scope.id);
-  const col: "editMetadata" | "uploadMasters" | "mapShopify" | "managePayouts" | "inviteSubusers" =
-    verb === "edit_metadata"
-      ? "editMetadata"
-      : verb === "upload_masters"
-        ? "uploadMasters"
-        : verb === "map_shopify"
-          ? "mapShopify"
-          : verb === "manage_payouts"
-            ? "managePayouts"
-            : "inviteSubusers";
-  if (!perms || !perms[col]) {
+  const col = verbToColumn(verb);
+  const override = await getUserPermissionOverride(scope.kind, scope.id, userId, verb);
+  const allowed = override !== null ? override : !!(perms && perms[col]);
+  if (!allowed) {
     res.status(403).json({ message: `Missing permission: ${verb}` });
     return "deny";
   }
@@ -517,17 +559,10 @@ export async function checkPartnerVerbForScope(
   }
 
   const perms = await getPartnerPermissions(scope.kind, scope.id);
-  const col: "editMetadata" | "uploadMasters" | "mapShopify" | "managePayouts" | "inviteSubusers" =
-    verb === "edit_metadata"
-      ? "editMetadata"
-      : verb === "upload_masters"
-        ? "uploadMasters"
-        : verb === "map_shopify"
-          ? "mapShopify"
-          : verb === "manage_payouts"
-            ? "managePayouts"
-            : "inviteSubusers";
-  if (!perms || !perms[col]) {
+  const col = verbToColumn(verb);
+  const override = await getUserPermissionOverride(scope.kind, scope.id, userId, verb);
+  const allowed = override !== null ? override : !!(perms && perms[col]);
+  if (!allowed) {
     return { status: 403, body: { message: `Missing permission: ${verb}` } };
   }
 

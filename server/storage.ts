@@ -2915,7 +2915,12 @@ export class DbStorage implements IStorage {
       referrerKind: (data as any).referrerKind ?? null,
       referrerScopeId: (data as any).referrerScopeId ?? null,
       welcomeNote: (data as any).welcomeNote ?? null,
-    }).returning();
+      // Task #351 — team invite shape.
+      inviteRole: (data as any).inviteRole ?? null,
+      targetPersonId: (data as any).targetPersonId ?? null,
+      preFlightedAlbumId: (data as any).preFlightedAlbumId ?? null,
+      reviewStatus: (data as any).reviewStatus ?? "not_required",
+    } as any).returning();
     return row;
   }
   async getAdminInviteById(id: string): Promise<AdminInvite | undefined> {

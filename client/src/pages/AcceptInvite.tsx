@@ -5,7 +5,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { setAuthToken } from "@/lib/queryClient";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
-type InviteInfo = { email: string; role: string; roleLabel: string };
+// Task #351 — Team-invite fields surfaced here so the accept page can
+// render the right hero copy and (after accept) the server-supplied
+// landingPath deep-links into either the album editor or the
+// "nothing's waiting yet" welcome page.
+type InviteInfo = {
+  email: string;
+  role: string;
+  roleLabel: string;
+  inviteRole?: "identity" | "manager" | "team" | null;
+  targetPersonName?: string | null;
+  preFlightedAlbumTitle?: string | null;
+};
 
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
@@ -30,6 +41,7 @@ export default function AcceptInvite() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [identityConfirmed, setIdentityConfirmed] = useState(false);
 
   useEffect(() => {
     if (data?.email && !displayName) {
@@ -95,10 +107,24 @@ export default function AcceptInvite() {
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <form onSubmit={handleSubmit} className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8" data-testid="form-accept-invite">
         <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mb-6" />
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">You're invited</h1>
+        <h1 className="text-2xl font-bold text-slate-900 mb-1" data-testid="text-invite-hero">
+          {data.inviteRole === "team" ? "You're on the team"
+            : data.inviteRole === "manager" ? "You're a manager"
+            : data.inviteRole === "identity" ? "Claim your artist page"
+            : "You're invited"}
+        </h1>
         <p className="text-sm text-slate-600 mb-6">
-          Set up your <span className="font-semibold">{data.roleLabel}</span> account for <span className="font-semibold">{data.email}</span>.
+          {data.targetPersonName ? (
+            <>Set up your <span className="font-semibold">{data.roleLabel}</span> account for <span className="font-semibold">{data.targetPersonName}</span> ({data.email}).</>
+          ) : (
+            <>Set up your <span className="font-semibold">{data.roleLabel}</span> account for <span className="font-semibold">{data.email}</span>.</>
+          )}
         </p>
+        {data.preFlightedAlbumTitle && (
+          <div className="mb-5 rounded-lg border border-[color:var(--brand-blue)]/30 bg-[color:var(--brand-blue)]/5 px-3 py-2 text-xs text-slate-700" data-testid="banner-preflight-album">
+            An album draft is waiting for you: <span className="font-semibold">{data.preFlightedAlbumTitle}</span>. We'll drop you straight into it after sign-up.
+          </div>
+        )}
 
         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Display name</label>
         <input
@@ -145,9 +171,27 @@ export default function AcceptInvite() {
           </div>
         )}
 
+        {/* Task #351 — Identity confirmation. For "identity" invites we
+            require an explicit "I am {name}" affirmation before letting
+            the account be created so a forwarded link can't be used by
+            someone else to claim the artist Person. Manager/Team invites
+            don't get this gate — they aren't claiming the artist. */}
+        {data.inviteRole === "identity" && data.targetPersonName && (
+          <label className="mb-4 flex items-start gap-2 text-sm text-slate-700" data-testid="label-identity-confirm">
+            <input
+              type="checkbox"
+              checked={identityConfirmed}
+              onChange={(e) => setIdentityConfirmed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+              data-testid="checkbox-identity-confirm"
+            />
+            <span>I am <span className="font-semibold">{data.targetPersonName}</span>, or I'm authorized to claim this artist account on their behalf.</span>
+          </label>
+        )}
+
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || (data.inviteRole === "identity" && !!data.targetPersonName && !identityConfirmed)}
           className="w-full bg-[#319ED8] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg py-2.5 transition-colors"
           data-testid="button-accept-invite"
         >

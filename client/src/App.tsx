@@ -48,6 +48,7 @@ import { AdminManufacturer } from "@/pages/AdminManufacturer";
 import { AdminFulfillmentPartners } from "@/pages/AdminFulfillmentPartners";
 import { AdminFulfillmentPartner } from "@/pages/AdminFulfillmentPartner";
 import { Welcome } from "@/pages/Welcome";
+import { WelcomeInvitee } from "@/pages/WelcomeInvitee";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
@@ -197,6 +198,13 @@ function Router() {
             (Welcome polls /api/checkout/session/:id to confirm the
             order, then bounces into the unlocked album). */}
         <Route path="/welcome" component={Welcome} />
+        {/* Task #351 — Landing for Team/Manager invitees with nothing
+            waiting (no pre-flighted album). Short "here's what you
+            can do" page so the first sign-in doesn't drop them into
+            an empty dashboard. */}
+        <Route path="/welcome-invitee">
+          <ProtectedRoute component={WelcomeInvitee} />
+        </Route>
         {/* Task #46 — Public gift claim page. The recipient hits this
             without an account; the page itself routes them through
             sign-in/up before letting them call POST claim. */}

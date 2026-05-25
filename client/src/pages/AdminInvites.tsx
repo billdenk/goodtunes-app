@@ -60,6 +60,30 @@ export function AdminInvites() {
   const [welcomeNote, setWelcomeNote] = useState("");
   const [lastUrl, setLastUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Task #351 — Team-invite shape: optional Identity/Manager/Team role
+  // + target Person (search the People catalog) + optional pre-flighted
+  // album draft to attach so the invitee lands in the editor.
+  const [inviteRole, setInviteRole] = useState<"" | "identity" | "manager" | "team">("");
+  const [targetPersonId, setTargetPersonId] = useState<string | null>(null);
+  const [targetPersonName, setTargetPersonName] = useState<string>("");
+  const [preFlightedAlbumId, setPreFlightedAlbumId] = useState<string | null>(null);
+  const [personSearch, setPersonSearch] = useState("");
+  const personResults = useQuery<Array<{ id: string; name: string; photoUrl: string | null }>>({
+    queryKey: ["/api/admin/people", { q: personSearch }],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/people?q=${encodeURIComponent(personSearch)}&limit=8`);
+      return r.json();
+    },
+    enabled: !!inviteRole && personSearch.trim().length >= 2 && !targetPersonId,
+  });
+  const targetAlbums = useQuery<Array<{ id: string; title: string }>>({
+    queryKey: ["/api/admin/albums", { artist: targetPersonId }],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/albums?artistId=${targetPersonId}`);
+      return r.json();
+    },
+    enabled: !!targetPersonId,
+  });
 
   const needsScope = !!SCOPE_CONFIG[role];
 
@@ -97,6 +121,8 @@ export function AdminInvites() {
         role: string;
         acceptUrl: string;
         emailDelivered: boolean;
+        reviewStatus?: string;
+        claimedReason?: string | null;
       }>;
     },
     onSuccess: (data) => {
@@ -106,14 +132,24 @@ export function AdminInvites() {
       setReferrerKind("");
       setReferrerScopeId(null);
       setWelcomeNote("");
+      setInviteRole("");
+      setTargetPersonId(null);
+      setTargetPersonName("");
+      setPreFlightedAlbumId(null);
+      setPersonSearch("");
       setLastUrl(data.acceptUrl);
       setCopied(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites/review"] });
       toast({
-        title: data.emailDelivered ? "Invite sent" : "Invite created (email failed)",
-        description: data.emailDelivered
-          ? `Emailed ${data.email}.`
-          : `${data.email} — copy the link below and share it manually.`,
+        title: data.reviewStatus === "pending_review"
+          ? "Held for review"
+          : data.emailDelivered ? "Invite sent" : "Invite created (email failed)",
+        description: data.reviewStatus === "pending_review"
+          ? `${data.claimedReason || "Needs super-admin approval"} — the email won't go out until approved.`
+          : data.emailDelivered
+            ? `Emailed ${data.email}.`
+            : `${data.email} — copy the link below and share it manually.`,
       });
     },
     onError: (e: Error) => {
@@ -196,7 +232,10 @@ export function AdminInvites() {
               referrerKind: referrerKind || null,
               referrerScopeId: referrerKind ? referrerScopeId : null,
               welcomeNote: welcomeNote.trim() || null,
-            });
+              inviteRole: inviteRole || null,
+              targetPersonId: inviteRole ? targetPersonId : null,
+              preFlightedAlbumId: inviteRole ? preFlightedAlbumId : null,
+            } as any);
           }}
           className="bg-white border border-slate-200 rounded-2xl p-5 mb-6"
           data-testid="form-create-invite"
@@ -276,6 +315,85 @@ export function AdminInvites() {
                 label={`Referring ${REFERRER_CONFIG[referrerKind].noun}`}
                 testId="referrer-scope"
               />
+            )}
+          </div>
+
+          {/* Task #351 — Team invite (Identity / Manager / Team). When
+              a role is picked, the invite is gated to a specific
+              Person; super-admin can also pre-flight an album draft so
+              the invitee lands in the editor on first sign-in. */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+              Team invite (optional)
+            </label>
+            <select
+              value={inviteRole}
+              onChange={(e) => { setInviteRole(e.target.value as any); setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); setPersonSearch(""); }}
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              data-testid="select-invite-role-team"
+            >
+              <option value="">— Not a team invite —</option>
+              <option value="identity">Identity (this person IS the artist)</option>
+              <option value="manager">Manager (manages the artist)</option>
+              <option value="team">Team (band/team member — credits + gear only)</option>
+            </select>
+            {inviteRole && (
+              <div className="mt-3">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Target person</label>
+                {targetPersonId ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2">
+                    <span className="text-sm text-slate-800 flex-1 truncate" data-testid="text-target-person">{targetPersonName}</span>
+                    <button type="button" onClick={() => { setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }} className="text-slate-400 hover:text-rose-600" data-testid="button-clear-target-person">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={personSearch}
+                      onChange={(e) => setPersonSearch(e.target.value)}
+                      placeholder="Search People (local catalog) — 2+ chars"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                      data-testid="input-target-person-search"
+                    />
+                    {personSearch.length >= 2 && personResults.data && personResults.data.length > 0 && (
+                      <ul className="mt-2 bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-56 overflow-y-auto" data-testid="list-person-results">
+                        {personResults.data.map((p) => (
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              onClick={() => { setTargetPersonId(p.id); setTargetPersonName(p.name); setPersonSearch(""); }}
+                              className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-slate-50"
+                              data-testid={`button-pick-person-${p.id}`}
+                            >
+                              {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-slate-200" />}
+                              <span className="text-sm text-slate-800">{p.name}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+                {targetPersonId && targetAlbums.data && targetAlbums.data.length > 0 && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Pre-flight an album draft (optional)</label>
+                    <select
+                      value={preFlightedAlbumId || ""}
+                      onChange={(e) => setPreFlightedAlbumId(e.target.value || null)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                      data-testid="select-preflight-album"
+                    >
+                      <option value="">— None — invitee lands on welcome page —</option>
+                      {targetAlbums.data.map((a) => (
+                        <option key={a.id} value={a.id}>{a.title}</option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">The invitee lands straight in the album editor after sign-up.</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -445,9 +563,97 @@ export function AdminInvites() {
             platform's margin. Toggle is its own panel so it doesn't
             crowd the create form; the GET endpoint 403s for non-super
             admins which simply hides the panel. */}
+        <ReviewQueuePanel />
         <ReferralFundingPanel />
       </div>
     </AdminFrame>
+  );
+}
+
+// Task #351 — Claimed-Person + anti-solicitation review queue.
+// Super-admin only; the GET endpoint 403s for non-super so this hides
+// itself silently on lower-tier admin accounts.
+function ReviewQueuePanel() {
+  const { toast } = useToast();
+  const q = useQuery<Array<{
+    id: string; email: string; role: string; inviteRole: string | null;
+    targetPersonName: string | null; targetPersonPhoto: string | null;
+    targetIsGroup: boolean | null; targetSpotifyId: string | null;
+    createdByName: string | null; createdAt: string;
+  }>>({
+    queryKey: ["/api/admin/invites/review"],
+    retry: false,
+  });
+  const approve = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await apiRequest("POST", `/api/admin/invites/${id}/approve`);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites/review"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
+      toast({ title: "Invite approved" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't approve", description: e.message, variant: "destructive" }),
+  });
+  const reject = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      await apiRequest("POST", `/api/admin/invites/${id}/reject`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites/review"] });
+      toast({ title: "Invite rejected" });
+    },
+  });
+  if (q.isError) return null;
+  if (q.isLoading || !q.data || q.data.length === 0) return null;
+  return (
+    <div className="mt-8 bg-white border border-amber-200 rounded-2xl p-5" data-testid="panel-review-queue">
+      <h2 className="text-sm font-semibold text-slate-900 mb-1">Held for review ({q.data.length})</h2>
+      <p className="text-xs text-slate-500 mb-3">
+        Identity invites for claimed People (linked login, Spotify artist, GoodTunes releases, or groups), and any team invite from a non-super-admin
+        whose email isn't on file for the target Person, are held here until approved.
+      </p>
+      <ul className="divide-y divide-slate-100">
+        {q.data.map((inv) => (
+          <li key={inv.id} className="flex items-center gap-3 py-3" data-testid={`row-review-${inv.id}`}>
+            {inv.targetPersonPhoto
+              ? <img src={inv.targetPersonPhoto} alt="" className="w-9 h-9 rounded-full object-cover bg-slate-100 flex-shrink-0" />
+              : <div className="w-9 h-9 rounded-full bg-slate-200 flex-shrink-0" />}
+            <div className="min-w-0 flex-1">
+              <div className="font-medium text-slate-900 truncate" data-testid={`text-review-email-${inv.id}`}>{inv.email}</div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                {inv.inviteRole || inv.role}
+                {inv.targetPersonName && <> · <span className="font-medium text-slate-700">{inv.targetPersonName}</span></>}
+                {inv.targetSpotifyId && <> · <span className="text-amber-700">Spotify-claimed</span></>}
+                {inv.targetIsGroup && <> · <span className="text-amber-700">group</span></>}
+                {inv.createdByName && <> · invited by {inv.createdByName}</>}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => approve.mutate(inv.id)}
+              disabled={approve.isPending}
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-[var(--brand-blue)] hover:bg-[#2789bd] rounded-md"
+              data-testid={`button-approve-${inv.id}`}
+            >
+              Approve & send
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const reason = prompt("Reason for rejecting this invite? (optional)") || "";
+                reject.mutate({ id: inv.id, reason });
+              }}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded-md"
+              data-testid={`button-reject-${inv.id}`}
+            >
+              Reject
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
