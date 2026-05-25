@@ -17,9 +17,9 @@
 // SellPanel used to mount UploadValidationsPanel directly; that surface
 // is now a one-line pointer to this tab.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Download, Loader2, AlertTriangle } from "lucide-react";
+import { Download, Loader2, AlertTriangle, RefreshCcw } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, type VendorId } from "@shared/vendorSpecs";
@@ -85,6 +85,17 @@ export function PressPanel({
   const sorted = [...songs].sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0));
   const withMaster = sorted.filter((s) => !!s.audioUrl);
   const missing = sorted.filter((s) => !s.audioUrl);
+  // Task #337 — a master with NULL format / sample rate / bit depth is
+  // the only thing that makes `validateAudioFromSpecs` emit a "couldn't
+  // read…" warn. Surface those rows up here so the operator can
+  // re-probe in one click instead of digging through the Tracks tab.
+  const staleSpecs = withMaster.filter(
+    (s) => !s.audioFormat || !s.audioSampleRate || !s.audioBitDepth,
+  );
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+  function scrollToReprobeBanner() {
+    bannerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
   const totalBytes = withMaster.reduce((acc, s) => acc + (s.audioBytes ?? 0), 0);
   const totalDur = withMaster.reduce((acc, s) => acc + (s.duration ?? 0), 0);
 
@@ -94,6 +105,40 @@ export function PressPanel({
   const [vendorId, setVendorId] = useState<VendorId>("mrp");
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
+
+  const reprobe = useMutation({
+    mutationFn: async (songIds: string[] | undefined) => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/reprobe-masters`, {
+        songIds,
+      });
+      return r.json() as Promise<{
+        scanned: number;
+        probedOk: number;
+        unreadable: Array<{ songId: string; title: string | null }>;
+        errored: Array<{ songId: string; title: string | null; error: string }>;
+      }>;
+    },
+    onSuccess: async (j) => {
+      const bits: string[] = [];
+      bits.push(`${j.probedOk} probed`);
+      if (j.unreadable.length > 0) bits.push(`${j.unreadable.length} unreadable`);
+      if (j.errored.length > 0) bits.push(`${j.errored.length} errored`);
+      toast({
+        title: "Re-probe complete",
+        description: `${j.scanned} master${j.scanned === 1 ? "" : "s"} · ${bits.join(" · ")}`,
+        variant: j.errored.length > 0 ? "destructive" : undefined,
+      });
+      // Refresh the album/song rows so the staleSpecs banner updates
+      // and the masters table shows the new format/rate/bit-depth.
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId] });
+      // Re-run preflight automatically — the spec says clicking the
+      // affordance should kick the probe pipeline THEN re-run preflight.
+      // Skip if there's nothing to validate (saves a noisy empty run).
+      if (withMaster.length > 0) runOnFile.mutate();
+    },
+    onError: (e: any) =>
+      toast({ title: "Re-probe failed", description: e?.message ?? "Unknown error", variant: "destructive" }),
+  });
 
   const runOnFile = useMutation({
     mutationFn: async () => {
@@ -233,6 +278,49 @@ export function PressPanel({
           </div>
         </div>
 
+        {/* ── Re-probe banner (Task #337) ─────────────────────────────
+            Shown when any uploaded master is missing format / sample-
+            rate / bit-depth on the songs row. Kicks the existing per-
+            song probe pipeline for just those tracks, then auto-
+            re-runs preflight so the warn rows clear. */}
+        {staleSpecs.length > 0 && (
+          <div
+            ref={bannerRef}
+            id="press-reprobe-banner"
+            className="mb-6 rounded-md border border-amber-200 bg-amber-50 p-3 flex items-start gap-3"
+            data-testid="banner-reprobe-stale-specs"
+          >
+            <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+            <div className="flex-1 text-xs text-amber-900">
+              <div className="font-semibold">
+                {staleSpecs.length} track{staleSpecs.length === 1 ? "" : "s"} have incomplete specs
+              </div>
+              <div className="text-amber-800">
+                Stored audio format, sample rate, or bit depth is missing — preflight
+                will flag these as warns until the master is re-probed.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => reprobe.mutate(staleSpecs.map((s) => s.id))}
+              disabled={reprobe.isPending || runOnFile.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-700 text-white text-xs font-semibold hover:bg-amber-800 disabled:opacity-50 shrink-0"
+              data-testid="button-reprobe-stale-masters"
+            >
+              {reprobe.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCcw className="w-3.5 h-3.5" />
+              )}
+              {reprobe.isPending
+                ? "Re-probing…"
+                : runOnFile.isPending
+                  ? "Re-running preflight…"
+                  : `Re-probe ${staleSpecs.length} master${staleSpecs.length === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        )}
+
         {/* ── On-file audio preflight runner ──────────────────────────── */}
         <div className="mb-10" data-testid="section-on-file-preflight">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
@@ -308,6 +396,7 @@ export function PressPanel({
           kindFilter="audio"
           title="Audio preflight results"
           description="Per-track pass / warn / fail against the picked plant's specs. Failing rows block fulfillment; an admin can override with a justification."
+          onReprobeClick={staleSpecs.length > 0 ? scrollToReprobeBanner : undefined}
         />
 
         {/* ── Art preflight (file-picker path) ────────────────────────── */}

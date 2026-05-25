@@ -14527,6 +14527,104 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // the list reflects the latest run. Tracks missing a master come
   // back as synthetic fail rows so the gap is visible. Art rows are
   // left untouched.
+  // Task #337 — Album-scoped re-probe for tracks whose stored audio
+  // specs are incomplete (NULL format / sample rate / bit depth / bytes
+  // on the served side, or NULL source-side fields when an audio_source_url
+  // is set). Same probe pipeline as the upload path and the global
+  // audio-specs-backfill, just narrowed to one album so the Press tab
+  // can offer a one-click "re-probe these N masters" affordance above
+  // the on-file preflight runner.
+  //
+  // Body: { songIds?: string[] }
+  //   - When omitted: probes every incomplete song on the album.
+  //   - When supplied: probes only those IDs (still scoped to the album,
+  //     so a stray ID from another album is silently dropped).
+  //
+  // Response mirrors /api/admin/audio-specs-backfill — { scanned,
+  // probedOk, unreadable, errored } — so the client can summarize what
+  // happened in a single toast and the operator can chase any "errored"
+  // rows from the same place. The caller is responsible for re-running
+  // preflight afterwards (the existing /preflight-masters endpoint).
+  app.post("/api/admin/albums/:id/reprobe-masters", requireAdminBearer, async (req, res) => {
+    const albumId = req.params.id;
+    const schema = z.object({ songIds: z.array(z.string()).optional() });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    try {
+      const album = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const songs = await storage.getSongsByAlbum(albumId);
+      const requested = parsed.data.songIds ? new Set(parsed.data.songIds) : null;
+      const targets = (songs as any[]).filter((s) => {
+        if (!s.audioUrl) return false;
+        if (requested && !requested.has(s.id)) return false;
+        const servedMissing =
+          s.audioFormat == null ||
+          s.audioSampleRate == null ||
+          s.audioBitDepth == null ||
+          s.audioBytes == null;
+        const sourceMissing = !!s.audioSourceUrl && (
+          s.audioSourceFormat == null ||
+          s.audioSourceSampleRate == null ||
+          s.audioSourceBitDepth == null ||
+          s.audioSourceBytes == null
+        );
+        // If the caller explicitly passed IDs, trust them — they're
+        // re-probing on purpose (e.g. a swapped master) and shouldn't
+        // be silently filtered out by an "already complete" check.
+        if (requested) return true;
+        return servedMissing || sourceMissing;
+      });
+      let probedOk = 0;
+      const unreadable: Array<{ songId: string; title: string | null }> = [];
+      const errored: Array<{ songId: string; title: string | null; error: string }> = [];
+      for (const song of targets) {
+        const label = song.title ?? song.id;
+        try {
+          const servedOutcome = await probeUrlToSpecsDetailed(song.audioUrl);
+          const sourceOutcome = song.audioSourceUrl
+            ? await probeUrlToSpecsDetailed(song.audioSourceUrl)
+            : null;
+          if (servedOutcome.kind === "download-error") {
+            errored.push({ songId: song.id, title: song.title, error: servedOutcome.error });
+            console.warn(`[reprobe-masters] ✗ ${label} — download failed: ${servedOutcome.error}`);
+            continue;
+          }
+          const served = servedOutcome.specs;
+          const sourcePatch = sourceOutcome && sourceOutcome.kind === "probed"
+            ? audioSpecsToColumnsForceWrite(sourceOutcome.specs, "source")
+            : {};
+          if (sourceOutcome && sourceOutcome.kind === "download-error") {
+            console.warn(`[reprobe-masters] · ${label} — source download failed: ${sourceOutcome.error}`);
+          }
+          await storage.updateSong(song.id, {
+            ...audioSpecsToColumnsForceWrite(served, "served"),
+            ...sourcePatch,
+          } as any);
+          if (served.format == null && served.sampleRate == null && served.bytes == null) {
+            unreadable.push({ songId: song.id, title: song.title });
+            console.warn(`[reprobe-masters] · ${label} — probe returned no usable fields.`);
+          } else {
+            probedOk++;
+            console.log(`[reprobe-masters] ✓ ${label} — ${served.format ?? "?"} · ${served.sampleRate ?? "?"}Hz · ${served.bitDepth ?? "?"}-bit.`);
+          }
+        } catch (err: any) {
+          errored.push({ songId: song.id, title: song.title, error: err?.message || String(err) });
+          console.warn(`[reprobe-masters] ✗ ${label} — ${err?.message || err}`);
+        }
+      }
+      return res.json({
+        scanned: targets.length,
+        probedOk,
+        unreadable,
+        errored,
+      });
+    } catch (err: any) {
+      console.error("[reprobe-masters] endpoint failed:", err);
+      return res.status(500).json({ message: err?.message || "Re-probe failed" });
+    }
+  });
+
   app.post("/api/admin/albums/:id/preflight-masters", requireAdminBearer, async (req, res) => {
     const albumId = req.params.id;
     const schema = z.object({

@@ -36,6 +36,7 @@ export function UploadValidationsPanel({
   kindFilter,
   title,
   description,
+  onReprobeClick,
 }: {
   albumId: string;
   // When set, the Kind selector is hidden, the panel is locked to that
@@ -46,6 +47,12 @@ export function UploadValidationsPanel({
   // frame each surface ("Art preflight" / "Replacement audio").
   title?: string;
   description?: string;
+  // Task #337 — when supplied, the warn rows that are caused by a
+  // NULL stored spec column (audio.bit_depth / audio.sample_rate
+  // emit "Couldn't read…" or "…not on file") render an inline
+  // "Re-probe master" link that calls this back. PressPanel uses it
+  // to scroll the re-probe banner into view.
+  onReprobeClick?: () => void;
 }) {
   const { toast } = useToast();
   const [vendorId, setVendorId] = useState<VendorId>("mrp");
@@ -280,14 +287,14 @@ export function UploadValidationsPanel({
           <div className="text-[13px] text-slate-500 italic">No files validated yet.</div>
         )}
         {visibleRows.map((row) => (
-          <ValidationRow key={row.id} row={row} />
+          <ValidationRow key={row.id} row={row} onReprobeClick={onReprobeClick} />
         ))}
       </div>
     </div>
   );
 }
 
-function ValidationRow({ row }: { row: UploadValidationResult }) {
+function ValidationRow({ row, onReprobeClick }: { row: UploadValidationResult; onReprobeClick?: () => void }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(row.status !== "pass");
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -334,6 +341,14 @@ function ValidationRow({ row }: { row: UploadValidationResult }) {
         <div className="mt-3 space-y-1.5">
           {row.checks.map((c) => {
             const cs = STATUS_STYLE[c.status];
+            // Task #337 — surface the re-probe affordance on the two
+            // warn rows whose root cause is a NULL stored spec column.
+            // Both messages start with "Couldn't read…" / "…not on
+            // file"; rather than string-matching we key off the
+            // stable check keys.
+            const isStaleSpecWarn =
+              c.status === "warn" &&
+              (c.key === "audio.bit_depth" || c.key === "audio.sample_rate");
             return (
               <div key={c.key} className="flex items-start gap-2 text-[12.5px]" data-testid={`check-${row.id}-${c.key}`}>
                 <span className={`mt-0.5 inline-flex items-center justify-center rounded-full ${cs.bg} ${cs.text} w-4 h-4`}>
@@ -341,7 +356,22 @@ function ValidationRow({ row }: { row: UploadValidationResult }) {
                 </span>
                 <div className="flex-1">
                   <div className="font-medium text-slate-800">{c.label}</div>
-                  <div className="text-slate-500">{c.message}</div>
+                  <div className="text-slate-500">
+                    {c.message}
+                    {isStaleSpecWarn && onReprobeClick && (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          onClick={onReprobeClick}
+                          className="text-[var(--brand-blue)] hover:underline font-semibold"
+                          data-testid={`link-reprobe-${row.id}-${c.key}`}
+                        >
+                          Re-probe master →
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
