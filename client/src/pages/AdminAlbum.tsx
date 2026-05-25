@@ -84,6 +84,11 @@ import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
+import {
+  attachAdminAudio,
+  useAdminTrackAudioSource,
+  type AdminAudioReason,
+} from "@/hooks/useAdminTrackAudioSource";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -1502,119 +1507,44 @@ function TracksPanel({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const teardownHls = () => {
+    if (!currentSong) {
+      audio.pause();
       if (hlsRef.current) {
         try { hlsRef.current.destroy(); } catch {}
         hlsRef.current = null;
       }
-    };
-    if (!currentSong?.audioUrl && !currentSong?.muxPlaybackId) {
-      audio.pause();
-      teardownHls();
       audio.removeAttribute("src");
       audio.load();
       setProgress(0);
       return;
     }
     const epoch = ++playEpochRef.current;
-    const useMux =
-      !!currentSong.muxPlaybackId && currentSong.muxStatus === "ready";
-
-    const attachAndPlay = (url: string) => {
-      // Stale-epoch guard — user already clicked another row.
-      if (epoch !== playEpochRef.current) return;
-      teardownHls();
-      const isHls = /\.m3u8(\?|$)/i.test(url);
-      if (
-        isHls &&
-        Hls.isSupported() &&
-        !audio.canPlayType("application/vnd.apple.mpegurl")
-      ) {
-        // Chrome / Firefox: hls.js drives MSE.
-        const hls = new Hls({ enableWorker: true });
-        hlsRef.current = hls;
-        hls.on(Hls.Events.ERROR, (_e, data) => {
-          if (data?.fatal) {
-            console.error("[admin-player] hls fatal", data.type, data.details);
-            if (epoch === playEpochRef.current) setPlaying(false);
-          }
-        });
-        hls.loadSource(url);
-        hls.attachMedia(audio);
-      } else {
-        // Safari / iOS: native HLS, or progressive .wav/.mp3.
-        audio.src = url;
-        audio.load();
-      }
-      setProgress(0);
-      audio.play().catch(() => {
-        if (epoch === playEpochRef.current) setPlaying(false);
+    setProgress(0);
+    (async () => {
+      const res = await attachAdminAudio(audio, currentSong, {
+        hlsRef,
+        isStale: () => epoch !== playEpochRef.current,
       });
-    };
-
-    // If Mux is still encoding this track (`ingesting`/`preparing`), don't
-    // attempt the raw `/objects/*.wav` fallback — large WAVs 500 on the
-    // Replit edge proxy and the user would just hear silence + a broken
-    // player. Sit tight: the album query polls every 3s, so the moment
-    // Mux flips to `ready` this effect re-runs (muxStatus is in deps) and
-    // attaches the HLS stream automatically. No button click required.
-    const muxEncoding =
-      currentSong.muxStatus === "ingesting" ||
-      currentSong.muxStatus === "preparing";
-    if (useMux) {
-      // Fetch a signed 1-hour Mux HLS URL, then attach. We try twice with
-      // a short backoff — a single sporadic 5xx from the signing endpoint
-      // shouldn't kick the operator out to the raw `.wav` (which 500s on
-      // the Replit edge for large masters anyway). If both attempts fail
-      // we surface a real error toast instead of silently switching to a
-      // playback path we already know is broken on prod.
-      (async () => {
-        const trySign = async () => {
-          const r = await apiRequest(
-            "POST",
-            `/api/songs/${currentSong.id}/playback-url`,
-          );
-          const json = (await r.json()) as { url?: string; message?: string };
-          if (!json?.url) throw new Error(json?.message || "no url");
-          return json.url;
-        };
-        try {
-          let url: string;
-          try {
-            url = await trySign();
-          } catch (firstErr) {
-            console.warn("[admin-player] Mux sign attempt 1 failed; retrying", firstErr);
-            if (epoch !== playEpochRef.current) return;
-            await new Promise((res) => setTimeout(res, 800));
-            if (epoch !== playEpochRef.current) return;
-            url = await trySign();
-          }
-          if (epoch !== playEpochRef.current) return;
-          attachAndPlay(url);
-        } catch (e) {
-          console.error("[admin-player] Mux signing failed after retry", e);
-          if (epoch !== playEpochRef.current) return;
-          setPlaying(false);
+      if (epoch !== playEpochRef.current) return;
+      if ("reason" in res) {
+        setPlaying(false);
+        // "stale" reasons mean a newer epoch superseded us; no UI.
+        if (res.reason.message === "stale") return;
+        if (res.reason.code === "mux-sign-failed") {
           toast({
             title: "Couldn't start playback",
-            description:
-              "Mux didn't return a stream URL. Try again in a moment — refresh if it keeps happening.",
+            description: res.reason.message,
             variant: "destructive",
           });
         }
-      })();
-    } else if (muxEncoding) {
-      // Wait for the poll to flip this to `ready`. Pause & clear src so the
-      // dock doesn't appear to be playing nothing.
-      audio.pause();
-      teardownHls();
-      audio.removeAttribute("src");
-      audio.load();
-      setProgress(0);
-      setPlaying(false);
-    } else if (currentSong.audioUrl) {
-      attachAndPlay(currentSong.audioUrl);
-    }
+        // `encoding` + `no-master` are already visible elsewhere
+        // (per-row encoding pill, missing-master state) — no toast.
+        return;
+      }
+      audio.play().catch(() => {
+        if (epoch === playEpochRef.current) setPlaying(false);
+      });
+    })();
   }, [
     currentSong?.id,
     currentSong?.audioUrl,
@@ -6071,14 +6001,19 @@ function GoodSyncPanel({
     );
   }, [hasSynced, savedCues]);
 
-  // Callback-ref-as-state for the hidden audio element. This is the
-  // bulletproof pattern: listener wiring happens in an effect keyed on
-  // the audio node itself, so any remount (HMR, conditional render,
-  // refetch-driven re-render) automatically rewires without stale
-  // refs. Previous version used a plain useRef + [canPlay] effect dep,
-  // which silently broke after song refetches — that's why Bill saw
-  // the 0:00 timer freeze even though audio was playing.
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  // Shared admin-audio source attacher — picks Mux HLS (signed URL +
+  // retry, hls.js / native HLS) when the asset is `ready`, falls back
+  // to the raw `audioUrl` otherwise. This is the same chain the dock
+  // uses, so anything the dock can play GoodSync can play too —
+  // including 24-bit WAV / FLAC masters that bare <audio src=…> would
+  // reject with NotSupportedError. The hook exposes a callback ref
+  // (`setAudio`) so remounts auto-rewire, plus a `reason` we render
+  // inline when no playable source exists.
+  const {
+    setAudio,
+    audio,
+    reason: audioReason,
+  } = useAdminTrackAudioSource(song);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -6387,11 +6322,20 @@ function GoodSyncPanel({
           <>
             <audio
               ref={setAudio}
-              src={song.audioUrl}
               preload="auto"
               className="hidden"
               data-testid={`audio-goodsync-${song.id}`}
             />
+            {audioReason && audioReason.code !== "no-master" && (
+              <div
+                className="px-3 pt-2 text-xs text-amber-700"
+                data-testid={`status-goodsync-audio-${song.id}`}
+              >
+                {audioReason.code === "encoding" || audioReason.code === "unplayable"
+                  ? "This master is still encoding — try the play button again in a moment."
+                  : audioReason.message}
+              </div>
+            )}
 
             {/* Scrolling cue list. Bottom padding clears the floating
                 Play button so the last line stays readable. */}
@@ -8843,11 +8787,25 @@ function RichPreviewEditor({
   // drags the window mid-playback, the next timeupdate snaps the
   // playhead back to the new draftSec so what they hear matches what
   // the window shows.
+  //
+  // Source selection goes through the shared admin-audio hook — same
+  // Mux-HLS-first chain the dock uses, so 24-bit WAV / FLAC masters
+  // that bare <audio src=…> would reject as "operation is not
+  // supported" actually play here too.
+  const {
+    setAudio: setAudioEl,
+    audio: audioEl,
+    reason: audioReason,
+  } = useAdminTrackAudioSource(song);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Mirror the hook's audio element into a ref so the existing
+  // pointer-move scrub code (`audioRef.current.currentTime = …`) keeps
+  // working without an effect-keyed wrapper.
+  audioRef.current = audioEl;
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    const audio = audioRef.current;
+    const audio = audioEl;
     if (!audio || !playing) return;
     const onTime = () => {
       if (audio.currentTime >= draftSec + WINDOW_SEC) {
@@ -8878,11 +8836,28 @@ function RichPreviewEditor({
   }, []);
 
   const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio || !song.audioUrl) {
+    const audio = audioEl;
+    if (!audio) {
       toast({
         title: "No master uploaded yet",
         description: "Add the audio file first, then preview-play will light up.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (audioReason) {
+      // Helper already picked the right reason — surface it verbatim
+      // instead of the generic "operation is not supported" decode
+      // error. `no-master` shouldn't fire here (button is wired even
+      // without audio so we still toast), but it's covered by the
+      // earlier branch above; encoding / sign-failed / unplayable get
+      // the precise text from the helper.
+      toast({
+        title:
+          audioReason.code === "encoding" || audioReason.code === "unplayable"
+            ? "Master is still encoding"
+            : "Couldn't play preview",
+        description: audioReason.message,
         variant: "destructive",
       });
       return;
@@ -8954,12 +8929,21 @@ function RichPreviewEditor({
           stalling on first interaction (Bill: "make the audio more
           responsive"). */}
       <audio
-        ref={audioRef}
-        src={song.audioUrl ?? undefined}
+        ref={setAudioEl}
         preload="auto"
         className="hidden"
         data-testid={`audio-preview-${song.id}`}
       />
+      {audioReason && audioReason.code !== "no-master" && (
+        <div
+          className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+          data-testid={`status-preview-audio-${song.id}`}
+        >
+          {audioReason.code === "encoding" || audioReason.code === "unplayable"
+            ? "This master is still encoding — preview-play will light up once Mux finishes (usually under a minute)."
+            : audioReason.message}
+        </div>
+      )}
 
       {/* Trim row: play · waveform · padlock — Apple iMovie pattern */}
       <div className="flex items-center gap-3 px-1">
