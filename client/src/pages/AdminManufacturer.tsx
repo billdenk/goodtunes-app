@@ -16,6 +16,7 @@ import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -284,6 +285,12 @@ export function AdminManufacturer() {
         />
 
         <PressCatalogPanel pressId={id} />
+
+        <PartnerPermissionsPanel
+          scopeKind="manufacturer"
+          scopeId={m.id}
+          scopeName={m.name}
+        />
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

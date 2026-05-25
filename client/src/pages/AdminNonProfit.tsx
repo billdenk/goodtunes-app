@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronRight, ExternalLink, Heart, Pencil } from "lucide-react";
 import { ReferralSummaryPanel } from "@/pages/AdminPerson";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,6 +158,29 @@ export default function AdminNonProfit() {
             )}
           </div>
         </div>
+
+        <EditablePanel
+          title="Identity"
+          testId="panel-npo-identity"
+          endpoint={`/api/non-profits/${npo.id}`}
+          values={{
+            name: npo.name,
+            websiteUrl: npo.websiteUrl,
+          }}
+          invalidate={[
+            [`/api/non-profits/${npo.id}`],
+            ["/api/non-profits"],
+          ]}
+          fields={[
+            { key: "name", label: "Name", type: "text", required: true },
+            {
+              key: "websiteUrl",
+              label: "Website",
+              type: "url",
+              placeholder: "https://example.org",
+            },
+          ]}
+        />
 
         <ContactsPanel npoId={npo.id} />
 

@@ -30,7 +30,7 @@ interface RoleInfo {
 }
 
 interface Props {
-  scopeKind: "label" | "artist" | "manufacturer" | "fulfillment";
+  scopeKind: "label" | "artist" | "manufacturer" | "fulfillment" | "vendor";
   scopeId: string;
   scopeName: string;
 }

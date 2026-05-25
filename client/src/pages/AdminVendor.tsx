@@ -24,6 +24,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard";
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
@@ -122,7 +123,7 @@ interface VendorProfile {
   children?: ChildLite[];
 }
 
-type Tab = "overview" | "cover" | "instruments" | "gooddeed";
+type Tab = "overview" | "cover" | "instruments" | "gooddeed" | "permissions";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
@@ -130,6 +131,10 @@ const TABS: { key: Tab; label: string }[] = [
   // Task #245 — vendor-quoted GoodDeed pricing (printing / hologram /
   // insertion). Same panel a vendor-role partner sees in /vendor.
   { key: "gooddeed", label: "GoodDeed Services" },
+  // Task #297 — per-vendor partner-permissions card. Same panel and
+  // server endpoint Label/Artist/Press use; vendor was wired into
+  // PARTNER_SCOPE_KINDS at Task #79.
+  { key: "permissions", label: "Permissions" },
 ];
 
 export function AdminVendor() {
@@ -484,6 +489,13 @@ export function AdminVendor() {
           <div className="mt-6">
             <GoodDeedServicesTab vendorId={vendorId} />
           </div>
+        )}
+        {tab === "permissions" && (
+          <PartnerPermissionsPanel
+            scopeKind="vendor"
+            scopeId={vendor.id}
+            scopeName={vendor.name}
+          />
         )}
       </div>
 
