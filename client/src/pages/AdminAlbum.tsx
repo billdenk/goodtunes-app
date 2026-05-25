@@ -2015,7 +2015,7 @@ function TracksPanel({
         </div>
       </div>
       {albumCredits?.production && albumCredits.production.length > 0 && (
-        <AlbumProductionCreditsPanel rows={albumCredits.production} />
+        <AlbumProductionCreditsPanel rows={albumCredits.production} albumId={album.id} />
       )}
       {/* Dock clearance lives as `mb-32` on the OUTER section (above) — a
           margin BELOW the white card, not padding inside it. Earlier the
@@ -2174,21 +2174,42 @@ function TracksPanel({
 // (or via a future inline editor). Hidden when there are no rows.
 function AlbumProductionCreditsPanel({
   rows,
+  albumId,
 }: {
   rows: NonNullable<AlbumCreditsMap["production"]>;
+  albumId: string;
 }) {
   // Group by role so duplicate roles ("Producer · Producer · Producer")
-  // collapse into a single "Producer — A, B, C" row.
+  // collapse into a single "Producer — A, B, C" row. Carry the person
+  // payload through (id + photo) so each name renders as an avatar +
+  // inline link into the admin Person sheet, matching how song-level
+  // credits already cross-link.
+  type CreditEntry = {
+    key: string;
+    name: string;
+    personId: string | null;
+    photoUrl: string | null;
+  };
   const byRole = useMemo(() => {
-    const m = new Map<string, string[]>();
+    const m = new Map<string, CreditEntry[]>();
     for (const r of rows) {
       const name = r.person?.name ?? r.name;
       const list = m.get(r.role) ?? [];
-      list.push(name);
+      list.push({
+        key: r.id,
+        name,
+        personId: r.person?.id ?? null,
+        photoUrl: r.person?.photoUrl ?? null,
+      });
       m.set(r.role, list);
     }
     return Array.from(m.entries());
   }, [rows]);
+
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSE_AT = 6;
+  const overflow = byRole.length > COLLAPSE_AT;
+  const visible = overflow && !expanded ? byRole.slice(0, COLLAPSE_AT) : byRole;
 
   return (
     <div
@@ -2199,17 +2220,52 @@ function AlbumProductionCreditsPanel({
         Album credits
       </div>
       <div className="grid gap-1">
-        {byRole.map(([role, names]) => (
+        {visible.map(([role, entries]) => (
           <div
             key={role}
             className="flex items-baseline gap-2 text-[13px]"
             data-testid={`row-album-credit-role-${role.replace(/\s+/g, "-").toLowerCase()}`}
           >
             <span className="text-slate-500 min-w-[140px]">{role}</span>
-            <span className="text-slate-800 font-medium">{names.join(", ")}</span>
+            <span className="text-slate-800 font-medium flex flex-wrap items-center gap-x-1 gap-y-0.5">
+              {entries.map((e, i) => (
+                <span key={e.key} className="inline-flex items-center gap-1">
+                  {e.personId && e.photoUrl && (
+                    <img
+                      src={e.photoUrl}
+                      alt=""
+                      className="w-4 h-4 rounded-full object-cover flex-shrink-0"
+                      data-testid={`img-album-credit-avatar-${e.personId}`}
+                    />
+                  )}
+                  {e.personId ? (
+                    <Link
+                      href={`/admin/people/${e.personId}?from=album&albumId=${albumId}`}
+                      className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+                      data-testid={`link-album-credit-person-${e.personId}`}
+                    >
+                      {e.name}
+                    </Link>
+                  ) : (
+                    <span>{e.name}</span>
+                  )}
+                  {i < entries.length - 1 && <span aria-hidden>,</span>}
+                </span>
+              ))}
+            </span>
           </div>
         ))}
       </div>
+      {overflow && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 text-xs font-medium text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+          data-testid="button-album-credits-expand"
+        >
+          {expanded ? "Show fewer" : `Show all credits (${byRole.length})`}
+        </button>
+      )}
     </div>
   );
 }

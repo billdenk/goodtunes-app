@@ -253,10 +253,23 @@ function AlbumDetailMobile() {
   // CreditsSheet + PerformerSheet both render from the resolved maps below;
   // the static `TRACK_CREDITS` / `PEOPLE` / `INSTRUMENTS` seed is kept as a
   // graceful fallback for songs that haven't been migrated into the DB yet.
-  const { data: apiAlbumCredits } = useQuery<{ bySongId: Record<string, ApiSongCredits> }>({
+  type ApiAlbumProductionCredit = {
+    id: string;
+    albumId: string;
+    personId: string | null;
+    name: string;
+    role: string;
+    position: number;
+    person: ApiPerson | null;
+  };
+  const { data: apiAlbumCredits } = useQuery<{
+    bySongId: Record<string, ApiSongCredits>;
+    production?: ApiAlbumProductionCredit[];
+  }>({
     queryKey: ["/api/albums", id, "credits"],
     enabled: !!id,
   });
+  const productionCredits = apiAlbumCredits?.production ?? [];
   const { creditsBySongId, peopleById, instrumentsById } = useMemo(() => {
     const peopleById = new Map<string, Person>();
     const instrumentsById = new Map<string, Instrument>();
@@ -266,6 +279,9 @@ function AlbumDetailMobile() {
 
     const creditsBySongId = new Map<string, TrackCredits>();
     if (apiAlbumCredits) {
+      for (const r of apiAlbumCredits.production ?? []) {
+        if (r.person) peopleById.set(r.person.id, normalizePerson(r.person));
+      }
       for (const [songId, api] of Object.entries(apiAlbumCredits.bySongId)) {
         for (const w of api.writers) {
           if (w.person) peopleById.set(w.person.id, normalizePerson(w.person));
@@ -724,6 +740,30 @@ function AlbumDetailMobile() {
               );
             })()}
           </div>
+
+          {/* Album-wide production credits (Produced by / Mixed by / etc.) */}
+          {productionCredits.length > 0 && (
+            <AlbumProductionCreditsPanelMobile
+              rows={productionCredits}
+              onOpenPerson={(personId) => {
+                const person = peopleById.get(personId);
+                if (!person) return;
+                // PerformerSheet wants a song context. Prefer the first
+                // album track this person is credited on; fall back to the
+                // first track so the sheet always opens.
+                const ctxSong =
+                  songs.find((s) => {
+                    const c = getCredits(s.id);
+                    return (
+                      c?.performers.some((p) => p.personId === personId) ||
+                      c?.writers.some((w) => w.personId === personId)
+                    );
+                  }) ?? songs[0];
+                if (!ctxSong) return;
+                setPerformerSheet({ person, song: ctxSong });
+              }}
+            />
+          )}
 
           {/* Tracks */}
           <div className="bg-[#00062B] px-5 mt-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
@@ -1853,6 +1893,112 @@ function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; 
           <path d="M18 6L6 18M6 6l12 12" />
         </svg>
       </button>
+    </div>
+  );
+}
+
+/**
+ * Customer-facing album-wide production credits panel (Produced by /
+ * Mixed by / Mastered by / etc.). Mirrors the admin panel: avatar +
+ * inline-link name per credited person, role groups collapse the
+ * duplicate-role expansion into a single row, and the panel collapses
+ * past 6 grouped rows with a Show all / Show fewer toggle. Names route
+ * into the same Person sheet (PerformerSheet) that song-level credits
+ * already open. Free-text-only rows (no linked Person) render as plain
+ * text so importer stubs still appear.
+ */
+function AlbumProductionCreditsPanelMobile({
+  rows,
+  onOpenPerson,
+}: {
+  rows: Array<{
+    id: string;
+    personId: string | null;
+    name: string;
+    role: string;
+    person: { id: string; name: string; photoUrl?: string | null } | null;
+  }>;
+  onOpenPerson: (personId: string) => void;
+}) {
+  type Entry = { key: string; name: string; personId: string | null; photoUrl: string | null };
+  const byRole = useMemo(() => {
+    const m = new Map<string, Entry[]>();
+    for (const r of rows) {
+      const list = m.get(r.role) ?? [];
+      list.push({
+        key: r.id,
+        name: r.person?.name ?? r.name,
+        personId: r.person?.id ?? null,
+        photoUrl: r.person?.photoUrl ?? null,
+      });
+      m.set(r.role, list);
+    }
+    return Array.from(m.entries());
+  }, [rows]);
+
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSE_AT = 6;
+  const overflow = byRole.length > COLLAPSE_AT;
+  const visible = overflow && !expanded ? byRole.slice(0, COLLAPSE_AT) : byRole;
+
+  return (
+    <div
+      className="px-5 mt-5 pb-4 border-t"
+      style={{ borderColor: "rgba(255,255,255,0.08)" }}
+      data-testid="panel-album-production-credits"
+    >
+      <div className="text-xs uppercase tracking-wide font-semibold text-white/45 mt-4 mb-2">
+        Album credits
+      </div>
+      <div className="grid gap-1.5">
+        {visible.map(([role, entries]) => (
+          <div
+            key={role}
+            className="flex items-baseline gap-2 text-sm"
+            data-testid={`row-album-credit-role-${role.replace(/\s+/g, "-").toLowerCase()}`}
+          >
+            <span className="text-white/45 min-w-[110px]">{role}</span>
+            <span className="text-white/90 font-medium flex flex-wrap items-center gap-x-1.5 gap-y-1">
+              {entries.map((e, i) => (
+                <span key={e.key} className="inline-flex items-center gap-1.5">
+                  {e.personId && e.photoUrl && (
+                    <img
+                      src={e.photoUrl}
+                      alt=""
+                      style={{ width: 16, height: 16 }}
+                      className="rounded-full object-cover flex-shrink-0"
+                      data-testid={`img-album-credit-avatar-${e.personId}`}
+                    />
+                  )}
+                  {e.personId ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenPerson(e.personId!)}
+                      className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+                      data-testid={`link-album-credit-person-${e.personId}`}
+                    >
+                      {e.name}
+                    </button>
+                  ) : (
+                    <span>{e.name}</span>
+                  )}
+                  {i < entries.length - 1 && <span aria-hidden className="text-white/40">,</span>}
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+      {overflow && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-3 text-xs font-medium text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+          data-testid="button-album-credits-expand"
+        >
+          {expanded ? "Show fewer" : `Show all credits (${byRole.length})`}
+        </button>
+      )}
     </div>
   );
 }
