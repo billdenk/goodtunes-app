@@ -14375,7 +14375,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Pending email invites for non-artist roles still surface in the
     // separate "Outstanding invites" panel.
     const acceptedRows = await db.execute<any>(sql`
-      SELECT p.id, p.name, p.photo_url
+      SELECT p.id, p.name, p.photo_url, p.can_invite_ambassadors
       FROM people p
       WHERE p.referred_by_org_id = ${orgId}
       ORDER BY p.name ASC
@@ -14393,12 +14393,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const artistRows: any[] = [
       ...(((acceptedRows as any).rows ?? []) as any[]).map((r) => ({
         id: r.id, name: r.name, photo_url: r.photo_url, status: "active" as const,
+        can_invite_ambassadors: !!r.can_invite_ambassadors,
       })),
       ...(((pendingArtistInviteRows as any).rows ?? []) as any[])
         // Don't double-count an invite once its target artist row exists.
         .filter((r) => !r.role_scope_id || !acceptedArtistIds.has(r.role_scope_id))
         .map((r) => ({
           id: `invite:${r.id}`, name: r.email, photo_url: null, status: "pending_invite" as const,
+          can_invite_ambassadors: false,
         })),
     ];
     // Non-artist pending invites surface separately so the operator
@@ -14457,6 +14459,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         name: a.name,
         photoUrl: a.photo_url,
         status: a.status,
+        canInviteAmbassadors: !!a.can_invite_ambassadors,
         albums: albumsByArtist[a.id] ?? [],
       })),
       pendingInvites: ((pendingInvites as any).rows ?? []).map((i: any) => ({

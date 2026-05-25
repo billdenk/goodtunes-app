@@ -1,7 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock } from "lucide-react";
 import { DashboardPanel } from "@/components/partner/dashboard-controls";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 // Task #78 — Non-profit partner shell. Single-page dashboard showing
 // the NPO's referred artists, their for-sale albums + paid units, and
@@ -17,6 +19,7 @@ type Dashboard = {
     name: string;
     photoUrl: string | null;
     status: "active" | "pending_invite";
+    canInviteAmbassadors: boolean;
     albums: { id: string; title: string; coverUrl: string | null; paidUnits: number }[];
   }[];
   pendingInvites: { id: string; email: string; role: string; createdAt: string; expiresAt: string }[];
@@ -110,6 +113,9 @@ export function NonProfitDashboard() {
                   </span>
                   <Link href={`/artist/${a.id}`} className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">View →</Link>
                 </div>
+                {a.status === "active" && (
+                  <AmbassadorToggle personId={a.id} canInviteAmbassadors={a.canInviteAmbassadors} />
+                )}
                 {a.albums.length > 0 && (
                   <ul className="divide-y divide-white/5">
                     {a.albums.map((al) => (
@@ -151,6 +157,49 @@ export function NonProfitDashboard() {
         </section>
       )}
     </main>
+  );
+}
+
+// Task #353 — Per-artist ambassador toggle inside the NPO partner shell.
+// Mirrors the admin Permissions-tab toggle (AdminPerson.tsx) but scoped
+// to the NPO's own referred artists. PATCH endpoint re-checks NPO
+// ownership server-side, so a stray person id can't be promoted.
+function AmbassadorToggle({ personId, canInviteAmbassadors }: { personId: string; canInviteAmbassadors: boolean }) {
+  const { toast } = useToast();
+  const m = useMutation({
+    mutationFn: async (next: boolean) => {
+      await apiRequest("PATCH", `/api/admin/people/${personId}/can-invite-ambassadors`, { enabled: next });
+      return next;
+    },
+    onSuccess: (next) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/non-profit/dashboard"] });
+      toast({ title: next ? "Promoted to ambassador" : "Ambassador verb removed" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't update", description: e.message, variant: "destructive" });
+    },
+  });
+  return (
+    <label
+      htmlFor={`amb-${personId}`}
+      className="mb-3 flex items-start gap-3 rounded-lg bg-white/[0.03] ring-1 ring-white/10 px-3 py-2.5 cursor-pointer"
+    >
+      <input
+        id={`amb-${personId}`}
+        type="checkbox"
+        checked={canInviteAmbassadors}
+        disabled={m.isPending}
+        onChange={(e) => m.mutate(e.target.checked)}
+        className="mt-0.5 w-4 h-4 accent-[var(--brand-blue)]"
+        data-testid={`toggle-npo-ambassador-${personId}`}
+      />
+      <span className="block min-w-0">
+        <span className="block text-xs font-semibold text-white/85">Make ambassador</span>
+        <span className="block text-xs text-white/55 mt-0.5">
+          When ON, this artist can invite other artists on your non-profit's behalf. Their referrals' credits flow to them, and you still see the roll-up.
+        </span>
+      </span>
+    </label>
   );
 }
 
