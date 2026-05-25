@@ -356,6 +356,30 @@ export const songs = pgTable("songs", {
   muxAssetId: text("mux_asset_id"),
   muxPlaybackId: text("mux_playback_id"),
   muxStatus: text("mux_status"),
+  // Master tech specs — populated at upload time by ffprobe so the
+  // admin track UI can surface a one-line `format · sample rate ·
+  // bit depth · channels · bytes · duration` readout (Task #317) and
+  // the operator can confirm at a glance what'll ship to the press
+  // vendor. All nullable — older rows that predate the probe show
+  // whatever subset we have, never an error.
+  //
+  // `audio*` reflect the AS-SERVED playback file (`audioUrl`). When a
+  // master was transcoded on upload (e.g. 24-bit WAV → FLAC), the
+  // `audioSource*` fields mirror the AS-PRESSED ORIGINAL bytes that
+  // live at `audioSourceUrl`. Source fields stay null on passthrough
+  // uploads — the served file IS the original.
+  audioFormat: text("audio_format"),
+  audioContainerExt: text("audio_container_ext"),
+  audioSampleRate: integer("audio_sample_rate"),
+  audioBitDepth: integer("audio_bit_depth"),
+  audioChannels: integer("audio_channels"),
+  audioBytes: integer("audio_bytes"),
+  audioSourceFormat: text("audio_source_format"),
+  audioSourceContainerExt: text("audio_source_container_ext"),
+  audioSourceSampleRate: integer("audio_source_sample_rate"),
+  audioSourceBitDepth: integer("audio_source_bit_depth"),
+  audioSourceChannels: integer("audio_source_channels"),
+  audioSourceBytes: integer("audio_source_bytes"),
 });
 
 export const userAlbums = pgTable(

@@ -2510,26 +2510,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const sourceUrl = conv.action === "transcode"
           ? await uploadFileToObjectStorage(tmpIn, f.mimetype)
           : null;
-        // Duration probe — Chrome's <audio> element can't decode 24-bit
-        // WAV / AIFF, so the client-side probe in AddTrackForm silently
-        // returns null on hi-res masters and we'd fall back to the DB
-        // default (180s = 3:00). music-metadata reads the WAV / AIFF
-        // header directly and works on any bit depth. Best-effort —
-        // a probe failure should not break the upload itself.
-        let duration: number | null = null;
-        try {
-          const mm = await import("music-metadata");
-          const meta = await mm.parseFile(tmpIn);
-          if (meta.format.duration && isFinite(meta.format.duration)) {
-            duration = Math.round(meta.format.duration);
-          }
-        } catch { /* leave null; client probe may have already filled it */ }
+        // Task #317 — probe both the served file (what'll stream) and,
+        // when transcoded, the archival source (what'll ship to press).
+        // Probe failures stay null; the upload itself never errors on
+        // a missing readout.
+        const servedSpecs = await probeAudioSpecs(conv.outputPath);
+        const sourceSpecs = conv.action === "transcode"
+          ? await probeAudioSpecs(tmpIn)
+          : null;
+        // Duration probe — `probeAudioSpecs` already returns duration
+        // via ffprobe (works on any bit depth). Fall back to
+        // music-metadata if ffprobe didn't yield one, to preserve the
+        // previous behavior of the route.
+        let duration: number | null = servedSpecs.duration ?? sourceSpecs?.duration ?? null;
+        if (duration == null) {
+          try {
+            const mm = await import("music-metadata");
+            const meta = await mm.parseFile(tmpIn);
+            if (meta.format.duration && isFinite(meta.format.duration)) {
+              duration = Math.round(meta.format.duration);
+            }
+          } catch { /* leave null; client probe may have already filled it */ }
+        }
         return res.json({
           url,
           sourceUrl,
           transcoded: conv.action === "transcode",
           sourceBitsPerSample: conv.sourceBitsPerSample,
           duration,
+          servedSpecs,
+          sourceSpecs,
         });
       } catch (err: any) {
         console.error("Audio upload failed", err);
@@ -2635,20 +2645,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ? await uploadFileToObjectStorage(conv.outputPath, conv.mime)
           : finalPath;
         const sourceUrl = conv.action === "transcode" ? finalPath : null;
-        let duration: number | null = null;
-        try {
-          const mm = await import("music-metadata");
-          const meta = await mm.parseFile(tmpIn);
-          if (meta.format.duration && isFinite(meta.format.duration)) {
-            duration = Math.round(meta.format.duration);
-          }
-        } catch { /* leave null; client probe may have already filled it */ }
+        // Task #317 — probe the as-served file (conv.outputPath, which
+        // is the transcoded FLAC on transcode and the original tempfile
+        // on passthrough) and, when transcoded, the as-pressed source
+        // (tmpIn = bytes the operator actually uploaded).
+        const servedSpecs = await probeAudioSpecs(conv.outputPath);
+        const sourceSpecs = conv.action === "transcode"
+          ? await probeAudioSpecs(tmpIn)
+          : null;
+        let duration: number | null = servedSpecs.duration ?? sourceSpecs?.duration ?? null;
+        if (duration == null) {
+          try {
+            const mm = await import("music-metadata");
+            const meta = await mm.parseFile(tmpIn);
+            if (meta.format.duration && isFinite(meta.format.duration)) {
+              duration = Math.round(meta.format.duration);
+            }
+          } catch { /* leave null; client probe may have already filled it */ }
+        }
         return res.json({
           url,
           sourceUrl,
           transcoded: conv.action === "transcode",
           sourceBitsPerSample: conv.sourceBitsPerSample,
           duration,
+          servedSpecs,
+          sourceSpecs,
         });
       } catch (err: any) {
         if (err instanceof ObjectNotFoundError) {
@@ -2862,6 +2884,96 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.log(`[audio-backfill] Done. ${transcoded} transcoded, ${passthrough} passthrough, ${failed} failed.`);
     } catch (err) {
       console.error("[audio-backfill] sweep aborted:", err);
+    }
+  })();
+
+  // Task #317 — One-shot post-boot audio-specs backfill. Mirrors the
+  // duration-backfill below: for every song with an audioUrl but null
+  // spec fields, download the served file (and audioSourceUrl when
+  // present) into a tempfile, run `probeAudioSpecs`, and persist
+  // whatever subset came back. Probe failures are non-fatal — the row
+  // just stays partially populated and the admin readout shows whatever
+  // it can. Same gate as the other legacy sweeps (RUN_LEGACY_BACKFILLS=1)
+  // so we don't peg ffmpeg on every Autoscale boot.
+  if (process.env.RUN_LEGACY_BACKFILLS === "1") void (async () => {
+    try {
+      await new Promise((r) => setTimeout(r, 4000));
+      // Eligibility: any populated audioUrl whose served-spec columns
+      // are all null. Source-spec backfill rides along automatically
+      // when audioSourceUrl is set — those columns can be partial
+      // independently of the served columns, but we only re-probe a
+      // row once per boot to keep the sweep cheap.
+      const { rows } = await pool.query<{
+        id: string;
+        title: string | null;
+        audio_url: string;
+        audio_source_url: string | null;
+      }>(
+        `SELECT id, title, audio_url, audio_source_url FROM songs
+           WHERE audio_url IS NOT NULL
+             AND audio_url <> ''
+             AND audio_format IS NULL
+             AND audio_sample_rate IS NULL
+             AND audio_bytes IS NULL
+           ORDER BY album_id ASC, track_number ASC, id ASC`,
+      );
+      if (rows.length === 0) return;
+      console.log(`[audio-specs-backfill] Found ${rows.length} song(s) with missing tech specs — re-probing.`);
+      const fsp = await import("node:fs/promises");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      let fixed = 0;
+      let failed = 0;
+      // Pulls one URL into /tmp and probes it. Returns the AudioSpecs +
+      // tempfile path so the caller can unlink it. On failure returns
+      // an empty AudioSpecs so the upstream write degrades to NULLs
+      // rather than throwing.
+      const probeUrlToSpecs = async (url: string): Promise<AudioSpecs> => {
+        const ext = (url.match(/\.(\w+)(?:\?|$)/)?.[0] || ".bin").toLowerCase();
+        const tmp = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
+        try {
+          const file = await objectStorage.getObjectEntityFile(url);
+          const [buf] = await file.download();
+          await fsp.writeFile(tmp, buf);
+          return await probeAudioSpecs(tmp);
+        } catch {
+          return {
+            format: null,
+            containerExt: null,
+            sampleRate: null,
+            bitDepth: null,
+            channels: null,
+            bytes: null,
+            duration: null,
+          };
+        } finally {
+          try { await fsp.unlink(tmp); } catch {}
+        }
+      };
+      for (const row of rows) {
+        const label = row.title ? `"${row.title}"` : row.id;
+        try {
+          const served = await probeUrlToSpecs(row.audio_url);
+          const source = row.audio_source_url ? await probeUrlToSpecs(row.audio_source_url) : null;
+          const patch: Record<string, any> = {
+            ...audioSpecsToColumns(served, "served"),
+            ...audioSpecsToColumns(source, "source"),
+          };
+          if (Object.keys(patch).length === 0) {
+            console.warn(`[audio-specs-backfill] · ${label} — probe returned no usable fields.`);
+            continue;
+          }
+          await storage.updateSong(row.id, patch as any);
+          fixed++;
+          console.log(`[audio-specs-backfill] ✓ ${label} — ${served.format ?? "?"} · ${served.sampleRate ?? "?"}Hz · ${served.bitDepth ?? "?"}-bit.`);
+        } catch (err: any) {
+          failed++;
+          console.warn(`[audio-specs-backfill] ✗ ${label} — ${err?.message || err}`);
+        }
+      }
+      console.log(`[audio-specs-backfill] Done. ${fixed} updated, ${failed} failed.`);
+    } catch (err) {
+      console.error("[audio-specs-backfill] sweep aborted:", err);
     }
   })();
 
@@ -3849,7 +3961,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/songs", requireAdmin, async (req, res) => {
-    const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl } = req.body ?? {};
+    const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, servedSpecs, sourceSpecs } = req.body ?? {};
     if (!albumId || !title || trackNumber == null) {
       return res.status(400).json({ message: "albumId, title, trackNumber are required" });
     }
@@ -3891,6 +4003,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // transcoded a 24-bit / 32-bit / 32-float PCM master down to
       // FLAC for browser playback. Null when no transcode was needed.
       audioSourceUrl: audioSourceUrl ? normalizeAudioUrl(String(audioSourceUrl)) : null,
+      // Task #317 — master tech specs from the upload-audio response,
+      // persisted in lock-step with the URLs so the admin track row
+      // can render its one-line readout without re-probing on read.
+      ...audioSpecsToColumns(servedSpecs, "served"),
+      ...audioSpecsToColumns(sourceSpecs, "source"),
     } as any);
     // Kick off Mux ingest the moment the master lands in object storage —
     // fire-and-forget; the admin UI polls muxStatus.
@@ -3926,7 +4043,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         message: "Your edit was sent to GoodTunes for review.",
       });
     }
-    const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs, servedSpecs, sourceSpecs } = req.body ?? {};
     // Task #79 — body-shape gating: the outer middleware enforces
     // edit_metadata + lock for ANY song PUT, but writes that touch the
     // master file additionally require upload_masters. This keeps a
@@ -3950,6 +4067,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.audioSourceUrl = audioSourceUrl
         ? normalizeAudioUrl(String(audioSourceUrl))
         : null;
+    }
+    // Task #317 — propagate the upload-audio specs alongside the URLs
+    // so the admin row's one-line readout updates in lock-step with a
+    // master swap. Clearing audioUrl also clears the served specs;
+    // clearing audioSourceUrl also clears the source specs.
+    if (servedSpecs !== undefined) {
+      if (servedSpecs == null) {
+        updates.audioFormat = null;
+        updates.audioContainerExt = null;
+        updates.audioSampleRate = null;
+        updates.audioBitDepth = null;
+        updates.audioChannels = null;
+        updates.audioBytes = null;
+      } else {
+        Object.assign(updates, audioSpecsToColumns(servedSpecs, "served"));
+      }
+    }
+    if (sourceSpecs !== undefined) {
+      if (sourceSpecs == null) {
+        updates.audioSourceFormat = null;
+        updates.audioSourceContainerExt = null;
+        updates.audioSourceSampleRate = null;
+        updates.audioSourceBitDepth = null;
+        updates.audioSourceChannels = null;
+        updates.audioSourceBytes = null;
+      } else {
+        Object.assign(updates, audioSpecsToColumns(sourceSpecs, "source"));
+      }
+    }
+    // Clearing the playback URL drops the served specs too — they're
+    // tied to the file. Same for the archival source.
+    if (audioUrl !== undefined && !audioUrl) {
+      updates.audioFormat = null;
+      updates.audioContainerExt = null;
+      updates.audioSampleRate = null;
+      updates.audioBitDepth = null;
+      updates.audioChannels = null;
+      updates.audioBytes = null;
+    }
+    if (audioSourceUrl !== undefined && !audioSourceUrl) {
+      updates.audioSourceFormat = null;
+      updates.audioSourceContainerExt = null;
+      updates.audioSourceSampleRate = null;
+      updates.audioSourceBitDepth = null;
+      updates.audioSourceChannels = null;
+      updates.audioSourceBytes = null;
     }
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     if (isExplicit !== undefined) updates.isExplicit = Boolean(isExplicit);
@@ -4646,6 +4809,109 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       sourceBitsPerSample: probe.bps || undefined,
       sourceCodec: probe.codec,
     };
+  }
+
+  // Task #317 — Master tech-spec probe. Returns the same shape the
+  // admin track row needs to render the one-line readout (format,
+  // sample rate, bit depth, channels, bytes, duration). Best-effort:
+  // any failure returns an all-null record so callers can still
+  // persist whatever subset they have without erroring the upload.
+  // `containerExt` is derived from the file path's extension because
+  // ffprobe's `format_name` is a comma-list ("mov,mp4,m4a,…") that
+  // doesn't map cleanly to a single user-facing label.
+  type AudioSpecs = {
+    format: string | null;
+    containerExt: string | null;
+    sampleRate: number | null;
+    bitDepth: number | null;
+    channels: number | null;
+    bytes: number | null;
+    duration: number | null;
+  };
+  async function probeAudioSpecs(filePath: string): Promise<AudioSpecs> {
+    const { spawn } = await import("node:child_process");
+    const fsp = await import("node:fs/promises");
+    const path = await import("node:path");
+    const out: AudioSpecs = {
+      format: null,
+      containerExt: null,
+      sampleRate: null,
+      bitDepth: null,
+      channels: null,
+      bytes: null,
+      duration: null,
+    };
+    try {
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext) out.containerExt = ext;
+    } catch { /* leave null */ }
+    try {
+      const stat = await fsp.stat(filePath);
+      if (stat.size > 0) out.bytes = stat.size;
+    } catch { /* leave null */ }
+    try {
+      const json = await new Promise<any>((resolve, reject) => {
+        const p = spawn(
+          "ffprobe",
+          [
+            "-v", "error",
+            "-print_format", "json",
+            "-show_streams",
+            "-show_format",
+            filePath,
+          ],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        let stdout = "";
+        let stderr = "";
+        p.stdout.on("data", (c) => (stdout += c.toString()));
+        p.stderr.on("data", (c) => (stderr += c.toString()));
+        p.on("error", reject);
+        p.on("close", (code) => {
+          if (code !== 0) return reject(new Error(`ffprobe exited ${code}: ${stderr.trim()}`));
+          try {
+            resolve(JSON.parse(stdout));
+          } catch (e: any) {
+            reject(new Error(`ffprobe parse failed: ${e?.message || e}`));
+          }
+        });
+      });
+      const streams: any[] = json.streams || [];
+      const a = streams.find((s) => s.codec_type === "audio");
+      if (a) {
+        if (a.codec_name) out.format = String(a.codec_name);
+        const sr = Number(a.sample_rate);
+        if (Number.isFinite(sr) && sr > 0) out.sampleRate = sr;
+        const bps = Number(a.bits_per_raw_sample || a.bits_per_sample || 0);
+        if (Number.isFinite(bps) && bps > 0) out.bitDepth = bps;
+        const ch = Number(a.channels);
+        if (Number.isFinite(ch) && ch > 0) out.channels = ch;
+      }
+      const dur = Number(json.format?.duration);
+      if (Number.isFinite(dur) && dur > 0) out.duration = Math.round(dur);
+    } catch { /* leave probed fields null */ }
+    return out;
+  }
+
+  // Convenience: pack a probed `AudioSpecs` into the `audio_*` / `audio_source_*`
+  // column shape used by inserts/updates. `kind: "served"` writes the
+  // `audio_*` columns; `kind: "source"` writes the `audio_source_*`
+  // columns. Returns only fields that are non-null so the caller can
+  // spread it into a patch without clobbering existing data with NULLs.
+  function audioSpecsToColumns(
+    specs: AudioSpecs | null | undefined,
+    kind: "served" | "source",
+  ): Record<string, any> {
+    if (!specs) return {};
+    const prefix = kind === "served" ? "audio" : "audioSource";
+    const patch: Record<string, any> = {};
+    if (specs.format != null) patch[`${prefix}Format`] = specs.format;
+    if (specs.containerExt != null) patch[`${prefix}ContainerExt`] = specs.containerExt;
+    if (specs.sampleRate != null) patch[`${prefix}SampleRate`] = specs.sampleRate;
+    if (specs.bitDepth != null) patch[`${prefix}BitDepth`] = specs.bitDepth;
+    if (specs.channels != null) patch[`${prefix}Channels`] = specs.channels;
+    if (specs.bytes != null) patch[`${prefix}Bytes`] = specs.bytes;
+    return patch;
   }
 
   // Alignment-grade audio transcode. Forced alignment only needs
@@ -5711,14 +5977,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   } catch { /* /tmp gets reaped anyway */ }
                 }
 
-                // Duration is best-effort — non-fatal. parseFile streams the
-                // tempfile too, so a 500 MB WAV stays bounded.
-                let duration = 0;
-                try {
-                  const mm = await import("music-metadata");
-                  const meta = await mm.parseFile(entry.tmpPath);
-                  duration = Math.round(meta.format.duration || 0);
-                } catch { /* leave at 0; admin can set it manually */ }
+                // Task #317 — probe served + (when transcoded) source
+                // for the admin track row's one-line readout. Best-
+                // effort; failures just leave the corresponding spec
+                // columns null. Probe BEFORE the optional FLAC unlink
+                // below so the served file still exists on disk.
+                const servedSpecsRow = await probeAudioSpecs(conv.outputPath);
+                const sourceSpecsRow = conv.action === "transcode"
+                  ? await probeAudioSpecs(entry.tmpPath)
+                  : null;
+
+                // Duration is best-effort — non-fatal. Prefer the
+                // ffprobe value from `probeAudioSpecs` (works on any
+                // bit depth); fall back to music-metadata if ffprobe
+                // didn't yield one.
+                let duration = servedSpecsRow.duration ?? sourceSpecsRow?.duration ?? 0;
+                if (!duration) {
+                  try {
+                    const mm = await import("music-metadata");
+                    const meta = await mm.parseFile(entry.tmpPath);
+                    duration = Math.round(meta.format.duration || 0);
+                  } catch { /* leave at 0; admin can set it manually */ }
+                }
 
                 const song = await storage.createSong({
                   albumId,
@@ -5733,6 +6013,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   previewStartMs: null as any,
                   previewEndMs: null as any,
                   waveform: null as any,
+                  ...audioSpecsToColumns(servedSpecsRow, "served"),
+                  ...audioSpecsToColumns(sourceSpecsRow, "source"),
                 } as any);
                 // Auto-ingest to Mux — Dropbox-batch is the primary upload
                 // path, so every new GoodTunes release flows through here.

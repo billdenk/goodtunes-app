@@ -6097,21 +6097,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "\"w-6 h-6 rounded-full grid place-items-center text-[11px] font-bold flex-shrink-0\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[10.5px] uppercase tracking-wide text-slate-400 font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[12.5px] font-medium text-slate-800 truncate flex items-center gap-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
     "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900\">"
   },
   {
@@ -9687,7 +9672,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<span className=\"block text-[11px] text-slate-500 leading-tight truncate\">"
+    "snippet": "<span className=\"block text-[11px] text-slate-500 leading-tight min-w-0\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -9697,7 +9682,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<div className=\"text-[10.5px] text-slate-500 truncate leading-tight mt-0.5\">"
+    "snippet": "<div className=\"text-[10.5px] text-slate-500 leading-tight mt-0.5 min-w-0\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -10078,6 +10063,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"px-2.5 h-7 rounded-md bg-[var(--brand-blue)] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"block text-[10.5px] text-slate-500 leading-tight font-mono tabular-nums truncate select-text\""
   },
   {
     "rule": "hardcoded-font-size",

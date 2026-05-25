@@ -198,6 +198,23 @@ interface SongLite {
   // via the admin "Regenerate waveform" action). When null, the preview
   // card falls back to decorative bars.
   waveform?: number[] | null;
+  // Task #317 — master tech specs. `audio*` describe the as-served file
+  // (what fans actually stream); `audioSource*` describe the archival
+  // original (set when the upload pipeline transcoded a hi-res WAV/AIFF
+  // master down to FLAC for browser playback). All nullable for legacy
+  // rows that haven't been re-probed yet.
+  audioFormat?: string | null;
+  audioContainerExt?: string | null;
+  audioSampleRate?: number | null;
+  audioBitDepth?: number | null;
+  audioChannels?: number | null;
+  audioBytes?: number | null;
+  audioSourceFormat?: string | null;
+  audioSourceContainerExt?: string | null;
+  audioSourceSampleRate?: number | null;
+  audioSourceBitDepth?: number | null;
+  audioSourceChannels?: number | null;
+  audioSourceBytes?: number | null;
 }
 
 type Tab = "overview" | "tracks" | "bonus" | "sell" | "shopify";
@@ -2481,6 +2498,12 @@ function AddTrackForm({
   // ORIGINAL bytes (24-bit WAV / 32-bit PCM / etc.) so we can persist
   // them in `audioSourceUrl` and offer a download link from the row.
   const [audioSourceUrl, setAudioSourceUrl] = useState<string | null>(null);
+  // Task #317 — tech-spec readout for the file the operator just
+  // attached, threaded into the createMut POST body so the new row
+  // lands with its full spec sheet on first paint instead of waiting
+  // on the backfill sweep.
+  const [pendingServedSpecs, setPendingServedSpecs] = useState<AudioSpecsPayload | null>(null);
+  const [pendingSourceSpecs, setPendingSourceSpecs] = useState<AudioSpecsPayload | null>(null);
   const [audioFilename, setAudioFilename] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -2526,6 +2549,8 @@ function AddTrackForm({
     // upload to the server.
     setAudioUrl(null);
     setAudioSourceUrl(null);
+    setPendingServedSpecs(null);
+    setPendingSourceSpecs(null);
     // Pre-fill what we can BEFORE the upload finishes so the admin sees
     // the row populate instantly while the bytes stream up.
     if (!title.trim()) setTitle(clientDeriveTitleFromFilename(f.name));
@@ -2542,6 +2567,10 @@ function AddTrackForm({
       const result = await uploadAudioFile(f);
       setAudioUrl(result.url);
       setAudioSourceUrl(result.sourceUrl);
+      // Task #317 — stash the just-probed specs so createMut can ship
+      // them in the POST body alongside the URLs.
+      setPendingServedSpecs(result.servedSpecs ?? null);
+      setPendingSourceSpecs(result.sourceSpecs ?? null);
       // Server-side duration is canonical (works on 24-bit WAV / AIFF
       // which the browser <audio> probe can't decode). Apply it
       // whenever the duration field is still empty or still showing
@@ -2596,6 +2625,12 @@ function AddTrackForm({
     // drop it so we don't ship it to the server alongside an
     // unrelated playback URL.
     setAudioSourceUrl(null);
+    // Same logic for specs — a pasted URL didn't come through our
+    // probe pipeline, so any pending readout from a prior upload
+    // no longer matches this URL. Server-side backfill will fill
+    // them in on the next boot.
+    setPendingServedSpecs(null);
+    setPendingSourceSpecs(null);
     setAudioFilename(file);
     setTitle(derived);
     const token = ++probeTokenRef.current;
@@ -2614,6 +2649,8 @@ function AddTrackForm({
     probeTokenRef.current++;
     setAudioUrl(null);
     setAudioSourceUrl(null);
+    setPendingServedSpecs(null);
+    setPendingSourceSpecs(null);
     setAudioFilename(null);
   };
 
@@ -2623,6 +2660,8 @@ function AddTrackForm({
       duration: number;
       audioUrl: string | null;
       audioSourceUrl: string | null;
+      servedSpecs: AudioSpecsPayload | null;
+      sourceSpecs: AudioSpecsPayload | null;
     }) => {
       const res = await apiRequest("POST", "/api/admin/songs", {
         albumId,
@@ -2631,6 +2670,11 @@ function AddTrackForm({
         duration: input.duration,
         ...(input.audioUrl ? { audioUrl: input.audioUrl } : {}),
         ...(input.audioSourceUrl ? { audioSourceUrl: input.audioSourceUrl } : {}),
+        // Task #317 — only send specs when we actually probed a file
+        // for this row; a pasted-URL POST omits them and the row lands
+        // with null spec columns until the backfill sweep catches up.
+        ...(input.servedSpecs ? { servedSpecs: input.servedSpecs } : {}),
+        ...(input.sourceSpecs ? { sourceSpecs: input.sourceSpecs } : {}),
       });
       return res.json();
     },
@@ -2646,6 +2690,8 @@ function AddTrackForm({
       setDurationText("");
       setAudioUrl(null);
       setAudioSourceUrl(null);
+      setPendingServedSpecs(null);
+      setPendingSourceSpecs(null);
       setAudioFilename(null);
       setError(null);
       queueMicrotask(() => titleRef.current?.focus());
@@ -2716,6 +2762,8 @@ function AddTrackForm({
       duration: durationSeconds,
       audioUrl,
       audioSourceUrl,
+      servedSpecs: pendingServedSpecs,
+      sourceSpecs: pendingSourceSpecs,
     });
   };
 
@@ -4567,7 +4615,10 @@ function ExpandedPanel({
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  sublabel?: string;
+  // Same widening as StatusBadge.subtitle — lets the Master panel
+  // header stack the brand-blue summary string above the Task #317
+  // MasterSpecLine.
+  sublabel?: React.ReactNode;
   onCollapse: () => void;
   testId?: string;
   children: React.ReactNode;
@@ -4598,7 +4649,7 @@ function ExpandedPanel({
             {label}
           </span>
           {sublabel && (
-            <span className="block text-[11px] text-slate-500 leading-tight truncate">
+            <span className="block text-[11px] text-slate-500 leading-tight min-w-0">
               {sublabel}
             </span>
           )}
@@ -4645,7 +4696,10 @@ function StatusBadge({
   ok: boolean;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  subtitle?: string;
+  // ReactNode so callers can stack the brand-blue "Required to publish" /
+  // "Uploaded · tap to replace" string with the Task #317 MasterSpecLine
+  // beneath it without rebuilding the tile's typography.
+  subtitle?: React.ReactNode;
   severity?: "required" | "soft";
   size?: "default" | "emphasized";
   compact?: boolean;
@@ -4704,7 +4758,7 @@ function StatusBadge({
             {label}
           </div>
           {subtitle && (
-            <div className="text-[10.5px] text-slate-500 truncate leading-tight mt-0.5">
+            <div className="text-[10.5px] text-slate-500 leading-tight mt-0.5 min-w-0">
               {subtitle}
             </div>
           )}
@@ -4748,7 +4802,7 @@ function StatusBadge({
           {subtitle && (
             <div
               className={[
-                "text-slate-500 truncate leading-tight",
+                "text-slate-500 leading-tight min-w-0",
                 emphasized ? "text-[11.5px] mt-0.5" : "text-[10px]",
               ].join(" ")}
             >
@@ -5391,9 +5445,14 @@ function TrackRow({
                   icon={Disc3}
                   label="Master"
                   sublabel={
-                    song.audioUrl
-                      ? "Uploaded · tap to collapse"
-                      : "Required to publish"
+                    <>
+                      <span className="block truncate">
+                        {song.audioUrl
+                          ? "Uploaded · tap to collapse"
+                          : "Required to publish"}
+                      </span>
+                      {song.audioUrl && <MasterSpecLine song={song} />}
+                    </>
                   }
                   onCollapse={closeAudio}
                   testId={`panel-master-${song.id}`}
@@ -5411,9 +5470,14 @@ function TrackRow({
                   icon={Disc3}
                   label="Master"
                   subtitle={
-                    song.audioUrl
-                      ? "Uploaded · tap to replace"
-                      : "Required to publish"
+                    <>
+                      <span className="block truncate">
+                        {song.audioUrl
+                          ? "Uploaded · tap to replace"
+                          : "Required to publish"}
+                      </span>
+                      {song.audioUrl && <MasterSpecLine song={song} />}
+                    </>
                   }
                   severity="required"
                   size="emphasized"
@@ -9545,6 +9609,193 @@ function PreviewWindowEditor({
   );
 }
 
+/* ─── Master tech-spec readout (Task #317) ──────────────────────────────
+   Single-line, view-only summary of what the file actually IS — format,
+   sample rate, bit depth, channels, file size, duration. Renders once
+   on the collapsed Master tile, once on the expanded panel header, and
+   once inside the AudioEditor near the URL field. When the upload
+   pipeline transcoded a hi-res master we surface both the served file
+   (e.g. FLAC) and the archival source (e.g. 24-bit/96 kHz WAV) on
+   separate lines so the operator can see what's streaming AND what's
+   going to press. Admin-only by virtue of where it's mounted (Master
+   tile lives inside the admin track row); no extra gate needed. */
+type AudioSpecsPayload = {
+  format: string | null;
+  containerExt: string | null;
+  sampleRate: number | null;
+  bitDepth: number | null;
+  channels: number | null;
+  bytes: number | null;
+  duration: number | null;
+};
+function formatBytesHuman(bytes: number | null | undefined): string | null {
+  if (!bytes || bytes <= 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+function formatChannelsHuman(ch: number | null | undefined): string | null {
+  if (!ch || ch <= 0) return null;
+  if (ch === 1) return "mono";
+  if (ch === 2) return "stereo";
+  return `${ch}-ch`;
+}
+function formatSampleRateHuman(sr: number | null | undefined): string | null {
+  if (!sr || sr <= 0) return null;
+  const khz = sr / 1000;
+  return Number.isInteger(khz) ? `${khz} kHz` : `${khz.toFixed(1)} kHz`;
+}
+function extFromUrl(url: string | null | undefined): string | null {
+  // Pull `.flac` etc. off the URL pathname so we can still label legacy
+  // rows whose spec columns are null because the backfill sweep
+  // hasn't run yet (or failed). Querystring is ignored.
+  if (!url) return null;
+  try {
+    const p = new URL(url, "http://x").pathname;
+    const m = p.match(/\.(\w+)$/);
+    return m ? `.${m[1].toLowerCase()}` : null;
+  } catch {
+    const m = url.match(/\.(\w+)(?:\?|$)/);
+    return m ? `.${m[1].toLowerCase()}` : null;
+  }
+}
+function formatFormatLabel(
+  format: string | null | undefined,
+  containerExt: string | null | undefined,
+  fallbackUrl?: string | null,
+): string | null {
+  // Prefer the ffprobe codec name (always present on a successful probe),
+  // upper-cased; fall back to the container extension stripped of its
+  // leading dot; finally fall back to the URL extension so legacy rows
+  // missing every probe field can still show "FLAC" etc. "pcm_s24le"
+  // reads as gibberish to a human, so collapse PCM variants to plain
+  // "PCM" — bit depth is its own field elsewhere on the line.
+  if (format) {
+    const f = format.toLowerCase();
+    if (f.startsWith("pcm")) return "PCM";
+    return format.toUpperCase();
+  }
+  const ext = (containerExt || extFromUrl(fallbackUrl) || "").replace(/^\./, "");
+  return ext ? ext.toUpperCase() : null;
+}
+function buildSpecsParts(
+  s: {
+    format?: string | null;
+    containerExt?: string | null;
+    sampleRate?: number | null;
+    bitDepth?: number | null;
+    channels?: number | null;
+    bytes?: number | null;
+  },
+  fallbackUrl?: string | null,
+): string[] {
+  const parts: string[] = [];
+  const fmt = formatFormatLabel(s.format, s.containerExt, fallbackUrl);
+  if (fmt) parts.push(fmt);
+  const sr = formatSampleRateHuman(s.sampleRate);
+  if (sr) {
+    parts.push(s.bitDepth ? `${s.bitDepth}-bit · ${sr}` : sr);
+  } else if (s.bitDepth) {
+    parts.push(`${s.bitDepth}-bit`);
+  }
+  const ch = formatChannelsHuman(s.channels);
+  if (ch) parts.push(ch);
+  const sz = formatBytesHuman(s.bytes);
+  if (sz) parts.push(sz);
+  return parts;
+}
+function MasterSpecLine({ song }: { song: SongLite }) {
+  // Served segment — what fans actually stream. URL extension is the
+  // last-resort fallback so legacy rows still get at least a format
+  // chip (e.g. "FLAC") before the backfill sweep has touched them.
+  const servedParts = buildSpecsParts(
+    {
+      format: song.audioFormat,
+      containerExt: song.audioContainerExt,
+      sampleRate: song.audioSampleRate,
+      bitDepth: song.audioBitDepth,
+      channels: song.audioChannels,
+      bytes: song.audioBytes,
+    },
+    song.audioUrl,
+  );
+  // Source segment — only when the pipeline transcoded
+  // (audioSourceUrl set). Same URL-extension fallback as served.
+  const sourceParts = song.audioSourceUrl
+    ? buildSpecsParts(
+        {
+          format: song.audioSourceFormat,
+          containerExt: song.audioSourceContainerExt,
+          sampleRate: song.audioSourceSampleRate,
+          bitDepth: song.audioSourceBitDepth,
+          channels: song.audioSourceChannels,
+          bytes: song.audioSourceBytes,
+        },
+        song.audioSourceUrl,
+      )
+    : [];
+  // Duration is shared (one file, one length) — tag it onto the
+  // single rendered line so the operator can cross-check the "3:42"
+  // row label without scrolling.
+  let durationStr: string | null = null;
+  if (song.duration && song.duration > 0) {
+    const mm = Math.floor(song.duration / 60);
+    const ss = String(song.duration % 60).padStart(2, "0");
+    durationStr = `${mm}:${ss}`;
+  }
+  if (
+    servedParts.length === 0 &&
+    sourceParts.length === 0 &&
+    !durationStr
+  ) {
+    return null;
+  }
+  // Compose ONE line. On a transcoded master we render the archival
+  // source first, an arrow, then the served file, then duration —
+  // mirrors what the operator actually wants to know: "raw bytes
+  // they uploaded → bytes that go down the wire to fans · length."
+  // On a non-transcoded upload we drop the arrow and prefix.
+  const tooltipBits: string[] = [];
+  const segments: React.ReactNode[] = [];
+  if (sourceParts.length > 0) {
+    tooltipBits.push(`Source: ${sourceParts.join(" · ")}`);
+    segments.push(
+      <span key="src">
+        <span className="text-slate-400">Source · </span>
+        {sourceParts.join(" · ")}
+      </span>,
+      <span key="arrow" className="text-slate-400">{" → "}</span>,
+      <span key="srv">
+        <span className="text-slate-400">Served · </span>
+        {servedParts.length > 0 ? servedParts.join(" · ") : "—"}
+      </span>,
+    );
+    tooltipBits.push(`Served: ${servedParts.length > 0 ? servedParts.join(" · ") : "—"}`);
+  } else if (servedParts.length > 0) {
+    segments.push(<span key="srv">{servedParts.join(" · ")}</span>);
+    tooltipBits.push(servedParts.join(" · "));
+  }
+  if (durationStr) {
+    segments.push(
+      <span key="dur">
+        {segments.length > 0 ? " · " : ""}
+        {durationStr}
+      </span>,
+    );
+    tooltipBits.push(durationStr);
+  }
+  return (
+    <span
+      className="block text-[10.5px] text-slate-500 leading-tight font-mono tabular-nums truncate select-text"
+      title={tooltipBits.join(" · ")}
+      data-testid={`text-master-specs-${song.id}`}
+    >
+      {segments}
+    </span>
+  );
+}
+
 /* ─── Per-track audio editor (drag-drop, file picker, paste URL) ─────── */
 
 function AudioEditor({
@@ -9580,6 +9831,18 @@ function AudioEditor({
   const [draftSourceUrl, setDraftSourceUrl] = useState<string | null>(
     () => song.audioSourceUrl ?? null,
   );
+  // Task #317 — specs travel as a pair with the URL. We only POST a
+  // non-undefined value when the operator just uploaded a fresh file
+  // (handleFile sets this); a plain URL paste or a Clear leaves them
+  // undefined so the saveMut body omits them and the server's
+  // "clear-specs-when-URL-clears" logic does the right thing on its
+  // own.
+  const [pendingServedSpecs, setPendingServedSpecs] = useState<
+    AudioSpecsPayload | null | undefined
+  >(undefined);
+  const [pendingSourceSpecs, setPendingSourceSpecs] = useState<
+    AudioSpecsPayload | null | undefined
+  >(undefined);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -9604,6 +9867,12 @@ function AudioEditor({
       const result = await uploadAudioFile(f);
       setDraftUrl(result.url);
       setDraftSourceUrl(result.sourceUrl);
+      // Task #317 — stash the just-probed specs so saveMut can ship
+      // them alongside the URL. `null` for source on a passthrough
+      // upload is meaningful (server clears any leftover source specs);
+      // we explicitly null it rather than leaving undefined.
+      setPendingServedSpecs(result.servedSpecs ?? null);
+      setPendingSourceSpecs(result.sourceSpecs ?? null);
       // Backfill duration when the row is still on the schema default
       // (180s = 3:00) or 0, and the server's music-metadata probe
       // returned a real value. Critical for 24-bit WAV / AIFF where
@@ -9648,8 +9917,19 @@ function AudioEditor({
         // cleared — they're a pair. Otherwise persist whatever the
         // transcode pipeline returned.
         audioSourceUrl: draftUrl ? draftSourceUrl : null,
+        // Task #317 — ship the upload-probed specs in lock-step with
+        // the URL. `undefined` means "leave whatever's in the DB" (URL
+        // paste / Clear path); `null` means "clear" (only used for
+        // source when the new upload was a passthrough); an object
+        // means "persist these values."
+        ...(pendingServedSpecs !== undefined ? { servedSpecs: pendingServedSpecs } : {}),
+        ...(pendingSourceSpecs !== undefined ? { sourceSpecs: pendingSourceSpecs } : {}),
       }),
     onSuccess: async () => {
+      // Specs landed in the DB; reset the pending bag so a follow-up
+      // edit (e.g. just clearing the URL) doesn't re-send stale specs.
+      setPendingServedSpecs(undefined);
+      setPendingSourceSpecs(undefined);
       await onSaved();
     },
     onError: (e: any) =>
@@ -9769,6 +10049,12 @@ function AudioEditor({
                 // pipeline produced — the previous archival original
                 // no longer corresponds to this playback file.
                 setDraftSourceUrl(null);
+                // Same logic for the just-probed specs — they belong
+                // to the prior upload, not to this manually-pasted
+                // URL. Reset so saveMut doesn't ship stale specs
+                // against a different file.
+                setPendingServedSpecs(undefined);
+                setPendingSourceSpecs(undefined);
                 setLocalError(null);
               }}
               placeholder="or paste a URL"
@@ -9792,8 +10078,12 @@ function AudioEditor({
                 onChange={(e) => {
                   setDraftUrl(normalizeAudioUrl(e.target.value));
                   // Manually-typed URL ⇒ drop any transcode-paired
-                  // archival original (no longer corresponds).
+                  // archival original (no longer corresponds), and
+                  // discard the just-probed specs (they belong to
+                  // the prior upload, not this URL).
                   setDraftSourceUrl(null);
+                  setPendingServedSpecs(undefined);
+                  setPendingSourceSpecs(undefined);
                   setLocalError(null);
                 }}
                 disabled={uploading || saveMut.isPending}
@@ -9859,6 +10149,11 @@ function AudioEditor({
                     onClick={() => {
                       setDraftUrl("");
                       setDraftSourceUrl(null);
+                      // Cleared file ⇒ null specs (saveMut will ship
+                      // them as explicit `null` so the DB columns
+                      // clear in lock-step with the URL).
+                      setPendingServedSpecs(null);
+                      setPendingSourceSpecs(null);
                       setLocalError(null);
                     }}
                     className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-rose-600 hover:bg-rose-50"
@@ -9870,6 +10165,12 @@ function AudioEditor({
                 </PopoverContent>
               </Popover>
             </div>
+
+            {/* Task #317 — single-line tech-spec readout for the file
+                in the URL field above. Anchored to the URL row so the
+                readout sits with the file it describes. Renders empty
+                for a legacy row with no probed specs yet. */}
+            <MasterSpecLine song={song} />
 
             {uploading && (
               <p className="text-[11px] text-slate-400">Uploading…</p>
@@ -10406,6 +10707,12 @@ async function uploadAudioFile(
   // this is the fallback so hi-res masters don't land at the 3:00
   // schema default.
   duration?: number | null;
+  // Task #317 — full ffprobe readout for the served + (when
+  // transcoded) source file. Passed back into POST/PUT /api/admin/songs
+  // so the admin track row can show format, sample rate, bit depth,
+  // channels, and file size without re-probing on read.
+  servedSpecs?: AudioSpecsPayload | null;
+  sourceSpecs?: AudioSpecsPayload | null;
 }> {
   const token = getAuthToken();
   if (!token) {
@@ -10469,6 +10776,8 @@ async function uploadAudioFile(
     transcoded: boolean;
     sourceBitsPerSample?: number;
     duration?: number | null;
+    servedSpecs?: AudioSpecsPayload | null;
+    sourceSpecs?: AudioSpecsPayload | null;
   };
   return body;
 }

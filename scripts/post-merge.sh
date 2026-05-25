@@ -303,3 +303,39 @@ SQL
 }
 migrate_cert_sale_window dev  "${DATABASE_URL:-}"
 migrate_cert_sale_window prod "${PROD_DATABASE_URL:-}"
+
+# Task #317 — Master tech-spec columns on songs. Populated at upload by
+# ffprobe so the admin track row can render a one-line readout (format,
+# sample rate, bit depth, channels, bytes, duration) for both the
+# AS-SERVED playback file and, when transcoded, the AS-PRESSED original.
+# Additive nullable columns — older rows just keep showing NULL until
+# the boot-time backfill (RUN_LEGACY_BACKFILLS=1) re-probes them.
+migrate_song_audio_specs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping song audio-specs migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE songs
+  ADD COLUMN IF NOT EXISTS audio_format                 text,
+  ADD COLUMN IF NOT EXISTS audio_container_ext          text,
+  ADD COLUMN IF NOT EXISTS audio_sample_rate            integer,
+  ADD COLUMN IF NOT EXISTS audio_bit_depth              integer,
+  ADD COLUMN IF NOT EXISTS audio_channels               integer,
+  ADD COLUMN IF NOT EXISTS audio_bytes                  integer,
+  ADD COLUMN IF NOT EXISTS audio_source_format          text,
+  ADD COLUMN IF NOT EXISTS audio_source_container_ext   text,
+  ADD COLUMN IF NOT EXISTS audio_source_sample_rate     integer,
+  ADD COLUMN IF NOT EXISTS audio_source_bit_depth       integer,
+  ADD COLUMN IF NOT EXISTS audio_source_channels        integer,
+  ADD COLUMN IF NOT EXISTS audio_source_bytes           integer;
+SQL
+  then
+    echo "post-merge: song audio-specs migration ok on $label"
+  else
+    echo "post-merge: WARNING — song audio-specs migration failed on $label (continuing)"
+  fi
+}
+migrate_song_audio_specs dev  "${DATABASE_URL:-}"
+migrate_song_audio_specs prod "${PROD_DATABASE_URL:-}"
