@@ -91,7 +91,7 @@ export function NonProfitDashboard() {
             {dash.data!.artists.map((a) => (
               <li key={a.id} data-testid={`row-npo-artist-${a.id}`}>
               <DashboardPanel>
-                <div className="flex items-center gap-3 mb-3">
+                <div className="group/artist flex items-center gap-3 mb-3">
                   {a.photoUrl ? (
                     <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-white/5" />
                   ) : (
@@ -101,6 +101,9 @@ export function NonProfitDashboard() {
                     <p className="font-semibold truncate">{a.name}</p>
                     <p className="text-[11px] text-white/55">{a.albums.length} album{a.albums.length === 1 ? "" : "s"} listed</p>
                   </div>
+                  {a.status === "active" && (
+                    <AmbassadorChip personId={a.id} canInviteAmbassadors={a.canInviteAmbassadors} />
+                  )}
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${
                       a.status === "active"
@@ -113,9 +116,6 @@ export function NonProfitDashboard() {
                   </span>
                   <Link href={`/artist/${a.id}`} className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">View →</Link>
                 </div>
-                {a.status === "active" && (
-                  <AmbassadorToggle personId={a.id} canInviteAmbassadors={a.canInviteAmbassadors} />
-                )}
                 {a.albums.length > 0 && (
                   <ul className="divide-y divide-white/5">
                     {a.albums.map((al) => (
@@ -160,11 +160,14 @@ export function NonProfitDashboard() {
   );
 }
 
-// Task #353 — Per-artist ambassador toggle inside the NPO partner shell.
-// Mirrors the admin Permissions-tab toggle (AdminPerson.tsx) but scoped
-// to the NPO's own referred artists. PATCH endpoint re-checks NPO
-// ownership server-side, so a stray person id can't be promoted.
-function AmbassadorToggle({ personId, canInviteAmbassadors }: { personId: string; canInviteAmbassadors: boolean }) {
+// Task #355 — At-a-glance ambassador chip on the NPO artist row.
+// Follows the AdminAlbum tracklist P/L/C pattern (StatusChip): a single
+// 20px square monogram that's filled brand-blue when ON (visible at
+// rest, so an NPO can scan the column for ambassadors) and hidden until
+// the row is hovered/focused when OFF (the affordance is there without
+// cluttering the resting state). Click toggles via the same Task #353
+// PATCH; server re-checks NPO ownership.
+function AmbassadorChip({ personId, canInviteAmbassadors }: { personId: string; canInviteAmbassadors: boolean }) {
   const { toast } = useToast();
   const m = useMutation({
     mutationFn: async (next: boolean) => {
@@ -179,27 +182,29 @@ function AmbassadorToggle({ personId, canInviteAmbassadors }: { personId: string
       toast({ title: "Couldn't update", description: e.message, variant: "destructive" });
     },
   });
+  const on = canInviteAmbassadors;
   return (
-    <label
-      htmlFor={`amb-${personId}`}
-      className="mb-3 flex items-start gap-3 rounded-lg bg-white/[0.03] ring-1 ring-white/10 px-3 py-2.5 cursor-pointer"
+    <button
+      type="button"
+      onClick={() => m.mutate(!on)}
+      disabled={m.isPending}
+      aria-pressed={on}
+      title={on ? "Ambassador — can invite other artists. Click to revoke." : "Make ambassador — allow this artist to invite other artists."}
+      className={[
+        "inline-flex w-[20px] h-[20px] items-center justify-center rounded-[5px]",
+        "font-mono text-xs font-bold leading-none transition-opacity",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]/60 focus-visible:opacity-100",
+        on
+          ? "bg-[color:var(--brand-blue)] text-white"
+          : "bg-white/10 text-white/55 ring-1 ring-inset ring-white/15 opacity-0 group-hover/artist:opacity-100",
+        m.isPending && "opacity-60 cursor-wait",
+      ].filter(Boolean).join(" ")}
+      data-testid={`chip-npo-ambassador-${personId}`}
+      data-state={on ? "on" : "off"}
+      aria-label={on ? "Ambassador (click to revoke)" : "Make ambassador"}
     >
-      <input
-        id={`amb-${personId}`}
-        type="checkbox"
-        checked={canInviteAmbassadors}
-        disabled={m.isPending}
-        onChange={(e) => m.mutate(e.target.checked)}
-        className="mt-0.5 w-4 h-4 accent-[var(--brand-blue)]"
-        data-testid={`toggle-npo-ambassador-${personId}`}
-      />
-      <span className="block min-w-0">
-        <span className="block text-xs font-semibold text-white/85">Make ambassador</span>
-        <span className="block text-xs text-white/55 mt-0.5">
-          When ON, this artist can invite other artists on your non-profit's behalf. Their referrals' credits flow to them, and you still see the roll-up.
-        </span>
-      </span>
-    </label>
+      A
+    </button>
   );
 }
 
