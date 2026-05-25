@@ -2751,6 +2751,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           [id, song.audioUrl],
         );
         if (claim.rowCount === 0) return { kind: "race-lost" };
+        // Task #331 — write spec columns alongside the audio_source_url
+        // claim. The same file IS both served + source on passthrough,
+        // so a single probe of `tmpIn` (the file we just downloaded)
+        // feeds both column sets. Guarded on `audio_url = song.audioUrl`
+        // so an admin master-swap between the claim above and this
+        // write can't get its new (unprobed) file stamped with the
+        // old probe's specs — second writer's UPDATE affects 0 rows.
+        try {
+          const probed = await probeAudioSpecs(tmpIn);
+          if (probed.format == null && probed.sampleRate == null && probed.bytes == null) {
+            console.warn(`[audio-specs] reprocess(passthrough) — song ${id} probe returned no usable fields.`);
+          }
+          const specsWrite = await pool.query(
+            `UPDATE songs SET
+               audio_format=$1, audio_container_ext=$2, audio_sample_rate=$3,
+               audio_bit_depth=$4, audio_channels=$5, audio_bytes=$6,
+               audio_source_format=$1, audio_source_container_ext=$2, audio_source_sample_rate=$3,
+               audio_source_bit_depth=$4, audio_source_channels=$5, audio_source_bytes=$6
+             WHERE id = $7 AND audio_url = $8`,
+            [
+              probed.format, probed.containerExt, probed.sampleRate,
+              probed.bitDepth, probed.channels, probed.bytes,
+              id, song.audioUrl,
+            ],
+          );
+          if (specsWrite.rowCount === 0) {
+            console.warn(`[audio-specs] reprocess(passthrough) — song ${id} master changed mid-flight; specs not written.`);
+          }
+        } catch (probeErr: any) {
+          console.warn(`[audio-specs] reprocess(passthrough) — song ${id} spec write failed: ${probeErr?.message || probeErr}`);
+        }
         return {
           kind: "passthrough",
           sourceBitsPerSample: conv.sourceBitsPerSample,
@@ -2773,6 +2804,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         [newAudioUrl, song.audioUrl, id, song.audioUrl],
       );
       if (claim.rowCount === 0) return { kind: "race-lost" };
+      // Task #331 — probe both halves while their tempfiles are still
+      // on disk: `conv.outputPath` is the served FLAC, `tmpIn` is the
+      // archival WAV/AIFF source. Best-effort writes the same way the
+      // upload path does so the admin Masters row updates in lock-step
+      // with the URL swap.
+      try {
+        const servedProbe = await probeAudioSpecs(conv.outputPath);
+        const sourceProbe = await probeAudioSpecs(tmpIn);
+        if (servedProbe.format == null && servedProbe.sampleRate == null && servedProbe.bytes == null) {
+          console.warn(`[audio-specs] reprocess(transcoded) — song ${id} served probe returned no usable fields.`);
+        }
+        if (sourceProbe.format == null && sourceProbe.sampleRate == null && sourceProbe.bytes == null) {
+          console.warn(`[audio-specs] reprocess(transcoded) — song ${id} source probe returned no usable fields.`);
+        }
+        // Guarded on `audio_url = newAudioUrl` and
+        // `audio_source_url = song.audioUrl` so an admin master-swap
+        // landing between the claim above and this write doesn't get
+        // stamped with the stale probe — second writer's UPDATE
+        // affects 0 rows and we log + skip.
+        const specsWrite = await pool.query(
+          `UPDATE songs SET
+             audio_format=$1, audio_container_ext=$2, audio_sample_rate=$3,
+             audio_bit_depth=$4, audio_channels=$5, audio_bytes=$6,
+             audio_source_format=$7, audio_source_container_ext=$8, audio_source_sample_rate=$9,
+             audio_source_bit_depth=$10, audio_source_channels=$11, audio_source_bytes=$12
+           WHERE id = $13 AND audio_url = $14 AND audio_source_url = $15`,
+          [
+            servedProbe.format, servedProbe.containerExt, servedProbe.sampleRate,
+            servedProbe.bitDepth, servedProbe.channels, servedProbe.bytes,
+            sourceProbe.format, sourceProbe.containerExt, sourceProbe.sampleRate,
+            sourceProbe.bitDepth, sourceProbe.channels, sourceProbe.bytes,
+            id, newAudioUrl, song.audioUrl,
+          ],
+        );
+        if (specsWrite.rowCount === 0) {
+          console.warn(`[audio-specs] reprocess(transcoded) — song ${id} master changed mid-flight; specs not written.`);
+        }
+      } catch (probeErr: any) {
+        console.warn(`[audio-specs] reprocess(transcoded) — song ${id} spec write failed: ${probeErr?.message || probeErr}`);
+      }
       return {
         kind: "transcoded",
         audioUrl: newAudioUrl,
@@ -2976,6 +3047,116 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("[audio-specs-backfill] sweep aborted:", err);
     }
   })();
+
+  // Task #331 — on-demand admin backfill. Walks every song with a
+  // master uploaded (`audio_url IS NOT NULL`) whose served-spec
+  // columns are missing, downloads each file, re-probes, and persists
+  // whatever the probe returned (NULLs included — a probe that can't
+  // read the headers is a real datum, not a reason to skip). Returns a
+  // JSON summary so the operator can paste the unreadable-titles list
+  // straight into "please re-supply the master" notes to the artist.
+  //
+  // Different shape from the boot sweep above: that one is a fire-and-
+  // forget legacy-cleanup; this one is request/response so the admin
+  // can see what happened. Serial because ffmpeg pegs a CPU per run
+  // and the shared box can't take parallel probes without affecting
+  // playback latency for fans.
+  app.post(
+    "/api/admin/audio-specs-backfill",
+    requireAdminBearer,
+    async (req, res) => {
+      try {
+        const { rows } = await pool.query<{
+          id: string;
+          title: string | null;
+          album_title: string | null;
+          audio_url: string;
+          audio_source_url: string | null;
+        }>(
+          `SELECT s.id, s.title, a.title AS album_title,
+                  s.audio_url, s.audio_source_url
+             FROM songs s
+             LEFT JOIN albums a ON a.id = s.album_id
+            WHERE s.audio_url IS NOT NULL
+              AND s.audio_url <> ''
+              AND (
+                s.audio_format IS NULL
+                OR s.audio_sample_rate IS NULL
+                OR s.audio_bytes IS NULL
+                OR (s.audio_source_url IS NOT NULL AND (
+                  s.audio_source_format IS NULL
+                  OR s.audio_source_sample_rate IS NULL
+                  OR s.audio_source_bytes IS NULL
+                ))
+              )
+            ORDER BY a.title ASC NULLS LAST, s.track_number ASC, s.id ASC`,
+        );
+        const scanned = rows.length;
+        let probedOk = 0;
+        const unreadable: Array<{ songId: string; album: string | null; title: string | null }> = [];
+        const errored: Array<{ songId: string; album: string | null; title: string | null; error: string }> = [];
+        for (const row of rows) {
+          const label = `${row.album_title ?? "(no album)"} — ${row.title ?? row.id}`;
+          try {
+            // Use the detailed variant so we can separate the two
+            // failure modes the task's summary buckets demand:
+            //   download-error → "errored" (infra problem to chase)
+            //   probed-but-no-fields → "unreadable" (ask the artist)
+            const servedOutcome = await probeUrlToSpecsDetailed(row.audio_url);
+            const sourceOutcome = row.audio_source_url
+              ? await probeUrlToSpecsDetailed(row.audio_source_url)
+              : null;
+            // If the served-side bytes never landed, we can't classify
+            // header readability — bucket as errored and skip the
+            // write entirely so we don't clobber prior values on a
+            // transient infra blip.
+            if (servedOutcome.kind === "download-error") {
+              errored.push({ songId: row.id, album: row.album_title, title: row.title, error: servedOutcome.error });
+              console.warn(`[audio-specs-backfill] ✗ ${label} — download failed: ${servedOutcome.error}`);
+              continue;
+            }
+            const served = servedOutcome.specs;
+            // Source bytes are optional; only force-write when we
+            // actually got a probe back. A source-only download
+            // failure shouldn't block the served-side write.
+            const sourcePatch = sourceOutcome && sourceOutcome.kind === "probed"
+              ? audioSpecsToColumnsForceWrite(sourceOutcome.specs, "source")
+              : {};
+            if (sourceOutcome && sourceOutcome.kind === "download-error") {
+              console.warn(`[audio-specs-backfill] · ${label} — source download failed: ${sourceOutcome.error}`);
+            }
+            await storage.updateSong(row.id, {
+              ...audioSpecsToColumnsForceWrite(served, "served"),
+              ...sourcePatch,
+            } as any);
+            // "Unreadable" = probe completed but the headers returned
+            // nothing useful (no format, no sample rate, no bytes).
+            // Those are the ones the artist needs to re-supply — the
+            // master header is corrupt or the file isn't really audio.
+            if (served.format == null && served.sampleRate == null && served.bytes == null) {
+              unreadable.push({ songId: row.id, album: row.album_title, title: row.title });
+              console.warn(`[audio-specs-backfill] · ${label} — probe returned no usable fields.`);
+            } else {
+              probedOk++;
+              console.log(`[audio-specs-backfill] ✓ ${label} — ${served.format ?? "?"} · ${served.sampleRate ?? "?"}Hz · ${served.bitDepth ?? "?"}-bit.`);
+            }
+          } catch (err: any) {
+            errored.push({ songId: row.id, album: row.album_title, title: row.title, error: err?.message || String(err) });
+            console.warn(`[audio-specs-backfill] ✗ ${label} — ${err?.message || err}`);
+          }
+        }
+        return res.json({
+          scanned,
+          probedOk,
+          unreadable,
+          errored,
+        });
+      } catch (err: any) {
+        console.error("[audio-specs-backfill] endpoint failed:", err);
+        return res.status(500).json({ message: err?.message || "Backfill failed" });
+      }
+    },
+  );
 
   // One-shot post-boot duration backfill — finds every song still stuck
   // on the schema default (180s = "3:00") that has a real master in
@@ -3992,22 +4173,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (await gateAlbumRoute(req, res, "upload_masters", String(albumId))) return;
       }
     }
+    // Task #331 — re-probe the file server-side rather than trusting
+    // whatever the upload widget posted. Client-provided servedSpecs/
+    // sourceSpecs are ignored (the values are derivable from the URL
+    // we're about to persist, and trusting them lets a bogus client
+    // poison the press-panel preflight). Probe failures resolve to
+    // all-null specs and get logged below so the operator can chase
+    // unreadable headers.
+    const normAudioUrl = audioUrl ? normalizeAudioUrl(String(audioUrl)) : null;
+    const normAudioSourceUrl = audioSourceUrl ? normalizeAudioUrl(String(audioSourceUrl)) : null;
+    const probedServed = normAudioUrl ? await probeUrlToSpecs(normAudioUrl) : null;
+    const probedSource = normAudioSourceUrl ? await probeUrlToSpecs(normAudioSourceUrl) : null;
+    if (normAudioUrl && probedServed && probedServed.format == null && probedServed.sampleRate == null && probedServed.bytes == null) {
+      console.warn(`[audio-specs] create — "${String(title)}" served probe returned no usable fields (${normAudioUrl}).`);
+    }
+    if (normAudioSourceUrl && probedSource && probedSource.format == null && probedSource.sampleRate == null && probedSource.bytes == null) {
+      console.warn(`[audio-specs] create — "${String(title)}" source probe returned no usable fields (${normAudioSourceUrl}).`);
+    }
     const song = await storage.createSong({
       albumId: String(albumId),
       title: String(title),
       trackNumber: Number(trackNumber),
       duration: duration != null ? Number(duration) : 180,
       lyrics: lyrics ? String(lyrics) : null,
-      audioUrl: audioUrl ? normalizeAudioUrl(String(audioUrl)) : null,
+      audioUrl: normAudioUrl,
       // Archival original — set by the upload-audio endpoint when it
       // transcoded a 24-bit / 32-bit / 32-float PCM master down to
       // FLAC for browser playback. Null when no transcode was needed.
-      audioSourceUrl: audioSourceUrl ? normalizeAudioUrl(String(audioSourceUrl)) : null,
-      // Task #317 — master tech specs from the upload-audio response,
-      // persisted in lock-step with the URLs so the admin track row
-      // can render its one-line readout without re-probing on read.
-      ...audioSpecsToColumns(servedSpecs, "served"),
-      ...audioSpecsToColumns(sourceSpecs, "source"),
+      audioSourceUrl: normAudioSourceUrl,
+      // Task #331 — authoritative server-side probe (replaces the
+      // earlier "trust client servedSpecs" path). Write ALL spec
+      // columns including nulls so a probe failure can't leave stale
+      // values from any previous master that shared the same row.
+      ...(probedServed ? audioSpecsToColumnsForceWrite(probedServed, "served") : {}),
+      ...(probedSource ? audioSpecsToColumnsForceWrite(probedSource, "source") : {}),
     } as any);
     // Kick off Mux ingest the moment the master lands in object storage —
     // fire-and-forget; the admin UI polls muxStatus.
@@ -4068,12 +4267,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ? normalizeAudioUrl(String(audioSourceUrl))
         : null;
     }
-    // Task #317 — propagate the upload-audio specs alongside the URLs
-    // so the admin row's one-line readout updates in lock-step with a
-    // master swap. Clearing audioUrl also clears the served specs;
-    // clearing audioSourceUrl also clears the source specs.
-    if (servedSpecs !== undefined) {
-      if (servedSpecs == null) {
+    // Task #331 — when the master URL changes (or is set fresh), the
+    // server re-probes the file authoritatively rather than trusting
+    // any servedSpecs/sourceSpecs the client posted. Probe failures
+    // write NULLs so a master swap can't leave stale values from the
+    // previous file. Clearing the URL also clears the corresponding
+    // specs (same shape the previous "clear-on-null" block handled).
+    if (audioUrl !== undefined) {
+      if (!updates.audioUrl) {
         updates.audioFormat = null;
         updates.audioContainerExt = null;
         updates.audioSampleRate = null;
@@ -4081,11 +4282,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         updates.audioChannels = null;
         updates.audioBytes = null;
       } else {
-        Object.assign(updates, audioSpecsToColumns(servedSpecs, "served"));
+        const probed = await probeUrlToSpecs(updates.audioUrl);
+        if (probed.format == null && probed.sampleRate == null && probed.bytes == null) {
+          console.warn(`[audio-specs] update — song ${id} served probe returned no usable fields (${updates.audioUrl}).`);
+        }
+        Object.assign(updates, audioSpecsToColumnsForceWrite(probed, "served"));
       }
     }
-    if (sourceSpecs !== undefined) {
-      if (sourceSpecs == null) {
+    if (audioSourceUrl !== undefined) {
+      if (!updates.audioSourceUrl) {
         updates.audioSourceFormat = null;
         updates.audioSourceContainerExt = null;
         updates.audioSourceSampleRate = null;
@@ -4093,27 +4298,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         updates.audioSourceChannels = null;
         updates.audioSourceBytes = null;
       } else {
-        Object.assign(updates, audioSpecsToColumns(sourceSpecs, "source"));
+        const probedSrc = await probeUrlToSpecs(updates.audioSourceUrl);
+        if (probedSrc.format == null && probedSrc.sampleRate == null && probedSrc.bytes == null) {
+          console.warn(`[audio-specs] update — song ${id} source probe returned no usable fields (${updates.audioSourceUrl}).`);
+        }
+        Object.assign(updates, audioSpecsToColumnsForceWrite(probedSrc, "source"));
       }
     }
-    // Clearing the playback URL drops the served specs too — they're
-    // tied to the file. Same for the archival source.
-    if (audioUrl !== undefined && !audioUrl) {
-      updates.audioFormat = null;
-      updates.audioContainerExt = null;
-      updates.audioSampleRate = null;
-      updates.audioBitDepth = null;
-      updates.audioChannels = null;
-      updates.audioBytes = null;
-    }
-    if (audioSourceUrl !== undefined && !audioSourceUrl) {
-      updates.audioSourceFormat = null;
-      updates.audioSourceContainerExt = null;
-      updates.audioSourceSampleRate = null;
-      updates.audioSourceBitDepth = null;
-      updates.audioSourceChannels = null;
-      updates.audioSourceBytes = null;
-    }
+    // Note: client-provided `servedSpecs` / `sourceSpecs` in req.body
+    // are intentionally ignored — the server-side probe above is the
+    // single source of truth, so the spec columns always match the
+    // file actually on disk.
+    void servedSpecs;
+    void sourceSpecs;
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     if (isExplicit !== undefined) updates.isExplicit = Boolean(isExplicit);
     // Inverted preview gate. Default is "previewable" — admin only flips
@@ -4966,6 +5163,91 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (Number.isFinite(dur) && dur > 0) out.duration = Math.round(dur);
     } catch { /* leave probed fields null */ }
     return out;
+  }
+
+  // Task #331 — Probe a served/stored audio URL authoritatively.
+  // Downloads the file into a tempfile, runs `probeAudioSpecs`, then
+  // unlinks. Used by every code path that writes `songs.audio_url`
+  // (POST/PUT /api/admin/songs, mirror-audio-to-storage,
+  // reprocess-audio, audio-specs-backfill) so the spec columns
+  // reflect the file the server actually has, not whatever the
+  // upload widget sent.
+  //
+  // Returns a discriminated outcome so callers can distinguish the
+  // three real states cleanly:
+  //   - "probed"      : download + ffprobe both completed (specs may
+  //                     still be all-null if the headers themselves
+  //                     are unreadable — see `usable` for that).
+  //   - "download-error": the bytes never landed (object storage
+  //                     missing, ACL flip, network). Spec columns
+  //                     stay NULL but this is an infra problem, not
+  //                     an artist-actionable "re-supply the master".
+  // The backfill route uses the distinction to put unreadable
+  // headers in the "ask the artist" list and download errors in the
+  // "errored" bucket. POST/PUT/mirror/reprocess just want the AudioSpecs
+  // — they use `probeUrlToSpecs` (below) which collapses both cases
+  // to all-null + a log line.
+  type ProbeUrlOutcome =
+    | { kind: "probed"; specs: AudioSpecs }
+    | { kind: "download-error"; error: string };
+  async function probeUrlToSpecsDetailed(url: string): Promise<ProbeUrlOutcome> {
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const ext = (url.match(/\.(\w+)(?:\?|$)/)?.[0] || ".bin").toLowerCase();
+    const tmp = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
+    try {
+      const file = await objectStorage.getObjectEntityFile(url);
+      const [buf] = await file.download();
+      await fsp.writeFile(tmp, buf);
+      // probeAudioSpecs itself never throws — it returns nulls on a
+      // bad ffprobe — so anything reaching here counts as a probe
+      // that ran end-to-end against the actual bytes.
+      const specs = await probeAudioSpecs(tmp);
+      return { kind: "probed", specs };
+    } catch (err: any) {
+      return { kind: "download-error", error: err?.message || String(err) };
+    } finally {
+      try { await fsp.unlink(tmp); } catch {}
+    }
+  }
+  // Convenience wrapper for the write paths that just want specs to
+  // persist alongside a URL update. Failure modes collapse to
+  // all-null so the caller can still write the row; the caller is
+  // responsible for logging.
+  const EMPTY_AUDIO_SPECS: AudioSpecs = {
+    format: null,
+    containerExt: null,
+    sampleRate: null,
+    bitDepth: null,
+    channels: null,
+    bytes: null,
+    duration: null,
+  };
+  async function probeUrlToSpecs(url: string): Promise<AudioSpecs> {
+    const r = await probeUrlToSpecsDetailed(url);
+    return r.kind === "probed" ? r.specs : EMPTY_AUDIO_SPECS;
+  }
+
+  // Task #331 — produce a patch that writes all six served-side spec
+  // columns from a probed AudioSpecs, including NULLs. Differs from
+  // `audioSpecsToColumns` (which skips nulls) because in the
+  // url-write paths we WANT to clobber stale values: if the probe
+  // failed on a master swap, leaving the previous file's specs in
+  // place would mislead the press panel.
+  function audioSpecsToColumnsForceWrite(
+    specs: AudioSpecs,
+    kind: "served" | "source",
+  ): Record<string, any> {
+    const prefix = kind === "served" ? "audio" : "audioSource";
+    return {
+      [`${prefix}Format`]: specs.format,
+      [`${prefix}ContainerExt`]: specs.containerExt,
+      [`${prefix}SampleRate`]: specs.sampleRate,
+      [`${prefix}BitDepth`]: specs.bitDepth,
+      [`${prefix}Channels`]: specs.channels,
+      [`${prefix}Bytes`]: specs.bytes,
+    };
   }
 
   // Convenience: pack a probed `AudioSpecs` into the `audio_*` / `audio_source_*`
@@ -6088,8 +6370,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   previewStartMs: null as any,
                   previewEndMs: null as any,
                   waveform: null as any,
-                  ...audioSpecsToColumns(servedSpecsRow, "served"),
-                  ...audioSpecsToColumns(sourceSpecsRow, "source"),
+                  // Task #331 — force-write semantics: keep specs in
+                  // lock-step with audio_url. The probe just ran
+                  // against the tempfile we're about to upload, so
+                  // any null here means the header genuinely doesn't
+                  // declare that field. Same rule the create/update
+                  // and reprocess paths follow.
+                  ...audioSpecsToColumnsForceWrite(servedSpecsRow, "served"),
+                  ...(sourceSpecsRow ? audioSpecsToColumnsForceWrite(sourceSpecsRow, "source") : {}),
                 } as any);
                 // Auto-ingest to Mux — Dropbox-batch is the primary upload
                 // path, so every new GoodTunes release flows through here.
@@ -8456,7 +8744,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
         const newUrl = `/objects/uploads/${newId}`;
-        const updated = await storage.updateSong(id, { audioUrl: newUrl });
+        // Task #331 — probe the mirrored file so the admin Masters
+        // table / press-panel preflight has rate/depth/size in
+        // lock-step with the audio_url write. Probe failures degrade
+        // to NULLs (logged) rather than silently leaving stale specs
+        // from the previous (Dropbox) URL.
+        const probedMirror = await probeUrlToSpecs(newUrl);
+        if (probedMirror.format == null && probedMirror.sampleRate == null && probedMirror.bytes == null) {
+          console.warn(`[audio-specs] mirror — song ${id} probe returned no usable fields (${newUrl}).`);
+        }
+        const updated = await storage.updateSong(id, {
+          audioUrl: newUrl,
+          ...audioSpecsToColumnsForceWrite(probedMirror, "served"),
+        } as any);
         return res.json({
           url: newUrl,
           bytes: received,
