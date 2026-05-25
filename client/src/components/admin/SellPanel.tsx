@@ -53,7 +53,6 @@ import {
 } from "@shared/pressing";
 import { VinylPreview } from "@/components/VinylPreview";
 import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
-import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { SignedCertVendorPanel } from "@/components/admin/SignedCertVendorPanel";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 
@@ -281,8 +280,15 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
           <span className="font-semibold text-slate-800">Press</span> tab above.
         </div>
 
-        {/* Task #217 — compose vendor-shaped print PDFs from artwork. */}
-        <PrintPdfsPanel albumId={albumId} />
+        {/* Task #327 — Print-ready PDFs moved to the Press tab alongside
+            the rest of the plant-facing tooling. Leave a quiet pointer. */}
+        <div
+          className="mb-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600"
+          data-testid="pointer-print-pdfs-press-tab"
+        >
+          Compose print-ready PDFs for the pressing plant on the{" "}
+          <span className="font-semibold text-slate-800">Press</span> tab above.
+        </div>
 
         {/* Presses */}
         <PressesPanel albumId={albumId} invited={invitedPress ?? null} />

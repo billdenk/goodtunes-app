@@ -24,6 +24,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, type VendorId } from "@shared/vendorSpecs";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
+import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 
 export type PressPanelSong = {
   id: string;
@@ -316,6 +317,9 @@ export function PressPanel({
           title="Art preflight"
           description="Drop a jacket / label / hype-sticker file to validate against the picked plant's print template before sending it to fulfillment."
         />
+
+        {/* ── Print-ready PDFs (Task #327, moved from Sell) ──────────── */}
+        <PrintPdfsPanel albumId={albumId} />
       </div>
     </div>
   );

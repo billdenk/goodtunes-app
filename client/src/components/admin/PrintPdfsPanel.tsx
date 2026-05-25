@@ -1,7 +1,9 @@
 // Task #217 — Pressing-plant print PDF generation panel.
 //
-// Mounted in the Sell tab of AdminAlbum, just below the upload
-// preflight panel. Lets an admin pick a vendor and press "Generate
+// Mounted in the Press tab of AdminAlbum (moved from Sell in Task
+// #327), alongside masters-on-file and art/audio preflight — all the
+// plant-facing tooling lives together. Lets an admin pick a vendor
+// and press "Generate
 // print PDFs for [Vendor]". The server composes one PDF per template
 // the release needs (center label, jacket, insert …), sized to
 // finished+bleed, named per the vendor's filename convention, and
