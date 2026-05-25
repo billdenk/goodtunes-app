@@ -129,7 +129,31 @@ function snapCatalogLadder(
   return { qty: top.qty, unitCents: top.unitCents, requiresQuote: true };
 }
 
-export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; artworkUrl?: string | null }) {
+export function SellPanel({
+  albumId,
+  artworkUrl = null,
+  sellMode = "direct",
+  physicalFormat = null,
+  sellQuoteLockedAt = null,
+  onLockToggle,
+  onChangeMode,
+}: {
+  albumId: string;
+  artworkUrl?: string | null;
+  // Task #335 — mode + format come from the album row (set in the
+  // creation modal). When "shopify" we render the slim panel below
+  // (digital + GoodDeed addon only). Defaults stay "direct" so callers
+  // that haven't been migrated yet still get the legacy full panel.
+  sellMode?: "direct" | "shopify" | null;
+  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+  sellQuoteLockedAt?: string | null;
+  /** Called by the "Lock in quote" / "Unlock quote" button at the bottom
+   *  of the direct panel. Toggles `sellQuoteLockedAt` on the album. */
+  onLockToggle?: (next: boolean) => void;
+  /** Called by the "Change mode" affordance in the slim Shopify panel
+   *  so the operator can re-open the two-step picker without leaving. */
+  onChangeMode?: () => void;
+}) {
   const { toast } = useToast();
   const { data, isLoading, error } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
   // Live platform-cost feed — used for the "You earn" readout the first
@@ -263,11 +287,30 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
   return (
     <div className="py-6">
       <div className="max-w-3xl">
-        {/* Task #225 — five-stage progress strip (Select package → Upload
-            art → Set price → Select quantity → Go to Press!). Frames
-            every Sell-panel session so artists always know what's next
-            and what's blocking submission. */}
-        <PressingOrderStepper albumId={albumId} skus={data.skus} />
+        {/* Task #335 — Path-to-press lives at the top of the album
+            page now (above the tabs), not inside SellPanel. The
+            artist sees it from every tab, not just Sell. */}
+
+        {/* Task #335 — Shopify mode: slim panel. No press path, no
+            per-format SKU grid. The label fulfills the physical
+            product themselves; GoodTunes only sells digital + an
+            optional GoodDeed certificate addon. */}
+        {sellMode === "shopify" ? (
+          <ShopifySlimPanel
+            albumId={albumId}
+            payoutSettings={payoutSettings ?? null}
+            signedAddon={signedAddon ?? null}
+            sellQuoteLockedAt={sellQuoteLockedAt ?? null}
+            onLockToggle={onLockToggle}
+            onChangeMode={onChangeMode}
+            onUpsertAddon={upsertAddon.mutate}
+          />
+        ) : (
+        <>
+        {/* Task #335 — Hellbender printer chips. MRP + PMP show as
+            "coming soon" so the artist sees the catalog roadmap but
+            can only pick the press we've actually wired in. */}
+        <PrinterChips />
 
         {/* Presses */}
         <PressesPanel albumId={albumId} invited={invitedPress ?? null} />
@@ -364,11 +407,210 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
           </div>
         </div>
 
-        {/* Task #225 — terminal action of the stepper above. Only lights
-            up when stages 0-3 are complete; surfaces the same submission
-            state as the stepper when one is in flight. */}
-        <GoToPressButton albumId={albumId} skus={data.skus} />
+        {/* Task #335 — "Lock in quote" CTA. Until the operator hits
+            this, the rest of the album tabs (Press, Bonus) stay
+            hidden — see visibleTabsFor() in AdminAlbum. Reversible
+            via "Unlock" until the run is actually at press. */}
+        {(() => {
+          // Task #335 — lock action stays disabled until the artist
+          // has actually built a quote: at least one active SKU, every
+          // active SKU has a price, and every active SKU has a planned
+          // quantity. Mirrors the package/price/quantity stages on the
+          // top stepper so the two never disagree.
+          const active = data.skus.filter((s) => s.active);
+          const quoteReady =
+            active.length > 0 &&
+            active.every((s) => (s.priceCents ?? 0) > 0) &&
+            active.every((s) => (s.plannedQuantity ?? 0) > 0);
+          return (
+            <LockQuoteCTA
+              locked={!!sellQuoteLockedAt}
+              disabled={!sellQuoteLockedAt && !quoteReady}
+              onToggle={() => onLockToggle?.(!sellQuoteLockedAt)}
+            />
+          );
+        })()}
+
+        {/* Task #225 — terminal "Go to Press" action stays at the
+            bottom, but only matters once the quote is locked. */}
+        {sellQuoteLockedAt && (
+          <GoToPressButton albumId={albumId} skus={data.skus} />
+        )}
+        </>
+        )}
       </div>
+    </div>
+  );
+}
+
+/* ─── Task #335 — Hellbender printer chips ─────────────────────────── */
+/* Public pressing-plant directory. Today Hellbender is the only one
+ * we've wired in; MRP + PMP appear as "coming soon" chips so the
+ * artist sees where the roadmap is going without being able to pick a
+ * plant we can't actually route an order to.                          */
+function PrinterChips() {
+  const printers: { id: string; label: string; status: "live" | "coming-soon"; blurb: string }[] = [
+    { id: "hellbender", label: "Hellbender Vinyl", status: "live", blurb: "Standard catalog · live quote" },
+    { id: "mrp", label: "MRP", status: "coming-soon", blurb: "Coming soon" },
+    { id: "pmp", label: "PMP", status: "coming-soon", blurb: "Coming soon" },
+  ];
+  return (
+    <div className="mb-6" data-testid="printer-chips">
+      <div className="text-[13px] font-semibold text-slate-900 mb-1.5">Choose your printer</div>
+      <div className="flex flex-wrap gap-2">
+        {printers.map((p) => {
+          const live = p.status === "live";
+          return (
+            <button
+              key={p.id}
+              type="button"
+              disabled={!live}
+              aria-pressed={live}
+              data-testid={`printer-${p.id}`}
+              className={[
+                "rounded-full px-3 py-1.5 text-[12.5px] font-semibold border transition-colors text-left",
+                live
+                  ? "bg-[color:var(--brand-blue)] text-white border-[color:var(--brand-blue)] shadow-sm"
+                  : "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed",
+              ].join(" ")}
+              title={p.blurb}
+            >
+              {p.label}
+              <span className="ml-1.5 opacity-80 text-[10.5px] font-normal">
+                {live ? "Selected" : "Soon"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Task #335 — Lock-in-quote CTA ────────────────────────────────── */
+function LockQuoteCTA({
+  locked,
+  disabled = false,
+  onToggle,
+}: {
+  locked: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="mt-6 mb-6 rounded-lg border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-[14px] font-semibold text-slate-900">
+            {locked
+              ? "Quote locked in."
+              : disabled
+                ? "Finish your quote to lock it in."
+                : "Lock in this quote to keep going."}
+          </div>
+          <div className="text-[12px] text-slate-500 mt-0.5">
+            {locked
+              ? "Press + Bonus tabs are unlocked. Unlock to keep editing the quote."
+              : disabled
+                ? "Pick a package, set a price, and choose a planned quantity above — then you can lock the quote and continue."
+                : "Locks the printer, colors, and quantity. Unlocks Press + Bonus tabs above. Reversible until the run goes to press."}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          data-testid={locked ? "button-unlock-quote" : "button-lock-quote"}
+          className={[
+            "h-10 px-4 rounded-full text-[13px] font-bold transition-all",
+            locked
+              ? "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+              : disabled
+                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                : "bg-[color:var(--brand-blue)] text-white hover:brightness-110 shadow-sm",
+          ].join(" ")}
+        >
+          {locked ? "Unlock quote" : "Lock in quote"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Task #335 — Shopify slim panel ───────────────────────────────── */
+/* Shopify-mode albums skip the entire press path. We sell the digital
+ * album (configured in Overview) + an optional Printed & Signed
+ * GoodDeed addon — the same addon the direct flow sells. The label
+ * handles every physical product on Shopify themselves and pushes the
+ * GoodTunes digital + addon through the Shopify tab.                   */
+function ShopifySlimPanel({
+  albumId,
+  payoutSettings,
+  signedAddon,
+  sellQuoteLockedAt,
+  onLockToggle,
+  onChangeMode,
+  onUpsertAddon,
+}: {
+  albumId: string;
+  payoutSettings: PayoutSettings | null;
+  signedAddon: any | null;
+  sellQuoteLockedAt: string | null;
+  onLockToggle?: (next: boolean) => void;
+  onChangeMode?: () => void;
+  onUpsertAddon: (body: { priceCents: number; active: boolean; minPriceCents: number; plannedQuantity: number | null }) => void;
+}) {
+  return (
+    <div data-testid="sell-panel-shopify">
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[14px] font-semibold text-slate-900">Selling through Shopify</div>
+          <div className="text-[12px] text-slate-500 mt-0.5">
+            You fulfill the physical product on your Shopify store. GoodTunes sells the
+            digital album + (optional) Printed &amp; Signed GoodDeed certificate.
+          </div>
+        </div>
+        {onChangeMode && (
+          <button
+            type="button"
+            onClick={onChangeMode}
+            data-testid="button-change-sell-mode"
+            className="text-[12px] font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0"
+          >
+            Change mode
+          </button>
+        )}
+      </div>
+      <div className="mb-8">
+        <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Printed &amp; Signed GoodDeed®</h2>
+        <p className="text-[13px] text-slate-500 mb-4">
+          Optional addon. Fans see a single toggle on the Buy sheet; your earnings are
+          computed live against the platform's certificate cost.
+        </p>
+        <div className="rounded-md border border-slate-200 bg-white p-4">
+          <AddonForm
+            existing={signedAddon ?? null}
+            livePlatformCostCents={payoutSettings?.certCostCents ?? null}
+            onSave={onUpsertAddon}
+          />
+        </div>
+        <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+          <SignedCertVendorPanel albumId={albumId} />
+        </div>
+        <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+          <CertSaleWindowPanel albumId={albumId} />
+        </div>
+      </div>
+
+      {/* Task #335 — Shopify mode lock CTA. The slim panel has no
+          quote completeness requirements (the addon is optional), so
+          the lock is always available; flipping it on unlocks the
+          Shopify + Bonus tabs above so the operator can finish the
+          product mapping and any digital-only bonuses. Reversible. */}
+      <LockQuoteCTA
+        locked={!!sellQuoteLockedAt}
+        onToggle={() => onLockToggle?.(!sellQuoteLockedAt)}
+      />
     </div>
   );
 }

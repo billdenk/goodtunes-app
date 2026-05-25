@@ -211,7 +211,39 @@ export const albums = pgTable("albums", {
   certBatchNotes: jsonb("cert_batch_notes").$type<Record<string, string>>(),
   certBatchPdfAssetUrl: text("cert_batch_pdf_asset_url"),
   certBatchPdfGeneratedAt: timestamp("cert_batch_pdf_generated_at"),
+  // Task #335 — sell mode + physical format.
+  // `sellMode`: "direct" (GoodTunes Direct: digital + optional press) or
+  // "shopify" (digital + optional GoodDeed addon only; label fulfills
+  // the physical product themselves). Null on freshly-created albums
+  // until the operator picks in the two-step creation modal.
+  // `physicalFormat`: the format chosen up front when sellMode=direct —
+  // drives the Sell-tab quote flow (Hellbender catalog) and the Path-to-
+  // press stepper. Null for sellMode=shopify (no press path) and for
+  // direct albums that haven't picked yet.
+  // `sellQuoteLockedAt`: timestamped when the operator hits "Lock in
+  // quote" on the Sell tab. Until non-null, the Press/Shopify/Bonus
+  // tabs stay hidden — Overview/Tracks/Sell are the only surfaces. Lock
+  // is reversible until the run actually goes to press.
+  sellMode: text("sell_mode"),
+  physicalFormat: text("physical_format"),
+  sellQuoteLockedAt: timestamp("sell_quote_locked_at"),
 });
+
+export const ALBUM_SELL_MODES = ["direct", "shopify"] as const;
+export type AlbumSellMode = (typeof ALBUM_SELL_MODES)[number];
+export const ALBUM_PHYSICAL_FORMATS = [
+  "single_lp",
+  "double_lp",
+  "seven_inch",
+  "cassette",
+] as const;
+export type AlbumPhysicalFormat = (typeof ALBUM_PHYSICAL_FORMATS)[number];
+export const ALBUM_PHYSICAL_FORMAT_LABEL: Record<AlbumPhysicalFormat, string> = {
+  single_lp: "Single LP",
+  double_lp: "Double LP",
+  seven_inch: "7\" Vinyl",
+  cassette: "Cassette",
+};
 
 // Fingerprint of what was last sent to Shopify on a Push. Re-push
 // fetches the live product and diffs the same shape against this row

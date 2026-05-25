@@ -19,14 +19,7 @@ import {
   ViewModeToggle,
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
-import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { Combobox } from "@/components/admin/Combobox";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -95,29 +88,24 @@ export function AdminAlbums() {
   >("any");
   const { toast } = useToast();
 
-  // "+" in the header — opens the "Who's the artist?" dialog first so we
-  // can attach a Person up-front (with optional Spotify/Apple enrichment),
-  // then creates the blank GoodTunes release and jumps into its editor.
-  // The dialog can be skipped — that path falls back to the legacy
-  // "Unknown artist" placeholder so the editor still loads.
-  const [artistDialogOpen, setArtistDialogOpen] = useState(false);
-  // The format picked from the "+ Add Album" dropdown (LP / EP / Duo).
-  // Set when the operator opens the dialog and passed through to the
-  // POST so the new row lands with the right `type` instead of always
-  // defaulting to LP — the operator picks the format up-front the same
-  // way they'd pick a sleeve size at a pressing plant.
-  const [pendingAlbumType, setPendingAlbumType] =
-    useState<"LP" | "EP" | "Duo">("LP");
+  // Task #335 — "+ Add Album" now creates a blank GoodTunes release with
+  // an unset sell mode, then navigates straight to the album page with
+  // `?onboarding=1` so the new album page can open the two-step
+  // mode/format chooser modal over its own scaffolding. The artist
+  // attach step happens inside the album editor afterwards (it's still
+  // reachable through the metadata panel + people picker), so the
+  // creation flow is one click → in-the-album.
   const createAlbum = useMutation({
     mutationFn: async (args: {
       artist?: { name: string; id: string };
-      type: "LP" | "EP" | "Duo";
     }) => {
       const res = await apiRequest("POST", "/api/admin/albums", {
         title: "New album",
         artist: args.artist?.name || "Unknown artist",
         artwork: "/album-placeholder.svg",
-        type: args.type,
+        // Default `type` stays LP — the two-step modal sets the new
+        // sellMode + physicalFormat right after the row exists.
+        type: "LP",
         isGoodTunesRelease: true,
         primaryArtistId: args.artist?.id || null,
       });
@@ -129,7 +117,7 @@ export function AdminAlbums() {
       );
       queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
       queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
-      navigate(`/admin/albums/${a.id}`);
+      navigate(`/admin/albums/${a.id}?onboarding=1`);
     },
     onError: (err: any) => {
       toast({
@@ -527,50 +515,29 @@ export function AdminAlbums() {
                 testIdPrefix="view-mode-albums"
               />
             </div>
-            {/* "+ Add Album" splits into a format picker. The operator
-                chooses LP / EP / Duo up-front so the new row lands with
-                the right `type` instead of always defaulting to LP and
-                making the operator re-pick on the detail page. The
-                outer button keeps `data-testid="button-new-album"` so
-                existing selectors still resolve the trigger. */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  disabled={createAlbum.isPending}
-                  className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  data-testid="button-new-album"
-                >
-                  <Plus className="w-3 h-3" />
-                  Add Album
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                {(
-                  [
-                    { value: "LP", label: "New LP", hint: "8+ tracks" },
-                    { value: "EP", label: "New EP", hint: "3–7 tracks" },
-                    { value: "Duo", label: "New Duo", hint: "2 tracks" },
-                  ] as const
-                ).map((opt) => (
-                  <DropdownMenuItem
-                    key={opt.value}
-                    onSelect={() => {
-                      if (createAlbum.isPending) return;
-                      setPendingAlbumType(opt.value);
-                      setArtistDialogOpen(true);
-                    }}
-                    data-testid={`menu-new-album-${opt.value}`}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <span>{opt.label}</span>
-                    <span className="text-[10.5px] text-slate-400">
-                      {opt.hint}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Task #335 — single "+ Add Album" button. The mode/format
+                pick is now a two-step modal that opens on the new
+                album's detail page (after the row exists), so the
+                operator immediately sees the album scaffolding while
+                they choose. */}
+            <button
+              type="button"
+              disabled={createAlbum.isPending}
+              onClick={() => {
+                if (createAlbum.isPending) return;
+                // Task #335 — create a blank GoodTunes release
+                // immediately. The artist picker is no longer the
+                // first decision; the album page opens with the
+                // two-step mode/format modal, and the operator picks
+                // an artist later from the Overview tab.
+                createAlbum.mutate({});
+              }}
+              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-new-album"
+            >
+              <Plus className="w-3 h-3" />
+              Add Album
+            </button>
           </>)}
           belowHeader={(
             <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
@@ -627,19 +594,6 @@ export function AdminAlbums() {
         )}
 
       </div>
-      <NewAlbumArtistDialog
-        open={artistDialogOpen}
-        onOpenChange={setArtistDialogOpen}
-        busy={createAlbum.isPending}
-        onSelect={(artist) => {
-          setArtistDialogOpen(false);
-          createAlbum.mutate({ artist, type: pendingAlbumType });
-        }}
-        onSkip={() => {
-          setArtistDialogOpen(false);
-          createAlbum.mutate({ type: pendingAlbumType });
-        }}
-      />
     </AdminFrame>
   );
 }

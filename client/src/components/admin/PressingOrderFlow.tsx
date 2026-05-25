@@ -71,11 +71,77 @@ function useStages(albumId: string, skus: AlbumSku[]): {
 export function PressingOrderStepper({
   albumId,
   skus,
+  mode = "direct",
+  onChangeMode,
 }: {
   albumId: string;
   skus: AlbumSku[];
+  /** Task #335 — when "shopify", we render a slim 3-stage strip (masters
+   *  → cover art → push-to-Shopify) instead of the full press flow.
+   *  The label runs their own fulfillment, so there is no press to go
+   *  to; the milestone is "product is live in your Shopify store". */
+  mode?: "direct" | "shopify";
+  /** Task #335 — small text affordance in the header that reopens the
+   *  two-step mode/format picker. Surfaced on the top-of-page strip
+   *  so the operator can switch direction without leaving the page. */
+  onChangeMode?: () => void;
 }) {
-  const { stages, currentIdx } = useStages(albumId, skus);
+  const directStages = useStages(albumId, skus);
+  if (mode === "shopify") {
+    // Slim Shopify variant — same visual chrome, fewer stages. The
+    // stage cues here are coarse (we don't have a Shopify-publish
+    // status hook yet); they exist to give the artist the same sense
+    // of "where am I" the direct flow does. Refine when the
+    // Push-to-Shopify status pipe is wired through.
+    const skusReady = skus.some((s) => s.active);
+    const slimStages: Stage[] = [
+      { key: "package", label: "Masters on file", icon: Package, done: true },
+      { key: "art", label: "Cover art", icon: ImageIcon, done: true },
+      { key: "submit", label: "Live on Shopify", icon: Send, done: skusReady },
+    ];
+    return (
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4" data-testid="pressing-order-stepper-shopify">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="text-[14px] font-semibold text-slate-900">Path to Shopify</div>
+            <div className="text-[12px] text-slate-500">
+              Push the album to your Shopify store — you fulfill the physical product.
+            </div>
+          </div>
+          {onChangeMode && (
+            <button
+              type="button"
+              onClick={onChangeMode}
+              data-testid="button-change-path-mode"
+              className="text-[12px] font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0"
+            >
+              Change
+            </button>
+          )}
+        </div>
+        <div className="rounded-full bg-slate-100 border border-slate-200 p-1 flex items-center gap-1" role="list">
+          {slimStages.map((s) => {
+            const Icon = s.icon;
+            return (
+              <div
+                key={s.key}
+                role="listitem"
+                className={[
+                  "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0 px-2.5 py-1.5",
+                  s.done ? "bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)]" : "text-slate-500",
+                ].join(" ")}
+                data-testid={`stage-${s.key}-${s.done ? "done" : "pending"}`}
+              >
+                {s.done ? <Check className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5 opacity-70" />}
+                <span className="text-xs font-semibold truncate">{s.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  const { stages, currentIdx } = directStages;
   const { data: latest } = useQuery<PressingOrderRequest | null>({
     queryKey: ["/api/admin/albums", albumId, "pressing-order"],
   });
@@ -107,6 +173,16 @@ export function PressingOrderStepper({
           >
             Approved — going to press
           </span>
+        )}
+        {onChangeMode && !submittedPending && !submittedApproved && (
+          <button
+            type="button"
+            onClick={onChangeMode}
+            data-testid="button-change-path-mode"
+            className="text-[12px] font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0"
+          >
+            Change
+          </button>
         )}
       </div>
       <div

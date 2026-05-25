@@ -364,3 +364,42 @@ SQL
 }
 migrate_song_preview_hide dev  "${DATABASE_URL:-}"
 migrate_song_preview_hide prod "${PROD_DATABASE_URL:-}"
+
+# Task #335 — sell mode + physical format on albums. Drives the two-step
+# creation flow, the adaptive Path-to-press at the top of the album page,
+# and the new visual Sell-tab quote flow. Additive nullable columns; the
+# backfill maps every existing album to `direct` with the closest format
+# we can infer from the legacy `type` so nothing 500s when the Sell tab
+# opens. Safe to re-run.
+migrate_album_sell_mode() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album sell-mode migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS sell_mode             text,
+  ADD COLUMN IF NOT EXISTS physical_format       text,
+  ADD COLUMN IF NOT EXISTS sell_quote_locked_at  timestamp;
+UPDATE albums
+   SET sell_mode = 'direct'
+ WHERE sell_mode IS NULL;
+UPDATE albums
+   SET physical_format = CASE
+     WHEN type = 'LP'  THEN 'single_lp'
+     WHEN type = 'EP'  THEN 'seven_inch'
+     WHEN type = 'Duo' THEN 'seven_inch'
+     ELSE                   'seven_inch'
+   END
+ WHERE physical_format IS NULL
+   AND sell_mode = 'direct';
+SQL
+  then
+    echo "post-merge: album sell-mode migration ok on $label"
+  else
+    echo "post-merge: WARNING — album sell-mode migration failed on $label (continuing)"
+  fi
+}
+migrate_album_sell_mode dev  "${DATABASE_URL:-}"
+migrate_album_sell_mode prod "${PROD_DATABASE_URL:-}"

@@ -3788,6 +3788,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (normalizedLabelId && !(await storage.getLabelById(normalizedLabelId))) {
       return res.status(400).json({ message: "Unknown labelId" });
     }
+    // Task #335 — sell mode + physical format. Optional on create: the
+    // two-step modal sets them after the row exists. We only validate
+    // the strings if the client did pass them, so the legacy "+ Add"
+    // path stays a one-call POST.
+    const { ALBUM_SELL_MODES, ALBUM_PHYSICAL_FORMATS } = await import("@shared/schema");
+    const rawSellMode = req.body?.sellMode;
+    const rawPhysicalFormat = req.body?.physicalFormat;
+    if (rawSellMode != null && !ALBUM_SELL_MODES.includes(rawSellMode)) {
+      return res.status(400).json({ message: "Unknown sellMode" });
+    }
+    if (rawPhysicalFormat != null && !ALBUM_PHYSICAL_FORMATS.includes(rawPhysicalFormat)) {
+      return res.status(400).json({ message: "Unknown physicalFormat" });
+    }
     const album = await storage.createAlbum({
       id: id || undefined,
       title: String(title),
@@ -3806,6 +3819,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Discography "+ Add" + Apple-URL seed paths leave this off; admin
       // flips it on once an album is actually being released by GoodTunes.
       isGoodTunesRelease: !!req.body?.isGoodTunesRelease,
+      sellMode: rawSellMode ?? null,
+      physicalFormat: rawPhysicalFormat ?? null,
     } as any);
     return res.status(201).json(album);
   });
@@ -4107,6 +4122,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           updates[field] = n;
         }
       }
+    }
+    // Task #335 — sell mode + physical format + quote-lock toggle.
+    // Treated as platform-config edits (not partner edit_metadata), but
+    // they ride through the same PUT for convenience. We re-validate
+    // the enums here just like the POST path.
+    const { ALBUM_SELL_MODES, ALBUM_PHYSICAL_FORMATS } = await import("@shared/schema");
+    if (req.body?.sellMode !== undefined) {
+      const v = req.body.sellMode;
+      if (v !== null && !ALBUM_SELL_MODES.includes(v)) {
+        return res.status(400).json({ message: "Unknown sellMode" });
+      }
+      updates.sellMode = v;
+    }
+    if (req.body?.physicalFormat !== undefined) {
+      const v = req.body.physicalFormat;
+      if (v !== null && !ALBUM_PHYSICAL_FORMATS.includes(v)) {
+        return res.status(400).json({ message: "Unknown physicalFormat" });
+      }
+      updates.physicalFormat = v;
+    }
+    if (req.body?.sellQuoteLockedAt !== undefined) {
+      // Client sends `true` to lock-now, `null` to unlock. We never let
+      // clients pick the lock timestamp themselves.
+      const raw = req.body.sellQuoteLockedAt;
+      updates.sellQuoteLockedAt = raw ? new Date() : null;
     }
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });

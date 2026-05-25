@@ -102,6 +102,8 @@ import { PlayerDock } from "@/components/ui/PlayerDock";
 import { SellPanel } from "@/components/admin/SellPanel";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
+import { NewAlbumModeDialog } from "@/components/admin/NewAlbumModeDialog";
+import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import {
   Dialog,
@@ -166,6 +168,14 @@ interface AlbumFull {
   // metadata edits; super-admin can still edit, or grant an unlock
   // override (see /admin/review).
   firstSoldAt?: string | null;
+  // Task #335 — sell mode + physical format set in the two-step
+  // creation modal. Null on freshly-created rows until the operator
+  // picks. `sellQuoteLockedAt` non-null = the operator hit "Lock in
+  // quote" on the Sell tab and the rest of the album tabs (Press,
+  // Shopify, Bonus) unlock.
+  sellMode?: "direct" | "shopify" | null;
+  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+  sellQuoteLockedAt?: string | null;
   songs: SongLite[];
 }
 
@@ -224,25 +234,28 @@ interface SongLite {
 }
 
 type Tab = "overview" | "tracks" | "bonus" | "sell" | "press" | "shopify";
-const TABS: { key: Tab; label: string; phase: number }[] = [
-  { key: "overview", label: "Overview", phase: 2 },
-  { key: "tracks", label: "Tracks", phase: 2 },
-  // Sell — Task #44 bundle configuration (formats + signed-cert addon).
-  { key: "sell", label: "Sell", phase: 2 },
-  // Press — Task #323 fulfillment surface: masters-on-file summary,
-  // on-file audio preflight runner, and the art file-picker preflight.
-  { key: "press", label: "Press", phase: 2 },
-  // Shopify — Task #49 per-album product mapping for label Shopify stores.
-  { key: "shopify", label: "Shopify", phase: 2 },
-  // Artwork lives inside Overview now (between Release and Metadata) —
-  // cover art is core release metadata, not a separate concern.
-  // Masters used to live as a separate tab here — it was redundant with
-  // the Tracks tab (the inline Master chip + MasterEditor own every
-  // master CRUD action). Per-row download lives on each Tracks row to
-  // the right of the duration; "Download all masters" lives in the
-  // Tracks Advanced menu. Deleted 2026-05.
-  { key: "bonus", label: "Bonus", phase: 5 },
-];
+// Task #335 — the visible tab set is now driven by `sellMode` +
+// `sellQuoteLockedAt`. Before the operator locks a quote we only show
+// Overview/Tracks/Sell so the page stays focused on "decide what we're
+// selling". Once locked, the fulfillment tabs unlock — Press for
+// `direct`, Shopify for `shopify`, Bonus in both. The Press tab is
+// NEVER shown in Shopify mode (the label fulfills the physical
+// product themselves; there is no press to talk about).
+function visibleTabsFor(album: { sellMode?: string | null; sellQuoteLockedAt?: string | null }): { key: Tab; label: string }[] {
+  const base: { key: Tab; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "tracks", label: "Tracks" },
+    { key: "sell", label: "Sell" },
+  ];
+  if (!album.sellQuoteLockedAt) return base;
+  if (album.sellMode === "direct") {
+    return [...base, { key: "press", label: "Press" }, { key: "bonus", label: "Bonus" }];
+  }
+  if (album.sellMode === "shopify") {
+    return [...base, { key: "shopify", label: "Shopify" }, { key: "bonus", label: "Bonus" }];
+  }
+  return base;
+}
 
 // Legacy "Migrate to Mux" admin action — removed 2026-05 once auto-ingest
 // (POST/PUT/Dropbox-import hooks + boot-time backfill in server/routes.ts)
@@ -272,7 +285,25 @@ export function AdminAlbum() {
     // a row the user already closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [tab, setTab] = useState<Tab>(initialTrackId ? "tracks" : "overview");
+  // Task #335 — `?onboarding=1` from "+ Add Album" lands the operator
+  // on the Sell tab so the two-step mode modal opens directly over the
+  // surface they're about to configure.
+  const initialOnboarding = useMemo(() => {
+    try {
+      return new URLSearchParams(search).get("onboarding") === "1";
+    } catch {
+      return false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [tab, setTab] = useState<Tab>(
+    initialTrackId ? "tracks" : initialOnboarding ? "sell" : "overview",
+  );
+  // Mode-picker modal state. Opens automatically when `sellMode` is
+  // null (a fresh row), or when the operator clicks "Change mode" in
+  // the Path-to-press strip. The album load is async, so the open
+  // flag flips on the useEffect below once the row arrives.
+  const [modeDialogOpen, setModeDialogOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Delete-options dropdown (replaces the standalone trashcan). The
   // dropdown can either delete the whole album, prime a multi-select
@@ -387,6 +418,62 @@ export function AdminAlbum() {
       queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
     },
   });
+
+  // Task #335 — SKU feed for the top-of-page Path-to-press stepper so
+  // its stage-completion mirrors real state (package / price / qty /
+  // upload preflight). SellPanel queries the same key so both stay in
+  // sync via the TanStack cache.
+  const { data: albumSkus } = useQuery<{ skus: any[]; addons: any[] }>({
+    queryKey: ["/api/admin/albums", albumId, "skus"],
+    enabled: !!album?.sellMode,
+  });
+
+  // Task #335 — sell-mode + format + lock toggle live on the album
+  // row. One mutation writes any subset; we use it for the modal
+  // submit, the "Change mode" link in the Shopify slim panel, and the
+  // Lock/Unlock CTA at the bottom of the direct Sell panel.
+  const updateAlbumMode = useMutation({
+    mutationFn: async (patch: {
+      sellMode?: "direct" | "shopify";
+      physicalFormat?: string | null;
+      sellQuoteLockedAt?: boolean | null;
+    }) => {
+      const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, patch);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't update sell mode",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Task #335 — re-pin the active tab to "sell" whenever a mode/lock
+  // change drops the current tab from the allowed set (e.g. operator
+  // is on Press, hits Change → Shopify; Press disappears, so we send
+  // them back to Sell instead of leaving them on a now-hidden tab).
+  // Must live below the `album` useQuery above to avoid TDZ on
+  // `album` in the dependency array.
+  useEffect(() => {
+    if (!album) return;
+    const allowed = visibleTabsFor(album).map((t) => t.key);
+    if (!allowed.includes(tab)) setTab("sell");
+  }, [album?.sellMode, album?.sellQuoteLockedAt, tab, album]);
+
+  // Auto-open the mode picker once the row arrives without a sellMode.
+  // Backfill ran on existing rows, so the modal really only fires for
+  // freshly-created albums or rows that were manually NULL'd.
+  useEffect(() => {
+    if (album && !album.sellMode) {
+      setModeDialogOpen(true);
+    }
+  }, [album?.sellMode, album?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openInClassicAdmin = () => {
     try {
@@ -586,6 +673,22 @@ export function AdminAlbum() {
           </div>
         </div>
 
+        {/* Task #335 — Path-to-press strip lives ABOVE the tab bar so
+            it's visible from every tab on the album page (not just
+            Sell). The stepper adapts by mode — slim 3-stage strip
+            for shopify, full 5-stage press flow for direct. Suppressed
+            until the operator picks a sellMode in the modal. */}
+        {album.sellMode && (
+          <div className="mt-2">
+            <PressingOrderStepper
+              albumId={album.id}
+              skus={albumSkus?.skus ?? []}
+              mode={album.sellMode === "shopify" ? "shopify" : "direct"}
+              onChangeMode={() => setModeDialogOpen(true)}
+            />
+          </div>
+        )}
+
         {/* TABS — Overview/Tracks/Bonus on the LEFT, gray trash icon
             on the RIGHT, both riding the same hairline. The trash hover
             reveals a "Delete" label on its left (Apple-Mac toolbar
@@ -595,7 +698,7 @@ export function AdminAlbum() {
           data-testid="tabs-admin-album"
         >
           <div className="flex items-center gap-5 overflow-x-auto">
-            {TABS.map((t) => (
+            {visibleTabsFor(album).map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -744,33 +847,61 @@ export function AdminAlbum() {
           )}
         </div>
 
-        {/* TAB CONTENT */}
-        {tab === "overview" && (
-          <OverviewPanel album={album} />
-        )}
-        {tab === "tracks" && (
-          <TracksPanel
-            album={album}
-            onEdit={openInClassicAdmin}
-            initialOpenTrackId={initialTrackId}
-            selectionMode={selectionMode}
-            selectedTrackIds={selectedTrackIds}
-            onToggleTrack={(id) =>
-              setSelectedTrackIds((prev) => {
-                const next = new Set(prev);
-                if (next.has(id)) next.delete(id);
-                else next.add(id);
-                return next;
-              })
-            }
-          />
-        )}
-        {tab === "bonus" && (
-          <BonusPanel album={album} onEdit={openInClassicAdmin} />
-        )}
-        {tab === "sell" && <SellPanel albumId={album.id} artworkUrl={album.artwork} />}
-        {tab === "press" && <PressPanel albumId={album.id} songs={album.songs} />}
-        {tab === "shopify" && <ShopifyPanel albumId={album.id} />}
+        {/* TAB CONTENT — gated on the same allowed-set the tab bar
+            uses. When sellMode flips (e.g. Direct → Shopify via the
+            "Change" affordance), Press disappears from the bar AND
+            from the content area, so a stale `tab === "press"` value
+            never renders the wrong panel. The useEffect below pins
+            `tab` back to "sell" whenever the current tab leaves the
+            allowed set. */}
+        {(() => {
+          const allowed = new Set(visibleTabsFor(album).map((t) => t.key));
+          const safeTab: Tab = allowed.has(tab) ? tab : "sell";
+          return (
+            <>
+              {safeTab === "overview" && allowed.has("overview") && (
+                <OverviewPanel album={album} />
+              )}
+              {safeTab === "tracks" && allowed.has("tracks") && (
+                <TracksPanel
+                  album={album}
+                  onEdit={openInClassicAdmin}
+                  initialOpenTrackId={initialTrackId}
+                  selectionMode={selectionMode}
+                  selectedTrackIds={selectedTrackIds}
+                  onToggleTrack={(id) =>
+                    setSelectedTrackIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(id)) next.delete(id);
+                      else next.add(id);
+                      return next;
+                    })
+                  }
+                />
+              )}
+              {safeTab === "bonus" && allowed.has("bonus") && (
+                <BonusPanel album={album} onEdit={openInClassicAdmin} />
+              )}
+              {safeTab === "sell" && allowed.has("sell") && (
+                <SellPanel
+                  albumId={album.id}
+                  artworkUrl={album.artwork}
+                  sellMode={album.sellMode ?? null}
+                  physicalFormat={album.physicalFormat ?? null}
+                  sellQuoteLockedAt={album.sellQuoteLockedAt ?? null}
+                  onLockToggle={(next) => updateAlbumMode.mutate({ sellQuoteLockedAt: next })}
+                  onChangeMode={() => setModeDialogOpen(true)}
+                />
+              )}
+              {safeTab === "press" && allowed.has("press") && (
+                <PressPanel albumId={album.id} songs={album.songs} />
+              )}
+              {safeTab === "shopify" && allowed.has("shopify") && (
+                <ShopifyPanel albumId={album.id} />
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Destructive confirm sheet — names the album being destroyed
@@ -990,6 +1121,26 @@ export function AdminAlbum() {
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Task #335 — two-step "how is this album sold?" modal. Opens
+          automatically when the album has no sellMode (fresh-from-
+          creation) and can be reopened via "Change mode" in the Sell
+          panel. Non-dismissable while `sellMode` is still null so the
+          operator can't escape to a half-configured page. */}
+      <NewAlbumModeDialog
+        open={modeDialogOpen}
+        required={!album.sellMode}
+        busy={updateAlbumMode.isPending}
+        onClose={() => setModeDialogOpen(false)}
+        onSubmit={({ sellMode, physicalFormat }) => {
+          updateAlbumMode.mutate(
+            { sellMode, physicalFormat },
+            {
+              onSuccess: () => setModeDialogOpen(false),
+            },
+          );
+        }}
+      />
     </AdminFrame>
   );
 }
