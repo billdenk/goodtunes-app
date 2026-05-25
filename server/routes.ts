@@ -14045,6 +14045,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // per-group results so a 2-letter query can't return thousands of
   // rows; an empty `q` short-circuits to {} so debounced callers don't
   // need to special-case it.
+  //
+  // Task #339 — In-memory LRU cache (~30s TTL) keyed by `${q}|${limit}`.
+  // Hunt-and-peck typing past the client debounce previously fanned out
+  // 9 LIKE scans on every keystroke; this collapses repeated queries
+  // within the TTL to a single materialization. Also dedupes concurrent
+  // in-flight requests for the same key via a promise registry, so two
+  // SearchBar mounts (desktop + mobile) firing simultaneously share one
+  // DB round-trip instead of racing. TTL ≤ 30s keeps newly-created
+  // records discoverable quickly.
+  const SEARCH_TTL_MS = 30_000;
+  const SEARCH_CACHE_MAX = 200;
+  const searchCache = new Map<string, { at: number; payload: unknown }>();
+  const searchInflight = new Map<string, Promise<unknown>>();
   app.get("/api/admin/search", requireAdmin, async (req, res) => {
     const q = String(req.query.q ?? "").trim();
     const perGroup = Math.min(Math.max(Number(req.query.limit) || 5, 1), 10);
@@ -14054,6 +14067,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         gear: [], customers: [], manufacturers: [], fulfillment: [],
       });
     }
+    const cacheKey = `${q.toLowerCase()}|${perGroup}`;
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < SEARCH_TTL_MS) {
+      // Touch for LRU recency.
+      searchCache.delete(cacheKey);
+      searchCache.set(cacheKey, cached);
+      return res.json(cached.payload);
+    }
+    const existing = searchInflight.get(cacheKey);
+    if (existing) {
+      try {
+        const payload = await existing;
+        return res.json(payload);
+      } catch (err) {
+        return res.status(500).json({ message: (err as Error).message });
+      }
+    }
+    const build = (async () => {
     const [
       people, vendors, labelsRows, nonprofits, albumsRows,
       gear, customers, manufacturers, fulfillment,
@@ -14068,7 +14099,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       storage.searchManufacturersAdmin(q, perGroup),
       storage.searchFulfillmentAdmin(q, perGroup),
     ]);
-    res.json({
+    return {
       people: people.map((p) => ({
         kind: "person", id: p.id, title: p.name,
         subtitle: null, badge: "Person", photoUrl: p.photoUrl,
@@ -14122,7 +14153,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         subtitle: null, badge: "Fulfillment",
         href: `/admin/fulfillment-partners/${f.id}`,
       })),
-    });
+    };
+    })();
+    searchInflight.set(cacheKey, build);
+    try {
+      const payload = await build;
+      // Store in LRU and trim if over capacity (oldest insertion first).
+      searchCache.set(cacheKey, { at: Date.now(), payload });
+      while (searchCache.size > SEARCH_CACHE_MAX) {
+        const oldest = searchCache.keys().next().value;
+        if (oldest === undefined) break;
+        searchCache.delete(oldest);
+      }
+      res.json(payload);
+    } catch (err) {
+      res.status(500).json({ message: (err as Error).message });
+    } finally {
+      searchInflight.delete(cacheKey);
+    }
   });
 
   // ─── Admin Customers directory (Task #131) ──────────────────────────
