@@ -211,6 +211,18 @@
   -webkit-touch-callout: none;
 }
 
+html,
+body {
+  /* Task #371 — refuse horizontal panning at the document level so a
+     stray-wide descendant (a w-screen next to a scrollbar gutter, a
+     sub-pixel rounding, an overflowing tooltip) can't let Safari /
+     Chrome rubber-band the whole viewport left or right. This also
+     keeps `position: fixed` children (e.g. PlayerDock) anchored to
+     the visible viewport instead of drifting with a trackpad swipe. */
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
 body {
   /* Mobile pages used to paint this gradient inside the 390px column,
      which left black gutters on wider viewports. Promoting it to body

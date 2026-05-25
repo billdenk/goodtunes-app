@@ -389,7 +389,7 @@ export function AdminFrame({
   const isSectionOpen = (id: SidebarSectionId) => openSection === id;
 
   return (
-    <div className="h-screen w-screen overflow-x-hidden bg-slate-50 font-sans antialiased flex">
+    <div className="h-screen w-full overflow-x-hidden bg-slate-50 font-sans antialiased flex">
       <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
         {/* Logo sits at the top of the sidebar column so the right
             preview pane + its vertical divider can reach the very top
