@@ -40,6 +40,7 @@ import {
   HELLBENDER_MATRIX,
   VINYL_COLORS,
   VINYL_COLOR_TIER_LABEL,
+  VINYL_COLOR_TIER_ORDER,
   VINYL_QUANTITY_TIERS,
   pressingSizeForFormat,
   type VinylColorTier,
@@ -187,6 +188,16 @@ export async function lookupCatalogUnitCents(args: {
 const HELLBENDER_DOMAIN = "hellbendervinyl.com";
 let hellbenderSeedRan = false;
 
+// Desired tier names in display order. The seed reconciles existing
+// catalog rows against this list: if the names + order already match,
+// no-op so admin edits survive; otherwise wipe the press's tiers and
+// re-create from VINYL_COLORS so a fresh dev DB and a prod that's
+// still carrying the legacy "Standard color" / "Regrind mix" rows
+// both converge on the same shape.
+const HELLBENDER_DESIRED_TIER_NAMES: string[] = VINYL_COLOR_TIER_ORDER.map(
+  (k) => VINYL_COLOR_TIER_LABEL[k],
+);
+
 export async function seedHellbenderCatalog() {
   if (hellbenderSeedRan) return;
   hellbenderSeedRan = true;
@@ -196,20 +207,40 @@ export async function seedHellbenderCatalog() {
       hellbenderSeedRan = false;
       return;
     }
-    const existing = await db.select().from(pressFormats).where(eq(pressFormats.pressId, press.id));
-    if (existing.length > 0) return; // already seeded
 
     // Hellbender presses 7" and 12" LP only (per pressingSizeForFormat).
     const formats: AlbumFormat[] = ["7_inch", "12_lp"];
-    const tierOrder: VinylColorTier[] = ["black", "standard", "regrind"];
 
     for (let fi = 0; fi < formats.length; fi++) {
       const fmt = formats[fi];
       const size = pressingSizeForFormat(fmt);
       if (!size) continue;
       await db.insert(pressFormats).values({ pressId: press.id, format: fmt, position: fi }).onConflictDoNothing();
-      for (let ti = 0; ti < tierOrder.length; ti++) {
-        const tierKey = tierOrder[ti];
+
+      // Reconcile vs desired tier list. If the existing tiers already
+      // match the desired names in order, leave them alone (admin
+      // edits to ladders + colors are preserved). Otherwise wipe +
+      // recreate — the catalog has no FK from album_skus (snapshots
+      // store names, not ids), so this is safe.
+      const existingTiers = await db
+        .select()
+        .from(pressColorTiers)
+        .where(and(eq(pressColorTiers.pressId, press.id), eq(pressColorTiers.format, fmt)))
+        .orderBy(asc(pressColorTiers.position));
+      const existingNames = existingTiers.map((t) => t.name);
+      const matches =
+        existingNames.length === HELLBENDER_DESIRED_TIER_NAMES.length &&
+        existingNames.every((n, i) => n === HELLBENDER_DESIRED_TIER_NAMES[i]);
+      if (matches) continue;
+
+      if (existingTiers.length > 0) {
+        await db
+          .delete(pressColorTiers)
+          .where(inArray(pressColorTiers.id, existingTiers.map((t) => t.id)));
+      }
+
+      for (let ti = 0; ti < VINYL_COLOR_TIER_ORDER.length; ti++) {
+        const tierKey = VINYL_COLOR_TIER_ORDER[ti];
         const sizeMatrix = HELLBENDER_MATRIX[tierKey][size];
         // Ladder uses the "none" jacket price (standard jacket). Jacket
         // upgrades aren't part of the catalog model in T218 — defer.

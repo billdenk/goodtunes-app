@@ -1027,7 +1027,8 @@ function SkuRow({
   // Hellbender tier (50/100/200/300/500/1000). The matrix is keyed
   // by tier, so this is also what gets snapshotted on save. Anything
   // above 1000 stays at 1000 and flips `requiresQuote` so the row
-  // can show a "1000+ — request custom quote" caveat.
+  // can show a "3000+ — request custom quote" caveat (top of the
+  // current Hellbender ladder).
   const qtySnap = useMemo(
     () => snapToQuantityTier(parsedQty ?? DEFAULT_VINYL_QUANTITY),
     [parsedQty],
@@ -1453,7 +1454,7 @@ function SkuRow({
               data-testid={`text-qty-tier-${format}`}
             >
               {qtySnap.requiresQuote ? (
-                <>1000+ — request a custom quote</>
+                <>{qtySnap.tier}+ — request a custom quote</>
               ) : parsedQty === qtySnap.tier ? (
                 <>Priced at the {qtySnap.tier}-unit tier.</>
               ) : (

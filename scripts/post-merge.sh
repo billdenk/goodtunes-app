@@ -660,3 +660,32 @@ SQL
 }
 backfill_press_turnaround_weeks dev  "${DATABASE_URL:-}"
 backfill_press_turnaround_weeks prod "${PROD_DATABASE_URL:-}"
+
+# Task #375 — Reconcile the Hellbender press catalog to the 6 real
+# color groups published on hellbendervinyl.com/pages/custom-vinyl
+# (Black / House Mix / Translucent Colors / Clear Colors / Metallic
+# Colors / Opaque Colors). Drops the legacy 3-tier shape ("Standard
+# color" / "Regrind mix") so the boot-time seed in
+# server/pressCatalog.ts re-materializes the new shape (the seed is
+# the source of truth — this SQL is the belt-and-suspenders kick that
+# lets prod converge on merge without a manual SQL pass). Safe to
+# re-run: only matches the dead tier names, leaves the new ones alone.
+reconcile_hellbender_catalog() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping hellbender-catalog reconcile on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+DELETE FROM press_color_tiers
+ WHERE press_id IN (SELECT id FROM manufacturers WHERE domain = 'hellbendervinyl.com')
+   AND name IN ('Standard color', 'Regrind mix');
+SQL
+  then
+    echo "post-merge: hellbender-catalog reconcile ok on $label"
+  else
+    echo "post-merge: WARNING — hellbender-catalog reconcile failed on $label (continuing)"
+  fi
+}
+reconcile_hellbender_catalog dev  "${DATABASE_URL:-}"
+reconcile_hellbender_catalog prod "${PROD_DATABASE_URL:-}"

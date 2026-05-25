@@ -923,6 +923,13 @@ function CatalogTierEditor({
     onSuccess: onChanged,
   });
 
+  // Task #375 — Hellbender's Metallic + Opaque ladders are seeded with
+  // the Translucent ladder as a placeholder pending real numbers from
+  // Hellbender. Flag those rows so the press admin (or Hellbender, with
+  // access) knows the prices want a once-over.
+  const isPlaceholderLadder =
+    tier.name === "Metallic Colors" || tier.name === "Opaque Colors";
+
   return (
     <div className="rounded-md border border-slate-200 p-3 space-y-3" data-testid={`tier-${tier.id}`}>
       <div className="flex items-start justify-between gap-2">
@@ -973,6 +980,14 @@ function CatalogTierEditor({
             Artists' typed quantity snaps up to the next rung. The top rung is the cap (above that, the
             picker shows "request a custom quote").
           </p>
+          {isPlaceholderLadder && (
+            <p
+              className="text-xs text-amber-600 mt-1"
+              data-testid={`hint-placeholder-${tier.id}`}
+            >
+              Placeholder pricing — copied from Translucent Colors. Confirm per-rung prices with Hellbender.
+            </p>
+          )}
         </label>
         <div className="block">
           <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">

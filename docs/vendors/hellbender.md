@@ -42,7 +42,18 @@ Implied by the published templates (single, gatefold 1- or 2-pocket, widespine 2
 
 ## Color / vinyl options
 
-Not stated on the templates page. Vinyl weight options: not stated.
+Six published groups on https://hellbendervinyl.com/pages/custom-vinyl (captured group → colors in `.local/tasks/hellbender-color-groups.json`):
+
+- **Black** — Black
+- **House Mix** — House Mix (random recycled blend)
+- **Translucent Colors** — Natural, Hazy Orange, Seaglass Blue, Violet
+- **Clear Colors** — Clear Pink, Clear Red, Clear Orange, Clear Yellow, Coke Bottle, Clear Green, Clear Blue, Smokey Clear, Ultra Clear
+- **Metallic Colors** — Gold, Silver
+- **Opaque Colors** — Pink, Maroon, Red, Orange, Peach, Yellow, Duckie Yellow, Lime Green, Green, Dark Green, Jade, Sky Blue, Turquoise, Blue, Deep Purple, Tan, Brown, White
+
+(The live page misspells the third group "Transluscent"; the catalog uses the corrected "Translucent Colors".)
+
+Vinyl weight options: not stated.
 
 ## Templates
 
