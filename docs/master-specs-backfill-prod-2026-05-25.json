@@ -1,0 +1,1144 @@
+{
+  "ranAt": "2026-05-25T07:17:27.163Z",
+  "target": "PROD_DATABASE_URL",
+  "task": "#333 — master-specs backfill against production",
+  "totals": {
+    "objectStorageProbedAndUpdated": 131,
+    "objectStorageRemaining": 0,
+    "unhostedNeedsArtistReSupply": 243,
+    "unreadableHeaders": 0
+  },
+  "spotCheck": {
+    "album": "Look at You",
+    "note": "11 of 14 tracks now show format/rate/depth/size; remaining 3 (Look At You, No Choice, Outside) have no master uploaded."
+  },
+  "notes": [
+    "Filtered scope: only songs with audio_url under /objects/ — those are masters we host and can re-probe.",
+    "243 songs still show no format/rate/size; all are pointed at https://dl.dropboxusercontent.com/... from the legacy bulk import. They need to be re-uploaded by the artist (or migrated into object storage) before specs can land.",
+    "Zero rows fell into the 'unreadable headers' bucket — every master we hold parsed cleanly via ffprobe."
+  ],
+  "needsArtistReSupplyByAlbum": {
+    "Keep On Rising": {
+      "count": 45,
+      "tracks": [
+        {
+          "songId": "0fe0059d-5eeb-4787-8061-7d3488939c5a",
+          "title": "Keep On Rising"
+        },
+        {
+          "songId": "a6d945c6-91f6-40a6-93ae-55853cd7c73c",
+          "title": "A Time Like This"
+        },
+        {
+          "songId": "0ccc8b1e-6166-448b-816a-840b5a0ba759",
+          "title": "We Are A Rock N Roll Band"
+        },
+        {
+          "songId": "7f00cc05-412f-40e4-942c-0b66c5b6f271",
+          "title": "Back in the Beginning... A Kid at Heart"
+        },
+        {
+          "songId": "9838fe98-fa95-478f-914a-5896c30157ed",
+          "title": "Bye, Bye, Baby"
+        },
+        {
+          "songId": "f65186a4-5dc7-4749-a52b-3cf50f5efc7f",
+          "title": "Doing It Right"
+        },
+        {
+          "songId": "11647a58-c55d-406a-a956-742ad24fa94c",
+          "title": "I Don't Want To Let You Go"
+        },
+        {
+          "songId": "9c44d318-49fa-40ef-a1e9-a27d779be5a8",
+          "title": "Back In The Grease"
+        },
+        {
+          "songId": "8bb70f8e-99e2-4224-a79f-e5fb618d5bb5",
+          "title": "Crash Burn"
+        },
+        {
+          "songId": "c1ece34c-e00c-43c8-b036-d71ddf1f5242",
+          "title": "A Moment of Silence"
+        },
+        {
+          "songId": "21513d35-bd1d-4fa5-a348-7015b4a40007",
+          "title": "The Sex Sells Love Drugs Rock N Roll Society"
+        },
+        {
+          "songId": "2f66dce2-0fcb-47fd-8db6-bd2150cb5924",
+          "title": "Delivery Room of the Morning Sun"
+        },
+        {
+          "songId": "ee1281d2-2dc4-42e4-bd3f-79ef9a7baf26",
+          "title": "Here I Am"
+        },
+        {
+          "songId": "a11e64ff-3f8f-4a39-8941-534584d96a96",
+          "title": "The Words of The Prophets on Wall 1"
+        },
+        {
+          "songId": "b0b2b122-6f2f-4788-a663-232ae77ea333",
+          "title": "In The Land of Nothing Matters"
+        },
+        {
+          "songId": "5aebbca3-88ad-492b-bf16-bb208c759272",
+          "title": "The Words of The Prophets on Wall 2"
+        },
+        {
+          "songId": "3abfab5c-75fc-481f-84e4-f850dbc207ef",
+          "title": "Fate VS. Fate"
+        },
+        {
+          "songId": "918fe97c-9f43-4edd-95e8-f3ca4245442f",
+          "title": "Born Again (I Believe)"
+        },
+        {
+          "songId": "9d77f133-715f-420d-83db-f878ff2203f9",
+          "title": "It's Okay"
+        },
+        {
+          "songId": "5d261086-95ce-43a2-8c60-c3a1ccc06bbb",
+          "title": "It's NOT Okay"
+        },
+        {
+          "songId": "a27a1a3b-9f08-4d37-9dfb-0bb235767fcb",
+          "title": "Meanwhile Back at the Ranch"
+        },
+        {
+          "songId": "156e831a-c021-489f-85cd-9686228668d8",
+          "title": "Find A Circle (It's A Wonderful Feeling)"
+        },
+        {
+          "songId": "868e8be4-7f23-4254-b342-31c6a3c459ad",
+          "title": "Tell Me a Story ... Action! Action!"
+        },
+        {
+          "songId": "ee840553-6141-4292-8a28-35863d1df20b",
+          "title": "The Tall Tell Tale of The Three Little Pigs"
+        },
+        {
+          "songId": "c5939cba-9332-4c15-bcf0-2b6d746c3135",
+          "title": "What's My Re-Action?! I Doh Wanna Le U Gogh"
+        },
+        {
+          "songId": "92645bbc-e40b-43ff-bf71-a93cb5f98547",
+          "title": "The Moment of Truth"
+        },
+        {
+          "songId": "937fe205-8177-40e8-9307-d71a058435e8",
+          "title": "OM WAY OH (That's The Way It Goes)"
+        },
+        {
+          "songId": "8dc5d8e6-ecb5-4b16-8fd7-1be07c333371",
+          "title": "Here Comes Your 21st Century Rising Star"
+        },
+        {
+          "songId": "e4118db6-cf9e-46da-9fbc-a4c491c2b8a9",
+          "title": "It's Never Too Late... For An Overture"
+        },
+        {
+          "songId": "a71b79b3-dbc7-4f70-b45d-6edb762647c7",
+          "title": "Everybody Wants Peace and Love"
+        },
+        {
+          "songId": "eeae22a4-9eb4-4a98-9fce-513997b136e2",
+          "title": "I Got Your Back"
+        },
+        {
+          "songId": "1e73e332-f6a0-4938-bf45-7bd7194f0a39",
+          "title": "The Story of The Lost & Found"
+        },
+        {
+          "songId": "aebbfdeb-8c4e-4876-a1f9-5dcccf365aa6",
+          "title": "Better Make It Count"
+        },
+        {
+          "songId": "06fd4a85-193e-429d-bae4-f7335bbca956",
+          "title": "Faith AND Fate"
+        },
+        {
+          "songId": "988519c8-757b-4dc0-9d49-175d270f80f6",
+          "title": "We're Gonna Win"
+        },
+        {
+          "songId": "619a16a0-d9de-4f6f-9081-327ecabf5385",
+          "title": "Hope Keep On Rising"
+        },
+        {
+          "songId": "72b80c7a-aa9d-41ae-8c84-7d5d8cf8246e",
+          "title": "Take a Moment to Appreciate"
+        },
+        {
+          "songId": "13b564da-a10b-4319-bb7c-c06ea4b9879c",
+          "title": "Peace Love Rock N Roll"
+        },
+        {
+          "songId": "8e24e9e9-0d91-4fda-9951-3edc98301896",
+          "title": "A Time Like This - Single Version"
+        },
+        {
+          "songId": "00dcea1d-668b-480c-8990-131ab396d708",
+          "title": "Doing It Right - Single Version"
+        },
+        {
+          "songId": "d9b260e1-d4bc-40e0-ab3b-0d42e3376ba4",
+          "title": "I Don't Want To Let You Go - Single Version"
+        },
+        {
+          "songId": "671426e4-75df-4f3e-b2df-8aa0cf0e31a9",
+          "title": "Find A Circle (It's A Wonderful Feeling) - Single Version"
+        },
+        {
+          "songId": "84986a99-2a79-4f78-94eb-f64bbee75697",
+          "title": "Everybody Wants Peace and Love - Single Version"
+        },
+        {
+          "songId": "6783eaea-08b0-4cda-bf1a-3bc786a47020",
+          "title": "Better Make It Count - Single Version"
+        },
+        {
+          "songId": "ff75dc9b-30d4-436d-bcb6-768d597f6e95",
+          "title": "Peace Love Rock N Roll - Single Version"
+        }
+      ]
+    },
+    "Love Life Tragedy": {
+      "count": 16,
+      "tracks": [
+        {
+          "songId": "8e5e9142-b1a0-40c2-92d1-6408e6184a0e",
+          "title": "Made for Us"
+        },
+        {
+          "songId": "ec1f28c8-cd28-471c-ad0b-d5c29266460c",
+          "title": "Nothing Without Your Love"
+        },
+        {
+          "songId": "e697f19b-7f28-4c13-b1c7-aa9ee9f0a437",
+          "title": "Good Love"
+        },
+        {
+          "songId": "dab7b84d-db9a-4e17-9aac-015c38f138d1",
+          "title": "Hey Kid"
+        },
+        {
+          "songId": "65fafaf7-5823-4c45-b177-77c7c336ca6a",
+          "title": "Searchlight"
+        },
+        {
+          "songId": "0032882e-ddf7-4e6b-8550-a7f69297a1eb",
+          "title": "Never Break My Heart (Not Again)"
+        },
+        {
+          "songId": "5e0f190d-e286-4c66-a01b-afcbfacae224",
+          "title": "Easy (Home Version)"
+        },
+        {
+          "songId": "468a7f50-7a6e-4875-a28d-4f265c3c081d",
+          "title": "Hurts to Love You (Remastered 2025)"
+        },
+        {
+          "songId": "a94325ed-c5b0-4d29-9393-db7b27fadc86",
+          "title": "Dirty Laundry (feat. ASHBA)"
+        },
+        {
+          "songId": "84a72711-8b03-4c08-ba33-6bed32f34774",
+          "title": "Wild Heart"
+        },
+        {
+          "songId": "60a4814b-1fce-4e09-8992-994d9ec9f693",
+          "title": "Cold Night (Zero Degrees)"
+        },
+        {
+          "songId": "7b3ae434-280c-4326-ba62-3c5400731752",
+          "title": "Storms"
+        },
+        {
+          "songId": "36f3bd44-dbd2-408f-838f-5d00469e7231",
+          "title": "Don't Let Go"
+        },
+        {
+          "songId": "40398ef2-d318-4846-ba74-6e4351783259",
+          "title": "Cold Night (Winter Mix)"
+        },
+        {
+          "songId": "be7f8472-4aca-4594-9b1e-4ca62a41a903",
+          "title": "Help Me (Re - Record)"
+        },
+        {
+          "songId": "fde07ced-8953-45ca-8c73-8bf323437c47",
+          "title": "Take You with Me (Bonus Track)"
+        }
+      ]
+    },
+    "Bringing it Down to the Bass": {
+      "count": 14,
+      "tracks": [
+        {
+          "songId": "d7f1f8ed-d0f7-41a6-9da2-7b89c9d09dee",
+          "title": "Bringing It Down to the Bass"
+        },
+        {
+          "songId": "99889a65-cd2a-422d-b8f6-12391c283155",
+          "title": "Me and My Axe"
+        },
+        {
+          "songId": "51141546-1d9e-4619-b3c8-9a497e05307c",
+          "title": "Road Dogs"
+        },
+        {
+          "songId": "b82fd43a-87cd-4f1e-a462-0991823b04be",
+          "title": "Uncle Funkster"
+        },
+        {
+          "songId": "a49323a6-0391-40b0-8509-fa1b77fad870",
+          "title": "Boston Rocks"
+        },
+        {
+          "songId": "a8e2be1d-4c54-4098-8065-da2a5da7778a",
+          "title": "Espressoville"
+        },
+        {
+          "songId": "92582c03-7542-4c6b-986a-b67b6f4b434d",
+          "title": "Give the Cello Some"
+        },
+        {
+          "songId": "8e8eac4e-b823-4934-866e-eb5530eb8913",
+          "title": "Turn It Over"
+        },
+        {
+          "songId": "c5e4ba28-5561-4b67-af33-6bd98ac650d0",
+          "title": "Beyond the Bass Clef"
+        },
+        {
+          "songId": "f8314355-20b3-4790-b5ff-825a2c7bb034",
+          "title": "Bungie Bass"
+        },
+        {
+          "songId": "706ff590-274d-4612-9e35-c57c14cc6763",
+          "title": "Fire Cross the Sky"
+        },
+        {
+          "songId": "99f9f0da-1353-4522-9746-8ff3c0cca663",
+          "title": "Floating in Dark Waters"
+        },
+        {
+          "songId": "be6ae3fb-bf25-4ee2-86ac-03cd66ccfb81",
+          "title": "On the Drums"
+        },
+        {
+          "songId": "18f173ba-9289-4e5a-a8a8-25e16209c85f",
+          "title": "Coda"
+        }
+      ]
+    },
+    "Destiny": {
+      "count": 14,
+      "tracks": [
+        {
+          "songId": "ff74587a-cf0f-457f-be05-83b6af8e5422",
+          "title": "Destiny"
+        },
+        {
+          "songId": "036834fe-ff74-44e1-a074-df766266b695",
+          "title": "Planet Chaser"
+        },
+        {
+          "songId": "1f33328b-ad7d-4a44-b290-93e600a175cc",
+          "title": "Man In The Captain's Seat"
+        },
+        {
+          "songId": "891be65f-55ad-4485-8fda-dca1ac3551f4",
+          "title": "Doubt"
+        },
+        {
+          "songId": "837b0cf3-3066-422d-a204-5824a1d9d88d",
+          "title": "Truth"
+        },
+        {
+          "songId": "46c4edf6-5a41-4689-9324-fde3cdbebcb6",
+          "title": "Stand Up For Ourselves"
+        },
+        {
+          "songId": "9a3e592a-6423-4541-b9c2-60b6304dfacc",
+          "title": "Rose Gold Shampoo"
+        },
+        {
+          "songId": "13008ef8-3522-4cf6-96d8-7c9a8d5ba5aa",
+          "title": "Pendulum"
+        },
+        {
+          "songId": "1cc61478-4444-40b7-b1ed-5d8f2889f6b1",
+          "title": "Forgive And Forget"
+        },
+        {
+          "songId": "2550e627-716a-48d6-8492-a67faaf5973a",
+          "title": "Never Back Down"
+        },
+        {
+          "songId": "92e91b14-f85c-4fd2-8144-602aee0e3466",
+          "title": "Loudmouth"
+        },
+        {
+          "songId": "7122ef15-7b7f-4f30-9abb-f389e39e39dc",
+          "title": "Adeline"
+        },
+        {
+          "songId": "0c0f3efb-955f-43bf-9050-fe7c4a9b5d5c",
+          "title": "Trade It All Away"
+        },
+        {
+          "songId": "e5871fe8-22ac-40f2-b82d-548726d6c925",
+          "title": "Static"
+        }
+      ]
+    },
+    "ABRA CaDaBRA": {
+      "count": 13,
+      "tracks": [
+        {
+          "songId": "220a640a-2b2b-4afd-a90c-089498109ab0",
+          "title": "It Won't Be Love"
+        },
+        {
+          "songId": "4c6ae08a-b182-4e7e-a282-23b5b65c60a5",
+          "title": "One Shot (of Rock 'n Roll)"
+        },
+        {
+          "songId": "0f4be6cd-e1c6-4db1-90ca-c7ad2f5b8be2",
+          "title": "Afterlife"
+        },
+        {
+          "songId": "8a9a7573-f7cc-41ad-b24d-cef1f14e21b9",
+          "title": "Lullaby in the Dark"
+        },
+        {
+          "songId": "fb3b9434-4a41-4870-9686-d7d6a91a19fa",
+          "title": "Let Me Out of You"
+        },
+        {
+          "songId": "6d69067f-ecde-4de2-8b2a-8dfae142faae",
+          "title": "You Gotta Be Bad"
+        },
+        {
+          "songId": "22fb5297-f169-42a1-a813-f23f56c4b228",
+          "title": "World on Fire"
+        },
+        {
+          "songId": "95c9e6e6-60bf-4424-9b10-1d3d1069b90a",
+          "title": "Someone Else"
+        },
+        {
+          "songId": "8e979a72-82d5-486a-8402-e3a629dafc28",
+          "title": "Heaven"
+        },
+        {
+          "songId": "a4534af6-3007-4016-b1d2-8684090434cd",
+          "title": "Don't Take Debbie Away"
+        },
+        {
+          "songId": "d7a82043-6211-48ed-9dd2-2c0b954ad881",
+          "title": "Murdered Me"
+        },
+        {
+          "songId": "613b5b33-fd99-4344-b97b-d0f151bb751c",
+          "title": "Looking Out My Window"
+        },
+        {
+          "songId": "8c9d13bd-b26e-4fd0-a9a9-5ec0c50a96b3",
+          "title": "November Night"
+        }
+      ]
+    },
+    "FEMME BOY - Signature Edition (Pink Vinyl)": {
+      "count": 12,
+      "tracks": [
+        {
+          "songId": "6a118196-3e50-4801-b641-9216efb708e2",
+          "title": "Too Many Boys"
+        },
+        {
+          "songId": "a762b3ca-9503-45e0-b39c-d0732b4ea3cc",
+          "title": "Do You Feel"
+        },
+        {
+          "songId": "d75246e8-8478-4b81-899b-410dae39a3a1",
+          "title": "Do It Baby"
+        },
+        {
+          "songId": "a93b1df2-d931-439c-b402-8c96c00f4b6a",
+          "title": "Real Girl"
+        },
+        {
+          "songId": "7dc129be-e31d-485f-8330-ac5fa8740d63",
+          "title": "You Fell"
+        },
+        {
+          "songId": "02feafdf-90f2-48f4-a6ea-8ef6ec88bebe",
+          "title": "Radio Trash"
+        },
+        {
+          "songId": "76e7c343-c621-4b8e-9291-453dc3620158",
+          "title": "Danny You're a F-ckboy"
+        },
+        {
+          "songId": "8acb3dc3-d449-4895-9a2f-59ae3355e220",
+          "title": "Never Home"
+        },
+        {
+          "songId": "38a01758-8110-46ba-a344-8ee1cf3a4e16",
+          "title": "Unicorn ft. Vestite"
+        },
+        {
+          "songId": "fee1234e-87eb-4e8e-807e-5b9736970a45",
+          "title": "La Isla Jotita ft. P1nkstar Y2K"
+        },
+        {
+          "songId": "da4a5aef-2407-489a-a5b6-b30329c63518",
+          "title": "Dreamer ft. Sabrina-Ellis"
+        },
+        {
+          "songId": "d29c44f3-5052-48c6-a85f-7ef7c9d52bbb",
+          "title": "Femme Boy"
+        }
+      ]
+    },
+    "After The Party - Signature Edition": {
+      "count": 10,
+      "tracks": [
+        {
+          "songId": "12dd2364-2209-4f4d-a5c5-0d7fa06ef7c9",
+          "title": "Have A Little Heart"
+        },
+        {
+          "songId": "b12a1333-f664-4ed2-b5d0-c7503fcf726d",
+          "title": "Other Girls"
+        },
+        {
+          "songId": "7413e5b8-2174-4623-a418-371234807501",
+          "title": "Rock And Roll On The Radio"
+        },
+        {
+          "songId": "bf5fd0b3-9858-4079-bf65-f14364293871",
+          "title": "After The Party"
+        },
+        {
+          "songId": "6dd126d8-8121-45ba-8979-9f5777d912ff",
+          "title": "The Good Life"
+        },
+        {
+          "songId": "68f9250a-530d-4a7d-a862-962028fb5af3",
+          "title": "Keep A Little Light On"
+        },
+        {
+          "songId": "d36e68cc-63b2-4adc-ac9d-55ea8d13fa2b",
+          "title": "Signs Of Life"
+        },
+        {
+          "songId": "2de7ae7f-f011-475c-a320-1c88e50d029e",
+          "title": "My Own Worst Enemy"
+        },
+        {
+          "songId": "087080a1-5b87-46fa-bdb0-41e09764a2f7",
+          "title": "I Gotta Go"
+        },
+        {
+          "songId": "174e206c-54a8-4168-87ce-ecbfcfaec6a0",
+          "title": "I Know A Lot Of People"
+        }
+      ]
+    },
+    "California Way": {
+      "count": 10,
+      "tracks": [
+        {
+          "songId": "af2d2e74-5b03-4f85-975f-b819ea05df13",
+          "title": "Head On"
+        },
+        {
+          "songId": "133f3638-4a61-466c-8af3-594ea913b7b5",
+          "title": "Hollywood Inn"
+        },
+        {
+          "songId": "4dffc7ce-ca2a-4e9e-99f2-5acdf657331b",
+          "title": "Topanga Canyon"
+        },
+        {
+          "songId": "72fa86c5-8c0b-4018-99da-754fc329b7b2",
+          "title": "California Way"
+        },
+        {
+          "songId": "18c20b7e-11eb-458c-b5c8-4863641a6a7a",
+          "title": "Won't You Tell Me"
+        },
+        {
+          "songId": "bc440d8c-aec5-49fa-a3d0-6ab42f144976",
+          "title": "Hey Sister"
+        },
+        {
+          "songId": "72be6102-1e73-4c51-8a84-13fe5bc4a00f",
+          "title": "Hollywood Fanta Sea"
+        },
+        {
+          "songId": "97c9fb7c-9d78-4051-a77c-c758ad74e1f2",
+          "title": "Everyday Stars"
+        },
+        {
+          "songId": "ef8a4191-f50d-4280-8aec-746b1baa75f2",
+          "title": "Tough Times"
+        },
+        {
+          "songId": "35ef5136-7c8e-458c-bd98-c1af389698e2",
+          "title": "This is Home to Me"
+        }
+      ]
+    },
+    "Into the Light": {
+      "count": 10,
+      "tracks": [
+        {
+          "songId": "a79821af-10a3-4208-b8d4-f93fe3e648d0",
+          "title": "Into The Light"
+        },
+        {
+          "songId": "47dca404-fb6d-48c9-87fb-3b043d6689f3",
+          "title": "The Invitation"
+        },
+        {
+          "songId": "a8693f7b-ec46-4a20-b316-c72c3e791356",
+          "title": "The Only Way Out Is Through"
+        },
+        {
+          "songId": "3f7a2acd-6eb6-4b79-a168-a8d2f394454b",
+          "title": "Behind Your Eyes"
+        },
+        {
+          "songId": "409c15bd-d960-42e9-b87c-2891b7b5cc60",
+          "title": "Fix My Fate"
+        },
+        {
+          "songId": "c4e25e67-5efb-4ba3-8783-f940673d6bb5",
+          "title": "Let It Roar"
+        },
+        {
+          "songId": "341ae64e-0350-45ca-b970-b1b4f03fd45d",
+          "title": "The Last Goodbye"
+        },
+        {
+          "songId": "df7c3f73-2089-4b74-b49c-4fdf0999779e",
+          "title": "When The Children Cry"
+        },
+        {
+          "songId": "78826395-6085-47e4-9443-9688b75626c0",
+          "title": "Soul Family"
+        },
+        {
+          "songId": "c68c25ab-4851-49a0-94fb-ae12fc991b05",
+          "title": "Love Who You Are"
+        }
+      ]
+    },
+    "The Journey From Grape To Raisin": {
+      "count": 10,
+      "tracks": [
+        {
+          "songId": "c1e8a2a3-14fe-4643-b6a9-fa17d8ed5eb7",
+          "title": "2448-02-When-I m-Drinking-I-Think-In-Spanish"
+        },
+        {
+          "songId": "7a526498-b8a6-4508-a6e8-a785f789322d",
+          "title": "2448-03-Not-A-Lot-Of-Sand-Left-In-The-Glass"
+        },
+        {
+          "songId": "321df206-4f29-4b85-8916-acc5ad144248",
+          "title": "2448-04-Don t-You-Leave-Me-Too-Soon"
+        },
+        {
+          "songId": "f43f096a-c2a0-4bd3-bc8c-3b355e76df25",
+          "title": "2448-05-Femme-Fatale"
+        },
+        {
+          "songId": "d9dc3525-0949-4084-89b9-78422a0f6fdf",
+          "title": "2448-06-I-Want-To-Be-The-Man-My-Dog-Thinks-I-Am"
+        },
+        {
+          "songId": "6c486bd7-2aa0-4b8e-8032-80091e0bf6f1",
+          "title": "2448-07-Song-for-Ukraine-No.-2"
+        },
+        {
+          "songId": "8228a31a-77c2-435f-856f-1ec136530f0e",
+          "title": "2448-08-Permanent-Twilight"
+        },
+        {
+          "songId": "e064f008-b314-422a-96ff-08a8923ee912",
+          "title": "2448-09-The-First-Of-The-Gang-To-Go"
+        },
+        {
+          "songId": "97adac57-9828-42d7-acad-710b5d5714cc",
+          "title": "2448-10-Son-Won t-You-Teach-Me-To-Waltz"
+        },
+        {
+          "songId": "8f31856a-be29-4cc3-8c95-5c5eb522d72d",
+          "title": "2448-11-Why-I-Play-Guitar"
+        }
+      ]
+    },
+    "Wild Eyes": {
+      "count": 10,
+      "tracks": [
+        {
+          "songId": "443d1398-8ff7-4da6-b43d-afb7cccccf73",
+          "title": "Fault"
+        },
+        {
+          "songId": "3be3b16c-60c1-4db9-a6e6-47b3ad05dee6",
+          "title": "Bad Days"
+        },
+        {
+          "songId": "6f06d00a-896a-48c5-b8f4-a2445b6c4f29",
+          "title": "Clouds"
+        },
+        {
+          "songId": "9bf7ea02-02b3-4968-a80f-18017400897c",
+          "title": "Sound It Out"
+        },
+        {
+          "songId": "e88466c4-ac7c-40b3-bb88-f8670935e6cf",
+          "title": "Spiraling"
+        },
+        {
+          "songId": "92d32104-816f-4dea-b8f5-735876b10d06",
+          "title": "Looking Up"
+        },
+        {
+          "songId": "43674e16-d25d-49ba-9bd4-593b20bbfdee",
+          "title": "Little One"
+        },
+        {
+          "songId": "d3e1be63-ca23-4e82-aed1-a9290817fe9a",
+          "title": "Be There Now"
+        },
+        {
+          "songId": "2fab14ff-173d-411b-9145-4c03c1d9efbf",
+          "title": "Shambling"
+        },
+        {
+          "songId": "3dcbb4c6-283c-4a61-a9e1-134b07eedf15",
+          "title": "Shout the Sky"
+        }
+      ]
+    },
+    "Love Spell Special Edition": {
+      "count": 7,
+      "tracks": [
+        {
+          "songId": "5839b22b-a7e6-4b5b-b1b2-7523dab0f71a",
+          "title": "There Is No Rule"
+        },
+        {
+          "songId": "470e3a0d-c893-4a2b-aa96-9b66180fe028",
+          "title": "The Time Is Now"
+        },
+        {
+          "songId": "49e068e2-5089-4a1a-90b2-1edc1fdc2289",
+          "title": "Love Spell"
+        },
+        {
+          "songId": "3c176aac-bc21-4a47-8f7d-a60e858d2f2f",
+          "title": "Don't Carry The Weight"
+        },
+        {
+          "songId": "697a33cf-ac86-48ea-840e-699d8cc7db7c",
+          "title": "Floating"
+        },
+        {
+          "songId": "285216d5-7586-41d4-ac37-b89d580ad359",
+          "title": "Love Spell (Live)"
+        },
+        {
+          "songId": "9bb1893a-c89f-4103-ad9d-468779aeaf0c",
+          "title": "Don't Carry The Weight (Live)"
+        }
+      ]
+    },
+    "Shut The Hell Up (Clean)": {
+      "count": 7,
+      "tracks": [
+        {
+          "songId": "d795c6be-18e3-4822-9f8f-52f2c5b09ae8",
+          "title": "Gold Digger (Clean)"
+        },
+        {
+          "songId": "89e533b6-6103-4f7b-8b48-4335503d5c4d",
+          "title": "I Don't Wanna Be Like You"
+        },
+        {
+          "songId": "d3ded7b6-7ca2-403f-86a1-4b10949e3a83",
+          "title": "Joe Strummer"
+        },
+        {
+          "songId": "78fb940e-6c70-4559-82e7-39dc9c7b12bf",
+          "title": "Oh Lord (Save Me)"
+        },
+        {
+          "songId": "ed15facf-6149-4d62-ac89-d30900a435ef",
+          "title": "Bad Reputation (Clean)"
+        },
+        {
+          "songId": "2bbee8d7-bc40-418b-962d-b8c9e7c2f6d5",
+          "title": "Is She Dead"
+        },
+        {
+          "songId": "dd0ecea4-4f57-480e-9277-5effcd51810b",
+          "title": "I Believe"
+        }
+      ]
+    },
+    "When the World Stops": {
+      "count": 7,
+      "tracks": [
+        {
+          "songId": "145ca3f6-6fec-417d-ae73-72d5339329d5",
+          "title": "When the World Stops"
+        },
+        {
+          "songId": "61be9a51-01a0-422b-af42-714950b699e2",
+          "title": "By Your Side"
+        },
+        {
+          "songId": "6e7c481a-bbdc-4071-b5fe-d7873a2b37ba",
+          "title": "Sometimes This (feat. Saeeda Wright)"
+        },
+        {
+          "songId": "3fa39c1c-563f-49c4-a4a4-7188f913a4ff",
+          "title": "All the Same"
+        },
+        {
+          "songId": "72efc26c-fa87-4d3a-ba16-210cf328f3d8",
+          "title": "Feet On the Ground"
+        },
+        {
+          "songId": "5446b806-9511-4bd4-9e16-42e4999cbee8",
+          "title": "Lifetimes"
+        },
+        {
+          "songId": "6420b1db-01e6-477d-bef3-cf0ff2179192",
+          "title": "The Beauty We Choose"
+        }
+      ]
+    },
+    "Believe": {
+      "count": 6,
+      "tracks": [
+        {
+          "songId": "e45b94b2-1944-4828-978d-2ee327488d97",
+          "title": "Believe"
+        },
+        {
+          "songId": "6e615b85-7b6b-4a6a-a6a0-be703d3ab2e9",
+          "title": "Don't Want Another (Be The Last)"
+        },
+        {
+          "songId": "94f710dc-e80d-4125-ab8b-cede3cc4c751",
+          "title": "Keep On"
+        },
+        {
+          "songId": "eb9193e9-f1c7-4028-a50c-1af785692192",
+          "title": "My Love Is A Killer"
+        },
+        {
+          "songId": "9a80f77e-736f-4605-bcb7-ceb93d9139d7",
+          "title": "Starlight"
+        },
+        {
+          "songId": "7ad523a6-7518-45cd-8ba8-4e4d264a5540",
+          "title": "Why Not Take It All"
+        }
+      ]
+    },
+    "Rosemary Hill": {
+      "count": 6,
+      "tracks": [
+        {
+          "songId": "2630649f-4e0b-424d-aa49-b50c55775c61",
+          "title": "Thread the Needle"
+        },
+        {
+          "songId": "96593e41-bafd-466b-a3ff-8c9055229042",
+          "title": "Julia"
+        },
+        {
+          "songId": "d9a1aa66-9b34-4306-8b97-556a65f6eae4",
+          "title": "We Are Love"
+        },
+        {
+          "songId": "15c0747d-204d-4a81-a9e6-6de7a1d74f30",
+          "title": "Child and Man"
+        },
+        {
+          "songId": "796e210d-cee2-4be5-92be-ca72c7e2b36b",
+          "title": "Homeland"
+        },
+        {
+          "songId": "fd8a2c1d-7961-4239-827f-c6416d7a6a6d",
+          "title": "Rosemary Hill"
+        }
+      ]
+    },
+    "Activ8te": {
+      "count": 5,
+      "tracks": [
+        {
+          "songId": "6fcc6506-da62-4807-bf08-d351b72c85f9",
+          "title": "DefCon Quantum Breach"
+        },
+        {
+          "songId": "580eec1d-fee3-45af-8045-49ff4ee97724",
+          "title": "I'm Tracking You"
+        },
+        {
+          "songId": "cd73250f-eb27-48e1-89e1-8455d533cbf9",
+          "title": "Netrunner"
+        },
+        {
+          "songId": "03db28a8-c6ab-4e31-b306-7cfb602b92ef",
+          "title": "Teardrop Falling"
+        },
+        {
+          "songId": "7f67de5f-8eb1-41ed-9c7b-fcc7185de74b",
+          "title": "Patch Your Network"
+        }
+      ]
+    },
+    "Fractured Hearts": {
+      "count": 5,
+      "tracks": [
+        {
+          "songId": "4d1deabb-c7fa-4ab4-96da-c8798c9910bf",
+          "title": "Trouble"
+        },
+        {
+          "songId": "5efc60c7-5a84-419e-ac6f-2d94674cda3c",
+          "title": "In A Dream"
+        },
+        {
+          "songId": "6ee4cf2b-898b-45a7-9da1-4cae55eae13b",
+          "title": "Love Addict"
+        },
+        {
+          "songId": "325e6e27-44e8-469b-8c1a-e381e8d145d7",
+          "title": "We Could Make It"
+        },
+        {
+          "songId": "28f7ad52-1fa9-47dc-9912-a99ca837fac7",
+          "title": "Cycles"
+        }
+      ]
+    },
+    "Love Spell EP": {
+      "count": 5,
+      "tracks": [
+        {
+          "songId": "e0c153c2-8b01-498e-ac48-c5acfa7d3f62",
+          "title": "There is No Rule"
+        },
+        {
+          "songId": "a5be57d2-e2ac-41e2-a567-f5e516364cc0",
+          "title": "The Time Is Now"
+        },
+        {
+          "songId": "song-3-1",
+          "title": "Love Spell"
+        },
+        {
+          "songId": "2f5d7331-d7ed-4a3a-8df3-72273b53b359",
+          "title": "Don't Carry the Weight"
+        },
+        {
+          "songId": "7f4a013e-907f-4f0e-92c3-0fc73cf414fd",
+          "title": "Floating"
+        }
+      ]
+    },
+    "Della Chase": {
+      "count": 4,
+      "tracks": [
+        {
+          "songId": "d213921a-9ebd-4dce-b6ab-de567c9d3e29",
+          "title": "I Don't Care"
+        },
+        {
+          "songId": "66a22eb3-3a98-4e32-9fa3-1eb716ead724",
+          "title": "Gone"
+        },
+        {
+          "songId": "a6e532d7-c693-43d8-867c-f82f138b17a1",
+          "title": "Insane"
+        },
+        {
+          "songId": "918c1c10-d27d-4617-a904-c25f17a6ee24",
+          "title": "Truth"
+        }
+      ]
+    },
+    "Last Stop On The Underground": {
+      "count": 4,
+      "tracks": [
+        {
+          "songId": "f6bec71f-0d87-4665-a3cf-bff2460f2719",
+          "title": "Surprise Surprise"
+        },
+        {
+          "songId": "a82bce23-15a9-4019-8189-ad20f9efe2fe",
+          "title": "Didn't Know What Not To Say"
+        },
+        {
+          "songId": "ae8742fe-bd37-42c4-98fe-48cc190d3cd5",
+          "title": "Last Stop on the Underground"
+        },
+        {
+          "songId": "ccae33de-accc-4b61-8b39-fcbe7adc8f30",
+          "title": "Happy To Leave"
+        }
+      ]
+    },
+    "Like A Man": {
+      "count": 4,
+      "tracks": [
+        {
+          "songId": "cf01b505-3e57-4b58-835b-e9c1d2b21012",
+          "title": "Like A Man"
+        },
+        {
+          "songId": "ceadf855-f011-48b9-99c4-24651e6e1cfc",
+          "title": "Forget About You"
+        },
+        {
+          "songId": "8a605d47-e121-4db1-be3b-22f2b37725c6",
+          "title": "Wendy Lady"
+        },
+        {
+          "songId": "0db33e12-e799-49ba-9136-521d691e0df1",
+          "title": "Lost in L.A."
+        }
+      ]
+    },
+    "El Magico 3 Pack": {
+      "count": 3,
+      "tracks": [
+        {
+          "songId": "90763fd1-0a27-4ace-af74-e75856d4829c",
+          "title": "Pray For My Sins"
+        },
+        {
+          "songId": "b46949b8-966d-4846-8faf-7be56fccc368",
+          "title": "Dime Mami"
+        },
+        {
+          "songId": "9081813f-2deb-46e9-be21-d871f580c5f4",
+          "title": "Miami Maybach"
+        }
+      ]
+    },
+    "Look at You": {
+      "count": 3,
+      "tracks": [
+        {
+          "songId": "53244b6f-a283-4143-9cdc-74f0b0269018",
+          "title": "Look At You"
+        },
+        {
+          "songId": "8780d4c8-479d-4efe-8c32-7635cdce4260",
+          "title": "No Choice (Bonus Track)"
+        },
+        {
+          "songId": "a72f8a7c-507a-4047-a10e-78c8215228d0",
+          "title": "Outside (Bonus Track)"
+        }
+      ]
+    },
+    "Never Break My Heart - LLT (Single Series)": {
+      "count": 3,
+      "tracks": [
+        {
+          "songId": "2b03946b-565d-4fae-99be-86dda690befe",
+          "title": "Nothing Without Your Love"
+        },
+        {
+          "songId": "a9517a06-c76d-4270-b9be-f2abd7159bc7",
+          "title": "Never-Break-My-Heart-6-24Bit-Master"
+        },
+        {
+          "songId": "c4a1a68d-d667-4f30-b5a3-39034d337d98",
+          "title": "Never-Break-My-Heart-6-24Bit-Master"
+        }
+      ]
+    },
+    "Cold Night - LLT (Single Series)": {
+      "count": 2,
+      "tracks": [
+        {
+          "songId": "db498c4d-0e53-4dc6-a2e7-f96cc8b38268",
+          "title": "Cold Night (Winter Mix)"
+        },
+        {
+          "songId": "5c6dd3a3-fc29-422f-a8e0-6c7b58d9854c",
+          "title": "Cold Night (Zero Degrees)"
+        }
+      ]
+    },
+    "Hurts to Love You - LLT (Single Series)": {
+      "count": 2,
+      "tracks": [
+        {
+          "songId": "07cb7be5-76de-4d2c-86aa-c2be5f1d86b8",
+          "title": "Hurts to Love You"
+        },
+        {
+          "songId": "e2da2113-8227-426c-8ddd-89935150eaa9",
+          "title": "Hey Kid"
+        }
+      ]
+    },
+    "Searchlight - LLT (Single Series)": {
+      "count": 2,
+      "tracks": [
+        {
+          "songId": "3667b6d2-ebec-4c3a-af96-7f29895559e1",
+          "title": "Searchlight"
+        },
+        {
+          "songId": "3170fb94-2030-45e3-995d-4b1ebeb11b8f",
+          "title": "Don't Let Go"
+        }
+      ]
+    },
+    "Storms - LLT (Single Series)": {
+      "count": 2,
+      "tracks": [
+        {
+          "songId": "a5897fab-91ba-4213-8ea7-ef2eca6f1491",
+          "title": "Storms"
+        },
+        {
+          "songId": "0eda90d6-b6d1-42eb-9c37-5b61f2a01a85",
+          "title": "Wild Hearts"
+        }
+      ]
+    },
+    "Superman - LLT (Single Series)": {
+      "count": 2,
+      "tracks": [
+        {
+          "songId": "9189b881-effc-458a-9b7d-15b7e2ac8338",
+          "title": "Superman"
+        },
+        {
+          "songId": "46fcc5de-b364-4bd8-ab3e-9518d65c68a9",
+          "title": "Made For Us"
+        }
+      ]
+    }
+  }
+}
