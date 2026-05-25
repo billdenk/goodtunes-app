@@ -215,6 +215,22 @@ async function bootstrapAccessGuard() {
   await registerRoutes(httpServer, app);
   await bootstrapAccessGuard();
 
+  // Task #246 — Signed-cert sale-window scheduler. In-process tick every
+  // 5 minutes promotes `scheduled` → `open` and closes any window whose
+  // `closesAt` has passed (min-check, refund pass, or production flip).
+  // Single-node only — if we scale out, lift this into a pg-advisory-
+  // lock-guarded job.
+  try {
+    const { runDueSaleWindows } = await import("./saleWindow");
+    runDueSaleWindows().catch((e) => log(`saleWindow first run failed: ${e?.message ?? e}`, "sale-window"));
+    setInterval(() => {
+      runDueSaleWindows().catch((e) => log(`saleWindow tick failed: ${e?.message ?? e}`, "sale-window"));
+    }, 5 * 60 * 1000);
+    log("signed-cert sale-window scheduler armed (5min tick)", "sale-window");
+  } catch (e: any) {
+    log(`saleWindow scheduler init failed: ${e?.message ?? e}`, "sale-window");
+  }
+
   // One-line OAuth provider status so operators can confirm at-a-glance
   // that the Apple/Google sign-in buttons will actually work in this
   // environment (env var present + key normalised). No secret values

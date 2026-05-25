@@ -230,3 +230,76 @@ SQL
 }
 migrate_entity_contacts dev  "${DATABASE_URL:-}"
 migrate_entity_contacts prod "${PROD_DATABASE_URL:-}"
+
+# Task #246 — signed-cert sale-window + reservations + true-up ledger.
+# Additive columns on `albums` plus two new tables. Drizzle push has a
+# habit of silently skipping additive ALTERs once a release ships, so
+# pre-create on both DBs to keep the publish dev→prod diff empty and
+# the new admin panel from 500'ing on fresh-clone dev.
+migrate_cert_sale_window() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping cert sale-window migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS signed_cert_window_opens_at           timestamp,
+  ADD COLUMN IF NOT EXISTS signed_cert_window_closes_at          timestamp,
+  ADD COLUMN IF NOT EXISTS signed_cert_window_status             text,
+  ADD COLUMN IF NOT EXISTS signed_cert_window_closed_at          timestamp,
+  ADD COLUMN IF NOT EXISTS cert_batch_sent_to_press_at           timestamp,
+  ADD COLUMN IF NOT EXISTS cert_batch_at_artist_at               timestamp,
+  ADD COLUMN IF NOT EXISTS cert_batch_returned_at                timestamp,
+  ADD COLUMN IF NOT EXISTS cert_batch_hologram_at                timestamp,
+  ADD COLUMN IF NOT EXISTS cert_batch_shipped_to_fulfillment_at  timestamp,
+  ADD COLUMN IF NOT EXISTS cert_batch_inserted_at                timestamp,
+  ADD COLUMN IF NOT EXISTS cert_batch_notes                      jsonb,
+  ADD COLUMN IF NOT EXISTS cert_batch_pdf_asset_url              text,
+  ADD COLUMN IF NOT EXISTS cert_batch_pdf_generated_at           timestamp;
+
+CREATE TABLE IF NOT EXISTS cert_reservations (
+  id                   varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id             varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  order_id             varchar NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  shopify_order_id     text,
+  shopify_line_item_id text,
+  good_deed_number     integer,
+  variant_kind         text    NOT NULL DEFAULT 'printed',
+  status               text    NOT NULL DEFAULT 'reserved',
+  refunded_at          timestamp,
+  refund_shopify_id    text,
+  refunded_cents       integer,
+  created_at           timestamp NOT NULL DEFAULT now(),
+  updated_at           timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT cert_reservations_order_uniq UNIQUE (order_id)
+);
+CREATE INDEX IF NOT EXISTS cert_reservations_album_status_idx
+  ON cert_reservations (album_id, status);
+
+CREATE TABLE IF NOT EXISTS cert_trueup_ledger (
+  id                          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id                    varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  batch_size                  integer NOT NULL,
+  projected_rung_label        text,
+  projected_wholesale_cents   integer,
+  actual_rung_label           text,
+  actual_wholesale_cents      integer,
+  delta_cents_per_unit        integer NOT NULL,
+  total_delta_cents           integer NOT NULL,
+  owner_kind                  text,
+  owner_id                    varchar,
+  status                      text    NOT NULL DEFAULT 'pending_no_engine',
+  applied_at                  timestamp,
+  notes                       text,
+  created_at                  timestamp NOT NULL DEFAULT now()
+);
+SQL
+  then
+    echo "post-merge: cert sale-window migration ok on $label"
+  else
+    echo "post-merge: WARNING — cert sale-window migration failed on $label (continuing)"
+  fi
+}
+migrate_cert_sale_window dev  "${DATABASE_URL:-}"
+migrate_cert_sale_window prod "${PROD_DATABASE_URL:-}"

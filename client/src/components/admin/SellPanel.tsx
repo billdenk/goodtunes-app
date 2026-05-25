@@ -56,6 +56,7 @@ import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPane
 import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { SignedCertVendorPanel } from "@/components/admin/SignedCertVendorPanel";
+import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 const parseDollars = (v: string): number | null => {
@@ -362,6 +363,10 @@ export function SellPanel({ albumId, artworkUrl = null }: { albumId: string; art
               edits the fan-facing price first, then routes the run. */}
           <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
             <SignedCertVendorPanel albumId={albumId} />
+          </div>
+          {/* Task #246 — Sale-window batch workflow. */}
+          <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+            <CertSaleWindowPanel albumId={albumId} />
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { SignedCertLadderRung } from "./signedCertLadder";
@@ -178,6 +178,39 @@ export const albums = pgTable("albums", {
   shopifyPushCertVariantId: text("shopify_push_cert_variant_id"),
   shopifyPushedAt: timestamp("shopify_pushed_at"),
   shopifyPushSnapshot: jsonb("shopify_push_snapshot").$type<ShopifyPushSnapshot>(),
+  // ─── Task #246 — Signed-cert sale-window batch workflow ────────────
+  // Optional sale-window for the signed-cert addon. When set, fan
+  // orders carrying the cert addon while open mint a `cert_reservations`
+  // row with a reserved GoodDeed number. At close, a min-check refunds
+  // the cert line (below 25) or flips into the production pipeline
+  // (>=25). Window status reflects the lifecycle the operator walks
+  // through on the album panel. After the window has closed, any new
+  // Shopify orders that still carry the cert variant are recorded as
+  // `digital_only` reservations — no print row is added.
+  //
+  //   null              — no window configured (legacy behaviour)
+  //   "scheduled"       — opensAt is in the future
+  //   "open"            — opensAt <= now < closesAt; mints reservations
+  //   "closed_below_min"— closesAt reached with <25 reservations; refunded
+  //   "in_production"   — closesAt reached, snapshot stamped, batch live
+  //   "shipped"         — batch reached the "inserted" step
+  //   "cancelled"       — operator-cancelled before close (rare)
+  signedCertWindowOpensAt: timestamp("signed_cert_window_opens_at"),
+  signedCertWindowClosesAt: timestamp("signed_cert_window_closes_at"),
+  signedCertWindowStatus: text("signed_cert_window_status"),
+  signedCertWindowClosedAt: timestamp("signed_cert_window_closed_at"),
+  // Operations tracker — six steps, one timestamp + free-text note
+  // each. The note bag is a tiny `{ stepKey: note }` jsonb so the same
+  // row can be edited without N round-trips.
+  certBatchSentToPressAt: timestamp("cert_batch_sent_to_press_at"),
+  certBatchAtArtistAt: timestamp("cert_batch_at_artist_at"),
+  certBatchReturnedAt: timestamp("cert_batch_returned_at"),
+  certBatchHologramAt: timestamp("cert_batch_hologram_at"),
+  certBatchShippedToFulfillmentAt: timestamp("cert_batch_shipped_to_fulfillment_at"),
+  certBatchInsertedAt: timestamp("cert_batch_inserted_at"),
+  certBatchNotes: jsonb("cert_batch_notes").$type<Record<string, string>>(),
+  certBatchPdfAssetUrl: text("cert_batch_pdf_asset_url"),
+  certBatchPdfGeneratedAt: timestamp("cert_batch_pdf_generated_at"),
 });
 
 // Fingerprint of what was last sent to Shopify on a Push. Re-push
@@ -2562,3 +2595,96 @@ export type PrintGeneration = typeof printGenerations.$inferSelect;
 export type InsertPrintGeneration = typeof printGenerations.$inferInsert;
 export type PrintArtifact = typeof printArtifacts.$inferSelect;
 export type InsertPrintArtifact = typeof printArtifacts.$inferInsert;
+
+// ─── Task #246 — Signed-cert sale-window reservations ──────────────────
+// One row per fan order (direct or Shopify) that bought into a signed-
+// cert sale window. The row pins the reserved GoodDeed number to the
+// order at sale time and tracks the lifecycle of the cert leg through
+// the batch. `variantKind` distinguishes prints (in-window orders) from
+// digital-only fallbacks (post-window orders that still buy the cert
+// variant on Shopify) — only `printed` rows are eligible for the print
+// batch.
+//
+// Status lifecycle:
+//   reserved             — order paid in-window; GoodDeed # held for batch
+//   in_production        — window closed >=25; pricing snapshotted
+//   fulfilled            — batch inserted into vinyl shipment
+//   refunded_below_min   — window closed <25; cert addon refunded
+//   digital_only         — order arrived post-window; no print row produced
+//   cancelled            — operator-cancelled before close
+export const CERT_RESERVATION_STATUSES = [
+  "reserved",
+  "in_production",
+  "fulfilled",
+  "refunded_below_min",
+  "digital_only",
+  "cancelled",
+] as const;
+export type CertReservationStatus = (typeof CERT_RESERVATION_STATUSES)[number];
+
+export const certReservations = pgTable(
+  "cert_reservations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+    orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+    shopifyOrderId: text("shopify_order_id"),
+    shopifyLineItemId: text("shopify_line_item_id"),
+    goodDeedNumber: integer("good_deed_number"),
+    variantKind: text("variant_kind").notNull().default("printed"),
+    status: text("status").notNull().default("reserved"),
+    refundedAt: timestamp("refunded_at"),
+    refundShopifyId: text("refund_shopify_id"),
+    refundedCents: integer("refunded_cents"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    orderUniq: unique("cert_reservations_order_uniq").on(t.orderId),
+    albumStatusIdx: index("cert_reservations_album_status_idx").on(t.albumId, t.status),
+  }),
+);
+
+export type CertReservation = typeof certReservations.$inferSelect;
+export type InsertCertReservation = typeof certReservations.$inferInsert;
+
+// ─── Task #246 — Signed-cert tier true-up ledger ───────────────────────
+// At window close we compute the delta between the wholesale rung that
+// was *projected* at sale time (label's Push-to-Shopify earnings preview)
+// and the rung the batch actually clears (which depends on the final
+// reservation count). The auto-charge engine from Task #4 isn't yet
+// implemented, so for now this table records the math and leaves status
+// = "pending_no_engine" — once the engine ships, a sweep will translate
+// these rows into Stripe Connect transfers / invoices.
+//
+// `totalDeltaCents` is signed: positive means the label owes GoodTunes
+// more than the projected amount already settled (we charge), negative
+// means we owe the label (we credit). Status flips to `applied` when
+// the engine eventually settles.
+export const CERT_TRUEUP_STATUSES = [
+  "pending_no_engine",
+  "applied",
+  "skipped",
+] as const;
+export type CertTrueupStatus = (typeof CERT_TRUEUP_STATUSES)[number];
+
+export const certTrueupLedger = pgTable("cert_trueup_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  batchSize: integer("batch_size").notNull(),
+  projectedRungLabel: text("projected_rung_label"),
+  projectedWholesaleCents: integer("projected_wholesale_cents"),
+  actualRungLabel: text("actual_rung_label"),
+  actualWholesaleCents: integer("actual_wholesale_cents"),
+  deltaCentsPerUnit: integer("delta_cents_per_unit").notNull(),
+  totalDeltaCents: integer("total_delta_cents").notNull(),
+  ownerKind: text("owner_kind"),
+  ownerId: varchar("owner_id"),
+  status: text("status").notNull().default("pending_no_engine"),
+  appliedAt: timestamp("applied_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CertTrueupLedgerRow = typeof certTrueupLedger.$inferSelect;
+export type InsertCertTrueupLedgerRow = typeof certTrueupLedger.$inferInsert;

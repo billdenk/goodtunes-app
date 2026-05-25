@@ -3,7 +3,9 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
 import { sql, and, eq } from "drizzle-orm";
-import { userAlbums, albums } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders } from "@shared/schema";
+import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
+import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
@@ -14274,6 +14276,216 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     },
   );
+
+  // ─── Task #246 — Signed-cert sale-window batch workflow ────────────
+  // Sits next to the Sell tab on AdminAlbum. Five routes:
+  //   GET  /api/admin/albums/:id/cert-sale-window   — read window + tracker
+  //   PUT  /api/admin/albums/:id/cert-sale-window   — set opens/closes
+  //   POST /api/admin/albums/:id/cert-sale-window/close — manual close
+  //   GET  /api/admin/albums/:id/cert-reservations  — list reservations
+  //   POST /api/admin/albums/:id/cert-batch/pdf     — produce + stream ZIP
+  //   PATCH /api/admin/albums/:id/cert-batch/step   — advance one step
+  //   GET  /api/partners/albums/:id/cert-batch-status — read-only mirror
+  {
+    const albumsTbl = albums;
+    const { desc } = await import("drizzle-orm");
+    const closeSaleWindow = closeCertSaleWindow;
+    const generateBatchPdf = generateCertBatchPdf;
+
+    const pickWindowPayload = (album: any) => {
+      return {
+        opensAt: album.signedCertWindowOpensAt,
+        closesAt: album.signedCertWindowClosesAt,
+        status: album.signedCertWindowStatus,
+        closedAt: album.signedCertWindowClosedAt,
+        notes: album.certBatchNotes ?? {},
+        pdfAssetUrl: album.certBatchPdfAssetUrl,
+        pdfGeneratedAt: album.certBatchPdfGeneratedAt,
+        steps: CERT_BATCH_STEPS.map((s) => ({
+          key: s.key,
+          label: s.label,
+          completedAt: album[s.column] ?? null,
+        })),
+      };
+    }
+
+    app.get("/api/admin/albums/:id/cert-sale-window", requireAdmin, async (req, res) => {
+      const [album] = await db.select().from(albumsTbl).where(eq(albumsTbl.id, String(req.params.id)));
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const reservations = await db
+        .select()
+        .from(certReservations)
+        .where(eq(certReservations.albumId, String(req.params.id)));
+      const counts = {
+        reserved: reservations.filter((r) => r.status === "reserved").length,
+        inProduction: reservations.filter((r) => r.status === "in_production").length,
+        fulfilled: reservations.filter((r) => r.status === "fulfilled").length,
+        refundedBelowMin: reservations.filter((r) => r.status === "refunded_below_min").length,
+        digitalOnly: reservations.filter((r) => r.status === "digital_only").length,
+        cancelled: reservations.filter((r) => r.status === "cancelled").length,
+        total: reservations.length,
+      };
+      const [latestTrueup] = await db
+        .select()
+        .from(certTrueupLedger)
+        .where(eq(certTrueupLedger.albumId, String(req.params.id)))
+        .orderBy(desc(certTrueupLedger.createdAt))
+        .limit(1);
+      res.json({
+        window: pickWindowPayload(album),
+        counts,
+        trueup: latestTrueup ?? null,
+      });
+    });
+
+    app.put("/api/admin/albums/:id/cert-sale-window", requireAdmin, async (req, res) => {
+      const body = req.body ?? {};
+      const opens = body.opensAt ? new Date(body.opensAt) : null;
+      const closes = body.closesAt ? new Date(body.closesAt) : null;
+      if (opens && closes && opens >= closes) {
+        return res.status(400).json({ message: "Window must open before it closes" });
+      }
+      const [album] = await db.select().from(albumsTbl).where(eq(albumsTbl.id, String(req.params.id)));
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      if (
+        album.signedCertWindowStatus === "in_production" ||
+        album.signedCertWindowStatus === "shipped" ||
+        album.signedCertWindowStatus === "closed_below_min"
+      ) {
+        return res.status(409).json({
+          message: "Window already closed — cannot edit dates after batch enters production",
+        });
+      }
+      const now = new Date();
+      const status = opens && opens > now ? "scheduled" : opens ? "open" : null;
+      await db
+        .update(albumsTbl)
+        .set({
+          signedCertWindowOpensAt: opens,
+          signedCertWindowClosesAt: closes,
+          signedCertWindowStatus: status,
+        })
+        .where(eq(albumsTbl.id, String(req.params.id)));
+      res.json({ ok: true });
+    });
+
+    app.post("/api/admin/albums/:id/cert-sale-window/close", requireAdmin, async (req, res) => {
+      const r = await closeSaleWindow(String(req.params.id));
+      if (!r.ok) return res.status(400).json({ message: r.error });
+      res.json(r);
+    });
+
+    app.get("/api/admin/albums/:id/cert-reservations", requireAdmin, async (req, res) => {
+      const rows = await db
+        .select({ reservation: certReservations, order: orders })
+        .from(certReservations)
+        .innerJoin(orders, eq(orders.id, certReservations.orderId))
+        .where(eq(certReservations.albumId, String(req.params.id)))
+        .orderBy(desc(certReservations.createdAt));
+      res.json(
+        rows.map((r) => ({
+          ...r.reservation,
+          buyerEmail: r.order.buyerEmail,
+          buyerName: r.order.buyerName,
+          orderCreatedAt: r.order.createdAt,
+          orderTotalCents: r.order.totalCents,
+          origin: r.order.origin,
+        })),
+      );
+    });
+
+    app.post("/api/admin/albums/:id/cert-batch/pdf", requireAdmin, async (req, res) => {
+      try {
+        const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() || req.protocol || "http";
+        const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+        const origin = `${proto}://${host}`;
+        const out = await generateBatchPdf(String(req.params.id), origin);
+        if (!out) return res.status(400).json({ message: "No in-production reservations to print" });
+        // Persist the ZIP artifact to Object Storage so the admin panel
+        // can re-download the exact bytes the press received without
+        // regenerating. Survives across redeploys; ACL = public so the
+        // signed `/objects/uploads/<id>` route works without auth.
+        let assetUrl: string | null = null;
+        try {
+          assetUrl = await uploadBufferToObjectStorage(out.buffer, "application/zip");
+        } catch (e: any) {
+          console.error("[cert-batch/pdf] artifact persist failed", e?.message ?? e);
+        }
+        await db
+          .update(albumsTbl)
+          .set({
+            certBatchPdfGeneratedAt: new Date(),
+            ...(assetUrl ? { certBatchPdfAssetUrl: assetUrl } : {}),
+          })
+          .where(eq(albumsTbl.id, String(req.params.id)));
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", `attachment; filename="gooddeed-batch-${String(req.params.id)}.zip"`);
+        res.send(out.buffer);
+      } catch (e: any) {
+        console.error("[cert-batch/pdf]", e);
+        res.status(500).json({ message: e?.message ?? "Batch PDF failed" });
+      }
+    });
+
+    app.patch("/api/admin/albums/:id/cert-batch/step", requireAdmin, async (req, res) => {
+      const stepKey = String(req.body?.stepKey ?? "");
+      const step = CERT_BATCH_STEPS.find((s) => s.key === stepKey);
+      if (!step) return res.status(400).json({ message: "Unknown stepKey" });
+      const action = String(req.body?.action ?? "complete"); // complete|undo|note
+      const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+      const [album] = await db.select().from(albumsTbl).where(eq(albumsTbl.id, String(req.params.id)));
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const patch: Record<string, any> = {};
+      if (action === "complete") patch[step.column] = album[step.column as keyof typeof album] ?? new Date();
+      else if (action === "undo") patch[step.column] = null;
+      if (note !== undefined) {
+        const next = { ...(album.certBatchNotes ?? {}), [step.key]: note };
+        patch.certBatchNotes = next;
+      }
+      // Auto-promote album status when the last step lands.
+      if (step.key === "inserted" && action === "complete") {
+        patch.signedCertWindowStatus = "shipped";
+      }
+      await db.update(albumsTbl).set(patch).where(eq(albumsTbl.id, String(req.params.id)));
+      res.json({ ok: true });
+    });
+
+    app.get("/api/partners/albums/:id/cert-batch-status", requireAuth, async (req, res) => {
+      // Scope check: only super_admin / admin OR the partner that owns
+      // this album's label / primary artist can read its batch status.
+      // Without this an authenticated partner could enumerate other
+      // labels' production schedules by album id (IDOR).
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const { resolveAlbumScope } = await import("./auth/partnerPermissions");
+      const { getUserRole } = await import("./auth/roles");
+      const resolved = await resolveAlbumScope(String(req.params.id));
+      if (!resolved) return res.status(404).json({ message: "Album not found" });
+      const role = await getUserRole(userId);
+      if (!role) return res.status(403).json({ message: "No role" });
+      const isAdmin = role.role === "super_admin" || role.role === "admin";
+      const scopedMatch =
+        resolved.scope &&
+        role.role === resolved.scope.kind &&
+        role.roleScopeId === resolved.scope.id;
+      if (!isAdmin && !scopedMatch) {
+        return res.status(403).json({ message: "Out of scope" });
+      }
+      const [album] = await db.select().from(albumsTbl).where(eq(albumsTbl.id, String(req.params.id)));
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const reservations = await db
+        .select({ status: certReservations.status })
+        .from(certReservations)
+        .where(eq(certReservations.albumId, String(req.params.id)));
+      res.json({
+        window: pickWindowPayload(album),
+        counts: {
+          total: reservations.length,
+          printed: reservations.filter((r) => r.status === "reserved" || r.status === "in_production" || r.status === "fulfilled").length,
+        },
+      });
+    });
+  }
 
   return httpServer;
 }

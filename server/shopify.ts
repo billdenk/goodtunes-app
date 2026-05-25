@@ -277,6 +277,7 @@ type ShopifyAddress = {
   phone?: string | null;
 };
 type ShopifyLineItem = {
+  id?: number | null;
   product_id: number | null;
   variant_id: number | null;
   title: string;
@@ -515,6 +516,34 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     });
   }
   await db.insert(orderItems).values(itemRows);
+
+  // Task #246 — Mint a cert_reservations row if the order carries the
+  // signed-cert add-on. Window status drives variantKind: in-window =
+  // printed (eligible for batch); post-window = digital_only (fan keeps
+  // the digital provenance page but no print row is produced).
+  if (signedCertCents > 0) {
+    try {
+      const { reservationKindForWindowStatus } = await import("./saleWindow");
+      const { certReservations } = await import("@shared/schema");
+      const variantKind = reservationKindForWindowStatus(
+        (albumRow as any)?.signedCertWindowStatus ?? null,
+      );
+      await db
+        .insert(certReservations)
+        .values({
+          albumId,
+          orderId: order.id,
+          shopifyOrderId,
+          shopifyLineItemId: matchedLine.id != null ? String(matchedLine.id) : null,
+          goodDeedNumber: variantKind === "printed" ? goodDeedNumber : null,
+          variantKind,
+          status: variantKind === "printed" ? "reserved" : "digital_only",
+        })
+        .onConflictDoNothing({ target: certReservations.orderId });
+    } catch (e: any) {
+      console.error(`[shopify] cert reservation mint failed for ${order.id}: ${e?.message ?? e}`);
+    }
+  }
 
   // Unlock the album for the (possibly-stub) customer immediately. The
   // /redeem page just signs them into the account that already owns the
