@@ -12250,6 +12250,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── Task #48 — Stripe Connect payouts ─────────────────────────
   const { registerPayoutRoutes } = await import("./payouts");
   registerPayoutRoutes(app);
+  const { registerReferralPayoutRoutes } = await import("./referralPayouts");
+  registerReferralPayoutRoutes(app);
 
   // ─── Task #80 — Partner reporting v1 ───────────────────────────
   const { registerReportRoutes } = await import("./reports/routes");

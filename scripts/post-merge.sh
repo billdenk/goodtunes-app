@@ -469,3 +469,35 @@ SQL
 }
 migrate_invite_tree_v1 dev  "${DATABASE_URL:-}"
 migrate_invite_tree_v1 prod "${PROD_DATABASE_URL:-}"
+
+# Task #354 — Referral-credit payout columns + organization payout owner.
+# Adds the stamps the batched payout job (server/referralPayouts.ts) writes
+# back ("paid" status, transfer id, paid_at, resolved payout owner). All
+# additive / idempotent.
+migrate_referral_payouts() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping referral-payouts migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE referral_credits
+  ADD COLUMN IF NOT EXISTS payout_transfer_id text,
+  ADD COLUMN IF NOT EXISTS paid_at            timestamp,
+  ADD COLUMN IF NOT EXISTS payout_owner_kind  text,
+  ADD COLUMN IF NOT EXISTS payout_owner_id    varchar,
+  ADD COLUMN IF NOT EXISTS payout_error       text,
+  ADD COLUMN IF NOT EXISTS payout_run_id      varchar;
+CREATE INDEX IF NOT EXISTS referral_credits_status_idx
+  ON referral_credits (status);
+CREATE INDEX IF NOT EXISTS referral_credits_payout_run_idx
+  ON referral_credits (payout_run_id) WHERE payout_run_id IS NOT NULL;
+SQL
+  then
+    echo "post-merge: referral-payouts migration ok on $label"
+  else
+    echo "post-merge: WARNING — referral-payouts migration failed on $label (continuing)"
+  fi
+}
+migrate_referral_payouts dev  "${DATABASE_URL:-}"
+migrate_referral_payouts prod "${PROD_DATABASE_URL:-}"

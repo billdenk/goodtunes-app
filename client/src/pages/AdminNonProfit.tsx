@@ -9,6 +9,7 @@ import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog"
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
+import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { queryClient } from "@/lib/queryClient";
 
 // Task #78 — Super-admin detail page for a non-profit partner.
@@ -35,7 +36,7 @@ export default function AdminNonProfit() {
   // other three tabs are shared components driven by
   // `/api/admin/non-profits/:id/...` endpoints (plus the existing
   // contacts endpoint for People).
-  const [tab, setTab] = useState<"overview" | "people" | "albums" | "analytics">("overview");
+  const [tab, setTab] = useState<"overview" | "people" | "albums" | "analytics" | "payouts">("overview");
 
   if (npoQ.isLoading) {
     return (
@@ -147,6 +148,7 @@ export default function AdminNonProfit() {
               { key: "people", label: "People" },
               { key: "albums", label: "Albums" },
               { key: "analytics", label: "Analytics" },
+              { key: "payouts", label: "Payouts" },
             ] as const).map((t) => (
               <button
                 key={t.key}
@@ -214,6 +216,13 @@ export default function AdminNonProfit() {
           <EntityAnalyticsTab
             apiPath={`/api/admin/non-profits/${npo.id}/analytics`}
             testIdPrefix="npo"
+          />
+        )}
+        {tab === "payouts" && (
+          <PayoutAccountPanel
+            ownerKind="organization"
+            ownerId={npo.id}
+            ownerName={npo.name}
           />
         )}
       </div>

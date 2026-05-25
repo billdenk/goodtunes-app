@@ -14,6 +14,7 @@ import { db } from "./db";
 import {
   orders,
   albums,
+  organizations,
   payoutAccounts,
   payoutSettings,
   people,
@@ -97,6 +98,28 @@ export async function syncAccountFromStripe(stripeAcct: Stripe.Account): Promise
     .where(eq(payoutAccounts.id, existing.id))
     .returning();
   return updated;
+}
+
+// Partner-permission gate for a payout-account owner. `organization`
+// owners (added by Task #354 for NPO referral payouts) aren't a partner
+// scope kind, so they're super-admin-only — anything else maps to the
+// usual artist/label scope check.
+async function gatePayoutOwner(
+  userId: string,
+  ownerKind: PayoutOwnerKind,
+  ownerId: string,
+): Promise<{ status: number; body: any } | null> {
+  if (ownerKind === "organization") {
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole(userId);
+    if (!info || info.role !== "super_admin") {
+      return { status: 403, body: { message: "Super admin only" } };
+    }
+    return null;
+  }
+  const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+  const scope = { kind: (ownerKind === "person" ? "artist" : "label") as any, id: ownerId };
+  return checkPartnerVerbForScope(userId, "manage_payouts", scope);
 }
 
 // ─── Resolve who gets paid for a given album ──────────────────────────
@@ -361,18 +384,19 @@ export function registerPayoutRoutes(app: Express) {
     // Task #79 — payouts gated by `manage_payouts` against the owner's
     // scope (person → artist scope; label → label scope).
     {
-      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
-      const scope = { kind: (ownerKind === "person" ? "artist" : "label") as any, id: ownerId };
-      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      const err = await gatePayoutOwner(req.session!.userId!, ownerKind, ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     // Validate owner exists.
     if (ownerKind === "person") {
       const [p] = await db.select({ id: people.id, name: people.name }).from(people).where(eq(people.id, ownerId));
       if (!p) return res.status(404).json({ message: "Person not found" });
-    } else {
+    } else if (ownerKind === "label") {
       const [l] = await db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.id, ownerId));
       if (!l) return res.status(404).json({ message: "Label not found" });
+    } else {
+      const [o] = await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, ownerId));
+      if (!o) return res.status(404).json({ message: "Organization not found" });
     }
     const existing = await getAccountByOwner(ownerKind, ownerId);
     if (existing) return res.status(409).json({ message: "Account already exists", account: existing });
@@ -420,9 +444,7 @@ export function registerPayoutRoutes(app: Express) {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.status(404).json({ message: "Account not found" });
     {
-      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
-      const scope = { kind: (row.ownerKind === "person" ? "artist" : "label") as any, id: row.ownerId };
-      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      const err = await gatePayoutOwner(req.session!.userId!, row.ownerKind as PayoutOwnerKind, row.ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     try {
@@ -445,9 +467,7 @@ export function registerPayoutRoutes(app: Express) {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.status(404).json({ message: "Account not found" });
     {
-      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
-      const scope = { kind: (row.ownerKind === "person" ? "artist" : "label") as any, id: row.ownerId };
-      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      const err = await gatePayoutOwner(req.session!.userId!, row.ownerKind as PayoutOwnerKind, row.ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     try {
@@ -465,9 +485,7 @@ export function registerPayoutRoutes(app: Express) {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.json({ ok: true });
     {
-      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
-      const scope = { kind: (row.ownerKind === "person" ? "artist" : "label") as any, id: row.ownerId };
-      const err = await checkPartnerVerbForScope(req.session!.userId!, "manage_payouts", scope);
+      const err = await gatePayoutOwner(req.session!.userId!, row.ownerKind as PayoutOwnerKind, row.ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     try {
@@ -558,9 +576,12 @@ export function registerPayoutRoutes(app: Express) {
       if (target.ownerKind === "person") {
         const [p] = await db.select({ name: people.name }).from(people).where(eq(people.id, target.ownerId));
         ownerName = p?.name ?? null;
-      } else {
+      } else if (target.ownerKind === "label") {
         const [l] = await db.select({ name: labels.name }).from(labels).where(eq(labels.id, target.ownerId));
         ownerName = l?.name ?? null;
+      } else {
+        const [o] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, target.ownerId));
+        ownerName = o?.name ?? null;
       }
     }
     const settings = await getPayoutSettings();

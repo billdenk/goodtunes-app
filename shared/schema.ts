@@ -2094,7 +2094,12 @@ export type InsertGift = z.infer<typeof insertGiftSchema>;
 export type Gift = typeof gifts.$inferSelect;
 
 // ─── Task #48 — Stripe Connect payouts ──────────────────────────────────
-export const PAYOUT_OWNER_KINDS = ["person", "label"] as const;
+// "organization" added by Task #354 so non-profit referral payees can
+// link a Stripe Connect Express account on AdminNonProfit — same panel,
+// owner row points at `organizations.id`. Payout permission for
+// organization-owned accounts is super-admin only (the partner-permissions
+// scope graph doesn't include non_profit yet).
+export const PAYOUT_OWNER_KINDS = ["person", "label", "organization"] as const;
 export type PayoutOwnerKind = (typeof PAYOUT_OWNER_KINDS)[number];
 
 export const insertPayoutAccountSchema = createInsertSchema(payoutAccounts)
@@ -2396,6 +2401,23 @@ export const referralCredits = pgTable("referral_credits", {
   units: integer("units").notNull().default(1),
   currency: text("currency").notNull().default("usd"),
   status: text("status").notNull().default("pending_payout"),
+  // Task #354 — Stamped when the batched payout job clears the credit.
+  // payoutTransferId is the Stripe Transfer id; payoutOwnerKind/Id is
+  // the resolved PayoutAccount owner the credit was paid to (so the
+  // dashboards can reconcile "Paid out" without re-walking referrer
+  // → owner-kind every render). Status flips pending_payout → paid.
+  payoutTransferId: text("payout_transfer_id"),
+  paidAt: timestamp("paid_at"),
+  payoutOwnerKind: text("payout_owner_kind"), // person | label | organization
+  payoutOwnerId: varchar("payout_owner_id"),
+  payoutError: text("payout_error"),
+  // Set when a run claims this row (status flipped pending_payout →
+  // processing under one atomic UPDATE). Stripe transfer uses the
+  // run_id in its idempotency key, so a concurrent overlapping run
+  // can neither claim the same row twice nor produce a different
+  // transfer for the same money. Cleared back to NULL when the row
+  // resolves to paid or is reverted to pending_payout on failure.
+  payoutRunId: varchar("payout_run_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // One credit per (order, referrer-of-each-kind). A single order can
