@@ -2897,97 +2897,143 @@ function GoodDeedPill({
                   )}
                 </div>
               )}
-              {/* Navy footer band — title + artist + photo + GoodDeed mark */}
+              {/* Navy cert footer — one continuous brand-navy slab
+                  mirroring the real GoodDeed cert bottom (artist
+                  photo + title row · "This certifies …" line ·
+                  provenance paragraph · founder signature · QR).
+                  Per-fan dynamic bits (owner name, serial #, QR)
+                  render as animated skeleton bars in white/15 so
+                  it's visually obvious they're placeholders the
+                  fan-issued cert fills in at sale time — not text
+                  the artist is expected to edit. */}
               <div
-                className="flex items-center gap-2.5 px-3 py-2.5 text-white"
+                className="px-3.5 pt-3 pb-3.5 text-white"
                 style={{ backgroundColor: "var(--brand-bg)" }}
                 data-testid="band-gooddeed-cert"
               >
-                {artistPhotoUrl ? (
-                  <img
-                    src={artistPhotoUrl}
-                    alt=""
-                    className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-white/20"
-                    data-testid="img-gooddeed-artist-photo"
-                  />
-                ) : (
-                  <div
-                    className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 border border-white/20"
-                    aria-hidden
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div
-                    className="text-sm font-semibold truncate leading-tight"
-                    data-testid="text-gooddeed-album-title"
-                  >
-                    {albumTitle || "Album title"}
-                  </div>
-                  <div
-                    className="text-xs text-white/70 truncate leading-tight"
-                    data-testid="text-gooddeed-artist-name"
-                  >
-                    {artistName || "Artist"}
-                  </div>
-                </div>
-                {/* GoodTunes mark in the corner — matches the real
-                    framed cert (see GoodDeedCertificate.tsx) which
-                    puts the white logo bottom-right. */}
-                <img
-                  src="/goodtunes-logo-white.png"
-                  alt="GoodTunes®"
-                  className="h-5 w-auto object-contain flex-shrink-0"
-                  style={{ mixBlendMode: "screen" }}
-                  data-testid="mark-goodtunes"
-                />
-              </div>
-              {/* Cert paragraph + signature + QR placeholder.
-                  Skeletal placeholders in italic muted grey because
-                  each cert gets a real owner name + serial + QR
-                  generated at sale time per fan — this is the *mock*
-                  the artist sees in the CMS, not a fan-issued cert.
-                  The QR tile is kept intentionally minimal (no
-                  explanatory caption) so it reads as a placeholder
-                  tile rather than a feature explainer. */}
-              <div
-                className="px-3.5 py-3 space-y-3"
-                data-testid="block-gooddeed-cert-body"
-              >
-                <p className="text-xs leading-snug text-slate-700">
-                  This <span className="font-semibold">GoodDeed®</span>{" "}
-                  certifies that{" "}
-                  <span className="italic text-slate-400">— owner name —</span>{" "}
-                  owns no.{" "}
-                  <span className="tabular-nums font-semibold text-slate-500">
-                    NN
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-medium text-slate-700">
-                    {albumTitle || "this release"}
-                  </span>
-                  .
-                </p>
-                <p className="text-xs leading-snug text-slate-500">
-                  Digital provenance can be confirmed at{" "}
-                  <span className="font-mono text-slate-600">
-                    goodtunes.fm/deed/&lt;serial&gt;
-                  </span>
-                  .
-                </p>
-                <div className="flex items-end justify-between gap-3 pt-1">
-                  <div className="flex-1 min-w-0">
-                    <div className="border-t border-slate-300 h-4" />
-                    <div className="text-xs text-slate-400 uppercase tracking-wider mt-1 truncate">
-                      Nick Carter — Founder
+                {/* Row 1 — artist photo + album title/artist, GoodTunes
+                    mark pinned right (matches real cert chrome). */}
+                <div className="flex items-start gap-2.5">
+                  {artistPhotoUrl ? (
+                    <img
+                      src={artistPhotoUrl}
+                      alt=""
+                      className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-white/20"
+                      data-testid="img-gooddeed-artist-photo"
+                    />
+                  ) : (
+                    <div
+                      className="w-9 h-9 rounded-full bg-white/10 flex-shrink-0 border border-white/20"
+                      aria-hidden
+                    />
+                  )}
+                  <div className="flex-1 min-w-0 pt-px">
+                    <div
+                      className="text-xs text-white/75 truncate leading-tight"
+                      data-testid="text-gooddeed-artist-name"
+                    >
+                      {artistName || "Artist"}
+                    </div>
+                    <div
+                      className="text-sm font-bold truncate leading-tight mt-0.5"
+                      data-testid="text-gooddeed-album-title"
+                    >
+                      {albumTitle || "Album title"}
                     </div>
                   </div>
-                  <div
-                    className="w-10 h-10 rounded border border-dashed border-slate-300 grid place-items-center text-xs text-slate-400 flex-shrink-0"
-                    aria-hidden
-                    title="Per-fan QR — auto-generated at sale time"
-                    data-testid="placeholder-gooddeed-qr"
-                  >
-                    QR
+                  <img
+                    src="/goodtunes-logo-white-sm.png"
+                    alt="GoodTunes®"
+                    className="h-4 w-auto object-contain flex-shrink-0 mt-0.5"
+                    data-testid="mark-goodtunes"
+                  />
+                </div>
+
+                <div
+                  className="mt-3 grid grid-cols-[1fr_auto] gap-3 items-start"
+                  data-testid="block-gooddeed-cert-body"
+                >
+                  <div className="min-w-0 space-y-2">
+                    {/* "This certifies that <owner> owns no. <NN> of <album>."
+                        — owner + serial are skeleton bars; the rest is real
+                        copy so the artist sees what the fan will read. */}
+                    <p className="text-xs leading-snug font-semibold text-white">
+                      This certifies that{" "}
+                      <span
+                        className="inline-block align-middle h-3 w-20 rounded bg-white/20 animate-pulse"
+                        aria-label="Owner name (filled in per fan)"
+                        data-testid="skeleton-gooddeed-owner"
+                      />{" "}
+                      owns no.{" "}
+                      <span
+                        className="inline-block align-middle h-3 w-7 rounded bg-white/20 animate-pulse"
+                        aria-label="Certificate number (assigned at sale)"
+                        data-testid="skeleton-gooddeed-serial"
+                      />{" "}
+                      of {albumTitle || "this release"}.
+                    </p>
+                    <p className="text-xs leading-snug text-white/65">
+                      Digital provenance can be confirmed by scanning the
+                      QR code on this GoodDeed®. If ownership has been
+                      transferred since the cert was issued, this
+                      GoodDeed® serves as the moment in time the previous
+                      owner possessed this good.
+                    </p>
+                    {/* Founder signature — scribble glyph above a thin
+                        rule + the real GoodTunes founder line. Was
+                        previously "Nick Carter — Founder", which was
+                        wrong (Nick is the artist; William E. Denk is
+                        the founder whose signature appears on the
+                        real certificate). */}
+                    <div className="pt-1">
+                      <svg
+                        viewBox="0 0 80 18"
+                        className="h-4 w-16 text-white/85"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                        aria-hidden
+                      >
+                        <path d="M2 12 C 8 4, 14 4, 18 12 S 28 18, 32 10 C 36 4, 44 4, 48 12 S 60 18, 66 8 L 78 5" />
+                      </svg>
+                      <div className="border-t border-white/25 mt-0.5" />
+                      <div className="text-xs text-white/55 mt-1 tracking-wide">
+                        William E. Denk, CEO/Founder GoodTunes™
+                      </div>
+                    </div>
+                  </div>
+                  {/* QR tile + caption. Stays a placeholder because
+                      each cert's QR is generated per fan at sale time. */}
+                  <div className="flex-shrink-0 flex flex-col items-center pt-0.5">
+                    <div
+                      className="w-12 h-12 rounded-sm bg-white p-1 grid place-items-center"
+                      aria-hidden
+                      title="Per-fan QR — auto-generated at sale time"
+                      data-testid="placeholder-gooddeed-qr"
+                    >
+                      {/* Tiny 5×5 finder-pattern style placeholder so
+                          the tile reads as a QR mock at thumbnail size
+                          without needing a real svg asset. */}
+                      <svg viewBox="0 0 25 25" className="w-full h-full text-[color:var(--brand-bg)]" aria-hidden>
+                        <rect x="0" y="0" width="7" height="7" fill="currentColor" />
+                        <rect x="2" y="2" width="3" height="3" fill="white" />
+                        <rect x="18" y="0" width="7" height="7" fill="currentColor" />
+                        <rect x="20" y="2" width="3" height="3" fill="white" />
+                        <rect x="0" y="18" width="7" height="7" fill="currentColor" />
+                        <rect x="2" y="20" width="3" height="3" fill="white" />
+                        <rect x="10" y="2" width="2" height="2" fill="currentColor" />
+                        <rect x="13" y="9" width="2" height="2" fill="currentColor" />
+                        <rect x="9" y="12" width="2" height="2" fill="currentColor" />
+                        <rect x="16" y="14" width="2" height="2" fill="currentColor" />
+                        <rect x="12" y="17" width="2" height="2" fill="currentColor" />
+                        <rect x="19" y="19" width="2" height="2" fill="currentColor" />
+                        <rect x="22" y="11" width="2" height="2" fill="currentColor" />
+                      </svg>
+                    </div>
+                    <div className="text-xs text-white/60 mt-1 tracking-wide">
+                      GoodDeed™
+                    </div>
                   </div>
                 </div>
               </div>
