@@ -1554,14 +1554,15 @@ function SkuRow({
         <div className={["flex items-center justify-between gap-2", expanded ? "mb-3" : ""].join(" ")}>
           {/* Task #397 — Tracks-row inline-editable title. Click the
               input to edit; click anywhere else on the header (or the
-              chevron) to expand. Empty placeholder is the canonical
-              format label so the row never reads as "Untitled". */}
+              chevron) to expand. Task #413 — empty placeholder reads
+              "Untitled <format label>" so it's obvious the title is
+              empty without losing which size was picked. */}
           <div className="flex-1 min-w-0 flex items-center gap-2">
             <input
               type="text"
               value={displayNameStr}
               onChange={(e) => setDisplayNameStr(e.target.value.slice(0, 80))}
-              placeholder={ALBUM_FORMAT_LABEL[format]}
+              placeholder={`Untitled ${ALBUM_FORMAT_LABEL[format]}`}
               maxLength={80}
               aria-label={`Row title — defaults to ${ALBUM_FORMAT_LABEL[format]}`}
               className="min-w-0 flex-1 bg-transparent border-0 outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold focus:bg-slate-50 focus:px-1 focus:-mx-1 focus:rounded-sm transition-all"
