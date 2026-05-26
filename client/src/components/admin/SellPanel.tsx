@@ -2113,12 +2113,12 @@ function SkuRow({
               hovers over the album art, not the vinyl disc peeking out
               to the right. Same fade-on-hover the rest of admin uses
               for cover edits. */}
-          <div className="relative group">
+          <div className="relative">
             <button
               type="button"
               onClick={onEditArtwork}
               disabled={!onEditArtwork}
-              className="block w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] disabled:cursor-default"
+              className="group block w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] disabled:cursor-default"
               aria-label="Edit album artwork"
               data-testid={`button-edit-artwork-${format}`}
             >
@@ -2129,12 +2129,20 @@ function SkuRow({
                   jacketUpgrade={jacketUpgrade}
                   size="xl"
                   jacketOverlay={onEditArtwork ? (
-                    <span
-                      className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/90 text-slate-700 shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-                      aria-hidden
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </span>
+                    <>
+                      <span
+                        className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors pointer-events-none"
+                        aria-hidden
+                      />
+                      <span
+                        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity pointer-events-none"
+                        aria-hidden
+                      >
+                        <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                          <Pencil className="w-4 h-4" />
+                        </span>
+                      </span>
+                    </>
                   ) : null}
                 />
               </div>
