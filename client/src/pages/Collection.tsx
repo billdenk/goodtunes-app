@@ -75,7 +75,10 @@ export function Collection() {
   // is false. Songs + artists derive from this filtered list so the
   // Songs tab and Artists tab also stay catalog-only.
   const dbAlbums = useMemo(
-    () => (albumsRaw ?? []).filter((a) => a.isGoodTunesRelease),
+    // Task #440 — "Prepping" GT shells (created by + Add Album but not yet
+    // promoted to Released) must stay off the fan-side Collection. Once the
+    // admin flips isPrepping=false on the album page, the row appears here.
+    () => (albumsRaw ?? []).filter((a) => a.isGoodTunesRelease && !(a as any).isPrepping),
     [albumsRaw],
   );
   const dbAlbumIds = useMemo(

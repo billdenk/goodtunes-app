@@ -29,7 +29,9 @@ import { Combobox } from "@/components/admin/Combobox";
  * white/light skin, with the canonical 4-state release lifecycle as
  * underline tabs above it:
  *
- *   - Prepping — we're working on it (today: imported but not yet a GT release)
+ *   - Prepping — we're working on it (Task #440: `isPrepping=true` on the
+ *                row, i.e. a new GoodTunes shell that hasn't been promoted
+ *                to Released yet — artwork swap, tracks, pricing pending)
  *   - Staged   — ready, waiting for sunrise (today: schema doesn't model this; count is 0)
  *   - Released — visible for purchase (isGoodTunesRelease && !isHidden).
  *                Industry standard term (Apple Music, Spotify, every
@@ -52,6 +54,9 @@ interface AlbumLite {
   description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
+  // Task #440 — new GoodTunes shells start in Prepping (true) so the
+  // Released tab stays clean; admin promotes via the album page.
+  isPrepping: boolean;
   isExplicit: boolean;
   genre: string | null;
   createdAt: string | null;
@@ -107,6 +112,10 @@ export function AdminAlbums() {
         // sellMode + physicalFormat right after the row exists.
         type: "LP",
         isGoodTunesRelease: true,
+        // Task #440 — land new shells in Prepping. The server also defaults
+        // GT-release creates to isPrepping=true, but we send it explicitly
+        // so the call site advertises the intent.
+        isPrepping: true,
         primaryArtistId: args.artist?.id || null,
       });
       return res.json() as Promise<AlbumLite>;
@@ -153,13 +162,17 @@ export function AdminAlbums() {
 
   const counts = useMemo(
     () => ({
-      // "Prepping" = GT releases that aren't live yet. We don't model this
-      // distinct from "not isGoodTunesRelease" until the lifecycle enum
-      // lands (see docs/roadmap.md), so for now this is 0.
-      prepping: 0,
+      // Task #440 — Prepping is now a real lifecycle gate (`isPrepping`).
+      // New "+ Add Album" shells land here; admin promotes them to Released
+      // from the album page once artwork / tracks / pricing are in place.
+      prepping: albums.filter(
+        (a) => a.isGoodTunesRelease && a.isPrepping && !a.isHidden,
+      ).length,
       // No schema field for staged yet — see Storefront in docs/roadmap.md.
       staged: 0,
-      live: albums.filter((a) => a.isGoodTunesRelease && !a.isHidden).length,
+      live: albums.filter(
+        (a) => a.isGoodTunesRelease && !a.isPrepping && !a.isHidden,
+      ).length,
       sunset: albums.filter((a) => a.isGoodTunesRelease && a.isHidden).length,
     }),
     [albums],
@@ -172,11 +185,15 @@ export function AdminAlbums() {
   const byTab = useMemo(() => {
     switch (tab) {
       case "prepping":
-        return [];
+        return albums.filter(
+          (a) => a.isGoodTunesRelease && a.isPrepping && !a.isHidden,
+        );
       case "staged":
         return [];
       case "live":
-        return albums.filter((a) => a.isGoodTunesRelease && !a.isHidden);
+        return albums.filter(
+          (a) => a.isGoodTunesRelease && !a.isPrepping && !a.isHidden,
+        );
       case "sunset":
         return albums.filter((a) => a.isGoodTunesRelease && a.isHidden);
     }

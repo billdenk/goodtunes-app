@@ -108,6 +108,16 @@ export const albums = pgTable("albums", {
   // live in the DB (so they remain reachable from a person's profile
   // and from the credits surface), they're just absent from this list.
   isGoodTunesRelease: boolean("is_goodtunes_release").notNull().default(false),
+  // Task #440 — "Prepping" lifecycle gate. New GoodTunes shells created
+  // via "+ Add Album" land here (`isPrepping=true, isGoodTunesRelease=true`)
+  // so the Released tab doesn't fill up with "Unknown artist / 0 tracks"
+  // placeholder rows. Promotion to Released is an explicit admin step on
+  // the album detail page that flips this back to false. Default false
+  // so every existing row (which the admin has long since treated as
+  // Released) stays put on rollout. Independent of `isGoodTunesRelease`,
+  // which still distinguishes streaming-imported catalog from curated
+  // GoodTunes releases (see docs/admin-conventions.md).
+  isPrepping: boolean("is_prepping").notNull().default(false),
   // Parental-advisory flag. When true the consumer surfaces a small "E"
   // badge next to the album title (Apple Music / Spotify convention).
   // Admin toggle lives in AdminAlbum's header; defaults false because most

@@ -60,6 +60,9 @@ export function ArtistDetail() {
           // docs/admin-conventions.md § "Streaming rows vs GoodTunes
           // releases".
           a.isGoodTunesRelease &&
+          // Task #440 — Prepping shells (post-promote not yet flipped) are
+          // admin-only; they must stay off the public artist page.
+          !(a as any).isPrepping &&
           (a.artist ?? "").trim().toLowerCase() === nameLc &&
           !seenIds.has(a.id),
       )

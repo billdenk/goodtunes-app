@@ -147,6 +147,10 @@ interface AlbumFull {
   description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
+  // Task #440 — "Prepping" lifecycle gate. Drives the LifecyclePill +
+  // the Promote/Demote CTA next to it. New shells land here; admin
+  // flips it off via "Mark as released" once the album is ready.
+  isPrepping?: boolean;
   isExplicit?: boolean;
   genre?: string | null;
   labelId?: string | null;
@@ -432,6 +436,39 @@ export function AdminAlbum() {
     enabled: !!album?.sellMode,
   });
 
+  // Task #440 — Promote ("Mark as released") / Demote ("Move back to
+  // prepping"). Rides the same PUT endpoint as every other album edit, so
+  // partner-permissions + post-sale lock apply automatically (the gate
+  // returns 403 for partners without `edit_metadata`; super-admins always
+  // pass). Demote shows a confirm dialog because pulling a Released row
+  // back is a meaningful state regression; promote is the happy path and
+  // fires on click.
+  const [demoteConfirmOpen, setDemoteConfirmOpen] = useState(false);
+  const setPrepping = useMutation({
+    mutationFn: async (next: boolean) => {
+      const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
+        isPrepping: next,
+      });
+      return r.json();
+    },
+    onSuccess: (_data, next) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      setDemoteConfirmOpen(false);
+      toast({
+        title: next ? "Moved back to Prepping." : "Album marked as released.",
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't update lifecycle",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Task #335 — sell-mode + format + lock toggle live on the album
   // row. One mutation writes any subset; we use it for the modal
   // submit, the "Change mode" link in the Shopify slim panel, and the
@@ -534,10 +571,14 @@ export function AdminAlbum() {
   }
 
   // Lifecycle pill — derived from the same logic the Albums grid uses.
-  const lifecycle = !album.isGoodTunesRelease
-    ? { label: "Prepping", tone: "slate" as const }
-    : album.isHidden
-      ? { label: "Sunset", tone: "amber" as const }
+  // Task #440 — `isPrepping` is the canonical Prepping gate for curated
+  // GoodTunes releases. Imported streaming rows (!isGoodTunesRelease) are
+  // never shown on this page in practice, but we still render them as
+  // Prepping for safety so the pill never goes blank.
+  const lifecycle = album.isHidden
+    ? { label: "Sunset", tone: "amber" as const }
+    : !album.isGoodTunesRelease || album.isPrepping
+      ? { label: "Prepping", tone: "slate" as const }
       : { label: "Released", tone: "mint" as const };
 
   return (
@@ -639,6 +680,37 @@ export function AdminAlbum() {
                   admin chrome (white card, slate text). */}
               {album.isExplicit && <ExplicitBadge tone="slate" />}
               <LifecyclePill {...lifecycle} />
+              {/* Task #440 — Promote/Demote affordance lives next to the
+                  lifecycle pill so the state + the action that mutates it
+                  read as one unit. Hidden in Sunset (operator un-hides via
+                  the existing Hidden toggle first). The button rides the
+                  same PUT edit_metadata gate as every other field, so it
+                  hides cleanly for partners who can't edit. */}
+              {!album.isHidden && (
+                album.isPrepping || !album.isGoodTunesRelease ? (
+                  <button
+                    type="button"
+                    onClick={() => setPrepping.mutate(false)}
+                    disabled={setPrepping.isPending}
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-50 transition-colors"
+                    data-testid="button-album-promote"
+                    title="Promote this album from Prepping to Released"
+                  >
+                    Mark as released
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setDemoteConfirmOpen(true)}
+                    disabled={setPrepping.isPending}
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 transition-colors"
+                    data-testid="button-album-demote"
+                    title="Move this album back to Prepping (hidden from fans)"
+                  >
+                    Move to prepping
+                  </button>
+                )
+              )}
               {album.firstSoldAt && <AlbumLockChip album={album} />}
               <AlbumEditAccessChip albumId={album.id} />
               
@@ -967,6 +1039,53 @@ export function AdminAlbum() {
               data-testid="button-delete-album-confirm"
             >
               {deleteAlbum.isPending ? "Deleting…" : "Delete album"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task #440 — Demote confirm. Pulling a Released album back to
+          Prepping hides it from every fan-side surface (Collection,
+          ArtistDetail, search), so we name what changes before flipping
+          the gate. Slate tone — not destructive, but reversible-with-
+          consequences. */}
+      <Dialog
+        open={demoteConfirmOpen}
+        onOpenChange={(v) => !setPrepping.isPending && setDemoteConfirmOpen(v)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-demote-album"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Move <span className="italic">{album.title}</span> back to Prepping?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              Fans will stop seeing this album in Collection, on the
+              artist page, and in search. Purchases already made are not
+              affected — owners keep access. You can mark it released
+              again whenever it's ready.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3 sm:gap-3">
+            <Button
+              type="button"
+              onClick={() => setDemoteConfirmOpen(false)}
+              disabled={setPrepping.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-demote-album-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setPrepping.mutate(true)}
+              disabled={setPrepping.isPending}
+              className="bg-slate-900 hover:bg-slate-800 text-white ml-2"
+              data-testid="button-demote-album-confirm"
+            >
+              {setPrepping.isPending ? "Moving…" : "Move to Prepping"}
             </Button>
           </DialogFooter>
         </DialogContent>

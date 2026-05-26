@@ -994,3 +994,28 @@ SQL
 }
 migrate_album_skus_locked_at dev  "${DATABASE_URL:-}"
 migrate_album_skus_locked_at prod "${PROD_DATABASE_URL:-}"
+
+# Task #440 — albums.is_prepping lifecycle gate. New GoodTunes shells
+# created via "+ Add Album" land in Prepping so the Released tab stops
+# filling up with "Unknown artist / 0 tracks" placeholder rows. Default
+# false keeps every existing row visible as Released on rollout. Pre-
+# create on both DBs so the publish dev→prod diff stays empty and a
+# fresh-clone dev doesn't 500 on /api/admin/albums creates.
+migrate_albums_is_prepping() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping albums.is_prepping migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS is_prepping boolean NOT NULL DEFAULT false;
+SQL
+  then
+    echo "post-merge: albums.is_prepping migration ok on $label"
+  else
+    echo "post-merge: WARNING — albums.is_prepping migration failed on $label (continuing)"
+  fi
+}
+migrate_albums_is_prepping dev  "${DATABASE_URL:-}"
+migrate_albums_is_prepping prod "${PROD_DATABASE_URL:-}"

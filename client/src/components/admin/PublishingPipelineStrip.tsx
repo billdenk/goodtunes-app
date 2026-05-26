@@ -29,6 +29,9 @@ export interface PublishingAlbumState {
   songsMuxReady: number;
   hasSkusOrPrice: boolean;
   isGoodTunesRelease: boolean;
+  // Task #440 — "Prepping" gate keeps unfinished shells off the Released
+  // tab. Promote stage doesn't tick until isPrepping=false.
+  isPrepping: boolean;
   isHidden: boolean;
 }
 
@@ -38,7 +41,7 @@ export function deriveStages(s: PublishingAlbumState): PipelineStage[] {
   const scanDone = songsExist && s.songsMuxReady >= s.songCount;
   const buildDone = songsExist && s.songsWithAudio >= s.songCount;
   const bundleDone = s.hasSkusOrPrice;
-  const promoteDone = s.isGoodTunesRelease && !s.isHidden;
+  const promoteDone = s.isGoodTunesRelease && !s.isPrepping && !s.isHidden;
 
   // Order matches the canonical pipeline: Provision → Security Scan →
   // Build → Bundle → Promote.

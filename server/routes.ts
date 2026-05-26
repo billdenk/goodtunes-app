@@ -3904,6 +3904,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Discography "+ Add" + Apple-URL seed paths leave this off; admin
       // flips it on once an album is actually being released by GoodTunes.
       isGoodTunesRelease: !!req.body?.isGoodTunesRelease,
+      // Task #440 — new GoodTunes shells land in Prepping so the Released
+      // tab stays clean. Default to true on any GT-release create unless
+      // the caller explicitly says otherwise; legacy (`!isGoodTunesRelease`)
+      // streaming imports always start with isPrepping=false because the
+      // gate is meaningless for non-curated rows. The admin "Mark as
+      // released" / "Move back to prepping" CTAs flip this via PUT.
+      isPrepping:
+        req.body?.isPrepping !== undefined
+          ? !!req.body.isPrepping
+          : !!req.body?.isGoodTunesRelease,
       sellMode: rawSellMode ?? null,
       physicalFormat: rawPhysicalFormat ?? null,
     } as any);
@@ -4097,6 +4107,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Apple-URL seed only runs from the Albums column's "Seed an album"
       // button — admin is explicitly curating a GoodTunes release here.
       isGoodTunesRelease: true,
+      // Task #440 — seeded shells still need artwork swap, master upload,
+      // pricing, etc. before they belong on the Released tab. Land them in
+      // Prepping; admin flips to Released from the album page.
+      isPrepping: true,
     } as any);
 
     // Bulk-create the tracks. iTunes durations are in ms; songs.duration
@@ -4173,6 +4187,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
     if (req.body?.isGoodTunesRelease !== undefined)
       updates.isGoodTunesRelease = !!req.body.isGoodTunesRelease;
+    // Task #440 — Promote ("Mark as released") and Demote ("Move back to
+    // prepping") flip this single boolean. Lifecycle change rides the
+    // same edit_metadata gate as isHidden, so partner-permissions +
+    // post-sale lock still apply (super-admins bypass via the lock
+    // override the same way).
+    if (req.body?.isPrepping !== undefined)
+      updates.isPrepping = !!req.body.isPrepping;
     if (req.body?.isExplicit !== undefined) updates.isExplicit = !!req.body.isExplicit;
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
@@ -12902,6 +12923,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     cover_url: string | null;
     first_sold_at: Date | null;
     is_goodtunes_release: boolean;
+    is_prepping: boolean;
     is_hidden: boolean;
     price_cents: number | null;
     sku_count: number;
@@ -12921,6 +12943,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       songsMuxReady: Number(row.songs_mux_ready) || 0,
       hasSkusOrPrice: Number(row.sku_count) > 0 || row.price_cents != null,
       isGoodTunesRelease: !!row.is_goodtunes_release,
+      isPrepping: !!row.is_prepping,
       isHidden: !!row.is_hidden,
     };
     return {
@@ -12983,6 +13006,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         a.cover_url,
         a.first_sold_at,
         a.is_goodtunes_release,
+        a.is_prepping,
         a.is_hidden,
         a.price_cents,
         (SELECT name FROM people WHERE id = a.primary_artist_id) AS artist_name,
@@ -13007,7 +13031,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const inQueue: any[] = [];
     const released: any[] = [];
     for (const a of list) {
-      const isReleased = !!a.firstSoldAt || (a.state.isGoodTunesRelease && !a.state.isHidden);
+      const isReleased = !!a.firstSoldAt || (a.state.isGoodTunesRelease && !a.state.isPrepping && !a.state.isHidden);
       (isReleased ? released : inQueue).push(a);
     }
     return { inQueue, released };

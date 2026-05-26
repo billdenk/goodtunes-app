@@ -5275,6 +5275,9 @@ function PersonEditor({
                     // surface it in the Albums sidebar from the moment it's
                     // created (unlike the discography "+ Add" path).
                     isGoodTunesRelease: true,
+                    // Task #440 — land new shells in Prepping so the
+                    // Released tab stays clean.
+                    isPrepping: true,
                   });
                   const album = (await res.json()) as AdminAlbum;
                   await queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
@@ -9824,6 +9827,9 @@ export function Admin() {
         // GoodTunes releases), and the auto-heal would snap selection
         // back to the first existing row.
         isGoodTunesRelease: true,
+        // Task #440 — start in Prepping so the Released tab doesn't fill
+        // with shell rows; admin promotes from the album page.
+        isPrepping: true,
       });
       return res.json() as Promise<AdminAlbum>;
     },
