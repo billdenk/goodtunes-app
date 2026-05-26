@@ -16,6 +16,15 @@ type Entry = {
   photoUrl: string | null;
 };
 
+function initialsOf(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 export function AlbumCreditsSheet({
   albumTitle,
   artist,
@@ -62,71 +71,68 @@ export function AlbumCreditsSheet({
           Production credits for this album haven't been published yet.
         </div>
       ) : (
-        <div className="pb-3">
-          {byRole.map(([role, entries]) => (
-            <div
+        <div className="px-5 pb-4">
+          {byRole.map(([role, entries], roleIdx) => (
+            <section
               key={role}
-              className="px-5 py-2.5"
+              className={roleIdx === 0 ? "" : "mt-7"}
               data-testid={`row-album-credit-role-${role.replace(/\s+/g, "-").toLowerCase()}`}
             >
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/45 mb-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/55 mb-3">
                 {role}
-              </p>
-              <div className="flex flex-col gap-1.5">
+              </h3>
+              <ul className="flex flex-col">
                 {entries.map((e) => {
+                  const avatar = e.photoUrl ? (
+                    <img
+                      src={e.photoUrl}
+                      alt=""
+                      style={{ width: 32, height: 32 }}
+                      className="rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <span
+                      aria-hidden
+                      style={{ width: 32, height: 32 }}
+                      className="rounded-full bg-white/[0.08] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-white/55"
+                    >
+                      {initialsOf(e.name)}
+                    </span>
+                  );
                   const inner = (
-                    <span className="inline-flex items-center gap-2.5">
-                      {e.photoUrl ? (
-                        <img
-                          src={e.photoUrl}
-                          alt=""
-                          style={{ width: 28, height: 28 }}
-                          className="rounded-full object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <span
-                          aria-hidden
-                          style={{ width: 28, height: 28 }}
-                          className="rounded-full bg-white/10 flex-shrink-0 inline-flex items-center justify-center text-xs font-semibold text-white/70"
-                        >
-                          {e.name
-                            .split(" ")
-                            .filter(Boolean)
-                            .slice(0, 2)
-                            .map((w) => w[0]?.toUpperCase() ?? "")
-                            .join("")}
-                        </span>
-                      )}
-                      <span className="text-white text-sm font-medium">
+                    <span className="inline-flex items-center gap-3 py-1.5">
+                      {avatar}
+                      <span className="text-white text-base font-normal leading-snug tracking-[-0.01em]">
                         {e.name}
                       </span>
                     </span>
                   );
                   if (e.personId && onOpenPerson) {
                     return (
-                      <button
-                        key={e.key}
-                        type="button"
-                        onClick={() => onOpenPerson(e.personId!)}
-                        className="self-start text-left active:opacity-70 hover:opacity-90 transition-opacity"
-                        data-testid={`link-album-credit-person-${e.personId}`}
-                      >
-                        {inner}
-                      </button>
+                      <li key={e.key}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenPerson(e.personId!)}
+                          className="self-start text-left active:opacity-70 hover:opacity-90 transition-opacity"
+                          data-testid={`link-album-credit-person-${e.personId}`}
+                        >
+                          {inner}
+                        </button>
+                      </li>
                     );
                   }
                   return (
-                    <span
+                    <li
                       key={e.key}
                       className="self-start"
                       data-testid={`text-album-credit-${e.key}`}
                     >
                       {inner}
-                    </span>
+                    </li>
                   );
                 })}
-              </div>
-            </div>
+              </ul>
+            </section>
           ))}
         </div>
       )}
