@@ -142,7 +142,7 @@ export default function AdminNonProfit() {
           className="flex items-end gap-5 border-b border-slate-200"
           data-testid="tabs-admin-npo"
         >
-          <div className="flex items-center gap-5 overflow-x-auto">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             {([
               { key: "overview", label: "Overview" },
               { key: "people", label: "People" },

@@ -357,7 +357,7 @@ export function AdminInstrument() {
           className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-instrument"
         >
-          <div className="flex items-center gap-5 overflow-x-auto">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             {TABS.map((t) => (
               <button
                 key={t.key}
