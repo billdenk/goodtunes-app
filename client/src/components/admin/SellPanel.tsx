@@ -3368,35 +3368,26 @@ function GoodDeedPill({
                       />{" "}
                       of {albumTitle || "this release"}.
                     </p>
-                    <p className="text-xs leading-snug text-white/65">
-                      Digital provenance can be confirmed by scanning the
-                      QR code on this GoodDeed®. If ownership has been
-                      transferred since the cert was issued, this
-                      GoodDeed® serves as the moment in time the previous
-                      owner possessed this good.
-                    </p>
-                    {/* Founder signature — scribble glyph above a thin
-                        rule + the real GoodTunes founder line. Was
-                        previously "Nick Carter — Founder", which was
-                        wrong (Nick is the artist; William E. Denk is
-                        the founder whose signature appears on the
-                        real certificate). */}
-                    <div className="pt-1">
-                      <svg
-                        viewBox="0 0 80 18"
-                        className="h-4 w-16 text-white/85"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.2"
-                        strokeLinecap="round"
-                        aria-hidden
-                      >
-                        <path d="M2 12 C 8 4, 14 4, 18 12 S 28 18, 32 10 C 36 4, 44 4, 48 12 S 60 18, 66 8 L 78 5" />
-                      </svg>
-                      <div className="border-t border-white/25 mt-0.5" />
-                      <div className="text-xs text-white/55 mt-1 tracking-wide">
-                        William E. Denk, CEO/Founder GoodTunes™
-                      </div>
+                    {/* Body copy + signature are skeleton bars so the
+                        whole navy strip reads as "cert template" rather
+                        than filled-in copy — matches AlbumDetailSkeleton. */}
+                    <div
+                      className="space-y-1.5"
+                      aria-label="Certificate body (filled in per fan)"
+                      data-testid="skeleton-gooddeed-body"
+                    >
+                      <div className="h-2 w-full rounded bg-white/15 animate-pulse" />
+                      <div className="h-2 w-11/12 rounded bg-white/15 animate-pulse" />
+                      <div className="h-2 w-9/12 rounded bg-white/15 animate-pulse" />
+                    </div>
+                    <div
+                      className="pt-2"
+                      aria-label="Founder signature"
+                      data-testid="skeleton-gooddeed-signature"
+                    >
+                      <div className="h-3 w-20 rounded bg-white/20 animate-pulse" />
+                      <div className="border-t border-white/25 mt-1" />
+                      <div className="h-2 w-32 rounded bg-white/15 animate-pulse mt-1.5" />
                     </div>
                   </div>
                   {/* QR tile + caption. Stays a placeholder because
