@@ -20,6 +20,7 @@ import {
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
 import { Combobox } from "@/components/admin/Combobox";
+import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -91,15 +92,21 @@ export function AdminAlbums() {
   const [explicitFilter, setExplicitFilter] = useState<
     "any" | "explicit" | "clean"
   >("any");
+  // Task #445 — "+ Add Album" opens the "Who's the artist?" dialog first
+  // so the new album lands with primaryArtistId already attached instead
+  // of "Unknown artist". The dialog stays open (and its actions disabled)
+  // while the album POST is in flight; the existing onSuccess navigate
+  // unmounts this page, which tears the dialog down.
+  const [artistDialogOpen, setArtistDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  // Task #335 — "+ Add Album" now creates a blank GoodTunes release with
-  // an unset sell mode, then navigates straight to the album page with
-  // `?onboarding=1` so the new album page can open the two-step
-  // mode/format chooser modal over its own scaffolding. The artist
-  // attach step happens inside the album editor afterwards (it's still
-  // reachable through the metadata panel + people picker), so the
-  // creation flow is one click → in-the-album.
+  // Task #335 / #445 — "+ Add Album" opens the "Who's the artist?"
+  // dialog first (NewAlbumArtistDialog, mode="album"); on pick/skip the
+  // mutation below creates the GoodTunes shell with primaryArtistId
+  // already attached (or null on skip → legacy "Unknown artist"), then
+  // navigates to the album page with `?onboarding=1` so the two-step
+  // mode/format chooser modal opens over the scaffolding. The Metadata
+  // panel's ArtistPickerField stays the late-attach fallback.
   const createAlbum = useMutation({
     mutationFn: async (args: {
       artist?: { name: string; id: string };
@@ -532,22 +539,16 @@ export function AdminAlbums() {
                 testIdPrefix="view-mode-albums"
               />
             </div>
-            {/* Task #335 — single "+ Add Album" button. The mode/format
-                pick is now a two-step modal that opens on the new
-                album's detail page (after the row exists), so the
-                operator immediately sees the album scaffolding while
-                they choose. */}
+            {/* Task #445 — "+ Add Album" opens the "Who's the artist?"
+                dialog first. After the artist is picked (or skipped),
+                the mutation creates the album with primaryArtistId set
+                and navigates into the existing onboarding flow. */}
             <button
               type="button"
               disabled={createAlbum.isPending}
               onClick={() => {
                 if (createAlbum.isPending) return;
-                // Task #335 — create a blank GoodTunes release
-                // immediately. The artist picker is no longer the
-                // first decision; the album page opens with the
-                // two-step mode/format modal, and the operator picks
-                // an artist later from the Overview tab.
-                createAlbum.mutate({});
+                setArtistDialogOpen(true);
               }}
               className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="button-new-album"
@@ -555,6 +556,25 @@ export function AdminAlbums() {
               <Plus className="w-3 h-3" />
               Add Album
             </button>
+            <NewAlbumArtistDialog
+              open={artistDialogOpen}
+              onOpenChange={(next) => {
+                // Don't allow the user to dismiss mid-create; the
+                // navigate on success will unmount us anyway.
+                if (createAlbum.isPending && !next) return;
+                setArtistDialogOpen(next);
+              }}
+              busy={createAlbum.isPending}
+              mode="album"
+              onSelect={({ name, id }) => {
+                if (createAlbum.isPending) return;
+                createAlbum.mutate({ artist: { name, id } });
+              }}
+              onSkip={() => {
+                if (createAlbum.isPending) return;
+                createAlbum.mutate({});
+              }}
+            />
           </>)}
           belowHeader={(
             <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
