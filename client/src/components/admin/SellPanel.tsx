@@ -3177,53 +3177,60 @@ function GoodDeedPill({
       className="rounded-md border border-slate-200 bg-white"
       data-testid="pill-gooddeed"
     >
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="flex-1 flex items-center justify-between gap-3 text-left -mx-1 px-1 py-0.5 rounded hover:bg-slate-50 transition-colors min-w-0"
-          aria-expanded={open}
-          data-testid="button-toggle-gooddeed-pill"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[13.5px] font-semibold text-slate-900">
-              GoodDeed® Certificate
-            </span>
-            <span
-              className="text-xs text-slate-500 truncate"
-              data-testid="text-gooddeed-summary"
-            >
-              · {summary}
-            </span>
-          </div>
-          <ChevronDown
-            className={[
-              "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
-              open ? "rotate-180" : "",
-            ].join(" ")}
-          />
-        </button>
-        {/* Task #415 — Active toggle relocated into the header summary
-            (same Apple-HIG Switch we use on the master-track row for
-            Instrumental / Explicit / Hide preview) so the row reads
-            `GoodDeed® Certificate · On · 25% (65 of 260)` and the
-            on/off control sits exactly where the eye expects it.
-            stopPropagation keeps clicks here from opening/closing the
-            pill body. */}
-        <span
-          onClick={(e) => e.stopPropagation()}
-          className="flex-shrink-0"
-        >
-          <Switch
-            checked={active}
-            onCheckedChange={setActive}
-            data-testid="toggle-gooddeed-active"
-            aria-label="Offer GoodDeed® cert on this release"
-          />
-        </span>
-      </div>
+      {/* Task #441 — Apple HIG: master on/off lives INSIDE the panel
+          it controls; the collapsed header is a single tappable row
+          with the disclosure chevron at the far trailing edge (down
+          collapsed / up expanded). 44pt min-height keeps the hit
+          target HIG-compliant even though admin chrome is denser. */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+        aria-expanded={open}
+        data-testid="button-toggle-gooddeed-pill"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[13.5px] font-semibold text-slate-900">
+            GoodDeed® Certificate
+          </span>
+          <span
+            className="text-xs text-slate-500 truncate"
+            data-testid="text-gooddeed-summary"
+          >
+            · {summary}
+          </span>
+        </div>
+        <ChevronDown
+          className={[
+            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </button>
       {open && (
-        <div className="px-3 pb-3 pt-3 border-t border-slate-100">
+        <div className="px-3 pb-3 pt-3 border-t border-slate-100 space-y-4">
+          {/* Task #441 — Master enable switch lives as the FIRST row
+              inside the panel it gates, directly above the % / cap /
+              price fields it controls. Flipping this updates the
+              collapsed header's `On · 25% (65 of 260)` echo to `Off`. */}
+          <div
+            className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2.5"
+            data-testid="row-gooddeed-enable"
+          >
+            <label
+              htmlFor="toggle-gooddeed-active"
+              className="text-sm font-medium text-slate-900 cursor-pointer select-none"
+            >
+              Enable GoodDeed® Certificate
+            </label>
+            <Switch
+              id="toggle-gooddeed-active"
+              checked={active}
+              onCheckedChange={setActive}
+              data-testid="toggle-gooddeed-active"
+              aria-label="Offer GoodDeed® cert on this release"
+            />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start">
             {/* LEFT — enlarged cert mock. Album art on top, navy
                 band (brand bg) with album title + artist + GoodDeed
