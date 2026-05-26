@@ -248,6 +248,14 @@ body {
 body.gt-admin {
   background-color: #f7f8fa;
   background-image: none; /* drop the fan-page gradient on admin routes */
+  /* Task #424 — also clear `background-attachment: fixed` on admin
+     routes. iPad Safari combines `background-attachment: fixed` +
+     radial gradients + html/body `overflow-x: hidden` into a renderer
+     bug that can paint a blank dark canvas even when the admin DOM is
+     present. The image is gone above, but explicitly resetting the
+     attachment shuts the door on any UA quirk that still tries to
+     composite the fixed bg layer. */
+  background-attachment: scroll;
   color: #0f172a; /* slate-900 */
   color-scheme: light;
 

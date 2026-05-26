@@ -78,6 +78,7 @@ import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { VendorPortal } from "@/pages/VendorPortal";
 import ErrorPage from "@/pages/ErrorPage";
+import { AdminShellErrorBoundary } from "@/components/admin/AdminShellErrorBoundary";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -93,12 +94,28 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
+  // Preserve the admin/customer distinction on the dev URL — visiting
+  // /admin/* unauthenticated should land on the admin-chromed login,
+  // not the dark customer one.
+  const isAdminPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+
   if (!user) {
-    // Preserve the admin/customer distinction on the dev URL — visiting
-    // /admin/* unauthenticated should land on the admin-chromed login,
-    // not the dark customer one.
-    const isAdminPath = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
     return <Redirect to={isAdminPath ? "/admin/login" : "/login"} />;
+  }
+
+  // Task #424 — Wrap every admin-protected page in a top-level shell
+  // error boundary so a throw inside AdminFrame (or any chrome it
+  // renders) paints a visible "Admin failed to load" card instead of
+  // the blank dark canvas we saw on iPad Safari. AdminFrame's inner
+  // `AdminErrorBoundary` only catches the per-page content area; this
+  // catches the chrome itself.
+  if (isAdminPath) {
+    return (
+      <AdminShellErrorBoundary>
+        <Component />
+      </AdminShellErrorBoundary>
+    );
   }
 
   return <Component />;
