@@ -78,34 +78,35 @@ export function AlbumDesktopTrackRow({
       data-row-state={state}
       data-row-current={isCurrent ? "true" : "false"}
     >
+      {/* Leading favorite heart — sits to the left of the number, reserves
+          its slot even when empty so titles stay aligned across rows.
+          Hidden on the currently-playing row (equalizer takes over). */}
+      <div className="w-3 flex items-center justify-center" aria-hidden>
+        {isFavorite && !isCurrent && (
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill={ROSE}
+            data-testid={`icon-favorite-row-${trackNumber}`}
+          >
+            <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
+          </svg>
+        )}
+      </div>
+
       {/* Track number / play affordance / equalizer cell. */}
       <div className="w-6 text-right relative h-5">
-        {/* Plain number — visible whenever the row is at rest and not favorited. */}
+        {/* Plain number — visible whenever the row is at rest. */}
         <span
           className={[
             "text-[13px] tabular-nums transition-opacity",
             state === "locked" ? "text-white/30" : "text-white/55",
-            showPlayGlyph || isCurrent || isFavorite ? "opacity-0" : "opacity-100",
+            showPlayGlyph || isCurrent ? "opacity-0" : "opacity-100",
           ].join(" ")}
         >
           {trackNumber}.
         </span>
-
-        {/* Favorited heart — replaces the number when the row is at rest. */}
-        {isFavorite && !isCurrent && (
-          <div
-            className={[
-              "absolute inset-0 inline-flex items-center justify-end pr-[1px] transition-opacity",
-              showPlayGlyph ? "opacity-0" : "opacity-100",
-            ].join(" ")}
-            aria-hidden
-            data-testid={`icon-favorite-row-${trackNumber}`}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill={ROSE}>
-              <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
-            </svg>
-          </div>
-        )}
 
         {/* Hover play triangle — rose, replaces the number on hover. */}
         {interactive && (

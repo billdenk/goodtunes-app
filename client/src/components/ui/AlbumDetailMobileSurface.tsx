@@ -505,42 +505,47 @@ export function AlbumDetailMobileSurface({
                   onClick={() => onPlaySong?.(song)}
                   className="flex items-center gap-4 flex-1 min-w-0 h-full text-left"
                 >
-                  <div className="w-6 flex-shrink-0 flex items-center justify-center">
-                    {isActive ? (
-                      <div className="flex gap-0.5 items-end h-4">
-                        {[1, 2, 3].map((j) => (
-                          <div
-                            key={j}
-                            className="w-0.5 rounded-full"
-                            style={{
-                              background: "#319ED8",
-                              height: isPlaying ? `${40 + j * 20}%` : "40%",
-                              animationName: isPlaying ? "pulse" : "none",
-                              animationDuration: `${0.5 + j * 0.1}s`,
-                              animationIterationCount: "infinite",
-                            }}
-                          />
-                        ))}
-                      </div>
-                    ) : isFavorite ? (
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="var(--brand-heart)"
-                        aria-hidden
-                        data-testid={`icon-favorite-${song.id}`}
-                      >
-                        <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
-                      </svg>
-                    ) : (
-                      <span
-                        className="text-[15px] tabular-nums"
-                        style={{ color: "rgba(255,255,255,0.32)" }}
-                      >
-                        {song.trackNumber}
-                      </span>
-                    )}
+                  <div className="flex-shrink-0 flex items-center gap-1.5">
+                    <div className="w-3 flex items-center justify-center">
+                      {!isActive && isFavorite && (
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="var(--brand-heart)"
+                          aria-hidden
+                          data-testid={`icon-favorite-${song.id}`}
+                        >
+                          <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="w-6 flex items-center justify-end">
+                      {isActive ? (
+                        <div className="flex gap-0.5 items-end h-4">
+                          {[1, 2, 3].map((j) => (
+                            <div
+                              key={j}
+                              className="w-0.5 rounded-full"
+                              style={{
+                                background: "#319ED8",
+                                height: isPlaying ? `${40 + j * 20}%` : "40%",
+                                animationName: isPlaying ? "pulse" : "none",
+                                animationDuration: `${0.5 + j * 0.1}s`,
+                                animationIterationCount: "infinite",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <span
+                          className="text-[15px] tabular-nums"
+                          style={{ color: "rgba(255,255,255,0.32)" }}
+                        >
+                          {song.trackNumber}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
                     <p
