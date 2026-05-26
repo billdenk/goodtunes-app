@@ -163,6 +163,10 @@ interface AlbumFull {
   // Bundle purchase price in cents — drives the consumer Buy Bundle CTA.
   // Null = not for sale yet, no CTA shown on /album/:id.
   priceCents?: number | null;
+  // Task #429 — operator-entered track count used by the Publishing
+  // line of the SellPanel breakdown before any masters are uploaded.
+  // Null = no estimate; once songs exist the live count wins.
+  anticipatedTrackCount?: number | null;
   // Task #79 — set the first time a paid order materializes for this
   // album. Non-null means the album is post-sale locked for partner
   // metadata edits; super-admin can still edit, or grant an unlock
@@ -437,6 +441,7 @@ export function AdminAlbum() {
       sellMode?: "direct" | "shopify";
       physicalFormat?: string | null;
       sellQuoteLockedAt?: boolean | null;
+      anticipatedTrackCount?: number | null;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, patch);
       return r.json();
@@ -894,6 +899,10 @@ export function AdminAlbum() {
                   physicalFormat={album.physicalFormat ?? null}
                   sellQuoteLockedAt={album.sellQuoteLockedAt ?? null}
                   trackCount={album.songs.length}
+                  anticipatedTrackCount={album.anticipatedTrackCount ?? null}
+                  onAnticipatedTrackCountChange={(next) =>
+                    updateAlbumMode.mutate({ anticipatedTrackCount: next })
+                  }
                   onLockToggle={(next) => updateAlbumMode.mutate({ sellQuoteLockedAt: next })}
                   onChangeMode={() => setModeDialogOpen(true)}
                   onEditArtwork={() => setArtworkEditorOpen(true)}

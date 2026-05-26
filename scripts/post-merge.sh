@@ -479,6 +479,30 @@ SQL
 migrate_album_sell_mode dev  "${DATABASE_URL:-}"
 migrate_album_sell_mode prod "${PROD_DATABASE_URL:-}"
 
+# Task #429 — Anticipated track count for Publishing estimate before
+# any masters are uploaded. Additive nullable column on `albums`; NULL
+# means "fall back to the live song count". Pre-create on both DBs so
+# the publish dev→prod diff stays empty and the Sell tab never 500s on
+# a fresh-clone dev that hasn't run db:push.
+migrate_album_anticipated_track_count() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping anticipated_track_count migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS anticipated_track_count integer;
+SQL
+  then
+    echo "post-merge: anticipated_track_count migration ok on $label"
+  else
+    echo "post-merge: WARNING — anticipated_track_count migration failed on $label (continuing)"
+  fi
+}
+migrate_album_anticipated_track_count dev  "${DATABASE_URL:-}"
+migrate_album_anticipated_track_count prod "${PROD_DATABASE_URL:-}"
+
 # Task #350 — Invite tree + multi-level referrals.
 #   1. people.can_invite_ambassadors — per-person flag NPO partners
 #      toggle on a contact to grant them the ambassador invite verb.

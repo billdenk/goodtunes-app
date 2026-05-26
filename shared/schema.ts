@@ -227,6 +227,12 @@ export const albums = pgTable("albums", {
   sellMode: text("sell_mode"),
   physicalFormat: text("physical_format"),
   sellQuoteLockedAt: timestamp("sell_quote_locked_at"),
+  // Task #429 — Anticipated track count used to drive the Sell-panel
+  // Publishing estimate (`N × $0.254`) BEFORE any masters have been
+  // uploaded. NULL means "fall back to the live song count" — the
+  // moment songs.length > 0 the field is read-only on the UI and the
+  // estimate uses the real tracklist. Capped at 99 by the route.
+  anticipatedTrackCount: integer("anticipated_track_count"),
   // gogoods.com legacy import id — used by the importer to dedupe and
   // by Tasks #400/#402/#403/#404 to reconnect legacy assets. Nullable;
   // populated only for rows that came in via the legacy export.

@@ -4227,6 +4227,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       updates.physicalFormat = v;
     }
+    if (req.body?.anticipatedTrackCount !== undefined) {
+      const raw = req.body.anticipatedTrackCount;
+      if (raw === null || raw === "") {
+        updates.anticipatedTrackCount = null;
+      } else {
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || n > 99 || !Number.isInteger(n)) {
+          return res.status(400).json({ message: "anticipatedTrackCount must be an integer between 0 and 99, or null." });
+        }
+        updates.anticipatedTrackCount = n;
+      }
+    }
     if (req.body?.sellQuoteLockedAt !== undefined) {
       // Client sends `true` to lock-now, `null` to unlock. We never let
       // clients pick the lock timestamp themselves.

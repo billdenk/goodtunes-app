@@ -165,6 +165,8 @@ export function SellPanel({
   onChangeMode,
   onEditArtwork,
   trackCount = 0,
+  anticipatedTrackCount = null,
+  onAnticipatedTrackCountChange,
 }: {
   albumId: string;
   // Task #397 — threaded into the GoodDeed cert preview tile so the
@@ -179,6 +181,12 @@ export function SellPanel({
   // (industry standard: $0.127/track each for vinyl + digital). Caller
   // (AdminAlbum) derives from `album.songs.length`.
   trackCount?: number;
+  // Task #429 — operator-typed estimate for use BEFORE any masters
+  // have been uploaded. When the album has 0 songs the Sell-panel
+  // Publishing line uses this number; once songs.length > 0 the live
+  // count wins and this field becomes read-only on the UI.
+  anticipatedTrackCount?: number | null;
+  onAnticipatedTrackCountChange?: (next: number | null) => void;
   // Task #335 — mode + format come from the album row (set in the
   // creation modal). When "shopify" we render the slim panel below
   // (digital + GoodDeed addon only). Defaults stay "direct" so callers
@@ -198,6 +206,24 @@ export function SellPanel({
   onEditArtwork?: () => void;
 }) {
   const { toast } = useToast();
+  // Task #429 — keep a local mirror of `anticipatedTrackCount` so the
+  // Publishing line of every format card's breakdown re-prices on each
+  // keystroke. The PUT to /api/admin/albums fires on blur (see
+  // `handleAnticipatedCommit` below); without this local state the
+  // breakdown would only refresh after the mutation + refetch round
+  // trip, breaking Bill's "type 12 → Publishing updates" expectation.
+  const [localAnticipated, setLocalAnticipated] = useState<number | null>(
+    anticipatedTrackCount ?? null,
+  );
+  useEffect(() => {
+    setLocalAnticipated(anticipatedTrackCount ?? null);
+  }, [anticipatedTrackCount]);
+  const handleAnticipatedCommit = (next: number | null) => {
+    setLocalAnticipated(next);
+    if (next !== (anticipatedTrackCount ?? null)) {
+      onAnticipatedTrackCountChange?.(next);
+    }
+  };
   const { data, isLoading, error } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
   // Live platform-cost feed — used for the "You earn" readout the first
   // time an addon is configured (before a snapshot is written), and as
@@ -451,7 +477,12 @@ export function SellPanel({
                           onDelete={() => deleteSku.mutate(f)}
                           expanded={skuDisclosure.isOpen(f)}
                           onSetExpanded={(open) => skuDisclosure.setOpen(f, open)}
-                          trackCount={trackCount}
+                          trackCount={trackCount || (localAnticipated ?? 0)}
+                          liveTrackCount={trackCount}
+                          anticipatedTrackCount={localAnticipated}
+                          persistedAnticipatedTrackCount={anticipatedTrackCount ?? null}
+                          onAnticipatedTrackLocalChange={setLocalAnticipated}
+                          onAnticipatedTrackCountChange={handleAnticipatedCommit}
                           albumId={albumId}
                           signedAddon={signedAddon ?? null}
                           livePlatformCostCents={payoutSettings?.certCostCents ?? null}
@@ -483,7 +514,12 @@ export function SellPanel({
                         onDelete={() => setDraftFormats((prev) => prev.filter((d) => d !== f))}
                         expanded={skuDisclosure.isOpen(`draft-${f}`)}
                         onSetExpanded={(open) => skuDisclosure.setOpen(`draft-${f}`, open)}
-                        trackCount={trackCount}
+                        trackCount={trackCount || (localAnticipated ?? 0)}
+                        liveTrackCount={trackCount}
+                        anticipatedTrackCount={localAnticipated}
+                        persistedAnticipatedTrackCount={anticipatedTrackCount ?? null}
+                        onAnticipatedTrackLocalChange={setLocalAnticipated}
+                        onAnticipatedTrackCountChange={handleAnticipatedCommit}
                         albumId={albumId}
                         signedAddon={signedAddon ?? null}
                         livePlatformCostCents={payoutSettings?.certCostCents ?? null}
@@ -920,6 +956,122 @@ function SaveLink({
   );
 }
 
+// Task #429 — small numeric input used on each vinyl format card to
+// capture an Anticipated track count BEFORE any masters are uploaded.
+// While `liveTrackCount === 0` the field is editable and seeded from
+// the album row's `anticipatedTrackCount`; once songs exist the input
+// disables and shows the live count with a "from tracklist" helper.
+// Saves on blur (and Enter) through the supplied `onChange` callback
+// — empty string clears back to null so Publishing falls to $0.
+function AnticipatedTracksInput({
+  format,
+  liveTrackCount,
+  anticipatedTrackCount,
+  persistedAnticipatedTrackCount,
+  onLocalChange,
+  onChange,
+}: {
+  format: AlbumFormat;
+  liveTrackCount: number;
+  // Local mirror (updates on every keystroke). Drives the input's
+  // displayed value and the live Publishing re-price.
+  anticipatedTrackCount: number | null;
+  // Last value the album row was saved with. The blur/Enter commit
+  // dedupes against THIS, not the local mirror — otherwise typing a
+  // new value updates the mirror, and by the time commit fires the
+  // "did it change?" check sees no diff and skips the PUT.
+  persistedAnticipatedTrackCount: number | null;
+  // Fires on every keystroke with the parsed/clamped value (or null
+  // for empty input). Used to drive the live Publishing re-price
+  // before the PUT round-trips. See SellPanel's `localAnticipated`.
+  onLocalChange?: (next: number | null) => void;
+  // Fires on blur / Enter — this is the one that persists.
+  onChange?: (next: number | null) => void;
+}) {
+  const hasLive = liveTrackCount > 0;
+  const initial = hasLive
+    ? String(liveTrackCount)
+    : anticipatedTrackCount != null
+      ? String(anticipatedTrackCount)
+      : "";
+  const [value, setValue] = useState<string>(initial);
+  useEffect(() => {
+    setValue(
+      hasLive
+        ? String(liveTrackCount)
+        : anticipatedTrackCount != null
+          ? String(anticipatedTrackCount)
+          : "",
+    );
+  }, [hasLive, liveTrackCount, anticipatedTrackCount]);
+
+  // Parse a raw input string into the clamped 0–99 value (or null
+  // for empty / unparseable). Shared by the live keystroke path and
+  // the blur/Enter commit path so they always agree.
+  const parse = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (trimmed === "") return null;
+    const n = Number.parseInt(trimmed.replace(/[^0-9]/g, ""), 10);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.min(99, n);
+  };
+
+  const handleType = (raw: string) => {
+    setValue(raw);
+    if (hasLive) return;
+    const parsed = parse(raw);
+    // Empty input = null (clears anticipated count). Unparseable
+    // input (e.g. "abc") is ignored — we leave the breakdown on the
+    // last good value until the user fixes the text.
+    if (raw.trim() === "" || parsed !== null) {
+      onLocalChange?.(parsed);
+    }
+  };
+
+  const commit = () => {
+    if (hasLive || !onChange) return;
+    const parsed = parse(value);
+    if (parsed === null && value.trim() !== "") return; // junk text — leave as-is
+    if (parsed !== persistedAnticipatedTrackCount) onChange(parsed);
+    setValue(parsed != null ? String(parsed) : "");
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+          Anticipated tracks
+        </span>
+        <InfoTip
+          label="About anticipated tracks"
+          testId={`info-anticipated-tracks-${format}`}
+          text="Type the number of tracks you expect this album to have so the Publishing estimate is realistic before you upload masters. Publishing = N × $0.254 (mechanicals × 2 for vinyl + digital). Once songs are uploaded this switches to the live tracklist count."
+        />
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => handleType(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        disabled={hasLive}
+        inputMode="numeric"
+        placeholder="0"
+        className="w-24 h-8 px-2 rounded-md border border-slate-200 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]"
+        data-testid={`input-anticipated-tracks-${format}`}
+      />
+      <div className="text-xs text-slate-400 mt-1">
+        {hasLive ? "from tracklist" : "Used until you upload masters."}
+      </div>
+    </div>
+  );
+}
+
 // Task #390 — small (i) popover used next to Retail Price, Select Qty,
 // Total and Profit·Per unit sold. Click or hover-equivalent (popover
 // trigger) opens a calm slate caption with the explanatory copy. Same
@@ -1006,6 +1158,7 @@ function CostTooltip({
   breakdown: {
     manufacturingCents: number;
     publishingCents: number;
+    publishingTrackCount: number;
     paymentProcessingCents: number;
     goodtunesCents: number;
     source?: "hellbender" | "placeholder" | "catalog";
@@ -1049,7 +1202,10 @@ function CostTooltip({
           Cost breakdown
         </div>
         <Row label="Manufacturing" cents={breakdown.manufacturingCents} />
-        <Row label="Publishing" cents={breakdown.publishingCents} />
+        <Row
+          label={`${breakdown.publishingTrackCount} tracks × $0.254`}
+          cents={breakdown.publishingCents}
+        />
         <Row label="Payment processing" cents={breakdown.paymentProcessingCents} />
         <Row label="GoodTunes" cents={breakdown.goodtunesCents} />
         <Row label="Total" cents={total} bold />
@@ -1079,6 +1235,11 @@ function SkuRow({
   expanded,
   onSetExpanded,
   trackCount,
+  liveTrackCount,
+  anticipatedTrackCount,
+  persistedAnticipatedTrackCount,
+  onAnticipatedTrackLocalChange,
+  onAnticipatedTrackCountChange,
   albumId,
   signedAddon,
   livePlatformCostCents,
@@ -1130,6 +1291,18 @@ function SkuRow({
   // Task #393 — vinyl-only props powering the live cost breakdown and
   // the in-card OPTIONAL GoodDeed pill. Non-vinyl rows ignore them.
   trackCount?: number;
+  // Task #429 — split the live song count from the operator-typed
+  // anticipated count so the input UI can decide which to show and
+  // whether to disable. Math (`trackCount`) uses the effective value
+  // already resolved by the caller.
+  liveTrackCount?: number;
+  anticipatedTrackCount?: number | null;
+  // Last persisted value from the album row. The blur commit dedupes
+  // against this (not the locally mirrored value) so a normal edit
+  // still triggers the PUT.
+  persistedAnticipatedTrackCount?: number | null;
+  onAnticipatedTrackLocalChange?: (next: number | null) => void;
+  onAnticipatedTrackCountChange?: (next: number | null) => void;
   albumId?: string;
   signedAddon?: AlbumAddon | null;
   livePlatformCostCents?: number | null;
@@ -1326,10 +1499,21 @@ function SkuRow({
     const liveTrackCount = trackCount ?? 0;
     const snapshotTrackCount = existing?.costSnapshotTrackCount ?? null;
     const publishingFor = (n: number) => Math.round(n * MECH_RATE_CENTS_PER_TRACK);
+    // Task #429 — if the album's effective track count (live tracklist
+    // or anticipated count) has drifted from the snapshotted value, fall
+    // back to the live number so Publishing reprices immediately. The
+    // SkuRow dirty calc below mirrors this so the row's Save lights up
+    // and the next Save re-snapshots costSnapshotTrackCount.
+    const trackCountDrift =
+      snapshotTrackCount != null && snapshotTrackCount !== liveTrackCount;
     const sideCarFor = (useSnapshot: boolean) => {
-      const tc = useSnapshot && snapshotTrackCount != null ? snapshotTrackCount : liveTrackCount;
+      const tc =
+        useSnapshot && snapshotTrackCount != null && !trackCountDrift
+          ? snapshotTrackCount
+          : liveTrackCount;
       return {
         publishingCents: publishingFor(tc),
+        publishingTrackCount: tc,
         paymentProcessingCents: Math.round(priceCentsForCost * 0.029) + 30,
         goodtunesCents: 450,
       };
@@ -1473,6 +1657,14 @@ function SkuRow({
     usingCatalog &&
     (pressTierId !== (initialTier?.id ?? null) || pressColorId !== initialColorId);
   const storedDisplayName = existing?.displayName ?? "";
+  // Task #429 — if the effective track count (live tracklist or
+  // operator-entered Anticipated tracks) has drifted from the row's
+  // snapshotted value, treat the row as dirty so Save lights up and
+  // the next submit re-snapshots costSnapshotTrackCount alongside the
+  // Publishing line that already re-priced live.
+  const trackCountDirty =
+    existing?.costSnapshotTrackCount != null &&
+    existing.costSnapshotTrackCount !== (trackCount ?? 0);
   const dirty =
     active !== storedActive ||
     priceStr !== storedPrice ||
@@ -1483,7 +1675,8 @@ function SkuRow({
          qtyMode !== initialQtyMode ||
          (qtyMode === "fixed" && legacyParsedQty !== storedQty))) ||
     (isVinyl && !usingCatalog && (vinylColorId !== storedColor || jacketUpgrade !== storedJacket)) ||
-    catalogDirty;
+    catalogDirty ||
+    trackCountDirty;
 
   const submit = () => {
     const cents = parseDollars(priceStr);
@@ -2087,6 +2280,20 @@ function SkuRow({
             )}
           </div>
 
+          {/* Task #429 — Anticipated tracks. Drives the Publishing
+              line of the cost breakdown before any masters have been
+              uploaded. Once songs are uploaded the field shows the
+              live count and is disabled. Saves on blur via the
+              album-level PUT (debounced by the operator's typing). */}
+          <AnticipatedTracksInput
+            format={format}
+            liveTrackCount={liveTrackCount ?? 0}
+            anticipatedTrackCount={anticipatedTrackCount ?? null}
+            persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
+            onLocalChange={onAnticipatedTrackLocalChange}
+            onChange={onAnticipatedTrackCountChange}
+          />
+
           {/* Profit — collapsible inline breakdown */}
           <div>
             <button
@@ -2130,7 +2337,7 @@ function SkuRow({
                   <span className="tabular-nums">{dollars(breakdown.manufacturingCents)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                  <span>Publishing</span>
+                  <span>{breakdown.publishingTrackCount} tracks × $0.254</span>
                   <span className="tabular-nums">{dollars(breakdown.publishingCents)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
