@@ -265,6 +265,21 @@ export function lookupHellbenderUnitCents(args: {
   return HELLBENDER_MATRIX[args.colorTier][size][args.qtyTier][args.jacketUpgrade];
 }
 
+// Vinyl rendering set — these formats render the rich vinyl card in
+// the Sell panel (color picker, jacket, ladder qty, GoodDeed pill).
+// Intentionally broader than `pressingSizeForFormat`, because 12"
+// Double LP is real vinyl Hellbender presses, even though we don't
+// carry a per-rung legacy matrix for it (the catalog flow or a
+// manual quote covers the cost). Keep this as the single source of
+// truth for "is this a vinyl SKU" in the UI; reach for
+// `pressingSizeForFormat` only when you actually need a Hellbender
+// matrix lookup.
+export const VINYL_FORMATS: ReadonlyArray<AlbumFormat> = [
+  "7_inch",
+  "12_lp",
+  "12_double",
+];
+
 export function isVinylFormat(format: AlbumFormat): boolean {
-  return pressingSizeForFormat(format) !== null;
+  return VINYL_FORMATS.includes(format);
 }

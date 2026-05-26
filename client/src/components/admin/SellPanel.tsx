@@ -35,6 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
+  PHYSICAL_FORMAT_TO_ALBUM_FORMAT,
   type AlbumFormat,
   type AlbumSku,
   type AlbumAddon,
@@ -338,10 +339,21 @@ export function SellPanel({
     // off-catalog draft the row editor can't actually price.
     const catalogFormats = invitedPress?.catalog?.formats ?? [];
     const catalogScopedHere = !!invitedPress?.press && catalogFormats.length > 0;
-    if (catalogScopedHere && !catalogFormats.some((f) => f.format === physicalFormat)) return;
+    // Task #456 — the New Album dialog stores `physicalFormat` in its
+    // own vocabulary (`seven_inch` / `single_lp` / `double_lp` /
+    // `cassette`) which doesn't line up with `ALBUM_FORMATS`
+    // (`7_inch` / `12_lp` / `12_double` / `cassette` / `cd`). Cast it
+    // through the shared mapping or the draft row lands with a key
+    // SkuRow can't recognise (`isVinylFormat("seven_inch")` is false →
+    // legacy non-vinyl chrome).
+    const albumFormat = PHYSICAL_FORMAT_TO_ALBUM_FORMAT[
+      physicalFormat as keyof typeof PHYSICAL_FORMAT_TO_ALBUM_FORMAT
+    ];
+    if (!albumFormat) return;
+    if (catalogScopedHere && !catalogFormats.some((f) => f.format === albumFormat)) return;
     seededPhysicalFormatRef.current = true;
-    setDraftFormats([physicalFormat as AlbumFormat]);
-    skuDisclosure.open(`draft-${physicalFormat}`);
+    setDraftFormats([albumFormat]);
+    skuDisclosure.open(`draft-${albumFormat}`);
   }, [data, physicalFormat, sellMode, invitedPress, draftFormats.length, skuDisclosure]);
 
   // Task #218 — when this album is invited by a press that has built
@@ -1553,12 +1565,14 @@ function SkuRow({
           manufacturingCents: existing.costSnapshotManufacturingCents,
           ...sideCarFor(true),
           source: "catalog" as const,
+          needsQuote: false,
         };
       }
       return {
         manufacturingCents: catalogSnap?.unitCents ?? 0,
         ...sideCarFor(false),
         source: "catalog" as const,
+        needsQuote: false,
       };
     }
     if (isVinyl) {
@@ -1588,6 +1602,7 @@ function SkuRow({
           manufacturingCents: existing.costSnapshotManufacturingCents,
           ...sideCarFor(true),
           source: "hellbender" as const,
+          needsQuote: false,
         };
       }
       const m = lookupHellbenderUnitCents({
@@ -1596,10 +1611,16 @@ function SkuRow({
         qtyTier: qtySnap.tier,
         jacketUpgrade,
       });
+      // Task #456 — `lookupHellbenderUnitCents` returns null for vinyl
+      // sizes we don't carry a per-rung matrix for (today: 12" Double
+      // LP). The row still renders vinyl chrome, but we flag the
+      // manufacturing cell as awaiting a manual quote so it doesn't
+      // silently read as $0.00 (which made profit look free).
       return {
         manufacturingCents: m ?? 0,
         ...sideCarFor(false),
         source: "hellbender" as const,
+        needsQuote: m === null,
       };
     }
     // Non-vinyl: snapshot wins until re-save (preserve #194 behaviour).
@@ -1610,7 +1631,7 @@ function SkuRow({
     const manufacturingCents = existing?.costSnapshotManufacturingCents
       ?? liveCost?.manufacturingCents
       ?? 0;
-    return { manufacturingCents, ...sideCarFor(hasSnapshot), source: "placeholder" as const };
+    return { manufacturingCents, ...sideCarFor(hasSnapshot), source: "placeholder" as const, needsQuote: false };
   }, [
     existing,
     liveCost,
@@ -2664,18 +2685,28 @@ function SkuRow({
                 <CostTooltip format={format} breakdown={breakdown} />
               )}
               <span
-                className="text-slate-400 text-[11px]"
+                className={[
+                  "text-xs",
+                  breakdown?.needsQuote ? "text-[color:var(--brand-blue)]" : "text-slate-400",
+                ].join(" ")}
                 data-testid={`text-cost-source-${format}`}
               >
                 ({usingCatalog
                   ? (existing?.costSnapshotManufacturingCents != null ? "locked · catalog" : "live · catalog")
                   : isVinyl
-                    ? (existing?.costSnapshotManufacturingCents != null ? "locked · Hellbender" : "live · Hellbender")
+                    ? (breakdown?.needsQuote
+                        ? "needs quote"
+                        : existing?.costSnapshotManufacturingCents != null
+                          ? "locked · Hellbender"
+                          : "live · Hellbender")
                     : "placeholder"})
               </span>
             </span>
             <span
-              className="w-28 text-right tabular-nums text-[13.5px] text-slate-700"
+              className={[
+                "w-28 text-right tabular-nums text-[13.5px]",
+                breakdown?.needsQuote ? "text-[color:var(--brand-blue)]" : "text-slate-700",
+              ].join(" ")}
               data-testid={`text-cost-${format}`}
             >
               {totalCostCents === null ? "—" : dollars(totalCostCents)}
@@ -2687,6 +2718,14 @@ function SkuRow({
               data-testid={`text-cost-nonvinyl-note-${format}`}
             >
               Quoted manually — Hellbender doesn't press this format.
+            </div>
+          )}
+          {isVinyl && breakdown?.needsQuote && (
+            <div
+              className="text-xs text-[color:var(--brand-blue)] leading-snug -mt-1.5"
+              data-testid={`text-cost-needs-quote-${format}`}
+            >
+              Awaiting Hellbender quote for {ALBUM_FORMAT_LABEL[format]} — manufacturing reads as $0 until a quote lands. Ping Bill.
             </div>
           )}
 

@@ -268,6 +268,23 @@ export const ALBUM_PHYSICAL_FORMAT_LABEL: Record<AlbumPhysicalFormat, string> = 
   seven_inch: "7\" Vinyl",
   cassette: "Cassette",
 };
+// The New Album dialog stores its own format vocabulary
+// (`ALBUM_PHYSICAL_FORMATS`) — Single LP / Double LP / 7" / Cassette.
+// The Sell-panel SKU machinery keys off a different list
+// (`ALBUM_FORMATS` below) — 7_inch / 12_lp / 12_double / cassette / cd.
+// Map between them when the dialog's pick is seeded into a draft SKU
+// row, otherwise the row arrives with a key SkuRow can't recognise
+// (e.g. "seven_inch" instead of "7_inch") and falls out of the vinyl
+// branch entirely.
+export const PHYSICAL_FORMAT_TO_ALBUM_FORMAT: Record<
+  AlbumPhysicalFormat,
+  "7_inch" | "12_lp" | "12_double" | "cassette"
+> = {
+  seven_inch: "7_inch",
+  single_lp: "12_lp",
+  double_lp: "12_double",
+  cassette: "cassette",
+};
 
 // Fingerprint of what was last sent to Shopify on a Push. Re-push
 // fetches the live product and diffs the same shape against this row
