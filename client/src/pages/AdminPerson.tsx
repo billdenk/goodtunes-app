@@ -2043,7 +2043,7 @@ function MemberRow({
   const isFormer = row.leftYear !== null;
   return (
     <div
-      className="px-5 py-4 grid grid-cols-12 gap-3 items-center"
+      className="group px-5 py-4 grid grid-cols-12 gap-3 items-center"
       data-testid={`row-band-member-${row.memberId}`}
     >
       <div className="col-span-3 flex items-center gap-3 min-w-0">
@@ -2142,7 +2142,7 @@ function MemberRow({
         <button
           type="button"
           onClick={onRemove}
-          className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50"
+          className="text-xs font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto"
           data-testid={`button-remove-member-${row.memberId}`}
         >
           Remove

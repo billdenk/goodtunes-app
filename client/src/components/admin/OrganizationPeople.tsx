@@ -137,7 +137,7 @@ export function OrganizationPeople({
           (contactsQ.data ?? []).map((c) => (
             <li
               key={c.personId}
-              className="flex items-center gap-3 px-1 py-2"
+              className="group flex items-center gap-3 px-1 py-2"
               data-testid={`row-${testIdPrefix}-contact-${c.personId}`}
             >
               {c.photoUrl ? (
@@ -173,6 +173,7 @@ export function OrganizationPeople({
                 variant="ghost"
                 onClick={() => detach.mutate(c.personId)}
                 disabled={detach.isPending}
+                className="opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto"
                 data-testid={`button-${testIdPrefix}-remove-contact-${c.personId}`}
               >
                 Remove
