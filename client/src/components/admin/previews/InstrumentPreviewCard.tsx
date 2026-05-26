@@ -17,6 +17,10 @@ export interface InstrumentPreviewInstrument {
   photoUrl: string | null;
   about: string | null;
   artistNote: string | null;
+  // Task #461 — original product/listing page (Carter Vintage,
+  // martinguitar.com, …). Optional; shown inline under the title as
+  // a "View original listing" credit breadcrumb.
+  sourceUrl?: string | null;
   vendors: InstrumentPreviewVendor[];
 }
 
@@ -89,6 +93,26 @@ export function InstrumentPreviewCard({
           >
             {instrument.name || "Unnamed gear"}
           </h2>
+          {/* Task #461 — credit breadcrumb back to the original listing
+              page. Shown inline under the title; opens in a new tab. */}
+          {instrument.sourceUrl && (() => {
+            let host = "";
+            try { host = new URL(instrument.sourceUrl).host.replace(/^www\./, ""); } catch { return null; }
+            return (
+              <a
+                href={instrument.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1.5 text-xs font-medium inline-flex items-center gap-1 text-white/55 hover:text-[var(--brand-blue)] hover:underline"
+                data-testid="link-preview-instrument-source"
+              >
+                <span>View original listing</span>
+                <span aria-hidden className="text-white/35">·</span>
+                <span className="truncate max-w-[160px]" aria-hidden>{host}</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            );
+          })()}
         </div>
 
         {/* About */}

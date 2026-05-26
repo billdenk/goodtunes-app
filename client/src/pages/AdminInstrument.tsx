@@ -102,6 +102,10 @@ interface InstrumentFull {
     domain: string;
     logoUrl: string | null;
   } | null;
+  // Task #461 — original product/listing URL the gear was scraped from.
+  // Drives the fan "View original listing" link + the admin "Refetch
+  // image from source" recovery for missing rehosted photos.
+  sourceUrl: string | null;
 }
 
 type Tab = "overview" | "photo" | "vendors" | "people";
@@ -491,8 +495,12 @@ function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
           name: instrument.name,
           category: instrument.category,
           shortCategory: instrument.shortCategory,
+          sourceUrl: instrument.sourceUrl,
         }}
         invalidate={invalidate}
+        readExtras={
+          <SourceUrlExtras instrument={instrument} />
+        }
         fields={[
           { key: "name", label: "Name", type: "text", required: true },
           {
@@ -508,6 +516,14 @@ function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
             type: "select",
             placeholder: "e.g. Guitar",
             options: SHORT_CATEGORIES.map((c) => ({ value: c, label: c })),
+          },
+          {
+            // Task #461 — original product/listing page (Carter Vintage,
+            // martinguitar.com, …). Empty clears.
+            key: "sourceUrl",
+            label: "Source URL",
+            type: "url",
+            placeholder: "https://… (where this gear was scraped from)",
           },
         ]}
       />
@@ -537,6 +553,101 @@ function OverviewPanel({ instrument }: { instrument: InstrumentFull }) {
         ]}
       />
       </div>
+    </div>
+  );
+}
+
+/* ─── Source URL recovery (Task #461) ─────────────────────────────── */
+
+// Sits in the Identity panel's read-mode footer. When the gear has a
+// `sourceUrl` but no `photoUrl`, surfaces a one-click "Refetch image
+// from source" button that re-runs the rehost step server-side. This
+// is the recovery path for cases like the 1974 Martin D-28 whose
+// Object-Storage photo went missing — fill in the Carter Vintage URL
+// in the field above, hit Refetch, photo comes back.
+function SourceUrlExtras({ instrument }: { instrument: InstrumentFull }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  // Track whether the current `photoUrl` actually loaded. An Object-
+  // Storage URL can still be non-null but 404 (object deleted, ACL
+  // change, signed URL expired) — that's the broken-image case the
+  // code review flagged, and the operator needs the refetch CTA in
+  // that scenario *more* than in the obvious null-photo case. We
+  // probe with a hidden <img>; failure or success both unlock state.
+  const [imageBroken, setImageBroken] = useState(false);
+  useEffect(() => {
+    setImageBroken(false);
+    if (!instrument.photoUrl) return;
+    const probe = new Image();
+    probe.onerror = () => setImageBroken(true);
+    probe.src = instrument.photoUrl;
+    return () => {
+      probe.onerror = null;
+    };
+  }, [instrument.photoUrl, instrument.id]);
+
+  const refetch = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/instruments/${instrument.id}/refetch-image`,
+      );
+      return (await r.json()) as { photoUrl: string };
+    },
+    onSuccess: async () => {
+      await invalidateAdminEntity(qc, "instrument", instrument.id);
+      setImageBroken(false);
+      toast({ title: "Photo restored from source" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't refetch the image",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  if (!instrument.sourceUrl) return null;
+  const photoMissing = !instrument.photoUrl || imageBroken;
+  // Amber alert when the photo is null *or* the URL 404s; quiet
+  // neutral row when the photo is fine but the operator still wants
+  // a one-click way to re-pull it (e.g. the source page swapped to a
+  // better hero shot).
+  const tone = photoMissing
+    ? {
+        wrap: "mt-1 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2",
+        icon: "w-3.5 h-3.5 text-amber-700 flex-shrink-0",
+        msg: "text-xs text-amber-900 flex-1 min-w-0",
+        btn: "h-7 px-2.5 rounded-md bg-white border border-amber-300 text-amber-900 text-xs font-semibold hover:bg-amber-100 disabled:opacity-50 inline-flex items-center gap-1.5",
+        msgText: imageBroken
+          ? "Photo URL is broken — pull a fresh one from the source page."
+          : "Photo is missing — pull it back from the source page.",
+      }
+    : {
+        wrap: "mt-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2",
+        icon: "w-3.5 h-3.5 text-slate-500 flex-shrink-0",
+        msg: "text-xs text-slate-600 flex-1 min-w-0",
+        btn: "h-7 px-2.5 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-100 disabled:opacity-50 inline-flex items-center gap-1.5",
+        msgText: "Re-pull the photo from the source page if it's gone stale.",
+      };
+  return (
+    <div className={tone.wrap} data-testid="panel-refetch-image" data-photo-broken={photoMissing}>
+      <ImageIcon className={tone.icon} />
+      <span className={tone.msg}>{tone.msgText}</span>
+      <button
+        type="button"
+        onClick={() => refetch.mutate()}
+        disabled={refetch.isPending}
+        className={tone.btn}
+        data-testid="button-refetch-image"
+      >
+        {refetch.isPending ? (
+          <Spinner className="w-3 h-3 animate-spin" />
+        ) : (
+          <Upload className="w-3 h-3" />
+        )}
+        {refetch.isPending ? "Refetching…" : "Refetch image"}
+      </button>
     </div>
   );
 }

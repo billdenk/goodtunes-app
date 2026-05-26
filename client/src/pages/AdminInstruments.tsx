@@ -167,6 +167,10 @@ export function AdminInstruments() {
         category,
         ...(photoUrl ? { photoUrl } : {}),
         ...(about ? { about } : {}),
+        // Task #461 — remember the page the operator pasted. Drives the
+        // fan "View original listing" link + the admin "Refetch image"
+        // recovery for missing photos.
+        ...(trimmedUrl ? { sourceUrl: trimmedUrl } : {}),
       });
       const instrument = (await res.json()) as { id: string };
       if (trimmedUrl && scraped?.vendor?.affiliateUrl) {

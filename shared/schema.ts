@@ -775,6 +775,14 @@ export const instruments = pgTable("instruments", {
   makerVendorId: varchar("maker_vendor_id").references((): any => vendors.id, {
     onDelete: "set null",
   }),
+  // Task #461 — the original product/listing page this gear was scraped
+  // from (e.g. the Carter Vintage Guitar listing or martinguitar.com
+  // model page). Drives the fan-side "View original listing" link, the
+  // admin one-click "Refetch image" recovery for missing photos, and
+  // keeps a breadcrumb so we can re-scrape later if needed. Distinct
+  // from `instrument_vendors.affiliate_url` — that table holds the N
+  // resellers; this column is the *one* page the gear came from.
+  sourceUrl: text("source_url"),
 });
 
 // Real-world vendor entity. One row per partner (Carter Vintage, Reverb,

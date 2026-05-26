@@ -1019,3 +1019,27 @@ SQL
 }
 migrate_albums_is_prepping dev  "${DATABASE_URL:-}"
 migrate_albums_is_prepping prod "${PROD_DATABASE_URL:-}"
+
+# Task #461 — `instruments.source_url` keeps the original product/listing
+# page each piece of gear was scraped from (Carter Vintage page,
+# martinguitar.com model page, etc). Drives the fan-side "View original
+# listing" link and the admin one-click "Refetch image" recovery. Pre-
+# create on both DBs so the publish dev→prod diff stays empty and a
+# fresh-clone dev never 500s the gear endpoints. Idempotent.
+migrate_instruments_source_url() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping instruments.source_url migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS source_url text;
+SQL
+  then
+    echo "post-merge: instruments.source_url migration ok on $label"
+  else
+    echo "post-merge: WARNING — instruments.source_url migration failed on $label (continuing)"
+  fi
+}
+migrate_instruments_source_url dev  "${DATABASE_URL:-}"
+migrate_instruments_source_url prod "${PROD_DATABASE_URL:-}"

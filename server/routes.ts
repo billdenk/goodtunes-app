@@ -9868,7 +9868,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(i);
   });
   app.post("/api/admin/instruments", requireAdmin, async (req, res) => {
-    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId } = req.body ?? {};
+    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId, sourceUrl } = req.body ?? {};
     if (!name || !category) return res.status(400).json({ message: "name and category are required" });
     if (shortCategory && !(SHORT_CATEGORIES as readonly string[]).includes(String(shortCategory))) {
       return res.status(400).json({ message: `Invalid shortCategory. Allowed: ${SHORT_CATEGORIES.join(", ")}` });
@@ -9880,6 +9880,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const m = await storage.getVendorById(String(makerVendorId));
       if (!m) return res.status(400).json({ message: "makerVendorId does not match any vendor" });
     }
+    // Task #461 — light shape check; we don't want a stray "Carter
+    // Vintage Guitar" string landing in a URL column. Empty/missing is
+    // allowed (blank-shell creates have no source page).
+    let sourceUrlClean: string | null = null;
+    if (sourceUrl !== undefined && sourceUrl !== null && String(sourceUrl).trim() !== "") {
+      const s = String(sourceUrl).trim();
+      if (!/^https?:\/\//i.test(s)) {
+        return res.status(400).json({ message: "sourceUrl must start with http:// or https://" });
+      }
+      sourceUrlClean = s;
+    }
     const i = await storage.createInstrument({
       name: String(name),
       category: String(category),
@@ -9888,12 +9899,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       about: about ? String(about) : null,
       artistNote: artistNote ? String(artistNote) : null,
       makerVendorId: makerVendorId ? String(makerVendorId) : null,
+      sourceUrl: sourceUrlClean,
     } as any);
     return res.status(201).json(i);
   });
   app.put("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId } = req.body ?? {};
+    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId, sourceUrl } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (category !== undefined) updates.category = String(category);
@@ -9906,6 +9918,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
     if (about !== undefined) updates.about = about ? String(about) : null;
     if (artistNote !== undefined) updates.artistNote = artistNote ? String(artistNote) : null;
+    // Task #461 — empty string clears the breadcrumb; non-empty must
+    // look like a URL.
+    if (sourceUrl !== undefined) {
+      if (sourceUrl === null || sourceUrl === "") {
+        updates.sourceUrl = null;
+      } else {
+        const s = String(sourceUrl).trim();
+        if (!s) {
+          updates.sourceUrl = null;
+        } else if (!/^https?:\/\//i.test(s)) {
+          return res.status(400).json({ message: "sourceUrl must start with http:// or https://" });
+        } else {
+          updates.sourceUrl = s;
+        }
+      }
+    }
     // Task #174 — headline maker. `null` / `""` clears the link; a real
     // id is validated against vendors so a bad id returns 400 not 500.
     if (makerVendorId !== undefined) {
@@ -9927,6 +9955,98 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
     await storage.deleteInstrument(String(req.params.id));
     return res.json({ message: "Deleted" });
+  });
+
+  // Task #461 — re-run the rehost step against the instrument's stored
+  // `sourceUrl`. Pulls the page, picks the same image the scraper would
+  // (JSON-LD Product.image → og:image → twitter:image → bare `image`),
+  // rehosts into Object Storage, writes the new url onto `photoUrl`.
+  // One-click recovery for the "Martin D-28 photo went missing" case
+  // once an operator has filled in the source page.
+  app.post("/api/admin/instruments/:id/refetch-image", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const inst = await storage.getInstrumentById(id);
+    if (!inst) return res.status(404).json({ message: "Instrument not found" });
+    const src = (inst as any).sourceUrl as string | null;
+    if (!src) return res.status(400).json({ message: "No source URL on this gear — set one first." });
+    let parsed: URL;
+    try { parsed = new URL(src); } catch { return res.status(400).json({ message: "Stored source URL is malformed." }); }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await safeFetchWithUaFallback(src, { signal: ctrl.signal })
+        .then((r) => {
+          if (!r.ok) throw new Error(`Source page returned ${r.status}`);
+          return r.text();
+        })
+        .finally(() => clearTimeout(t));
+      // Same meta-tag harvest the scrape route uses — kept short here
+      // since we only need image-related keys.
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) { const k = m[1].toLowerCase(); if (!(k in meta)) meta[k] = decodeEntities(m[2]); }
+      while ((m = re2.exec(html))) { const k = m[2].toLowerCase(); if (!(k in meta)) meta[k] = decodeEntities(m[1]); }
+      const product = pickProduct(html, meta["og:site_name"] || null);
+      const pickImage = (img: any): string | null => {
+        if (!img) return null;
+        if (typeof img === "string") return img;
+        if (Array.isArray(img)) { for (const x of img) { const v = pickImage(x); if (v) return v; } return null; }
+        if (typeof img === "object") return img.url || img.contentUrl || null;
+        return null;
+      };
+      let rawImage: string | null =
+        pickImage(product?.image) ||
+        meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || meta["image"] || null;
+      if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
+      if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
+      if (!rawImage) return res.status(422).json({ message: "Couldn't find an image on that page." });
+      const rehosted = await rehostRemoteImage(rawImage);
+      const updated = await storage.updateInstrument(id, { photoUrl: rehosted } as any);
+      return res.json({ photoUrl: rehosted, instrument: updated });
+    } catch (e: any) {
+      const msg = e?.name === "AbortError" ? "Source page took too long to respond." : (e?.message || "Couldn't refetch the image.");
+      return res.status(502).json({ message: msg });
+    }
+  });
+
+  // Task #461 — one-shot idempotent backfill. For every instrument that
+  // has no `sourceUrl` *and* exactly one `instrument_vendors` row, copy
+  // that row's `affiliateUrl` into `sourceUrl`. Multi-reseller pieces
+  // stay untouched — picking the "right" listing is too ambiguous to
+  // automate. Safe to re-run; only rows still missing a sourceUrl get
+  // touched.
+  app.post("/api/admin/instruments/backfill-source-url", requireAdmin, async (_req, res) => {
+    try {
+      // Tightened per code review: require EXACTLY one
+      // `instrument_vendors` row total (not "one with a non-empty
+      // affiliate_url"), so a piece with three resellers where only
+      // one happens to have a URL isn't silently treated as
+      // single-source. The single row must also carry a usable URL.
+      const result = await db.execute(sql`
+        WITH vendor_counts AS (
+          SELECT instrument_id, COUNT(*) AS n,
+                 MIN(affiliate_url) AS affiliate_url
+          FROM instrument_vendors
+          GROUP BY instrument_id
+          HAVING COUNT(*) = 1
+        )
+        UPDATE instruments i
+        SET source_url = vc.affiliate_url
+        FROM vendor_counts vc
+        WHERE i.id = vc.instrument_id
+          AND i.source_url IS NULL
+          AND vc.affiliate_url IS NOT NULL
+          AND vc.affiliate_url <> ''
+        RETURNING i.id;
+      `);
+      const updated = Array.isArray((result as any).rows) ? (result as any).rows.length : 0;
+      console.log(`[task-461] backfilled source_url on ${updated} instruments`);
+      return res.json({ updated });
+    } catch (e: any) {
+      return res.status(500).json({ message: e?.message || "Backfill failed" });
+    }
   });
 
   // ----- Vendor entity CRUD ----------------------------------------------

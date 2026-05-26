@@ -12,6 +12,12 @@ import { INSTRUMENTS, type Instrument, type InstrumentVendor } from "@/data/musi
 // renders.
 interface LiveMakerProfile {
   instrument?: {
+    // Task #461 — also carries `sourceUrl`, the original product page
+    // the gear was scraped from (Carter Vintage, martinguitar.com, …).
+    // Surfaced as a "View original listing" link below the title so
+    // fans can read the full listing / dive deeper into a vintage
+    // piece's provenance.
+    sourceUrl?: string | null;
     maker?: {
       id: string;
       name: string;
@@ -172,6 +178,7 @@ export function InstrumentDetail() {
             <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(235,235,245,0.55)" }} data-testid="text-instrument-category">{instrument.category}</p>
             <h1 className="text-white text-[26px] font-bold leading-tight tracking-tight" data-testid="text-instrument-name">{instrument.name}</h1>
             <MakerLine instrumentId={instrument.id} />
+            <SourceListingLink instrumentId={instrument.id} />
           </div>
 
           {/* About prose */}
@@ -293,5 +300,42 @@ function MakerLine({ instrumentId }: { instrumentId: string }) {
       )}
       <span>By {maker.name}</span>
     </p>
+  );
+}
+
+// Task #461 — link out to the original product/listing page the gear
+// was scraped from. Reuses the same /profile query as MakerLine so
+// TanStack dedupes the request. Hidden when the gear has no source
+// URL (legacy rows, or a piece nobody's filled in yet). Opens in a
+// new tab with rel=noopener so the listing site can't reach back
+// into our window. No affiliate tracking — this is a credit
+// breadcrumb, not a Discover-more / Buy CTA (those still live in the
+// Available-at section below).
+function SourceListingLink({ instrumentId }: { instrumentId: string }) {
+  const { data } = useQuery<LiveMakerProfile>({
+    queryKey: [`/api/instruments/${instrumentId}/profile`],
+    enabled: !!instrumentId,
+  });
+  const url = data?.instrument?.sourceUrl;
+  if (!url) return null;
+  let host = "";
+  try { host = new URL(url).host.replace(/^www\./, ""); } catch { return null; }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1.5 text-xs font-medium inline-flex items-center gap-1 text-white/55 hover:text-[var(--brand-blue)] hover:underline"
+      data-testid="link-instrument-source"
+    >
+      <span>View original listing</span>
+      <span aria-hidden className="text-white/40">·</span>
+      <span className="truncate max-w-[200px]" aria-hidden>{host}</span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M14 4h6v6" />
+        <path d="M20 4L10 14" />
+        <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+      </svg>
+    </a>
   );
 }
