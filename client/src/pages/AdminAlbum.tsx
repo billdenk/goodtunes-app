@@ -1266,6 +1266,7 @@ export function AdminAlbum() {
         required={!album.sellMode}
         busy={updateAlbumMode.isPending}
         onClose={() => setModeDialogOpen(false)}
+        onRequestDelete={() => setDeleteConfirmOpen(true)}
         onSubmit={({ sellMode, physicalFormat }) => {
           updateAlbumMode.mutate(
             { sellMode, physicalFormat },

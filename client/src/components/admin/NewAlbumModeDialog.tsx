@@ -38,13 +38,25 @@ export function NewAlbumModeDialog({
   required,
   onSubmit,
   onClose,
+  onRequestDelete,
   busy = false,
 }: {
   open: boolean;
-  /** When true (album has no sellMode yet) ✕ + outside-click are blocked. */
+  /**
+   * When true (album has no sellMode yet) ✕ / outside-click / Esc are
+   * redirected to `onRequestDelete` instead of being silently swallowed,
+   * so the operator has an escape hatch out of a half-created album.
+   */
   required: boolean;
   onSubmit: (v: { sellMode: AlbumSellMode; physicalFormat: AlbumPhysicalFormat | null }) => void;
   onClose: () => void;
+  /**
+   * Fired when the operator dismisses while `required` is true. Parent
+   * is expected to open the existing delete-album confirm. The mode
+   * dialog stays mounted underneath so cancelling delete returns the
+   * operator to whichever stage they were on.
+   */
+  onRequestDelete?: () => void;
   busy?: boolean;
 }) {
   const [stage, setStage] = useState<"mode" | "format">("mode");
@@ -69,7 +81,14 @@ export function NewAlbumModeDialog({
       open={open}
       onOpenChange={(v) => {
         if (!v) {
-          if (required || busy) return;
+          if (busy) return;
+          if (required) {
+            // Don't dismiss — bubble up so the parent can offer Delete
+            // as the escape hatch. Stage state is preserved so the
+            // operator lands back where they were if they cancel.
+            onRequestDelete?.();
+            return;
+          }
           reset();
           onClose();
         }
