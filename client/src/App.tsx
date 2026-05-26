@@ -57,6 +57,7 @@ import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
+import { AdminLegacyImageAudit } from "@/pages/AdminLegacyImageAudit";
 import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
@@ -271,6 +272,10 @@ function Router() {
         {/* Task #128 — Printable GoodDeed certificate print queue. */}
         <Route path="/admin/print-queue">
           <ProtectedRoute component={AdminPrintQueue} />
+        </Route>
+        {/* Task #434 — Audit imported rows still on tinifycdn.com */}
+        <Route path="/admin/legacy-image-audit">
+          <ProtectedRoute component={AdminLegacyImageAudit} />
         </Route>
         {/* Task #128 — Public per-deed provenance page (QR target).
             No auth — the short id is the secret. */}

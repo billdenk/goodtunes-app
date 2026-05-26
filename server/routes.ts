@@ -13144,6 +13144,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerGiftRoutes } = await import("./gifts");
   registerGiftRoutes(app);
 
+  // Task #434 — Read-only audit of imported rows still pointing at the
+  // off-platform `tinifycdn.com` CDN. Powers /admin/legacy-image-audit.
+  const { registerLegacyImageAuditRoutes } = await import("./legacyImageAudit");
+  registerLegacyImageAuditRoutes(app, requireAdmin);
+
   // Task #128 — Printable GoodDeed certificates. Mounts the public
   // /g/:shortId provenance endpoint, the fan name-confirmation routes,
   // and the admin print queue + batch download. Also runs a one-shot
