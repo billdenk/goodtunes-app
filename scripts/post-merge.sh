@@ -810,3 +810,45 @@ SQL
 }
 migrate_album_skus_display_name dev  "${DATABASE_URL:-}"
 migrate_album_skus_display_name prod "${PROD_DATABASE_URL:-}"
+
+# Task #398 — gogoods.com legacy import mapping. The importer wrote
+# `legacy_gogoods_id` onto `albums` / `songs` / `people` / `customer_users`
+# / `orders` in prod (845 rows) but never landed in shared/schema.ts or
+# dev DB. Without these columns + their partial unique indexes on dev,
+# the publish dev→prod diff wanted to DROP all five columns and wipe
+# the mapping that Tasks #400 / #402 / #403 / #404 depend on. Now in
+# shared/schema.ts; this step keeps both DBs aligned across future
+# fresh-clones and merges. Idempotent.
+migrate_legacy_gogoods_id() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping legacy_gogoods_id migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE albums         ADD COLUMN IF NOT EXISTS legacy_gogoods_id text;
+ALTER TABLE songs          ADD COLUMN IF NOT EXISTS legacy_gogoods_id text;
+ALTER TABLE people         ADD COLUMN IF NOT EXISTS legacy_gogoods_id text;
+ALTER TABLE customer_users ADD COLUMN IF NOT EXISTS legacy_gogoods_id text;
+ALTER TABLE orders         ADD COLUMN IF NOT EXISTS legacy_gogoods_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS albums_legacy_gogoods_id_uniq
+  ON albums(legacy_gogoods_id) WHERE legacy_gogoods_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS songs_legacy_gogoods_id_uniq
+  ON songs(legacy_gogoods_id) WHERE legacy_gogoods_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS people_legacy_gogoods_id_uniq
+  ON people(legacy_gogoods_id) WHERE legacy_gogoods_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS customer_users_legacy_gogoods_id_uniq
+  ON customer_users(legacy_gogoods_id) WHERE legacy_gogoods_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS orders_legacy_gogoods_id_uniq
+  ON orders(legacy_gogoods_id) WHERE legacy_gogoods_id IS NOT NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: legacy_gogoods_id migration ok on $label"
+  else
+    echo "post-merge: WARNING — legacy_gogoods_id migration failed on $label (continuing)"
+  fi
+}
+migrate_legacy_gogoods_id dev  "${DATABASE_URL:-}"
+migrate_legacy_gogoods_id prod "${PROD_DATABASE_URL:-}"

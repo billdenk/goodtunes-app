@@ -227,7 +227,15 @@ export const albums = pgTable("albums", {
   sellMode: text("sell_mode"),
   physicalFormat: text("physical_format"),
   sellQuoteLockedAt: timestamp("sell_quote_locked_at"),
-});
+  // gogoods.com legacy import id — used by the importer to dedupe and
+  // by Tasks #400/#402/#403/#404 to reconnect legacy assets. Nullable;
+  // populated only for rows that came in via the legacy export.
+  legacyGogoodsId: text("legacy_gogoods_id"),
+}, (t) => ({
+  legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
+    .on(t.legacyGogoodsId)
+    .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+}));
 
 export const ALBUM_SELL_MODES = ["direct", "shopify"] as const;
 export type AlbumSellMode = (typeof ALBUM_SELL_MODES)[number];
@@ -439,7 +447,12 @@ export const songs = pgTable("songs", {
   audioSourceBitDepth: integer("audio_source_bit_depth"),
   audioSourceChannels: integer("audio_source_channels"),
   audioSourceBytes: integer("audio_source_bytes"),
-});
+  legacyGogoodsId: text("legacy_gogoods_id"),
+}, (t) => ({
+  legacyGogoodsIdUniq: uniqueIndex("songs_legacy_gogoods_id_uniq")
+    .on(t.legacyGogoodsId)
+    .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+}));
 
 export const userAlbums = pgTable(
   "user_albums",
@@ -637,7 +650,12 @@ export const people = pgTable("people", {
   // join table.
   isGroup: boolean("is_group").notNull().default(false),
   groupKind: text("group_kind"),
-});
+  legacyGogoodsId: text("legacy_gogoods_id"),
+}, (t) => ({
+  legacyGogoodsIdUniq: uniqueIndex("people_legacy_gogoods_id_uniq")
+    .on(t.legacyGogoodsId)
+    .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+}));
 
 // Task #190 — Band ↔ member roster. One row per (band, member) pair;
 // `bandId` and `memberId` are both Person rows (the band itself is the
@@ -1097,7 +1115,12 @@ export const customerUsers = pgTable("customer_users", {
   phone: text("phone"),
   emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+  legacyGogoodsId: text("legacy_gogoods_id"),
+}, (t) => ({
+  legacyGogoodsIdUniq: uniqueIndex("customer_users_legacy_gogoods_id_uniq")
+    .on(t.legacyGogoodsId)
+    .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+}));
 
 // JSON shape we persist for billing/shipping snapshots. Matches the subset
 // of Stripe's Address object we actually read on receipts + cert prints.
@@ -1539,7 +1562,12 @@ export const orders = pgTable("orders", {
   // Last raw OD payload for admin debugging — small enough to inline.
   fulfillmentRaw: jsonb("fulfillment_raw"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+  legacyGogoodsId: text("legacy_gogoods_id"),
+}, (t) => ({
+  legacyGogoodsIdUniq: uniqueIndex("orders_legacy_gogoods_id_uniq")
+    .on(t.legacyGogoodsId)
+    .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+}));
 
 // ─── Task #73 — Order Desk webhook idempotency ─────────────────────
 // One row per OD event id we've successfully processed. PK on event
