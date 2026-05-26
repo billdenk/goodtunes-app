@@ -27,6 +27,13 @@ import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2,
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
+import {
+  PATH_TO_PRESS_NAVIGATE_EVENT,
+  consumePendingPathToPressKey,
+  scrollAndFlash,
+  type PathToPressKey,
+  type PathToPressNavigateDetail,
+} from "@/lib/pathToPressNav";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -368,6 +375,169 @@ export function SellPanel({
     (invitedPress?.catalog?.formats ?? []).forEach((f) => m.set(f.format, f));
     return m;
   }, [invitedPress]);
+
+  // Task #454 — Listen for Path-to-press chip navigation. Chips dispatch
+  // via `dispatchPathToPressNavigate`; AdminAlbum flips into the Sell
+  // tab when needed (and stashes the key in the pending slot) so this
+  // panel can resolve `package` / `price` / `quantity` / `submit` to
+  // the matching anchor here. We register the live listener AND drain
+  // the pending key on every mount/data update — the live event fires
+  // when we're already on Sell, the pending slot covers the case where
+  // we just mounted because AdminAlbum switched tabs.
+  useEffect(() => {
+    if (!data) return;
+    const skusNow = data.skus;
+    const skuByFormatNow = new Map(
+      skusNow.map((s) => [s.format as AlbumFormat, s]),
+    );
+    const configuredNow = ALBUM_FORMATS.filter((f) => skuByFormatNow.has(f));
+    const liveDraftsNow = draftFormats.filter((f) => !skuByFormatNow.has(f));
+    const firstFormat: AlbumFormat | null =
+      configuredNow[0] ?? liveDraftsNow[0] ?? null;
+    const firstDisclosureKey = firstFormat
+      ? skuByFormatNow.has(firstFormat)
+        ? (firstFormat as string)
+        : `draft-${firstFormat}`
+      : null;
+
+    // Resolve the SKU row a price/quantity chip should jump to. Prefer
+    // whichever row the operator currently has expanded — that's the
+    // row they're editing. Fall back to the first configured/draft row
+    // only when nothing is open.
+    const resolveActiveTarget = (): {
+      format: AlbumFormat;
+      disclosureKey: string;
+    } | null => {
+      const openId = skuDisclosure.openId;
+      if (openId) {
+        const draftMatch = openId.startsWith("draft-")
+          ? (openId.slice("draft-".length) as AlbumFormat)
+          : null;
+        if (draftMatch && liveDraftsNow.includes(draftMatch)) {
+          return { format: draftMatch, disclosureKey: openId };
+        }
+        const cfgMatch = configuredNow.find((f) => (f as string) === openId);
+        if (cfgMatch) return { format: cfgMatch, disclosureKey: openId };
+      }
+      if (firstFormat && firstDisclosureKey) {
+        return { format: firstFormat, disclosureKey: firstDisclosureKey };
+      }
+      return null;
+    };
+
+    const handle = (key: PathToPressKey) => {
+      // Defer to next frame so any tab/state flip above has rendered.
+      requestAnimationFrame(() => {
+        if (key === "package") {
+          // Spec: when SKU rows exist, jump to the first row and land
+          // focus on an actionable control inside it (the row-summary
+          // expand button when collapsed, or the first input — Price —
+          // when already expanded). The "+ Add physical good" affordance
+          // is only the empty-state fallback for albums with nothing
+          // configured yet.
+          if (firstFormat && firstDisclosureKey) {
+            const rowTestid = skuByFormatNow.has(firstFormat)
+              ? `row-sku-${firstFormat}`
+              : `row-sku-draft-${firstFormat}`;
+            const row = document.querySelector(
+              `[data-testid="${rowTestid}"]`,
+            ) as HTMLElement | null;
+            scrollAndFlash(row, { focus: false });
+            const focusInside = (attempt: number) => {
+              const isOpen = skuDisclosure.isOpen(firstDisclosureKey);
+              const selector = isOpen
+                ? `[data-testid="input-price-${firstFormat}"]`
+                : `[data-testid="button-row-summary-${firstFormat}"]`;
+              const el = document.querySelector(selector) as HTMLElement | null;
+              if (el) {
+                try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+              } else if (attempt < 6) {
+                window.setTimeout(() => focusInside(attempt + 1), 40);
+              }
+            };
+            requestAnimationFrame(() => focusInside(0));
+            return;
+          }
+          const panel = document.querySelector(
+            '[data-testid="panel-formats"]',
+          ) as HTMLElement | null;
+          if (panel) {
+            scrollAndFlash(panel, { focus: false });
+            const addBtn = panel.querySelector(
+              'button[data-testid^="button-add-physical"]',
+            ) as HTMLElement | null;
+            if (addBtn) {
+              requestAnimationFrame(() => {
+                try {
+                  addBtn.focus({ preventScroll: true });
+                } catch {
+                  addBtn.focus();
+                }
+              });
+            }
+          }
+          return;
+        }
+        if (key === "submit") {
+          // Direct-flow CTA when present; Shopify slim panel exposes
+          // its own "Live on Shopify" anchor as a fallback so the chip
+          // in Shopify mode still has a concrete target.
+          const el = (document.querySelector(
+            '[data-testid="button-go-to-press"]',
+          ) ?? document.querySelector(
+            '[data-testid="anchor-shopify-live"]',
+          )) as HTMLElement | null;
+          scrollAndFlash(el);
+          return;
+        }
+        if (key === "price" || key === "quantity") {
+          const target = resolveActiveTarget();
+          if (!target) {
+            // No SKU row to focus — fall back to the Formats panel.
+            const panel = document.querySelector(
+              '[data-testid="panel-formats"]',
+            ) as HTMLElement | null;
+            scrollAndFlash(panel, { focus: false });
+            return;
+          }
+          if (!skuDisclosure.isOpen(target.disclosureKey)) {
+            skuDisclosure.setOpen(target.disclosureKey, true);
+          }
+          // The disclosure body needs a paint to mount its inputs.
+          const tryFocus = (attempt: number) => {
+            const selector =
+              key === "price"
+                ? `[data-testid="input-price-${target.format}"]`
+                : `[data-testid="select-sku-quantity-${target.format}"], [data-testid="input-sku-quantity-${target.format}"]`;
+            const el = document.querySelector(selector) as HTMLElement | null;
+            if (el) {
+              scrollAndFlash(el);
+            } else if (attempt < 6) {
+              window.setTimeout(() => tryFocus(attempt + 1), 40);
+            }
+          };
+          requestAnimationFrame(() => tryFocus(0));
+        }
+      });
+    };
+
+    // Drain any key dispatched while this panel was still mounting
+    // (the AdminAlbum listener flipped to the Sell tab a tick ago).
+    const pending = consumePendingPathToPressKey();
+    if (pending && pending !== "art") {
+      handle(pending);
+    }
+
+    const listener = (e: Event) => {
+      const detail = (e as CustomEvent<PathToPressNavigateDetail>).detail;
+      if (!detail?.key) return;
+      if (detail.key === "art") return; // AdminAlbum owns the cover anchor.
+      handle(detail.key);
+    };
+    window.addEventListener(PATH_TO_PRESS_NAVIGATE_EVENT, listener);
+    return () =>
+      window.removeEventListener(PATH_TO_PRESS_NAVIGATE_EVENT, listener);
+  }, [data, draftFormats, skuDisclosure]);
 
   // Honest loading/error/empty gates so a future schema-drift regression
   // surfaces as a visible message instead of an infinite spinner
@@ -866,7 +1036,10 @@ function ShopifySlimPanel({
           Optional addon. Fans see a single toggle on the Buy sheet; your earnings are
           computed live against the platform's certificate cost.
         </p>
-        <div className="rounded-md border border-slate-200 bg-white p-4">
+        <div
+          className="rounded-md border border-slate-200 bg-white p-4"
+          data-testid="anchor-shopify-live"
+        >
           <AddonForm
             existing={signedAddon ?? null}
             livePlatformCostCents={payoutSettings?.certCostCents ?? null}

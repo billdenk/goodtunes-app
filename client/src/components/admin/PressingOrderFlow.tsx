@@ -4,6 +4,7 @@ import { Check, Package, Image as ImageIcon, DollarSign, Hash, Send, AlertCircle
 import type { LucideIcon } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { dispatchPathToPressNavigate } from "@/lib/pathToPressNav";
 import type { AlbumSku, PressingOrderRequest } from "@shared/schema";
 
 // Task #225 — five-stage "Go to Press!" flow that frames every Sell
@@ -128,6 +129,7 @@ export function PressingOrderStepper({
                 type="button"
                 role="listitem"
                 aria-label={s.label}
+                onClick={() => dispatchPathToPressNavigate(s.key)}
                 className={[
                   "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0 px-2.5 py-1.5",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]/40",
@@ -205,6 +207,7 @@ export function PressingOrderStepper({
                 role="listitem"
                 aria-label={s.label}
                 aria-current={active ? "step" : undefined}
+                onClick={() => dispatchPathToPressNavigate(s.key)}
                 className={[
                   "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-100",
@@ -229,6 +232,7 @@ export function PressingOrderStepper({
               type="button"
               role="listitem"
               aria-label={s.label}
+              onClick={() => dispatchPathToPressNavigate(s.key)}
               className={[
                 "group flex items-center rounded-full transition-all duration-200 min-w-0",
                 "px-2.5 py-1.5 text-slate-500",

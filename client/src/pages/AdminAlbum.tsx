@@ -104,6 +104,11 @@ import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
 import { NewAlbumModeDialog } from "@/components/admin/NewAlbumModeDialog";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
+import {
+  PATH_TO_PRESS_NAVIGATE_EVENT,
+  scrollAndFlash,
+  type PathToPressNavigateDetail,
+} from "@/lib/pathToPressNav";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import {
   Dialog,
@@ -334,6 +339,7 @@ export function AdminAlbum() {
       setSelectedTrackIds(new Set());
     }
   }, [tab, selectionMode]);
+
   const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
   const [deleteAllTracksOpen, setDeleteAllTracksOpen] = useState(false);
   // Artwork editor lives as a modal hanging off the page header thumbnail,
@@ -435,6 +441,63 @@ export function AdminAlbum() {
     queryKey: ["/api/admin/albums", albumId, "skus"],
     enabled: !!album?.sellMode,
   });
+
+  // Task #454 — Path-to-press chip navigation. The chips live in
+  // <PressingOrderStepper> above the tabs; they dispatch a window
+  // CustomEvent and this listener routes the page to the right tab +
+  // anchors the `art` chip on the album-header cover thumbnail. The
+  // in-Sell anchors (package / price / quantity / submit) are handled
+  // by SellPanel's own listener once we switch into the Sell tab — the
+  // pending-key slot in pathToPressNav.ts bridges the gap on tabs that
+  // haven't mounted SellPanel yet.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const key = (e as CustomEvent<PathToPressNavigateDetail>).detail?.key;
+      if (!key) return;
+      if (key === "art") {
+        // Cover thumbnail trigger lives in the page header above the
+        // tabs — no tab switch needed.
+        const el = document.querySelector(
+          '[data-testid="button-edit-album-cover"]',
+        ) as HTMLElement | null;
+        scrollAndFlash(el);
+        return;
+      }
+      // Slim Shopify variant: "Masters on file" jumps to the Tracks
+      // tab; "Cover art" is handled above; "Live on Shopify" goes to
+      // the Sell tab where the slim panel's publish CTA lives.
+      const isShopify = album?.sellMode === "shopify";
+      if (isShopify && key === "package") {
+        setTab("tracks");
+        // Wait for the tracks panel to mount, then flash + focus a
+        // masters-related control inside it (not just the tab button).
+        // Prefer the toggle that opens the Add-track / upload-masters
+        // tray; fall back to the empty-state Add-first-track CTA, and
+        // finally to the panel itself.
+        const tryAnchor = (attempt: number) => {
+          const focusable = document.querySelector(
+            '[data-testid="button-toggle-add-track"], [data-testid="button-add-first-track"], [data-testid="button-bulk-add-tracks-empty"]',
+          ) as HTMLElement | null;
+          const panel =
+            (document.querySelector('[data-testid="panel-tracks"]') ??
+              document.querySelector(
+                '[data-testid="panel-tracks-empty"]',
+              )) as HTMLElement | null;
+          if (focusable || panel) {
+            scrollAndFlash(focusable ?? panel, { focus: !!focusable });
+            return;
+          }
+          if (attempt < 8) window.setTimeout(() => tryAnchor(attempt + 1), 40);
+        };
+        requestAnimationFrame(() => tryAnchor(0));
+        return;
+      }
+      // Everything else lives in the Sell tab.
+      setTab("sell");
+    };
+    window.addEventListener(PATH_TO_PRESS_NAVIGATE_EVENT, handler);
+    return () => window.removeEventListener(PATH_TO_PRESS_NAVIGATE_EVENT, handler);
+  }, [album?.sellMode]);
 
   // Task #440 — Promote ("Mark as released") / Demote ("Move back to
   // prepping"). Rides the same PUT endpoint as every other album edit, so
