@@ -689,3 +689,47 @@ SQL
 }
 reconcile_hellbender_catalog dev  "${DATABASE_URL:-}"
 reconcile_hellbender_catalog prod "${PROD_DATABASE_URL:-}"
+
+# Task #394 — profile_photos: drop the bogus user_id→users.id FK, add
+# the new photo_url column, and make the legacy data_url nullable.
+#
+# `user_id` legitimately holds either a `users.id` (admin/partner) or a
+# `customer_users.id` (fan), same loose-FK pattern as `auth_tokens` and
+# `user_albums`. The leftover FK blocks fan photo uploads with a 500
+# whenever the constraint is enforced (prod, or a freshly-cloned dev),
+# and the publish dev→prod diff will keep re-adding it from drifted dev
+# DBs, so we DROP IF EXISTS idempotently on every merge.
+#
+# `photo_url` stores the object-storage `/objects/uploads/<id>` URL.
+# `data_url` stays around (nullable) so existing inline base64 avatars
+# in prod keep rendering until users replace them.
+migrate_profile_photos_v2() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping profile_photos v2 migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS profile_photos (
+  user_id    varchar PRIMARY KEY,
+  photo_url  text,
+  data_url   text,
+  updated_at timestamp DEFAULT now()
+);
+ALTER TABLE profile_photos
+  DROP CONSTRAINT IF EXISTS profile_photos_user_id_users_id_fk;
+ALTER TABLE profile_photos
+  ADD COLUMN IF NOT EXISTS photo_url text;
+ALTER TABLE profile_photos
+  ALTER COLUMN data_url DROP NOT NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: profile_photos v2 migration ok on $label"
+  else
+    echo "post-merge: WARNING — profile_photos v2 migration failed on $label (continuing)"
+  fi
+}
+migrate_profile_photos_v2 dev  "${DATABASE_URL:-}"
+migrate_profile_photos_v2 prod "${PROD_DATABASE_URL:-}"

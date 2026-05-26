@@ -1821,12 +1821,19 @@ export const insertCustomerUserSchema = createInsertSchema(customerUsers).pick({
 });
 export type InsertCustomerUser = z.infer<typeof insertCustomerUserSchema>;
 
-// One profile photo per user. Stored inline as a data URL so we don't need
-// object storage yet — small images (5MB cap on the client). When GT object
-// storage lands, swap dataUrl for a CDN URL on the same row.
+// One profile photo per user. New writes land in object storage and we
+// persist the public `/objects/uploads/<id>` URL in `photo_url`. The
+// legacy `data_url` column stays nullable for backward compat — old
+// inline base64 avatars keep rendering until the user replaces them.
+//
+// `user_id` is a loose FK: it stores either a `users.id` (admin/partner)
+// or a `customer_users.id` (fan), so we intentionally do NOT declare a
+// `.references()` here — same pattern as `auth_tokens` / `user_albums`.
+// post-merge.sh drops the leftover FK constraint on both DBs.
 export const profilePhotos = pgTable("profile_photos", {
-  userId: varchar("user_id").primaryKey().references(() => users.id),
-  dataUrl: text("data_url").notNull(),
+  userId: varchar("user_id").primaryKey(),
+  photoUrl: text("photo_url"),
+  dataUrl: text("data_url"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

@@ -631,7 +631,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const kind = stateBag.kind;
     const redirectUri = `${callbackOrigin(req, kind)}/api/auth/${provider}/callback`;
 
-    let identity: { sub: string; email: string | null; emailVerified: boolean };
+    let identity: { sub: string; email: string | null; emailVerified: boolean; picture?: string | null };
     try {
       identity = provider === "google"
         ? await exchangeGoogleCode(code, redirectUri)
@@ -831,6 +831,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       userId = c.id;
       await storage.linkIdentity(kind, { userId, provider, providerUserId: identity.sub, email: identity.email });
+
+      // Capture Google's profile picture on first signup. Only set it if
+      // we don't already have one for this user (we never overwrite a
+      // returning user's own upload on subsequent logins). Best-effort —
+      // a Google CDN hiccup must NOT fail signup, so we swallow errors.
+      if (provider === "google" && identity.picture) {
+        try {
+          const already = await storage.hasProfilePhoto(userId);
+          if (!already) {
+            const hosted = await rehostRemoteImage(identity.picture);
+            await storage.setProfilePhoto(userId, hosted);
+          }
+        } catch (err: any) {
+          console.warn(`[oauth] google avatar rehost failed for ${userId}: ${err?.message}`);
+        }
+      }
     }
 
     // Admin side requires a second factor before we hand out the real
@@ -11513,8 +11529,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ----- Profile photo ----------------------------------------------------
-  // Stored inline as a data URL (5MB hard cap). Swap for object-storage URL
-  // once GT's AWS bucket lands.
+  // Accepts a base64 `dataUrl` from the client, validates the magic bytes,
+  // writes the decoded bytes to Object Storage under `uploads/<uuid>.<ext>`,
+  // and persists the public `/objects/uploads/<id>` URL on the row. Same
+  // storage path every other image type in the app uses (album art, person
+  // photos, vendor logos).
   app.put("/api/me/photo", requireAuth, async (req, res) => {
     const { dataUrl } = req.body as { dataUrl?: string };
     if (!dataUrl || typeof dataUrl !== "string") {
@@ -11545,8 +11564,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(looksLikePng || looksLikeJpeg || looksLikeWebp || looksLikeGif)) {
       return res.status(400).json({ message: "Image data does not match a supported format" });
     }
-    await storage.setProfilePhoto(req.session.userId!, dataUrl);
-    return res.json({ photoUrl: dataUrl });
+    const declared = m[1].toLowerCase();
+    const mime = declared === "jpg" ? "image/jpeg" : `image/${declared}`;
+    let photoUrl: string;
+    try {
+      photoUrl = await uploadBufferToObjectStorage(buf, mime);
+    } catch (err: any) {
+      console.error("[profile-photo] upload failed", err?.message);
+      return res.status(500).json({ message: "Couldn't save photo. Please try again." });
+    }
+    await storage.setProfilePhoto(req.session.userId!, photoUrl);
+    return res.json({ photoUrl });
   });
 
   app.delete("/api/me/photo", requireAuth, async (req, res) => {

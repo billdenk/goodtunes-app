@@ -521,7 +521,8 @@ export interface IStorage {
 
   // Profile photo
   getProfilePhoto(userId: string): Promise<string | null>;
-  setProfilePhoto(userId: string, dataUrl: string): Promise<void>;
+  setProfilePhoto(userId: string, photoUrl: string): Promise<void>;
+  hasProfilePhoto(userId: string): Promise<boolean>;
   deleteProfilePhoto(userId: string): Promise<void>;
 
   // Analytics
@@ -2679,16 +2680,25 @@ export class DbStorage implements IStorage {
 
   async getProfilePhoto(userId: string): Promise<string | null> {
     const [row] = await db.select().from(profilePhotos).where(eq(profilePhotos.userId, userId));
-    return row?.dataUrl ?? null;
+    // Prefer the new object-storage URL; fall back to the legacy inline
+    // base64 so users who haven't replaced their old avatar still see it.
+    return row?.photoUrl ?? row?.dataUrl ?? null;
   }
-  async setProfilePhoto(userId: string, dataUrl: string): Promise<void> {
+  async setProfilePhoto(userId: string, photoUrl: string): Promise<void> {
+    // New writes only ever populate `photo_url`; we clear any leftover
+    // inline base64 in `data_url` so the read precedence above doesn't
+    // matter and old bytes don't linger in Postgres.
     await db
       .insert(profilePhotos)
-      .values({ userId, dataUrl, updatedAt: new Date() })
+      .values({ userId, photoUrl, dataUrl: null, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: profilePhotos.userId,
-        set: { dataUrl, updatedAt: new Date() },
+        set: { photoUrl, dataUrl: null, updatedAt: new Date() },
       });
+  }
+  async hasProfilePhoto(userId: string): Promise<boolean> {
+    const [row] = await db.select().from(profilePhotos).where(eq(profilePhotos.userId, userId));
+    return Boolean(row?.photoUrl || row?.dataUrl);
   }
   async deleteProfilePhoto(userId: string): Promise<void> {
     await db.delete(profilePhotos).where(eq(profilePhotos.userId, userId));
