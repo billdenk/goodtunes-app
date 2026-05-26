@@ -3518,66 +3518,112 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return Buffer.concat(chunks);
   }
 
-  const KNOWN_VENDORS: Record<string, string> = {
-    "cartervintage.com": "Carter Vintage Guitars",
-    "normansrareguitars.com": "Norman's Rare Guitars",
-    "reverb.com": "Reverb",
-    "sweetwater.com": "Sweetwater",
-    "chicagomusicexchange.com": "Chicago Music Exchange",
-    "elderly.com": "Elderly Instruments",
-    "wildwoodguitars.com": "Wildwood Guitars",
-    "davesguitar.com": "Dave's Guitar Shop",
-    "rudysmusic.com": "Rudy's Music",
-    "gibson.com": "Gibson",
-    "martinguitar.com": "Martin Guitar",
-    "fender.com": "Fender",
-    "gretschguitars.com": "Gretsch Guitars",
-    "gretschdrums.com": "Gretsch Drums",
-    "taylorguitars.com": "Taylor Guitars",
-    "prsguitars.com": "PRS Guitars",
-    "ricksmusicworld.com": "Rick's Music World",
-    "steinway.com": "Steinway & Sons",
-    "yamaha.com": "Yamaha",
-    "kawai.com": "Kawai",
-    "boesendorfer.com": "Bösendorfer",
-    "fazioli.com": "Fazioli",
-    "nordkeyboards.com": "Nord",
-    "ludwig-drums.com": "Ludwig",
-    "dwdrums.com": "DW Drums",
-    "pearldrum.com": "Pearl Drums",
-    "tama.com": "Tama",
-    "sonor.com": "Sonor",
-    "zildjian.com": "Zildjian",
-    "sabian.com": "Sabian",
-    "paiste.com": "Paiste",
-    "meinl.de": "Meinl",
-    "marshall.com": "Marshall",
-    "mesaboogie.com": "Mesa/Boogie",
-    "voxamps.com": "Vox",
-    "orangeamps.com": "Orange Amps",
-    "two-rock.com": "Two-Rock",
-    "matchlessamplifiers.com": "Matchless",
-    "friedmanamplification.com": "Friedman",
-    "drzamps.com": "Dr. Z",
-    "daddario.com": "D'Addario",
-    "ernieball.com": "Ernie Ball",
-    "elixirstrings.com": "Elixir",
-    "rotosound.com": "Rotosound",
-    // Europe / UK / international staples
-    "thomann.de": "Thomann",
-    "andertons.co.uk": "Andertons",
-    "guitarguitar.co.uk": "GuitarGuitar",
-    // Boutique pedals / amps
-    "strymon.net": "Strymon",
-    "chasebliss.com": "Chase Bliss Audio",
-    "earthquakerdevices.com": "EarthQuaker Devices",
-    // Keys
-    "roland.com": "Roland",
-    "casio.com": "Casio",
-    "korg.com": "Korg",
-    "moogmusic.com": "Moog",
-    "sequential.com": "Sequential",
+  // Task #500 — classify each known host as maker / reseller / both.
+  // A "reseller" host (Sweetwater, Reverb, Carter Vintage…) sells gear
+  // built by other companies; pasting one of these URLs attaches the
+  // shop as the reseller AND pulls the JSON-LD brand to attach as the
+  // maker. A "maker" host is the manufacturer's own site; pasting one
+  // attaches a single vendor row tagged maker. "both" is for vendors
+  // that sell their own gear direct (Gibson) — one row, both flags.
+  type KnownHostRole = "maker" | "reseller" | "both";
+  const KNOWN_HOSTS: Record<string, { name: string; role: KnownHostRole }> = {
+    // Resellers — multi-brand shops
+    "cartervintage.com": { name: "Carter Vintage Guitars", role: "reseller" },
+    "normansrareguitars.com": { name: "Norman's Rare Guitars", role: "reseller" },
+    "reverb.com": { name: "Reverb", role: "reseller" },
+    "sweetwater.com": { name: "Sweetwater", role: "reseller" },
+    "guitarcenter.com": { name: "Guitar Center", role: "reseller" },
+    "musiciansfriend.com": { name: "Musician's Friend", role: "reseller" },
+    "americanmusical.com": { name: "American Musical Supply", role: "reseller" },
+    "chicagomusicexchange.com": { name: "Chicago Music Exchange", role: "reseller" },
+    "elderly.com": { name: "Elderly Instruments", role: "reseller" },
+    "wildwoodguitars.com": { name: "Wildwood Guitars", role: "reseller" },
+    "davesguitar.com": { name: "Dave's Guitar Shop", role: "reseller" },
+    "rudysmusic.com": { name: "Rudy's Music", role: "reseller" },
+    "ricksmusicworld.com": { name: "Rick's Music World", role: "reseller" },
+    // Europe / UK / international resellers
+    "thomann.de": { name: "Thomann", role: "reseller" },
+    "andertons.co.uk": { name: "Andertons", role: "reseller" },
+    "guitarguitar.co.uk": { name: "GuitarGuitar", role: "reseller" },
+    // Both — sells direct AND manufactures
+    "gibson.com": { name: "Gibson", role: "both" },
+    // Makers — manufacturer-owned sites
+    "martinguitar.com": { name: "Martin Guitar", role: "maker" },
+    "fender.com": { name: "Fender", role: "maker" },
+    "gretschguitars.com": { name: "Gretsch Guitars", role: "maker" },
+    "gretschdrums.com": { name: "Gretsch Drums", role: "maker" },
+    "taylorguitars.com": { name: "Taylor Guitars", role: "maker" },
+    "prsguitars.com": { name: "PRS Guitars", role: "maker" },
+    "steinway.com": { name: "Steinway & Sons", role: "maker" },
+    "yamaha.com": { name: "Yamaha", role: "maker" },
+    "kawai.com": { name: "Kawai", role: "maker" },
+    "boesendorfer.com": { name: "Bösendorfer", role: "maker" },
+    "fazioli.com": { name: "Fazioli", role: "maker" },
+    "nordkeyboards.com": { name: "Nord", role: "maker" },
+    "ludwig-drums.com": { name: "Ludwig", role: "maker" },
+    "dwdrums.com": { name: "DW Drums", role: "maker" },
+    "pearldrum.com": { name: "Pearl Drums", role: "maker" },
+    "tama.com": { name: "Tama", role: "maker" },
+    "sonor.com": { name: "Sonor", role: "maker" },
+    "zildjian.com": { name: "Zildjian", role: "maker" },
+    "sabian.com": { name: "Sabian", role: "maker" },
+    "paiste.com": { name: "Paiste", role: "maker" },
+    "meinl.de": { name: "Meinl", role: "maker" },
+    "marshall.com": { name: "Marshall", role: "maker" },
+    "mesaboogie.com": { name: "Mesa/Boogie", role: "maker" },
+    "voxamps.com": { name: "Vox", role: "maker" },
+    "orangeamps.com": { name: "Orange Amps", role: "maker" },
+    "two-rock.com": { name: "Two-Rock", role: "maker" },
+    "matchlessamplifiers.com": { name: "Matchless", role: "maker" },
+    "friedmanamplification.com": { name: "Friedman", role: "maker" },
+    "drzamps.com": { name: "Dr. Z", role: "maker" },
+    "daddario.com": { name: "D'Addario", role: "maker" },
+    "ernieball.com": { name: "Ernie Ball", role: "maker" },
+    "elixirstrings.com": { name: "Elixir", role: "maker" },
+    "rotosound.com": { name: "Rotosound", role: "maker" },
+    "strymon.net": { name: "Strymon", role: "maker" },
+    "chasebliss.com": { name: "Chase Bliss Audio", role: "maker" },
+    "earthquakerdevices.com": { name: "EarthQuaker Devices", role: "maker" },
+    "roland.com": { name: "Roland", role: "maker" },
+    "casio.com": { name: "Casio", role: "maker" },
+    "korg.com": { name: "Korg", role: "maker" },
+    "moogmusic.com": { name: "Moog", role: "maker" },
+    "sequential.com": { name: "Sequential", role: "maker" },
   };
+  // Reverse lookup — when the host is a reseller and the JSON-LD `brand`
+  // gives us only a string ("PRS", "Ernie Ball"), try to resolve it back
+  // to a maker host so the maker slot carries a real domain (and the
+  // find-or-create-by-domain path in the attach endpoint matches the
+  // existing maker row instead of inventing a duplicate). Short brand
+  // aliases get explicit mappings; everything else falls through to a
+  // case-insensitive name match against KNOWN_HOSTS values.
+  const BRAND_ALIASES: Record<string, string> = {
+    "prs": "prsguitars.com",
+    "paul reed smith": "prsguitars.com",
+    "paul reed smith guitars": "prsguitars.com",
+    "martin": "martinguitar.com",
+    "c.f. martin": "martinguitar.com",
+    "c. f. martin": "martinguitar.com",
+    "mesa": "mesaboogie.com",
+    "mesa/boogie": "mesaboogie.com",
+    "boogie": "mesaboogie.com",
+    "ernie ball music man": "ernieball.com",
+    "music man": "ernieball.com",
+    "d'addario": "daddario.com",
+    "daddario": "daddario.com",
+    "earthquaker": "earthquakerdevices.com",
+    "chase bliss": "chasebliss.com",
+  };
+  function resolveMakerHostFromBrand(brand: string): string | null {
+    const norm = brand.trim().toLowerCase();
+    if (!norm) return null;
+    if (BRAND_ALIASES[norm]) return BRAND_ALIASES[norm];
+    for (const [host, info] of Object.entries(KNOWN_HOSTS)) {
+      if (info.role === "reseller") continue;
+      if (info.name.toLowerCase() === norm) return host;
+    }
+    return null;
+  }
 
   // Centralized UA strings + header builders for outbound vendor scrapes.
   // Many vendor sites (PRS Guitars, etc.) 403 obvious bot UAs at their
@@ -3791,16 +3837,102 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let parsed: URL;
     try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
     const host = parsed.hostname.replace(/^www\./, "");
+    const hostInfo = KNOWN_HOSTS[host] ?? null;
+
+    // Task #500 — small helpers shared by the live-scrape path and the
+    // blocked-shop fallback. Vendor "slots" carry exactly the fields
+    // the Add-gear client uses to render preview chips and to find-or-
+    // create the row on confirm.
+    type VendorSlot = {
+      name: string;
+      domain: string | null;
+      affiliateUrl: string | null;
+      aboutUrl: string | null;
+      logoUrl: string | null;
+      known: boolean;
+    };
+    const buildHostSlot = (
+      slotHost: string,
+      slotName: string,
+      affiliate: string | null,
+    ): VendorSlot => ({
+      name: slotName,
+      domain: slotHost,
+      affiliateUrl: affiliate,
+      aboutUrl: `https://${slotHost}/`,
+      logoUrl: `https://www.google.com/s2/favicons?sz=128&domain=${slotHost}`,
+      known: slotHost in KNOWN_HOSTS,
+    });
+    // Sweetwater URLs look like `/store/detail/Foo--bar-baz-quux`. The
+    // human-readable name is everything after `--`. For other resellers
+    // we fall back to the last path segment. Hyphens / underscores → spaces,
+    // title-cased so it reads like a name rather than a slug.
+    const guessNameFromUrl = (p: URL): string | null => {
+      const segs = p.pathname.split("/").filter(Boolean);
+      const last = segs.length ? segs[segs.length - 1] : "";
+      if (!last) return null;
+      const slug = last.includes("--") ? last.split("--").slice(1).join("--") : last;
+      const cleaned = slug
+        .replace(/\.\w{1,5}$/, "") // strip trailing extensions like .html
+        .replace(/[-_]+/g, " ")
+        .trim();
+      if (!cleaned) return null;
+      return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
+    };
+
+    // When the shop blocks us (401/403/429) AND we recognize it as a
+    // known reseller, build a best-effort response from the URL alone
+    // instead of dead-ending on a bare "403". Unknown blocked hosts
+    // still fail loudly — we don't silently import garbage.
+    function blockedFallback(status: number) {
+      if (
+        !hostInfo ||
+        (hostInfo.role !== "reseller" && hostInfo.role !== "both")
+      ) {
+        return res
+          .status(502)
+          .json({ message: `Vendor page returned ${status}` });
+      }
+      const guessedName = guessNameFromUrl(parsed);
+      const reseller = buildHostSlot(host, hostInfo.name, url);
+      return res.json({
+        name: guessedName,
+        brand: null,
+        category: null,
+        description: null,
+        specs: {},
+        price: null,
+        photoUrl: null,
+        sourceImage: null,
+        reseller,
+        maker: hostInfo.role === "both" ? reseller : null,
+        // Backward-compat alias — see success path below for context.
+        vendor: reseller,
+        notice:
+          `${hostInfo.name} wouldn't let us read the page — name guessed from the URL; please add a photo and double-check the name before saving.`,
+      });
+    }
 
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 10_000);
-      const html = await safeFetchWithUaFallback(url, {
+      const fetchRes = await safeFetchWithUaFallback(url, {
         signal: ctrl.signal,
-      }).then((r) => {
-        if (!r.ok) throw new Error(`Vendor page returned ${r.status}`);
-        return r.text();
       }).finally(() => clearTimeout(t));
+      if (!fetchRes.ok) {
+        try { await fetchRes.body?.cancel(); } catch { /* ignore */ }
+        if (
+          fetchRes.status === 401 ||
+          fetchRes.status === 403 ||
+          fetchRes.status === 429
+        ) {
+          return blockedFallback(fetchRes.status);
+        }
+        return res
+          .status(502)
+          .json({ message: `Vendor page returned ${fetchRes.status}` });
+      }
+      const html = await fetchRes.text();
 
       // Collect every meta tag. Two regexes because property/name can come
       // before or after content depending on the shop's template.
@@ -3922,10 +4054,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         catch { photoUrl = rawImage; /* fall back to hot-link, admin can re-upload */ }
       }
 
-      const vendorName =
-        KNOWN_VENDORS[host] ||
+      const fallbackVendorName =
+        hostInfo?.name ||
         meta["og:site_name"] ||
         host.split(".").slice(0, -1).join(".").replace(/\b\w/g, (c) => c.toUpperCase());
+
+      // Task #500 — classify the host into reseller / maker slots. A
+      // reseller host (Sweetwater, Reverb, Carter Vintage) attaches the
+      // shop as the reseller AND lifts the JSON-LD `brand` as the maker
+      // when we can resolve it to a known manufacturer domain. A maker
+      // host attaches a single vendor row. "both" (Gibson) collapses to
+      // the same slot in both spots so the client knows not to double-
+      // create. Unknown hosts default to reseller (matches the legacy
+      // `isReseller=true` default).
+      let reseller: VendorSlot | null = null;
+      let maker: VendorSlot | null = null;
+      if (hostInfo?.role === "maker") {
+        maker = buildHostSlot(host, hostInfo.name, url);
+      } else if (hostInfo?.role === "both") {
+        const slot = buildHostSlot(host, hostInfo.name, url);
+        maker = slot;
+        reseller = slot;
+      } else if (hostInfo?.role === "reseller") {
+        reseller = buildHostSlot(host, hostInfo.name, url);
+      } else {
+        reseller = {
+          name: fallbackVendorName,
+          domain: host,
+          affiliateUrl: url,
+          aboutUrl: `${parsed.origin}/`,
+          logoUrl: `https://www.google.com/s2/favicons?sz=128&domain=${host}`,
+          known: false,
+        };
+      }
+      // When the host is a reseller and the page exposes a JSON-LD
+      // brand, attach the brand as the maker. We try to map the brand
+      // string back to a known maker host so the find-or-create-by-
+      // domain path in /api/admin/instruments/:id/vendors lines up with
+      // an existing maker row; if nothing matches we also check the DB
+      // by case-insensitive name. As a last resort we emit the maker
+      // slot with no domain — the client will skip the auto-attach in
+      // that case because we can't satisfy vendors.domain NOT NULL.
+      if (!maker && reseller && typeof brand === "string" && brand.trim()) {
+        const brandStr = brand.trim();
+        const resolvedHost = resolveMakerHostFromBrand(brandStr);
+        if (resolvedHost) {
+          const info = KNOWN_HOSTS[resolvedHost];
+          maker = buildHostSlot(resolvedHost, info?.name ?? brandStr, null);
+        } else {
+          const byName = await storage.getVendorByNameInsensitive(brandStr);
+          if (byName?.domain) {
+            maker = {
+              name: byName.name,
+              domain: byName.domain,
+              affiliateUrl: null,
+              aboutUrl: byName.aboutUrl ?? `https://${byName.domain}/`,
+              logoUrl:
+                byName.logoUrl ??
+                `https://www.google.com/s2/favicons?sz=128&domain=${byName.domain}`,
+              known: false,
+            };
+          } else {
+            maker = {
+              name: brandStr,
+              domain: null,
+              affiliateUrl: null,
+              aboutUrl: null,
+              logoUrl: null,
+              known: false,
+            };
+          }
+        }
+      }
 
       res.json({
         name,
@@ -3936,14 +4136,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         price,
         photoUrl,
         sourceImage: rawImage,
-        vendor: {
-          name: vendorName,
-          affiliateUrl: url,
-          aboutUrl: `${parsed.origin}/`,
-          logoUrl: `https://www.google.com/s2/favicons?sz=128&domain=${host}`,
-          domain: host,
-          known: host in KNOWN_VENDORS,
-        },
+        reseller,
+        maker,
+        // Task #500 — backward-compat alias for the legacy /admin/classic
+        // ScrapeBar consumer (client/src/pages/Admin.tsx), which still
+        // reads `vendor.{affiliateUrl,name,domain,logoUrl,aboutUrl}` to
+        // auto-link a Reverb / Sweetwater listing on the classic editor.
+        // New consumers should use the reseller/maker slots.
+        vendor: reseller ?? maker ?? null,
       });
     } catch (e: any) {
       const msg = e?.name === "AbortError" ? "Vendor site took too long to respond." : (e?.message || "Unable to read that page");

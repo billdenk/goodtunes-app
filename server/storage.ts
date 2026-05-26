@@ -244,6 +244,10 @@ export interface IStorage {
   getVendors(): Promise<Vendor[]>;
   getVendorById(id: string): Promise<Vendor | undefined>;
   getVendorByDomain(domain: string): Promise<Vendor | undefined>;
+  // Task #500 — case-insensitive name lookup. Used by the gear scrape
+  // route to resolve a JSON-LD `brand` string (e.g. "Ernie Ball") back
+  // to an existing maker vendor row when the brand-alias map misses.
+  getVendorByNameInsensitive(name: string): Promise<Vendor | undefined>;
   // Task #237 — only the top-level row for a domain (parent_vendor_id
   // IS NULL). Used by the create-flow collision check so a sub-brand's
   // domain match doesn't dead-end the operator on 409.
@@ -1569,6 +1573,18 @@ export class DbStorage implements IStorage {
   async getVendorByDomain(domain: string): Promise<Vendor | undefined> {
     const [v] = await db.select().from(vendors)
       .where(and(eq(vendors.domain, domain.toLowerCase()), isNull(vendors.deletedAt)));
+    return v;
+  }
+  async getVendorByNameInsensitive(name: string): Promise<Vendor | undefined> {
+    const trimmed = name.trim();
+    if (!trimmed) return undefined;
+    const [v] = await db
+      .select()
+      .from(vendors)
+      .where(and(
+        sql`lower(${vendors.name}) = lower(${trimmed})`,
+        isNull(vendors.deletedAt),
+      ));
     return v;
   }
   async getTopLevelVendorByDomain(domain: string): Promise<Vendor | undefined> {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Search, X, Guitar, Store, Loader2 } from "lucide-react";
+import { Search, X, Guitar, Store, Loader2, Factory, ShoppingBag } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -35,6 +35,31 @@ import { Button } from "@/components/ui/button";
  * detail page also defers full vendor editing to the classic admin —
  * same staged-migration cadence Albums + People used.
  */
+// Task #500 — paste-a-URL scrape result. Reseller / maker each carry
+// the fields the dialog renders as preview chips and the find-or-create
+// path needs to upsert the vendor row before linking it to the gear.
+interface VendorSlot {
+  name: string;
+  domain: string | null;
+  affiliateUrl: string | null;
+  aboutUrl: string | null;
+  logoUrl: string | null;
+  known: boolean;
+}
+interface ScrapeResult {
+  name: string | null;
+  brand: string | null;
+  category: string | null;
+  description: string | null;
+  specs: Record<string, string>;
+  price: string | null;
+  photoUrl: string | null;
+  sourceImage: string | null;
+  reseller: VendorSlot | null;
+  maker: VendorSlot | null;
+  notice?: string | null;
+}
+
 interface InstrumentLite {
   id: string;
   name: string;
@@ -136,93 +161,154 @@ export function AdminInstruments() {
   const { toast } = useToast();
   // "Add Gear" opens a paste-URL dialog (restored 2026-05). Pulling the
   // product page first lets the server scraper prefill name / category /
-  // photo and attach the vendor in one shot — the workflow Bill remembers
-  // from the legacy /admin Gear tab. "Skip" still creates a blank "New gear"
-  // for hand-entry cases where there's no public product URL.
+  // photo and classify the reseller + maker — task #500 introduced a
+  // two-stage flow so the operator sees both vendor chips before
+  // confirming. "Skip" still creates a blank "New gear" for hand-entry.
   const [addOpen, setAddOpen] = useState(false);
   const [pasteUrl, setPasteUrl] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
+  const [scraped, setScraped] = useState<ScrapeResult | null>(null);
+
+  // Find-or-create a vendor row by domain, OR-promoting the maker /
+  // reseller flag if the row already exists with the opposite flag.
+  // Server returns 201 (created), 200 (promoted), or 409 (already
+  // carries the requested flag) — all three carry the vendor in the
+  // payload, just at different shapes.
+  async function findOrCreateVendor(slot: VendorSlot, role: "maker" | "reseller" | "both"): Promise<{ id: string; name: string } | null> {
+    if (!slot.domain) return null;
+    const isMaker = role === "maker" || role === "both";
+    const isReseller = role === "reseller" || role === "both";
+    try {
+      const r = await apiRequest("POST", "/api/admin/vendors", {
+        name: slot.name,
+        domain: slot.domain,
+        isMaker,
+        isReseller,
+        ...(slot.logoUrl ? { logoUrl: slot.logoUrl } : {}),
+        ...(slot.aboutUrl ? { aboutUrl: slot.aboutUrl } : {}),
+      });
+      return (await r.json()) as { id: string; name: string };
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : "";
+      const m = raw.match(/^409:\s*(.*)$/);
+      if (m) {
+        try {
+          const body = JSON.parse(m[1]);
+          if (body?.vendor?.id) return body.vendor as { id: string; name: string };
+        } catch { /* fall through */ }
+      }
+      throw err;
+    }
+  }
+
+  const scrapeUrl = useMutation({
+    mutationFn: async (url: string): Promise<ScrapeResult> => {
+      const r = await apiRequest("POST", "/api/admin/instruments/scrape", { url });
+      return (await r.json()) as ScrapeResult;
+    },
+    onSuccess: (data) => {
+      setScraped(data);
+      setPasteError(null);
+    },
+    onError: (err: any) => {
+      setPasteError(humanizeApiError(err));
+    },
+  });
 
   const createInstrument = useMutation({
-    mutationFn: async (opts: { url?: string }) => {
-      let name = "New gear";
-      let category = "Guitar";
-      let photoUrl: string | null = null;
-      let about: string | null = null;
-      let scraped: any = null;
-      let vendorAttached = false;
+    mutationFn: async (opts: { url?: string; scraped?: ScrapeResult | null }) => {
       const trimmedUrl = (opts.url ?? "").trim();
-      if (trimmedUrl) {
-        const sr = await apiRequest("POST", "/api/admin/instruments/scrape", {
-          url: trimmedUrl,
-        });
-        scraped = await sr.json();
-        if (scraped?.name) name = String(scraped.name);
-        if (scraped?.category) category = String(scraped.category);
-        if (scraped?.photoUrl) photoUrl = String(scraped.photoUrl);
-        if (scraped?.description) about = String(scraped.description);
+      const s = opts.scraped ?? null;
+      let name = s?.name ? String(s.name) : "New gear";
+      let category = s?.category ? String(s.category) : "Guitar";
+      const photoUrl = s?.photoUrl ? String(s.photoUrl) : null;
+      const about = s?.description ? String(s.description) : null;
+
+      // Resolve vendors up front so we can stamp makerVendorId at create
+      // time (PUT-after-POST would still work but races the detail page
+      // navigation). Reseller + maker can collapse to the same vendor
+      // row (Gibson) — dedupe by domain so we don't double-POST.
+      let makerVendor: { id: string; name: string } | null = null;
+      let resellerVendor: { id: string; name: string } | null = null;
+      const sameVendor =
+        !!s?.reseller?.domain && !!s?.maker?.domain &&
+        s.reseller.domain.toLowerCase() === s.maker.domain.toLowerCase();
+      if (sameVendor && s?.reseller) {
+        const both = await findOrCreateVendor(s.reseller, "both");
+        makerVendor = both;
+        resellerVendor = both;
+      } else {
+        if (s?.maker?.domain) {
+          try { makerVendor = await findOrCreateVendor(s.maker, "maker"); }
+          catch (err) { console.error("[add-gear] maker upsert failed", err); }
+        }
+        if (s?.reseller?.domain) {
+          try { resellerVendor = await findOrCreateVendor(s.reseller, "reseller"); }
+          catch (err) { console.error("[add-gear] reseller upsert failed", err); }
+        }
       }
+
       const res = await apiRequest("POST", "/api/admin/instruments", {
         name,
         category,
         ...(photoUrl ? { photoUrl } : {}),
         ...(about ? { about } : {}),
-        // Task #461 — remember the page the operator pasted. Drives the
-        // fan "View original listing" link + the admin "Refetch image"
-        // recovery for missing photos.
+        // Task #461 — remember the page the operator pasted.
         ...(trimmedUrl ? { sourceUrl: trimmedUrl } : {}),
+        // Task #500 — stamp the maker at create time so AdminInstrument
+        // doesn't render an empty Maker panel during the navigate.
+        ...(makerVendor ? { makerVendorId: makerVendor.id } : {}),
       });
       const instrument = (await res.json()) as { id: string };
-      if (trimmedUrl && scraped?.vendor?.affiliateUrl) {
+
+      let resellerAttached = false;
+      if (resellerVendor && s?.reseller?.affiliateUrl) {
         try {
           await apiRequest(
             "POST",
             `/api/admin/instruments/${instrument.id}/vendors`,
             {
-              affiliateUrl: scraped.vendor.affiliateUrl,
-              ...(scraped.vendor.name ? { name: scraped.vendor.name } : {}),
-              ...(scraped.vendor.logoUrl
-                ? { logoUrl: scraped.vendor.logoUrl }
-                : {}),
-              ...(scraped.vendor.aboutUrl
-                ? { aboutUrl: scraped.vendor.aboutUrl }
-                : {}),
+              vendorId: resellerVendor.id,
+              affiliateUrl: s.reseller.affiliateUrl,
             },
           );
-          vendorAttached = true;
+          resellerAttached = true;
         } catch (err) {
-          // Vendor attach failing shouldn't block the new gear row from
-          // opening — the operator can re-attach on the detail page. We
-          // surface the partial-success state in the toast below so the
-          // operator isn't told the vendor was attached when it wasn't.
-          console.error("[add-gear] vendor attach failed", err);
+          // Reseller attach failing shouldn't block the new gear row
+          // from opening — the operator can re-attach on the detail
+          // page. We surface the partial-success state in the toast.
+          console.error("[add-gear] reseller attach failed", err);
         }
       }
-      return { instrument, scraped, vendorAttached };
+      return { instrument, scraped: s, makerVendor, resellerVendor, resellerAttached };
     },
-    onSuccess: ({ instrument, scraped, vendorAttached }) => {
+    onSuccess: ({ instrument, scraped, makerVendor, resellerVendor, resellerAttached }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
       setAddOpen(false);
       setPasteUrl("");
       setPasteError(null);
-      if (scraped?.name) {
-        const hasVendor = !!scraped.vendor?.affiliateUrl;
-        if (hasVendor && !vendorAttached) {
-          toast({
-            title: `Pulled "${scraped.name}"`,
-            description:
-              "Vendor link didn't attach automatically — add it from the detail page.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: `Pulled "${scraped.name}"`,
-            description:
-              vendorAttached && scraped.vendor?.name
-                ? `Vendor: ${scraped.vendor.name}. Review and edit on the detail page.`
-                : "Review and edit on the detail page.",
-          });
+      setScraped(null);
+      if (scraped?.name || makerVendor || resellerVendor) {
+        const headline = scraped?.name ?? "Created blank gear";
+        const parts: string[] = [];
+        if (resellerVendor) {
+          parts.push(
+            resellerAttached
+              ? `Reseller: ${resellerVendor.name}`
+              : `Reseller: ${resellerVendor.name} (attach failed — re-link on detail page)`,
+          );
+        } else if (scraped?.reseller && !scraped.reseller.domain) {
+          parts.push("Reseller skipped — no domain");
         }
+        if (makerVendor) parts.push(`Maker: ${makerVendor.name}`);
+        else if (scraped?.maker && !scraped.maker.domain) parts.push(`Maker: ${scraped.maker.name} (no domain — set by hand)`);
+        toast({
+          title: `Pulled "${headline}"`,
+          description: parts.length
+            ? `${parts.join(" · ")}. Review and edit on the detail page.`
+            : "Review and edit on the detail page.",
+          ...(resellerVendor && !resellerAttached ? { variant: "destructive" as const } : {}),
+        });
       }
       navigate(`/admin/instruments/${instrument.id}`);
     },
@@ -232,14 +318,15 @@ export function AdminInstruments() {
   });
 
   const openNewInstrument = () => {
-    if (createInstrument.isPending) return;
+    if (scrapeUrl.isPending || createInstrument.isPending) return;
     setPasteError(null);
     setPasteUrl("");
+    setScraped(null);
     setAddOpen(true);
   };
 
-  const submitPaste = () => {
-    if (createInstrument.isPending) return;
+  const pullFromUrl = () => {
+    if (scrapeUrl.isPending || createInstrument.isPending) return;
     const u = pasteUrl.trim();
     if (!u) {
       setPasteError("Paste a product URL, or click Skip to create a blank entry.");
@@ -250,13 +337,24 @@ export function AdminInstruments() {
       return;
     }
     setPasteError(null);
-    createInstrument.mutate({ url: u });
+    scrapeUrl.mutate(u);
+  };
+
+  const confirmCreate = () => {
+    if (scrapeUrl.isPending || createInstrument.isPending) return;
+    createInstrument.mutate({ url: pasteUrl.trim(), scraped });
   };
 
   const skipPaste = () => {
-    if (createInstrument.isPending) return;
+    if (scrapeUrl.isPending || createInstrument.isPending) return;
     setPasteError(null);
-    createInstrument.mutate({});
+    createInstrument.mutate({ url: "", scraped: null });
+  };
+
+  const resetScrape = () => {
+    if (scrapeUrl.isPending || createInstrument.isPending) return;
+    setScraped(null);
+    setPasteError(null);
   };
 
   if (authLoading) {
@@ -415,11 +513,12 @@ export function AdminInstruments() {
       <Dialog
         open={addOpen}
         onOpenChange={(o) => {
-          if (createInstrument.isPending) return;
+          if (scrapeUrl.isPending || createInstrument.isPending) return;
           setAddOpen(o);
           if (!o) {
             setPasteUrl("");
             setPasteError(null);
+            setScraped(null);
           }
         }}
       >
@@ -433,8 +532,8 @@ export function AdminInstruments() {
             </DialogTitle>
             <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
               Paste a product URL — Carter Vintage, Reverb, Gibson, Martin,
-              Sweetwater, etc. We'll prefill name, category, photo, and attach
-              the vendor.
+              Sweetwater, etc. We'll prefill name, category, photo, and
+              attach the reseller + maker.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 pt-1">
@@ -444,16 +543,20 @@ export function AdminInstruments() {
               onChange={(e) => {
                 setPasteUrl(e.target.value);
                 if (pasteError) setPasteError(null);
+                // Editing the URL invalidates the prior scrape preview
+                // so the chips can't get out of sync with the input.
+                if (scraped) setScraped(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  submitPaste();
+                  if (scraped) confirmCreate();
+                  else pullFromUrl();
                 }
               }}
               placeholder="https://…"
               autoFocus
-              disabled={createInstrument.isPending}
+              disabled={scrapeUrl.isPending || createInstrument.isPending}
               className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-gear-url"
             />
@@ -465,38 +568,170 @@ export function AdminInstruments() {
                 {pasteError}
               </p>
             )}
-            <p className="text-[11.5px] text-slate-400">
-              Reads the page's Open Graph + product metadata and rehosts the
-              hero image. Most modern shops work without an account.
-            </p>
+            {!scraped && !pasteError && (
+              <p className="text-[11.5px] text-slate-400">
+                Reads the page's Open Graph + product metadata and rehosts
+                the hero image. Most modern shops work without an account.
+              </p>
+            )}
+            {scraped && (
+              <div
+                className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"
+                data-testid="panel-scrape-preview"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+                    {scraped.photoUrl ? (
+                      <img
+                        src={scraped.photoUrl}
+                        alt={scraped.name ?? "Pulled gear"}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Guitar className="w-5 h-5 text-slate-300" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="text-slate-900 text-sm font-semibold truncate"
+                      data-testid="text-scrape-preview-name"
+                    >
+                      {scraped.name ?? "Untitled gear"}
+                    </div>
+                    {scraped.category && (
+                      <div className="text-slate-500 text-xs truncate">
+                        {scraped.category}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {scraped.reseller && (
+                    <VendorChip
+                      role="reseller"
+                      slot={scraped.reseller}
+                      testId="chip-scrape-reseller"
+                    />
+                  )}
+                  {scraped.maker && (
+                    <VendorChip
+                      role="maker"
+                      slot={scraped.maker}
+                      testId="chip-scrape-maker"
+                    />
+                  )}
+                  {!scraped.reseller && !scraped.maker && (
+                    <span className="text-xs text-slate-400">
+                      No vendor classified.
+                    </span>
+                  )}
+                </div>
+                {scraped.notice && (
+                  <p
+                    className="text-xs text-slate-500 leading-snug"
+                    data-testid="text-scrape-notice"
+                  >
+                    {scraped.notice}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
-            <button
-              type="button"
-              onClick={skipPaste}
-              disabled={createInstrument.isPending}
-              className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              data-testid="button-add-gear-skip"
-            >
-              Skip — create blank
-            </button>
-            <Button
-              type="button"
-              onClick={submitPaste}
-              disabled={createInstrument.isPending || !pasteUrl.trim()}
-              size="sm"
-              className="text-[12.5px] font-semibold"
-              data-testid="button-add-gear-pull"
-            >
-              {createInstrument.isPending && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              )}
-              {createInstrument.isPending ? "Reading…" : "Pull from URL"}
-            </Button>
+            {scraped ? (
+              <>
+                <button
+                  type="button"
+                  onClick={resetScrape}
+                  disabled={createInstrument.isPending}
+                  className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  data-testid="button-add-gear-reset"
+                >
+                  Try another URL
+                </button>
+                <Button
+                  type="button"
+                  onClick={confirmCreate}
+                  disabled={createInstrument.isPending}
+                  size="sm"
+                  className="text-[12.5px] font-semibold"
+                  data-testid="button-add-gear-confirm"
+                >
+                  {createInstrument.isPending && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {createInstrument.isPending ? "Creating…" : "Create gear"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={skipPaste}
+                  disabled={scrapeUrl.isPending || createInstrument.isPending}
+                  className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  data-testid="button-add-gear-skip"
+                >
+                  Skip — create blank
+                </button>
+                <Button
+                  type="button"
+                  onClick={pullFromUrl}
+                  disabled={scrapeUrl.isPending || createInstrument.isPending || !pasteUrl.trim()}
+                  size="sm"
+                  className="text-[12.5px] font-semibold"
+                  data-testid="button-add-gear-pull"
+                >
+                  {scrapeUrl.isPending && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {scrapeUrl.isPending ? "Reading…" : "Pull from URL"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </AdminFrame>
+  );
+}
+
+function VendorChip({
+  role,
+  slot,
+  testId,
+}: {
+  role: "reseller" | "maker";
+  slot: VendorSlot;
+  testId: string;
+}) {
+  const Icon = role === "reseller" ? ShoppingBag : Factory;
+  const label = role === "reseller" ? "Reseller" : "Maker";
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 pl-1.5 pr-2.5 py-1 text-xs text-slate-700"
+      data-testid={testId}
+    >
+      {slot.logoUrl ? (
+        <img
+          src={slot.logoUrl}
+          alt=""
+          className="w-4 h-4 rounded-sm object-cover"
+        />
+      ) : (
+        <Icon className="w-3.5 h-3.5 text-slate-400" />
+      )}
+      <span className="font-semibold text-slate-500">{label}:</span>
+      <span className="truncate max-w-[12rem]">{slot.name}</span>
+      {!slot.domain && (
+        <span
+          className="text-slate-400 italic"
+          title="No domain — admin will need to fill this in by hand on the vendor row"
+        >
+          (no domain)
+        </span>
+      )}
+    </span>
   );
 }
 
