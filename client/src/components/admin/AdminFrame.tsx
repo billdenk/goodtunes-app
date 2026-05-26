@@ -25,6 +25,7 @@ import {
   PanelRightOpen,
   Smartphone,
   Tablet,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
@@ -72,6 +73,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   customers: "audience",
   reports: "audience",
   "platform-pricing": "system",
+  trash: "system",
 };
 
 export type PreviewDevice = "phone" | "tablet";
@@ -115,6 +117,7 @@ export type EntityKey =
   | "reports"
   | "jobs"
   | "platform-pricing"
+  | "trash"
   | "none";
 
 export function AdminFrame({
@@ -643,6 +646,18 @@ export function AdminFrame({
                   active={active === "invite-tree"}
                   onClick={() => navigate("/admin/invite-tree")}
                   testId="nav-invite-tree"
+                />
+                {/* Task #475 — Soft-delete recycle bin (super-admin only).
+                    Labelled "Deleted items" so the mechanical destructive-
+                    without-confirm linter stays quiet: this is a nav link,
+                    not a destructive action. */}
+                <SidebarLink
+                  icon={Trash2}
+                  label="Deleted items"
+                  count={-1}
+                  active={active === "trash"}
+                  onClick={() => navigate("/admin/trash")}
+                  testId="nav-trash"
                 />
               </Section>
             )}

@@ -179,3 +179,23 @@ The hazard is that each detail page picks its own query-key shape — most use t
 ## Person sheet — content guardrails
 
 The public, fan-facing Person sheet (and any artist bio surface we ingest) must **not** include legal-issue, criminal-allegation, lawsuit, or controversy content, even when the source (Wikipedia, Roon, MusicBrainz, etc.) has those sections. When ingesting biographies, filter out sections titled along the lines of "Legal issues", "Allegations", "Controversy", "Lawsuits", or any incident/court coverage — keep early life, career, discography, charity work, family, and music-related content only. This is a product rule, not a one-off Nick decision.
+
+## Soft-delete trash (super-admin recycle bin)
+
+Every admin Delete is a soft-flip, not a hard DELETE. Fourteen tables — `albums`, `songs`, `album_videos`, `album_photos`, `album_credits`, `people`, `band_members`, `instruments`, `labels`, `vendors`, `manufacturers`, `fulfillment_partners`, `track_writers`, `track_performers` — carry a `(deleted_at, deleted_by_user_id, deleted_via_parent_id)` trio. The Delete handler routes through `softDeleteEntity(kind, id, userId?)` in `server/softDelete.ts`, which:
+
+- Stamps `deleted_at = now()` and `deleted_by_user_id = caller` on the row.
+- Cascades the flip to dependent rows (album → songs/videos/photos/credits; song → track_writers/track_performers; person → band_members on both sides). Cascaded rows record `deleted_via_parent_id` so Restore can identify what was taken down with the parent.
+- Hard-DELETEs join-table rows that have no fan-visible identity of their own (`playlist_songs`) — keeping a deleted song in a playlist is worse than removing it cleanly.
+
+Every list/detail read filters `WHERE deleted_at IS NULL`, so the rest of admin and the customer surfaces never see soft-deleted rows.
+
+**Recycle bin UI** — `/admin/trash` (sidebar → System → "Deleted items"). Page is super-admin only and self-gates on a 403 from `GET /api/admin/trash`. Each row shows kind, label, deleted-at, days-until-purge, and Restore / Purge buttons. The three endpoints are `GET /api/admin/trash`, `POST /api/admin/trash/:type/:id/restore`, `DELETE /api/admin/trash/:type/:id` — all `requireAdmin + requireSuperAdmin`.
+
+**Restore** un-stamps `deleted_at` on the row and on any children with a matching `deleted_via_parent_id`. **Purge** hard-DELETEs immediately (the parent's cascade FKs clean up dependents).
+
+**30-day sweeper** — `server/index.ts` arms a daily tick (60 s after boot, then every 24 h) that calls `sweepExpiredTrash(30)` to hard-DELETE any row whose `deleted_at` is older than 30 days. A guard variable prevents overlap.
+
+**What this is not** — object-storage blobs (album art, audio, person photos, vendor logos) are **not** copied to a recycle area. A purge does not delete the blob, and a soft-delete does not hide it from `/objects/uploads/<id>`. Restoring a row puts its existing image URL back into circulation. Customer and order tables (`customer_users`, `orders`, `order_items`, `subscriptions`, etc.) are out of scope — those use status fields and refund flows, not soft-delete.
+
+**Schema migration** lives in `scripts/post-merge.sh` (`migrate_soft_delete`) and runs idempotently against both `DATABASE_URL` and `PROD_DATABASE_URL` after every merge. Per the dev↔prod drift rule, the columns must exist on both DBs before publish or the Replit publish dialog will try to drop them from prod.

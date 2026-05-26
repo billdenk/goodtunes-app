@@ -231,6 +231,36 @@ async function bootstrapAccessGuard() {
     log(`saleWindow scheduler init failed: ${e?.message ?? e}`, "sale-window");
   }
 
+  // Task #475 — Soft-delete sweeper. Once a day, hard-delete any row
+  // whose `deleted_at` is more than 30 days old across the 14 admin
+  // tables that opted into soft-delete. The first tick fires ~60s
+  // after boot so the server is healthy before we run a write pass,
+  // and a guard variable prevents overlap if a sweep ever runs long.
+  try {
+    const { sweepExpiredTrash } = await import("./softDelete");
+    let sweeping = false;
+    const runSweep = async () => {
+      if (sweeping) return;
+      sweeping = true;
+      try {
+        const out = await sweepExpiredTrash(30);
+        const total = out.reduce((n, r) => n + r.purged, 0);
+        if (total > 0) {
+          log(`trash sweep purged ${total} row(s): ${out.map((r) => `${r.table}=${r.purged}`).join(", ")}`, "trash-sweep");
+        }
+      } catch (e: any) {
+        log(`trash sweep failed: ${e?.message ?? e}`, "trash-sweep");
+      } finally {
+        sweeping = false;
+      }
+    };
+    setTimeout(runSweep, 60 * 1000);
+    setInterval(runSweep, 24 * 60 * 60 * 1000);
+    log("trash sweeper armed (daily tick, 30-day TTL)", "trash-sweep");
+  } catch (e: any) {
+    log(`trash sweeper init failed: ${e?.message ?? e}`, "trash-sweep");
+  }
+
   // Task #364 — Loud one-line warning at boot when Mux isn't fully
   // configured. The pipeline degrades to "raw audio only" without these
   // keys, so the operator needs to see the gap on the next deploy log

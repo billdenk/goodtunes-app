@@ -4385,7 +4385,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
     }
-    await storage.deleteAlbum(String(req.params.id));
+    await storage.deleteAlbum(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -4750,7 +4750,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
     }
-    await storage.deleteSong(String(req.params.id));
+    await storage.deleteSong(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -9124,7 +9124,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(v);
   });
   app.delete("/api/admin/album-videos/:id", requireAdminBearer, async (req, res) => {
-    await storage.deleteAlbumVideo(String(req.params.id));
+    await storage.deleteAlbumVideo(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -9208,7 +9208,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(p);
   });
   app.delete("/api/admin/album-photos/:id", requireAdminBearer, async (req, res) => {
-    await storage.deleteAlbumPhoto(String(req.params.id));
+    await storage.deleteAlbumPhoto(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -9620,7 +9620,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
       }
     }
-    await storage.deletePerson(String(req.params.id));
+    await storage.deletePerson(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -9714,7 +9714,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/admin/band-members/:rowId", requireAdmin, async (req, res) => {
-    await storage.removeBandMember(String(req.params.rowId));
+    await storage.removeBandMember(String(req.params.rowId), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -10222,7 +10222,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(await storage.getInstrumentUsage(String(req.params.id)));
   });
   app.delete("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
-    await storage.deleteInstrument(String(req.params.id));
+    await storage.deleteInstrument(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -10434,7 +10434,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
     // SET NULL on albums.label_id — releases stay, label credit clears.
-    await storage.deleteLabel(String(req.params.id));
+    await storage.deleteLabel(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -10774,7 +10774,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(m);
   });
   app.delete("/api/admin/manufacturers/:id", requireAdmin, async (req, res) => {
-    await storage.deleteManufacturer(String(req.params.id));
+    await storage.deleteManufacturer(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -10962,7 +10962,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(f);
   });
   app.delete("/api/admin/fulfillment-partners/:id", requireAdmin, async (req, res) => {
-    await storage.deleteFulfillmentPartner(String(req.params.id));
+    await storage.deleteFulfillmentPartner(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -11682,7 +11682,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.delete("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
     // Cascades to every instrument_vendors row pointing at this vendor.
-    await storage.deleteVendor(String(req.params.id));
+    await storage.deleteVendor(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -11913,7 +11913,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
     }
-    await storage.deleteTrackWriter(String(req.params.id));
+    await storage.deleteTrackWriter(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -12006,7 +12006,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
     }
-    await storage.deleteTrackPerformer(String(req.params.id));
+    await storage.deleteTrackPerformer(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 
@@ -17290,6 +17290,111 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       });
     });
+  }
+
+  // ─── Task #475 — Soft-delete trash (super-admin only) ──────────────
+  // Every admin Delete soft-flips `deleted_at` on the row instead of
+  // hard-DELETEing it (see server/softDelete.ts). The three endpoints
+  // below are the only surface that can see, restore, or purge those
+  // rows; the daily sweeper in server/index.ts hard-deletes anything
+  // older than 30 days.
+  {
+    const softDelete = await import("./softDelete");
+    const {
+      listTrash,
+      restoreEntity,
+      purgeEntity,
+      previewPurge,
+      RestoreConflictError,
+      TRASH_ENTITY_TYPES,
+    } = softDelete;
+    type TrashEntityType = typeof softDelete extends { TRASH_ENTITY_TYPES: readonly (infer U)[] }
+      ? U
+      : string;
+    const { getUserRole } = await import("./auth/roles");
+
+    async function requireSuperAdmin(
+      req: Request,
+      res: Response,
+      next: Function,
+    ) {
+      const role = await getUserRole(req.session.userId!);
+      if (role?.role !== "super_admin") {
+        return res.status(403).json({ message: "Super admin only" });
+      }
+      next();
+    }
+
+    function parseType(s: string): TrashEntityType | null {
+      return (TRASH_ENTITY_TYPES as readonly string[]).includes(s)
+        ? (s as TrashEntityType)
+        : null;
+    }
+
+    app.get(
+      "/api/admin/trash",
+      requireAdmin,
+      requireSuperAdmin,
+      async (_req, res) => {
+        try {
+          res.json(await listTrash());
+        } catch (e: any) {
+          res.status(500).json({ message: e?.message ?? "Failed to list trash" });
+        }
+      },
+    );
+
+    app.get(
+      "/api/admin/trash/:type/:id/preview",
+      requireAdmin,
+      requireSuperAdmin,
+      async (req, res) => {
+        const kind = parseType(String(req.params.type));
+        if (!kind) return res.status(400).json({ message: "Unknown entity type" });
+        try {
+          res.json(await previewPurge(kind, String(req.params.id)));
+        } catch (e: any) {
+          res.status(500).json({ message: e?.message ?? "Preview failed" });
+        }
+      },
+    );
+
+    app.post(
+      "/api/admin/trash/:type/:id/restore",
+      requireAdmin,
+      requireSuperAdmin,
+      async (req, res) => {
+        const kind = parseType(String(req.params.type));
+        if (!kind) return res.status(400).json({ message: "Unknown entity type" });
+        try {
+          await restoreEntity(kind, String(req.params.id));
+          res.json({ message: "Restored" });
+        } catch (e: any) {
+          // 409 carries the actionable "rename the conflicting row" copy
+          // so the UI can surface it as a toast instead of a generic 500.
+          if (e instanceof RestoreConflictError) {
+            return res.status(409).json({ message: e.message });
+          }
+          res.status(500).json({ message: e?.message ?? "Restore failed" });
+        }
+      },
+    );
+
+    app.delete(
+      "/api/admin/trash/:type/:id",
+      requireAdmin,
+      requireSuperAdmin,
+      async (req, res) => {
+        const kind = parseType(String(req.params.type));
+        if (!kind) return res.status(400).json({ message: "Unknown entity type" });
+        try {
+          await purgeEntity(kind, String(req.params.id));
+          res.json({ message: "Purged" });
+        } catch (e: any) {
+          res.status(500).json({ message: e?.message ?? "Purge failed" });
+        }
+      },
+    );
   }
 
   return httpServer;

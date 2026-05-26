@@ -106,6 +106,7 @@ import {
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./db";
+import { softDeleteEntity } from "./softDelete";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -873,41 +874,53 @@ export class DbStorage implements IStorage {
   // Single LEFT JOIN with labels so each album carries its denormalized
   // label entity (or null). Same shape returned by getAlbums + getAlbumById
   // so every caller — fan list, fan detail, admin CMS — gets one read.
-  async getAlbums(opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel[]> {
+  async getAlbums(opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel[]> {
     // Apple-Music / Spotify standard: alphabetical by title as a single
     // string. Postgres lower() makes it case-insensitive at the SQL
     // layer so we don't pay a JS sort cost on every list fetch.
+    // Task #475 — soft-deleted rows are hidden from every list/detail
+    // read path; the only surface that sees them is /admin/trash via
+    // raw SQL in server/softDelete.ts.
+    const conds = [isNull(albums.deletedAt)];
+    if (!opts?.includeHidden) conds.push(eq(albums.isHidden, false));
     const rows = await db
       .select()
       .from(albums)
-      .leftJoin(labels, eq(albums.labelId, labels.id))
-      .where(opts?.includeHidden ? undefined : eq(albums.isHidden, false))
+      // Soft-deleted labels are joined as NULL — the album survives the
+      // label's deletion, but the credit clears (mirrors what restoring
+      // the label later would re-attach).
+      .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
+      .where(and(...conds))
       .orderBy(asc(sql`lower(${albums.title})`));
     return rows.map((r) => ({ ...r.albums, label: r.labels ?? null }));
   }
-  async getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel | undefined> {
+  async getAlbumById(id: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined> {
     const [row] = await db
       .select()
       .from(albums)
-      .leftJoin(labels, eq(albums.labelId, labels.id))
+      .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
       .where(eq(albums.id, id));
     if (!row) return undefined;
+    if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
     if (row.albums.isHidden && !opts?.includeHidden) return undefined;
     return { ...row.albums, label: row.labels ?? null };
   }
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
-    const rows = await db.select().from(songs).where(eq(songs.albumId, albumId)).orderBy(asc(songs.trackNumber));
+    const rows = await db.select().from(songs)
+      .where(and(eq(songs.albumId, albumId), isNull(songs.deletedAt)))
+      .orderBy(asc(songs.trackNumber));
     return rows.map((r) => normalizePreviewHide(r));
   }
   async getExplicitAlbumIds(): Promise<Set<string>> {
     const rows = await db
       .selectDistinct({ albumId: songs.albumId })
       .from(songs)
-      .where(eq(songs.isExplicit, true));
+      .where(and(eq(songs.isExplicit, true), isNull(songs.deletedAt)));
     return new Set(rows.map((r) => r.albumId));
   }
   async getSongById(id: string): Promise<Song | undefined> {
-    const [s] = await db.select().from(songs).where(eq(songs.id, id));
+    const [s] = await db.select().from(songs)
+      .where(and(eq(songs.id, id), isNull(songs.deletedAt)));
     return s ? normalizePreviewHide(s) : s;
   }
   // Used by the fan-side `/api/songs` endpoint so PlayerContext can build
@@ -921,14 +934,14 @@ export class DbStorage implements IStorage {
   // enumerate songs from demo-hidden albums by hitting this endpoint.
   async getAllSongs(opts?: { includeHidden?: boolean }): Promise<Song[]> {
     if (opts?.includeHidden) {
-      const all = await db.select().from(songs);
+      const all = await db.select().from(songs).where(isNull(songs.deletedAt));
       return all.map((r) => normalizePreviewHide(r));
     }
     const rows = await db
       .select({ song: songs })
       .from(songs)
       .innerJoin(albums, eq(songs.albumId, albums.id))
-      .where(eq(albums.isHidden, false));
+      .where(and(eq(albums.isHidden, false), isNull(songs.deletedAt), isNull(albums.deletedAt)));
     return rows.map((r) => normalizePreviewHide(r.song));
   }
   async createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album> {
@@ -941,22 +954,15 @@ export class DbStorage implements IStorage {
     const [a] = await db.update(albums).set(rest).where(eq(albums.id, id)).returning();
     return a;
   }
-  async deleteAlbum(id: string): Promise<void> {
-    // Wrap the whole cascade in a transaction: if any step fails (e.g. a
-    // playlist row violates a future constraint, the connection drops), we
-    // roll back instead of leaving half-deleted state.
-    await db.transaction(async (tx) => {
-      const albumSongs = await tx
-        .select({ id: songs.id })
-        .from(songs)
-        .where(eq(songs.albumId, id));
-      for (const s of albumSongs) {
-        await tx.delete(playlistSongs).where(eq(playlistSongs.songId, s.id));
-      }
-      await tx.delete(songs).where(eq(songs.albumId, id));
-      await tx.delete(userAlbums).where(eq(userAlbums.albumId, id));
-      await tx.delete(albums).where(eq(albums.id, id));
-    });
+  async deleteAlbum(id: string, userId?: string | null): Promise<void> {
+    // Task #475 — Soft-delete. Stamps `deleted_at` on the album and
+    // soft-cascades to songs / album_videos / album_photos /
+    // album_credits (and song→track_writers/track_performers in turn);
+    // `user_albums` rows stay live so fans who own the album still see
+    // their certificate, and `playlist_songs` get hard-removed inside
+    // the song path so trashed songs don't haunt playlists. Restore is
+    // reversible until the 30-day sweeper purges the row.
+    await softDeleteEntity("album", id, userId ?? null);
   }
   async createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song> {
     const [s] = await db.insert(songs).values(data as any).returning();
@@ -968,11 +974,11 @@ export class DbStorage implements IStorage {
   // for fans without an explicit sort hint on the consumer.
   async listAlbumVideos(albumId: string): Promise<AlbumVideo[]> {
     return db.select().from(albumVideos)
-      .where(eq(albumVideos.albumId, albumId))
+      .where(and(eq(albumVideos.albumId, albumId), isNull(albumVideos.deletedAt)))
       .orderBy(asc(albumVideos.position), asc(albumVideos.id));
   }
   async listAllAlbumVideos(): Promise<AlbumVideo[]> {
-    return db.select().from(albumVideos);
+    return db.select().from(albumVideos).where(isNull(albumVideos.deletedAt));
   }
   async createAlbumVideo(data: InsertAlbumVideo): Promise<AlbumVideo> {
     const [v] = await db.insert(albumVideos).values(data as any).returning();
@@ -987,12 +993,12 @@ export class DbStorage implements IStorage {
     const [v] = await db.update(albumVideos).set(rest).where(eq(albumVideos.id, id)).returning();
     return v;
   }
-  async deleteAlbumVideo(id: string): Promise<void> {
-    await db.delete(albumVideos).where(eq(albumVideos.id, id));
+  async deleteAlbumVideo(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("album_video", id, userId ?? null);
   }
   async listAlbumPhotos(albumId: string): Promise<AlbumPhoto[]> {
     return db.select().from(albumPhotos)
-      .where(eq(albumPhotos.albumId, albumId))
+      .where(and(eq(albumPhotos.albumId, albumId), isNull(albumPhotos.deletedAt)))
       .orderBy(asc(albumPhotos.position), asc(albumPhotos.id));
   }
   async createAlbumPhoto(data: InsertAlbumPhoto): Promise<AlbumPhoto> {
@@ -1008,8 +1014,8 @@ export class DbStorage implements IStorage {
     const [p] = await db.update(albumPhotos).set(rest).where(eq(albumPhotos.id, id)).returning();
     return p;
   }
-  async deleteAlbumPhoto(id: string): Promise<void> {
-    await db.delete(albumPhotos).where(eq(albumPhotos.id, id));
+  async deleteAlbumPhoto(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("album_photo", id, userId ?? null);
   }
   async updateSong(id: string, data: Partial<Song>): Promise<Song | undefined> {
     const { id: _i, ...rest } = data as any;
@@ -1035,11 +1041,12 @@ export class DbStorage implements IStorage {
       .returning({ id: songs.id });
     return rows.length > 0;
   }
-  async deleteSong(id: string): Promise<void> {
-    await db.transaction(async (tx) => {
-      await tx.delete(playlistSongs).where(eq(playlistSongs.songId, id));
-      await tx.delete(songs).where(eq(songs.id, id));
-    });
+  async deleteSong(id: string, userId?: string | null): Promise<void> {
+    // Task #475 — Soft-delete. Stamps `deleted_at` and soft-cascades
+    // to track_writers + track_performers; playlist_songs are hard-
+    // deleted inside softDeleteEntity so the song doesn't keep
+    // appearing in saved playlists while it sits in the trash.
+    await softDeleteEntity("song", id, userId ?? null);
   }
   async countAdmins(): Promise<number> {
     const rows = await db.select({ id: users.id }).from(users).where(eq(users.isAdmin, true));
@@ -1050,10 +1057,11 @@ export class DbStorage implements IStorage {
   }
   // ----- SuperCredits™ catalog ---------------------------------------
   async getPeople(): Promise<Person[]> {
-    return db.select().from(people).orderBy(asc(people.name));
+    return db.select().from(people).where(isNull(people.deletedAt)).orderBy(asc(people.name));
   }
   async getPersonById(id: string): Promise<Person | undefined> {
-    const [p] = await db.select().from(people).where(eq(people.id, id));
+    const [p] = await db.select().from(people)
+      .where(and(eq(people.id, id), isNull(people.deletedAt)));
     return p;
   }
   async createPerson(data: InsertPerson & { id?: string }): Promise<Person> {
@@ -1066,8 +1074,14 @@ export class DbStorage implements IStorage {
     const [p] = await db.update(people).set(rest).where(eq(people.id, id)).returning();
     return p;
   }
-  async deletePerson(id: string): Promise<void> {
-    await db.delete(people).where(eq(people.id, id));
+  async deletePerson(id: string, userId?: string | null): Promise<void> {
+    // Task #475 — Soft-delete. Soft-cascades to band_members on either
+    // side (band_id or member_id) so the band roster comes back cleanly
+    // on Restore. track_writers / track_performers / album_credits
+    // already have ON DELETE SET NULL on personId — we don't soft-touch
+    // those rows because the snapshotted `name` text keeps the credit
+    // rendering correctly while the Person sits in trash.
+    await softDeleteEntity("person", id, userId ?? null);
   }
 
   // ---- Task #190 — Bands & members ---------------------------------
@@ -1076,7 +1090,11 @@ export class DbStorage implements IStorage {
       .select({ bm: bandMembers, p: people })
       .from(bandMembers)
       .innerJoin(people, eq(bandMembers.memberId, people.id))
-      .where(eq(bandMembers.bandId, bandId))
+      .where(and(
+        eq(bandMembers.bandId, bandId),
+        isNull(bandMembers.deletedAt),
+        isNull(people.deletedAt),
+      ))
       .orderBy(asc(bandMembers.displayOrder), asc(people.name));
     return rows.map((r) => ({
       ...r.bm,
@@ -1091,7 +1109,11 @@ export class DbStorage implements IStorage {
       .select({ bm: bandMembers, p: people })
       .from(bandMembers)
       .innerJoin(people, eq(bandMembers.bandId, people.id))
-      .where(eq(bandMembers.memberId, memberId))
+      .where(and(
+        eq(bandMembers.memberId, memberId),
+        isNull(bandMembers.deletedAt),
+        isNull(people.deletedAt),
+      ))
       .orderBy(asc(people.name));
     // memberName/photo here reflect the BAND (the other side), so the
     // caller can render "Plays in: <band>" without a second fetch.
@@ -1125,8 +1147,8 @@ export class DbStorage implements IStorage {
     return row;
   }
 
-  async removeBandMember(id: string): Promise<void> {
-    await db.delete(bandMembers).where(eq(bandMembers.id, id));
+  async removeBandMember(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("band_member", id, userId ?? null);
   }
 
   async listAlbumLineup(albumId: string): Promise<AlbumLineupWithPerson[]> {
@@ -1430,7 +1452,9 @@ export class DbStorage implements IStorage {
   }
 
   async getInstruments(opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: (Vendor & { parent?: Vendor | null }) | null })[]> {
-    const all = await db.select().from(instruments).orderBy(asc(instruments.name));
+    const all = await db.select().from(instruments)
+      .where(isNull(instruments.deletedAt))
+      .orderBy(asc(instruments.name));
     if (all.length === 0) return [];
     const [byInstrument, makers] = await Promise.all([
       this.loadEnrichedAttachments(all.map((i) => i.id), !!opts?.includeHiddenVendors),
@@ -1443,7 +1467,8 @@ export class DbStorage implements IStorage {
     }));
   }
   async getInstrumentById(id: string, opts?: { includeHiddenVendors?: boolean }): Promise<(Instrument & { vendors: EnrichedInstrumentVendor[]; maker: (Vendor & { parent?: Vendor | null }) | null }) | undefined> {
-    const [i] = await db.select().from(instruments).where(eq(instruments.id, id));
+    const [i] = await db.select().from(instruments)
+      .where(and(eq(instruments.id, id), isNull(instruments.deletedAt)));
     if (!i) return undefined;
     const [byInstrument, makers] = await Promise.all([
       this.loadEnrichedAttachments([id], !!opts?.includeHiddenVendors),
@@ -1464,11 +1489,13 @@ export class DbStorage implements IStorage {
     const [i] = await db.update(instruments).set(rest).where(eq(instruments.id, id)).returning();
     return i;
   }
-  async deleteInstrument(id: string): Promise<void> {
-    // FK on instrument_vendors.instrument_id is ON DELETE CASCADE — the join
-    // rows go with the instrument. Vendor entities are untouched (they may
-    // still be attached to other instruments).
-    await db.delete(instruments).where(eq(instruments.id, id));
+  async deleteInstrument(id: string, userId?: string | null): Promise<void> {
+    // Task #475 — Soft-delete. The instrument_vendors join rows stay
+    // alive (no soft-delete column there) and only get hard-cascaded
+    // away when the row is eventually purged or sweeper-collected.
+    // Restoring the instrument therefore brings back the reseller list
+    // it had at delete time.
+    await softDeleteEntity("instrument", id, userId ?? null);
   }
 
   async getInstrumentUsage(id: string): Promise<{ performerCount: number }> {
@@ -1484,14 +1511,18 @@ export class DbStorage implements IStorage {
 
   // ----- Label ENTITY CRUD --------------------------------------------
   async getLabels(): Promise<Label[]> {
-    return await db.select().from(labels).orderBy(asc(labels.name));
+    return await db.select().from(labels)
+      .where(isNull(labels.deletedAt))
+      .orderBy(asc(labels.name));
   }
   async getLabelByDomain(domain: string): Promise<Label | undefined> {
-    const [l] = await db.select().from(labels).where(eq(labels.domain, domain));
+    const [l] = await db.select().from(labels)
+      .where(and(eq(labels.domain, domain), isNull(labels.deletedAt)));
     return l;
   }
   async getLabelById(id: string): Promise<Label | undefined> {
-    const [l] = await db.select().from(labels).where(eq(labels.id, id));
+    const [l] = await db.select().from(labels)
+      .where(and(eq(labels.id, id), isNull(labels.deletedAt)));
     return l;
   }
   async createLabel(data: InsertLabel & { id?: string }): Promise<Label> {
@@ -1517,22 +1548,27 @@ export class DbStorage implements IStorage {
     const [l] = await db.update(labels).set(rest).where(eq(labels.id, id)).returning();
     return l;
   }
-  async deleteLabel(id: string): Promise<void> {
-    // ON DELETE SET NULL on albums.label_id — the catalog stays, the label
-    // credit just clears until reassigned.
-    await db.delete(labels).where(eq(labels.id, id));
+  async deleteLabel(id: string, userId?: string | null): Promise<void> {
+    // Task #475 — Soft-delete. Albums keep their `label_id` pointer
+    // while the label sits in trash; on Purge the existing
+    // ON DELETE SET NULL kicks in and clears the credit.
+    await softDeleteEntity("label", id, userId ?? null);
   }
 
   // ----- Vendor ENTITY CRUD -------------------------------------------
   async getVendors(): Promise<Vendor[]> {
-    return await db.select().from(vendors).orderBy(asc(vendors.name));
+    return await db.select().from(vendors)
+      .where(isNull(vendors.deletedAt))
+      .orderBy(asc(vendors.name));
   }
   async getVendorById(id: string): Promise<Vendor | undefined> {
-    const [v] = await db.select().from(vendors).where(eq(vendors.id, id));
+    const [v] = await db.select().from(vendors)
+      .where(and(eq(vendors.id, id), isNull(vendors.deletedAt)));
     return v;
   }
   async getVendorByDomain(domain: string): Promise<Vendor | undefined> {
-    const [v] = await db.select().from(vendors).where(eq(vendors.domain, domain.toLowerCase()));
+    const [v] = await db.select().from(vendors)
+      .where(and(eq(vendors.domain, domain.toLowerCase()), isNull(vendors.deletedAt)));
     return v;
   }
   async getTopLevelVendorByDomain(domain: string): Promise<Vendor | undefined> {
@@ -1542,14 +1578,14 @@ export class DbStorage implements IStorage {
     const [v] = await db
       .select()
       .from(vendors)
-      .where(and(eq(vendors.domain, domain.toLowerCase()), isNull(vendors.parentVendorId)));
+      .where(and(eq(vendors.domain, domain.toLowerCase()), isNull(vendors.parentVendorId), isNull(vendors.deletedAt)));
     return v;
   }
   async getVendorChildren(parentId: string): Promise<Vendor[]> {
     return await db
       .select()
       .from(vendors)
-      .where(eq(vendors.parentVendorId, parentId))
+      .where(and(eq(vendors.parentVendorId, parentId), isNull(vendors.deletedAt)))
       .orderBy(asc(vendors.name));
   }
   async createVendor(data: InsertVendor & { id?: string }): Promise<Vendor> {
@@ -1576,10 +1612,11 @@ export class DbStorage implements IStorage {
     const [v] = await db.update(vendors).set(rest).where(eq(vendors.id, id)).returning();
     return v;
   }
-  async deleteVendor(id: string): Promise<void> {
-    // ON DELETE CASCADE on instrument_vendors.vendor_id removes every
-    // attachment of this vendor across all instruments.
-    await db.delete(vendors).where(eq(vendors.id, id));
+  async deleteVendor(id: string, userId?: string | null): Promise<void> {
+    // Task #475 — Soft-delete. instrument_vendors attachments stay
+    // alive while the vendor is in trash (the join table has no soft-
+    // delete column) and only get hard-cascaded on Purge.
+    await softDeleteEntity("vendor", id, userId ?? null);
   }
 
   async getVendorInstruments(vendorId: string): Promise<Instrument[]> {
@@ -1593,6 +1630,7 @@ export class DbStorage implements IStorage {
       .where(and(
         eq(instrumentVendors.vendorId, vendorId),
         eq(instrumentVendors.isHidden, false),
+        isNull(instruments.deletedAt),
       ))
       .orderBy(asc(instruments.name));
     const seen = new Set<string>();
@@ -1609,7 +1647,10 @@ export class DbStorage implements IStorage {
     return await db
       .select()
       .from(instruments)
-      .where(eq(instruments.makerVendorId, vendorId))
+      .where(and(
+        eq(instruments.makerVendorId, vendorId),
+        isNull(instruments.deletedAt),
+      ))
       .orderBy(asc(instruments.name));
   }
 
@@ -1636,7 +1677,10 @@ export class DbStorage implements IStorage {
     const built = await db
       .select()
       .from(instruments)
-      .where(eq(instruments.makerVendorId, vendorId))
+      .where(and(
+        eq(instruments.makerVendorId, vendorId),
+        isNull(instruments.deletedAt),
+      ))
       .orderBy(asc(instruments.name));
     if (built.length === 0) return [];
     const ids = built.map((i) => i.id);
@@ -1648,6 +1692,7 @@ export class DbStorage implements IStorage {
         and(
           inArray(instrumentVendors.instrumentId, ids),
           eq(instrumentVendors.isHidden, false),
+          isNull(vendors.deletedAt),
         ),
       )
       .orderBy(asc(instrumentVendors.position));
@@ -1695,7 +1740,13 @@ export class DbStorage implements IStorage {
       .innerJoin(songs, eq(trackPerformers.songId, songs.id))
       .innerJoin(albums, eq(songs.albumId, albums.id))
       .leftJoin(instruments, eq(trackPerformers.instrumentId, instruments.id))
-      .where(and(eq(trackPerformers.personId, personId), eq(albums.isHidden, false)))
+      .where(and(
+        eq(trackPerformers.personId, personId),
+        eq(albums.isHidden, false),
+        isNull(trackPerformers.deletedAt),
+        isNull(songs.deletedAt),
+        isNull(albums.deletedAt),
+      ))
       .orderBy(asc(albums.year), asc(albums.title), asc(songs.trackNumber), asc(trackPerformers.position));
     return rows.map((r) => ({
       performerId: r.p.id,
@@ -1727,7 +1778,10 @@ export class DbStorage implements IStorage {
     const personRows = await db
       .select()
       .from(trackPerformers)
-      .where(eq(trackPerformers.personId, personId));
+      .where(and(
+        eq(trackPerformers.personId, personId),
+        isNull(trackPerformers.deletedAt),
+      ));
     const songIdsWithCredit = new Set(personRows.map((r) => r.songId));
 
     if (mode === "credited" && songIdsWithCredit.size === 0) return [];
@@ -1736,9 +1790,15 @@ export class DbStorage implements IStorage {
       mode === "credited"
         ? and(
             eq(albums.isGoodTunesRelease, true),
+            isNull(albums.deletedAt),
+            isNull(songs.deletedAt),
             inArray(songs.id, Array.from(songIdsWithCredit)),
           )
-        : eq(albums.isGoodTunesRelease, true);
+        : and(
+            eq(albums.isGoodTunesRelease, true),
+            isNull(albums.deletedAt),
+            isNull(songs.deletedAt),
+          );
 
     const rows = await db
       .select({ s: songs, a: albums })
@@ -1783,7 +1843,10 @@ export class DbStorage implements IStorage {
     const ownAlbums = await db
       .select()
       .from(albums)
-      .where(eq(albums.primaryArtistId, personId));
+      .where(and(
+        eq(albums.primaryArtistId, personId),
+        isNull(albums.deletedAt),
+      ));
     const performerRows = await db
       .select({
         p: trackPerformers,
@@ -1795,7 +1858,12 @@ export class DbStorage implements IStorage {
       .innerJoin(songs, eq(trackPerformers.songId, songs.id))
       .innerJoin(albums, eq(songs.albumId, albums.id))
       .leftJoin(instruments, eq(trackPerformers.instrumentId, instruments.id))
-      .where(eq(trackPerformers.personId, personId));
+      .where(and(
+        eq(trackPerformers.personId, personId),
+        isNull(trackPerformers.deletedAt),
+        isNull(songs.deletedAt),
+        isNull(albums.deletedAt),
+      ));
 
     type AlbumBucket = {
       albumId: string;
@@ -2057,8 +2125,12 @@ export class DbStorage implements IStorage {
   // ----- SuperCredits™ song credits ----------------------------------
   async getSongCredits(songId: string) {
     const [writerRows, performerRows] = await Promise.all([
-      db.select().from(trackWriters).where(eq(trackWriters.songId, songId)).orderBy(asc(trackWriters.position)),
-      db.select().from(trackPerformers).where(eq(trackPerformers.songId, songId)).orderBy(asc(trackPerformers.position)),
+      db.select().from(trackWriters)
+        .where(and(eq(trackWriters.songId, songId), isNull(trackWriters.deletedAt)))
+        .orderBy(asc(trackWriters.position)),
+      db.select().from(trackPerformers)
+        .where(and(eq(trackPerformers.songId, songId), isNull(trackPerformers.deletedAt)))
+        .orderBy(asc(trackPerformers.position)),
     ]);
     // Resolve the small set of distinct person + instrument ids in one
     // query each — keeps the fan-side credits sheet to a single GET.
@@ -2070,8 +2142,8 @@ export class DbStorage implements IStorage {
       performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
     ));
     const [peopleRows, instrumentRows, vendorsByInstrument] = await Promise.all([
-      personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
-      instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
+      personIds.length ? db.select().from(people).where(and(inArray(people.id, personIds), isNull(people.deletedAt))) : Promise.resolve([] as Person[]),
+      instrumentIds.length ? db.select().from(instruments).where(and(inArray(instruments.id, instrumentIds), isNull(instruments.deletedAt))) : Promise.resolve([] as Instrument[]),
       // Fan-facing — hidden vendors are excluded so demo-hidden vendor
       // buttons don't render in the InstrumentSheet.
       this.loadEnrichedAttachments(instrumentIds, false),
@@ -2091,7 +2163,8 @@ export class DbStorage implements IStorage {
   }
   async getAlbumCredits(albumId: string) {
     // 1) Resolve song ids for this album. Cheap single query.
-    const songRows = await db.select({ id: songs.id }).from(songs).where(eq(songs.albumId, albumId));
+    const songRows = await db.select({ id: songs.id }).from(songs)
+      .where(and(eq(songs.albumId, albumId), isNull(songs.deletedAt)));
     const songIds = songRows.map((r) => r.id);
     // Album-wide production credits are independent of songs — fetch even
     // when the album has no tracks yet so a freshly-created album still
@@ -2101,8 +2174,12 @@ export class DbStorage implements IStorage {
 
     // 2) All writers + performers for those songs in two queries.
     const [writerRows, performerRows] = await Promise.all([
-      db.select().from(trackWriters).where(inArray(trackWriters.songId, songIds)).orderBy(asc(trackWriters.position)),
-      db.select().from(trackPerformers).where(inArray(trackPerformers.songId, songIds)).orderBy(asc(trackPerformers.position)),
+      db.select().from(trackWriters)
+        .where(and(inArray(trackWriters.songId, songIds), isNull(trackWriters.deletedAt)))
+        .orderBy(asc(trackWriters.position)),
+      db.select().from(trackPerformers)
+        .where(and(inArray(trackPerformers.songId, songIds), isNull(trackPerformers.deletedAt)))
+        .orderBy(asc(trackPerformers.position)),
     ]);
 
     // 3) Resolve the small set of distinct person + instrument ids in one
@@ -2115,8 +2192,8 @@ export class DbStorage implements IStorage {
       performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
     ));
     const [peopleRows, instrumentRows, vendorsByInstrument] = await Promise.all([
-      personIds.length ? db.select().from(people).where(inArray(people.id, personIds)) : Promise.resolve([] as Person[]),
-      instrumentIds.length ? db.select().from(instruments).where(inArray(instruments.id, instrumentIds)) : Promise.resolve([] as Instrument[]),
+      personIds.length ? db.select().from(people).where(and(inArray(people.id, personIds), isNull(people.deletedAt))) : Promise.resolve([] as Person[]),
+      instrumentIds.length ? db.select().from(instruments).where(and(inArray(instruments.id, instrumentIds), isNull(instruments.deletedAt))) : Promise.resolve([] as Instrument[]),
       // Fan-facing — hidden vendors are excluded.
       this.loadEnrichedAttachments(instrumentIds, false),
     ]);
@@ -2161,8 +2238,8 @@ export class DbStorage implements IStorage {
     const [w] = await db.update(trackWriters).set(rest).where(eq(trackWriters.id, id)).returning();
     return w;
   }
-  async deleteTrackWriter(id: string): Promise<void> {
-    await db.delete(trackWriters).where(eq(trackWriters.id, id));
+  async deleteTrackWriter(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("track_writer", id, userId ?? null);
   }
   async createTrackPerformer(data: InsertTrackPerformer & { id?: string }): Promise<TrackPerformer> {
     const [p] = await db.insert(trackPerformers).values(data as any).returning();
@@ -2177,15 +2254,15 @@ export class DbStorage implements IStorage {
     const [p] = await db.update(trackPerformers).set(rest).where(eq(trackPerformers.id, id)).returning();
     return p;
   }
-  async deleteTrackPerformer(id: string): Promise<void> {
-    await db.delete(trackPerformers).where(eq(trackPerformers.id, id));
+  async deleteTrackPerformer(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("track_performer", id, userId ?? null);
   }
 
   async listAlbumProductionCredits(albumId: string): Promise<(AlbumCredit & { person: Person | null })[]> {
     const rows = await db
       .select()
       .from(albumCredits)
-      .where(eq(albumCredits.albumId, albumId))
+      .where(and(eq(albumCredits.albumId, albumId), isNull(albumCredits.deletedAt)))
       .orderBy(asc(albumCredits.position));
     const personIds = Array.from(new Set(rows.map((r) => r.personId).filter((v): v is string => !!v)));
     const peopleRows = personIds.length
@@ -2198,8 +2275,8 @@ export class DbStorage implements IStorage {
     const [r] = await db.insert(albumCredits).values(data as any).returning();
     return r;
   }
-  async deleteAlbumProductionCredit(id: string): Promise<void> {
-    await db.delete(albumCredits).where(eq(albumCredits.id, id));
+  async deleteAlbumProductionCredit(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("album_credit", id, userId ?? null);
   }
 
   async listCreditRoles(): Promise<CreditRole[]> {
@@ -2285,7 +2362,11 @@ export class DbStorage implements IStorage {
       .select()
       .from(userAlbums)
       .innerJoin(albums, eq(userAlbums.albumId, albums.id))
-      .where(and(eq(userAlbums.userId, userId), eq(albums.isHidden, false)));
+      .where(and(
+        eq(userAlbums.userId, userId),
+        eq(albums.isHidden, false),
+        isNull(albums.deletedAt),
+      ));
     return rows.map((r) => ({ ...r.user_albums, album: r.albums }));
   }
 
@@ -2309,7 +2390,12 @@ export class DbStorage implements IStorage {
         // Drop songs whose parent album is hidden — those artworks and the
         // bumped song count would otherwise leak the hidden album back into
         // the playlist cover mosaic / row count on the fan side.
-        .where(and(eq(playlistSongs.playlistId, p.id), eq(albums.isHidden, false)))
+        .where(and(
+          eq(playlistSongs.playlistId, p.id),
+          eq(albums.isHidden, false),
+          isNull(albums.deletedAt),
+          isNull(songs.deletedAt),
+        ))
         .orderBy(desc(playlistSongs.addedAt));
       const seen = new Set<string>();
       const artworks: string[] = [];
@@ -2396,7 +2482,12 @@ export class DbStorage implements IStorage {
       .innerJoin(albums, eq(songs.albumId, albums.id))
       // Hide songs whose parent album is hidden so they vanish from the
       // playlist detail view too (matches getPlaylists summary).
-      .where(and(eq(playlistSongs.playlistId, playlistId), eq(albums.isHidden, false)))
+      .where(and(
+        eq(playlistSongs.playlistId, playlistId),
+        eq(albums.isHidden, false),
+        isNull(albums.deletedAt),
+        isNull(songs.deletedAt),
+      ))
       .orderBy(asc(playlistSongs.position));
     return rows.map((r) => ({
       ...r.playlist_songs,
@@ -2864,14 +2955,18 @@ export class DbStorage implements IStorage {
 
   // ----- Manufacturer ENTITY CRUD (Task #69) --------------------------
   async getManufacturers(): Promise<Manufacturer[]> {
-    return await db.select().from(manufacturers).orderBy(asc(manufacturers.name));
+    return await db.select().from(manufacturers)
+      .where(isNull(manufacturers.deletedAt))
+      .orderBy(asc(manufacturers.name));
   }
   async getManufacturerById(id: string): Promise<Manufacturer | undefined> {
-    const [m] = await db.select().from(manufacturers).where(eq(manufacturers.id, id));
+    const [m] = await db.select().from(manufacturers)
+      .where(and(eq(manufacturers.id, id), isNull(manufacturers.deletedAt)));
     return m;
   }
   async getManufacturerByDomain(domain: string): Promise<Manufacturer | undefined> {
-    const [m] = await db.select().from(manufacturers).where(eq(manufacturers.domain, domain));
+    const [m] = await db.select().from(manufacturers)
+      .where(and(eq(manufacturers.domain, domain), isNull(manufacturers.deletedAt)));
     return m;
   }
   async createManufacturer(data: InsertManufacturer & { id?: string }): Promise<Manufacturer> {
@@ -2884,22 +2979,26 @@ export class DbStorage implements IStorage {
     const [m] = await db.update(manufacturers).set(rest).where(eq(manufacturers.id, id)).returning();
     return m;
   }
-  async deleteManufacturer(id: string): Promise<void> {
-    await db.delete(manufacturers).where(eq(manufacturers.id, id));
+  async deleteManufacturer(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("manufacturer", id, userId ?? null);
   }
 
   // ----- Fulfillment partner ENTITY CRUD (Task #69) -------------------
   async getFulfillmentPartners(): Promise<FulfillmentPartner[]> {
-    return await db.select().from(fulfillmentPartners).orderBy(asc(fulfillmentPartners.name));
+    return await db.select().from(fulfillmentPartners)
+      .where(isNull(fulfillmentPartners.deletedAt))
+      .orderBy(asc(fulfillmentPartners.name));
   }
   async getFulfillmentPartnerById(id: string): Promise<FulfillmentPartner | undefined> {
-    const [f] = await db.select().from(fulfillmentPartners).where(eq(fulfillmentPartners.id, id));
+    const [f] = await db.select().from(fulfillmentPartners)
+      .where(and(eq(fulfillmentPartners.id, id), isNull(fulfillmentPartners.deletedAt)));
     return f;
   }
   async getFulfillmentPartnerByDomain(domain: string): Promise<FulfillmentPartner | undefined> {
     const d = (domain ?? "").trim().toLowerCase().replace(/^www\./, "");
     if (!d) return undefined;
-    const [f] = await db.select().from(fulfillmentPartners).where(eq(fulfillmentPartners.domain, d));
+    const [f] = await db.select().from(fulfillmentPartners)
+      .where(and(eq(fulfillmentPartners.domain, d), isNull(fulfillmentPartners.deletedAt)));
     return f;
   }
   async createFulfillmentPartner(data: InsertFulfillmentPartner & { id?: string }): Promise<FulfillmentPartner> {
@@ -2912,8 +3011,8 @@ export class DbStorage implements IStorage {
     const [f] = await db.update(fulfillmentPartners).set(rest).where(eq(fulfillmentPartners.id, id)).returning();
     return f;
   }
-  async deleteFulfillmentPartner(id: string): Promise<void> {
-    await db.delete(fulfillmentPartners).where(eq(fulfillmentPartners.id, id));
+  async deleteFulfillmentPartner(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("fulfillment_partner", id, userId ?? null);
   }
 
   // ----- RFQ flow (Task #69) ------------------------------------------
@@ -3303,7 +3402,7 @@ export class DbStorage implements IStorage {
     return await db
       .select({ id: people.id, name: people.name, photoUrl: people.photoUrl })
       .from(people)
-      .where(sql`lower(${people.name}) LIKE ${like}`)
+      .where(and(sql`lower(${people.name}) LIKE ${like}`, isNull(people.deletedAt)))
       .orderBy(asc(people.name))
       .limit(limit);
   }
@@ -3312,7 +3411,10 @@ export class DbStorage implements IStorage {
     return await db
       .select({ id: vendors.id, name: vendors.name, isMaker: vendors.isMaker, isReseller: vendors.isReseller })
       .from(vendors)
-      .where(sql`lower(${vendors.name}) LIKE ${like} OR lower(coalesce(${vendors.domain}, '')) LIKE ${like}`)
+      .where(and(
+        sql`lower(${vendors.name}) LIKE ${like} OR lower(coalesce(${vendors.domain}, '')) LIKE ${like}`,
+        isNull(vendors.deletedAt),
+      ))
       .orderBy(asc(vendors.name))
       .limit(limit);
   }
@@ -3321,7 +3423,7 @@ export class DbStorage implements IStorage {
     return await db
       .select({ id: labels.id, name: labels.name })
       .from(labels)
-      .where(sql`lower(${labels.name}) LIKE ${like}`)
+      .where(and(sql`lower(${labels.name}) LIKE ${like}`, isNull(labels.deletedAt)))
       .orderBy(asc(labels.name))
       .limit(limit);
   }
@@ -3330,7 +3432,10 @@ export class DbStorage implements IStorage {
     return await db
       .select({ id: albums.id, title: albums.title, artist: albums.artist })
       .from(albums)
-      .where(sql`(lower(${albums.title}) LIKE ${like} OR lower(${albums.artist}) LIKE ${like}) AND ${albums.isGoodTunesRelease} = true`)
+      .where(and(
+        sql`(lower(${albums.title}) LIKE ${like} OR lower(${albums.artist}) LIKE ${like}) AND ${albums.isGoodTunesRelease} = true`,
+        isNull(albums.deletedAt),
+      ))
       .orderBy(asc(albums.title))
       .limit(limit);
   }
@@ -3339,7 +3444,7 @@ export class DbStorage implements IStorage {
     return await db
       .select({ id: instruments.id, name: instruments.name, category: instruments.shortCategory })
       .from(instruments)
-      .where(sql`lower(${instruments.name}) LIKE ${like}`)
+      .where(and(sql`lower(${instruments.name}) LIKE ${like}`, isNull(instruments.deletedAt)))
       .orderBy(asc(instruments.name))
       .limit(limit);
   }
@@ -3359,7 +3464,7 @@ export class DbStorage implements IStorage {
     return await db
       .select({ id: manufacturers.id, name: manufacturers.name })
       .from(manufacturers)
-      .where(sql`lower(${manufacturers.name}) LIKE ${like}`)
+      .where(and(sql`lower(${manufacturers.name}) LIKE ${like}`, isNull(manufacturers.deletedAt)))
       .orderBy(asc(manufacturers.name))
       .limit(limit);
   }
@@ -3368,7 +3473,7 @@ export class DbStorage implements IStorage {
     return await db
       .select({ id: fulfillmentPartners.id, name: fulfillmentPartners.name })
       .from(fulfillmentPartners)
-      .where(sql`lower(${fulfillmentPartners.name}) LIKE ${like}`)
+      .where(and(sql`lower(${fulfillmentPartners.name}) LIKE ${like}`, isNull(fulfillmentPartners.deletedAt)))
       .orderBy(asc(fulfillmentPartners.name))
       .limit(limit);
   }
@@ -3403,7 +3508,11 @@ export class DbStorage implements IStorage {
       })
       .from(songs)
       .innerJoin(albums, eq(songs.albumId, albums.id))
-      .where(sql`lower(${songs.title}) LIKE ${like} AND ${albums.isGoodTunesRelease} = true`)
+      .where(and(
+        sql`lower(${songs.title}) LIKE ${like} AND ${albums.isGoodTunesRelease} = true`,
+        isNull(songs.deletedAt),
+        isNull(albums.deletedAt),
+      ))
       .orderBy(asc(songs.title))
       .limit(limit);
   }

@@ -1212,3 +1212,47 @@ SQL
 }
 migrate_press_catalog dev  "${DATABASE_URL:-}"
 migrate_press_catalog prod "${PROD_DATABASE_URL:-}"
+
+# Task #475 — Soft-delete columns. Every admin-deletable table grew a
+# trio of nullable columns (deleted_at, deleted_by_user_id,
+# deleted_via_parent_id) so Delete becomes a soft-flip surfaced on
+# /admin/trash for 30 days; a daily sweeper hard-deletes anything past
+# the TTL. Idempotent — re-running this on a DB that already has the
+# columns is a no-op.
+migrate_soft_delete() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping soft_delete migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'albums','songs','album_videos','album_photos','album_credits',
+    'people','band_members','instruments','labels','vendors',
+    'manufacturers','fulfillment_partners','track_writers','track_performers'
+  ] LOOP
+    EXECUTE format(
+      'ALTER TABLE IF EXISTS %I
+         ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
+         ADD COLUMN IF NOT EXISTS deleted_by_user_id VARCHAR,
+         ADD COLUMN IF NOT EXISTS deleted_via_parent_id VARCHAR', t);
+    EXECUTE format(
+      'CREATE INDEX IF NOT EXISTS %I ON %I (deleted_at) WHERE deleted_at IS NOT NULL',
+      t || '_deleted_at_idx', t);
+  END LOOP;
+END $$;
+COMMIT;
+SQL
+  then
+    echo "post-merge: soft_delete migration ok on $label"
+  else
+    echo "post-merge: WARNING — soft_delete migration failed on $label (continuing)"
+  fi
+}
+migrate_soft_delete dev  "${DATABASE_URL:-}"
+migrate_soft_delete prod "${PROD_DATABASE_URL:-}"

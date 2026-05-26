@@ -4,6 +4,24 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { SignedCertLadderRung } from "./signedCertLadder";
 
+// Task #475 — 30-day soft-delete Trash. Every admin-deletable entity
+// (albums, songs, people, vendors, instruments, labels, manufacturers,
+// fulfillment partners, album bonus content, track/album credits, band
+// members) carries this trio of columns. `deletedAt` stamps when the
+// admin deleted the row; rows with `deletedAt IS NOT NULL` are filtered
+// out of every list/detail read path and only visible on /admin/trash.
+// `deletedByUserId` is the admin user who pressed Delete (for the audit
+// row); `deletedViaParentId` is set when the row was soft-deleted as a
+// cascade of a soft-deleted parent (album → songs/videos/photos/credits;
+// song → track_writers/track_performers; person → band_members) so the
+// trash UI only surfaces root deletions and restoring a parent restores
+// its children. A daily sweeper hard-deletes anything older than 30 days.
+export const softDeleteCols = {
+  deletedAt: timestamp("deleted_at"),
+  deletedByUserId: varchar("deleted_by_user_id"),
+  deletedViaParentId: varchar("deleted_via_parent_id"),
+};
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -59,6 +77,7 @@ export const labels = pgTable("labels", {
   // Nullable + SET NULL so deleting a press doesn't orphan the label.
   invitedByPressId: varchar("invited_by_press_id"),
   createdAt: timestamp("created_at").defaultNow(),
+  ...softDeleteCols,
 });
 
 export const albums = pgTable("albums", {
@@ -247,6 +266,7 @@ export const albums = pgTable("albums", {
   // by Tasks #400/#402/#403/#404 to reconnect legacy assets. Nullable;
   // populated only for rows that came in via the legacy export.
   legacyGogoodsId: text("legacy_gogoods_id"),
+  ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
@@ -333,6 +353,7 @@ export const albumVideos = pgTable("album_videos", {
   // Bill can copy/open the original. Never shown fan-side.
   sourceUrl: text("source_url"),
   position: integer("position").notNull().default(0),
+  ...softDeleteCols,
 });
 
 export const albumPhotos = pgTable("album_photos", {
@@ -344,6 +365,7 @@ export const albumPhotos = pgTable("album_photos", {
   // Optional caption rendered under the photo on the fan-side gallery.
   caption: text("caption"),
   position: integer("position").notNull().default(0),
+  ...softDeleteCols,
 });
 
 export const songs = pgTable("songs", {
@@ -481,6 +503,7 @@ export const songs = pgTable("songs", {
   audioSourceChannels: integer("audio_source_channels"),
   audioSourceBytes: integer("audio_source_bytes"),
   legacyGogoodsId: text("legacy_gogoods_id"),
+  ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("songs_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
@@ -684,6 +707,7 @@ export const people = pgTable("people", {
   isGroup: boolean("is_group").notNull().default(false),
   groupKind: text("group_kind"),
   legacyGogoodsId: text("legacy_gogoods_id"),
+  ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("people_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
@@ -706,6 +730,7 @@ export const bandMembers = pgTable("band_members", {
   joinedYear: integer("joined_year"),
   leftYear: integer("left_year"),
   displayOrder: integer("display_order").notNull().default(0),
+  ...softDeleteCols,
 });
 
 // Task #190 — Per-album lineup snapshot. When an album's primary artist
@@ -800,6 +825,7 @@ export const instruments = pgTable("instruments", {
   // from `instrument_vendors.affiliate_url` — that table holds the N
   // resellers; this column is the *one* page the gear came from.
   sourceUrl: text("source_url"),
+  ...softDeleteCols,
 });
 
 // Real-world vendor entity. One row per partner (Carter Vintage, Reverb,
@@ -859,6 +885,7 @@ export const vendors = pgTable("vendors", {
   location: text("location"),
   coverUrl: text("cover_url"),
   createdAt: timestamp("created_at").defaultNow(),
+  ...softDeleteCols,
 }, (table) => ({
   // Task #174 — a vendor row with both flags off is invisible to both
   // index pages. The DB-level CHECK is the truth; the API guard in
@@ -911,6 +938,7 @@ export const trackWriters = pgTable("track_writers", {
   name: text("name").notNull(),
   role: text("role").notNull(), // "Composer" / "Lyricist" / "Producer"
   position: integer("position").notNull().default(0),
+  ...softDeleteCols,
 });
 
 export const trackPerformers = pgTable("track_performers", {
@@ -922,6 +950,7 @@ export const trackPerformers = pgTable("track_performers", {
   role: text("role").notNull(), // "Guitar" / "Bass" / "Composer · Violin"
   tuningNotes: text("tuning_notes"), // "DADGAD", "Dropped D, capo 3"
   position: integer("position").notNull().default(0),
+  ...softDeleteCols,
 });
 
 // Album-wide production credits — Producer / Mixed by / Mastered by /
@@ -940,6 +969,7 @@ export const albumCredits = pgTable("album_credits", {
   name: text("name").notNull(),
   role: text("role").notNull(),
   position: integer("position").notNull().default(0),
+  ...softDeleteCols,
 });
 
 // ----- Organizations (labels-publishers as legal entities) --------------
@@ -2488,6 +2518,7 @@ export const manufacturers = pgTable("manufacturers", {
     { onDelete: "set null" },
   ),
   createdAt: timestamp("created_at").defaultNow(),
+  ...softDeleteCols,
 });
 
 export const fulfillmentPartners = pgTable("fulfillment_partners", {
@@ -2506,6 +2537,7 @@ export const fulfillmentPartners = pgTable("fulfillment_partners", {
   // label themselves). Optional while onboarding.
   shippingAddress: text("shipping_address"),
   createdAt: timestamp("created_at").defaultNow(),
+  ...softDeleteCols,
 });
 
 // One open quote request from a label/artist out to N manufacturers.

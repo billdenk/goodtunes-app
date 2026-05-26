@@ -42,6 +42,7 @@ import { AdminInstrument } from "@/pages/AdminInstrument";
 import { AdminVendors } from "@/pages/AdminVendors";
 import { AdminVendor } from "@/pages/AdminVendor";
 import { AdminLabels } from "@/pages/AdminLabels";
+import AdminTrash from "@/pages/AdminTrash";
 import { AdminLabel } from "@/pages/AdminLabel";
 import { AdminManufacturers } from "@/pages/AdminManufacturers";
 import { AdminManufacturer } from "@/pages/AdminManufacturer";
@@ -439,6 +440,11 @@ function Router() {
             caller's role isn't super_admin. */}
         <Route path="/admin/platform-pricing">
           <ProtectedRoute component={AdminPlatformPricing} />
+        </Route>
+        {/* Task #475 — Soft-delete trash. Page self-gates on super_admin
+            via /api/admin/trash returning 403 for everyone else. */}
+        <Route path="/admin/trash">
+          <ProtectedRoute component={AdminTrash} />
         </Route>
         {/* Bare /admin used to render the legacy 3-column monolith. We now
             redirect straight into the new Albums index so anyone who lands
