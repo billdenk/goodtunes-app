@@ -80,10 +80,7 @@ export function InvitedByPressPanel({
   }, [presses, query]);
 
   return (
-    <div
-      className="rounded-2xl border border-slate-200 bg-white p-5"
-      data-testid="panel-invited-by-press"
-    >
+    <div data-testid="panel-invited-by-press">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-slate-900 inline-flex items-center gap-1.5">
           <Lock className="w-3.5 h-3.5 text-slate-400" /> Invited by press

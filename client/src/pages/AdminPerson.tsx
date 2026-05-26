@@ -1673,7 +1673,7 @@ function ReferralSummaryPanel({ kind, id }: { kind: "artist" | "non_profit"; id:
     !hasProvenance
   ) return null;
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5" data-testid="panel-referral-summary">
+    <div data-testid="panel-referral-summary">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-slate-900">Referral credits</h3>
         <span className="text-[11px] uppercase tracking-wide font-semibold text-[#FF5470]">$1 per unit</span>
