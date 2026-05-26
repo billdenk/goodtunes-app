@@ -304,6 +304,57 @@ SQL
 migrate_task_471_quickprinter dev  "${DATABASE_URL:-}"
 migrate_task_471_quickprinter prod "${PROD_DATABASE_URL:-}"
 
+# Task #481 — payout_settings platform-default GoodDeed vendor columns.
+# Same three columns the Task #471 block above tries to add, but split
+# into their own transactional block so they don't get rolled back when
+# the rest of the #471 migration fails on a DB that's missing the
+# vendor_gooddeed_services table (the whole BEGIN/COMMIT rolls back as
+# one unit; that's exactly how both dev and prod ended up without these
+# columns even though the #471 block "ran"). shared/schema.ts depends
+# on them for every payout_settings query, so missing them 500s the
+# album editor save and the Platform Pricing page.
+migrate_payout_settings_vendor_defaults() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping payout_settings vendor-defaults migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE payout_settings
+  ADD COLUMN IF NOT EXISTS default_print_vendor_id     varchar,
+  ADD COLUMN IF NOT EXISTS default_hologram_vendor_id  varchar,
+  ADD COLUMN IF NOT EXISTS default_insertion_vendor_id varchar;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payout_settings_default_print_vendor_id_vendors_id_fk') THEN
+    ALTER TABLE payout_settings
+      ADD CONSTRAINT payout_settings_default_print_vendor_id_vendors_id_fk
+      FOREIGN KEY (default_print_vendor_id) REFERENCES vendors(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payout_settings_default_hologram_vendor_id_vendors_id_fk') THEN
+    ALTER TABLE payout_settings
+      ADD CONSTRAINT payout_settings_default_hologram_vendor_id_vendors_id_fk
+      FOREIGN KEY (default_hologram_vendor_id) REFERENCES vendors(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payout_settings_default_insertion_vendor_id_vendors_id_fk') THEN
+    ALTER TABLE payout_settings
+      ADD CONSTRAINT payout_settings_default_insertion_vendor_id_vendors_id_fk
+      FOREIGN KEY (default_insertion_vendor_id) REFERENCES vendors(id) ON DELETE SET NULL;
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  then
+    echo "post-merge: payout_settings vendor-defaults migration ok on $label"
+  else
+    echo "post-merge: WARNING — payout_settings vendor-defaults migration failed on $label (continuing)"
+  fi
+}
+migrate_payout_settings_vendor_defaults dev  "${DATABASE_URL:-}"
+migrate_payout_settings_vendor_defaults prod "${PROD_DATABASE_URL:-}"
+
 # Task #294 — shared per-entity contacts table + LinkedIn URL on people.
 # The same Add-a-contact surface now ships on vendor / press / label /
 # fulfillment detail pages and they all write here. NPOs keep using the
