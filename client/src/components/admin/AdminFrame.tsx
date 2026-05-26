@@ -550,7 +550,7 @@ export function AdminFrame({
                   list, so we pass -1 to suppress the count. */}
               <SidebarLink
                 icon={Factory}
-                label="Pressing orders"
+                label="Press Orders"
                 count={-1}
                 active={active === "pressing-orders"}
                 onClick={() => navigate("/admin/pressing-orders")}

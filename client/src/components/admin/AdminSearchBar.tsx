@@ -71,7 +71,7 @@ const NAV_PAGES: SearchResult[] = [
   { kind: "page", id: "makers", title: "Makers", badge: "Page", href: "/admin/makers" },
   { kind: "page", id: "vendors", title: "Resellers", badge: "Page", href: "/admin/vendors" },
   { kind: "page", id: "fulfillment", title: "Fulfillment", badge: "Page", href: "/admin/fulfillment-partners" },
-  { kind: "page", id: "pressing-orders", title: "Pressing orders", badge: "Page", href: "/admin/pressing-orders" },
+  { kind: "page", id: "pressing-orders", title: "Press Orders", badge: "Page", href: "/admin/pressing-orders" },
   { kind: "page", id: "fan-orders", title: "Fan orders", badge: "Page", href: "/admin/fan-orders" },
   { kind: "page", id: "jobs", title: "Jobs", badge: "Page", href: "/admin/jobs" },
   { kind: "page", id: "customers", title: "Customers", badge: "Page", href: "/admin/customers" },
@@ -133,7 +133,7 @@ const GROUP_ORDER: Array<{ key: keyof ServerPayload | "pages"; label: string }> 
   { key: "songs", label: "Songs" },
   { key: "playlists", label: "Playlists" },
   { key: "fanOrders", label: "Fan orders" },
-  { key: "pressingOrders", label: "Pressing orders" },
+  { key: "pressingOrders", label: "Press Orders" },
 ];
 
 export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?: boolean } = {}) {

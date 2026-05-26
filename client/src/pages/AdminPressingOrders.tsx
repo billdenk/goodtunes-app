@@ -79,7 +79,7 @@ export function AdminPressingOrders() {
         <div className="flex items-end justify-between gap-4 mb-5">
           <div>
             <h1 className="text-[22px] font-bold text-slate-900 tracking-tight">
-              Pressing orders
+              Press Orders
             </h1>
             <p className="text-[13px] text-slate-500 mt-1">
               Artist-submitted "Go to Press!" requests awaiting GoodTunes review.
