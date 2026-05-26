@@ -2927,11 +2927,6 @@ function GoodDeedPill({
   // Cost/unit subtotal, and the Floor $ guardrail (moved out of the
   // primary pricing column so it doesn't compete with Retail Price).
   const [breakdownOpen, setBreakdownOpen] = useState(false);
-  // Per-vendor leg costs live in a secondary disclosure beneath the
-  // two-column card so vendor routing stays one click away without
-  // interrupting the Retail / Qty / Profit / Total flow.
-  const [vendorsOpen, setVendorsOpen] = useState(false);
-
   // Resolve initial % choice from the stored plannedQuantity ÷ vinylQty.
   // If it doesn't snap to one of the canned options we surface "Other…"
   // with the exact percentage pre-filled. Vinyl rows with no qty fall
@@ -3518,86 +3513,6 @@ function GoodDeedPill({
             </div>
           </div>
 
-          {/* Per-vendor cost — secondary disclosure beneath the
-              two-column card. Operational detail (which press / hologram
-              vendor / insertion vendor runs each leg + their per-unit
-              cost) stays one click away without competing with Retail /
-              Qty / Profit / Total. Per the partner-permissions rule,
-              vendor routing is editable even after first sale — only
-              fan-facing metadata (price/min/qty on the addon itself)
-              respects the edit_metadata lock. */}
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => setVendorsOpen((o) => !o)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
-              aria-expanded={vendorsOpen}
-              data-testid="button-toggle-gooddeed-vendors"
-            >
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                Per-vendor cost
-              </span>
-              <ChevronDown
-                className={[
-                  "w-3.5 h-3.5 text-slate-400 transition-transform",
-                  vendorsOpen ? "rotate-180" : "",
-                ].join(" ")}
-              />
-            </button>
-            {vendorsOpen && (
-              <div
-                className="mt-2 rounded-md bg-slate-50 border border-slate-200 p-2.5 space-y-1"
-                data-testid="block-gooddeed-vendors"
-              >
-                {(["printing", "hologram", "insertion"] as const).map((svc) => {
-                  const leg = preview?.legs?.[svc];
-                  if (!leg) {
-                    return (
-                      <div
-                        key={svc}
-                        className="flex items-center justify-between text-xs"
-                        data-testid={`row-gooddeed-leg-${svc}`}
-                      >
-                        <span className="text-slate-600 capitalize">{svc}</span>
-                        <span className="text-slate-400">—</span>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div
-                      key={svc}
-                      className="flex items-center justify-between text-xs tabular-nums"
-                      data-testid={`row-gooddeed-leg-${svc}`}
-                    >
-                      <span className="text-slate-700">
-                        <span className="capitalize text-slate-500 mr-1.5">
-                          {svc}
-                        </span>
-                        {leg.vendorName ?? "—"}
-                      </span>
-                      <span className="text-slate-900">
-                        {dollars(leg.perUnitCents)}
-                      </span>
-                    </div>
-                  );
-                })}
-                {preview && (
-                  <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1.5 mt-1 tabular-nums">
-                    <span className="text-slate-700">
-                      Wholesale · {dollars(preview.totalPerUnitCents)} ×{" "}
-                      {resolvedQty.toLocaleString()}
-                    </span>
-                    <span
-                      className="text-slate-900"
-                      data-testid="text-gooddeed-vendors-total"
-                    >
-                      {dollars(preview.totalPerUnitCents * resolvedQty)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>
