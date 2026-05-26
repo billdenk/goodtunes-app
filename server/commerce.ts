@@ -374,11 +374,19 @@ async function getOrderItems(orderId: string): Promise<OrderItemWithVinyl[]> {
 // which is monotonic — refunds leave gaps. Acceptable trade-off vs.
 // the user-confusing "your number changed" problem.
 async function assignNextGoodDeedNumber(albumId: string): Promise<number> {
-  const [row] = await db
-    .select({ max: sql<number>`COALESCE(MAX(${orders.goodDeedNumber}), 0)` })
-    .from(orders)
-    .where(eq(orders.albumId, albumId));
-  return Number(row?.max ?? 0) + 1;
+  // Floor = max(goodDeedNumber across paid orders, certificateNumber
+  // across owned user_albums). The user_albums leg matters because the
+  // gogoods.com importer (Task #398) stamps the legacy collectible
+  // index into `user_albums.certificateNumber` for owned-but-no-paid-
+  // order rows; without considering it here we could mint a duplicate
+  // GoodDeed number on the next real sale.
+  const [row] = await db.execute(sql<{ max: number }>`
+    SELECT GREATEST(
+      COALESCE((SELECT MAX(${orders.goodDeedNumber}) FROM ${orders} WHERE ${orders.albumId} = ${albumId}), 0),
+      COALESCE((SELECT MAX(${userAlbums.certificateNumber}) FROM ${userAlbums} WHERE ${userAlbums.albumId} = ${albumId}), 0)
+    ) AS max
+  `);
+  return Number((row as any)?.max ?? 0) + 1;
 }
 
 // ─── Stripe Customer / address backfill ───────────────────────────────

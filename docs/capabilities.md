@@ -116,6 +116,7 @@ The third-party services GoodTunes already runs against in production.
 
 ---
 
+- **gogoods.com legacy catalog + fan base imported.** An idempotent admin importer (`scripts/import-gogoods.ts`) walks the eight-CSV PostgreSQL export from gogoods.com into GoodTunes: 44 artists, 64 releases (with the 5 pre-existing albums deduped onto the live rows, not duplicated), 633 audio recordings + 39 album videos, 2,692 returning fans, 2,724 owned albums (collectibles), and 2,713 completed Stripe orders — every row stamped with a `legacy_gogoods_id` so re-runs are no-ops and any imported record traces back to its source. Standalone Singles / Videos arrive hidden + flagged `isGoodTunesRelease=false` so the editorial team decides whether to promote them; per-album GoodDeed counters pick up where gogoods left off because the original collectible index is carried into `orders.goodDeedNumber`.
 - **Admin access guard + promote-from-customers.** A signed-in fan who lands on `admin.goodtunes.music` sees a branded "access not authorized" modal instead of a silent bounce, and every super-admin gets one email per requester (24h dedupe) so the "we'll be in touch" copy is honest. Super-admins can now promote any existing customer in place from the Admin → Customers row — same email, same password, no second account — into any partner role (super_admin / label / artist / manufacturer / fulfillment / non_profit / vendor + scope).
 
 ## Coming next

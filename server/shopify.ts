@@ -323,11 +323,19 @@ function snapshotAddress(a: ShopifyAddress | null | undefined) {
 // fan with GoodDeed #42 doesn't care whether they bought on Shopify or
 // goodtunes.music, the number is the number.
 async function assignNextGoodDeedNumberForAlbum(albumId: string): Promise<number> {
-  const [{ max }] = await db
-    .select({ max: sql<number>`COALESCE(MAX(${orders.goodDeedNumber}), 0)` })
-    .from(orders)
-    .where(eq(orders.albumId, albumId));
-  return Number(max ?? 0) + 1;
+  // Floor = max(goodDeedNumber across paid orders, certificateNumber
+  // across owned user_albums). The user_albums leg matters because the
+  // gogoods.com importer (Task #398) stamps the legacy collectible
+  // index into `user_albums.certificateNumber` for owned-but-no-paid-
+  // order rows; without considering it here Shopify-sourced sales could
+  // mint a duplicate GoodDeed number on the next purchase.
+  const [row] = await db.execute(sql<{ max: number }>`
+    SELECT GREATEST(
+      COALESCE((SELECT MAX(${orders.goodDeedNumber}) FROM ${orders} WHERE ${orders.albumId} = ${albumId}), 0),
+      COALESCE((SELECT MAX(${userAlbums.certificateNumber}) FROM ${userAlbums} WHERE ${userAlbums.albumId} = ${albumId}), 0)
+    ) AS max
+  `);
+  return Number((row as any)?.max ?? 0) + 1;
 }
 
 // Find-or-create a stub customer_users row keyed on email. Shopify hands
