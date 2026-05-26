@@ -143,7 +143,7 @@ export function AdminFrame({
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   // Opt every admin route that uses this frame into the light theme by
   // tagging <body>. The matching `body.gt-admin` rule in index.css
@@ -154,12 +154,20 @@ export function AdminFrame({
   // this, pages like Reports/Jobs that don't add the class themselves
   // fall back to the fan-player dark tokens and render with a black
   // active tab pill, dark date inputs, and a dark "Try again" button.
+  //
+  // Task #425 — Re-apply on every location change and NEVER remove on
+  // unmount. The synchronous bootstrap in main.tsx handles the very
+  // first paint, but a wouter transition that briefly unmounts
+  // AdminFrame between two admin pages (or an HMR refresh) would
+  // otherwise run a cleanup that strips the class and re-introduces
+  // the dark fan-player gradient flash. The pre-React handoff in
+  // main.tsx + this idempotent re-apply guarantee `body.gt-admin`
+  // stays attached for the entire time the URL is on an admin route;
+  // it's harmless to leave attached afterwards because the customer
+  // shell on a hard navigation reloads the page and resets <body>.
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => {
-      document.body.classList.remove("gt-admin");
-    };
-  }, []);
+  }, [location]);
 
   // Toggle state for the right preview pane. Persisted so once you tuck
   // it away it stays tucked across navigations / refreshes — matches
