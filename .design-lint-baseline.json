@@ -5966,6 +5966,36 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumTitleDialog.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumTitleDialog.tsx",
+    "snippet": "<DialogDescription className=\"text-[12.5px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumTitleDialog.tsx",
+    "snippet": "className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumTitleDialog.tsx",
+    "snippet": "className=\"w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumTitleDialog.tsx",
+    "snippet": "className=\"h-9 px-3 rounded-md border border-slate-300 bg-white text-slate-700 text-[12.5px] font-semibold hover:bg-slate-50 disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumTitleDialog.tsx",
+    "snippet": "className=\"h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PartnerPermissionsPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Partner permissions</h2>"
   },
@@ -6657,11 +6687,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Selling through Shopify</div>"
   },
   {
@@ -6692,12 +6717,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-slate-400 text-[11px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"w-28 text-right tabular-nums text-[13.5px] text-slate-700\""
+    "snippet": "\"w-28 text-right tabular-nums text-[13.5px]\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -6718,11 +6738,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<span className=\"text-slate-400 text-[11.5px]\">Stock</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "\"w-28 text-right tabular-nums text-[13.5px]\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -6768,6 +6783,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<span className=\"text-slate-400 text-[11px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SellPanel.tsx",
+    "snippet": "className=\"w-28 text-right tabular-nums text-[13.5px] text-slate-700\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -10137,11 +10157,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<p className=\"text-[12.5px] text-slate-500 mt-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<p className=\"text-[12.5px] text-slate-500 mt-0.5\">"
   },
   {
@@ -10152,12 +10167,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50\""
+    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11547,46 +11562,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<span className=\"text-[11.5px] text-slate-400\">Not offered</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500\">No tiers yet — add one to start.</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "className=\"h-8 px-3 text-[12px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<span className=\"block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "className={INPUT + \" min-h-[80px] py-2 font-mono text-[12px]\"}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-400 mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "className=\"flex items-center gap-2 text-[12.5px] text-slate-700\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-400\">No colors yet.</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<span className=\"block text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1\">"
   },
   {
@@ -12133,11 +12108,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50\""
   },
   {
     "rule": "brand-hex-literal",

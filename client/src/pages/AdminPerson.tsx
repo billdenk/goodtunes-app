@@ -32,6 +32,7 @@ import {
   type PersonPreviewAlbum,
 } from "@/components/admin/previews/PersonPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
@@ -1151,6 +1152,12 @@ function ReleasesPanel({
 }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  // Task #468 — name the album up-front instead of shipping a "New album"
+  // placeholder. The title dialog opens after "+ Add Album"; on submit we
+  // fire the create POST with the typed title. The smart-back hand-off
+  // (`?from=person&personId=…`) also lets the Album page's delete handler
+  // return here when the operator deletes this shell.
+  const [titleDialogOpen, setTitleDialogOpen] = useState(false);
   // Task #447 — "+ Add Album" on the artist's profile skips the
   // "Who's the artist?" gate from Task #445 entirely: we already know
   // the artist, so create the GoodTunes shell with primaryArtistId
@@ -1158,9 +1165,9 @@ function ReleasesPanel({
   // the createAlbum mutation on AdminAlbums.tsx (same endpoint, same
   // defaults, same `?onboarding=1` landing).
   const createAlbum = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (args: { title: string }) => {
       const res = await apiRequest("POST", "/api/admin/albums", {
-        title: "New album",
+        title: args.title,
         artist: person.name,
         artwork: "/album-placeholder.svg",
         type: "LP",
@@ -1173,7 +1180,12 @@ function ReleasesPanel({
     onSuccess: (a) => {
       queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
       queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
-      navigate(`/admin/albums/${a.id}?onboarding=1`);
+      setTitleDialogOpen(false);
+      // Carry the person id forward so the Album page's delete handler
+      // can land the operator back here on success.
+      navigate(
+        `/admin/albums/${a.id}?onboarding=1&from=person&personId=${person.id}`,
+      );
     },
     onError: (err: any) => {
       toast({
@@ -1272,7 +1284,7 @@ function ReleasesPanel({
             disabled={createAlbum.isPending}
             onClick={() => {
               if (createAlbum.isPending) return;
-              createAlbum.mutate();
+              setTitleDialogOpen(true);
             }}
             className="px-2.5 h-8 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-new-album-for-person"
@@ -1299,7 +1311,10 @@ function ReleasesPanel({
             {filtered.map((r) => (
               <Link
                 key={r.id}
-                href={`/admin/albums/${r.id}`}
+                // Task #468 — carry the person id forward so the Album
+                // page's delete handler can land the operator back on
+                // this Person page on success (smart-back convention).
+                href={`/admin/albums/${r.id}?from=person&personId=${person.id}`}
                 className="text-left group"
                 data-testid={`release-row-${r.id}`}
               >
@@ -1335,6 +1350,19 @@ function ReleasesPanel({
           </div>
         )}
       </div>
+      <NewAlbumTitleDialog
+        open={titleDialogOpen}
+        onOpenChange={(next) => {
+          if (createAlbum.isPending && !next) return;
+          setTitleDialogOpen(next);
+        }}
+        artistName={person.name}
+        busy={createAlbum.isPending}
+        onSubmit={(title) => {
+          if (createAlbum.isPending) return;
+          createAlbum.mutate({ title });
+        }}
+      />
     </Card>
   );
 }

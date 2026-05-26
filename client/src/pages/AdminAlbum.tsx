@@ -401,7 +401,21 @@ export function AdminAlbum() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
       toast({ title: "Album deleted." });
       setDeleteConfirmOpen(false);
-      navigate("/admin/albums");
+      // Task #468 — smart-back: when the operator arrived from a Person
+      // page (`?from=person&personId=…`), return them to that Person
+      // instead of dumping them on the global Albums list. Falls back
+      // to `/admin/albums` for direct links + the canonical entry.
+      let returnTo = "/admin/albums";
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        if (sp.get("from") === "person") {
+          const personId = sp.get("personId");
+          if (personId) returnTo = `/admin/people/${personId}`;
+        }
+      } catch {
+        /* malformed query string — fall through to the default */
+      }
+      navigate(returnTo);
     },
     onError: (e: any) => {
       toast({

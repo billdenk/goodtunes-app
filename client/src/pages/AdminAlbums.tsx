@@ -21,6 +21,7 @@ import {
 } from "@/components/admin/ViewModeToggle";
 import { Combobox } from "@/components/admin/Combobox";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
+import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -98,6 +99,13 @@ export function AdminAlbums() {
   // while the album POST is in flight; the existing onSuccess navigate
   // unmounts this page, which tears the dialog down.
   const [artistDialogOpen, setArtistDialogOpen] = useState(false);
+  // Task #468 — second step: name the album. Holds the resolved artist
+  // (or null after "I'll set the artist later") between the artist
+  // dialog closing and the create POST firing.
+  const [titleDialogOpen, setTitleDialogOpen] = useState(false);
+  const [pendingArtist, setPendingArtist] = useState<
+    { name: string; id: string } | null
+  >(null);
   const { toast } = useToast();
 
   // Task #335 / #445 — "+ Add Album" opens the "Who's the artist?"
@@ -109,10 +117,11 @@ export function AdminAlbums() {
   // panel's ArtistPickerField stays the late-attach fallback.
   const createAlbum = useMutation({
     mutationFn: async (args: {
+      title: string;
       artist?: { name: string; id: string };
     }) => {
       const res = await apiRequest("POST", "/api/admin/albums", {
-        title: "New album",
+        title: args.title,
         artist: args.artist?.name || "Unknown artist",
         artwork: "/album-placeholder.svg",
         // Default `type` stays LP — the two-step modal sets the new
@@ -568,11 +577,34 @@ export function AdminAlbums() {
               mode="album"
               onSelect={({ name, id }) => {
                 if (createAlbum.isPending) return;
-                createAlbum.mutate({ artist: { name, id } });
+                // Task #468 — hand off to the title dialog. The artist
+                // dialog closes, the title dialog opens with the
+                // resolved artist echoed back as helper copy.
+                setPendingArtist({ name, id });
+                setArtistDialogOpen(false);
+                setTitleDialogOpen(true);
               }}
               onSkip={() => {
                 if (createAlbum.isPending) return;
-                createAlbum.mutate({});
+                setPendingArtist(null);
+                setArtistDialogOpen(false);
+                setTitleDialogOpen(true);
+              }}
+            />
+            <NewAlbumTitleDialog
+              open={titleDialogOpen}
+              onOpenChange={(next) => {
+                if (createAlbum.isPending && !next) return;
+                setTitleDialogOpen(next);
+              }}
+              artistName={pendingArtist?.name ?? null}
+              busy={createAlbum.isPending}
+              onSubmit={(title) => {
+                if (createAlbum.isPending) return;
+                createAlbum.mutate({
+                  title,
+                  artist: pendingArtist ?? undefined,
+                });
               }}
             />
           </>)}
