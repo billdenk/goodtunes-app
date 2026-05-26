@@ -31,6 +31,7 @@ import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { ViewAsSwitcher } from "@/components/admin/ViewAsSwitcher";
 import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
 import { MuxStatusBanner } from "@/components/admin/MuxStatusBanner";
+import { PlacesBanner as PlacesBannerSlot } from "@/components/admin/AddressAutocompleteField";
 import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
 import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
@@ -675,6 +676,7 @@ export function AdminFrame({
             ingests, large not-ingested backlog). Same passive +
             per-set-dismissible pattern as AutoSyncAlertBanner. */}
         <MuxStatusBanner />
+        <PlacesBannerSlot />
         <div
           className={[
             "mx-auto w-full px-6 sm:px-8 pt-6 pb-[120px]",

@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
+import { registerPlacesRoutes } from "./places";
 import { sql, and, eq } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders } from "@shared/schema";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
@@ -1589,6 +1590,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Admin super-admin grant/revoke ───────────────────────────────
+  registerPlacesRoutes(app, requireAdmin);
+
   app.get("/api/admin/admins", requireAdminBearer, async (_req, res) => {
     const list = await storage.listAdmins();
     return res.json(list);

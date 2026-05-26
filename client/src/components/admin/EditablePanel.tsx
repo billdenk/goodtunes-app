@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ArtistPickerField } from "./ArtistPickerField";
 import { Combobox } from "./Combobox";
+import { AddressAutocompleteField } from "./AddressAutocompleteField";
 
 /**
  * Shared in-place edit panel used across the new admin detail pages
@@ -26,7 +27,8 @@ export type FieldType =
   | "date"
   | "select"
   | "combobox"
-  | "artist-picker";
+  | "artist-picker"
+  | "address";
 
 export interface FieldOption {
   value: string;
@@ -544,6 +546,21 @@ function EditInput({
           value={value}
           onChange={onChange}
           optionsEndpoint={field.optionsEndpoint}
+          placeholder={field.placeholder}
+          testId={testId}
+        />
+      </div>
+    );
+  }
+
+  if (field.type === "address") {
+    return (
+      <div>
+        {baseLabel}
+        <AddressAutocompleteField
+          ref={inputRef as React.RefObject<HTMLInputElement> | undefined}
+          value={value}
+          onChange={onChange}
           placeholder={field.placeholder}
           testId={testId}
         />

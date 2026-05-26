@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { Button } from "@/components/ui/button";
@@ -323,11 +324,10 @@ function FpForm({
           />
         </Field>
         <Field label="Location">
-          <input
+          <AddressAutocompleteField
             value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            className={INPUT}
-            data-testid="input-fp-location"
+            onChange={setLocation}
+            testId="input-fp-location"
           />
         </Field>
         <Field label="Website">
@@ -365,12 +365,11 @@ function FpForm({
         </Field>
       </div>
       <Field label="Shipping address">
-        <input
+        <AddressAutocompleteField
           value={shippingAddress}
-          onChange={(e) => setShippingAddress(e.target.value)}
-          className={INPUT}
+          onChange={setShippingAddress}
           placeholder="Receiving dock address, single line"
-          data-testid="input-fp-shipping"
+          testId="input-fp-shipping"
         />
       </Field>
       <Field label="Notes">

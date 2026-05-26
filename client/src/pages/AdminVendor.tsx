@@ -992,7 +992,7 @@ function OverviewPanel({ vendor }: { vendor: Vendor }) {
           {
             key: "location",
             label: "Location",
-            type: "text",
+            type: "address",
             placeholder: "Nashville, TN",
           },
         ]}

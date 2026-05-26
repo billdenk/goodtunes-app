@@ -507,7 +507,7 @@ function OverviewPanel({ label }: { label: Label }) {
           {
             key: "location",
             label: "Location",
-            type: "text",
+            type: "address",
             placeholder: "Brooklyn, NY",
           },
           {

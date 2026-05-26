@@ -16,6 +16,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
@@ -439,7 +440,12 @@ function PartnerProfileForm({
           <input value={name} onChange={(e) => setName(e.target.value)} className={INPUT} data-testid="input-mfr-name" />
         </Field>
         <Field label="Location">
-          <input value={location} onChange={(e) => setLocation(e.target.value)} className={INPUT} placeholder="Berkeley, CA" data-testid="input-mfr-location" />
+          <AddressAutocompleteField
+            value={location}
+            onChange={setLocation}
+            placeholder="Berkeley, CA"
+            testId="input-mfr-location"
+          />
         </Field>
         <Field label="Website">
           <input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} className={INPUT} placeholder="https://example.com" data-testid="input-mfr-website" />
