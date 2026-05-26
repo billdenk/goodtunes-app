@@ -3593,10 +3593,9 @@ function GoodDeedPill({
                   photo + title row · "This certifies …" line ·
                   provenance paragraph · founder signature · QR).
                   Per-fan dynamic bits (owner name, serial #, QR)
-                  render as animated skeleton bars in white/15 so
-                  it's visually obvious they're placeholders the
-                  fan-issued cert fills in at sale time — not text
-                  the artist is expected to edit. */}
+                  render as static rounded bars in a mid-blue brand
+                  tone so it's obviously a template preview, not
+                  filled-in copy the artist is expected to edit. */}
               <div
                 className="px-3.5 pt-3 pb-3.5 text-white"
                 style={{ backgroundColor: "var(--brand-bg)" }}
@@ -3651,38 +3650,44 @@ function GoodDeedPill({
                     <p className="text-xs leading-snug font-semibold text-white">
                       This certifies that{" "}
                       <span
-                        className="inline-block align-middle h-3 w-20 rounded bg-white/20 animate-pulse"
+                        className="inline-block align-middle h-3 w-20 rounded-full bg-[color:var(--brand-blue)]/70"
                         aria-label="Owner name (filled in per fan)"
                         data-testid="skeleton-gooddeed-owner"
                       />{" "}
                       owns no.{" "}
                       <span
-                        className="inline-block align-middle h-3 w-7 rounded bg-white/20 animate-pulse"
+                        className="inline-block align-middle h-3 w-7 rounded-full bg-[color:var(--brand-blue)]/70"
                         aria-label="Certificate number (assigned at sale)"
                         data-testid="skeleton-gooddeed-serial"
                       />{" "}
                       of {albumTitle || "this release"}.
                     </p>
-                    {/* Body copy + signature are skeleton bars so the
+                    {/* Body copy rows are placeholder bars so the
                         whole navy strip reads as "cert template" rather
-                        than filled-in copy — matches AlbumDetailSkeleton. */}
+                        than filled-in copy. Static (no pulse) so it
+                        reads as a finished preview, not a loading state. */}
                     <div
                       className="space-y-1.5"
                       aria-label="Certificate body (filled in per fan)"
                       data-testid="skeleton-gooddeed-body"
                     >
-                      <div className="h-2 w-full rounded bg-white/15 animate-pulse" />
-                      <div className="h-2 w-11/12 rounded bg-white/15 animate-pulse" />
-                      <div className="h-2 w-9/12 rounded bg-white/15 animate-pulse" />
+                      <div className="h-2 w-full rounded-full bg-[color:var(--brand-blue)]/55" />
+                      <div className="h-2 w-11/12 rounded-full bg-[color:var(--brand-blue)]/55" />
+                      <div className="h-2 w-9/12 rounded-full bg-[color:var(--brand-blue)]/55" />
                     </div>
                     <div
                       className="pt-2"
                       aria-label="Founder signature"
-                      data-testid="skeleton-gooddeed-signature"
+                      data-testid="signature-gooddeed"
                     >
-                      <div className="h-3 w-20 rounded bg-white/20 animate-pulse" />
-                      <div className="border-t border-white/25 mt-1" />
-                      <div className="h-2 w-32 rounded bg-white/15 animate-pulse mt-1.5" />
+                      <img
+                        src="/founder-signature-white.png"
+                        alt="Founder signature"
+                        className="h-6 w-auto max-w-[7rem] object-contain object-left -mb-1 select-none"
+                        draggable={false}
+                      />
+                      <div className="border-t border-white/40 mt-0.5" />
+                      <div className="h-2 w-32 rounded-full bg-[color:var(--brand-blue)]/55 mt-1.5" />
                     </div>
                   </div>
                   {/* QR tile + caption. Stays a placeholder because
