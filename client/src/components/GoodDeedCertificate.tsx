@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, forwardRef, useMemo, type Ref } from "react";
 import { Album } from "@/data/musicData";
 import { useAuth } from "@/hooks/useAuth";
-import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 export interface ShareIdentities {
   realName?: string | null;
@@ -42,7 +41,7 @@ export function GoodDeedCertificate({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  const { updateProfile } = useAuth();
+  const { user, updateProfile } = useAuth();
 
   const safeIdx = Math.min(Math.max(activeIdx, 0), certs.length - 1);
 
@@ -327,6 +326,7 @@ export function GoodDeedCertificate({
                 ref={(el) => { cardRefs.current[i] = el; }}
                 album={album}
                 ownerName={displayedName}
+                ownerPhotoUrl={user?.photoUrl ?? null}
                 num={num}
               />
             ))}
@@ -399,66 +399,116 @@ interface CertCardProps {
   album: Album;
   ownerName: string;
   num: number;
+  ownerPhotoUrl?: string | null;
 }
 
 const CertCard = forwardRef(function CertCard(
-  { album, ownerName, num }: CertCardProps,
+  { album, ownerName, num, ownerPhotoUrl }: CertCardProps,
   ref: Ref<HTMLDivElement>,
 ) {
   const certNumStr = num.toString().padStart(2, "0");
+  const initial = (ownerName.replace(/^@/, "").trim()[0] || "?").toUpperCase();
   return (
     <div
       ref={ref}
-      className="flex-shrink-0 snap-start rounded-3xl overflow-hidden shadow-2xl mx-auto"
+      className="flex-shrink-0 snap-start rounded-3xl overflow-hidden mx-auto flex flex-col"
       style={{
-        width: "min(100%, calc((100dvh - 200px) * 9 / 16))",
-        aspectRatio: "9 / 16",
+        width: "min(92vw, calc((100dvh - 220px) / 1.36))",
+        aspectRatio: "1 / 1.36",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
-        backgroundColor: "#00062B",
-        backgroundImage: `url(${certBgUrl})`,
-        backgroundSize: "100% 100%",
-        backgroundRepeat: "no-repeat",
+        backgroundColor: "var(--brand-bg)",
       }}
     >
-      {/* Top: full-bleed artwork */}
-      <div className="relative w-full" style={{ height: "50%" }}>
-        <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
-        <div
-          className="absolute inset-0"
-          style={{ background: "linear-gradient(to bottom, transparent 70%, rgba(13,32,96,0.4) 100%)" }}
-        />
+      {/* Top: square album art, full-bleed */}
+      <div className="relative w-full aspect-square flex-shrink-0">
+        <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
       </div>
 
-      {/* Bottom: SVG ambient background shows through */}
+      {/* Bottom: navy band */}
       <div
-        className="relative w-full px-6 py-6 flex flex-col"
-        style={{ height: "50%" }}
+        className="relative w-full flex-1 px-5 py-4 flex flex-col"
+        style={{ backgroundColor: "var(--brand-bg)" }}
       >
-        <div>
-          <p className="text-white text-xl font-bold leading-tight">{album.title}</p>
-          <p className="text-white/65 text-sm mt-0.5">{album.artist}</p>
-        </div>
-
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
-          <p className="text-white/75 text-[13px]">This GoodDeed® certifies that</p>
-          <p className="text-white text-2xl font-bold mt-1.5 leading-tight" data-testid="text-cert-owner">{ownerName}</p>
-          <p className="text-white/75 text-[13px] mt-1.5">
-            owns number {certNumStr} of this series.
-          </p>
-        </div>
-
-        <div className="flex items-end justify-between">
-          <p
-            className="text-white text-3xl font-bold leading-none"
-            style={{ fontVariantNumeric: "tabular-nums" }}
-          >
-            No. {certNumStr}
-          </p>
+        {/* Top of band: avatar + owner / "owns no. NN of <album>" on left, GoodTunes logo top-right */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {ownerPhotoUrl ? (
+              <img
+                src={ownerPhotoUrl}
+                alt=""
+                className="w-11 h-11 rounded-full object-cover flex-shrink-0 border border-white/20"
+                data-testid="img-cert-owner-photo"
+              />
+            ) : (
+              <div
+                className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center text-white text-sm font-semibold border border-white/20"
+                style={{ background: "rgba(255,255,255,0.14)" }}
+                aria-hidden
+              >
+                {initial}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div
+                className="text-white text-sm font-semibold truncate leading-tight"
+                data-testid="text-cert-owner"
+              >
+                {ownerName}
+              </div>
+              <div className="text-white/65 text-xs leading-tight mt-0.5 truncate">
+                owns no. {certNumStr} of {album.title}
+              </div>
+            </div>
+          </div>
           <img
             src="/goodtunes-logo-white.png"
             alt="GoodTunes"
-            className="h-9 w-auto object-contain"
+            className="h-4 w-auto object-contain flex-shrink-0 mt-1"
           />
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Bottom of band: signature on rule (left), QR (right) */}
+        <div className="flex items-end justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <img
+              src="/will-signature.png"
+              alt="Will Bowen, Founder"
+              className="h-8 w-auto max-w-[8rem] object-contain object-left select-none"
+              draggable={false}
+            />
+            <div className="border-t border-white/35 mt-1" />
+            <div className="text-white/55 text-xs uppercase tracking-wider mt-1">
+              Will Bowen · Founder, GoodTunes
+            </div>
+          </div>
+          <div
+            className="w-14 h-14 rounded-sm flex-shrink-0 grid place-items-center p-1"
+            style={{ background: "var(--brand-mint)" }}
+            aria-hidden
+            title="Per-fan QR — verifies this certificate"
+            data-testid="placeholder-cert-qr"
+          >
+            <svg viewBox="0 0 25 25" className="w-full h-full" style={{ color: "var(--brand-bg)" }} aria-hidden>
+              <rect x="0" y="0" width="7" height="7" fill="currentColor" />
+              <rect x="2" y="2" width="3" height="3" fill="var(--brand-mint)" />
+              <rect x="18" y="0" width="7" height="7" fill="currentColor" />
+              <rect x="20" y="2" width="3" height="3" fill="var(--brand-mint)" />
+              <rect x="0" y="18" width="7" height="7" fill="currentColor" />
+              <rect x="2" y="20" width="3" height="3" fill="var(--brand-mint)" />
+              <rect x="10" y="2" width="2" height="2" fill="currentColor" />
+              <rect x="13" y="9" width="2" height="2" fill="currentColor" />
+              <rect x="9" y="12" width="2" height="2" fill="currentColor" />
+              <rect x="16" y="14" width="2" height="2" fill="currentColor" />
+              <rect x="12" y="17" width="2" height="2" fill="currentColor" />
+              <rect x="19" y="19" width="2" height="2" fill="currentColor" />
+              <rect x="22" y="11" width="2" height="2" fill="currentColor" />
+              <rect x="14" y="22" width="2" height="2" fill="currentColor" />
+              <rect x="8" y="8" width="2" height="2" fill="currentColor" />
+            </svg>
+          </div>
         </div>
       </div>
     </div>

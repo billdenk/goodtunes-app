@@ -3454,9 +3454,24 @@ function GoodDeedPill({
   // configured (costCents === null), fall back to gross retail × qty
   // and surface a one-line note that net can't be computed yet. Loss
   // (negative net) renders in brand pink, same as the Profit row.
-  const canComputeNet = priceCents !== null && costCents !== null;
+  // Task #498 — Stripe's flat US card-present rate: 2.9% + 30¢ per
+  // transaction. We compute it client-side off the retail price
+  // (the platform constant doesn't justify a server round-trip).
+  // Only meaningful once a retail price is set; otherwise null.
+  const ccFeeCents =
+    priceCents !== null ? Math.round(priceCents * 0.029) + 30 : null;
+  const costPerUnitCents =
+    costCents !== null && ccFeeCents !== null
+      ? costCents + ccFeeCents
+      : costCents;
+  const netPerUnitCents =
+    priceCents !== null && costCents !== null && ccFeeCents !== null
+      ? priceCents - costCents - ccFeeCents
+      : earnsCents;
+  const canComputeNet =
+    priceCents !== null && costCents !== null && ccFeeCents !== null;
   const netTotalCents = canComputeNet
-    ? (priceCents! - costCents!) * resolvedQty
+    ? (priceCents! - costCents! - ccFeeCents!) * resolvedQty
     : null;
   const grossTotalCents = priceCents !== null ? priceCents * resolvedQty : null;
   const totalCents = netTotalCents ?? grossTotalCents;
@@ -3467,13 +3482,13 @@ function GoodDeedPill({
       : totalIsLoss
         ? `-${dollars(Math.abs(totalCents))}`
         : dollars(totalCents);
-  const lossColor = earnsCents !== null && earnsCents < 0;
+  const lossColor = netPerUnitCents !== null && netPerUnitCents < 0;
   const profitLabel =
-    earnsCents === null
+    netPerUnitCents === null
       ? "—"
-      : earnsCents < 0
-        ? `-${dollars(Math.abs(earnsCents))}`
-        : dollars(earnsCents);
+      : netPerUnitCents < 0
+        ? `-${dollars(Math.abs(netPerUnitCents))}`
+        : dollars(netPerUnitCents);
 
   return (
     <div
@@ -3588,139 +3603,101 @@ function GoodDeedPill({
                   )}
                 </div>
               )}
-              {/* Navy cert footer — one continuous brand-navy slab
-                  mirroring the real GoodDeed cert bottom (artist
-                  photo + title row · "This certifies …" line ·
-                  provenance paragraph · founder signature · QR).
-                  Per-fan dynamic bits (owner name, serial #, QR)
-                  render as static rounded bars in a mid-blue brand
-                  tone so it's obviously a template preview, not
+              {/* Task #498 — Navy band mirrors the new portrait
+                  customer-facing cert: avatar + owner skeleton line
+                  + "owns no. NN of <album>" on the left with the
+                  GoodTunes mark pinned top-right; founder signature
+                  on a thin rule bottom-left with a small QR tile
+                  bottom-right. Per-fan dynamic bits (owner name,
+                  serial #, QR) render as mid-blue bars / decorative
+                  finder pattern so it reads as a template, not
                   filled-in copy the artist is expected to edit. */}
               <div
-                className="px-3.5 pt-3 pb-3.5 text-white"
-                style={{ backgroundColor: "var(--brand-bg)" }}
+                className="px-3.5 pt-3 pb-3 text-white flex flex-col"
+                style={{ backgroundColor: "var(--brand-bg)", minHeight: "8rem" }}
                 data-testid="band-gooddeed-cert"
               >
-                {/* Row 1 — artist photo + album title/artist, GoodTunes
-                    mark pinned right (matches real cert chrome). */}
+                {/* Top of band — avatar + owner-line skeleton on the
+                    left, GoodTunes mark pinned top-right. */}
                 <div className="flex items-start gap-2.5">
-                  {artistPhotoUrl ? (
-                    <img
-                      src={artistPhotoUrl}
-                      alt=""
-                      className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-white/20"
-                      data-testid="img-gooddeed-artist-photo"
+                  <div
+                    className="w-8 h-8 rounded-full flex-shrink-0 border border-white/20"
+                    style={{ background: "rgba(255,255,255,0.14)" }}
+                    aria-label="Owner avatar (per fan)"
+                    data-testid="skeleton-gooddeed-avatar"
+                  />
+                  <div className="flex-1 min-w-0 pt-1 space-y-1.5">
+                    {/* Owner-name skeleton bar */}
+                    <div
+                      className="h-2.5 w-24 rounded-full bg-[color:var(--brand-blue)]/70"
+                      aria-label="Owner name (filled in per fan)"
+                      data-testid="skeleton-gooddeed-owner"
                     />
-                  ) : (
-                    <div
-                      className="w-9 h-9 rounded-full bg-white/10 flex-shrink-0 border border-white/20"
-                      aria-hidden
-                    />
-                  )}
-                  <div className="flex-1 min-w-0 pt-px">
-                    <div
-                      className="text-xs text-white/75 truncate leading-tight"
-                      data-testid="text-gooddeed-artist-name"
-                    >
-                      {artistName || "Artist"}
-                    </div>
-                    <div
-                      className="text-sm font-bold truncate leading-tight mt-0.5"
-                      data-testid="text-gooddeed-album-title"
-                    >
-                      {albumTitle || "Album title"}
+                    {/* "owns no. NN of <album>" — serial skeleton + real album title */}
+                    <div className="flex items-center gap-1.5 text-xs text-white/70 leading-tight">
+                      <span>owns no.</span>
+                      <span
+                        className="inline-block h-2 w-5 rounded-full bg-[color:var(--brand-blue)]/70"
+                        aria-label="Certificate number (assigned at sale)"
+                        data-testid="skeleton-gooddeed-serial"
+                      />
+                      <span className="truncate">
+                        of {albumTitle || "this release"}
+                      </span>
                     </div>
                   </div>
                   <img
                     src="/goodtunes-logo-white-sm.png"
                     alt="GoodTunes®"
-                    className="h-4 w-auto object-contain flex-shrink-0 mt-0.5"
+                    className="h-4 w-auto object-contain flex-shrink-0 mt-1"
                     data-testid="mark-goodtunes"
                   />
                 </div>
 
-                <div
-                  className="mt-3 grid grid-cols-[1fr_auto] gap-3 items-start"
-                  data-testid="block-gooddeed-cert-body"
-                >
-                  <div className="min-w-0 space-y-2">
-                    {/* "This certifies that <owner> owns no. <NN> of <album>."
-                        — owner + serial are skeleton bars; the rest is real
-                        copy so the artist sees what the fan will read. */}
-                    <p className="text-xs leading-snug font-semibold text-white">
-                      This certifies that{" "}
-                      <span
-                        className="inline-block align-middle h-3 w-20 rounded-full bg-[color:var(--brand-blue)]/70"
-                        aria-label="Owner name (filled in per fan)"
-                        data-testid="skeleton-gooddeed-owner"
-                      />{" "}
-                      owns no.{" "}
-                      <span
-                        className="inline-block align-middle h-3 w-7 rounded-full bg-[color:var(--brand-blue)]/70"
-                        aria-label="Certificate number (assigned at sale)"
-                        data-testid="skeleton-gooddeed-serial"
-                      />{" "}
-                      of {albumTitle || "this release"}.
-                    </p>
-                    {/* Body copy rows are placeholder bars so the
-                        whole navy strip reads as "cert template" rather
-                        than filled-in copy. Static (no pulse) so it
-                        reads as a finished preview, not a loading state. */}
-                    <div
-                      className="space-y-1.5"
-                      aria-label="Certificate body (filled in per fan)"
-                      data-testid="skeleton-gooddeed-body"
-                    >
-                      <div className="h-2 w-full rounded-full bg-[color:var(--brand-blue)]/55" />
-                      <div className="h-2 w-11/12 rounded-full bg-[color:var(--brand-blue)]/55" />
-                      <div className="h-2 w-9/12 rounded-full bg-[color:var(--brand-blue)]/55" />
-                    </div>
-                    <div
-                      className="pt-2"
-                      aria-label="Founder signature"
-                      data-testid="signature-gooddeed"
-                    >
-                      <img
-                        src="/founder-signature-white.png"
-                        alt="Founder signature"
-                        className="h-6 w-auto max-w-[7rem] object-contain object-left -mb-1 select-none"
-                        draggable={false}
-                      />
-                      <div className="border-t border-white/40 mt-0.5" />
-                      <div className="h-2 w-32 rounded-full bg-[color:var(--brand-blue)]/55 mt-1.5" />
+                {/* Spacer so signature/QR pin to the bottom of the band */}
+                <div className="flex-1 min-h-[1rem]" />
+
+                {/* Bottom of band — signature on a thin rule (left),
+                    QR placeholder (right). */}
+                <div className="flex items-end justify-between gap-3">
+                  <div
+                    className="flex-1 min-w-0"
+                    aria-label="Founder signature"
+                    data-testid="signature-gooddeed"
+                  >
+                    <img
+                      src="/will-signature.png"
+                      alt="Will Bowen, Founder"
+                      className="h-6 w-auto max-w-[7rem] object-contain object-left select-none"
+                      draggable={false}
+                    />
+                    <div className="border-t border-white/35 mt-0.5" />
+                    <div className="text-xs text-white/55 uppercase tracking-wider mt-1">
+                      Will Bowen · Founder
                     </div>
                   </div>
-                  {/* QR tile + caption. Stays a placeholder because
-                      each cert's QR is generated per fan at sale time. */}
-                  <div className="flex-shrink-0 flex flex-col items-center pt-0.5">
-                    <div
-                      className="w-12 h-12 rounded-sm bg-white p-1 grid place-items-center"
-                      aria-hidden
-                      title="Per-fan QR — auto-generated at sale time"
-                      data-testid="placeholder-gooddeed-qr"
-                    >
-                      {/* Tiny 5×5 finder-pattern style placeholder so
-                          the tile reads as a QR mock at thumbnail size
-                          without needing a real svg asset. */}
-                      <svg viewBox="0 0 25 25" className="w-full h-full text-[color:var(--brand-bg)]" aria-hidden>
-                        <rect x="0" y="0" width="7" height="7" fill="currentColor" />
-                        <rect x="2" y="2" width="3" height="3" fill="white" />
-                        <rect x="18" y="0" width="7" height="7" fill="currentColor" />
-                        <rect x="20" y="2" width="3" height="3" fill="white" />
-                        <rect x="0" y="18" width="7" height="7" fill="currentColor" />
-                        <rect x="2" y="20" width="3" height="3" fill="white" />
-                        <rect x="10" y="2" width="2" height="2" fill="currentColor" />
-                        <rect x="13" y="9" width="2" height="2" fill="currentColor" />
-                        <rect x="9" y="12" width="2" height="2" fill="currentColor" />
-                        <rect x="16" y="14" width="2" height="2" fill="currentColor" />
-                        <rect x="12" y="17" width="2" height="2" fill="currentColor" />
-                        <rect x="19" y="19" width="2" height="2" fill="currentColor" />
-                        <rect x="22" y="11" width="2" height="2" fill="currentColor" />
-                      </svg>
-                    </div>
-                    <div className="text-xs text-white/60 mt-1 tracking-wide">
-                      GoodDeed™
-                    </div>
+                  <div
+                    className="w-10 h-10 rounded-sm flex-shrink-0 grid place-items-center p-0.5"
+                    style={{ background: "var(--brand-mint)" }}
+                    aria-hidden
+                    title="Per-fan QR — auto-generated at sale time"
+                    data-testid="placeholder-gooddeed-qr"
+                  >
+                    <svg viewBox="0 0 25 25" className="w-full h-full" style={{ color: "var(--brand-bg)" }} aria-hidden>
+                      <rect x="0" y="0" width="7" height="7" fill="currentColor" />
+                      <rect x="2" y="2" width="3" height="3" fill="var(--brand-mint)" />
+                      <rect x="18" y="0" width="7" height="7" fill="currentColor" />
+                      <rect x="20" y="2" width="3" height="3" fill="var(--brand-mint)" />
+                      <rect x="0" y="18" width="7" height="7" fill="currentColor" />
+                      <rect x="2" y="20" width="3" height="3" fill="var(--brand-mint)" />
+                      <rect x="10" y="2" width="2" height="2" fill="currentColor" />
+                      <rect x="13" y="9" width="2" height="2" fill="currentColor" />
+                      <rect x="9" y="12" width="2" height="2" fill="currentColor" />
+                      <rect x="16" y="14" width="2" height="2" fill="currentColor" />
+                      <rect x="12" y="17" width="2" height="2" fill="currentColor" />
+                      <rect x="19" y="19" width="2" height="2" fill="currentColor" />
+                      <rect x="22" y="11" width="2" height="2" fill="currentColor" />
+                    </svg>
                   </div>
                 </div>
               </div>
@@ -3870,21 +3847,29 @@ function GoodDeedPill({
                             {dollars(costCents)}
                           </span>
                         </div>
-                        {/* CC fee — mirrors the vinyl SkuRow's
-                            per-unit breakdown. The preview payload
-                            from gooddeed-pricing-preview doesn't yet
-                            expose a ccFeePerUnitCents field, so we
-                            surface the gap explicitly here rather
-                            than silently omit it. Tracked as a
-                            follow-up to wire the server side. */}
+                        {/* Task #498 — CC fee = retail × 2.9% + $0.30
+                            (Stripe's flat US rate). Computed off the
+                            retail price client-side; rolls into
+                            Cost/unit, per-unit Profit, and Net to
+                            Artist. Only italic-fallback when retail
+                            isn't set yet. */}
                         <div
                           className="flex items-center justify-between text-xs tabular-nums"
                           data-testid="row-gooddeed-cc-fee"
                         >
                           <span className="text-slate-600">CC fee</span>
-                          <span className="text-xs text-slate-400 italic">
-                            unavailable
-                          </span>
+                          {ccFeeCents !== null ? (
+                            <span
+                              className="text-slate-900"
+                              data-testid="text-gooddeed-cc-fee"
+                            >
+                              {dollars(ccFeeCents)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">
+                              set retail price
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1.5 mt-1 tabular-nums">
                           <span className="text-slate-700">Cost / unit</span>
@@ -3892,7 +3877,7 @@ function GoodDeedPill({
                             className="text-slate-900"
                             data-testid="text-gooddeed-cost-per-unit"
                           >
-                            {dollars(costCents)}
+                            {dollars(costPerUnitCents!)}
                           </span>
                         </div>
                       </>
