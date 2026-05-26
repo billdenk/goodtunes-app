@@ -286,7 +286,7 @@ export function AdminCustomerDetail() {
         {/* Task #400 — Account-merge audit. Only renders rows for fans
             who absorbed another account via the customer-side merge
             flow ("These two accounts are me"). */}
-        <MergeAuditSection customerId={customer.id} />
+        <MergeAuditSection customerId={c.id} />
 
         {/* Playlists */}
         <Section title={`Playlists (${playlists.length})`}>
