@@ -554,35 +554,13 @@ export function SellPanel({
             keeps its own version since that branch has no vinyl row
             to host the pill on. */}
 
-        {/* Task #335 — "Lock in quote" CTA. Until the operator hits
-            this, the rest of the album tabs (Press, Bonus) stay
-            hidden — see visibleTabsFor() in AdminAlbum. Reversible
-            via "Unlock" until the run is actually at press. */}
-        {(() => {
-          // Task #335 — lock action stays disabled until the artist
-          // has actually built a quote: at least one active SKU, every
-          // active SKU has a price, and every active SKU has a planned
-          // quantity. Mirrors the package/price/quantity stages on the
-          // top stepper so the two never disagree.
-          const active = data.skus.filter((s) => s.active);
-          const quoteReady =
-            active.length > 0 &&
-            active.every((s) => (s.priceCents ?? 0) > 0) &&
-            active.every((s) => (s.plannedQuantity ?? 0) > 0);
-          return (
-            <LockQuoteCTA
-              locked={!!sellQuoteLockedAt}
-              disabled={!sellQuoteLockedAt && !quoteReady}
-              onToggle={() => onLockToggle?.(!sellQuoteLockedAt)}
-            />
-          );
-        })()}
+        {/* Album-level "Lock in quote" banner removed — per-row Lock
+            on each vinyl SKU (Task #433) is the new affordance, so this
+            second source of truth went away. */}
 
         {/* Task #225 — terminal "Go to Press" action stays at the
-            bottom, but only matters once the quote is locked. */}
-        {sellQuoteLockedAt && (
-          <GoToPressButton albumId={albumId} skus={data.skus} />
-        )}
+            bottom of the panel. */}
+        <GoToPressButton albumId={albumId} skus={data.skus} />
         </>
         )}
       </div>
@@ -800,56 +778,6 @@ function PressInfoPopover({ press }: { press: Manufacturer }) {
   );
 }
 
-/* ─── Task #335 — Lock-in-quote CTA ────────────────────────────────── */
-function LockQuoteCTA({
-  locked,
-  disabled = false,
-  onToggle,
-}: {
-  locked: boolean;
-  disabled?: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div className="mt-6 mb-6 rounded-lg border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="min-w-0">
-          <div className="text-[14px] font-semibold text-slate-900">
-            {locked
-              ? "Quote locked in."
-              : disabled
-                ? "Finish your quote to lock it in."
-                : "Lock in this quote to keep going."}
-          </div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            {locked
-              ? "Press + Bonus tabs are unlocked. Unlock to keep editing the quote."
-              : disabled
-                ? "Pick a package, set a price, and choose a planned quantity above — then you can lock the quote and continue."
-                : "Locks the printer, colors, and quantity. Unlocks Press + Bonus tabs above. Reversible until the run goes to press."}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onToggle}
-          disabled={disabled}
-          data-testid={locked ? "button-unlock-quote" : "button-lock-quote"}
-          className={[
-            "h-10 px-4 rounded-full text-sm font-bold transition-all",
-            locked
-              ? "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-              : disabled
-                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                : "bg-[color:var(--brand-blue)] text-white hover:brightness-110 shadow-sm",
-          ].join(" ")}
-        >
-          {locked ? "Unlock quote" : "Lock in quote"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Task #335 — Shopify slim panel ───────────────────────────────── */
 /* Shopify-mode albums skip the entire press path. We sell the digital
  * album (configured in Overview) + an optional Printed & Signed
@@ -915,15 +843,8 @@ function ShopifySlimPanel({
         </div>
       </div>
 
-      {/* Task #335 — Shopify mode lock CTA. The slim panel has no
-          quote completeness requirements (the addon is optional), so
-          the lock is always available; flipping it on unlocks the
-          Shopify + Bonus tabs above so the operator can finish the
-          product mapping and any digital-only bonuses. Reversible. */}
-      <LockQuoteCTA
-        locked={!!sellQuoteLockedAt}
-        onToggle={() => onLockToggle?.(!sellQuoteLockedAt)}
-      />
+      {/* Album-level lock banner removed in favor of per-row Lock
+          affordance (Task #433). */}
     </div>
   );
 }
