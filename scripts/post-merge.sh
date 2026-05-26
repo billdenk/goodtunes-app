@@ -1098,3 +1098,40 @@ SQL
 }
 migrate_instruments_source_url dev  "${DATABASE_URL:-}"
 migrate_instruments_source_url prod "${PROD_DATABASE_URL:-}"
+
+# Task #467 — Press catalog jacket SKUs + per-(tier,jacket) ladder rows.
+# Replaces the tier-level `priceLadder` jsonb as the source of truth for
+# press pricing. Pre-create on both DBs so the publish dev→prod diff
+# stays empty (otherwise the dev→prod diff would try to DROP the new
+# tables from prod, see [Dev↔Prod publish-time drift]). Idempotent.
+migrate_press_jackets() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_jackets migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS press_jackets (
+  id          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id    varchar NOT NULL,
+  name        text    NOT NULL,
+  position    integer NOT NULL DEFAULT 0,
+  is_default  boolean NOT NULL DEFAULT false,
+  CONSTRAINT press_jackets_press_name_uniq UNIQUE (press_id, name)
+);
+CREATE TABLE IF NOT EXISTS press_tier_jacket_ladders (
+  id           varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  tier_id      varchar NOT NULL REFERENCES press_color_tiers(id) ON DELETE CASCADE,
+  jacket_id    varchar NOT NULL REFERENCES press_jackets(id)     ON DELETE CASCADE,
+  price_ladder jsonb   NOT NULL DEFAULT '[]'::jsonb,
+  CONSTRAINT press_tier_jacket_ladder_uniq UNIQUE (tier_id, jacket_id)
+);
+SQL
+  then
+    echo "post-merge: press_jackets migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_jackets migration failed on $label (continuing)"
+  fi
+}
+migrate_press_jackets dev  "${DATABASE_URL:-}"
+migrate_press_jackets prod "${PROD_DATABASE_URL:-}"

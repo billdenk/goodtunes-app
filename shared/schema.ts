@@ -1436,6 +1436,52 @@ export const pressColors = pgTable("press_colors", {
 });
 export type PressColor = typeof pressColors.$inferSelect;
 
+// Task #467 — per-press jacket catalog. One row per jacket SKU the
+// press offers (e.g. "Standard Full-Color Jacket"). Each jacket pairs
+// with a tier under any format to form a (format,tier,jacket) combo
+// whose price ladder lives in `press_tier_jacket_ladders`. Exactly one
+// jacket per press is flagged `isDefault` — that ladder is what
+// /invited-press exposes as `tier.priceLadder` so the SellPanel (which
+// doesn't pick a jacket today) keeps reading the same shape.
+export const pressJackets = pgTable(
+  "press_jackets",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    pressId: varchar("press_id").notNull(),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    isDefault: boolean("is_default").notNull().default(false),
+  },
+  (t) => ({
+    pressJacketNameUniq: unique("press_jackets_press_name_uniq").on(t.pressId, t.name),
+  }),
+);
+export type PressJacket = typeof pressJackets.$inferSelect;
+
+// Per (tier, jacket) combo price ladder. Replaces the old
+// `press_color_tiers.priceLadder` jsonb (which is left in place for
+// back-compat reads but is no longer the source of truth).
+export const pressTierJacketLadders = pgTable(
+  "press_tier_jacket_ladders",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    tierId: varchar("tier_id")
+      .notNull()
+      .references(() => pressColorTiers.id, { onDelete: "cascade" }),
+    jacketId: varchar("jacket_id")
+      .notNull()
+      .references(() => pressJackets.id, { onDelete: "cascade" }),
+    priceLadder: jsonb("price_ladder")
+      .$type<{ qty: number; unitCents: number }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+  },
+  (t) => ({
+    pressTierJacketLadderUniq: unique("press_tier_jacket_ladder_uniq").on(t.tierId, t.jacketId),
+  }),
+);
+export type PressTierJacketLadder = typeof pressTierJacketLadders.$inferSelect;
+
 // Generic per-album add-on. First user: the **signed_cert** add-on (printed
 // & signed GoodDeed certificate). Future shapes (professional framing,
 // full-album-sized framed GoodDeed with QR provenance) drop in here as new
