@@ -348,7 +348,14 @@ export function SellPanel({
 
   return (
     <div className="py-6">
-      <div className="max-w-3xl">
+      {/* Task #427 — No inner max-w wrapper here. The album page is
+          already constrained by AdminFrame (narrow = 960px), and the
+          Path-to-press strip above the tabs uses that full column.
+          A second max-w-3xl inside the Sell tab made every card here
+          (Formats, SKU rows, Printer/Press) visibly narrower than the
+          strip above it on iPad. Inheriting the page column keeps the
+          right edges aligned across the whole album page. */}
+      <div>
         {/* Task #335 — Path-to-press lives at the top of the album
             page now (above the tabs), not inside SellPanel. The
             artist sees it from every tab, not just Sell. */}
