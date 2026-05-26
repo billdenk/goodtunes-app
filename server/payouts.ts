@@ -331,6 +331,12 @@ export function registerPayoutRoutes(app: Express) {
     // `validateSignedCertLadder` after zod (label/order/floor checks
     // are easier to express imperatively than in a zod schema).
     signedCertLadder: z.array(z.unknown()).optional(),
+    // Task #471 — platform default GoodDeed vendor routing. Null
+    // clears the assignment; the Shopify Sell panel then shows the
+    // "no default" hint and falls back to its current Cost-(live) 0.
+    defaultPrintVendorId: z.string().nullable().optional(),
+    defaultHologramVendorId: z.string().nullable().optional(),
+    defaultInsertionVendorId: z.string().nullable().optional(),
   });
   app.put("/api/admin/payout-settings", requireAdmin, async (req, res) => {
     const { getUserRole } = await import("./auth/roles");
@@ -350,6 +356,9 @@ export function registerPayoutRoutes(app: Express) {
       if (!v.ok) return res.status(400).json({ message: v.message });
       patch.signedCertLadder = v.rungs;
     }
+    if (parsed.data.defaultPrintVendorId !== undefined) patch.defaultPrintVendorId = parsed.data.defaultPrintVendorId;
+    if (parsed.data.defaultHologramVendorId !== undefined) patch.defaultHologramVendorId = parsed.data.defaultHologramVendorId;
+    if (parsed.data.defaultInsertionVendorId !== undefined) patch.defaultInsertionVendorId = parsed.data.defaultInsertionVendorId;
     const [row] = await db
       .update(payoutSettings)
       .set(patch as any)

@@ -193,6 +193,15 @@ export function AdminPlatformPricing() {
 
         {settings && <SignedCertLadderCard settings={settings} />}
 
+        {/* Task #471 — platform-default GoodDeed vendor routing.
+            Per-album routing went away; every album resolves printing /
+            hologram / insertion against these three IDs. The Printing
+            picker is filtered to Quickprinters only on the server. */}
+        {settings && <RoutingDefaultsCard settings={settings} />}
+        {settings?.defaultPrintVendorId && (
+          <QuickprinterLadderCard vendorId={settings.defaultPrintVendorId} />
+        )}
+
         {formatCosts && formatCosts.length > 0 && (
           <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-format-costs">
             <div>
@@ -550,6 +559,249 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
         underneath this ladder) will move into a press-managed pricing
         portal in a later task.
       </p>
+    </div>
+  );
+}
+
+// Task #471 — pick the platform-default vendor for each of the three
+// GoodDeed legs. The Printing list is filtered server-side to
+// `is_quickprinter` vendors so a vinyl press can never be selected as
+// the certificate printer. Saves go to the same payout-settings PUT
+// as the cert / Shopify-fee fields above.
+type GoodDeedVendor = { id: string; name: string; logoUrl: string | null };
+type LegKey = "printing" | "hologram" | "insertion";
+const LEG_FIELD: Record<LegKey, "defaultPrintVendorId" | "defaultHologramVendorId" | "defaultInsertionVendorId"> = {
+  printing: "defaultPrintVendorId",
+  hologram: "defaultHologramVendorId",
+  insertion: "defaultInsertionVendorId",
+};
+const LEG_LABEL: Record<LegKey, string> = {
+  printing: "Printing (Quickprinter)",
+  hologram: "Hologram + shrinkwrap",
+  insertion: "Insertion",
+};
+
+function RoutingDefaultsCard({ settings }: { settings: PayoutSettings }) {
+  const { toast } = useToast();
+  const printing = useQuery<GoodDeedVendor[]>({ queryKey: ["/api/admin/gooddeed-vendors", { service: "printing" }] });
+  const hologram = useQuery<GoodDeedVendor[]>({ queryKey: ["/api/admin/gooddeed-vendors", { service: "hologram" }] });
+  const insertion = useQuery<GoodDeedVendor[]>({ queryKey: ["/api/admin/gooddeed-vendors", { service: "insertion" }] });
+
+  const save = useMutation({
+    mutationFn: async (patch: Partial<Record<typeof LEG_FIELD[LegKey], string | null>>) => {
+      const r = await apiRequest("PUT", "/api/admin/payout-settings", patch);
+      return (await r.json()) as PayoutSettings;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-settings"] });
+      toast({ title: "Routing saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save routing", description: e?.message, variant: "destructive" }),
+  });
+
+  const lists: Record<LegKey, GoodDeedVendor[] | undefined> = {
+    printing: printing.data,
+    hologram: hologram.data,
+    insertion: insertion.data,
+  };
+  const current: Record<LegKey, string | null> = {
+    printing: settings.defaultPrintVendorId ?? null,
+    hologram: settings.defaultHologramVendorId ?? null,
+    insertion: settings.defaultInsertionVendorId ?? null,
+  };
+
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-4"
+      data-testid="panel-gooddeed-routing"
+    >
+      <div>
+        <h2 className="text-sm font-semibold text-slate-900">GoodDeed routing defaults</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          Every album resolves printing, hologram, and insertion against these defaults. The
+          Printing picker only shows Quickprinters (print-only partners like Hoover).
+        </p>
+      </div>
+      <div className="space-y-3">
+        {(Object.keys(LEG_LABEL) as LegKey[]).map((leg) => {
+          const list = lists[leg];
+          const value = current[leg] ?? "";
+          return (
+            <label key={leg} className="block" data-testid={`row-routing-${leg}`}>
+              <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+                {LEG_LABEL[leg]}
+              </span>
+              <select
+                value={value}
+                disabled={!list || save.isPending}
+                onChange={(e) => {
+                  const next = e.target.value || null;
+                  if (next === current[leg]) return;
+                  save.mutate({ [LEG_FIELD[leg]]: next } as any);
+                }}
+                className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm bg-white focus:outline-none focus:border-[color:var(--brand-blue)]"
+                data-testid={`select-routing-${leg}`}
+              >
+                <option value="">— None —</option>
+                {(list ?? []).map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+              {leg === "printing" && list && list.length === 0 && (
+                <p className="text-xs text-[color:var(--brand-heart)] mt-1">
+                  No Quickprinters with active Printing pricing yet — mark a vendor as Quickprinter and add a tier.
+                </p>
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Task #471 — per-paper-size price ladder for the platform-default
+// Quickprinter. Letter is the live ladder used by today's certificates;
+// 12×18 is scaffolded as a disabled tab so the next task that ships
+// large-format certs has the editor wired up. Walking rule lives in
+// server/vendorGoodDeedPricing.ts: missing rungs fall through to the
+// next-lower rung at price-resolution time.
+const QP_RUNGS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+type ServiceRow = {
+  id: string;
+  service: string;
+  active: boolean;
+  tiers: Array<{ qty: number; perUnitCents: number }> | null;
+  sizeLadders: Record<string, Array<{ qty: number; perUnitCents: number }>> | null;
+  flatPerUnitCents: number | null;
+  setupFeeCents: number;
+  minBatch: number;
+  leadTimeDays: number;
+};
+
+function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ vendor: { id: string; name: string }; services: ServiceRow[] }>({
+    queryKey: ["/api/admin/vendors", vendorId, "gooddeed-services"],
+  });
+  const printing = data?.services.find((s) => s.service === "printing") ?? null;
+  // Seed the editor map (qty → dollar string) from the row's ladder.
+  const [letter, setLetter] = useState<Record<number, string>>({});
+  useEffect(() => {
+    const ladder = printing?.sizeLadders?.letter ?? printing?.tiers ?? [];
+    const map: Record<number, string> = {};
+    for (const rung of QP_RUNGS) {
+      const t = ladder.find((x) => x.qty === rung);
+      map[rung] = t ? (t.perUnitCents / 100).toFixed(2) : "";
+    }
+    setLetter(map);
+  }, [printing?.id, printing?.sizeLadders, printing?.tiers]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!printing) throw new Error("No printing row");
+      const letterLadder: Array<{ qty: number; perUnitCents: number }> = [];
+      for (const rung of QP_RUNGS) {
+        const raw = (letter[rung] ?? "").trim();
+        if (!raw) continue;
+        const n = Number.parseFloat(raw);
+        if (!Number.isFinite(n) || n < 0) throw new Error(`Invalid price at qty ${rung}`);
+        letterLadder.push({ qty: rung, perUnitCents: Math.round(n * 100) });
+      }
+      if (letterLadder.length === 0) throw new Error("Set at least one rung");
+      const r = await apiRequest("PUT", `/api/admin/vendors/${vendorId}/gooddeed-services`, {
+        service: "printing",
+        active: printing.active,
+        tiers: letterLadder,
+        sizeLadders: { letter: letterLadder },
+        setupFeeCents: printing.setupFeeCents,
+        minBatch: printing.minBatch,
+        leadTimeDays: printing.leadTimeDays,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors", vendorId, "gooddeed-services"] });
+      toast({ title: "Quickprinter ladder saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save ladder", description: e?.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-3" data-testid="panel-quickprinter-ladder">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-slate-900">
+            Quickprinter price ladder{data?.vendor ? ` — ${data.vendor.name}` : ""}
+          </h2>
+          <p className="text-[13px] text-slate-500 mt-1">
+            Per-unit cost at each quantity rung. Quantities between rungs walk down to the
+            next-lower rung's price. Blank cells fall through too.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 border-b border-slate-100">
+        <button
+          type="button"
+          className="px-3 h-8 text-xs font-semibold border-b-2 border-[color:var(--brand-blue)] text-slate-900"
+          data-testid="tab-paper-letter"
+        >
+          US Letter (8.5×11)
+        </button>
+        <button
+          type="button"
+          disabled
+          className="px-3 h-8 text-xs font-medium text-slate-300 cursor-not-allowed"
+          data-testid="tab-paper-12x18"
+          title="Scaffolded — wired up in a future task"
+        >
+          12×18 (coming soon)
+        </button>
+      </div>
+
+      {isLoading || !printing ? (
+        <div className="py-6 text-slate-500 text-sm">
+          {isLoading ? "Loading ladder…" : "This vendor has no Printing row yet — add one from their vendor portal."}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {QP_RUNGS.map((rung) => (
+              <label key={rung} className="block" data-testid={`field-qp-rung-${rung}`}>
+                <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+                  {rung} units
+                </span>
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={letter[rung] ?? ""}
+                    onChange={(e) => setLetter((m) => ({ ...m, [rung]: e.target.value }))}
+                    placeholder="—"
+                    className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-right text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]"
+                    data-testid={`input-qp-rung-${rung}`}
+                  />
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => save.mutate()}
+              disabled={save.isPending}
+              className="h-8 px-3 rounded-md bg-[color:var(--brand-blue)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-60"
+              data-testid="button-save-qp-ladder"
+            >
+              {save.isPending ? "Saving…" : "Save ladder"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -838,6 +838,12 @@ export const vendors = pgTable("vendors", {
   }),
   isMaker: boolean("is_maker").notNull().default(false),
   isReseller: boolean("is_reseller").notNull().default(true),
+  // Task #471 — Quickprinter capability. A Quickprinter prints things
+  // like the Letter-size GoodDeed certificate but does NOT press vinyl,
+  // so it's mutually exclusive with `isMaker` (enforced in PUT
+  // /api/admin/vendors/:id). Only Quickprinters are selectable as the
+  // platform-default Printing vendor on AdminPlatformPricing.
+  isQuickprinter: boolean("is_quickprinter").notNull().default(false),
   homeUrl: text("home_url"),
   aboutUrl: text("about_url"),
   logoUrl: text("logo_url"),
@@ -1513,6 +1519,12 @@ export const vendorGoodDeedServices = pgTable(
     // picks the highest qty <= run size. Use `flat_per_unit_cents` for
     // hologram/insertion.
     tiersJson: jsonb("tiers_json").$type<Array<{ qty: number; perUnitCents: number }>>(),
+    // Task #471 — per-paper-size price ladder for Quickprinter printing
+    // rows. Shape: `{ letter?: Tier[]; "12x18"?: Tier[] }`. When set,
+    // takes precedence over `tiersJson` (which stays for back-compat
+    // with pre-#471 vinyl-press printing rows). The runtime asks for a
+    // specific size; missing sizes return null pricing.
+    sizeLaddersJson: jsonb("size_ladders_json").$type<{ letter?: Array<{ qty: number; perUnitCents: number }>; "12x18"?: Array<{ qty: number; perUnitCents: number }> }>(),
     flatPerUnitCents: integer("flat_per_unit_cents"),
     setupFeeCents: integer("setup_fee_cents").notNull().default(0),
     minBatch: integer("min_batch").notNull().default(25),
@@ -1870,6 +1882,15 @@ export const payoutSettings = pgTable("payout_settings", {
   // shared/signedCertLadder.ts so the column being un-seeded never breaks
   // the preview math. See `validateSignedCertLadder` for the write rules.
   signedCertLadder: jsonb("signed_cert_ladder").$type<SignedCertLadderRung[]>(),
+  // Task #471 — platform-default GoodDeed vendor routing. Moved off
+  // `album_addons.{print,hologram,insertion}_vendor_id` so admins set
+  // it once on AdminPlatformPricing instead of per album. The Shopify
+  // Sell panel's Cost (live) preview resolves against these IDs; the
+  // legacy album-level columns are kept (loose FK, no longer written
+  // from the UI) so historical snapshots still read.
+  defaultPrintVendorId: varchar("default_print_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  defaultHologramVendorId: varchar("default_hologram_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  defaultInsertionVendorId: varchar("default_insertion_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

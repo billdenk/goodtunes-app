@@ -11313,7 +11313,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.put("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller, parentVendorId } = req.body ?? {};
+    const { name, domain, homeUrl, aboutUrl, logoUrl, tagline, bio, location, coverUrl, isMaker, isReseller, isQuickprinter, parentVendorId } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (domain !== undefined) updates.domain = String(domain).toLowerCase().replace(/^www\./, "");
@@ -11358,15 +11358,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // useful message instead of a 500.
     if (isMaker !== undefined) updates.isMaker = !(isMaker === false || isMaker === "false");
     if (isReseller !== undefined) updates.isReseller = !(isReseller === false || isReseller === "false");
-    if (updates.isMaker !== undefined || updates.isReseller !== undefined) {
+    // Task #471 — Quickprinter is a print-only capability (Hoover etc.)
+    // and is mutually exclusive with Maker (a vinyl press can't also be
+    // the certificate print partner). Quickprinter rows still need
+    // Reseller OR Maker to satisfy the existing role check; in practice
+    // they always carry Reseller=true (you "resell" their print runs).
+    if (isQuickprinter !== undefined) updates.isQuickprinter = !(isQuickprinter === false || isQuickprinter === "false");
+    if (updates.isMaker !== undefined || updates.isReseller !== undefined || updates.isQuickprinter !== undefined) {
       const existing = await storage.getVendorById(id);
       if (!existing) return res.status(404).json({ message: "Vendor not found" });
       const nextMaker = updates.isMaker ?? existing.isMaker;
       const nextReseller = updates.isReseller ?? existing.isReseller;
+      const nextQuick = updates.isQuickprinter ?? (existing as any).isQuickprinter ?? false;
       if (!nextMaker && !nextReseller) {
         return res.status(400).json({
           message:
             "A vendor must be a Maker, a Reseller, or both — at least one role must stay on.",
+        });
+      }
+      if (nextMaker && nextQuick) {
+        return res.status(400).json({
+          message: "A vendor can't be both a Maker and a Quickprinter — Quickprinter is a print-only capability.",
         });
       }
     }
@@ -14346,10 +14358,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
-  // Lookup endpoint for the album-side assignment picker. Returns the
-  // vendors that have an active row for the requested service, with
-  // their current pricing folded in so the calculator can preview totals
-  // without a second round-trip per option.
+  // Lookup endpoint for the AdminPlatformPricing routing-defaults
+  // picker. Returns the vendors that have an active row for the
+  // requested service. Task #471 — for "printing" we restrict to
+  // Quickprinters so a vinyl press can't be picked as the default
+  // certificate printer.
   app.get(
     "/api/admin/gooddeed-vendors",
     requireAdmin,
@@ -14358,7 +14371,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!["printing", "hologram", "insertion"].includes(service)) {
         return res.status(400).json({ message: "Unknown service" });
       }
-      const rows = await vgdp.listVendorsWithService(service as any);
+      const rows = await vgdp.listVendorsWithService(service as any, {
+        quickprintersOnly: service === "printing",
+      });
       res.json(rows);
     },
   );
@@ -14402,14 +14417,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // Live preview of total wholesale cost for a hypothetical run size.
-  // Used by the AddonForm so the artist sees what their wholesale tab
-  // would look like at, say, 100 units.
+  // Used by the Shopify AddonForm's Cost (live) readout. Task #471 —
+  // per-leg vendor IDs now come from the platform defaults on
+  // `payout_settings`; the legacy per-album columns are read only as a
+  // back-compat override when set (older albums + admin tooling).
   app.get(
     "/api/admin/albums/:id/gooddeed-pricing-preview",
     requireAdmin,
     async (req, res) => {
       const albumId = String(req.params.id);
       const runQty = Math.max(1, parseInt(String(req.query.runQty || "100"), 10) || 100);
+      const paperSize = (String(req.query.paperSize || "letter") === "12x18" ? "12x18" : "letter") as "letter" | "12x18";
       const rows = await db.execute<any>(sql`
         SELECT print_vendor_id, hologram_vendor_id, insertion_vendor_id, pricing_snapshot, pricing_snapshot_at
         FROM album_addons
@@ -14417,21 +14435,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         LIMIT 1
       `);
       const row = ((rows as any).rows ?? [])[0];
-      if (!row) return res.json({ legs: { printing: null, hologram: null, insertion: null }, totalPerUnitCents: 0, totalRunCents: 0, snapshot: null });
-      const live = await vgdp.resolveLivePricing(
-        {
-          printVendorId: row.print_vendor_id ?? null,
-          hologramVendorId: row.hologram_vendor_id ?? null,
-          insertionVendorId: row.insertion_vendor_id ?? null,
-        },
-        runQty,
-      );
+      const defaults = await vgdp.getDefaultGoodDeedLegs();
+      const legs = {
+        printVendorId: row?.print_vendor_id ?? defaults.printVendorId,
+        hologramVendorId: row?.hologram_vendor_id ?? defaults.hologramVendorId,
+        insertionVendorId: row?.insertion_vendor_id ?? defaults.insertionVendorId,
+      };
+      const live = await vgdp.resolveLivePricing(legs, runQty, paperSize);
       res.json({
         legs: { printing: live.printing, hologram: live.hologram, insertion: live.insertion },
         totalPerUnitCents: live.totalPerUnitCents,
         totalRunCents: live.totalRunCents,
-        snapshot: row.pricing_snapshot ?? null,
-        snapshotAt: row.pricing_snapshot_at ?? null,
+        snapshot: row?.pricing_snapshot ?? null,
+        snapshotAt: row?.pricing_snapshot_at ?? null,
       });
     },
   );

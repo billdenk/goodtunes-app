@@ -68,7 +68,6 @@ import {
 } from "@shared/pressing";
 import { VinylPreview } from "@/components/VinylPreview";
 import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
-import { SignedCertVendorPanel } from "@/components/admin/SignedCertVendorPanel";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 
 // Task #393 — Intl-based currency formatter with thousands separators
@@ -1041,14 +1040,16 @@ function ShopifySlimPanel({
           data-testid="anchor-shopify-live"
         >
           <AddonForm
+            albumId={albumId}
             existing={signedAddon ?? null}
             livePlatformCostCents={payoutSettings?.certCostCents ?? null}
             onSave={onUpsertAddon}
           />
         </div>
-        <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-          <SignedCertVendorPanel albumId={albumId} />
-        </div>
+        {/* Task #471 — per-album printing/hologram/insertion vendor
+            routing moved off the album to platform-level defaults on
+            AdminPlatformPricing. The Sell panel now just shows the
+            live Cost (live) readout against those defaults. */}
         <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
           <CertSaleWindowPanel albumId={albumId} />
         </div>
@@ -3868,8 +3869,8 @@ function GoodDeedPill({
                       </>
                     ) : (
                       <div className="text-xs text-slate-400 italic">
-                        Cost preview unavailable — assign vendors below to load
-                        per-unit pricing.
+                        Cost preview unavailable — set platform-default
+                        Printing/Hologram/Insertion vendors on Platform Pricing.
                       </div>
                     )}
                     {/* Floor — guardrail moved out of the primary column. */}
@@ -4107,10 +4108,12 @@ function VinylPicksBlock({
 }
 
 function AddonForm({
+  albumId,
   existing,
   livePlatformCostCents,
   onSave,
 }: {
+  albumId: string;
   existing: AlbumAddon | null;
   livePlatformCostCents: number | null;
   onSave: (b: {
@@ -4135,7 +4138,27 @@ function AddonForm({
   );
 
   const lockedCost = existing?.costCentsSnapshot ?? null;
-  const readoutCost = lockedCost ?? livePlatformCostCents;
+  const parsedQtyForPreview = useMemo(() => {
+    const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }, [qtyInput]);
+  const previewQty = qtyMode === "fixed" ? parsedQtyForPreview : 1;
+  const { data: livePreview } = useQuery<any>({
+    queryKey: ["/api/admin/albums", albumId, "gooddeed-pricing-preview", previewQty],
+    queryFn: async () => {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/albums/${albumId}/gooddeed-pricing-preview?runQty=${Math.max(1, previewQty)}`,
+      );
+      return r.json();
+    },
+    enabled: lockedCost === null,
+  });
+  const liveCost: number | null =
+    typeof livePreview?.totalPerUnitCents === "number"
+      ? livePreview.totalPerUnitCents
+      : null;
+  const readoutCost = lockedCost ?? liveCost ?? livePlatformCostCents;
 
   const priceCents = useMemo(() => parseDollars(price), [price]);
   const earnsCents = priceCents !== null && readoutCost !== null ? priceCents - readoutCost : null;

@@ -249,6 +249,61 @@ SQL
 migrate_album_addons_vendor_legs dev  "${DATABASE_URL:-}"
 migrate_album_addons_vendor_legs prod "${PROD_DATABASE_URL:-}"
 
+# Task #471 — Quickprinter capability + platform-default GoodDeed
+# vendor routing + per-paper-size printing ladders. Idempotent on both
+# DBs so a fresh-clone dev never 500s the Sell panel after this merge
+# and the publish dev→prod diff stays empty. Backfills Hoover Printing
+# as the seed Quickprinter and copies its existing `tiers_json` into
+# the Letter ladder of `size_ladders_json`.
+migrate_task_471_quickprinter() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-471 migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE vendors
+  ADD COLUMN IF NOT EXISTS is_quickprinter boolean NOT NULL DEFAULT false;
+ALTER TABLE vendor_gooddeed_services
+  ADD COLUMN IF NOT EXISTS size_ladders_json jsonb;
+ALTER TABLE payout_settings
+  ADD COLUMN IF NOT EXISTS default_print_vendor_id     varchar REFERENCES vendors(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS default_hologram_vendor_id  varchar REFERENCES vendors(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS default_insertion_vendor_id varchar REFERENCES vendors(id) ON DELETE SET NULL;
+-- Seed Hoover Printing as the Quickprinter and copy its existing
+-- printing tiers into the Letter ladder. Match by case-insensitive
+-- name so "Hoover Printing" / "Hoover" both land. No-op when the
+-- row doesn't exist.
+UPDATE vendors
+   SET is_quickprinter = true, is_maker = false
+ WHERE lower(name) LIKE 'hoover%'
+   AND is_quickprinter = false;
+UPDATE vendor_gooddeed_services s
+   SET size_ladders_json = jsonb_build_object('letter', s.tiers_json)
+  FROM vendors v
+ WHERE s.vendor_id = v.id
+   AND s.service = 'printing'
+   AND v.is_quickprinter = true
+   AND s.size_ladders_json IS NULL
+   AND s.tiers_json IS NOT NULL;
+-- Seed the platform default Printing vendor to Hoover if unset.
+UPDATE payout_settings
+   SET default_print_vendor_id = v.id
+  FROM vendors v
+ WHERE payout_settings.id = 'default'
+   AND payout_settings.default_print_vendor_id IS NULL
+   AND v.is_quickprinter = true
+   AND lower(v.name) LIKE 'hoover%';
+SQL
+  then
+    echo "post-merge: task-471 quickprinter migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-471 quickprinter migration failed on $label (continuing)"
+  fi
+}
+migrate_task_471_quickprinter dev  "${DATABASE_URL:-}"
+migrate_task_471_quickprinter prod "${PROD_DATABASE_URL:-}"
+
 # Task #294 — shared per-entity contacts table + LinkedIn URL on people.
 # The same Add-a-contact surface now ships on vendor / press / label /
 # fulfillment detail pages and they all write here. NPOs keep using the

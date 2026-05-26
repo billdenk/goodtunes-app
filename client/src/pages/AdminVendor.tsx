@@ -840,6 +840,14 @@ function RolesPanel({ vendor }: { vendor: Vendor }) {
             testId="toggle-role-maker"
             onChange={(next) => {
               if (!ensureOne(next, vendor.isReseller)) return;
+              if (next && (vendor as any).isQuickprinter) {
+                toast({
+                  title: "Can't be both",
+                  description: "Quickprinter is print-only; turn it off first to promote to Maker.",
+                  variant: "destructive",
+                });
+                return;
+              }
               flip.mutate({ isMaker: next });
             }}
           />
@@ -852,6 +860,28 @@ function RolesPanel({ vendor }: { vendor: Vendor }) {
             onChange={(next) => {
               if (!ensureOne(vendor.isMaker, next)) return;
               flip.mutate({ isReseller: next });
+            }}
+          />
+          {/* Task #471 — Quickprinter capability. Hoover Printing and
+              friends: print-only partners who run the certificate paper
+              for every GoodDeed. Mutually exclusive with Maker (a
+              vinyl press isn't a Quickprinter). */}
+          <RoleToggle
+            label="Quickprinter"
+            description="Print-only partner for GoodDeed certificates. Can't be combined with Maker."
+            checked={!!(vendor as any).isQuickprinter}
+            disabled={flip.isPending || vendor.isMaker}
+            testId="toggle-role-quickprinter"
+            onChange={(next) => {
+              if (next && vendor.isMaker) {
+                toast({
+                  title: "Can't be both",
+                  description: "Maker is on; turn it off first to mark this vendor a Quickprinter.",
+                  variant: "destructive",
+                });
+                return;
+              }
+              flip.mutate({ isQuickprinter: next } as any);
             }}
           />
         </div>
