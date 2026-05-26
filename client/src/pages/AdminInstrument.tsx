@@ -350,7 +350,7 @@ export function AdminInstrument() {
         {/* TABS — left tabs + gray trash on the right, both riding the
             same hairline. Mirrors AdminPerson/AdminAlbum. */}
         <div
-          className="bg-white flex items-end justify-between gap-5 border-b border-slate-200"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-instrument"
         >
           <div className="flex items-center gap-5 overflow-x-auto">
