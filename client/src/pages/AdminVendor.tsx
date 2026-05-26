@@ -427,7 +427,7 @@ export function AdminVendor() {
             hover reveals a "Delete" label; opens a rose-tinted confirm
             sheet per the replit.md destructive-actions rule. */}
         <div
-          className="bg-white flex items-end justify-between gap-5 border-b border-slate-200"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-vendor"
         >
           <div className="flex items-center gap-5 overflow-x-auto">
@@ -495,6 +495,9 @@ export function AdminVendor() {
           <OrganizationPeople
             apiPath={`/api/vendors/${vendor.id}/people`}
             testIdPrefix="vendor"
+            entityKind="vendor"
+            entityId={vendor.id}
+            entityName={vendor.name}
             blurb="People at this vendor — buyer, A&R, accounts payable, whoever you need to reach."
           />
         )}

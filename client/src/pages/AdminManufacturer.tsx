@@ -242,7 +242,7 @@ export function AdminManufacturer() {
 
         {/* TAB BAR — Overview / People / Albums / Analytics; Refresh + Delete sit on the right. */}
         <div
-          className="bg-white flex items-end justify-between gap-5 border-b border-slate-200"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-press"
         >
           <div className="flex items-center gap-5 overflow-x-auto">
@@ -325,6 +325,9 @@ export function AdminManufacturer() {
           <OrganizationPeople
             apiPath={`/api/manufacturers/${m.id}/people`}
             testIdPrefix="press"
+            entityKind="manufacturer"
+            entityId={m.id}
+            entityName={m.name}
             blurb="People at this plant — production manager, account rep, whoever you need to reach."
           />
         )}

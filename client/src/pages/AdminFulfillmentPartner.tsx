@@ -223,6 +223,9 @@ export function AdminFulfillmentPartner() {
         <OrganizationPeople
           apiPath={`/api/fulfillment-partners/${f.id}/people`}
           testIdPrefix="fulfillment"
+          entityKind="fulfillment"
+          entityId={f.id}
+          entityName={f.name}
           blurb="People at this fulfillment partner — operations lead, account rep, whoever you need to reach."
         />
       </div>

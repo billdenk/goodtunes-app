@@ -14992,6 +14992,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ id: personId, canInviteAmbassadors: enabled });
   });
 
+  // Task #421 — partner-detail "Add Admin" path. After the People panel
+  // attaches a Person as a Contact, it calls this to grant the person
+  // a partner-scoped admin role using the existing setUserRole plumbing
+  // (same path as /api/admin/customers/:id/promote, but keyed off a
+  // Person's contactEmail instead of a customer_users row). Looks up an
+  // existing users row by lower(email); does NOT mint new users rows
+  // here — if the Person has never signed in we surface a clear error
+  // so the operator falls back to the Invite Artist flow.
+  app.post(
+    "/api/admin/people/:id/grant-admin-role",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const personId = String(req.params.id);
+      const role = String(req.body?.role || "").trim();
+      const roleScopeId = req.body?.roleScopeId ? String(req.body.roleScopeId) : null;
+      if (!ADMIN_ROLES.includes(role as any)) {
+        return res.status(400).json({ message: "Unknown role" });
+      }
+      const scopedRoles = ["artist", "label", "manufacturer", "fulfillment", "non_profit", "vendor"];
+      if (scopedRoles.includes(role) && !roleScopeId) {
+        return res.status(400).json({ message: "Scope required for this role" });
+      }
+      const p = await db.execute<{ email: string | null; name: string }>(sql`
+        SELECT contact_email AS email, name FROM people WHERE id = ${personId} LIMIT 1
+      `);
+      const person = ((p as any).rows ?? [])[0];
+      if (!person) return res.status(404).json({ message: "Person not found" });
+      if (!person.email) {
+        return res.status(400).json({
+          message: `${person.name} has no contact email on file — set one on the Person, or use Invite Artist instead.`,
+        });
+      }
+      const u = await db.execute<{ id: string }>(sql`
+        SELECT id FROM users WHERE lower(email) = lower(${person.email}) LIMIT 1
+      `);
+      const adminUserId = ((u as any).rows ?? [])[0]?.id as string | undefined;
+      if (!adminUserId) {
+        return res.status(400).json({
+          message: `No admin account exists for ${person.email} yet — send them an Invite Artist link, or have them sign up first.`,
+        });
+      }
+      await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${adminUserId}`);
+      await setUserRole(adminUserId, role as any, roleScopeId);
+      res.json({ adminUserId, role, roleScopeId });
+    },
+  );
+
   // GET /api/admin/referral-funding-config — super_admin reads singleton.
   app.get("/api/admin/referral-funding-config", requireAdmin, async (req, res) => {
     const info = await getUserRole(req.session.userId!);

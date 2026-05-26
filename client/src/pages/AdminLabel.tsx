@@ -332,7 +332,7 @@ export function AdminLabel() {
         {/* TABS — left tabs + gray trash on the right, both riding the
             same hairline. Mirrors AdminPerson/AdminAlbum. */}
         <div
-          className="bg-white flex items-end justify-between gap-5 border-b border-slate-200"
+          className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-label"
         >
           <div className="flex items-center gap-5 overflow-x-auto">
@@ -391,6 +391,9 @@ export function AdminLabel() {
           <OrganizationPeople
             apiPath={`/api/labels/${label.id}/people`}
             testIdPrefix="label"
+            entityKind="label"
+            entityId={label.id}
+            entityName={label.name}
             blurb="People at this label — A&R, label manager, accounts, anyone you need to reach."
           />
         )}
