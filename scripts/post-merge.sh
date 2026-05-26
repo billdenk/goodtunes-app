@@ -853,6 +853,30 @@ SQL
 migrate_legacy_gogoods_id dev  "${DATABASE_URL:-}"
 migrate_legacy_gogoods_id prod "${PROD_DATABASE_URL:-}"
 
+# Task #423 — snapshot album track count on saved SKUs so the
+# Publishing line (trackCount × mechanicals) doesn't silently shift
+# when songs are added/removed after Save. The task agent applied
+# the column to dev only ("drizzle push is interactive in this repo")
+# and didn't land a post-merge step, so prod's Sell tab 500'd on the
+# select. Idempotent.
+migrate_album_skus_track_count() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_skus.cost_snapshot_track_count migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE album_skus ADD COLUMN IF NOT EXISTS cost_snapshot_track_count integer;
+SQL
+  then
+    echo "post-merge: album_skus.cost_snapshot_track_count migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_skus.cost_snapshot_track_count migration failed on $label (continuing)"
+  fi
+}
+migrate_album_skus_track_count dev  "${DATABASE_URL:-}"
+migrate_album_skus_track_count prod "${PROD_DATABASE_URL:-}"
+
 # Task #400 — Welcome-back flow for imported gogoods.com fans.
 # Adds:
 #   * customer_users.onboarded_at         — stamp after 3-screen onboarding
