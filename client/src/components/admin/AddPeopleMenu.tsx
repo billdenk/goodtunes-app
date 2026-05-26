@@ -182,12 +182,22 @@ type SpotifyCandidate = {
   imageUrl?: string | null;
 };
 
+type ScrapePersonResult = {
+  source: "apple" | "spotify" | "bandcamp" | "generic" | "unknown";
+  name: string | null;
+  title?: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+  links?: Array<{ kind: string; url: string }>;
+};
+
 function PersonPicker({
   value,
   onChange,
   excludeIds,
   testIdPrefix,
   enableSpotify,
+  onPrefilled,
 }: {
   value: PersonLite | null;
   onChange: (p: PersonLite | null) => void;
@@ -195,9 +205,26 @@ function PersonPicker({
   testIdPrefix: string;
   /** Adds a "Search Spotify" fallback button (only used by Invite Artist). */
   enableSpotify?: boolean;
+  /** Fires after a paste-a-URL prefill resolves with extra scraped
+      fields the parent dialog can hydrate (e.g. AttachContactDialog
+      prefilling its Role input from JSON-LD `jobTitle`). */
+  onPrefilled?: (info: { title: string | null }) => void;
 }) {
   const [q, setQ] = useState("");
   const [spotifyQuery, setSpotifyQuery] = useState<string | null>(null);
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
+  // Staged scrape result — the operator confirms (or discards) this
+  // before any Person row is created. Mirrors the staged-prefill UX
+  // in NewAlbumArtistDialog so admins can review what the scraper
+  // pulled before it lands in the database.
+  const [pastePrefill, setPastePrefill] = useState<{
+    name: string;
+    title: string | null;
+    bio: string | null;
+    photoUrl: string | null;
+    links: Array<{ kind: string; url: string }>;
+  } | null>(null);
 
   const results = useQuery<PersonLite[]>({
     queryKey: ["/api/admin/people", { q }],
@@ -265,6 +292,68 @@ function PersonPicker({
       }),
   });
 
+  // Paste-a-URL prefill — Bandcamp / artist site / Apple Music / Spotify
+  // / generic Person JSON-LD. Mirrors the same affordance NewAlbumArtist
+  // Dialog adds on the album-create flow so the Add Admin / Add
+  // Ambassador / Invite Artist dialogs all create a populated Person row
+  // (name + bio + photo + social links) from one URL paste.
+  // Step 1: scrape. Stages the result into pastePrefill — does NOT
+  // touch the database. The operator reviews the preview card and
+  // confirms via the explicit "Add to People" button below.
+  const scrapeUrlMut = useMutation({
+    mutationFn: async (url: string) => {
+      const scrapeRes = await apiRequest("POST", "/api/admin/people/scrape", { url });
+      const scrape = (await scrapeRes.json()) as ScrapePersonResult;
+      const scrapedName = (scrape.name || "").trim();
+      if (!scrapedName) {
+        throw new Error("Couldn't find a person at that URL — search by name instead.");
+      }
+      return {
+        name: scrapedName,
+        title: scrape.title?.trim() || null,
+        bio: scrape.bio ?? null,
+        photoUrl: scrape.photoUrl ?? null,
+        links: scrape.links ?? [],
+      };
+    },
+    onSuccess: (prefill) => {
+      setPastePrefill(prefill);
+      setPasteError(null);
+    },
+    onError: (e) => setPasteError(humanizeApiError(e)),
+  });
+
+  // Step 2: commit. Fires when the operator confirms the staged
+  // prefill is correct. Maps classified links onto the named columns
+  // POST /api/admin/people already accepts; surfaces the scraped
+  // title back up to the parent dialog via onPrefilled.
+  const commitPrefillMut = useMutation({
+    mutationFn: async () => {
+      if (!pastePrefill) throw new Error("No prefill staged");
+      const body: Record<string, unknown> = {
+        name: pastePrefill.name,
+        photoUrl: pastePrefill.photoUrl,
+        bio: pastePrefill.bio,
+      };
+      for (const link of pastePrefill.links) {
+        if (!(link.kind in body)) body[link.kind] = link.url;
+      }
+      const created = await apiRequest("POST", "/api/admin/people", body);
+      const person = (await created.json()) as PersonLite;
+      return { person, title: pastePrefill.title };
+    },
+    onSuccess: ({ person, title }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people"] });
+      onChange({ id: person.id, name: person.name, photoUrl: person.photoUrl ?? null });
+      onPrefilled?.({ title });
+      setPasteUrl("");
+      setPasteError(null);
+      setPastePrefill(null);
+      toast({ title: `Added ${person.name}` });
+    },
+    onError: (e) => setPasteError(humanizeApiError(e)),
+  });
+
   if (value) {
     return (
       <div
@@ -300,6 +389,112 @@ function PersonPicker({
 
   return (
     <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          type="url"
+          placeholder="Paste a URL (Bandcamp, Apple Music, Spotify, bio page)"
+          value={pasteUrl}
+          onChange={(e) => { setPasteUrl(e.target.value); setPasteError(null); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && pasteUrl.trim() && !scrapeUrlMut.isPending) {
+              e.preventDefault();
+              scrapeUrlMut.mutate(pasteUrl.trim());
+            }
+          }}
+          disabled={scrapeUrlMut.isPending || commitPrefillMut.isPending}
+          data-testid={`input-${testIdPrefix}-paste-url`}
+        />
+        <button
+          type="button"
+          onClick={() => scrapeUrlMut.mutate(pasteUrl.trim())}
+          disabled={scrapeUrlMut.isPending || commitPrefillMut.isPending || !pasteUrl.trim()}
+          className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 whitespace-nowrap"
+          data-testid={`button-${testIdPrefix}-paste-url`}
+        >
+          {scrapeUrlMut.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          Prefill
+        </button>
+      </div>
+      {pasteError && (
+        <p
+          className="text-xs text-amber-700 leading-snug"
+          data-testid={`text-${testIdPrefix}-paste-url-error`}
+        >
+          {pasteError}
+        </p>
+      )}
+      {pastePrefill && (
+        // Staged scrape preview — operator confirms via "Add to People"
+        // before the row is created. Discarding clears the staged data
+        // so the same paste field can be reused for another URL.
+        <div
+          className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2"
+          data-testid={`card-${testIdPrefix}-paste-prefill`}
+        >
+          <div className="flex gap-3">
+            {pastePrefill.photoUrl ? (
+              <img
+                src={pastePrefill.photoUrl}
+                alt=""
+                className="w-12 h-12 rounded-md object-cover bg-slate-100 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-md bg-slate-100 flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <div className="text-sm font-semibold text-slate-900 truncate">
+                {pastePrefill.name}
+              </div>
+              {pastePrefill.title && (
+                <div className="text-xs text-slate-500 truncate">
+                  {pastePrefill.title}
+                </div>
+              )}
+              {pastePrefill.bio && (
+                <p className="text-xs text-slate-700 leading-snug line-clamp-2 pt-0.5">
+                  {pastePrefill.bio}
+                </p>
+              )}
+              {pastePrefill.links.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {pastePrefill.links.map((l) => (
+                    <span
+                      key={l.kind + l.url}
+                      className="inline-flex items-center rounded-full bg-white border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600"
+                    >
+                      {l.kind.replace(/Url$/, "")}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => { setPastePrefill(null); setPasteError(null); }}
+              disabled={commitPrefillMut.isPending}
+              className="h-8 px-3 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-60"
+              data-testid={`button-${testIdPrefix}-paste-prefill-discard`}
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={() => commitPrefillMut.mutate()}
+              disabled={commitPrefillMut.isPending}
+              className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
+              data-testid={`button-${testIdPrefix}-paste-prefill-commit`}
+            >
+              {commitPrefillMut.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Add to People
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-1">
+        or search
+      </div>
       <Input
         type="text"
         placeholder="Search People (2+ chars)…"
@@ -514,6 +709,13 @@ function AttachContactDialog(
             onChange={setPicked}
             excludeIds={props.attachedIds}
             testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
+            // Paste-a-URL prefill: a scraped JSON-LD `jobTitle`
+            // (vendor team pages, label staff pages) maps onto the Role
+            // input here so the operator doesn't retype it. Only fills
+            // when the field is still empty — never clobber.
+            onPrefilled={(info) => {
+              if (info.title && !role.trim()) setRole(info.title);
+            }}
           />
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">

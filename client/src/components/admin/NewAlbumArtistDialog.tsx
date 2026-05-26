@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ExternalLink } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, X } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
@@ -87,13 +87,15 @@ interface AppleCandidate {
 }
 
 interface ScrapeResult {
-  source: "apple" | "spotify" | "unknown";
+  source: "apple" | "spotify" | "bandcamp" | "generic" | "unknown";
   name: string | null;
+  title?: string | null;
   photoUrl: string | null;
   bio: string | null;
   itunesArtistId: string | null;
   appleMusicUrl: string | null;
   spotifyUrl: string | null;
+  links?: Array<{ kind: string; url: string }>;
   albums?: Array<{
     collectionId: number;
     name: string;
@@ -177,6 +179,23 @@ export function NewAlbumArtistDialog({
   const qc = useQueryClient();
   const [stage, setStage] = useState<Stage>("intro");
   const [name, setName] = useState("");
+  // Paste-a-URL prefill (Bandcamp / artist site / Spotify / Apple Music
+  // / generic Person JSON-LD). Runs through the same /api/admin/people/
+  // scrape endpoint the confirm step uses; result is either committed
+  // directly (generic / bandcamp) or routed through the existing
+  // Apple/Spotify confirm stage when the pasted URL is one of those.
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
+  // Bandcamp / generic prefill is *staged*, not auto-committed — the
+  // scraper drops {bio, photoUrl, links} here and the operator clicks
+  // the existing "Enter manually" / "Add person" button to actually
+  // create the row. That way the admin can edit the name, drop a
+  // wrong photo, or change anything else before save.
+  const [pastePrefill, setPastePrefill] = useState<{
+    bio: string | null;
+    photoUrl: string | null;
+    links: Array<{ kind: string; url: string }>;
+  } | null>(null);
   const [hasSearchedStreaming, setHasSearchedStreaming] = useState(false);
   const [spotifyError, setSpotifyError] = useState<"configured" | "failed" | null>(null);
   const [picked, setPicked] = useState<SpotifyCandidate | null>(null);
@@ -197,6 +216,9 @@ export function NewAlbumArtistDialog({
     if (open) {
       setStage("intro");
       setName("");
+      setPasteUrl("");
+      setPasteError(null);
+      setPastePrefill(null);
       setHasSearchedStreaming(false);
       setSpotifyError(null);
       setPicked(null);
@@ -354,11 +376,97 @@ export function NewAlbumArtistDialog({
     onSelect({ name: p.name, id: p.id });
   };
 
-  // ---------- Action: enter manually (name only) ----------
+  // ---------- Action: paste-a-URL prefill ----------
+  // Scrapes the URL via /api/admin/people/scrape, then takes one of two
+  // paths depending on what the server identified:
+  //   • Apple Music / Spotify artist URL → synthesize a candidate and
+  //     route through the existing confirm stage so the admin gets the
+  //     same Apple-discography backfill the search flow gets.
+  //   • Bandcamp / generic Person page → create the Person directly
+  //     with the prefilled name / bio / photo / links, then onSelect.
+  // Dup guard mirrors the streaming-confirm flow: if the scrape returns
+  // a name that already exists locally (or an itunesArtistId that does),
+  // open the existing row instead of double-creating.
+  const handlePasteUrl = async () => {
+    const trimmedUrl = pasteUrl.trim();
+    if (!trimmedUrl) return;
+    setPasteError(null);
+    let scrape: ScrapeResult;
+    try {
+      scrape = await scrapeMut.mutateAsync(trimmedUrl);
+    } catch (e: any) {
+      // 422 (no person extractable) and 502 (transport failure) both
+      // surface inline so the admin can fill the fields by hand.
+      const msg = e?.message?.match(/\{[\s\S]*"message"\s*:\s*"([^"]+)"/)?.[1]
+        || e?.message
+        || "Couldn't read that URL.";
+      setPasteError(msg);
+      return;
+    }
+
+    // Apple / Spotify routes synthesize a SpotifyCandidate so the
+    // existing confirm flow handles enrichment + discography.
+    if (scrape.source === "apple" || scrape.source === "spotify") {
+      const candidate: SpotifyCandidate = {
+        id: `${scrape.source}-${scrape.itunesArtistId ?? scrape.spotifyUrl ?? trimmedUrl}`,
+        name: scrape.name || trimmedUrl || "Untitled",
+        source: scrape.source,
+        spotifyUrl: scrape.spotifyUrl ?? undefined,
+        appleMusicUrl: scrape.appleMusicUrl ?? undefined,
+        itunesArtistId: scrape.itunesArtistId ?? undefined,
+        photoUrl: scrape.photoUrl,
+        popularity: 0,
+        followers: 0,
+        genres: [],
+      };
+      await handlePick(candidate);
+      return;
+    }
+
+    // Bandcamp / generic / unknown — *stage* the prefill so the operator
+    // can edit the Name (and review the photo/bio preview) before the
+    // existing "Enter manually" button commits the row. Never create
+    // here. If we couldn't find a name, leave the Name input as-is and
+    // surface the error inline so the operator can type one.
+    const scrapedName = (scrape.name || "").trim();
+    if (!scrapedName) {
+      setPasteError("Couldn't find a name on that page — type one below.");
+      return;
+    }
+    // Dup guard: if the scraped name already exists in the catalog,
+    // open the existing row directly instead of staging a duplicate.
+    const existing = people.find(
+      (p) => p.name.trim().toLowerCase() === scrapedName.toLowerCase(),
+    );
+    if (existing) {
+      toast({
+        title: `Already in your catalog`,
+        description: `Opening ${existing.name}.`,
+      });
+      onSelect({ name: existing.name, id: existing.id });
+      return;
+    }
+    setName(scrapedName);
+    setPastePrefill({
+      bio: scrape.bio ?? null,
+      photoUrl: scrape.photoUrl ?? null,
+      links: scrape.links ?? [],
+    });
+  };
+
+  // ---------- Action: enter manually (name + any staged prefill) ----------
   const handleManual = async () => {
     if (!trimmed) return;
+    const body: Record<string, unknown> = { name: trimmed };
+    if (pastePrefill) {
+      if (pastePrefill.photoUrl) body.photoUrl = pastePrefill.photoUrl;
+      if (pastePrefill.bio) body.bio = pastePrefill.bio;
+      for (const link of pastePrefill.links) {
+        if (!(link.kind in body)) body[link.kind] = link.url;
+      }
+    }
     try {
-      const person = await createPersonMut.mutateAsync({ name: trimmed });
+      const person = await createPersonMut.mutateAsync(body);
       toast({ title: `Added ${person.name}` });
       onSelect({ name: person.name, id: person.id });
     } catch (e: any) {
@@ -556,6 +664,59 @@ export function NewAlbumArtistDialog({
         {stage === "intro" && (
           <div className="flex-1 flex flex-col p-5 overflow-hidden">
             <div className="flex-1 overflow-y-auto space-y-4">
+              {/* Paste-a-URL prefill — same shape as the Add dialogs on
+                  vendors / labels / presses. Accepts Apple Music, Spotify,
+                  Bandcamp, or any generic bio page with Person JSON-LD or
+                  OG tags. Routes Apple/Spotify URLs through the normal
+                  confirm + discography flow; commits Bandcamp/generic
+                  directly with whatever fields we extracted. */}
+              <div>
+                <label
+                  htmlFor="new-album-artist-paste-url"
+                  className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1"
+                >
+                  Paste a URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="new-album-artist-paste-url"
+                    type="url"
+                    value={pasteUrl}
+                    onChange={(e) => { setPasteUrl(e.target.value); setPasteError(null); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && pasteUrl.trim() && !busy) {
+                        e.preventDefault();
+                        handlePasteUrl();
+                      }
+                    }}
+                    placeholder="Apple Music, Spotify, Bandcamp, or a bio page"
+                    disabled={busy}
+                    className="flex-1 h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-60"
+                    data-testid="input-artist-paste-url"
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePasteUrl}
+                    disabled={busy || !pasteUrl.trim()}
+                    className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    data-testid="button-artist-paste-url"
+                  >
+                    {scrapeMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Prefill
+                  </button>
+                </div>
+                {pasteError && (
+                  <p
+                    className="text-xs text-amber-700 mt-1.5 leading-snug"
+                    data-testid="text-paste-url-error"
+                  >
+                    {pasteError}
+                  </p>
+                )}
+              </div>
+
+              <div className="border-t border-slate-100 -mx-5" />
+
               <div>
                 <label
                   htmlFor="new-album-artist-name"
@@ -586,6 +747,60 @@ export function NewAlbumArtistDialog({
                   We'll match against people already in your catalog as you type.
                 </p>
               </div>
+
+              {pastePrefill && (
+                // Staged prefill preview. Bio / photo / links from the
+                // pasted URL haven't been saved yet — the operator sees
+                // what *will* land when they click "Enter manually"
+                // below and can drop the prefill entirely with the X.
+                <div
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex gap-3"
+                  data-testid="card-paste-prefill-preview"
+                >
+                  {pastePrefill.photoUrl ? (
+                    <img
+                      src={pastePrefill.photoUrl}
+                      alt=""
+                      className="w-14 h-14 rounded-md object-cover bg-slate-100 flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-md bg-slate-100 flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Prefilled — click Enter manually to save
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPastePrefill(null)}
+                        className="text-slate-400 hover:text-slate-700 -mt-0.5"
+                        aria-label="Discard prefilled data"
+                        data-testid="button-paste-prefill-clear"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {pastePrefill.bio && (
+                      <p className="text-xs text-slate-700 leading-snug line-clamp-2">
+                        {pastePrefill.bio}
+                      </p>
+                    )}
+                    {pastePrefill.links.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {pastePrefill.links.map((l) => (
+                          <span
+                            key={l.kind + l.url}
+                            className="inline-flex items-center rounded-full bg-white border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600"
+                          >
+                            {l.kind.replace(/Url$/, "")}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {trimmed && localMatches.length > 0 && (
                 <div>

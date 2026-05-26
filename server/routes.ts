@@ -3680,6 +3680,93 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return candidates.find((p) => !isBrandIdentityProduct(p, siteName)) || null;
   }
 
+  // --- Paste-a-URL Person scrape helpers ---------------------------------
+  // Walk a JSON-LD blob collecting nodes whose @type matches Person /
+  // MusicGroup / PerformingGroup / MusicArtist. We deliberately reject
+  // Organization-shaped nodes — the brand-identity Product trap noted in
+  // memory applies here too: label/publisher pages embed an Organization
+  // card for the label itself that would otherwise import the brand as a
+  // Person.
+  function collectPeopleNodes(node: any, out: any[] = [], depth = 0): any[] {
+    if (!node || depth > 8) return out;
+    if (Array.isArray(node)) {
+      for (const x of node) collectPeopleNodes(x, out, depth + 1);
+      return out;
+    }
+    if (typeof node !== "object") return out;
+    const t = (node as any)["@type"];
+    const tList = Array.isArray(t) ? t.map((x: any) => String(x)) : [String(t ?? "")];
+    const isPeoplelike = tList.some((x) =>
+      /^(Person|MusicGroup|PerformingGroup|MusicArtist)$/i.test(x),
+    );
+    const isOrgish = tList.some((x) =>
+      /^(Organization|Corporation|LocalBusiness|Brand|WebSite|WebPage)$/i.test(x),
+    );
+    if (isPeoplelike && !isOrgish) out.push(node);
+    for (const key of Object.keys(node)) {
+      const v = (node as any)[key];
+      if (v && typeof v === "object") collectPeopleNodes(v, out, depth + 1);
+    }
+    return out;
+  }
+  function pickPerson(html: string): any | null {
+    const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    const candidates: any[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = ldRe.exec(html))) {
+      try { collectPeopleNodes(JSON.parse(m[1].trim()), candidates); }
+      catch { /* malformed JSON-LD — keep walking */ }
+    }
+    return candidates[0] ?? null;
+  }
+  // Classify a sameAs / external link into a known column on the `people`
+  // table. Anything we don't recognize goes to `websiteUrl` (the generic
+  // catch-all, per shared/schema.ts). Bandcamp also falls into websiteUrl
+  // because there's no dedicated bandcamp column today.
+  function classifyPersonLink(rawUrl: string): { kind: string; url: string } | null {
+    let u: URL;
+    try { u = new URL(rawUrl); } catch { return null; }
+    if (!/^https?:$/.test(u.protocol)) return null;
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    if (/(^|\.)instagram\.com$/.test(host)) return { kind: "instagramUrl", url: u.toString() };
+    if (/(^|\.)tiktok\.com$/.test(host)) return { kind: "tiktokUrl", url: u.toString() };
+    if (host === "twitter.com" || /(^|\.)x\.com$/.test(host)) return { kind: "twitterUrl", url: u.toString() };
+    if (/(^|\.)bsky\.app$/.test(host)) return { kind: "blueskyUrl", url: u.toString() };
+    if (/(^|\.)facebook\.com$/.test(host)) return { kind: "facebookUrl", url: u.toString() };
+    if (/(^|\.)open\.spotify\.com$/.test(host) || host === "spotify.com") return { kind: "spotifyUrl", url: u.toString() };
+    if (/(^|\.)music\.apple\.com$/.test(host)) return { kind: "appleMusicUrl", url: u.toString() };
+    if (/(^|\.)linkedin\.com$/.test(host)) return { kind: "linkedinUrl", url: u.toString() };
+    return { kind: "websiteUrl", url: u.toString() };
+  }
+  // Strip HTML out of a JSON-LD description (Shopify / Squarespace embed
+  // <p>/<br>) and collapse whitespace.
+  function cleanBioText(s: string): string {
+    return decodeEntities(
+      s.replace(/<br\s*\/?>/gi, "\n")
+       .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+       .replace(/<[^>]+>/g, "")
+       .replace(/\n{3,}/g, "\n\n")
+       .trim(),
+    );
+  }
+  // Gravatar — md5(lowercased trimmed email). The ?d=404 sentinel makes
+  // Gravatar 404 instead of returning the generic mystery-person silhouette
+  // when there's no profile, so we can silently skip in that case.
+  function gravatarUrlForEmail(email: string, size = 512): string {
+    const hash = createHash("md5").update(email.trim().toLowerCase()).digest("hex");
+    return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=404`;
+  }
+  async function tryGravatarRehost(email: string): Promise<string | null> {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return null;
+    try {
+      const src = gravatarUrlForEmail(email);
+      return await rehostRemoteImage(src);
+    } catch {
+      // 404 (no Gravatar) or transport failure — caller silently skips.
+      return null;
+    }
+  }
+
   async function rehostRemoteImage(src: string): Promise<string> {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 10_000);
@@ -9175,13 +9262,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(toPublicPerson(p));
   });
+  // Gravatar fallback for email-only Person entries. Returns the rehosted
+  // photoUrl when Gravatar has a profile for this email, null when it
+  // doesn't (silent miss — caller renders the default initials avatar).
+  app.post("/api/admin/people/gravatar", requireAdminBearer, async (req, res) => {
+    const email = String(req.body?.email ?? "").trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "A valid email is required" });
+    }
+    const photoUrl = await tryGravatarRehost(email);
+    return res.json({ photoUrl, found: !!photoUrl });
+  });
+
   app.post("/api/admin/people", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ message: "name is required" });
     const opt = (v: any) => (v ? String(v) : null);
+    // Gravatar fallback: when we have an email but no photo, hit Gravatar
+    // and rehost the avatar if a profile exists. Silent miss otherwise so
+    // the admin can fill the photo by hand later.
+    let photoUrl = opt(b.photoUrl);
+    if (!photoUrl && b.contactEmail) {
+      photoUrl = await tryGravatarRehost(String(b.contactEmail));
+    }
     const p = await storage.createPerson({
       name: String(b.name),
-      photoUrl: opt(b.photoUrl),
+      photoUrl,
       coverUrl: opt(b.coverUrl),
       bio: opt(b.bio),
       appleMusicUrl: opt(b.appleMusicUrl),
@@ -9685,7 +9791,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Detect service. Apple Music artist URLs look like
     //   /<country>/artist/<slug>/<numeric-id>(?i=...)?
     // Spotify artist URLs look like /artist/<base62>
-    let source: "apple" | "spotify" | "unknown" = "unknown";
+    // Bandcamp = anything on `<artist>.bandcamp.com` or bandcamp.com itself.
+    // Anything else is treated as a generic bio page (Person JSON-LD + OG
+    // fallback) — the catch-all for vendor staff pages, label team pages,
+    // wikipedia-style profiles, etc.
+    let source: "apple" | "spotify" | "bandcamp" | "generic" = "generic";
     let itunesArtistId: string | null = null;
     if (/(^|\.)music\.apple\.com$/.test(host)) {
       source = "apple";
@@ -9693,6 +9803,150 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (m) itunesArtistId = m[1];
     } else if (/(^|\.)open\.spotify\.com$/.test(host) || /(^|\.)spotify\.com$/.test(host)) {
       source = "spotify";
+    } else if (/(^|\.)bandcamp\.com$/.test(host) || host === "bandcamp.com") {
+      source = "bandcamp";
+    }
+
+    // -------- Generic / Bandcamp branch ---------------------------------
+    // Reuses the same OG + JSON-LD shape the instrument scraper uses but
+    // looks for Person / MusicGroup nodes instead of Product. Returns the
+    // unified prefill shape { name, title, bio, photoUrl, links[] }.
+    if (source === "generic" || source === "bandcamp") {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10_000);
+        const html = await safeFetchWithUaFallback(url, { signal: ctrl.signal })
+          .then((r) => {
+            if (!r.ok) throw new Error(`Page returned ${r.status}`);
+            return r.text();
+          })
+          .finally(() => clearTimeout(t));
+
+        const meta: Record<string, string> = {};
+        const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+        const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+        let m: RegExpExecArray | null;
+        while ((m = re1.exec(html))) { const k = m[1].toLowerCase(); if (!(k in meta)) meta[k] = decodeEntities(m[2]); }
+        while ((m = re2.exec(html))) { const k = m[2].toLowerCase(); if (!(k in meta)) meta[k] = decodeEntities(m[1]); }
+
+        const person = pickPerson(html);
+
+        // Name: JSON-LD wins. OG title strips trailing " | <site>" suffix
+        // (Bandcamp's "<Artist> | <Artist>" → "<Artist>"; LinkedIn-style).
+        let name: string | null = null;
+        if (person?.name) name = String(person.name).trim();
+        else if (meta["og:title"]) name = meta["og:title"];
+        else if (meta["twitter:title"]) name = meta["twitter:title"];
+        if (name) name = name.replace(/\s*[|·\-–—]\s*[^|·\-–—]{1,40}$/u, "").trim() || name;
+
+        // Title / role — JSON-LD jobTitle (vendor team pages), Bandcamp's
+        // "location" tag as a soft fallback. OG doesn't carry a role.
+        let title: string | null = null;
+        if (person?.jobTitle) title = String(person.jobTitle).trim();
+        else if (person?.affiliation?.name) title = String(person.affiliation.name).trim();
+
+        // Bio — JSON-LD description (rich), OG description (always short),
+        // <meta name=description> (always short). Strip HTML.
+        let bio: string | null = null;
+        const rawBio =
+          person?.description ||
+          meta["og:description"] ||
+          meta["twitter:description"] ||
+          meta["description"] ||
+          null;
+        if (rawBio) bio = cleanBioText(String(rawBio));
+
+        // Image — JSON-LD image can be { @type: ImageObject, url } or a
+        // bare URL or an array. Same picker the instrument scraper uses.
+        const pickImage = (img: any): string | null => {
+          if (!img) return null;
+          if (typeof img === "string") return img;
+          if (Array.isArray(img)) {
+            for (const x of img) { const v = pickImage(x); if (v) return v; }
+            return null;
+          }
+          if (typeof img === "object") return img.url || img.contentUrl || null;
+          return null;
+        };
+        let rawImage: string | null =
+          pickImage(person?.image) ||
+          meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] ||
+          null;
+        if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
+        if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
+
+        // Links — JSON-LD sameAs[] is the standard, plus the scrape URL
+        // itself classified by host (a Bandcamp page → websiteUrl). Dedup
+        // by kind, first-write-wins.
+        const links: Array<{ kind: string; url: string }> = [];
+        const seenKinds = new Set<string>();
+        const pushLink = (raw: string) => {
+          const cl = classifyPersonLink(raw);
+          if (!cl) return;
+          if (seenKinds.has(cl.kind)) return;
+          seenKinds.add(cl.kind);
+          links.push(cl);
+        };
+        const sameAs = person?.sameAs;
+        if (Array.isArray(sameAs)) {
+          for (const s of sameAs) {
+            if (typeof s === "string") pushLink(s);
+          }
+        } else if (typeof sameAs === "string") {
+          pushLink(sameAs);
+        }
+        // Bandcamp + generic: also include the original URL so the admin
+        // keeps the breadcrumb back to where the bio came from.
+        pushLink(url);
+
+        // Image must land in Object Storage — GoodTunes never hot-links a
+        // scraped photo (capabilities + asset-ownership rule). If the
+        // rehost fails we drop the photo entirely and let the admin set
+        // one by hand; the rest of the prefill still ships.
+        let photoUrl: string | null = null;
+        if (rawImage) {
+          try { photoUrl = await rehostRemoteImage(rawImage); }
+          catch { photoUrl = null; }
+        }
+
+        // No-person guard. A page with no name is not a Person page — bail
+        // with the structured 422 the UI uses to render its inline
+        // fallback copy. Apart from missing a name, we also bail if we
+        // got nothing else worth keeping (no bio, no photo, no extra
+        // links beyond the URL the operator pasted).
+        if (!name) {
+          return res.status(422).json({
+            source,
+            message: "Couldn't find a person at that URL — fill in the fields below.",
+          });
+        }
+        if (!bio && !photoUrl && links.length <= 1) {
+          return res.status(422).json({
+            source,
+            message: "Couldn't find a person at that URL — fill in the fields below.",
+          });
+        }
+
+        return res.json({
+          source,
+          name,
+          title,
+          bio,
+          photoUrl,
+          links,
+          // Legacy fields kept for shape compatibility with the existing
+          // Apple/Spotify response — null when not applicable.
+          itunesArtistId: null,
+          appleMusicUrl: null,
+          spotifyUrl: null,
+          albums: [],
+        });
+      } catch (e: any) {
+        const msg = e?.name === "AbortError"
+          ? "Page took too long to respond."
+          : (e?.message || "Unable to read that page");
+        return res.status(502).json({ source, message: msg });
+      }
     }
 
     try {
@@ -9834,21 +10088,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // ----- 3) Rehost photo so we don't depend on Apple's CDN long-term -----
+      // Photo must land in Object Storage — GoodTunes never hot-links a
+      // scraped photo. If the rehost fails we drop the photo entirely
+      // and let the admin set one by hand.
       let photoUrl: string | null = null;
       if (rawImage) {
         try { photoUrl = await rehostRemoteImage(rawImage); }
-        catch { photoUrl = rawImage; }
+        catch { photoUrl = null; }
       }
 
       const name = canonicalName || metaName || null;
+      // Build a links[] payload for shape parity with the generic branch
+      // so the client can iterate one list regardless of source. Apple
+      // and Spotify each carry their canonical own-URL plus, for Apple,
+      // a Spotify cross-link is never available (no free mapping).
+      const links: Array<{ kind: string; url: string }> = [];
+      if (source === "apple") links.push({ kind: "appleMusicUrl", url });
+      if (source === "spotify") links.push({ kind: "spotifyUrl", url });
       res.json({
         source,
         name,
+        title: null,
         photoUrl,
         bio,
         itunesArtistId,
         appleMusicUrl: source === "apple" ? url : null,
         spotifyUrl: source === "spotify" ? url : null,
+        links,
         albums,
       });
     } catch (e: any) {
