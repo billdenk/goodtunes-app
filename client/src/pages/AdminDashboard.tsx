@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -50,6 +50,56 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
  *   • /api/admin/orders        — recent activity (orders + payouts)
  *   • /api/admin/customers     — recent activity (new fans)
  */
+
+// Per-section error boundary so a crash in one dashboard widget paints
+// the actual error inline (instead of leaving the whole /admin landing
+// blank against the dark body bg). React error boundaries don't catch
+// errors thrown from effects or async callbacks — those still bubble
+// to `installGlobalErrorReporter()` in GlobalErrorBoundary.tsx and
+// paint the red fixed banner.
+class SectionBoundary extends Component<
+  { section: string; children: ReactNode },
+  { error: Error | null; info: string | null }
+> {
+  state = { error: null as Error | null, info: null as string | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: { componentStack?: string }) {
+    console.error(`[AdminDashboard:${this.props.section}]`, error, info);
+    this.setState({ info: info?.componentStack ?? null });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const e = this.state.error;
+    const stack = (e.stack ?? "").split("\n").slice(0, 8).join("\n");
+    const comp = (this.state.info ?? "").split("\n").slice(0, 8).join("\n");
+    return (
+      <div
+        className="rounded-lg border border-rose-300 bg-rose-50 text-rose-900 p-3 text-xs"
+        data-testid={`dashboard-section-error-${this.props.section}`}
+      >
+        <div className="font-bold mb-1">
+          Dashboard section "{this.props.section}" crashed
+        </div>
+        <div className="font-mono text-[11px] whitespace-pre-wrap break-all mb-2">
+          {e.name || "Error"}: {e.message || "(no message)"}
+        </div>
+        {stack && (
+          <pre className="font-mono text-[10px] whitespace-pre-wrap break-all opacity-80">
+{stack}
+          </pre>
+        )}
+        {comp && (
+          <pre className="font-mono text-[10px] whitespace-pre-wrap break-all opacity-80 mt-2">
+Component stack:
+{comp}
+          </pre>
+        )}
+      </div>
+    );
+  }
+}
 
 const BLUE = "#319ED8";
 const MINT = "#4AFFCA";
@@ -252,18 +302,28 @@ export function AdminDashboard() {
           actions={<RangeSwitcher value={range} onChange={setRange} />}
         />
 
-        {ops && <OpsHealthStrip ops={ops} />}
+        <SectionBoundary section="ops-health">
+          {ops && <OpsHealthStrip ops={ops} />}
+        </SectionBoundary>
 
-        {isSuperAdmin && <ReferralPayoutsCard />}
+        <SectionBoundary section="referral-payouts">
+          {isSuperAdmin && <ReferralPayoutsCard />}
+        </SectionBoundary>
 
-        <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
+        <SectionBoundary section="kpi-grid">
+          <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
+        </SectionBoundary>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
-            <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+            <SectionBoundary section="primary-chart">
+              <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+            </SectionBoundary>
           </div>
           <div>
-            <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} />
+            <SectionBoundary section="activity-feed">
+              <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} />
+            </SectionBoundary>
           </div>
         </div>
       </div>
