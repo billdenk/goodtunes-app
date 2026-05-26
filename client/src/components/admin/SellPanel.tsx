@@ -144,6 +144,9 @@ function snapCatalogLadder(
 
 export function SellPanel({
   albumId,
+  albumTitle = "",
+  artistName = "",
+  primaryArtistId = null,
   artworkUrl = null,
   sellMode = "direct",
   physicalFormat = null,
@@ -154,6 +157,12 @@ export function SellPanel({
   trackCount = 0,
 }: {
   albumId: string;
+  // Task #397 — threaded into the GoodDeed cert preview tile so the
+  // mock the artist sees in the Sell panel matches what fans get
+  // (album art on top + blue footer band with title + artist + photo).
+  albumTitle?: string;
+  artistName?: string;
+  primaryArtistId?: string | null;
   artworkUrl?: string | null;
   // Task #393 — number of songs on this album. Threaded into the vinyl
   // card's cost breakdown so Publishing reads `trackCount × $0.257`
@@ -200,6 +209,15 @@ export function SellPanel({
   const { data: invitedPress } = useQuery<InvitedPressResponse>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
   });
+  // Task #397 — pull the primary artist's photoUrl so the GoodDeed
+  // cert preview tile shows the same round artist headshot fans get
+  // on the printed certificate. Disabled when the album has no
+  // primary artist linked yet (string-only `artist` field).
+  const { data: primaryArtist } = useQuery<{ photoUrl: string | null } | null>({
+    queryKey: ["/api/people", primaryArtistId ?? "__none__"],
+    enabled: !!primaryArtistId,
+  });
+  const artistPhotoUrl = primaryArtist?.photoUrl ?? null;
   const costByFormat = useMemo(() => {
     const m = new Map<string, PayoutFormatCost>();
     const source = invitedPress?.press ? invitedPress.formatCosts : formatCosts;
@@ -413,6 +431,9 @@ export function SellPanel({
                           livePlatformCostCents={payoutSettings?.certCostCents ?? null}
                           onSaveAddon={upsertAddon.mutate}
                           isPrimaryVinyl={primaryVinylFormat === f}
+                          albumTitle={albumTitle}
+                          artistName={artistName}
+                          artistPhotoUrl={artistPhotoUrl}
                         />
                       );
                     })}
@@ -442,6 +463,9 @@ export function SellPanel({
                         livePlatformCostCents={payoutSettings?.certCostCents ?? null}
                         onSaveAddon={upsertAddon.mutate}
                         isPrimaryVinyl={primaryVinylFormat === f}
+                        albumTitle={albumTitle}
+                        artistName={artistName}
+                        artistPhotoUrl={artistPhotoUrl}
                       />
                     ))}
                   </>
@@ -451,32 +475,14 @@ export function SellPanel({
           )}
         </div>
 
-        {/* Signed cert */}
-        <div className="mb-8">
-          <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Printed & Signed GoodDeed®</h2>
-          <p className="text-sm text-slate-500 mb-4">
-            Optional add-on for every order. Fans see a single toggle on the Buy sheet with this price.
-            Your per-unit earnings are computed live against the platform's certificate cost — the
-            platform price locks in when you Save.
-          </p>
-          <div className="rounded-md border border-slate-200 bg-white p-4">
-            <AddonForm
-              existing={signedAddon ?? null}
-              livePlatformCostCents={payoutSettings?.certCostCents ?? null}
-              onSave={upsertAddon.mutate}
-            />
-          </div>
-          {/* Task #245 — per-leg vendor assignment + live wholesale
-              calculator. Sits under the AddonForm so the operator
-              edits the fan-facing price first, then routes the run. */}
-          <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-            <SignedCertVendorPanel albumId={albumId} />
-          </div>
-          {/* Task #246 — Sale-window batch workflow. */}
-          <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-            <CertSaleWindowPanel albumId={albumId} />
-          </div>
-        </div>
+        {/* Task #397 — the duplicate "Printed & Signed GoodDeed®"
+            section that used to live here (AddonForm + vendor panel +
+            sale-window panel) was a stale second source of truth for
+            the same signed_cert addon now configured inline on the
+            primary vinyl row via <GoodDeedPill> above. Removed for
+            direct-mode; the Shopify-mode equivalent (slim panel below)
+            keeps its own version since that branch has no vinyl row
+            to host the pill on. */}
 
         {/* Task #335 — "Lock in quote" CTA. Until the operator hits
             this, the rest of the album tabs (Press, Bonus) stay
@@ -1051,6 +1057,9 @@ function SkuRow({
   livePlatformCostCents,
   onSaveAddon,
   isPrimaryVinyl,
+  albumTitle,
+  artistName,
+  artistPhotoUrl,
 }: {
   format: AlbumFormat;
   existing: AlbumSku | null;
@@ -1079,6 +1088,7 @@ function SkuRow({
     jacketUpgrade: JacketUpgrade | null;
     pressTierId?: string | null;
     pressColorId?: string | null;
+    displayName?: string | null;
   }) => void;
   onDelete: () => void;
   // Exclusive-disclosure: owned by SellPanel via `useExclusiveDisclosure`.
@@ -1105,6 +1115,10 @@ function SkuRow({
   // would race-overwrite the same addon's plannedQuantity. SellPanel
   // sets this true on whichever vinyl row is first in the offered list.
   isPrimaryVinyl?: boolean;
+  // Task #397 — forwarded into the GoodDeed cert preview tile.
+  albumTitle?: string;
+  artistName?: string;
+  artistPhotoUrl?: string | null;
 }) {
   const isDraft = existing === null;
   const isVinyl = isVinylFormat(format);
@@ -1116,14 +1130,14 @@ function SkuRow({
   }, []);
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
-  // Task #393 — the header reads as the format label only. The
-  // earlier draft used an inline input bound to local state, but the
-  // schema has no per-SKU display-name column to autosave into and
-  // aliasing onto `vinylColor` corrupts the color-id contract the
-  // swatch picker + reload path depend on. Code review accepted
-  // "remove edit affordance if data model cannot support it" — once a
-  // `displayName` column exists this becomes a Tracks-style inline
-  // input bound to it.
+  // Task #397 — inline-editable row label (Tracks-row pattern). Empty
+  // string serialises to NULL server-side and the read path falls
+  // back to the format label, so the header never renders as
+  // "Untitled". Autosaves through the same debounced submit() the
+  // rest of the vinyl card uses.
+  const [displayNameStr, setDisplayNameStr] = useState<string>(
+    existing?.displayName ?? "",
+  );
   // Task #385 — vinyl rows lose Stock + the unlimited radio. Non-vinyl
   // rows (CD / cassette / merch) keep the legacy fixed/unlimited mode
   // and the Stock input untouched (out of scope for #385).
@@ -1413,9 +1427,11 @@ function SkuRow({
   const catalogDirty =
     usingCatalog &&
     (pressTierId !== (initialTier?.id ?? null) || pressColorId !== initialColorId);
+  const storedDisplayName = existing?.displayName ?? "";
   const dirty =
     active !== storedActive ||
     priceStr !== storedPrice ||
+    displayNameStr.trim() !== storedDisplayName.trim() ||
     (isVinyl
       ? parsedQty !== storedQty
       : (stockStr !== storedStock ||
@@ -1457,6 +1473,7 @@ function SkuRow({
           : null,
       pressTierId: usingCatalog ? pressTierId : null,
       pressColorId: usingCatalog ? pressColorId : null,
+      displayName: displayNameStr.trim() ? displayNameStr.trim() : null,
     });
   };
 
@@ -1489,6 +1506,7 @@ function SkuRow({
     active,
     pressTierId,
     pressColorId,
+    displayNameStr,
   ]);
 
   // Task #393 — destructive confirm for the trash button in the new
@@ -1508,8 +1526,11 @@ function SkuRow({
 
   // Collapsed summary text for the vinyl header. `12" LP · $25.00 · 1,000`
   // when fully configured; degrades gracefully when bits are missing.
+  // Task #397 — the artist-edited displayName lives in the inline
+  // input itself (placeholder falls back to the format label), so the
+  // summary only carries the trailing $price · qty · off bits.
   const collapsedSummary = (() => {
-    const bits: string[] = [ALBUM_FORMAT_LABEL[format]];
+    const bits: string[] = [];
     if (priceCents !== null) bits.push(dollars(priceCents));
     if (parsedQty > 0) bits.push(parsedQty.toLocaleString());
     if (!active) bits.push("off");
@@ -1531,17 +1552,33 @@ function SkuRow({
            no SaveLink, no bare ×. Format pivots happen via the
            Format dropdown inside the expanded REQUIRED body. */
         <div className={["flex items-center justify-between gap-2", expanded ? "mb-3" : ""].join(" ")}>
-          <button
-            type="button"
-            onClick={() => onSetExpanded(!expanded)}
-            className="flex-1 min-w-0 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 py-0.5 transition-colors"
-            aria-expanded={expanded}
-            data-testid={`button-row-title-${format}`}
-          >
-            <span className="text-sm font-semibold text-slate-900">
-              {expanded ? ALBUM_FORMAT_LABEL[format] : collapsedSummary}
-            </span>
-          </button>
+          {/* Task #397 — Tracks-row inline-editable title. Click the
+              input to edit; click anywhere else on the header (or the
+              chevron) to expand. Empty placeholder is the canonical
+              format label so the row never reads as "Untitled". */}
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            <input
+              type="text"
+              value={displayNameStr}
+              onChange={(e) => setDisplayNameStr(e.target.value.slice(0, 80))}
+              placeholder={ALBUM_FORMAT_LABEL[format]}
+              maxLength={80}
+              aria-label={`Row title — defaults to ${ALBUM_FORMAT_LABEL[format]}`}
+              className="min-w-0 flex-1 bg-transparent border-0 outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold focus:bg-slate-50 focus:px-1 focus:-mx-1 focus:rounded-sm transition-all"
+              data-testid={`input-sku-display-name-${format}`}
+            />
+            {!expanded && collapsedSummary && (
+              <button
+                type="button"
+                onClick={() => onSetExpanded(true)}
+                className="text-xs text-slate-500 truncate hover:text-slate-700 transition-colors"
+                aria-label="Expand format"
+                data-testid={`button-row-summary-${format}`}
+              >
+                {collapsedSummary}
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -2119,6 +2156,9 @@ function SkuRow({
         <GoodDeedPill
           albumId={albumId}
           artworkUrl={artworkUrl}
+          albumTitle={(displayNameStr.trim() || albumTitle) ?? ""}
+          artistName={artistName ?? ""}
+          artistPhotoUrl={artistPhotoUrl ?? null}
           vinylQty={parsedQty}
           existing={signedAddon ?? null}
           livePlatformCostCents={livePlatformCostCents ?? null}
@@ -2573,6 +2613,9 @@ function CatalogPicksBlock({
 function GoodDeedPill({
   albumId,
   artworkUrl,
+  albumTitle,
+  artistName,
+  artistPhotoUrl,
   vinylQty,
   existing,
   livePlatformCostCents,
@@ -2581,6 +2624,12 @@ function GoodDeedPill({
 }: {
   albumId: string;
   artworkUrl: string | null | undefined;
+  // Task #397 — power the proper cert visual (album art on top + a
+  // navy footer band with the album title, artist name, and a small
+  // round artist photo) instead of the previous 14×14 thumbnail.
+  albumTitle: string;
+  artistName: string;
+  artistPhotoUrl: string | null;
   vinylQty: number;
   existing: AlbumAddon | null;
   livePlatformCostCents: number | null;
@@ -2735,55 +2784,118 @@ function GoodDeedPill({
       </button>
       {open && (
         <div className="px-3 pb-3 pt-3 space-y-4 border-t border-slate-100">
-          {/* Inline cert preview — uses the album art on a placeholder
-              cert tile so the artist sees what fans get without leaving
-              the row. Task #393: the tile is a button that opens the
-              same cover-art editor the REQUIRED jacket pencil opens,
-              so artwork stays a single source of truth (`albums.artwork`). */}
-          <div className="flex items-center gap-3">
-            {onEditArtwork ? (
-              <button
-                type="button"
-                onClick={onEditArtwork}
-                aria-label="Edit cover art"
-                title="Edit cover art (syncs with the vinyl jacket)"
-                className="group relative w-14 h-14 rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
-                data-testid="button-gooddeed-edit-artwork"
+          {/* Task #397 — proper cert visual. Replaces the 14×14
+              thumbnail with the actual cert mock fans get: square
+              album art on top, navy footer band (brand bg) with the
+              album title + artist name + a small round artist photo
+              + the GoodDeed® mark, and a cert paragraph with a QR
+              placeholder beneath. The album-art tile keeps the
+              pencil-on-hover and opens the shared cover-art editor so
+              `albums.artwork` stays the single source of truth. */}
+          <div className="grid grid-cols-1 sm:grid-cols-[200px,1fr] gap-3 items-start">
+            <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
+              {onEditArtwork ? (
+                <button
+                  type="button"
+                  onClick={onEditArtwork}
+                  aria-label="Edit cover art"
+                  title="Edit cover art (syncs with the vinyl jacket)"
+                  className="group relative block w-full aspect-square bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
+                  data-testid="button-gooddeed-edit-artwork"
+                >
+                  {artworkUrl ? (
+                    <img
+                      src={artworkUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      data-testid="img-gooddeed-preview"
+                    />
+                  ) : (
+                    <span className="absolute inset-0 inline-flex items-center justify-center text-xs text-slate-400">
+                      No art
+                    </span>
+                  )}
+                  <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center">
+                    <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </span>
+                </button>
+              ) : (
+                <div className="relative w-full aspect-square bg-slate-50">
+                  {artworkUrl ? (
+                    <img
+                      src={artworkUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      data-testid="img-gooddeed-preview"
+                    />
+                  ) : (
+                    <span className="absolute inset-0 inline-flex items-center justify-center text-xs text-slate-400">
+                      No art
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Navy footer band — title + artist + photo + GoodDeed mark */}
+              <div
+                className="flex items-center gap-2.5 px-2.5 py-2 text-white"
+                style={{ backgroundColor: "var(--brand-bg)" }}
+                data-testid="band-gooddeed-cert"
               >
-                {artworkUrl ? (
+                {artistPhotoUrl ? (
                   <img
-                    src={artworkUrl}
+                    src={artistPhotoUrl}
                     alt=""
-                    className="w-full h-full object-cover"
-                    data-testid="img-gooddeed-preview"
+                    className="w-7 h-7 rounded-full object-cover flex-shrink-0 border border-white/20"
+                    data-testid="img-gooddeed-artist-photo"
                   />
                 ) : (
-                  <span className="text-xs text-slate-400">No art</span>
+                  <div
+                    className="w-7 h-7 rounded-full bg-white/10 flex-shrink-0 border border-white/20"
+                    aria-hidden
+                  />
                 )}
-                <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center">
-                  <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-xs font-semibold truncate leading-tight"
+                    data-testid="text-gooddeed-album-title"
+                  >
+                    {albumTitle || "Album title"}
+                  </div>
+                  <div
+                    className="text-xs text-white/70 truncate leading-tight"
+                    data-testid="text-gooddeed-artist-name"
+                  >
+                    {artistName || "Artist"}
+                  </div>
+                </div>
+                <span
+                  className="text-xs font-bold uppercase tracking-wider flex-shrink-0"
+                  style={{ color: "var(--brand-mint)" }}
+                  data-testid="mark-gooddeed"
+                >
+                  GoodDeed®
                 </span>
-              </button>
-            ) : (
-              <div className="w-14 h-14 rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
-                {artworkUrl ? (
-                  <img
-                    src={artworkUrl}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    data-testid="img-gooddeed-preview"
-                  />
-                ) : (
-                  <span className="text-xs text-slate-400">No art</span>
-                )}
               </div>
-            )}
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-slate-900">
-                Signed, numbered, hologrammed
-              </div>
-              <div className="text-xs text-slate-500">
-                Certificate of authenticity that ships with the vinyl
+            </div>
+            <div className="flex flex-col gap-2 text-xs text-slate-600 leading-relaxed">
+              <p>
+                A signed, numbered, hologrammed certificate of
+                authenticity that ships with the vinyl — every cert
+                carries a unique GoodDeed® serial and a QR code that
+                resolves to the fan's provenance page.
+              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <div
+                  className="w-12 h-12 rounded border border-dashed border-slate-300 grid place-items-center text-xs text-slate-400 flex-shrink-0"
+                  aria-hidden
+                  data-testid="placeholder-gooddeed-qr"
+                >
+                  QR
+                </div>
+                <div className="text-xs text-slate-400 leading-snug">
+                  QR placeholder — at print time this resolves to
+                  goodtunes.fm/deed/&lt;serial&gt;.
+                </div>
               </div>
             </div>
           </div>

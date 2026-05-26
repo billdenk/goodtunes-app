@@ -787,3 +787,26 @@ SQL
 }
 migrate_fan_favorites dev  "${DATABASE_URL:-}"
 migrate_fan_favorites prod "${PROD_DATABASE_URL:-}"
+
+# Task #397 — album_skus.display_name. Optional artist-edited label for
+# the format row in the Sell panel (empty falls back to the format
+# label on read). Pre-create on both DBs so the publish dev→prod diff
+# stays empty and fresh-clone dev never 500s the PUT /skus/:format
+# route on the new column.
+migrate_album_skus_display_name() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_skus.display_name migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE album_skus ADD COLUMN IF NOT EXISTS display_name text;
+SQL
+  then
+    echo "post-merge: album_skus.display_name migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_skus.display_name migration failed on $label (continuing)"
+  fi
+}
+migrate_album_skus_display_name dev  "${DATABASE_URL:-}"
+migrate_album_skus_display_name prod "${PROD_DATABASE_URL:-}"

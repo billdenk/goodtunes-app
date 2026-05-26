@@ -164,6 +164,7 @@ async function upsertSku(input: {
   stock: number | null;
   active: boolean;
   plannedQuantity: number | null;
+  displayName: string | null;
   costSnapshotManufacturingCents: number;
   costSnapshotPublishingCents: number;
   costSnapshotPaymentProcessingCents: number;
@@ -185,6 +186,7 @@ async function upsertSku(input: {
         stock: input.stock,
         active: input.active,
         plannedQuantity: input.plannedQuantity,
+        displayName: input.displayName,
         costSnapshotManufacturingCents: input.costSnapshotManufacturingCents,
         costSnapshotPublishingCents: input.costSnapshotPublishingCents,
         costSnapshotPaymentProcessingCents: input.costSnapshotPaymentProcessingCents,
@@ -506,6 +508,9 @@ export function registerCommerceRoutes(app: Express) {
     // only — snapshotted onto album_skus.vinylColor as the name).
     pressTierId: z.string().optional().nullable(),
     pressColorId: z.string().optional().nullable(),
+    // Task #397 — artist-edited row label. Empty string normalises to
+    // NULL so the read path falls back to the canonical format label.
+    displayName: z.string().max(120).optional().nullable(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
@@ -588,6 +593,7 @@ export function registerCommerceRoutes(app: Express) {
       stock: parsed.data.stock ?? null,
       active: parsed.data.active,
       plannedQuantity: parsed.data.plannedQuantity ?? null,
+      displayName: (parsed.data.displayName ?? "").trim() || null,
       costSnapshotManufacturingCents: manufacturingCents,
       costSnapshotPublishingCents: platformCost.publishingCents,
       costSnapshotPaymentProcessingCents: platformCost.paymentProcessingCents,

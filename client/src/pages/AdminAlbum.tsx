@@ -886,6 +886,9 @@ export function AdminAlbum() {
               {safeTab === "sell" && allowed.has("sell") && (
                 <SellPanel
                   albumId={album.id}
+                  albumTitle={album.title}
+                  artistName={album.artist}
+                  primaryArtistId={album.primaryArtistId ?? null}
                   artworkUrl={album.artwork}
                   sellMode={album.sellMode ?? null}
                   physicalFormat={album.physicalFormat ?? null}

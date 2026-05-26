@@ -1153,6 +1153,10 @@ export const albumSkus = pgTable(
     // readout in the admin Sell panel. Not a hard cap on fan checkout
     // today — `stock` is still the only column that gates buy attempts.
     plannedQuantity: integer("planned_quantity"),
+    // Task #397 — optional artist-edited display name for this format
+    // row. Empty / NULL falls back to the format label on read so the
+    // Buy sheet and admin Sell panel header never render as "Untitled".
+    displayName: text("display_name"),
     // Task #194 — per-format cost snapshot. Locked at save time off the
     // platform default in `payout_format_costs`, so the artist's profit
     // readout is stable until they re-save (mirrors the addon
