@@ -857,7 +857,7 @@ export function Login() {
                     <button
                       type="button"
                       onClick={() => navigate(isAdmin ? "/admin/forgot-password" : "/forgot-password")}
-                      className={`text-xs font-medium hover:underline ${isAdmin ? "text-[var(--brand-blue)]" : "text-[var(--brand-mint)]"}`}
+                      className={`text-xs font-medium hover:underline transition-colors ${isAdmin ? "text-[var(--brand-blue)]" : "text-white/60 hover:text-white/90"}`}
                       data-testid="link-forgot-password"
                     >
                       Forgot password?
