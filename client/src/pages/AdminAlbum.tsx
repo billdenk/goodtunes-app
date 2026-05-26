@@ -244,8 +244,8 @@ type Tab = "overview" | "tracks" | "bonus" | "sell" | "press" | "shopify";
 function visibleTabsFor(album: { sellMode?: string | null; sellQuoteLockedAt?: string | null }): { key: Tab; label: string }[] {
   const base: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
+    { key: "sell", label: "Estimate" },
     { key: "tracks", label: "Tracks" },
-    { key: "sell", label: "Sell" },
   ];
   if (!album.sellQuoteLockedAt) return base;
   if (album.sellMode === "direct") {
