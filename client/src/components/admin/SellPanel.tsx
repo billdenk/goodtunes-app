@@ -3445,10 +3445,28 @@ function GoodDeedPill({
   // Task #415 — Match the vinyl card's right column exactly: same
   // labels (RETAIL PRICE / SELECT QTY), same InfoTip popover, same
   // collapsible Profit chevron, same Total row. The active toggle
-  // lives in the header summary; Floor moves into the Profit
-  // disclosure (a guardrail, not a primary control); per-vendor cost
-  // becomes a secondary disclosure beneath the two-column card.
-  const totalCents = priceCents !== null ? priceCents * resolvedQty : null;
+  // lives in the header summary; per-vendor cost becomes a secondary
+  // disclosure beneath the two-column card.
+  //
+  // Task #485 — Total is now NET to the artist:
+  //   (retail − per-unit GoodDeed cost) × resolvedQty
+  // when we can resolve a cost. When the platform has no tier ladder
+  // configured (costCents === null), fall back to gross retail × qty
+  // and surface a one-line note that net can't be computed yet. Loss
+  // (negative net) renders in brand pink, same as the Profit row.
+  const canComputeNet = priceCents !== null && costCents !== null;
+  const netTotalCents = canComputeNet
+    ? (priceCents! - costCents!) * resolvedQty
+    : null;
+  const grossTotalCents = priceCents !== null ? priceCents * resolvedQty : null;
+  const totalCents = netTotalCents ?? grossTotalCents;
+  const totalIsLoss = netTotalCents !== null && netTotalCents < 0;
+  const totalLabel =
+    totalCents === null
+      ? "—"
+      : totalIsLoss
+        ? `-${dollars(Math.abs(totalCents))}`
+        : dollars(totalCents);
   const lossColor = earnsCents !== null && earnsCents < 0;
   const profitLabel =
     earnsCents === null
@@ -3827,8 +3845,14 @@ function GoodDeedPill({
                     className="mt-1 ml-1 pl-3 border-l border-slate-200 space-y-1.5 py-1"
                     data-testid="block-gooddeed-cost-breakdown"
                   >
-                    {/* GoodDeed Wholesale (printing + hologram + insertion). */}
-                    {preview ? (
+                    {/* Task #485 — Per-unit GoodDeed cost is the
+                        headline number here. It comes from the
+                        tiered ladder via the gooddeed-pricing-preview
+                        query (qty-driven) when available, and falls
+                        back to a snapshot or the live platform cost.
+                        The Floor $ guardrail was removed — the
+                        artist shouldn't be setting our cost. */}
+                    {costCents !== null ? (
                       <>
                         <div className="flex items-center justify-between text-xs tabular-nums">
                           <span className="text-slate-600">
@@ -3838,7 +3862,7 @@ function GoodDeedPill({
                             className="text-slate-900"
                             data-testid="text-gooddeed-wholesale"
                           >
-                            {dollars(preview.totalPerUnitCents)}
+                            {dollars(costCents)}
                           </span>
                         </div>
                         {/* CC fee — mirrors the vinyl SkuRow's
@@ -3863,62 +3887,65 @@ function GoodDeedPill({
                             className="text-slate-900"
                             data-testid="text-gooddeed-cost-per-unit"
                           >
-                            {dollars(preview.totalPerUnitCents)}
+                            {dollars(costCents)}
                           </span>
                         </div>
                       </>
                     ) : (
-                      <div className="text-xs text-slate-400 italic">
+                      <div
+                        className="text-xs text-slate-400 italic"
+                        data-testid="text-gooddeed-cost-unavailable"
+                      >
                         Cost preview unavailable — set platform-default
                         Printing/Hologram/Insertion vendors on Platform Pricing.
                       </div>
                     )}
-                    {/* Floor — guardrail moved out of the primary column. */}
-                    <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between gap-3">
-                      <label
-                        htmlFor="input-gooddeed-floor"
-                        className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
-                      >
-                        Floor $
-                      </label>
-                      <div className="flex items-center gap-1">
-                        <span className="text-slate-400 text-xs">$</span>
-                        <input
-                          id="input-gooddeed-floor"
-                          type="text"
-                          value={floorStr}
-                          onChange={(e) => setFloorStr(e.target.value)}
-                          inputMode="decimal"
-                          className={`${fieldClass} w-24 tabular-nums`}
-                          data-testid="input-gooddeed-floor"
-                          aria-label="Minimum price floor"
-                        />
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
 
-              {/* TOTAL — full cert run revenue. */}
+              {/* TOTAL — Task #485: net to the artist for the full
+                  cert run = (retail − per-unit GoodDeed cost) × qty.
+                  When the platform has no tier ladder configured
+                  we can't compute net, so we fall back to gross
+                  (retail × qty) and surface a one-line note. */}
               <div className="pt-3 border-t border-slate-100">
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-1.5">
                     <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                      Total
+                      {canComputeNet ? "Net to Artist" : "Total"}
                     </span>
                     <InfoTip
                       label="About total"
                       testId="info-gooddeed-total"
-                      text="Estimated retail revenue from the full cert run (Retail Price × Qty)."
+                      text={
+                        canComputeNet
+                          ? "What the artist nets on the full cert run: (Retail − GoodDeed cost) × Qty."
+                          : "Gross retail revenue (Retail × Qty). Net can't be shown until the platform tier ladder is configured."
+                      }
                     />
                   </span>
                   <span
-                    className="text-base font-semibold text-slate-900 tabular-nums"
+                    className={[
+                      "text-base font-semibold tabular-nums",
+                      totalIsLoss
+                        ? "text-[color:var(--brand-pink)]"
+                        : "text-slate-900",
+                    ].join(" ")}
                     data-testid="text-gooddeed-total"
                   >
-                    {totalCents === null ? "—" : dollars(totalCents)}
+                    {totalLabel}
                   </span>
                 </div>
+                {!canComputeNet && grossTotalCents !== null && (
+                  <div
+                    className="mt-1 text-xs text-slate-400 italic"
+                    data-testid="text-gooddeed-total-note"
+                  >
+                    Showing gross — net can't be computed until the
+                    platform tier ladder is set.
+                  </div>
+                )}
               </div>
             </div>
           </div>
