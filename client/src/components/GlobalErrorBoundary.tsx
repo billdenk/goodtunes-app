@@ -58,13 +58,52 @@ export function installGlobalErrorReporter() {
       /* never throw from the error reporter */
     }
   };
+  // An error counts as "ours" if any frame in its stack references a URL on
+  // our own origin, or — when the stack is empty — if the ErrorEvent's
+  // `filename` is on our origin. Cross-origin scripts (Replit preview chrome,
+  // iOS Safari extensions, injected userscripts) surface to `window.onerror`
+  // as the opaque `"Script error."` with no stack and no filename; those are
+  // foreign and must NOT paint the full-width red banner over our header.
+  // Do NOT loosen this — painting foreign errors makes the app look broken
+  // when it isn't (see task #406).
+  const ourOrigin = window.location.origin;
+  const isOurStack = (stack?: string) => {
+    if (!stack) return false;
+    const urlRe = /https?:\/\/[^\s)'"]+/g;
+    const matches = stack.match(urlRe);
+    if (!matches) return false;
+    return matches.some((u) => u.startsWith(ourOrigin));
+  };
+  const isOurError = (stack: string | undefined, filename: string | undefined) => {
+    if (isOurStack(stack)) return true;
+    if (!stack && filename && filename.startsWith(ourOrigin)) return true;
+    return false;
+  };
   window.addEventListener("error", (ev) => {
-    const err = (ev as ErrorEvent).error;
-    paint("Uncaught error", (err && (err.message || String(err))) || (ev as ErrorEvent).message || "(no message)", err && err.stack);
+    const e = ev as ErrorEvent;
+    const err = e.error;
+    const stack: string | undefined = err && err.stack;
+    if (!isOurError(stack, e.filename)) {
+      console.warn(
+        "[global-error-reporter] ignoring foreign error",
+        e.message,
+        e.filename || "(no filename)",
+      );
+      return;
+    }
+    paint("Uncaught error", (err && (err.message || String(err))) || e.message || "(no message)", stack);
   });
   window.addEventListener("unhandledrejection", (ev) => {
     const r: any = (ev as PromiseRejectionEvent).reason;
-    paint("Unhandled promise rejection", (r && (r.message || String(r))) || "(no reason)", r && r.stack);
+    const stack: string | undefined = r && r.stack;
+    if (!isOurError(stack, undefined)) {
+      console.warn(
+        "[global-error-reporter] ignoring foreign rejection",
+        (r && (r.message || String(r))) || "(no reason)",
+      );
+      return;
+    }
+    paint("Unhandled promise rejection", (r && (r.message || String(r))) || "(no reason)", stack);
   });
 }
 
