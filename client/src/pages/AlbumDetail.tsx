@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
+import { AlbumCreditsSheet } from "@/components/ui/AlbumCreditsSheet";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
@@ -120,6 +121,7 @@ function AlbumDetailMobile() {
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [songMenuFor, setSongMenuFor] = useState<{ song: Song; rect: DOMRect } | null>(null);
   const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
+  const [showAlbumCredits, setShowAlbumCredits] = useState(false);
   const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song; creditId?: string } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
@@ -569,26 +571,10 @@ function AlbumDetailMobile() {
           currentSongId={currentSong?.id ?? null}
           isPlaying={isPlaying}
           downloadedSongIds={downloadedSongs}
+          favoriteSongIds={favSongs.set}
           nativeDownloadsEnabled={nativeDownloadsEnabled}
-          productionCreditsSlot={productionCredits.length > 0 ? (
-            <AlbumProductionCreditsPanelMobile
-              rows={productionCredits}
-              onOpenPerson={(personId) => {
-                const person = peopleById.get(personId);
-                if (!person) return;
-                const ctxSong =
-                  songs.find((s) => {
-                    const c = getCredits(s.id);
-                    return (
-                      c?.performers.some((p) => p.personId === personId) ||
-                      c?.writers.some((w) => w.personId === personId)
-                    );
-                  }) ?? songs[0];
-                if (!ctxSong) return;
-                setPerformerSheet({ person, song: ctxSong });
-              }}
-            />
-          ) : null}
+          hasAlbumCredits={productionCredits.length > 0}
+          onOpenAlbumCredits={() => setShowAlbumCredits(true)}
           bonusSlot={<AlbumBonusContent albumId={album.id} />}
           lineupSlot={<AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />}
           onBack={() => navigate("/collection")}
@@ -843,6 +829,30 @@ function AlbumDetailMobile() {
             onClose={() => setCreditsForSong(null)}
           />
         ) : null}
+
+        {showAlbumCredits && productionCredits.length > 0 && (
+          <AlbumCreditsSheet
+            albumTitle={album.title}
+            artist={album.artist}
+            rows={productionCredits}
+            onOpenPerson={(personId) => {
+              const person = peopleById.get(personId);
+              if (!person) return;
+              const ctxSong =
+                songs.find((s) => {
+                  const c = getCredits(s.id);
+                  return (
+                    c?.performers.some((p) => p.personId === personId) ||
+                    c?.writers.some((w) => w.personId === personId)
+                  );
+                }) ?? songs[0];
+              if (!ctxSong) return;
+              setShowAlbumCredits(false);
+              setPerformerSheet({ person, song: ctxSong });
+            }}
+            onClose={() => setShowAlbumCredits(false)}
+          />
+        )}
 
         {activeVideo && (
           <div
@@ -1405,7 +1415,7 @@ function AlbumDescriptionSheet({ album, onClose }: { album: Album; onClose: () =
   );
 }
 
-function SheetShell({
+export function SheetShell({
   ariaLabel,
   testId,
   onClose,
@@ -1480,7 +1490,7 @@ function SheetShell({
   );
 }
 
-function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; title: string; subtitle?: string; onClose: () => void }) {
+export function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; title: string; subtitle?: string; onClose: () => void }) {
   return (
     <div className="flex items-start gap-3 px-5 pb-4">
       <div className="flex-1 min-w-0">
@@ -1500,112 +1510,6 @@ function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; 
           <path d="M18 6L6 18M6 6l12 12" />
         </svg>
       </button>
-    </div>
-  );
-}
-
-/**
- * Customer-facing album-wide production credits panel (Produced by /
- * Mixed by / Mastered by / etc.). Mirrors the admin panel: avatar +
- * inline-link name per credited person, role groups collapse the
- * duplicate-role expansion into a single row, and the panel collapses
- * past 6 grouped rows with a Show all / Show fewer toggle. Names route
- * into the same Person sheet (PerformerSheet) that song-level credits
- * already open. Free-text-only rows (no linked Person) render as plain
- * text so importer stubs still appear.
- */
-function AlbumProductionCreditsPanelMobile({
-  rows,
-  onOpenPerson,
-}: {
-  rows: Array<{
-    id: string;
-    personId: string | null;
-    name: string;
-    role: string;
-    person: { id: string; name: string; photoUrl?: string | null } | null;
-  }>;
-  onOpenPerson: (personId: string) => void;
-}) {
-  type Entry = { key: string; name: string; personId: string | null; photoUrl: string | null };
-  const byRole = useMemo(() => {
-    const m = new Map<string, Entry[]>();
-    for (const r of rows) {
-      const list = m.get(r.role) ?? [];
-      list.push({
-        key: r.id,
-        name: r.person?.name ?? r.name,
-        personId: r.person?.id ?? null,
-        photoUrl: r.person?.photoUrl ?? null,
-      });
-      m.set(r.role, list);
-    }
-    return Array.from(m.entries());
-  }, [rows]);
-
-  const [expanded, setExpanded] = useState(false);
-  const COLLAPSE_AT = 6;
-  const overflow = byRole.length > COLLAPSE_AT;
-  const visible = overflow && !expanded ? byRole.slice(0, COLLAPSE_AT) : byRole;
-
-  return (
-    <div
-      className="px-5 mt-5 pb-4 border-t"
-      style={{ borderColor: "rgba(255,255,255,0.08)" }}
-      data-testid="panel-album-production-credits"
-    >
-      <div className="text-xs uppercase tracking-wide font-semibold text-white/45 mt-4 mb-2">
-        Album credits
-      </div>
-      <div className="grid gap-1.5">
-        {visible.map(([role, entries]) => (
-          <div
-            key={role}
-            className="flex items-baseline gap-2 text-sm"
-            data-testid={`row-album-credit-role-${role.replace(/\s+/g, "-").toLowerCase()}`}
-          >
-            <span className="text-white/45 min-w-[110px]">{role}</span>
-            <span className="text-white/90 font-medium flex flex-wrap items-center gap-x-1.5 gap-y-1">
-              {entries.map((e, i) => (
-                <span key={e.key} className="inline-flex items-center gap-1.5">
-                  {e.personId && e.photoUrl && (
-                    <img
-                      src={e.photoUrl}
-                      alt=""
-                      style={{ width: 16, height: 16 }}
-                      className="rounded-full object-cover flex-shrink-0"
-                      data-testid={`img-album-credit-avatar-${e.personId}`}
-                    />
-                  )}
-                  {e.personId ? (
-                    <button
-                      type="button"
-                      onClick={() => onOpenPerson(e.personId!)}
-                      className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
-                      data-testid={`link-album-credit-person-${e.personId}`}
-                    >
-                      {e.name}
-                    </button>
-                  ) : (
-                    <span>{e.name}</span>
-                  )}
-                  {i < entries.length - 1 && <span aria-hidden className="text-white/40">,</span>}
-                </span>
-              ))}
-            </span>
-          </div>
-        ))}
-      </div>
-      {overflow && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-3 text-xs font-medium text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-          data-testid="button-album-credits-expand"
-        >
-          {expanded ? "Show fewer" : `Show all credits (${byRole.length})`}
-        </button>
-      )}
     </div>
   );
 }

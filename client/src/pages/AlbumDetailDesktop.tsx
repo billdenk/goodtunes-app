@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { useAuth } from "@/hooks/useAuth";
+import { useFavoriteSongs } from "@/hooks/useFavorites";
+import { AlbumCreditsSheet, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
 import { toast } from "@/hooks/use-toast";
 import {
   useAlbumOwnership,
@@ -100,11 +102,21 @@ export function AlbumDetailDesktop() {
   });
 
   const isOwned = useAlbumOwnership(id);
+  const favSongs = useFavoriteSongs();
+  const [showAlbumCredits, setShowAlbumCredits] = useState(false);
 
   const { data: album, isLoading } = useQuery<ApiAlbum>({
     queryKey: ["/api/albums", id],
     enabled: !!id,
   });
+  const { data: albumCredits } = useQuery<{
+    bySongId: Record<string, unknown>;
+    production?: AlbumCreditsRow[];
+  }>({
+    queryKey: ["/api/albums", id, "credits"],
+    enabled: !!id,
+  });
+  const productionCredits = albumCredits?.production ?? [];
   const { data: videos = [] } = useQuery<ApiAlbumVideo[]>({
     queryKey: ["/api/albums", id, "videos"],
     enabled: !!id,
@@ -328,6 +340,9 @@ export function AlbumDetailDesktop() {
             onPlayTrack={handlePlayTrack}
             onMoreTrack={() => toast({ title: "Track menu coming next" })}
             onAddTrack={handleAddTrack}
+            favoriteSongIds={favSongs.set}
+            hasAlbumCredits={productionCredits.length > 0}
+            onOpenAlbumCredits={() => setShowAlbumCredits(true)}
             onBuyBundle={handleBuyBundle}
             lyricsOpen={player.showLyrics}
             lyrics={lyricsBody}
@@ -394,6 +409,15 @@ export function AlbumDetailDesktop() {
         <BuySheet
           albumId={album.id}
           onClose={() => setShowBuySheet(false)}
+        />
+      )}
+
+      {showAlbumCredits && productionCredits.length > 0 && album && (
+        <AlbumCreditsSheet
+          albumTitle={album.title}
+          artist={album.artist}
+          rows={productionCredits}
+          onClose={() => setShowAlbumCredits(false)}
         />
       )}
     </div>

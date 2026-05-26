@@ -5,7 +5,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { ChevronLeft, Share, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Info } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 
@@ -45,9 +45,13 @@ export interface AlbumDetailMobileSurfaceProps {
   currentSongId?: string | null;
   isPlaying?: boolean;
   downloadedSongIds?: Set<string>;
+  favoriteSongIds?: Set<string>;
   nativeDownloadsEnabled?: boolean;
   songMenuOpenForId?: string | null;
-  productionCreditsSlot?: ReactNode;
+  /** When true, the album-level Credits IconButton renders in the
+   *  Play/Shuffle row and `onOpenAlbumCredits` is invoked on tap. */
+  hasAlbumCredits?: boolean;
+  onOpenAlbumCredits?: () => void;
   bonusSlot?: ReactNode;
   lineupSlot?: ReactNode;
   /** Optional ref attached to the scroll container — used by the fan
@@ -95,8 +99,10 @@ export function AlbumDetailMobileSurface({
   currentSongId,
   isPlaying = false,
   downloadedSongIds,
+  favoriteSongIds,
   nativeDownloadsEnabled = false,
-  productionCreditsSlot,
+  hasAlbumCredits = false,
+  onOpenAlbumCredits,
   bonusSlot,
   lineupSlot,
   scrollRef,
@@ -424,6 +430,18 @@ export function AlbumDetailMobileSurface({
               Buy ${(album.priceCents / 100).toFixed(2)}
             </button>
           )}
+          {hasAlbumCredits && (
+            <IconButton
+              variant="glass"
+              size="lg"
+              label="Album credits"
+              onClick={onOpenAlbumCredits}
+              style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+              data-testid="button-album-credits"
+            >
+              <Info strokeWidth={2} />
+            </IconButton>
+          )}
           {nativeDownloadsEnabled && (
             <button
               type="button"
@@ -467,8 +485,6 @@ export function AlbumDetailMobileSurface({
           )}
         </div>
 
-        {productionCreditsSlot}
-
         {/* Tracks */}
         <div
           className="bg-[#00062B] px-5 mt-5 border-t"
@@ -477,6 +493,7 @@ export function AlbumDetailMobileSurface({
           {songs.map((song, i) => {
             const isActive = currentSongId === song.id;
             const isDownloaded = !!downloadedSongIds?.has(song.id);
+            const isFavorite = !!favoriteSongIds?.has(song.id);
             return (
               <div
                 key={song.id}
@@ -505,6 +522,17 @@ export function AlbumDetailMobileSurface({
                           />
                         ))}
                       </div>
+                    ) : isFavorite ? (
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="var(--brand-heart)"
+                        aria-hidden
+                        data-testid={`icon-favorite-${song.id}`}
+                      >
+                        <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
+                      </svg>
                     ) : (
                       <span
                         className="text-[15px] tabular-nums"

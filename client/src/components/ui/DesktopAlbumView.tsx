@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Link2 } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Link2, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
+import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
 
@@ -83,6 +84,17 @@ export type DesktopAlbumViewProps = {
   onMoreTrack?: (song: DesktopAlbumSong) => void;
   onAddTrack?: (song: DesktopAlbumSong) => void;
 
+  /** Songs the current viewer has favorited. The track row renders a
+   *  small brand-pink heart in its leading number cell when the id is
+   *  in this set (display only — toggling lives in the ⋯ menu). */
+  favoriteSongIds?: Set<string>;
+
+  /** When true, an album-level Credits IconButton renders in the action
+   *  bar next to Play/Shuffle. Host wires `onOpenAlbumCredits` into the
+   *  album credits sheet. */
+  hasAlbumCredits?: boolean;
+  onOpenAlbumCredits?: () => void;
+
   /** Override breadcrumb back-link. Defaults to /collection · "Discover". */
   breadcrumb?: ReactNode;
 
@@ -146,6 +158,9 @@ export function DesktopAlbumView({
   onPlayTrack,
   onMoreTrack,
   onAddTrack,
+  favoriteSongIds,
+  hasAlbumCredits = false,
+  onOpenAlbumCredits,
   breadcrumb,
   lyricsOpen,
   lyrics,
@@ -317,6 +332,18 @@ export function DesktopAlbumView({
                       <Shuffle className="w-4 h-4" strokeWidth={2} />
                     </button>
                   )}
+                  {hasAlbumCredits && (
+                    <IconButton
+                      variant="ghost"
+                      size="md"
+                      label="Album credits"
+                      onClick={onOpenAlbumCredits}
+                      className="border border-white/30 text-white/80 hover:text-white hover:border-white/85"
+                      data-testid="button-album-credits"
+                    >
+                      <Info strokeWidth={2} />
+                    </IconButton>
+                  )}
                 </>
               ) : (
                 <>
@@ -422,6 +449,7 @@ export function DesktopAlbumView({
                     isCurrent={isCurrent}
                     isPlaying={isCurrent && !!isPlaying}
                     isExplicit={!!s.isExplicit}
+                    isFavorite={!!favoriteSongIds?.has(s.id)}
                     state={state}
                     onPlay={
                       state === "locked" || !onPlayTrack

@@ -15,6 +15,10 @@ export type AlbumDesktopTrackRowProps = {
   isCurrent: boolean;
   isPlaying: boolean;
   isExplicit?: boolean;
+  /** Display-only — when true and the row is not currently playing,
+   *  the leading number cell renders a small brand-pink heart instead.
+   *  Not a tap target; favoriting is toggled from the ⋯ menu. */
+  isFavorite?: boolean;
   state: "locked" | "preview" | "full";
   onPlay?: () => void;
   onMore?: () => void;
@@ -41,6 +45,7 @@ export function AlbumDesktopTrackRow({
   isCurrent,
   isPlaying,
   isExplicit,
+  isFavorite = false,
   state,
   onPlay,
   onMore,
@@ -75,16 +80,32 @@ export function AlbumDesktopTrackRow({
     >
       {/* Track number / play affordance / equalizer cell. */}
       <div className="w-6 text-right relative h-5">
-        {/* Plain number — visible whenever the row is at rest. */}
+        {/* Plain number — visible whenever the row is at rest and not favorited. */}
         <span
           className={[
             "text-[13px] tabular-nums transition-opacity",
             state === "locked" ? "text-white/30" : "text-white/55",
-            showPlayGlyph || isCurrent ? "opacity-0" : "opacity-100",
+            showPlayGlyph || isCurrent || isFavorite ? "opacity-0" : "opacity-100",
           ].join(" ")}
         >
           {trackNumber}.
         </span>
+
+        {/* Favorited heart — replaces the number when the row is at rest. */}
+        {isFavorite && !isCurrent && (
+          <div
+            className={[
+              "absolute inset-0 inline-flex items-center justify-end pr-[1px] transition-opacity",
+              showPlayGlyph ? "opacity-0" : "opacity-100",
+            ].join(" ")}
+            aria-hidden
+            data-testid={`icon-favorite-row-${trackNumber}`}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill={ROSE}>
+              <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
+            </svg>
+          </div>
+        )}
 
         {/* Hover play triangle — rose, replaces the number on hover. */}
         {interactive && (
