@@ -6627,82 +6627,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Formats</h2>"
+    "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold\">Formats</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mb-4\">"
+    "snippet": "<p className=\"text-slate-500 text-[11.5px] mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-slate-700 text-[13.5px] font-medium\">No physical formats yet</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12.5px] mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Printed & Signed GoodDeed®</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[13px] font-semibold text-slate-900 mb-1.5\">Choose your printer</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "\"rounded-full px-3 py-1.5 text-[12.5px] font-semibold border transition-colors text-left\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500 mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "\"h-10 px-4 rounded-full text-[13px] font-bold transition-all\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Selling through Shopify</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[12px] font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Printed &amp; Signed GoodDeed®</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "\"h-8 rounded-md border border-slate-200 bg-white px-2 text-[13px] text-slate-900 \" +"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "\"h-8 px-2.5 rounded-md text-[12px] font-medium transition-colors \" +"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"w-full text-left px-3 py-2 text-[13px] text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -6717,22 +6652,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[12px] text-slate-500 inline-flex items-center gap-1 mt-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[12px] text-slate-500 inline-flex items-center gap-1\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "className=\"text-[11px] rounded-full bg-slate-100 text-slate-700 px-2 py-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "\"flex items-center justify-between gap-6 text-[12.5px]\","
+    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SellPanel.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Selling through Shopify</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SellPanel.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Printed &amp; Signed GoodDeed®</h2>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -6752,22 +6687,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-[12px] text-slate-500 ml-2\" data-testid={`text-sku-summary-${format}`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[12px]\">Price $</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[12px] inline-flex items-center gap-1\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -6787,11 +6707,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[12px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<span className=\"text-slate-400 text-[11px]\">Per unit sold</span>"
   },
   {
@@ -6807,32 +6722,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className={`w-20 ${fieldClass} text-[12px]`}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-[12.5px] text-slate-500\">units</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-[13px] text-slate-700\">As many as will sell</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "\"w-28 text-right tabular-nums text-[13.5px]\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[12px]\">Total $</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"w-28 text-right tabular-nums text-[15px] font-semibold text-slate-400\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -6852,42 +6742,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
+    "snippet": "className=\"w-28 text-right tabular-nums text-[15px] font-semibold text-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "\"h-7 rounded-full px-3 text-[12px] border transition-colors\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-400\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-[12px] text-slate-700\">{c.name}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-[12px] text-slate-500\">Color</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[12px] text-slate-700 font-medium\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-400 ml-1.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-[12px] text-slate-500\">Jacket</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -8292,26 +8152,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"text-[13px] font-semibold text-[#FF5470] active:opacity-70\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"w-full border border-white/15 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"w-full border border-white/15 rounded-xl px-3 py-2.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[#319ED8]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Account.tsx",
     "snippet": "className=\"relative w-20 h-20 rounded-full border-2 border-[#319ED8] overflow-hidden flex items-center justify-center text-2xl font-bold text-white\""
   },
   {
@@ -8345,79 +8185,9 @@
     "snippet": "style={{ background: \"#FF5470\" }}"
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<div className=\"mb-3 flex items-center gap-2 text-[#4AFFCA] text-sm px-1\">"
-  },
-  {
     "rule": "destructive-without-confirm",
     "file": "client/src/pages/Account.tsx",
     "snippet": "{clearing ? \"Deleting...\" : \"Delete\"}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white text-[14px] font-semibold mb-1\">Add a real email</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/70 text-[12px] leading-snug mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"text-[13px] font-semibold text-[#FF5470] active:opacity-70\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "{err && <p className=\"text-[12px] text-rose-300\" data-testid=\"text-realemail-err\">{err}</p>}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<button type=\"button\" onClick={() => setOpen(false)} className=\"text-white/55 text-[12px]\" data-testid=\"button-cancel-realemail\">Cancel</button>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/65 text-[12px]\">Code sent to <strong>{newEmail}</strong>.{devCode ? <> Dev code: <code className=\"font-mono text-white/85\">{devCode}</code></> : null}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<button type=\"button\" onClick={() => { setPhase(\"enter\"); setCode(\"\"); }} className=\"text-white/55 text-[12px]\" data-testid=\"button-back-realemail\">Back</button>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-4 ml-1\">Linked Accounts</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white text-[15px] capitalize\">{id.provider}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "{id.email && <p className=\"text-white/45 text-[12px]\">{id.email}</p>}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<button type=\"button\" onClick={() => linkProvider(\"google\")} className=\"w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t\" style={{ borderColor: \"rgba(255,255,255,0.0"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<button type=\"button\" onClick={() => linkProvider(\"apple\")} className=\"w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t\" style={{ borderColor: \"rgba(255,255,255,0.07"
   },
   {
     "rule": "hardcoded-font-size",
@@ -8427,92 +8197,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1\">My Orders</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<span className=\"block text-white text-[15px]\">Orders &amp; tracking</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<span className=\"block text-white/45 text-[12px] truncate\" data-testid=\"text-orders-latest\">{latestStatusLine}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<span className=\"text-white/40 text-[13px] tabular-nums\" data-testid=\"row-orders-count\">{orderCount}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1\">Your Collections</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<span className=\"flex-1 text-white text-[15px]\">{label}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<span className=\"text-white/40 text-[13px] tabular-nums\" data-testid={`${testId}-count`}>{count}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1\">Settings</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<span className=\"text-white text-[15px]\">{label}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"w-full py-3.5 text-center text-red-400 text-[15px] font-normal active:bg-white/[0.06]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
     "snippet": "<h1 className=\"text-white text-[17px] font-semibold\">Privacy</h1>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1\">Listening History</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"px-4 pt-3 pb-2 text-white/55 text-[12px] leading-snug\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "className=\"w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white text-[14px] mb-3\">Permanently delete every play, skip, and favorite event tied to this account?</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-4 ml-1\">Policy</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<span className=\"text-white text-[15px]\">Privacy Policy</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<p className=\"text-white/35 text-[11px] leading-relaxed px-1\">"
   },
   {
     "rule": "naked-icon-button",
@@ -9438,11 +9123,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<span className=\"text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2.5 py-1.5 mb-1 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100 f"
   },
   {
     "rule": "hardcoded-font-size",
@@ -10742,152 +10422,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] text-slate-500 hover:text-[var(--brand-blue)]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] text-slate-500 hover:text-[var(--brand-blue)] transition-colors\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<span className=\"flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"inline-flex items-center text-[11px] font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 transition-colors\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[14px] font-medium truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[14px] font-medium tabular-nums\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[13px] font-medium truncate\">{a.albumTitle}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] truncate\">{a.albumArtist}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11px] mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[14px] font-medium truncate\">{p.name}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wide text-slate-500\">{label}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
     "snippet": "<div className=\"text-slate-900 text-[18px] font-semibold tabular-nums mt-0.5\">{value}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<h2 className=\"text-[13px] font-semibold uppercase tracking-wide text-slate-500\">{title}</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[11px]\">Free comp — no payment, no order, super-admin only</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"w-full pl-8 pr-3 py-2 text-[13px] border border-slate-200 rounded-md focus:border-[var(--brand-blue)] focus:outline-none\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"p-6 text-center text-slate-500 text-[13px]\">Loading albums…</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"p-6 text-center text-slate-500 text-[13px]\">No albums match.</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[13px] font-medium truncate\">{a.title}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] truncate\">{a.artist}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<span className=\"inline-flex items-center gap-1 text-emerald-600 text-[11px] font-medium\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "className=\"rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-[12px] font-medium hover:opacity-90 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[13px]\">{text}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-700 text-[13px] leading-snug\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[13px]\">No {kind.toLowerCase()} address on file.</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13652,11 +13187,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<button onClick={() => navigate(\"/collection\")} className=\"mt-4 text-[#319ED8]\">Back to Collection</button>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "{ date: \"2025-11-21\", actor: ownerName, action: \"Acquired via secondary transfer\", color: \"#4AFFCA\" },"
   },
   {
@@ -14413,11 +13943,6 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "className=\"w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetailDesktop.tsx",
-    "snippet": "className=\"mt-4 text-[#319ED8]\""
   },
   {
     "rule": "brand-hex-literal",
@@ -15493,36 +15018,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
     "snippet": "<span className=\"font-mono text-white/65 text-[11px] w-7\">{r.country}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "<p className={`${isAdmin ? \"text-slate-400\" : \"text-white/45\"} text-[11px] text-center mb-4 break-all`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "<p className={`${isAdmin ? \"text-slate-500\" : \"text-white/55\"} text-[12px] mb-3`}>Save these somewhere safe. Each works once if you lose your authenticator.</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "<div className={`grid grid-cols-2 gap-2 font-mono ${isAdmin ? \"text-slate-800\" : \"text-white\"} text-[13px]`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "<p className={`${isAdmin ? \"text-amber-700 bg-amber-50 border-amber-200\" : \"text-amber-200 bg-amber-500/10 border-amber-400/30\"} text-[12px] border rounded px-2 py-1 mb-3 text-center`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "<p className={`text-[11px] mt-1.5 ${isAdmin ? \"ml-0\" : \"ml-1\"} ${"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "<div className={`text-[11px] ${isAdmin ? \"text-slate-500\" : \"text-white/55\"}`}>"
   },
   {
     "rule": "hardcoded-font-size",

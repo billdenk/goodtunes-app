@@ -28,6 +28,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -364,9 +365,17 @@ export function SellPanel({
         <PrinterAndPressPanel invited={invitedPress ?? null} />
 
         {/* SKUs */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-[15px] font-semibold text-slate-900">Formats</h2>
+        <Card
+          className="relative rounded-2xl shadow-sm overflow-hidden mb-8"
+          data-testid="panel-formats"
+        >
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+            <div>
+              <h2 className="text-slate-900 text-[14px] font-bold">Formats</h2>
+              <p className="text-slate-500 text-[11.5px] mt-0.5">
+                Toggle a format on and set its price. Only enabled formats appear on the fan's Buy sheet.
+              </p>
+            </div>
             {availableFormats.length > 0 && (
               <AddPhysicalGoodButton
                 availableFormats={availableFormats}
@@ -376,9 +385,7 @@ export function SellPanel({
               />
             )}
           </div>
-          <p className="text-sm text-slate-500 mb-4">
-            Toggle a format on and set its price. Only enabled formats appear on the fan's Buy sheet.
-          </p>
+          <div className="px-5 py-4">
           {configuredFormats.length === 0 && liveDrafts.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-200 bg-white p-8 text-center">
               <div className="text-slate-700 text-[13.5px] font-medium">No physical formats yet</div>
@@ -473,7 +480,8 @@ export function SellPanel({
               })()}
             </div>
           )}
-        </div>
+          </div>
+        </Card>
 
         {/* Task #397 — the duplicate "Printed & Signed GoodDeed®"
             section that used to live here (AddonForm + vendor panel +
