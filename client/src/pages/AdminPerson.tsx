@@ -139,6 +139,9 @@ interface PersonFull {
   // the Members tab + per-album lineup snapshots only show then.
   isGroup: boolean;
   groupKind: string | null;
+  // Task #490 — formatted shipping/mailing address for artist comp runs.
+  // Free-form text written by the shared Places-autocomplete field.
+  shippingAddress: string | null;
   // Task #199 — if this artist was invited by a specific press, their
   // Sell-panel Presses surface is hard-locked to that press until
   // their first run ships. Super-admin can clear/switch via Identity.
@@ -226,6 +229,7 @@ export function AdminPerson() {
     },
     onSuccess: () => {
       qc.removeQueries({ queryKey: ["/api/people", personId] });
+      qc.removeQueries({ queryKey: ["/api/admin/people", personId] });
       qc.invalidateQueries({ queryKey: ["/api/people"] });
       qc.invalidateQueries({ queryKey: ["/api/albums"] });
       toast({ title: "Person deleted." });
@@ -248,8 +252,11 @@ export function AdminPerson() {
     };
   }, []);
 
+  // Task #490 — admin shell reads the *admin* projection so it sees
+  // admin-only fields (currently `shippingAddress`) that must not leak
+  // through the public /api/people/:id endpoint other pages rely on.
   const { data: person, isLoading, error } = useQuery<PersonFull>({
-    queryKey: ["/api/people", personId],
+    queryKey: ["/api/admin/people", personId],
     enabled: !!user?.isAdmin && !!personId,
   });
   const { data: labels = [] } = useQuery<LabelLite[]>({
@@ -592,6 +599,7 @@ function OverviewPanel({
   // bottom of the Overview tab — they used to be their own tab, but
   // there are only two fields, which didn't justify a separate tab.
   const invalidate: (readonly unknown[])[] = [
+    ["/api/admin/people", person.id],
     ["/api/people", person.id],
     ["/api/people"],
   ];
@@ -629,6 +637,8 @@ function OverviewPanel({
           // flips `isGroup` true server-side and unlocks the Members tab
           // + the per-album Lineup panel.
           groupKind: person.groupKind ?? "",
+          // Task #490 — artist comp / contact shipping address.
+          shippingAddress: person.shippingAddress ?? "",
         }}
         invalidate={invalidate}
         fields={[
@@ -644,6 +654,12 @@ function OverviewPanel({
             label: "Type",
             type: "select",
             options: groupKindOptions,
+          },
+          {
+            key: "shippingAddress",
+            label: "Shipping address",
+            type: "address",
+            placeholder: "Where artist comp copies & mail go",
           },
           {
             key: "bio",
@@ -874,6 +890,7 @@ function ImageUploadPanel({
       return r.json();
     },
     onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["/api/admin/people", person.id] });
       await qc.invalidateQueries({ queryKey: ["/api/people", person.id] });
       await qc.invalidateQueries({ queryKey: ["/api/people"] });
       toast({ title: "Photo refreshed from Spotify" });

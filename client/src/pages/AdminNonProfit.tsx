@@ -21,6 +21,8 @@ type NonProfit = {
   name: string;
   logoUrl: string | null;
   websiteUrl: string | null;
+  // Task #490 — NPO partner mailing address.
+  mailingAddress: string | null;
 };
 
 export default function AdminNonProfit() {
@@ -180,6 +182,8 @@ export default function AdminNonProfit() {
               values={{
                 name: npo.name,
                 websiteUrl: npo.websiteUrl,
+                // Task #490 — NPO partner mailing address.
+                mailingAddress: npo.mailingAddress ?? "",
               }}
               invalidate={[
                 [`/api/non-profits/${npo.id}`],
@@ -192,6 +196,12 @@ export default function AdminNonProfit() {
                   label: "Website",
                   type: "url",
                   placeholder: "https://example.org",
+                },
+                {
+                  key: "mailingAddress",
+                  label: "Mailing address",
+                  type: "address",
+                  placeholder: "Where partner mail goes",
                 },
               ]}
             />

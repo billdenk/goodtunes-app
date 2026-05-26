@@ -713,6 +713,13 @@ export const people = pgTable("people", {
   // join table.
   isGroup: boolean("is_group").notNull().default(false),
   groupKind: text("group_kind"),
+  // Task #490 — Mailing/shipping address for artist comp shipments and
+  // outreach mail. Free-form formatted-address text written by the
+  // shared AddressAutocompleteField; matches the `location` pattern on
+  // vendors/labels rather than the structured jsonb snapshot used on
+  // orders, because the EditablePanel address field only round-trips
+  // a single string.
+  shippingAddress: text("shipping_address"),
   legacyGogoodsId: text("legacy_gogoods_id"),
   ...softDeleteCols,
 }, (t) => ({
@@ -1005,6 +1012,11 @@ export const organizations = pgTable(
     // label into the richer `labels` row — so admins editing the label there
     // don't need to keep two records in sync.
     labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
+    // Task #490 — NPO partner mailing address. Free-form formatted-address
+    // text written by AddressAutocompleteField (same shape as vendors/labels'
+    // `location`). Lets us send partner mail without inventing a parallel
+    // address table.
+    mailingAddress: text("mailing_address"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({

@@ -1284,3 +1284,29 @@ SQL
 }
 migrate_partner_address_snapshots dev  "${DATABASE_URL:-}"
 migrate_partner_address_snapshots prod "${PROD_DATABASE_URL:-}"
+
+# Task #490 — Address columns for artist comp shipments + NPO partner mail.
+# `people.shipping_address` carries the formatted address typed/picked via
+# the shared Places-autocomplete field on the AdminPerson Identity panel;
+# `organizations.mailing_address` is the parallel column for NPO partners on
+# AdminNonProfit. Both are nullable text (matches vendors/labels `location`),
+# so the publish dev→prod diff stays empty whether one side has the column
+# yet or not. Idempotent ADD COLUMN IF NOT EXISTS — safe on every merge.
+migrate_partner_addresses() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping partner_addresses migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE people         ADD COLUMN IF NOT EXISTS shipping_address text;
+ALTER TABLE organizations  ADD COLUMN IF NOT EXISTS mailing_address  text;
+SQL
+  then
+    echo "post-merge: partner_addresses migration ok on $label"
+  else
+    echo "post-merge: WARNING — partner_addresses migration failed on $label (continuing)"
+  fi
+}
+migrate_partner_addresses dev  "${DATABASE_URL:-}"
+migrate_partner_addresses prod "${PROD_DATABASE_URL:-}"
