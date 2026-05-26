@@ -20,7 +20,7 @@
 // A new Presses panel above Formats surfaces the pressing-plant
 // directory (MRP, PMP, Hellbender …) as info cards — per-press RFQ
 // pricing plumbing is tracked separately on the roadmap.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen } from "lucide-react";
@@ -317,6 +317,32 @@ export function SellPanel({
   // opening one collapses whichever sibling was previously open. Keyed
   // by AlbumFormat. See docs/design-system.md ("Expandable row lists").
   const skuDisclosure = useExclusiveDisclosure<string>();
+
+  // Task #452 — When the New Album dialog set `physicalFormat` (direct
+  // mode), the operator already told us what they want to sell. Landing
+  // on the Estimate tab to a "No physical formats yet" empty card and
+  // forcing them to re-pick the same format is busywork. Seed a single
+  // draft row for that format on first render (once SKU data has loaded
+  // and only if no SKUs/drafts exist yet) and pop the disclosure open
+  // so the row arrives expanded. The one-shot ref prevents re-seeding
+  // after the operator dismisses or deletes the row.
+  const seededPhysicalFormatRef = useRef(false);
+  useEffect(() => {
+    if (seededPhysicalFormatRef.current) return;
+    if (!data) return;
+    if (sellMode === "shopify") return;
+    if (!physicalFormat) return;
+    if (data.skus.length > 0) return;
+    if (draftFormats.length > 0) return;
+    // Honor a press catalog if one scopes this album — don't seed an
+    // off-catalog draft the row editor can't actually price.
+    const catalogFormats = invitedPress?.catalog?.formats ?? [];
+    const catalogScopedHere = !!invitedPress?.press && catalogFormats.length > 0;
+    if (catalogScopedHere && !catalogFormats.some((f) => f.format === physicalFormat)) return;
+    seededPhysicalFormatRef.current = true;
+    setDraftFormats([physicalFormat as AlbumFormat]);
+    skuDisclosure.open(`draft-${physicalFormat}`);
+  }, [data, physicalFormat, sellMode, invitedPress, draftFormats.length, skuDisclosure]);
 
   // Task #218 — when this album is invited by a press that has built
   // its catalog, restrict the Add-Physical menu to the formats that
