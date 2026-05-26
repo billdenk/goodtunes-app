@@ -37,6 +37,10 @@ Read the doc that matches your task before changing code:
 
 Save preferences here that don't fit a topic doc. Topic-scoped preferences belong in the matching doc above (design system rules in `docs/design-system.md`, etc.).
 
+### Who's who
+- **Bill** is the operator / decision-maker running GoodTunes — talk to Bill as the customer for everything in this repo (plans, copy approvals, deal math, roadmap calls).
+- **Nick** is an artist on the platform (Nick Carter). Do not assign him operator/PM responsibilities in tasks or docs.
+
 ### Auto-load the design + admin conventions before touching admin code
 Any task that edits an admin/CMS surface (anything under `client/src/pages/Admin*` or `client/src/components/admin/`) must read **[`docs/design-system.md`](./docs/design-system.md)** and **[`docs/admin-conventions.md`](./docs/admin-conventions.md)** before changing code. The design system covers Save semantics, IconButton, inline links, accent restraint, destructive confirms, and the mechanical linter; admin conventions cover paste-a-URL Add dialogs, the partner permissions / post-sale lock, debugging dev vs. prod, grid/list toggles, and the streaming-row vs. GoodTunes-release rule. For player work, default to Apple-Music chrome (44pt IconButton, glass scrim, Apple-Music segmented tabs) — don't borrow admin h-9 squares into the player. Run `npm run design:lint` before merging anything that touched a UI file.
 
