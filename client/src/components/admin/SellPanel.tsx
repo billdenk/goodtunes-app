@@ -1657,14 +1657,19 @@ function SkuRow({
     usingCatalog &&
     (pressTierId !== (initialTier?.id ?? null) || pressColorId !== initialColorId);
   const storedDisplayName = existing?.displayName ?? "";
-  // Task #429 — if the effective track count (live tracklist or
-  // operator-entered Anticipated tracks) has drifted from the row's
-  // snapshotted value, treat the row as dirty so Save lights up and
-  // the next submit re-snapshots costSnapshotTrackCount alongside the
-  // Publishing line that already re-priced live.
+  // Task #429 / #430 — if the effective track count (live tracklist
+  // or operator-entered Anticipated tracks) has drifted from the
+  // row's snapshotted value, treat the row as dirty so Save lights
+  // up and the next submit re-snapshots costSnapshotTrackCount
+  // alongside the Publishing line that already re-priced live.
+  // Treating a null snapshot as 0 means legacy rows saved before
+  // Task #423 (when the snapshot column didn't exist) also dirty up
+  // the first time the artist changes Anticipated tracks — without
+  // this, Bill's "saved SKU, then change anticipated, Save doesn't
+  // light up" repro stays silent for those rows.
   const trackCountDirty =
-    existing?.costSnapshotTrackCount != null &&
-    existing.costSnapshotTrackCount !== (trackCount ?? 0);
+    !!existing &&
+    (existing.costSnapshotTrackCount ?? 0) !== (trackCount ?? 0);
   const dirty =
     active !== storedActive ||
     priceStr !== storedPrice ||
@@ -1749,6 +1754,13 @@ function SkuRow({
     pressTierId,
     pressColorId,
     displayNameStr,
+    // Task #430 — re-arm the debounce when only the effective track
+    // count changes (e.g. anticipated tracks edited on a row that's
+    // otherwise clean, or already dirty from a price edit). Without
+    // this dep, the pending setTimeout fires the previous render's
+    // submit closure, which captured the stale trackCount and
+    // re-snapshots the old value.
+    trackCount,
   ]);
 
   // Task #393 — destructive confirm for the trash button in the new
