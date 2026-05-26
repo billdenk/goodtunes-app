@@ -896,6 +896,7 @@ function AnticipatedTracksInput({
   liveTrackCount,
   anticipatedTrackCount,
   persistedAnticipatedTrackCount,
+  lockedValue,
   onLocalChange,
   onChange,
 }: {
@@ -909,6 +910,11 @@ function AnticipatedTracksInput({
   // new value updates the mirror, and by the time commit fires the
   // "did it change?" check sees no diff and skips the PUT.
   persistedAnticipatedTrackCount: number | null;
+  // Task #446 — when supplied, the input renders that value disabled
+  // and never fires `onChange` / `onLocalChange`. 7" passes 2 here so
+  // the operator can't edit a single's mechanical track count. Live
+  // masters still win once songs are uploaded.
+  lockedValue?: number | null;
   // Fires on every keystroke with the parsed/clamped value (or null
   // for empty input). Used to drive the live Publishing re-price
   // before the PUT round-trips. See SellPanel's `localAnticipated`.
@@ -917,21 +923,26 @@ function AnticipatedTracksInput({
   onChange?: (next: number | null) => void;
 }) {
   const hasLive = liveTrackCount > 0;
+  const locked = lockedValue != null && !hasLive;
   const initial = hasLive
     ? String(liveTrackCount)
-    : anticipatedTrackCount != null
-      ? String(anticipatedTrackCount)
-      : "";
+    : locked
+      ? String(lockedValue)
+      : anticipatedTrackCount != null
+        ? String(anticipatedTrackCount)
+        : "";
   const [value, setValue] = useState<string>(initial);
   useEffect(() => {
     setValue(
       hasLive
         ? String(liveTrackCount)
-        : anticipatedTrackCount != null
-          ? String(anticipatedTrackCount)
-          : "",
+        : locked
+          ? String(lockedValue)
+          : anticipatedTrackCount != null
+            ? String(anticipatedTrackCount)
+            : "",
     );
-  }, [hasLive, liveTrackCount, anticipatedTrackCount]);
+  }, [hasLive, liveTrackCount, locked, lockedValue, anticipatedTrackCount]);
 
   // Parse a raw input string into the clamped 0–99 value (or null
   // for empty / unparseable). Shared by the live keystroke path and
@@ -945,6 +956,7 @@ function AnticipatedTracksInput({
   };
 
   const handleType = (raw: string) => {
+    if (locked) return;
     setValue(raw);
     if (hasLive) return;
     const parsed = parse(raw);
@@ -957,7 +969,7 @@ function AnticipatedTracksInput({
   };
 
   const commit = () => {
-    if (hasLive || !onChange) return;
+    if (locked || hasLive || !onChange) return;
     const parsed = parse(value);
     if (parsed === null && value.trim() !== "") return; // junk text — leave as-is
     if (parsed !== persistedAnticipatedTrackCount) onChange(parsed);
@@ -987,7 +999,8 @@ function AnticipatedTracksInput({
             (e.target as HTMLInputElement).blur();
           }
         }}
-        disabled={hasLive}
+        disabled={hasLive || locked}
+        readOnly={locked}
         inputMode="numeric"
         placeholder="0"
         className="w-24 h-8 px-2 rounded-md border border-slate-200 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]"
@@ -1263,6 +1276,31 @@ function SkuRow({
 }) {
   const isDraft = existing === null;
   const isVinyl = isVinylFormat(format);
+  // Task #446 — 7" is the constrained Single format: jacket is fixed at
+  // Standard Full-Color, tracks are mechanically 2 (one per side), and
+  // the color picker is pared to Black + Opaque. Used throughout this
+  // row to lock format/jacket/tracks/color picks for 7" while leaving
+  // 12" / 10" / cassette / CD untouched.
+  const sevenInch = format === "7_inch";
+  const SEVEN_INCH_VISIBLE_TIERS: ReadonlyArray<import("@shared/pressing").VinylColorTier> = [
+    "black",
+    "opaque",
+  ];
+  const SEVEN_INCH_TRACK_COUNT = 2;
+  // Detect rows saved before Task #446 with a now-hidden jacket / color
+  // tier. We snap the in-memory pick to the allowed value (so the row
+  // doesn't crash on render) and surface a one-line note so the next
+  // save isn't silent. Pricing in the breakdown reads the snapshot
+  // until the user actively edits the row (see dirty calc below).
+  const sevenInchHiddenJacket =
+    sevenInch && !!existing?.jacketUpgrade && existing.jacketUpgrade !== "none";
+  const existingColorTier = existing?.vinylColor
+    ? VINYL_COLOR_BY_ID[existing.vinylColor]?.tier ?? null
+    : null;
+  const sevenInchHiddenColor =
+    sevenInch &&
+    existingColorTier !== null &&
+    !SEVEN_INCH_VISIBLE_TIERS.includes(existingColorTier);
   // Draft rows auto-open on first mount — the operator just picked the
   // format from the "+ Add" menu and clearly wants to start editing.
   useEffect(() => {
@@ -1299,16 +1337,21 @@ function SkuRow({
   // present) so a saved row re-opens with the picks the artist locked
   // in. New / non-vinyl rows fall back to platform defaults.
   const [vinylColorId, setVinylColorId] = useState<string>(
-    existing?.vinylColor && VINYL_COLOR_BY_ID[existing.vinylColor]
-      ? existing.vinylColor
-      : DEFAULT_VINYL_COLOR_ID,
+    sevenInchHiddenColor
+      ? DEFAULT_VINYL_COLOR_ID
+      : existing?.vinylColor && VINYL_COLOR_BY_ID[existing.vinylColor]
+        ? existing.vinylColor
+        : DEFAULT_VINYL_COLOR_ID,
   );
   const vinylColor: VinylColorOption = VINYL_COLOR_BY_ID[vinylColorId] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
   // Task #385 — legacy color "section" (tier). Picking a section
   // filters the swatch row to that tier and auto-selects its first
   // color.
+  // Task #446 — for 7" we trim the tier list to Black + Opaque; if the
+  // current color belongs to a hidden tier (back-compat snap), start
+  // on Black so the picker stays in a visible state.
   const [legacyColorTier, setLegacyColorTier] = useState<import("@shared/pressing").VinylColorTier>(
-    vinylColor.tier,
+    sevenInch && !SEVEN_INCH_VISIBLE_TIERS.includes(vinylColor.tier) ? "black" : vinylColor.tier,
   );
   // Task #390 — when the section changes, snap to the first swatch in
   // that tier (the old behavior lived in VinylPicksBlock, which the
@@ -1319,10 +1362,11 @@ function SkuRow({
     if (first) setVinylColorId(first.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [legacyColorTier]);
-  // Task #385 — 12"LP always ships with the standard jacket. For 7"
-  // we still allow the jacket-upgrade picker since Hellbender's 7"
-  // ladders price gatefold + insert variants too.
-  const jacketDropdownAllowed = isVinyl && format !== "12_lp";
+  // Task #385 — 12"LP always ships with the standard jacket.
+  // Task #446 — 7" is also locked to the Standard Full-Color Jacket
+  // (the only 7" jacket we currently offer); the upgrade picker is
+  // hidden for both formats.
+  const jacketDropdownAllowed = isVinyl && format !== "12_lp" && format !== "7_inch";
   const [jacketUpgrade, setJacketUpgrade] = useState<JacketUpgrade>(
     jacketDropdownAllowed
       ? ((existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE)
@@ -1433,8 +1477,17 @@ function SkuRow({
   // snapshot; dirty or unsaved rows recompute against the live count
   // and re-snapshot on the next Save.
   const priceCentsForCost = useMemo(() => parseDollars(priceStr) ?? 0, [priceStr]);
+  // Task #446 — 7" is mechanically a two-track single (one per side),
+  // so the row's effective track count defaults to 2 whenever no real
+  // masters have been uploaded yet. Live tracklist wins once songs
+  // exist (same rule as every other format). Used by the Publishing
+  // line of the breakdown, the trackCountDirty check, and the
+  // snapshot persisted via submit().
+  const songsUploaded = (liveTrackCount ?? 0) > 0;
+  const effectiveTrackCount = sevenInch && !songsUploaded
+    ? SEVEN_INCH_TRACK_COUNT
+    : (trackCount ?? 0);
   const breakdown = useMemo(() => {
-    const liveTrackCount = trackCount ?? 0;
     const snapshotTrackCount = existing?.costSnapshotTrackCount ?? null;
     const publishingFor = (n: number) => Math.round(n * MECH_RATE_CENTS_PER_TRACK);
     // Task #429 — if the album's effective track count (live tracklist
@@ -1443,12 +1496,12 @@ function SkuRow({
     // SkuRow dirty calc below mirrors this so the row's Save lights up
     // and the next Save re-snapshots costSnapshotTrackCount.
     const trackCountDrift =
-      snapshotTrackCount != null && snapshotTrackCount !== liveTrackCount;
+      snapshotTrackCount != null && snapshotTrackCount !== effectiveTrackCount;
     const sideCarFor = (useSnapshot: boolean) => {
       const tc =
         useSnapshot && snapshotTrackCount != null && !trackCountDrift
           ? snapshotTrackCount
-          : liveTrackCount;
+          : effectiveTrackCount;
       return {
         publishingCents: publishingFor(tc),
         publishingTrackCount: tc,
@@ -1489,8 +1542,16 @@ function SkuRow({
       // they explicitly re-save (mirroring #194). If picks ARE
       // dirty, recompute live so the artist sees the new cost as
       // they tweak; that new number gets snapshotted on Save.
-      const storedColorId = existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID;
-      const storedJacketLocal = (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE;
+      // Task #446 — for 7" rows that were saved against a now-hidden
+      // tier / jacket, treat the snapped values as the stored picks so
+      // the breakdown keeps showing the locked snapshot until the user
+      // actively re-picks (matches storedColor/storedJacket above).
+      const storedColorId = sevenInchHiddenColor
+        ? DEFAULT_VINYL_COLOR_ID
+        : (existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID);
+      const storedJacketLocal: JacketUpgrade = sevenInchHiddenJacket
+        ? DEFAULT_JACKET_UPGRADE
+        : ((existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE);
       const storedTier = existing?.quantityTier ?? null;
       const picksDirty =
         vinylColorId !== storedColorId ||
@@ -1586,8 +1647,17 @@ function SkuRow({
   const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "";
   const storedStock = existing?.stock?.toString() ?? "";
   const storedQty = existing?.plannedQuantity ?? null;
-  const storedColor = existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID;
-  const storedJacket = (existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE;
+  // Task #446 — back-compat snap rows compare against the snapped
+  // value (Black / standard jacket) so simply opening a saved 7" row
+  // with a hidden tier or jacket upgrade doesn't flip dirty=true and
+  // silently re-save on render. The persist happens on the next save
+  // the user triggers (e.g. price edit) — the inline note tells them so.
+  const storedColor = sevenInchHiddenColor
+    ? DEFAULT_VINYL_COLOR_ID
+    : (existing?.vinylColor ?? DEFAULT_VINYL_COLOR_ID);
+  const storedJacket: JacketUpgrade = sevenInchHiddenJacket
+    ? DEFAULT_JACKET_UPGRADE
+    : ((existing?.jacketUpgrade as JacketUpgrade | null | undefined) ?? DEFAULT_JACKET_UPGRADE);
   // Task #218 — catalog picks dirty when tier or color id differs from
   // initial. We compare by id, not by snapshot name, so reopening a
   // saved row doesn't appear dirty.
@@ -1607,7 +1677,7 @@ function SkuRow({
   // light up" repro stays silent for those rows.
   const trackCountDirty =
     !!existing &&
-    (existing.costSnapshotTrackCount ?? 0) !== (trackCount ?? 0);
+    (existing.costSnapshotTrackCount ?? 0) !== effectiveTrackCount;
 
   // Task #433 — per-row Lock. The row is effectively locked when:
   //   1) the row itself has `lockedAt` set (per-row Lock icon), OR
@@ -1650,7 +1720,10 @@ function SkuRow({
       // Task #423 — snapshot the album's current track count so the
       // Publishing line stays anchored to today's tracklist until the
       // artist re-saves this row.
-      trackCount: trackCount ?? 0,
+      // Task #446 — for 7" with no live masters, snapshot 2 (one per
+      // side) so the Publishing line is anchored to the format's
+      // mechanical track count, not the album-level anticipated value.
+      trackCount: effectiveTrackCount,
       // Task #385 — Stock removed for vinyl only; non-vinyl keeps the
       // per-album inventory cap.
       stock: isVinyl
@@ -2000,33 +2073,46 @@ function SkuRow({
       >
         {/* LEFT */}
         <div className="space-y-3">
-          {/* Format dropdown — pivot to any other offered format */}
+          {/* Format dropdown — pivot to any other offered format.
+              Task #446 — 7" is pre-selected from the "+ Add physical
+              good" menu; we render a read-only label so the operator
+              doesn't see a second size pick. To switch off 7", delete
+              the row and add a different format from the menu. */}
           <div>
             <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
               Format
             </div>
-            <Select
-              value={format}
-              onValueChange={(v) => onSwitchFormat(v as AlbumFormat)}
-            >
-              <SelectTrigger
-                className="h-8 w-full text-sm"
-                data-testid={`select-card-format-${format}`}
+            {sevenInch ? (
+              <div
+                className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
+                data-testid={`text-card-format-${format}`}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-white text-slate-900 border-slate-200">
-                {formatOptions.map((f) => (
-                  <SelectItem
-                    key={f}
-                    value={f}
-                    data-testid={`option-card-format-${format}-${f}`}
-                  >
-                    {ALBUM_FORMAT_LABEL[f]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                {ALBUM_FORMAT_LABEL[format]}
+              </div>
+            ) : (
+              <Select
+                value={format}
+                onValueChange={(v) => onSwitchFormat(v as AlbumFormat)}
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-card-format-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {formatOptions.map((f) => (
+                    <SelectItem
+                      key={f}
+                      value={f}
+                      data-testid={`option-card-format-${format}-${f}`}
+                    >
+                      {ALBUM_FORMAT_LABEL[f]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Preview hero — Task #393: pencil now lives INSIDE the
@@ -2161,7 +2247,14 @@ function SkuRow({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-white text-slate-900 border-slate-200">
-                  {VINYL_COLOR_TIER_ORDER.map((t) => (
+                  {/* Task #446 — 7" trims the catalog to Black + Opaque
+                      (the only tiers we want to sell today). The other
+                      groups stay defined in shared/pressing.ts so this
+                      is a one-line UI flip if Bill wants them back. */}
+                  {(sevenInch
+                    ? VINYL_COLOR_TIER_ORDER.filter((t) => SEVEN_INCH_VISIBLE_TIERS.includes(t))
+                    : VINYL_COLOR_TIER_ORDER
+                  ).map((t) => (
                     <SelectItem
                       key={t}
                       value={t}
@@ -2172,6 +2265,14 @@ function SkuRow({
                   ))}
                 </SelectContent>
               </Select>
+              {sevenInchHiddenColor && existingColorTier && (
+                <div
+                  className="text-xs text-slate-500"
+                  data-testid={`text-vinyl-color-back-compat-${format}`}
+                >
+                  Previously: {VINYL_COLOR_TIER_LABEL[existingColorTier]} — switch to a visible color to save.
+                </div>
+              )}
               <div
                 className="flex flex-wrap gap-1.5"
                 role="radiogroup"
@@ -2241,11 +2342,26 @@ function SkuRow({
               </Select>
             </div>
           ) : (
-            <div
-              className="text-xs text-slate-400"
-              data-testid={`text-jacket-standard-${format}`}
-            >
-              Standard jacket — every 12&quot;LP ships in the standard jacket.
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Jacket
+              </div>
+              <div
+                className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
+                data-testid={`text-jacket-standard-${format}`}
+              >
+                {sevenInch
+                  ? "Standard Full-Color Jacket"
+                  : "Standard jacket — every 12\u201D LP ships in the standard jacket."}
+              </div>
+              {sevenInchHiddenJacket && existing?.jacketUpgrade && (
+                <div
+                  className="text-xs text-slate-500"
+                  data-testid={`text-jacket-back-compat-${format}`}
+                >
+                  Previously: {JACKET_UPGRADE_LABEL[existing.jacketUpgrade as JacketUpgrade]} — saved as Standard jacket on next save.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2358,6 +2474,7 @@ function SkuRow({
             liveTrackCount={liveTrackCount ?? 0}
             anticipatedTrackCount={anticipatedTrackCount ?? null}
             persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
+            lockedValue={sevenInch ? SEVEN_INCH_TRACK_COUNT : null}
             onLocalChange={onAnticipatedTrackLocalChange}
             onChange={onAnticipatedTrackCountChange}
           />
