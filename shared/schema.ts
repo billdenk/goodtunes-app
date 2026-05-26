@@ -1255,6 +1255,13 @@ export const albumSkus = pgTable(
     costSnapshotPublishingCents: integer("cost_snapshot_publishing_cents"),
     costSnapshotPaymentProcessingCents: integer("cost_snapshot_payment_processing_cents"),
     costSnapshotGoodtunesCents: integer("cost_snapshot_goodtunes_cents"),
+    // Task #423 — track count in effect when this SKU was last saved.
+    // Publishing is computed live as trackCount × MECH per-track rate
+    // (vinyl + digital mechanicals); without a snapshot, adding or
+    // removing songs after Save silently shifts the saved row's
+    // Publishing / Profit / Total. Nullable so pre-#423 rows fall
+    // back to the live `album.songs.length` until they're re-saved.
+    costSnapshotTrackCount: integer("cost_snapshot_track_count"),
     // Task #200 — Pressing picks snapshot. Captures which row of the
     // Hellbender reference matrix the manufacturing snapshot came from
     // (color id + collapsed price tier + jacket upgrade + snapped qty

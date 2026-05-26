@@ -76,6 +76,14 @@ const parseDollars = (v: string): number | null => {
   return Math.round(n * 100);
 };
 
+// Task #423 — single source of truth for the mechanicals rate used by
+// the Publishing line in the SellPanel breakdown. $0.127/track × 2
+// covers vinyl + digital mechanicals (industry standard), i.e. 25.4¢
+// per track. Centralised so the snapshot path and the live-preview
+// path can't drift the way they used to (the comment said 0.254 but
+// the literal was 25.7).
+const MECH_RATE_CENTS_PER_TRACK = 25.4;
+
 type SellResponse = { skus: AlbumSku[]; addons: AlbumAddon[] };
 
 type Manufacturer = {
@@ -238,6 +246,9 @@ export function SellPanel({
       jacketUpgrade: JacketUpgrade | null;
       pressTierId?: string | null;
       pressColorId?: string | null;
+      displayName?: string | null;
+      // Task #423 — snapshotted track count on Save.
+      trackCount?: number | null;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
       return r.json();
@@ -1098,6 +1109,9 @@ function SkuRow({
     pressTierId?: string | null;
     pressColorId?: string | null;
     displayName?: string | null;
+    // Task #423 — snapshotted track count so Publishing math stays
+    // stable when songs are added / removed after Save.
+    trackCount?: number | null;
   }) => void;
   onDelete: () => void;
   // Exclusive-disclosure: owned by SellPanel via `useExclusiveDisclosure`.
@@ -1287,20 +1301,31 @@ function SkuRow({
   // computed live from real formulas instead of reading whatever the
   // payout-cost defaults table returns (which was $0 for every saved
   // row that hadn't been re-snapshotted). Formulas:
-  //   • Publishing       = trackCount × $0.257  ($0.127/track × 2 for
-  //                        vinyl + digital, industry standard).
+  //   • Publishing       = trackCount × $0.254  ($0.127/track × 2 for
+  //                        vinyl + digital mechanicals, industry std).
   //   • Payment proc.    = round(retail × 2.9%) + $0.30 (Stripe-style;
   //                        placeholder for fulfillment + GoodDeed + tax).
   //   • GoodTunes        = flat $4.50 per unit.
   // Manufacturing keeps the existing snapshot-on-unchanged behaviour
   // (vinyl: Hellbender / catalog matrix recomputes live when picks
   // change; non-vinyl: snapshot wins until re-save).
+  // Task #423 — track count itself is snapshotted on Save (alongside
+  // manufacturing) so the Publishing line stops drifting when songs
+  // are added / removed on the album. Saved-and-clean rows read the
+  // snapshot; dirty or unsaved rows recompute against the live count
+  // and re-snapshot on the next Save.
   const priceCentsForCost = useMemo(() => parseDollars(priceStr) ?? 0, [priceStr]);
   const breakdown = useMemo(() => {
-    const sideCarCents = {
-      publishingCents: Math.round((trackCount ?? 0) * 25.7),
-      paymentProcessingCents: Math.round(priceCentsForCost * 0.029) + 30,
-      goodtunesCents: 450,
+    const liveTrackCount = trackCount ?? 0;
+    const snapshotTrackCount = existing?.costSnapshotTrackCount ?? null;
+    const publishingFor = (n: number) => Math.round(n * MECH_RATE_CENTS_PER_TRACK);
+    const sideCarFor = (useSnapshot: boolean) => {
+      const tc = useSnapshot && snapshotTrackCount != null ? snapshotTrackCount : liveTrackCount;
+      return {
+        publishingCents: publishingFor(tc),
+        paymentProcessingCents: Math.round(priceCentsForCost * 0.029) + 30,
+        goodtunesCents: 450,
+      };
     };
     if (usingCatalog && pickedTier) {
       // Catalog-driven: live snap from the picked tier's ladder. Mirror
@@ -1318,13 +1343,13 @@ function SkuRow({
       if (existing && existing.costSnapshotManufacturingCents != null && !picksDirty) {
         return {
           manufacturingCents: existing.costSnapshotManufacturingCents,
-          ...sideCarCents,
+          ...sideCarFor(true),
           source: "catalog" as const,
         };
       }
       return {
         manufacturingCents: catalogSnap?.unitCents ?? 0,
-        ...sideCarCents,
+        ...sideCarFor(false),
         source: "catalog" as const,
       };
     }
@@ -1345,7 +1370,7 @@ function SkuRow({
       if (existing && existing.costSnapshotManufacturingCents != null && !picksDirty) {
         return {
           manufacturingCents: existing.costSnapshotManufacturingCents,
-          ...sideCarCents,
+          ...sideCarFor(true),
           source: "hellbender" as const,
         };
       }
@@ -1357,15 +1382,19 @@ function SkuRow({
       });
       return {
         manufacturingCents: m ?? 0,
-        ...sideCarCents,
+        ...sideCarFor(false),
         source: "hellbender" as const,
       };
     }
     // Non-vinyl: snapshot wins until re-save (preserve #194 behaviour).
+    // Mirror that for Publishing — if we have a manufacturing snapshot
+    // we treat the row as locked and pull the snapshotted track count
+    // too (Task #423).
+    const hasSnapshot = existing?.costSnapshotManufacturingCents != null;
     const manufacturingCents = existing?.costSnapshotManufacturingCents
       ?? liveCost?.manufacturingCents
       ?? 0;
-    return { manufacturingCents, ...sideCarCents, source: "placeholder" as const };
+    return { manufacturingCents, ...sideCarFor(hasSnapshot), source: "placeholder" as const };
   }, [
     existing,
     liveCost,
@@ -1460,6 +1489,10 @@ function SkuRow({
     onSave({
       format,
       priceCents: cents,
+      // Task #423 — snapshot the album's current track count so the
+      // Publishing line stays anchored to today's tracklist until the
+      // artist re-saves this row.
+      trackCount: trackCount ?? 0,
       // Task #385 — Stock removed for vinyl only; non-vinyl keeps the
       // per-album inventory cap.
       stock: isVinyl

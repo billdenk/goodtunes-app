@@ -169,6 +169,10 @@ async function upsertSku(input: {
   costSnapshotPublishingCents: number;
   costSnapshotPaymentProcessingCents: number;
   costSnapshotGoodtunesCents: number;
+  // Task #423 — snapshot of album.songs.length at save time so the
+  // Publishing line (trackCount × mechanicals) stays stable until the
+  // artist re-saves the row.
+  costSnapshotTrackCount: number | null;
   // Task #200
   vinylColor: string | null;
   vinylColorTier: VinylColorTier | null;
@@ -191,6 +195,7 @@ async function upsertSku(input: {
         costSnapshotPublishingCents: input.costSnapshotPublishingCents,
         costSnapshotPaymentProcessingCents: input.costSnapshotPaymentProcessingCents,
         costSnapshotGoodtunesCents: input.costSnapshotGoodtunesCents,
+        costSnapshotTrackCount: input.costSnapshotTrackCount,
         vinylColor: input.vinylColor,
         vinylColorTier: input.vinylColorTier,
         jacketUpgrade: input.jacketUpgrade,
@@ -519,6 +524,11 @@ export function registerCommerceRoutes(app: Express) {
     // Task #397 — artist-edited row label. Empty string normalises to
     // NULL so the read path falls back to the canonical format label.
     displayName: z.string().max(120).optional().nullable(),
+    // Task #423 — current album track count as seen by the client at
+    // save time. Persisted on the SKU so the Publishing line stops
+    // shifting when the artist later adds or removes songs. Optional /
+    // nullable for back-compat with clients that haven't been updated.
+    trackCount: z.number().int().min(0).nullable().optional(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
@@ -606,6 +616,7 @@ export function registerCommerceRoutes(app: Express) {
       costSnapshotPublishingCents: platformCost.publishingCents,
       costSnapshotPaymentProcessingCents: platformCost.paymentProcessingCents,
       costSnapshotGoodtunesCents: platformCost.goodtunesCents,
+      costSnapshotTrackCount: parsed.data.trackCount ?? null,
       vinylColor: vinylColorId,
       vinylColorTier,
       jacketUpgrade,
