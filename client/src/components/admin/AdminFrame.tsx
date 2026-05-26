@@ -18,6 +18,7 @@ import {
   ChevronRight,
   DollarSign,
   LayoutDashboard,
+  Mail,
   HeartHandshake,
   ShoppingBag,
   PanelRightClose,
