@@ -18,6 +18,7 @@ import {
   Guitar,
   Search,
   X,
+  Plus,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
@@ -1148,6 +1149,41 @@ function ReleasesPanel({
   person: PersonFull;
   allAlbums: PersonPreviewAlbum[];
 }) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  // Task #447 — "+ Add Album" on the artist's profile skips the
+  // "Who's the artist?" gate from Task #445 entirely: we already know
+  // the artist, so create the GoodTunes shell with primaryArtistId
+  // pre-attached and drop straight into the onboarding flow. Mirrors
+  // the createAlbum mutation on AdminAlbums.tsx (same endpoint, same
+  // defaults, same `?onboarding=1` landing).
+  const createAlbum = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/albums", {
+        title: "New album",
+        artist: person.name,
+        artwork: "/album-placeholder.svg",
+        type: "LP",
+        isGoodTunesRelease: true,
+        isPrepping: true,
+        primaryArtistId: person.id,
+      });
+      return res.json() as Promise<{ id: string }>;
+    },
+    onSuccess: (a) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
+      navigate(`/admin/albums/${a.id}?onboarding=1`);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't create album",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const needle = person.name.trim().toLowerCase();
   const releases = allAlbums
     .filter((a) => {
@@ -1227,6 +1263,22 @@ function ReleasesPanel({
             ) : (
               <Search className="w-3.5 h-3.5" />
             )}
+          </button>
+          {/* Task #447 — skip the "Who's the artist?" gate: we're already
+              on the artist's page, so create the shell with their id
+              attached and jump straight into onboarding. */}
+          <button
+            type="button"
+            disabled={createAlbum.isPending}
+            onClick={() => {
+              if (createAlbum.isPending) return;
+              createAlbum.mutate();
+            }}
+            className="px-2.5 h-8 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            data-testid="button-new-album-for-person"
+          >
+            <Plus className="w-3 h-3" />
+            Add Album
           </button>
         </div>
       </div>
