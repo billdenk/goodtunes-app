@@ -31,6 +31,7 @@ import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
@@ -2662,6 +2663,15 @@ function GoodDeedPill({
   const [floorStr, setFloorStr] = useState(
     existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99",
   );
+  // Task #415 — Profit disclosure mirrors the vinyl card's "Profit ·
+  // Per unit sold" chevron. Houses the per-unit cost lines, the
+  // Cost/unit subtotal, and the Floor $ guardrail (moved out of the
+  // primary pricing column so it doesn't compete with Retail Price).
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  // Per-vendor leg costs live in a secondary disclosure beneath the
+  // two-column card so vendor routing stays one click away without
+  // interrupting the Retail / Qty / Profit / Total flow.
+  const [vendorsOpen, setVendorsOpen] = useState(false);
 
   // Resolve initial % choice from the stored plannedQuantity ÷ vinylQty.
   // If it doesn't snap to one of the canned options we surface "Other…"
@@ -2766,43 +2776,86 @@ function GoodDeedPill({
       : "—";
   const summary = `${stateLabel} · ${resolvedLabel}`;
 
+  // Task #415 — Match the vinyl card's right column exactly: same
+  // labels (RETAIL PRICE / SELECT QTY), same InfoTip popover, same
+  // collapsible Profit chevron, same Total row. The active toggle
+  // lives in the header summary; Floor moves into the Profit
+  // disclosure (a guardrail, not a primary control); per-vendor cost
+  // becomes a secondary disclosure beneath the two-column card.
+  const totalCents = priceCents !== null ? priceCents * resolvedQty : null;
+  const lossColor = earnsCents !== null && earnsCents < 0;
+  const profitLabel =
+    earnsCents === null
+      ? "—"
+      : earnsCents < 0
+        ? `-${dollars(Math.abs(earnsCents))}`
+        : dollars(earnsCents);
+
   return (
     <div
       className="rounded-md border border-slate-200 bg-white"
       data-testid="pill-gooddeed"
     >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 rounded-md transition-colors"
-        aria-expanded={open}
-        data-testid="button-toggle-gooddeed-pill"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13.5px] font-semibold text-slate-900">
-            GoodDeed® Certificate
-          </span>
-          <span className="text-xs text-slate-500 truncate">{summary}</span>
-        </div>
-        <ChevronDown
-          className={[
-            "w-4 h-4 text-slate-400 transition-transform",
-            open ? "rotate-180" : "",
-          ].join(" ")}
-        />
-      </button>
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex-1 flex items-center justify-between gap-3 text-left -mx-1 px-1 py-0.5 rounded hover:bg-slate-50 transition-colors min-w-0"
+          aria-expanded={open}
+          data-testid="button-toggle-gooddeed-pill"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[13.5px] font-semibold text-slate-900">
+              GoodDeed® Certificate
+            </span>
+            <span
+              className="text-xs text-slate-500 truncate"
+              data-testid="text-gooddeed-summary"
+            >
+              · {summary}
+            </span>
+          </div>
+          <ChevronDown
+            className={[
+              "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
+              open ? "rotate-180" : "",
+            ].join(" ")}
+          />
+        </button>
+        {/* Task #415 — Active toggle relocated into the header summary
+            (same Apple-HIG Switch we use on the master-track row for
+            Instrumental / Explicit / Hide preview) so the row reads
+            `GoodDeed® Certificate · On · 25% (65 of 260)` and the
+            on/off control sits exactly where the eye expects it.
+            stopPropagation keeps clicks here from opening/closing the
+            pill body. */}
+        <span
+          onClick={(e) => e.stopPropagation()}
+          className="flex-shrink-0"
+        >
+          <Switch
+            checked={active}
+            onCheckedChange={setActive}
+            data-testid="toggle-gooddeed-active"
+            aria-label="Offer GoodDeed® cert on this release"
+          />
+        </span>
+      </div>
       {open && (
-        <div className="px-3 pb-3 pt-3 space-y-4 border-t border-slate-100">
-          {/* Task #397 — proper cert visual. Replaces the 14×14
-              thumbnail with the actual cert mock fans get: square
-              album art on top, navy footer band (brand bg) with the
-              album title + artist name + a small round artist photo
-              + the GoodDeed® mark, and a cert paragraph with a QR
-              placeholder beneath. The album-art tile keeps the
-              pencil-on-hover and opens the shared cover-art editor so
-              `albums.artwork` stays the single source of truth. */}
-          <div className="grid grid-cols-1 sm:grid-cols-[200px,1fr] gap-3 items-start">
-            <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <div className="px-3 pb-3 pt-3 border-t border-slate-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start">
+            {/* LEFT — enlarged cert mock. Album art on top, navy
+                band (brand bg) with album title + artist + GoodDeed
+                mark, then the cert paragraph + founder signature
+                line. The QR code is per-fan and gets generated at
+                print time, so no placeholder shown here. The album-
+                art tile keeps the pencil-on-hover affordance that
+                opens the shared cover-art editor — single source of
+                truth on `albums.artwork`. */}
+            <div
+              className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm"
+              data-testid="card-gooddeed-cert"
+            >
               {onEditArtwork ? (
                 <button
                   type="button"
@@ -2825,7 +2878,7 @@ function GoodDeedPill({
                     </span>
                   )}
                   <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center">
-                    <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Pencil className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                   </span>
                 </button>
               ) : (
@@ -2846,7 +2899,7 @@ function GoodDeedPill({
               )}
               {/* Navy footer band — title + artist + photo + GoodDeed mark */}
               <div
-                className="flex items-center gap-2.5 px-2.5 py-2 text-white"
+                className="flex items-center gap-2.5 px-3 py-2.5 text-white"
                 style={{ backgroundColor: "var(--brand-bg)" }}
                 data-testid="band-gooddeed-cert"
               >
@@ -2854,18 +2907,18 @@ function GoodDeedPill({
                   <img
                     src={artistPhotoUrl}
                     alt=""
-                    className="w-7 h-7 rounded-full object-cover flex-shrink-0 border border-white/20"
+                    className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-white/20"
                     data-testid="img-gooddeed-artist-photo"
                   />
                 ) : (
                   <div
-                    className="w-7 h-7 rounded-full bg-white/10 flex-shrink-0 border border-white/20"
+                    className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 border border-white/20"
                     aria-hidden
                   />
                 )}
                 <div className="flex-1 min-w-0">
                   <div
-                    className="text-xs font-semibold truncate leading-tight"
+                    className="text-sm font-semibold truncate leading-tight"
                     data-testid="text-gooddeed-album-title"
                   >
                     {albumTitle || "Album title"}
@@ -2877,201 +2930,369 @@ function GoodDeedPill({
                     {artistName || "Artist"}
                   </div>
                 </div>
-                <span
-                  className="text-xs font-bold uppercase tracking-wider flex-shrink-0"
-                  style={{ color: "var(--brand-mint)" }}
-                  data-testid="mark-gooddeed"
-                >
-                  GoodDeed®
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 text-xs text-slate-600 leading-relaxed">
-              <p>
-                A signed, numbered, hologrammed certificate of
-                authenticity that ships with the vinyl — every cert
-                carries a unique GoodDeed® serial and a QR code that
-                resolves to the fan's provenance page.
-              </p>
-              <div className="flex items-center gap-2 mt-1">
-                <div
-                  className="w-12 h-12 rounded border border-dashed border-slate-300 grid place-items-center text-xs text-slate-400 flex-shrink-0"
-                  aria-hidden
-                  data-testid="placeholder-gooddeed-qr"
-                >
-                  QR
-                </div>
-                <div className="text-xs text-slate-400 leading-snug">
-                  QR placeholder — at print time this resolves to
-                  goodtunes.fm/deed/&lt;serial&gt;.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={(e) => setActive(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
-              data-testid="toggle-gooddeed-active"
-            />
-            <span className="text-sm text-slate-900">
-              Offer GoodDeed® cert on this release
-            </span>
-          </label>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                Price $
-              </div>
-              <input
-                type="text"
-                value={priceStr}
-                onChange={(e) => setPriceStr(e.target.value)}
-                inputMode="decimal"
-                className={fieldClass}
-                data-testid="input-gooddeed-price"
-              />
-            </div>
-            <div>
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                Floor $
-              </div>
-              <input
-                type="text"
-                value={floorStr}
-                onChange={(e) => setFloorStr(e.target.value)}
-                inputMode="decimal"
-                className={fieldClass}
-                data-testid="input-gooddeed-floor"
-              />
-            </div>
-            <div>
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                % of vinyl qty
-              </div>
-              <Select value={pctChoice} onValueChange={setPctChoice}>
-                <SelectTrigger
-                  className="h-8 text-sm"
-                  data-testid="select-gooddeed-pct"
-                  aria-label={`Cert run ratio — currently ${resolvedLabel}`}
-                >
-                  {/* Spec label: `{pct}% ({resolvedQty} of vinyl qty)` */}
-                  <span className="truncate">{resolvedLabel}</span>
-                </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900 border-slate-200">
-                  <SelectItem value="100">100% · one per vinyl</SelectItem>
-                  <SelectItem value="50">50%</SelectItem>
-                  <SelectItem value="25">25%</SelectItem>
-                  <SelectItem value="20">20%</SelectItem>
-                  <SelectItem value="other">Other…</SelectItem>
-                </SelectContent>
-              </Select>
-              {pctChoice === "other" && (
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={otherQtyStr}
-                  onChange={(e) => setOtherQtyStr(e.target.value)}
-                  className={`${fieldClass} mt-1.5`}
-                  placeholder={`max ${vinylQty.toLocaleString()}`}
-                  aria-label={`Cert count — capped at vinyl qty ${vinylQty.toLocaleString()}`}
-                  data-testid="input-gooddeed-other-qty"
+                {/* GoodTunes mark in the corner — matches the real
+                    framed cert (see GoodDeedCertificate.tsx) which
+                    puts the white logo bottom-right. */}
+                <img
+                  src="/goodtunes-logo-white.png"
+                  alt="GoodTunes®"
+                  className="h-5 w-auto object-contain flex-shrink-0"
+                  style={{ mixBlendMode: "screen" }}
+                  data-testid="mark-goodtunes"
                 />
-              )}
+              </div>
+              {/* Cert paragraph + signature + QR placeholder.
+                  Skeletal placeholders in italic muted grey because
+                  each cert gets a real owner name + serial + QR
+                  generated at sale time per fan — this is the *mock*
+                  the artist sees in the CMS, not a fan-issued cert.
+                  The QR tile is kept intentionally minimal (no
+                  explanatory caption) so it reads as a placeholder
+                  tile rather than a feature explainer. */}
               <div
-                className="text-xs text-slate-500 mt-1 tabular-nums"
-                data-testid="text-gooddeed-resolved-qty"
+                className="px-3.5 py-3 space-y-3"
+                data-testid="block-gooddeed-cert-body"
               >
-                = {resolvedQty.toLocaleString()} of {vinylQty.toLocaleString()}
+                <p className="text-xs leading-snug text-slate-700">
+                  This <span className="font-semibold">GoodDeed®</span>{" "}
+                  certifies that{" "}
+                  <span className="italic text-slate-400">— owner name —</span>{" "}
+                  owns no.{" "}
+                  <span className="tabular-nums font-semibold text-slate-500">
+                    NN
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium text-slate-700">
+                    {albumTitle || "this release"}
+                  </span>
+                  .
+                </p>
+                <p className="text-xs leading-snug text-slate-500">
+                  Digital provenance can be confirmed at{" "}
+                  <span className="font-mono text-slate-600">
+                    goodtunes.fm/deed/&lt;serial&gt;
+                  </span>
+                  .
+                </p>
+                <div className="flex items-end justify-between gap-3 pt-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="border-t border-slate-300 h-4" />
+                    <div className="text-xs text-slate-400 uppercase tracking-wider mt-1 truncate">
+                      Nick Carter — Founder
+                    </div>
+                  </div>
+                  <div
+                    className="w-10 h-10 rounded border border-dashed border-slate-300 grid place-items-center text-xs text-slate-400 flex-shrink-0"
+                    aria-hidden
+                    title="Per-fan QR — auto-generated at sale time"
+                    data-testid="placeholder-gooddeed-qr"
+                  >
+                    QR
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT — Retail / Qty / Profit / Total. Mirrors the
+                vinyl SkuRow's right column exactly: same uppercase
+                slate-500 labels, same InfoTip popover positions,
+                same chevron disclosure for Profit, same Total row. */}
+            <div className="space-y-4">
+              {/* RETAIL PRICE */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                    Retail Price
+                  </span>
+                  <InfoTip
+                    label="About retail price"
+                    testId="info-gooddeed-price"
+                    text="What fans pay per GoodDeed® certificate."
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 text-sm">$</span>
+                  <input
+                    type="text"
+                    value={priceStr}
+                    onChange={(e) => setPriceStr(e.target.value)}
+                    inputMode="decimal"
+                    className={`${fieldClass} w-32 tabular-nums`}
+                    data-testid="input-gooddeed-price"
+                    aria-label="Retail price per cert"
+                  />
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  Per unit sold to fans.
+                </div>
+              </div>
+
+              {/* SELECT QTY */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                    Select Qty
+                  </span>
+                  <InfoTip
+                    label="About cert quantity"
+                    testId="info-gooddeed-qty"
+                    text="How many certs to issue against this vinyl run. Capped at the vinyl quantity."
+                  />
+                </div>
+                <Select value={pctChoice} onValueChange={setPctChoice}>
+                  <SelectTrigger
+                    className="h-8 w-full text-sm"
+                    data-testid="select-gooddeed-pct"
+                    aria-label={`Cert run ratio — currently ${resolvedLabel}`}
+                  >
+                    <span className="truncate">{resolvedLabel}</span>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white text-slate-900 border-slate-200">
+                    <SelectItem value="100">100% · one per vinyl</SelectItem>
+                    <SelectItem value="50">50%</SelectItem>
+                    <SelectItem value="25">25%</SelectItem>
+                    <SelectItem value="20">20%</SelectItem>
+                    <SelectItem value="other">Other…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {pctChoice === "other" && (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={otherQtyStr}
+                    onChange={(e) => setOtherQtyStr(e.target.value)}
+                    className={`${fieldClass} mt-1.5`}
+                    placeholder={`max ${vinylQty.toLocaleString()}`}
+                    aria-label={`Cert count — capped at vinyl qty ${vinylQty.toLocaleString()}`}
+                    data-testid="input-gooddeed-other-qty"
+                  />
+                )}
+              </div>
+
+              {/* PROFIT — chevron disclosure. Same primitive as the
+                  vinyl SkuRow's "Profit · Per unit sold". Loss shown
+                  in brand pink. Body holds the per-unit cost
+                  breakdown (printing/hologram/insertion totalled as
+                  GoodDeed Wholesale), the Cost/unit subtotal, and
+                  the Floor $ guardrail (moved out of the primary
+                  pricing column). No CC-fee line — the preview
+                  endpoint doesn't expose one, and the task says
+                  surface what's there, don't invent a field. */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setBreakdownOpen((o) => !o)}
+                  className="w-full flex items-center justify-between gap-2 py-1.5 -mx-1 px-1 rounded hover:bg-slate-50 transition-colors text-left"
+                  aria-expanded={breakdownOpen}
+                  data-testid="button-toggle-gooddeed-profit"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                      Profit
+                    </span>
+                    <span className="text-xs text-slate-400 truncate">
+                      · Per unit sold
+                    </span>
+                    <ChevronDown
+                      className={[
+                        "w-3.5 h-3.5 text-slate-400 transition-transform flex-shrink-0",
+                        breakdownOpen ? "rotate-180" : "",
+                      ].join(" ")}
+                    />
+                  </span>
+                  <span
+                    className={[
+                      "text-sm font-semibold tabular-nums flex-shrink-0",
+                      lossColor
+                        ? "text-[color:var(--brand-pink)]"
+                        : "text-slate-900",
+                    ].join(" ")}
+                    data-testid="text-gooddeed-profit"
+                  >
+                    {profitLabel}
+                  </span>
+                </button>
+                {breakdownOpen && (
+                  <div
+                    className="mt-1 ml-1 pl-3 border-l border-slate-200 space-y-1.5 py-1"
+                    data-testid="block-gooddeed-cost-breakdown"
+                  >
+                    {/* GoodDeed Wholesale (printing + hologram + insertion). */}
+                    {preview ? (
+                      <>
+                        <div className="flex items-center justify-between text-xs tabular-nums">
+                          <span className="text-slate-600">
+                            GoodDeed Wholesale
+                          </span>
+                          <span
+                            className="text-slate-900"
+                            data-testid="text-gooddeed-wholesale"
+                          >
+                            {dollars(preview.totalPerUnitCents)}
+                          </span>
+                        </div>
+                        {/* CC fee — mirrors the vinyl SkuRow's
+                            per-unit breakdown. The preview payload
+                            from gooddeed-pricing-preview doesn't yet
+                            expose a ccFeePerUnitCents field, so we
+                            surface the gap explicitly here rather
+                            than silently omit it. Tracked as a
+                            follow-up to wire the server side. */}
+                        <div
+                          className="flex items-center justify-between text-xs tabular-nums"
+                          data-testid="row-gooddeed-cc-fee"
+                        >
+                          <span className="text-slate-600">CC fee</span>
+                          <span className="text-xs text-slate-400 italic">
+                            unavailable
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1.5 mt-1 tabular-nums">
+                          <span className="text-slate-700">Cost / unit</span>
+                          <span
+                            className="text-slate-900"
+                            data-testid="text-gooddeed-cost-per-unit"
+                          >
+                            {dollars(preview.totalPerUnitCents)}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-xs text-slate-400 italic">
+                        Cost preview unavailable — assign vendors below to load
+                        per-unit pricing.
+                      </div>
+                    )}
+                    {/* Floor — guardrail moved out of the primary column. */}
+                    <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+                      <label
+                        htmlFor="input-gooddeed-floor"
+                        className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
+                      >
+                        Floor $
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400 text-xs">$</span>
+                        <input
+                          id="input-gooddeed-floor"
+                          type="text"
+                          value={floorStr}
+                          onChange={(e) => setFloorStr(e.target.value)}
+                          inputMode="decimal"
+                          className={`${fieldClass} w-24 tabular-nums`}
+                          data-testid="input-gooddeed-floor"
+                          aria-label="Minimum price floor"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* TOTAL — full cert run revenue. */}
+              <div className="pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                      Total
+                    </span>
+                    <InfoTip
+                      label="About total"
+                      testId="info-gooddeed-total"
+                      text="Estimated retail revenue from the full cert run (Retail Price × Qty)."
+                    />
+                  </span>
+                  <span
+                    className="text-base font-semibold text-slate-900 tabular-nums"
+                    data-testid="text-gooddeed-total"
+                  >
+                    {totalCents === null ? "—" : dollars(totalCents)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {preview && (
-            <div
-              className="rounded-md bg-slate-50 border border-slate-200 p-2.5 space-y-1"
-              data-testid="block-gooddeed-vendors"
+          {/* Per-vendor cost — secondary disclosure beneath the
+              two-column card. Operational detail (which press / hologram
+              vendor / insertion vendor runs each leg + their per-unit
+              cost) stays one click away without competing with Retail /
+              Qty / Profit / Total. Per the partner-permissions rule,
+              vendor routing is editable even after first sale — only
+              fan-facing metadata (price/min/qty on the addon itself)
+              respects the edit_metadata lock. */}
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setVendorsOpen((o) => !o)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+              aria-expanded={vendorsOpen}
+              data-testid="button-toggle-gooddeed-vendors"
             >
-              <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
                 Per-vendor cost
-              </div>
-              {(["printing", "hologram", "insertion"] as const).map((svc) => {
-                const leg = preview.legs?.[svc];
-                if (!leg) {
+              </span>
+              <ChevronDown
+                className={[
+                  "w-3.5 h-3.5 text-slate-400 transition-transform",
+                  vendorsOpen ? "rotate-180" : "",
+                ].join(" ")}
+              />
+            </button>
+            {vendorsOpen && (
+              <div
+                className="mt-2 rounded-md bg-slate-50 border border-slate-200 p-2.5 space-y-1"
+                data-testid="block-gooddeed-vendors"
+              >
+                {(["printing", "hologram", "insertion"] as const).map((svc) => {
+                  const leg = preview?.legs?.[svc];
+                  if (!leg) {
+                    return (
+                      <div
+                        key={svc}
+                        className="flex items-center justify-between text-xs"
+                        data-testid={`row-gooddeed-leg-${svc}`}
+                      >
+                        <span className="text-slate-600 capitalize">{svc}</span>
+                        <span className="text-slate-400">—</span>
+                      </div>
+                    );
+                  }
                   return (
                     <div
                       key={svc}
-                      className="flex items-center justify-between text-xs"
+                      className="flex items-center justify-between text-xs tabular-nums"
                       data-testid={`row-gooddeed-leg-${svc}`}
                     >
-                      <span className="text-slate-600 capitalize">{svc}</span>
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-700">
+                        <span className="capitalize text-slate-500 mr-1.5">
+                          {svc}
+                        </span>
+                        {leg.vendorName ?? "—"}
+                      </span>
+                      <span className="text-slate-900">
+                        {dollars(leg.perUnitCents)}
+                      </span>
                     </div>
                   );
-                }
-                return (
-                  <div
-                    key={svc}
-                    className="flex items-center justify-between text-xs tabular-nums"
-                    data-testid={`row-gooddeed-leg-${svc}`}
-                  >
+                })}
+                {preview && (
+                  <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1.5 mt-1 tabular-nums">
                     <span className="text-slate-700">
-                      {leg.vendorName ?? svc}
+                      Wholesale · {dollars(preview.totalPerUnitCents)} ×{" "}
+                      {resolvedQty.toLocaleString()}
                     </span>
-                    <span className="text-slate-900">
-                      {dollars(leg.perUnitCents)}
+                    <span
+                      className="text-slate-900"
+                      data-testid="text-gooddeed-vendors-total"
+                    >
+                      {dollars(preview.totalPerUnitCents * resolvedQty)}
                     </span>
                   </div>
-                );
-              })}
-              <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1 mt-1 tabular-nums">
-                <span className="text-slate-700">Wholesale per cert</span>
-                <span
-                  className="text-slate-900"
-                  data-testid="text-gooddeed-wholesale"
-                >
-                  {dollars(preview.totalPerUnitCents)}
-                </span>
+                )}
               </div>
-              {/* Task #393 — explicit Total = perUnit × resolvedQty line
-                  so the artist sees what the whole cert run will cost
-                  GoodTunes (not just one unit). Multiplier is shown to
-                  make the math legible at a glance. */}
-              <div className="flex items-center justify-between text-xs font-semibold tabular-nums">
-                <span className="text-slate-700">
-                  Total · {dollars(preview.totalPerUnitCents)} ×{" "}
-                  {resolvedQty.toLocaleString()}
-                </span>
-                <span
-                  className="text-slate-900"
-                  data-testid="text-gooddeed-total"
-                >
-                  {dollars(preview.totalPerUnitCents * resolvedQty)}
-                </span>
-              </div>
-              {earnsCents !== null && (
-                <div className="flex items-center justify-between text-xs tabular-nums">
-                  <span className="text-slate-600">Profit per cert</span>
-                  <span
-                    className={
-                      earnsCents < 0
-                        ? "text-[color:var(--brand-pink)] font-semibold"
-                        : "text-slate-900 font-semibold"
-                    }
-                    data-testid="text-gooddeed-profit"
-                  >
-                    {earnsCents < 0
-                      ? `-${dollars(Math.abs(earnsCents))}`
-                      : dollars(earnsCents)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
