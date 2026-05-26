@@ -254,20 +254,32 @@ type Tab = "overview" | "tracks" | "bonus" | "sell" | "press" | "shopify";
 // `direct`, Shopify for `shopify`, Bonus in both. The Press tab is
 // NEVER shown in Shopify mode (the label fulfills the physical
 // product themselves; there is no press to talk about).
-function visibleTabsFor(album: { sellMode?: string | null; sellQuoteLockedAt?: string | null }): { key: Tab; label: string }[] {
+function visibleTabsFor(album: {
+  sellMode?: string | null;
+  sellQuoteLockedAt?: string | null;
+  isGoodTunesRelease?: boolean;
+  isPrepping?: boolean;
+}): { key: Tab; label: string }[] {
   const base: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "sell", label: "Estimate" },
     { key: "tracks", label: "Tracks" },
   ];
-  if (!album.sellQuoteLockedAt) return base;
+  // Bonus is part of the digital offering — always available, no gate.
+  const bonus: { key: Tab; label: string } = { key: "bonus", label: "Bonus" };
+  const released = album.isGoodTunesRelease === true && album.isPrepping === false;
+  const fulfillmentUnlocked = !!album.sellQuoteLockedAt || released;
   if (album.sellMode === "direct") {
-    return [...base, { key: "press", label: "Press" }, { key: "bonus", label: "Bonus" }];
+    return fulfillmentUnlocked
+      ? [...base, { key: "press", label: "Press" }, bonus]
+      : [...base, bonus];
   }
   if (album.sellMode === "shopify") {
-    return [...base, { key: "shopify", label: "Shopify" }, { key: "bonus", label: "Bonus" }];
+    return fulfillmentUnlocked
+      ? [...base, { key: "shopify", label: "Shopify" }, bonus]
+      : [...base, bonus];
   }
-  return base;
+  return [...base, bonus];
 }
 
 // Legacy "Migrate to Mux" admin action — removed 2026-05 once auto-ingest
@@ -569,7 +581,7 @@ export function AdminAlbum() {
     if (!album) return;
     const allowed = visibleTabsFor(album).map((t) => t.key);
     if (!allowed.includes(tab)) setTab("sell");
-  }, [album?.sellMode, album?.sellQuoteLockedAt, tab, album]);
+  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, tab, album]);
 
   // Auto-open the mode picker once the row arrives without a sellMode.
   // Backfill ran on existing rows, so the modal really only fires for
