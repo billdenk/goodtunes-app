@@ -61,15 +61,15 @@ function PrivateRelayBanner({ relayEmail }: { relayEmail: string }) {
   };
   return (
     <div className="rounded-2xl overflow-hidden mb-4 px-4 py-3.5" style={{ background: "rgba(255, 84, 112, 0.10)", border: "1px solid rgba(255,84,112,0.25)" }} data-testid="banner-privaterelay">
-      <p className="text-white text-[14px] font-semibold mb-1">Add a real email</p>
-      <p className="text-white/70 text-[12px] leading-snug mb-3">
+      <p className="text-white text-sm font-semibold mb-1">Add a real email</p>
+      <p className="text-white/70 text-xs leading-snug mb-3">
         You signed in with Apple's <strong>Hide my email</strong>. We can reach you at <span className="font-mono text-white/85">{relayEmail}</span> but deliverability can be flaky — give us a real address for order updates.
       </p>
       {!open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="text-[13px] font-semibold text-[#FF5470] active:opacity-70"
+          className="text-sm font-semibold text-[var(--brand-pink)] active:opacity-70"
           data-testid="button-open-realemail"
         >
           Add real email →
@@ -84,49 +84,49 @@ function PrivateRelayBanner({ relayEmail }: { relayEmail: string }) {
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false}
-                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]"
+                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[var(--brand-blue)]"
                 style={{ background: "rgba(255,255,255,0.06)" }}
                 data-testid="input-realemail"
               />
-              {err && <p className="text-[12px] text-rose-300" data-testid="text-realemail-err">{err}</p>}
+              {err && <p className="text-xs text-rose-300" data-testid="text-realemail-err">{err}</p>}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={start}
                   disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail.trim())}
-                  className="px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40"
+                  className="px-3 py-1.5 rounded-full bg-[var(--brand-blue)] text-white text-xs font-semibold disabled:opacity-40"
                   data-testid="button-send-realemail-code"
                 >
                   {busy ? "Sending…" : "Send code"}
                 </button>
-                <button type="button" onClick={() => setOpen(false)} className="text-white/55 text-[12px]" data-testid="button-cancel-realemail">Cancel</button>
+                <button type="button" onClick={() => setOpen(false)} className="text-white/55 text-xs" data-testid="button-cancel-realemail">Cancel</button>
               </div>
             </>
           ) : (
             <>
-              <p className="text-white/65 text-[12px]">Code sent to <strong>{newEmail}</strong>.{devCode ? <> Dev code: <code className="font-mono text-white/85">{devCode}</code></> : null}</p>
+              <p className="text-white/65 text-xs">Code sent to <strong>{newEmail}</strong>.{devCode ? <> Dev code: <code className="font-mono text-white/85">{devCode}</code></> : null}</p>
               <input
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 placeholder="123456"
                 inputMode="numeric" autoComplete="one-time-code" maxLength={6}
-                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[#319ED8]"
+                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[var(--brand-blue)]"
                 style={{ background: "rgba(255,255,255,0.06)" }}
                 data-testid="input-realemail-code"
               />
-              {err && <p className="text-[12px] text-rose-300" data-testid="text-realemail-err">{err}</p>}
+              {err && <p className="text-xs text-rose-300" data-testid="text-realemail-err">{err}</p>}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={confirm}
                   disabled={busy || code.length !== 6}
-                  className="px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40"
+                  className="px-3 py-1.5 rounded-full bg-[var(--brand-blue)] text-white text-xs font-semibold disabled:opacity-40"
                   data-testid="button-confirm-realemail"
                 >
                   {busy ? "Verifying…" : "Confirm"}
                 </button>
-                <button type="button" onClick={() => { setPhase("enter"); setCode(""); }} className="text-white/55 text-[12px]" data-testid="button-back-realemail">Back</button>
+                <button type="button" onClick={() => { setPhase("enter"); setCode(""); }} className="text-white/55 text-xs" data-testid="button-back-realemail">Back</button>
               </div>
             </>
           )}
@@ -152,7 +152,7 @@ function LinkedProvidersPanel() {
   const hasApple = identities.some((i) => i.provider === "apple");
   return (
     <>
-      <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Linked Accounts</p>
+      <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Linked Accounts</p>
       <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
         {isLoading ? (
           <p className="px-4 py-3 text-white/55 text-sm">Loading…</p>
@@ -161,19 +161,19 @@ function LinkedProvidersPanel() {
             {identities.map((id) => (
               <div key={id.id} className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid={`row-identity-${id.provider}`}>
                 <div>
-                  <p className="text-white text-[15px] capitalize">{id.provider}</p>
-                  {id.email && <p className="text-white/45 text-[12px]">{id.email}</p>}
+                  <p className="text-white text-base capitalize">{id.provider}</p>
+                  {id.email && <p className="text-white/45 text-xs">{id.email}</p>}
                 </div>
                 <button type="button" onClick={() => unlink.mutate(id.id)} disabled={unlink.isPending} className="text-red-400 text-sm" data-testid={`button-unlink-${id.provider}`}>Unlink</button>
               </div>
             ))}
             {!hasGoogle && (
-              <button type="button" onClick={() => linkProvider("google")} className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid="button-link-google">
+              <button type="button" onClick={() => linkProvider("google")} className="w-full py-3.5 text-left px-4 text-white text-base active:bg-white/[0.06] border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid="button-link-google">
                 Link Google
               </button>
             )}
             {!hasApple && (
-              <button type="button" onClick={() => linkProvider("apple")} className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid="button-link-apple">
+              <button type="button" onClick={() => linkProvider("apple")} className="w-full py-3.5 text-left px-4 text-white text-base active:bg-white/[0.06] border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid="button-link-apple">
                 Link Apple
               </button>
             )}
@@ -359,7 +359,7 @@ export function Account() {
               placed an order so a brand-new profile stays clean. */}
           {orderCount > 0 && (
             <>
-              <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">My Orders</p>
+              <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">My Orders</p>
               <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
                 <button
                   type="button"
@@ -374,12 +374,12 @@ export function Account() {
                     </svg>
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="block text-white text-[15px]">Orders &amp; tracking</span>
+                    <span className="block text-white text-base">Orders &amp; tracking</span>
                     {latestStatusLine && (
-                      <span className="block text-white/45 text-[12px] truncate" data-testid="text-orders-latest">{latestStatusLine}</span>
+                      <span className="block text-white/45 text-xs truncate" data-testid="text-orders-latest">{latestStatusLine}</span>
                     )}
                   </span>
-                  <span className="text-white/40 text-[13px] tabular-nums" data-testid="row-orders-count">{orderCount}</span>
+                  <span className="text-white/40 text-sm tabular-nums" data-testid="row-orders-count">{orderCount}</span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
                     <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -388,7 +388,7 @@ export function Account() {
             </>
           )}
 
-          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Your Collections</p>
+          <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Your Collections</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             {([
               {
@@ -423,8 +423,8 @@ export function Account() {
                 data-testid={testId}
               >
                 <span className="w-5 flex items-center justify-center flex-shrink-0">{icon}</span>
-                <span className="flex-1 text-white text-[15px]">{label}</span>
-                <span className="text-white/40 text-[13px] tabular-nums" data-testid={`${testId}-count`}>{count}</span>
+                <span className="flex-1 text-white text-base">{label}</span>
+                <span className="text-white/40 text-sm tabular-nums" data-testid={`${testId}-count`}>{count}</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
                   <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -438,7 +438,7 @@ export function Account() {
               now lives INSIDE Privacy (Apple-style: tap Privacy → push a
               sub-screen that groups everything privacy-related — listening
               history + the public Privacy Policy link). */}
-          <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
+          <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             {([
               { label: "Notifications", onClick: undefined },
@@ -453,7 +453,7 @@ export function Account() {
                 style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
                 data-testid={`row-${label.toLowerCase().replace(/[^a-z]/g, "-")}`}
               >
-                <span className="text-white text-[15px]">{label}</span>
+                <span className="text-white text-base">{label}</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
                   <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -467,11 +467,17 @@ export function Account() {
 
           <LinkedProvidersPanel />
 
+          {/* Task #400 — Fan-initiated account merge. If a fan signed up
+              on the new player and *then* discovered their imported
+              gogoods.com account exists separately, they can pull all
+              that history into the account they're using now. */}
+          <AccountMergePanel />
+
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full py-3.5 text-center text-red-400 text-[15px] font-normal active:bg-white/[0.06]"
+              className="w-full py-3.5 text-center text-red-400 text-base font-normal active:bg-white/[0.06]"
               data-testid="button-sign-out"
             >
               Sign Out
@@ -545,6 +551,109 @@ export function Account() {
  * Header mirrors AlbumDetail's pushed sub-views: back chevron on the
  * left, centered title, no right-side chrome.
  * ──────────────────────────────────────────────────────────────────── */
+// Task #400 — Fan-initiated account merge. The fan pastes the *other*
+// email they used (typically the legacy gogoods.com address); we send
+// a 24-hour confirm link to that address. Clicking the link lands on
+// /account/merge, which POSTs to /api/me/welcome-back/merge/confirm
+// and reparents user_albums + orders + playlists onto the surviving
+// account (the one they're signed in as now).
+function AccountMergePanel() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const start = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/me/welcome-back/merge/start", { otherEmail: email.trim() });
+      setSent(true);
+      toast({ title: "Check the other inbox", description: "If that account exists, a confirmation link is on its way." });
+    } catch (err: any) {
+      // Non-enumerating — same toast either way.
+      setSent(true);
+      toast({ title: "Check the other inbox", description: "If that account exists, a confirmation link is on its way." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }} data-testid="panel-account-merge">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06]"
+          data-testid="button-account-merge-open"
+        >
+          <div>
+            <div className="text-white text-base">These two accounts are me</div>
+            <div className="text-white/45 text-xs mt-0.5">Pull a second email's library onto this account.</div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+            <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      ) : (
+        <div className="px-4 py-4">
+          {sent ? (
+            <div data-testid="merge-start-sent">
+              <div className="text-white text-sm font-semibold mb-1">Link sent.</div>
+              <p className="text-white/55 text-xs leading-relaxed">
+                Open the inbox for that other email and tap the confirmation link to move everything onto this account.
+                The link expires in 24 hours.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={start}>
+              <p className="text-white/55 text-xs mb-3 leading-relaxed">
+                Enter the email on your other GoodTunes account. We'll send a confirmation link there — once you tap it,
+                we'll move that account's orders and library onto this one.
+              </p>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="the.other@example.com"
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="w-full border border-white/10 bg-white/[0.06] rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[var(--brand-blue)] mb-3"
+                required
+                data-testid="input-account-merge-email"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setOpen(false); setEmail(""); }}
+                  className="px-3 py-2 rounded-xl text-white/70 text-sm border border-white/10"
+                  data-testid="button-account-merge-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || !email.trim()}
+                  className="flex-1 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                  style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
+                  data-testid="button-account-merge-send"
+                >
+                  {submitting ? "Sending…" : "Send confirmation link"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PrivacySheet({
   onClose,
   confirmClear,
@@ -584,16 +693,16 @@ function PrivacySheet({
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-10">
-        <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
+        <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
         <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
-          <p className="px-4 pt-3 pb-2 text-white/55 text-[12px] leading-snug">
+          <p className="px-4 pt-3 pb-2 text-white/55 text-xs leading-snug">
             We record what you listen to so artists can see which songs resonate. You can wipe your history any time.
           </p>
           {!confirmClear ? (
             <button
               type="button"
               onClick={() => setConfirmClear(true)}
-              className="w-full py-3.5 text-left px-4 text-white text-[15px] active:bg-white/[0.06] border-t"
+              className="w-full py-3.5 text-left px-4 text-white text-base active:bg-white/[0.06] border-t"
               style={{ borderColor: "rgba(255,255,255,0.07)" }}
               data-testid="button-clear-history"
             >
@@ -601,7 +710,7 @@ function PrivacySheet({
             </button>
           ) : (
             <div className="px-4 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-              <p className="text-white text-[14px] mb-3">Permanently delete every play, skip, and favorite event tied to this account?</p>
+              <p className="text-white text-sm mb-3">Permanently delete every play, skip, and favorite event tied to this account?</p>
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -625,7 +734,7 @@ function PrivacySheet({
           )}
         </div>
         {clearedToast && (
-          <div className="mb-3 flex items-center gap-2 text-[#4AFFCA] text-sm px-1">
+          <div className="mb-3 flex items-center gap-2 text-[var(--brand-mint)] text-sm px-1">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M20 6L9 17l-5-5" strokeLinecap="round" />
             </svg>
@@ -633,7 +742,7 @@ function PrivacySheet({
           </div>
         )}
 
-        <p className="text-white/40 text-[11px] uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Policy</p>
+        <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Policy</p>
         <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
           <a
             href={PRIVACY_POLICY_URL}
@@ -642,7 +751,7 @@ function PrivacySheet({
             className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06]"
             data-testid="link-privacy-policy"
           >
-            <span className="text-white text-[15px]">Privacy Policy</span>
+            <span className="text-white text-base">Privacy Policy</span>
             {/* Apple's external-link glyph (top-right arrow out of box) —
                 signals this leaves the app, not just a deeper screen. */}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.45" strokeLinecap="round" strokeLinejoin="round">
@@ -652,7 +761,7 @@ function PrivacySheet({
             </svg>
           </a>
         </div>
-        <p className="text-white/35 text-[11px] leading-relaxed px-1">
+        <p className="text-white/35 text-xs leading-relaxed px-1">
           Opens goodtunes.music/privacy in your browser.
         </p>
       </div>

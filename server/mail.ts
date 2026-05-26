@@ -197,6 +197,80 @@ export async function sendCustomerSignupCodeEmail(toEmail: string, code: string,
   return sendViaResend("customer-signup-code", toEmail, subject, html, text);
 }
 
+// Task #400 — One-time welcome-back mail for the ~1,850 imported
+// gogoods.com fans. The link below carries a single-use 30-day token
+// that signs the recipient straight in (no password) and drops them
+// into the 3-screen onboarding (pick handle → confirm name → tour
+// their library). Sent at most once per address — we stamp
+// `welcomeEmailSentAt` on success so a future retry batch can target
+// only the un-mailed remainder.
+import { WELCOME_BACK_WHATS_NEW } from "@shared/welcomeBack";
+
+export async function sendWelcomeBackEmail(toEmail: string, displayName: string | null, signInUrl: string): Promise<SendResult> {
+  const friendly = (displayName ?? "").trim() || "there";
+  const subject = `${friendly}, your GoodTunes player is ready — your gogoods library is inside`;
+  const bullets = WELCOME_BACK_WHATS_NEW;
+
+  const text = [
+    `Hi ${friendly},`,
+    ``,
+    `Welcome back. Your gogoods.com purchases just moved into the new GoodTunes player — every album you ever bought is waiting, ready to stream.`,
+    ``,
+    `Tap to open your library (no password — this link signs you in):`,
+    signInUrl,
+    ``,
+    `While you were away:`,
+    ...bullets.map((b) => `  • ${b.title} ${b.body}`),
+    ``,
+    `On your first tap-in we'll ask you to pick a @handle, confirm the name to show on your profile, and then drop you straight into your library.`,
+    ``,
+    `The link is good for 30 days and works once. After that, sign in at https://my.goodtunes.fm with this email and tap "Email me a sign-in code".`,
+    ``,
+    `— The GoodTunes team`,
+  ].join("\n");
+
+  const bulletsHtml = bullets
+    .map(
+      (b) => `
+      <li style="margin: 0 0 10px; padding: 0; line-height: 1.5;">
+        <strong style="color: #1a1a1a;">${escapeHtml(b.title)}</strong>
+        <span style="color: #4a4a4a;"> ${escapeHtml(b.body)}</span>
+      </li>`,
+    )
+    .join("");
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">GoodTunes · Welcome back</div>
+      <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">Hi ${escapeHtml(friendly)}, your player is ready.</h1>
+      <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
+        Your gogoods.com purchases just moved into the new <strong>GoodTunes</strong> player — every album you ever bought is waiting, ready to stream.
+      </p>
+      <p style="margin: 28px 0;">
+        <a href="${signInUrl}" style="display: inline-block; background: linear-gradient(135deg, #1D5E8F, #319ED8); color: #fff; text-decoration: none; padding: 14px 24px; border-radius: 12px; font-weight: 600; font-size: 15px;">Open my GoodTunes player</a>
+      </p>
+      <h2 style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600; margin: 32px 0 12px;">While you were away</h2>
+      <ul style="list-style: disc; padding-left: 18px; margin: 0 0 24px; font-size: 14px;">
+        ${bulletsHtml}
+      </ul>
+      <p style="font-size: 14px; color: #333; line-height: 1.55; margin: 0 0 16px;">
+        On your first tap-in we'll ask you to pick a <strong>@handle</strong>, confirm the name to show on your profile, and then drop you straight into your library.
+      </p>
+      <p style="font-size: 13px; color: #666; line-height: 1.55; margin: 0 0 6px;">
+        This link signs you in — no password needed. It's good for 30 days and works once.
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 24px 0 0;">
+        After that, sign in at <a href="https://my.goodtunes.fm" style="color: #319ED8;">my.goodtunes.fm</a> with this email and tap "Email me a sign-in code".
+      </p>
+    </div>
+  `;
+  return sendViaResend("customer-welcome-back", toEmail, subject, html, text);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
 // Task #256 — Notify super-admins that a customer landed on the admin
 // shell and is asking to be promoted. One email per (customer, day) is
 // enforced by the caller via admin_access_requests.last_notified_at;

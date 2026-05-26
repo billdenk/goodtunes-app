@@ -97,9 +97,36 @@ async function getUserIdFromRequest(req: Request): Promise<string | undefined> {
   return a?.userId;
 }
 
+// Task #400 — Tear down any session/bearer-token for a customer row
+// that's been merged into another account. Without this, a stale tab
+// signed in to the losing account could keep authorizing requests
+// against a row that no longer owns its data.
+async function destroyMergedSession(req: Request, res: Response, userId: string): Promise<void> {
+  try {
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith("Bearer ")) {
+      await storage.deleteAuthToken(auth.slice(7));
+    }
+  } catch { /* best-effort */ }
+  await new Promise<void>((resolve) => {
+    req.session.destroy(() => resolve());
+  });
+  res.clearCookie("connect.sid", { path: "/" });
+}
+
 async function requireAuth(req: Request, res: Response, next: Function) {
   const a = await getAuthFromRequest(req);
   if (!a) return res.status(401).json({ message: "Unauthorized" });
+  // Merged-customer deny: any session/bearer for a row whose
+  // `mergedIntoId` is set must be rejected and the session torn down.
+  if (a.kind === "customer") {
+    const c = await storage.getCustomer(a.userId);
+    if (!c) return res.status(401).json({ message: "Unauthorized" });
+    if (c.mergedIntoId) {
+      await destroyMergedSession(req, res, a.userId);
+      return res.status(401).json({ message: "Account merged", mergedIntoId: c.mergedIntoId });
+    }
+  }
   req.session.userId = a.userId;
   req.session.kind = a.kind;
   next();
@@ -120,6 +147,10 @@ async function requireCustomer(req: Request, res: Response, next: Function) {
   if (!a || a.kind !== "customer") return res.status(401).json({ message: "Unauthorized" });
   const c = await storage.getCustomer(a.userId);
   if (!c) return res.status(401).json({ message: "Unauthorized" });
+  if (c.mergedIntoId) {
+    await destroyMergedSession(req, res, a.userId);
+    return res.status(401).json({ message: "Account merged", mergedIntoId: c.mergedIntoId });
+  }
   req.session.userId = a.userId;
   req.session.kind = "customer";
   next();
@@ -480,6 +511,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (req.session.kind === "customer") {
       const c = await storage.getCustomer(req.session.userId!);
       if (!c) return res.status(404).json({ message: "User not found" });
+      // Task #400 — a fan whose row was soft-deleted by an account merge
+      // can still hold a cached bearer token (the merge revokes them but
+      // a stale tab may not have noticed). Refuse to authenticate the
+      // dead row so they can't take any action against it.
+      if ((c as any).mergedIntoId) {
+        req.session.destroy(() => {});
+        return res.status(401).json({ message: "This account has been merged. Sign in with your other email." });
+      }
       const photoUrl = await storage.getProfilePhoto(c.id);
       return res.json(shapeCustomer(c, photoUrl));
     }
@@ -790,6 +829,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const params = new URLSearchParams({ prompt: "link", provider, email: identity.email });
           return res.redirect(`/login?${params.toString()}`);
         }
+      } else if (kind === "customer") {
+        // Task #400 — Apple private-relay reattach for imported gogoods
+        // fans. The legacy gogoods.com importer wrote each fan's stable
+        // Apple relay address as their email; if Apple now hands us the
+        // exact same relay back AND the row is `legacyGogoodsId`-stamped
+        // AND we don't already have an identity (covered by the
+        // `findIdentity` branch above), attach this Apple identity to
+        // that row so the fan keeps their orders + owned albums instead
+        // of orphaning them behind a fresh OAuth account.
+        const existing = await storage.getCustomerByEmail(identity.email);
+        if (existing && existing.legacyGogoodsId) {
+          await storage.linkIdentity(kind, { userId: existing.id, provider, providerUserId: identity.sub, email: identity.email });
+          userId = existing.id;
+        }
       }
     }
 
@@ -895,6 +948,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Apple uses form_post on the callback — express.urlencoded is already
   // installed in server/index.ts so req.body works on this POST.
   app.post("/api/auth/apple/callback", (req, res) => handleProviderCallback("apple", req, res));
+
+  // Task #400 — welcome-back for imported gogoods.com fans. All routes
+  // live in their own module so the campaign + onboarding + merge
+  // surface area stays auditable in one place.
+  const { registerWelcomeBackRoutes } = await import("./welcomeBack");
+  registerWelcomeBackRoutes(app, { requireAuth, requireAdmin, generateAuthToken: generateToken });
 
   // ─── Tap-to-report error capture (Task #284) ───────────────────────
   // Friendly error cards across the app POST here when the user taps

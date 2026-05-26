@@ -48,6 +48,112 @@ type AdminPhase = "password" | "totp" | "enroll" | "emailOtp";
 const inputBgStyle = (kind: "admin" | "customer"): React.CSSProperties | undefined =>
   kind === "customer" ? { background: "rgba(255,255,255,0.06)" } : undefined;
 
+// Task #400 — Welcome-back banner for imported gogoods.com fans who
+// landed on /login on their own (didn't get the wave-1 mail, or lost
+// the link). Same shape as /api/auth/lookup: constant-floor latency,
+// no enumeration. We always show a friendly "if your email is on file
+// we just sent a link" toast regardless of whether the address was a
+// hit, then stick a localStorage dismiss flag so the banner stays out
+// of a returning fan's way after first interaction.
+function WelcomeBackBanner() {
+  const { toast } = useToast();
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try { return localStorage.getItem("gt:welcomeback:banner-dismissed") === "1"; } catch { return false; }
+  });
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const params = new URL(window.location.href).searchParams;
+    const reason = params.get("welcomeback");
+    if (reason === "expired") toast({ title: "That sign-in link has expired", description: "Tap below to send a fresh one.", variant: "destructive" });
+    else if (reason === "used") toast({ title: "That sign-in link was already used", description: "Tap below to send a fresh one.", variant: "destructive" });
+  }, [toast]);
+
+  if (dismissed) return null;
+
+  const dismiss = () => {
+    try { localStorage.setItem("gt:welcomeback:banner-dismissed", "1"); } catch {}
+    setDismissed(true);
+  };
+
+  const sendLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/welcome-back/start", { email: email.trim() });
+      toast({ title: "Check your inbox", description: "If that email is on file, a sign-in link is on its way." });
+      dismiss();
+    } catch {
+      // Endpoint is intentionally non-enumerating — fall through to the
+      // same friendly toast so timing/error never reveals account presence.
+      toast({ title: "Check your inbox", description: "If that email is on file, a sign-in link is on its way." });
+      dismiss();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 mb-4" data-testid="welcomeback-banner">
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-white text-sm font-semibold mb-0.5">Imported from gogoods.com?</div>
+          <div className="text-white/55 text-xs leading-relaxed">
+            Your old library moved over. We'll email a one-tap sign-in link — no password needed.
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={dismiss}
+          className="text-white/40 hover:text-white/70 text-lg leading-none -mr-1 -mt-1 p-1"
+          aria-label="Dismiss"
+          data-testid="button-welcomeback-banner-dismiss"
+        >
+          ×
+        </button>
+      </div>
+      {open ? (
+        <form onSubmit={sendLink} className="mt-3 flex gap-2">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            className="flex-1 border border-white/10 bg-white/[0.06] rounded-xl px-3 py-2 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[var(--brand-blue)]"
+            required
+            data-testid="input-welcomeback-banner-email"
+          />
+          <button
+            type="submit"
+            disabled={submitting || !email.trim()}
+            className="px-3 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+            style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
+            data-testid="button-welcomeback-banner-send"
+          >
+            {submitting ? "…" : "Send"}
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="mt-3 text-[var(--brand-mint)] text-sm font-semibold"
+          data-testid="button-welcomeback-banner-open"
+        >
+          Email me a sign-in link →
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Login() {
   const kind = useAuthKind();
   const isAdmin = kind === "admin";
@@ -478,7 +584,7 @@ export function Login() {
               <div className="flex justify-center mb-4">
                 <img src={enrollData.qr} alt="2FA QR code" className={s.qrFrame} />
               </div>
-              <p className={`${isAdmin ? "text-slate-400" : "text-white/45"} text-[11px] text-center mb-4 break-all`}>
+              <p className={`${isAdmin ? "text-slate-400" : "text-white/45"} text-xs text-center mb-4 break-all`}>
                 Or enter secret manually: <span className={`${isAdmin ? "text-slate-700" : "text-white/80"} font-mono`}>{enrollData.secret}</span>
               </p>
               <input
@@ -505,8 +611,8 @@ export function Login() {
               </button>
               <div className={s.recoveryWrap} style={recoveryGroupBg}>
                 <p className={`${isAdmin ? "text-slate-900" : "text-white/85"} text-sm font-semibold mb-2`}>Recovery codes</p>
-                <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-[12px] mb-3`}>Save these somewhere safe. Each works once if you lose your authenticator.</p>
-                <div className={`grid grid-cols-2 gap-2 font-mono ${isAdmin ? "text-slate-800" : "text-white"} text-[13px]`}>
+                <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-xs mb-3`}>Save these somewhere safe. Each works once if you lose your authenticator.</p>
+                <div className={`grid grid-cols-2 gap-2 font-mono ${isAdmin ? "text-slate-800" : "text-white"} text-sm`}>
                   {enrollData.recoveryCodes.map((c) => <div key={c} className={s.recoveryItem}>{c}</div>)}
                 </div>
               </div>
@@ -529,7 +635,7 @@ export function Login() {
             We sent a 6-digit code to <span className={`${isAdmin ? "text-slate-800" : "text-white/85"} font-medium`}>{emailOtpInfo?.email ?? "your inbox"}</span>. It expires in 10 minutes.
           </p>
           {emailOtpInfo?.devCode && (
-            <p className={`${isAdmin ? "text-amber-700 bg-amber-50 border-amber-200" : "text-amber-200 bg-amber-500/10 border-amber-400/30"} text-[12px] border rounded px-2 py-1 mb-3 text-center`}>
+            <p className={`${isAdmin ? "text-amber-700 bg-amber-50 border-amber-200" : "text-amber-200 bg-amber-500/10 border-amber-400/30"} text-xs border rounded px-2 py-1 mb-3 text-center`}>
               Dev only — your code is <span className="font-mono font-semibold">{emailOtpInfo.devCode}</span>
             </p>
           )}
@@ -690,6 +796,12 @@ export function Login() {
           </div>
         )}
 
+        {/* Task #400 — Welcome-back banner. Customer login only.
+            Dismissible (sticky in localStorage) and short-circuited
+            after first dismiss so it never re-bothers a returning fan.
+            Posts to /api/welcome-back/start with constant-floor latency
+            and no-enumeration semantics, so it's safe to show pre-auth. */}
+        {!isAdmin && mode === "login" && <WelcomeBackBanner />}
         {mode === "login" && (
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
             <div>
@@ -802,7 +914,7 @@ export function Login() {
                 placeholder="••••••••" name="new-password" autoComplete="new-password" minLength={8}
                 className={s.input} style={inputBg} required data-testid="input-password"
               />
-              <p className={`text-[11px] mt-1.5 ${isAdmin ? "ml-0" : "ml-1"} ${
+              <p className={`text-xs mt-1.5 ${isAdmin ? "ml-0" : "ml-1"} ${
                 password.length === 0
                   ? (isAdmin ? "text-slate-400" : "text-white/35")
                   : isValidPassword(password)
@@ -836,7 +948,7 @@ export function Login() {
               We sent a 6-digit code to <strong>{email}</strong>. Enter it below to finish creating your account.
             </p>
             {devCode && (
-              <div className={`text-[11px] ${isAdmin ? "text-slate-500" : "text-white/55"}`}>
+              <div className={`text-xs ${isAdmin ? "text-slate-500" : "text-white/55"}`}>
                 Dev mode: code is <code className="font-mono">{devCode}</code>
               </div>
             )}

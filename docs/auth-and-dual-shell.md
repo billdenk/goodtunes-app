@@ -26,6 +26,31 @@ Apple + Google OAuth both live. `APPLE_CONFIGURED` gate in `server/auth/oauth.ts
 
 When Apple Sign-In returns `@privaterelay.appleid.com`, the customer is prompted via `POST /api/customer/real-email/{start,confirm}` to add a real, deliverable email. Reuses the `emailVerifications` table + scrypt code hashing. The relay address stays on `customer_identities.email` (the link key); the real email overwrites `customer_users.email`. Account.tsx surfaces a backfill banner for existing relay-email customers.
 
+### Apple private-relay reattach for imported fans (Task #400)
+
+The gogoods.com importer wrote each Apple-signed fan's stable
+`@privaterelay.appleid.com` forwarder as the email on the imported
+`customer_users` row (about 211 of them). The Apple OAuth callback
+therefore has a special-case branch *before* the usual "we found an
+account with this email" prompt:
+
+If — and only if — the OAuth identity lookup misses (first time the
+new GoodTunes side has seen this Apple `sub`) **and** the email Apple
+gave us ends in `@privaterelay.appleid.com` **and** an existing
+`customer_users` row carries that exact relay as its email **and**
+that row has `legacy_gogoods_id` set, we *link* the fresh Apple
+identity onto the imported row instead of minting a new one. The fan
+keeps their orders + owned albums; the relay address is the same one
+Apple has always returned for this fan, so this is a safe rejoin.
+
+Non-relay emails always fall through to the standard collision prompt
+(`?prompt=link`) — we never silently merge two different fans into
+the same row.
+
+See [`docs/migrations/gogoods-welcome-back.md`](./migrations/gogoods-welcome-back.md)
+for the whole welcome-back flow (single-use email-link sign-in,
+3-screen onboarding, admin wave-1 campaign, fan-initiated merge).
+
 ## Host-based routing
 
 - `admin.goodtunes.music` → admin shell

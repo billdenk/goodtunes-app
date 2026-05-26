@@ -49,6 +49,10 @@ import { AdminFulfillmentPartners } from "@/pages/AdminFulfillmentPartners";
 import { AdminFulfillmentPartner } from "@/pages/AdminFulfillmentPartner";
 import { Welcome } from "@/pages/Welcome";
 import { WelcomeInvitee } from "@/pages/WelcomeInvitee";
+// Task #400 — Welcome-back flow for imported gogoods.com fans.
+import { WelcomeBack } from "@/pages/WelcomeBack";
+import { AccountMerge } from "@/pages/AccountMerge";
+import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
@@ -198,6 +202,20 @@ function Router() {
             (Welcome polls /api/checkout/session/:id to confirm the
             order, then bounces into the unlocked album). */}
         <Route path="/welcome" component={Welcome} />
+        {/* Task #400 — Welcome-back onboarding for imported gogoods.com
+            fans. Gated server-side via /api/me/welcome-back/state, which
+            bounces non-imported or already-onboarded fans to /account. */}
+        <Route path="/welcome-back">
+          <ProtectedRoute component={WelcomeBack} />
+        </Route>
+        {/* Public landing for the merge-confirmation link emailed to
+            the *other* address. Page itself handles the not-signed-in
+            case (asks the fan to sign in as the surviving account). */}
+        <Route path="/account/merge" component={AccountMerge} />
+        {/* Admin tool for the wave-1 welcome-back campaign. */}
+        <Route path="/admin/welcome-back">
+          <ProtectedRoute component={AdminWelcomeBack} />
+        </Route>
         {/* Task #351 — Landing for Team/Manager invitees with nothing
             waiting (no pre-flighted album). Short "here's what you
             can do" page so the first sign-in doesn't drop them into

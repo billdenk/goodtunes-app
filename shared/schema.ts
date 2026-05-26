@@ -1116,11 +1116,78 @@ export const customerUsers = pgTable("customer_users", {
   emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
   legacyGogoodsId: text("legacy_gogoods_id"),
+  // Task #400 — Welcome-back flow for imported gogoods.com fans.
+  // `onboardedAt` is stamped after the 3-screen onboarding finishes; once
+  // set, the flow never re-appears even if the fan signs out and back in.
+  // `welcomeEmailSentAt` is stamped when the wave-1 welcome email leaves
+  // Resend (so a retry / second batch can target only fans who haven't
+  // received it). `mergedIntoId` is the surviving customer row when a fan
+  // taps "These two accounts are me" on their profile — the duplicate row
+  // is soft-deleted (kept for audit) and every authed query treats this
+  // value as "redirect to that id" so the deleted row can never sign in.
+  onboardedAt: timestamp("onboarded_at"),
+  welcomeEmailSentAt: timestamp("welcome_email_sent_at"),
+  mergedIntoId: varchar("merged_into_id"),
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("customer_users_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
     .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
 }));
+
+// Task #400 — Single-use one-tap sign-in tokens emailed in the welcome
+// campaign. Clicking the link in the wave-1 email lands the fan on
+// `/welcome-back?token=…`, which trades the token for a fresh customer
+// session, stamps `email_verified_at`, and routes into the 3-screen
+// onboarding. Tokens are 30-day TTL and single-use (consumedAt). Hash
+// the token at rest so a DB leak can't be replayed — the raw token is
+// the secret in the email and we hold its sha-256 here.
+export const welcomeBackTokens = pgTable("welcome_back_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull().references(() => customerUsers.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Task #400 — Per-recipient send log for the welcome-back campaign.
+// One row per *attempt* (success or failure) so an operator can see who
+// got the mail, retry only the failed addresses, and reconcile against
+// Resend deliverability after the fact. `status` is "sent" on a 2xx
+// Resend response, "failed" otherwise. Bounce/complaint webhooks (not
+// in this task) would extend this to "bounced" / "complained".
+export const welcomeBackEmailSends = pgTable("welcome_back_email_sends", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull().references(() => customerUsers.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  status: text("status").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Task #400 — Self-service customer account merges. One row per merge
+// the fan triggered from their profile ("These two accounts are me").
+// `losingId` is the row that got soft-deleted (carries mergedIntoId
+// pointing here); `survivingId` is the row that absorbed the orders +
+// owned albums + playlists. Admin surfaces this list under the
+// surviving customer's profile for audit / undo.
+export const customerMerges = pgTable("customer_merges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  survivingId: varchar("surviving_id").notNull().references(() => customerUsers.id, { onDelete: "cascade" }),
+  losingId: varchar("losing_id").notNull().references(() => customerUsers.id, { onDelete: "cascade" }),
+  losingEmail: text("losing_email").notNull(),
+  movedOrderCount: integer("moved_order_count").notNull().default(0),
+  movedAlbumCount: integer("moved_album_count").notNull().default(0),
+  movedPlaylistCount: integer("moved_playlist_count").notNull().default(0),
+  // Task #400 — exact row ids that moved, persisted so admin undo can
+  // reverse precisely the same set without timestamp heuristics that
+  // might sweep in legitimate pre-existing surviving-account data.
+  movedOrderIds: text("moved_order_ids").array().notNull().default(sql`'{}'::text[]`),
+  movedAlbumIds: text("moved_album_ids").array().notNull().default(sql`'{}'::text[]`),
+  movedPlaylistIds: text("moved_playlist_ids").array().notNull().default(sql`'{}'::text[]`),
+  triggeredBy: text("triggered_by").notNull().default("customer"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 // JSON shape we persist for billing/shipping snapshots. Matches the subset
 // of Stripe's Address object we actually read on receipts + cert prints.

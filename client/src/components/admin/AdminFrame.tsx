@@ -597,6 +597,16 @@ export function AdminFrame({
                 onClick={() => navigate("/admin/reports")}
                 testId="nav-reports"
               />
+              {/* Task #400 — wave-1 welcome-back campaign for imported
+                  gogoods.com fans. Tool surface (not a CRUD list). */}
+              <SidebarLink
+                icon={Mail}
+                label="Welcome back"
+                count={-1}
+                active={active === "welcome-back"}
+                onClick={() => navigate("/admin/welcome-back")}
+                testId="nav-welcome-back"
+              />
             </Section>
 
             {isSuperAdmin && (

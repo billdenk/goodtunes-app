@@ -852,3 +852,74 @@ SQL
 }
 migrate_legacy_gogoods_id dev  "${DATABASE_URL:-}"
 migrate_legacy_gogoods_id prod "${PROD_DATABASE_URL:-}"
+
+# Task #400 — Welcome-back flow for imported gogoods.com fans.
+# Adds:
+#   * customer_users.onboarded_at         — stamp after 3-screen onboarding
+#   * customer_users.welcome_email_sent_at — single-shot guard for wave-1 mail
+#   * customer_users.merged_into_id        — soft-delete pointer (audit + auth)
+#   * welcome_back_tokens                  — 30-day single-use sign-in tokens
+#   * welcome_back_email_sends             — per-recipient send log (sent/failed)
+#   * customer_merges                      — audit of fan-initiated merges
+# Mirrors shared/schema.ts. Idempotent — safe to run on both dev and prod
+# regardless of which migrations have already landed.
+migrate_welcome_back() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping welcome-back migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE customer_users ADD COLUMN IF NOT EXISTS onboarded_at         timestamp;
+ALTER TABLE customer_users ADD COLUMN IF NOT EXISTS welcome_email_sent_at timestamp;
+ALTER TABLE customer_users ADD COLUMN IF NOT EXISTS merged_into_id        varchar;
+CREATE TABLE IF NOT EXISTS welcome_back_tokens (
+  id           varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  varchar NOT NULL REFERENCES customer_users(id) ON DELETE CASCADE,
+  token_hash   text    NOT NULL UNIQUE,
+  expires_at   timestamp NOT NULL,
+  consumed_at  timestamp,
+  created_at   timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS welcome_back_tokens_customer_idx
+  ON welcome_back_tokens(customer_id);
+CREATE TABLE IF NOT EXISTS welcome_back_email_sends (
+  id           varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  varchar NOT NULL REFERENCES customer_users(id) ON DELETE CASCADE,
+  email        text    NOT NULL,
+  status       text    NOT NULL,
+  reason       text,
+  created_at   timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS welcome_back_email_sends_customer_idx
+  ON welcome_back_email_sends(customer_id);
+CREATE TABLE IF NOT EXISTS customer_merges (
+  id                   varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  surviving_id         varchar NOT NULL REFERENCES customer_users(id) ON DELETE CASCADE,
+  losing_id            varchar NOT NULL REFERENCES customer_users(id) ON DELETE CASCADE,
+  losing_email         text    NOT NULL,
+  moved_order_count    integer NOT NULL DEFAULT 0,
+  moved_album_count    integer NOT NULL DEFAULT 0,
+  moved_playlist_count integer NOT NULL DEFAULT 0,
+  triggered_by         text    NOT NULL DEFAULT 'customer',
+  created_at           timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS customer_merges_surviving_idx
+  ON customer_merges(surviving_id);
+-- Task #400 follow-up — store the exact moved row ids so admin undo
+-- reverses precisely the same set instead of guessing by timestamp.
+ALTER TABLE customer_merges
+  ADD COLUMN IF NOT EXISTS moved_order_ids    text[] NOT NULL DEFAULT '{}'::text[],
+  ADD COLUMN IF NOT EXISTS moved_album_ids    text[] NOT NULL DEFAULT '{}'::text[],
+  ADD COLUMN IF NOT EXISTS moved_playlist_ids text[] NOT NULL DEFAULT '{}'::text[];
+COMMIT;
+SQL
+  then
+    echo "post-merge: welcome-back migration ok on $label"
+  else
+    echo "post-merge: WARNING — welcome-back migration failed on $label (continuing)"
+  fi
+}
+migrate_welcome_back dev  "${DATABASE_URL:-}"
+migrate_welcome_back prod "${PROD_DATABASE_URL:-}"

@@ -103,7 +103,7 @@ export function AdminCustomerDetail() {
         <div className="space-y-4">
           <Link
             href="/admin/customers"
-            className="inline-flex items-center gap-1.5 text-[13px] text-slate-500 hover:text-[var(--brand-blue)]"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)]"
             data-testid="link-back-to-customers"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Customers
@@ -129,7 +129,7 @@ export function AdminCustomerDetail() {
       <div className="space-y-6">
         <Link
           href="/admin/customers"
-          className="inline-flex items-center gap-1.5 text-[13px] text-slate-500 hover:text-[var(--brand-blue)] transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)] transition-colors"
           data-testid="link-back-to-customers"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Customers
@@ -138,12 +138,12 @@ export function AdminCustomerDetail() {
         <AdminPageHeader
           title={name}
           subtitle={
-            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-slate-500">
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
               <span className="inline-flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5" /> {c.email}
                 {c.emailVerifiedAt ? (
                   <span
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded"
+                    className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded"
                     title={`Verified ${new Date(c.emailVerifiedAt as unknown as string).toLocaleDateString()}`}
                     data-testid="badge-email-verified"
                   >
@@ -151,7 +151,7 @@ export function AdminCustomerDetail() {
                   </span>
                 ) : (
                   <span
-                    className="inline-flex items-center text-[11px] font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
+                    className="inline-flex items-center text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
                     data-testid="badge-email-unverified"
                   >
                     Unverified
@@ -173,7 +173,7 @@ export function AdminCustomerDetail() {
                 href={`https://dashboard.stripe.com/customers/${c.stripeCustomerId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                 data-testid="link-stripe-customer"
               >
                 Stripe
@@ -225,18 +225,18 @@ export function AdminCustomerDetail() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="text-slate-900 text-[14px] font-medium truncate">
+                      <div className="text-slate-900 text-sm font-medium truncate">
                         {o.albumTitle}
                         <span className="text-slate-400"> · </span>
                         <span className="text-slate-600">{o.albumArtist}</span>
                       </div>
-                      <div className="text-slate-500 text-[12px] mt-0.5">
+                      <div className="text-slate-500 text-xs mt-0.5">
                         {formatDate(o.createdAt)}
                         {o.goodDeedNumber != null && <> · Good Deed #{o.goodDeedNumber}</>}
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <div className="text-slate-900 text-[14px] font-medium tabular-nums">
+                      <div className="text-slate-900 text-sm font-medium tabular-nums">
                         {formatMoney(o.totalCents)}
                       </div>
                       <StatusPill status={o.status} />
@@ -270,9 +270,9 @@ export function AdminCustomerDetail() {
                     )}
                   </div>
                   <div className="p-3">
-                    <div className="text-slate-900 text-[13px] font-medium truncate">{a.albumTitle}</div>
-                    <div className="text-slate-500 text-[12px] truncate">{a.albumArtist}</div>
-                    <div className="text-slate-400 text-[11px] mt-1">
+                    <div className="text-slate-900 text-sm font-medium truncate">{a.albumTitle}</div>
+                    <div className="text-slate-500 text-xs truncate">{a.albumArtist}</div>
+                    <div className="text-slate-400 text-xs mt-1">
                       {a.certificateNumber != null ? `Cert #${a.certificateNumber} · ` : ""}
                       {formatDate(a.acquiredAt)}
                     </div>
@@ -282,6 +282,11 @@ export function AdminCustomerDetail() {
             </div>
           )}
         </Section>
+
+        {/* Task #400 — Account-merge audit. Only renders rows for fans
+            who absorbed another account via the customer-side merge
+            flow ("These two accounts are me"). */}
+        <MergeAuditSection customerId={customer.id} />
 
         {/* Playlists */}
         <Section title={`Playlists (${playlists.length})`}>
@@ -297,8 +302,8 @@ export function AdminCustomerDetail() {
                 >
                   <ListMusic className="w-4 h-4 text-slate-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-slate-900 text-[14px] font-medium truncate">{p.name}</div>
-                    <div className="text-slate-500 text-[12px]">
+                    <div className="text-slate-900 text-sm font-medium truncate">{p.name}</div>
+                    <div className="text-slate-500 text-xs">
                       {p.songCount} song{p.songCount === 1 ? "" : "s"} · created {formatDate(p.createdAt)}
                     </div>
                   </div>
@@ -315,8 +320,145 @@ export function AdminCustomerDetail() {
 function Stat({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-4 py-3" data-testid={testId}>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="text-slate-900 text-[18px] font-semibold tabular-nums mt-0.5">{value}</div>
+    </div>
+  );
+}
+
+// Task #400 — Account-merge audit. Renders nothing for fans who never
+// absorbed another account; otherwise lists each merge with what moved
+// and from where.
+function MergeAuditSection({ customerId }: { customerId: string }) {
+  const { data, isLoading } = useQuery<{
+    merges: Array<{
+      id: string;
+      losingId: string;
+      losingEmail: string | null;
+      losingLegacyGogoodsId: string | null;
+      movedAlbums: number;
+      movedOrders: number;
+      movedPlaylists: number;
+      mergedAt: string | null;
+    }>;
+  }>({
+    queryKey: ["/api/admin/customers", customerId, "merges"],
+  });
+  if (isLoading || !data || data.merges.length === 0) return null;
+  return (
+    <Section title={`Account merges (${data.merges.length})`}>
+      <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+        {data.merges.map((m) => (
+          <MergeRow key={m.id} customerId={customerId} merge={m} />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function MergeRow({
+  customerId,
+  merge: m,
+}: {
+  customerId: string;
+  merge: {
+    id: string;
+    losingId: string;
+    losingEmail: string | null;
+    losingLegacyGogoodsId: string | null;
+    movedAlbums: number;
+    movedOrders: number;
+    movedPlaylists: number;
+    mergedAt: string | null;
+  };
+}) {
+  const { toast } = useToast();
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  const undo = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/customers/${customerId}/merges/${m.id}/undo`);
+      return r.json();
+    },
+    onSuccess: (res: { movedAlbums: number; movedOrders: number; movedPlaylists: number }) => {
+      toast({
+        title: "Merge reversed",
+        description: `${res.movedAlbums} album${res.movedAlbums === 1 ? "" : "s"} · ${res.movedOrders} order${res.movedOrders === 1 ? "" : "s"} · ${res.movedPlaylists} playlist${res.movedPlaylists === 1 ? "" : "s"} moved back to ${m.losingEmail ?? "the other account"}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId, "merges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId] });
+      setConfirming(false);
+      setTyped("");
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't reverse the merge", description: e.message, variant: "destructive" });
+    },
+  });
+  const canSubmit = typed.trim().toLowerCase() === (m.losingEmail ?? "").toLowerCase() && !!m.losingEmail;
+  return (
+    <div className="px-4 py-3" data-testid={`row-merge-${m.id}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-slate-900 text-sm font-medium">
+            Absorbed {m.losingEmail ?? "(unknown email)"}
+            {m.losingLegacyGogoodsId && (
+              <span className="ml-2 text-xs font-semibold uppercase tracking-wide text-sky-700 bg-sky-50 px-2 py-0.5 rounded">
+                legacy gogoods
+              </span>
+            )}
+          </div>
+          <div className="text-slate-500 text-xs mt-0.5">
+            Moved {m.movedAlbums} album{m.movedAlbums === 1 ? "" : "s"} · {m.movedOrders} order{m.movedOrders === 1 ? "" : "s"} · {m.movedPlaylists} playlist{m.movedPlaylists === 1 ? "" : "s"} · {formatDate(m.mergedAt)}
+          </div>
+        </div>
+        {!confirming && (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="text-xs font-medium text-rose-700 hover:text-rose-900 transition-colors flex-shrink-0"
+            data-testid={`button-merge-undo-${m.id}`}
+          >
+            Undo merge…
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3" data-testid={`merge-undo-confirm-${m.id}`}>
+          <p className="text-xs text-rose-900 leading-relaxed mb-2">
+            This reparents every album, order, and playlist that moved from{" "}
+            <strong>{m.losingEmail ?? "the absorbed account"}</strong> back to that account, and clears
+            the soft-delete so it can sign in again. Type the absorbed account's email to confirm.
+          </p>
+          <input
+            type="text"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={m.losingEmail ?? ""}
+            className="w-full rounded border border-rose-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-rose-500"
+            data-testid={`input-merge-undo-confirm-${m.id}`}
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => undo.mutate()}
+              disabled={!canSubmit || undo.isPending}
+              className="rounded-md bg-rose-700 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-rose-800 disabled:opacity-40 transition-colors"
+              data-testid={`button-merge-undo-confirm-${m.id}`}
+            >
+              {undo.isPending ? "Reversing…" : "Reverse this merge"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setConfirming(false); setTyped(""); }}
+              disabled={undo.isPending}
+              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              data-testid={`button-merge-undo-cancel-${m.id}`}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -325,7 +467,7 @@ function Section({ title, children, action }: { title: string; children: React.R
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
         {action}
       </div>
       {children}
@@ -350,7 +492,7 @@ function GrantAlbumButton({ customerId, ownedAlbumIds }: { customerId: string; o
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
         data-testid="button-grant-album-open"
       >
         <Plus className="w-3.5 h-3.5" /> Grant album
@@ -428,7 +570,7 @@ function GrantAlbumDialog({
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
           <div>
             <div className="text-slate-900 text-sm font-semibold">Grant album (demo)</div>
-            <div className="text-slate-500 text-[11px]">Free comp — no payment, no order, super-admin only</div>
+            <div className="text-slate-500 text-xs">Free comp — no payment, no order, super-admin only</div>
           </div>
           <button
             type="button"
@@ -448,16 +590,16 @@ function GrantAlbumDialog({
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search albums by title or artist…"
               autoFocus
-              className="w-full pl-8 pr-3 py-2 text-[13px] border border-slate-200 rounded-md focus:border-[var(--brand-blue)] focus:outline-none"
+              className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:border-[var(--brand-blue)] focus:outline-none"
               data-testid="input-grant-album-search"
             />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="p-6 text-center text-slate-500 text-[13px]">Loading albums…</div>
+            <div className="p-6 text-center text-slate-500 text-sm">Loading albums…</div>
           ) : filtered.length === 0 ? (
-            <div className="p-6 text-center text-slate-500 text-[13px]">No albums match.</div>
+            <div className="p-6 text-center text-slate-500 text-sm">No albums match.</div>
           ) : (
             <ul className="divide-y divide-slate-100">
               {filtered.map((a) => {
@@ -470,11 +612,11 @@ function GrantAlbumDialog({
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-slate-900 text-[13px] font-medium truncate">{a.title}</div>
-                      <div className="text-slate-500 text-[12px] truncate">{a.artist}</div>
+                      <div className="text-slate-900 text-sm font-medium truncate">{a.title}</div>
+                      <div className="text-slate-500 text-xs truncate">{a.artist}</div>
                     </div>
                     {isOwned ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 text-[11px] font-medium">
+                      <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">
                         <CheckCircle2 className="w-3.5 h-3.5" /> Owned
                       </span>
                     ) : (
@@ -482,7 +624,7 @@ function GrantAlbumDialog({
                         type="button"
                         disabled={grant.isPending}
                         onClick={() => grant.mutate(a.id)}
-                        className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-[12px] font-medium hover:opacity-90 disabled:opacity-50"
+                        className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-xs font-medium hover:opacity-90 disabled:opacity-50"
                         data-testid={`button-grant-album-${a.id}`}
                       >
                         Grant
@@ -503,7 +645,7 @@ function EmptyRow({ icon: Icon, text }: { icon: React.ComponentType<any>; text: 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-6 text-center">
       <Icon className="w-6 h-6 mx-auto text-slate-300 mb-1.5" strokeWidth={1.5} />
-      <div className="text-slate-500 text-[13px]">{text}</div>
+      <div className="text-slate-500 text-sm">{text}</div>
     </div>
   );
 }
@@ -521,11 +663,11 @@ function AddressCard({
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid={testId}>
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
         <MapPin className="w-3.5 h-3.5" /> {kind}
       </div>
       {fallback ? (
-        <div className="text-slate-700 text-[13px] leading-snug">
+        <div className="text-slate-700 text-sm leading-snug">
           {snapshot?.name && <div className="font-medium text-slate-900">{snapshot.name}</div>}
           {snapshot?.line1 && <div>{snapshot.line1}</div>}
           {snapshot?.line2 && <div>{snapshot.line2}</div>}
@@ -535,7 +677,7 @@ function AddressCard({
           {snapshot?.country && <div>{snapshot.country}</div>}
         </div>
       ) : (
-        <div className="text-slate-400 text-[13px]">No {kind.toLowerCase()} address on file.</div>
+        <div className="text-slate-400 text-sm">No {kind.toLowerCase()} address on file.</div>
       )}
     </div>
   );
