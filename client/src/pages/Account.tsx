@@ -8,6 +8,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
+import { useToast } from "@/hooks/use-toast";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 
