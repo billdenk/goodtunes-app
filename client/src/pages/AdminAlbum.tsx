@@ -890,6 +890,7 @@ export function AdminAlbum() {
                   sellMode={album.sellMode ?? null}
                   physicalFormat={album.physicalFormat ?? null}
                   sellQuoteLockedAt={album.sellQuoteLockedAt ?? null}
+                  trackCount={album.songs.length}
                   onLockToggle={(next) => updateAlbumMode.mutate({ sellQuoteLockedAt: next })}
                   onChangeMode={() => setModeDialogOpen(true)}
                   onEditArtwork={() => setArtworkEditorOpen(true)}

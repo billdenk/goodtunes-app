@@ -82,16 +82,16 @@ class SectionBoundary extends Component<
         <div className="font-bold mb-1">
           Dashboard section "{this.props.section}" crashed
         </div>
-        <div className="font-mono text-[11px] whitespace-pre-wrap break-all mb-2">
+        <div className="font-mono text-xs whitespace-pre-wrap break-all mb-2">
           {e.name || "Error"}: {e.message || "(no message)"}
         </div>
         {stack && (
-          <pre className="font-mono text-[10px] whitespace-pre-wrap break-all opacity-80">
+          <pre className="font-mono text-xs whitespace-pre-wrap break-all opacity-80">
 {stack}
           </pre>
         )}
         {comp && (
-          <pre className="font-mono text-[10px] whitespace-pre-wrap break-all opacity-80 mt-2">
+          <pre className="font-mono text-xs whitespace-pre-wrap break-all opacity-80 mt-2">
 Component stack:
 {comp}
           </pre>

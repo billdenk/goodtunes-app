@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
@@ -60,7 +60,14 @@ import { PressingOrderStepper, GoToPressButton } from "@/components/admin/Pressi
 import { SignedCertVendorPanel } from "@/components/admin/SignedCertVendorPanel";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 
-const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+// Task #393 — Intl-based currency formatter with thousands separators
+// and proper negative handling, replacing the old `$${(c/100).toFixed(2)}`
+// helper. `dollars(123456)` → "$1,234.56", `dollars(-50)` → "-$0.50".
+const DOLLAR_FMT = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+const dollars = (c: number) => DOLLAR_FMT.format(c / 100);
 const parseDollars = (v: string): number | null => {
   const n = Number.parseFloat(v.replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(n) || n < 0) return null;
@@ -144,9 +151,15 @@ export function SellPanel({
   onLockToggle,
   onChangeMode,
   onEditArtwork,
+  trackCount = 0,
 }: {
   albumId: string;
   artworkUrl?: string | null;
+  // Task #393 — number of songs on this album. Threaded into the vinyl
+  // card's cost breakdown so Publishing reads `trackCount × $0.257`
+  // (industry standard: $0.127/track each for vinyl + digital). Caller
+  // (AdminAlbum) derives from `album.songs.length`.
+  trackCount?: number;
   // Task #335 — mode + format come from the album row (set in the
   // creation modal). When "shopify" we render the slim panel below
   // (digital + GoodDeed addon only). Defaults stay "direct" so callers
@@ -294,6 +307,13 @@ export function SellPanel({
   const availableFormats = offeredFormats.filter(
     (f) => !skuByFormat.has(f) && !liveDrafts.includes(f),
   );
+  // Task #393 — `signed_cert` is a single album-level addon; render
+  // the GoodDeed pill on exactly one vinyl row so multiple vinyl
+  // formats (e.g. 7" + 12"LP on the same release) don't race-overwrite
+  // each other's `plannedQuantity` on autosave. The "primary" vinyl
+  // is just the first vinyl format in the configured/draft order.
+  const primaryVinylFormat: AlbumFormat | null =
+    [...configuredFormats, ...liveDrafts].find((f) => isVinylFormat(f)) ?? null;
 
   return (
     <div className="py-6">
@@ -387,6 +407,12 @@ export function SellPanel({
                           onDelete={() => deleteSku.mutate(f)}
                           expanded={skuDisclosure.isOpen(f)}
                           onSetExpanded={(open) => skuDisclosure.setOpen(f, open)}
+                          trackCount={trackCount}
+                          albumId={albumId}
+                          signedAddon={signedAddon ?? null}
+                          livePlatformCostCents={payoutSettings?.certCostCents ?? null}
+                          onSaveAddon={upsertAddon.mutate}
+                          isPrimaryVinyl={primaryVinylFormat === f}
                         />
                       );
                     })}
@@ -410,6 +436,12 @@ export function SellPanel({
                         onDelete={() => setDraftFormats((prev) => prev.filter((d) => d !== f))}
                         expanded={skuDisclosure.isOpen(`draft-${f}`)}
                         onSetExpanded={(open) => skuDisclosure.setOpen(`draft-${f}`, open)}
+                        trackCount={trackCount}
+                        albumId={albumId}
+                        signedAddon={signedAddon ?? null}
+                        livePlatformCostCents={payoutSettings?.certCostCents ?? null}
+                        onSaveAddon={upsertAddon.mutate}
+                        isPrimaryVinyl={primaryVinylFormat === f}
                       />
                     ))}
                   </>
@@ -943,7 +975,7 @@ function CostTooltip({
     publishingCents: number;
     paymentProcessingCents: number;
     goodtunesCents: number;
-    source?: "hellbender" | "placeholder";
+    source?: "hellbender" | "placeholder" | "catalog";
   };
 }) {
   const total =
@@ -1013,6 +1045,12 @@ function SkuRow({
   onDelete,
   expanded,
   onSetExpanded,
+  trackCount,
+  albumId,
+  signedAddon,
+  livePlatformCostCents,
+  onSaveAddon,
+  isPrimaryVinyl,
 }: {
   format: AlbumFormat;
   existing: AlbumSku | null;
@@ -1028,7 +1066,7 @@ function SkuRow({
   // good" uses (catalog-restricted for invited presses; full list
   // otherwise). `onSwitchFormat` flips the disclosure and creates a
   // draft for not-yet-configured formats.
-  offeredFormats: AlbumFormat[];
+  offeredFormats: readonly AlbumFormat[];
   onSwitchFormat: (target: AlbumFormat) => void;
   onEditArtwork?: () => void;
   onSave: (b: {
@@ -1049,6 +1087,24 @@ function SkuRow({
   // ("Expandable row lists").
   expanded: boolean;
   onSetExpanded: (open: boolean) => void;
+  // Task #393 — vinyl-only props powering the live cost breakdown and
+  // the in-card OPTIONAL GoodDeed pill. Non-vinyl rows ignore them.
+  trackCount?: number;
+  albumId?: string;
+  signedAddon?: AlbumAddon | null;
+  livePlatformCostCents?: number | null;
+  onSaveAddon?: (b: {
+    priceCents: number;
+    active: boolean;
+    minPriceCents: number;
+    plannedQuantity: number | null;
+  }) => void;
+  // Task #393 — `signed_cert` is a single album-level addon, so the
+  // GoodDeed pill renders on the canonical vinyl row only (the first
+  // configured vinyl format). Without this gate, multiple vinyl rows
+  // would race-overwrite the same addon's plannedQuantity. SellPanel
+  // sets this true on whichever vinyl row is first in the offered list.
+  isPrimaryVinyl?: boolean;
 }) {
   const isDraft = existing === null;
   const isVinyl = isVinylFormat(format);
@@ -1060,6 +1116,14 @@ function SkuRow({
   }, []);
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
+  // Task #393 — the header reads as the format label only. The
+  // earlier draft used an inline input bound to local state, but the
+  // schema has no per-SKU display-name column to autosave into and
+  // aliasing onto `vinylColor` corrupts the color-id contract the
+  // swatch picker + reload path depend on. Code review accepted
+  // "remove edit affordance if data model cannot support it" — once a
+  // `displayName` column exists this becomes a Tracks-style inline
+  // input bound to it.
   // Task #385 — vinyl rows lose Stock + the unlimited radio. Non-vinyl
   // rows (CD / cassette / merch) keep the legacy fixed/unlimited mode
   // and the Stock input untouched (out of scope for #385).
@@ -1196,26 +1260,25 @@ function SkuRow({
     [usingCatalog, pickedTier, parsedQty],
   );
 
-  // Live Cost computation. Vinyl recomputes Manufacturing from the
-  // Hellbender matrix every time the artist changes picks, so they
-  // see the new cost immediately (the snapshot still locks at Save).
-  // Non-vinyl formats fall back to the existing #194 snapshot/live
-  // placeholder rule.
+  // Task #393 — Publishing / payment-processing / GoodTunes are now
+  // computed live from real formulas instead of reading whatever the
+  // payout-cost defaults table returns (which was $0 for every saved
+  // row that hadn't been re-snapshotted). Formulas:
+  //   • Publishing       = trackCount × $0.257  ($0.127/track × 2 for
+  //                        vinyl + digital, industry standard).
+  //   • Payment proc.    = round(retail × 2.9%) + $0.30 (Stripe-style;
+  //                        placeholder for fulfillment + GoodDeed + tax).
+  //   • GoodTunes        = flat $4.50 per unit.
+  // Manufacturing keeps the existing snapshot-on-unchanged behaviour
+  // (vinyl: Hellbender / catalog matrix recomputes live when picks
+  // change; non-vinyl: snapshot wins until re-save).
+  const priceCentsForCost = useMemo(() => parseDollars(priceStr) ?? 0, [priceStr]);
   const breakdown = useMemo(() => {
-    const sideCarCents = existing && existing.costSnapshotManufacturingCents != null
-      ? {
-          publishingCents: existing.costSnapshotPublishingCents ?? 0,
-          paymentProcessingCents: existing.costSnapshotPaymentProcessingCents ?? 0,
-          goodtunesCents: existing.costSnapshotGoodtunesCents ?? 0,
-        }
-      : liveCost
-        ? {
-            publishingCents: liveCost.publishingCents,
-            paymentProcessingCents: liveCost.paymentProcessingCents,
-            goodtunesCents: liveCost.goodtunesCents,
-          }
-        : null;
-    if (!sideCarCents) return null;
+    const sideCarCents = {
+      publishingCents: Math.round((trackCount ?? 0) * 25.7),
+      paymentProcessingCents: Math.round(priceCentsForCost * 0.029) + 30,
+      goodtunesCents: 450,
+    };
     if (usingCatalog && pickedTier) {
       // Catalog-driven: live snap from the picked tier's ladder. Mirror
       // the snapshot-vs-live trick from the legacy block so a saved row
@@ -1293,6 +1356,8 @@ function SkuRow({
     pickedTier,
     pressColorId,
     catalogSnap,
+    trackCount,
+    priceCentsForCost,
   ]);
 
   const totalCostCents = breakdown
@@ -1403,6 +1468,54 @@ function SkuRow({
         ? `-${dollars(Math.abs(profitCents))}`
         : dollars(profitCents);
 
+  // Task #393 — debounced autosave for vinyl rows. The new card has
+  // no visible Save button; field changes (price, qty, color, jacket,
+  // active toggle) flush through `submit()` after a quiet beat. Draft
+  // rows without a parseable price are no-ops via submit's early-return.
+  // Non-vinyl rows keep the explicit SaveLink path and skip this effect.
+  useEffect(() => {
+    if (!isVinyl) return;
+    if (!dirty) return;
+    const t = setTimeout(() => submit(), 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dirty,
+    isVinyl,
+    priceStr,
+    parsedQty,
+    vinylColorId,
+    jacketUpgrade,
+    active,
+    pressTierId,
+    pressColorId,
+  ]);
+
+  // Task #393 — destructive confirm for the trash button in the new
+  // vinyl card header. Mirrors the `window.confirm` pattern the
+  // Tracks row uses for "Delete track" so admin destructive confirms
+  // stay consistent (see TracksPanel in AdminAlbum.tsx).
+  const onDeleteWithConfirm = () => {
+    if (isDraft) {
+      onDelete();
+      return;
+    }
+    const ok = window.confirm(
+      `Remove the ${ALBUM_FORMAT_LABEL[format]} format from this album? Fans on the Buy sheet will no longer see it.`,
+    );
+    if (ok) onDelete();
+  };
+
+  // Collapsed summary text for the vinyl header. `12" LP · $25.00 · 1,000`
+  // when fully configured; degrades gracefully when bits are missing.
+  const collapsedSummary = (() => {
+    const bits: string[] = [ALBUM_FORMAT_LABEL[format]];
+    if (priceCents !== null) bits.push(dollars(priceCents));
+    if (parsedQty > 0) bits.push(parsedQty.toLocaleString());
+    if (!active) bits.push("off");
+    return bits.join(" · ");
+  })();
+
   return (
     <div
       className={[
@@ -1411,57 +1524,123 @@ function SkuRow({
       ].join(" ")}
       data-testid={isDraft ? `row-sku-draft-${format}` : `row-sku-${format}`}
     >
-      <div className={["flex items-start justify-between gap-4", expanded ? "mb-3" : ""].join(" ")}>
-        <label className="inline-flex items-center gap-2 min-w-0">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={(e) => setActive(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
-            data-testid={`toggle-sku-${format}`}
-          />
-          <span className="text-[13.5px] font-semibold text-slate-900">
-            {ALBUM_FORMAT_LABEL[format]}
-          </span>
-          {!expanded && (
-            <span className="text-xs text-slate-500 ml-2" data-testid={`text-sku-summary-${format}`}>
-              {priceStr ? `$${priceStr}` : "no price"}
-              {active ? "" : " · off"}
-            </span>
-          )}
-        </label>
-        <div className="flex items-center gap-1">
-          <SaveLink dirty={dirty} onClick={submit} testId={`button-save-sku-${format}`} />
+      {isVinyl ? (
+        /* Task #393 — vinyl header mirrors the Tracks-row chrome:
+           format name as the title on the left, hide-toggle + trash
+           (destructive-confirm) + chevron on the right. No checkbox,
+           no SaveLink, no bare ×. Format pivots happen via the
+           Format dropdown inside the expanded REQUIRED body. */
+        <div className={["flex items-center justify-between gap-2", expanded ? "mb-3" : ""].join(" ")}>
           <button
             type="button"
             onClick={() => onSetExpanded(!expanded)}
-            className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
-            aria-label={expanded ? "Collapse format" : "Expand format"}
+            className="flex-1 min-w-0 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 py-0.5 transition-colors"
             aria-expanded={expanded}
-            data-testid={`button-toggle-sku-${format}`}
+            data-testid={`button-row-title-${format}`}
           >
-            <ChevronDown className={["w-4 h-4 transition-transform", expanded ? "rotate-180" : ""].join(" ")} />
+            <span className="text-sm font-semibold text-slate-900">
+              {expanded ? ALBUM_FORMAT_LABEL[format] : collapsedSummary}
+            </span>
           </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors"
-            aria-label={isDraft ? "Discard draft" : "Remove format"}
-            data-testid={`button-delete-sku-${format}`}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActive((a) => !a)}
+              className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              aria-label={active ? "Hide from Buy sheet" : "Show on Buy sheet"}
+              aria-pressed={!active}
+              title={active ? "Hide from Buy sheet" : "Show on Buy sheet"}
+              data-testid={`button-hide-sku-${format}`}
+            >
+              {active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteWithConfirm}
+              className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors"
+              aria-label={isDraft ? "Discard draft" : "Remove format"}
+              data-testid={`button-delete-sku-${format}`}
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="sr-only">{isDraft ? "Discard draft" : "Remove format"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSetExpanded(!expanded)}
+              className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              aria-label={expanded ? "Collapse format" : "Expand format"}
+              aria-expanded={expanded}
+              data-testid={`button-toggle-sku-${format}`}
+            >
+              <ChevronDown className={["w-4 h-4 transition-transform", expanded ? "rotate-180" : ""].join(" ")} />
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Non-vinyl rows keep the legacy header (checkbox + SaveLink +
+           chevron + X) — out of scope for the #393 restructure. */
+        <div className={["flex items-start justify-between gap-4", expanded ? "mb-3" : ""].join(" ")}>
+          <label className="inline-flex items-center gap-2 min-w-0">
+            <input
+              type="checkbox"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+              data-testid={`toggle-sku-${format}`}
+            />
+            <span className="text-[13.5px] font-semibold text-slate-900">
+              {ALBUM_FORMAT_LABEL[format]}
+            </span>
+            {!expanded && (
+              <span className="text-xs text-slate-500 ml-2" data-testid={`text-sku-summary-${format}`}>
+                {priceStr ? `$${priceStr}` : "no price"}
+                {active ? "" : " · off"}
+              </span>
+            )}
+          </label>
+          <div className="flex items-center gap-1">
+            <SaveLink dirty={dirty} onClick={submit} testId={`button-save-sku-${format}`} />
+            <button
+              type="button"
+              onClick={() => onSetExpanded(!expanded)}
+              className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              aria-label={expanded ? "Collapse format" : "Expand format"}
+              aria-expanded={expanded}
+              data-testid={`button-toggle-sku-${format}`}
+            >
+              <ChevronDown className={["w-4 h-4 transition-transform", expanded ? "rotate-180" : ""].join(" ")} />
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors"
+              aria-label={isDraft ? "Discard draft" : "Remove format"}
+              data-testid={`button-delete-sku-${format}`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {expanded && (isVinyl ? (
-      // Task #390 — new two-column vinyl card. LEFT: format dropdown,
-      // big preview hero with pencil-on-hover (→ cover-art editor),
-      // color section + swatch row + selected color name, jacket.
-      // RIGHT: Retail Price, Select Qty, collapsible Profit with
-      // inline cost breakdown, Total. Non-vinyl rows keep the legacy
-      // grid below (else branch).
-      (() => {
+      <>
+      {/* Task #393 — REQUIRED section. The vinyl pressing itself is
+          non-optional for this format; the hairline + label echoes the
+          Tracks-row REQUIRED/OPTIONAL split. */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Required · Vinyl
+        </span>
+        <span className="flex-1 h-px bg-slate-200" aria-hidden />
+      </div>
+      {/* Task #390 — new two-column vinyl card. LEFT: format dropdown,
+          big preview hero with pencil-on-hover (→ cover-art editor),
+          color section + swatch row + selected color name, jacket.
+          RIGHT: Retail Price, Select Qty, collapsible Profit with
+          inline cost breakdown, Total. Non-vinyl rows keep the legacy
+          grid below (else branch). */}
+      {(() => {
         const catalogPicked = usingCatalog && pickedTier
           ? pickedTier.colors.find((c) => c.id === pressColorId) ?? null
           : null;
@@ -1510,7 +1689,11 @@ function SkuRow({
             </Select>
           </div>
 
-          {/* Preview hero — pencil on hover opens the cover-art editor */}
+          {/* Preview hero — Task #393: pencil now lives INSIDE the
+              jacket via VinylPreview's `jacketOverlay` slot so it only
+              hovers over the album art, not the vinyl disc peeking out
+              to the right. Same fade-on-hover the rest of admin uses
+              for cover edits. */}
           <div className="relative group">
             <button
               type="button"
@@ -1526,16 +1709,16 @@ function SkuRow({
                   color={previewColor}
                   jacketUpgrade={jacketUpgrade}
                   size="xl"
+                  jacketOverlay={onEditArtwork ? (
+                    <span
+                      className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/90 text-slate-700 shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                      aria-hidden
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </span>
+                  ) : null}
                 />
               </div>
-              {onEditArtwork && (
-                <span
-                  className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/90 text-slate-700 shadow opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-hidden
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </span>
-              )}
             </button>
           </div>
 
@@ -1917,7 +2100,33 @@ function SkuRow({
         </div>
       </div>
         );
-      })()
+      })()}
+      {/* Task #393 — OPTIONAL section: GoodDeed certificate pill.
+          Full-width, collapsible, mirrors the AddonForm save shape but
+          adds a percentage-of-vinyl-qty picker, inline cert preview,
+          and per-vendor cost breakdown via the existing
+          /gooddeed-pricing-preview endpoint. Vendor pricing edits keep
+          working post-sale (see memory: vendor-pricing-bypasses-post-
+          sale-lock) — only the fan-facing price/min/qty inside the
+          pill respect the partner-permissions edit_metadata lock. */}
+      <div className="flex items-center gap-2 mt-5 mb-3">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Optional · Upsells
+        </span>
+        <span className="flex-1 h-px bg-slate-200" aria-hidden />
+      </div>
+      {albumId && onSaveAddon && isPrimaryVinyl ? (
+        <GoodDeedPill
+          albumId={albumId}
+          artworkUrl={artworkUrl}
+          vinylQty={parsedQty}
+          existing={signedAddon ?? null}
+          livePlatformCostCents={livePlatformCostCents ?? null}
+          onSave={onSaveAddon}
+          onEditArtwork={onEditArtwork}
+        />
+      ) : null}
+      </>
       ) : (
       <>
       <div className={["grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4"].join(" ")}>
@@ -2350,6 +2559,400 @@ function CatalogPicksBlock({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Task #393 — GoodDeed certificate upsell, rendered as the full-width
+// OPTIONAL pill underneath the vinyl REQUIRED body. Collapsed shows a
+// one-line summary; expanded reveals the cert preview, % qty picker,
+// price + floor, and the per-vendor cost block sourced from the
+// existing /api/admin/albums/:id/gooddeed-pricing-preview endpoint.
+// Field edits autosave through the same upsertAddon mutation the
+// legacy AddonForm uses.
+function GoodDeedPill({
+  albumId,
+  artworkUrl,
+  vinylQty,
+  existing,
+  livePlatformCostCents,
+  onSave,
+  onEditArtwork,
+}: {
+  albumId: string;
+  artworkUrl: string | null | undefined;
+  vinylQty: number;
+  existing: AlbumAddon | null;
+  livePlatformCostCents: number | null;
+  onSave: (b: {
+    priceCents: number;
+    active: boolean;
+    minPriceCents: number;
+    plannedQuantity: number | null;
+  }) => void;
+  // Task #393 — two-way artwork sync. The cert preview tile is the
+  // same `albums.artwork` field the REQUIRED jacket renders, so
+  // clicking it must open the same cover-art editor (no second source
+  // of truth). When absent the tile renders non-interactive.
+  onEditArtwork?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(existing?.active ?? false);
+  const [priceStr, setPriceStr] = useState(
+    existing ? (existing.priceCents / 100).toFixed(2) : "12.99",
+  );
+  const [floorStr, setFloorStr] = useState(
+    existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99",
+  );
+
+  // Resolve initial % choice from the stored plannedQuantity ÷ vinylQty.
+  // If it doesn't snap to one of the canned options we surface "Other…"
+  // with the exact percentage pre-filled. Vinyl rows with no qty fall
+  // back to 100 (one cert per vinyl pressed) — the default sales pitch.
+  const initialPctChoice = useMemo(() => {
+    if (!existing?.plannedQuantity || vinylQty <= 0) return "100";
+    const pct = Math.round((existing.plannedQuantity / vinylQty) * 100);
+    if ([100, 50, 25, 20].includes(pct)) return String(pct);
+    return "other";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [pctChoice, setPctChoice] = useState<string>(initialPctChoice);
+  // Task #393 — "Other…" is a RAW QUANTITY, not a percentage. The
+  // dropdown is for the four canned ratios (100/50/25/20); when the
+  // operator needs an odd run (e.g. "only the first 37 buyers get a
+  // cert") they type the cert count directly and we clamp it to the
+  // vinyl qty (a cert run > pressing run makes no sense).
+  const [otherQtyStr, setOtherQtyStr] = useState(
+    initialPctChoice === "other" && existing?.plannedQuantity
+      ? String(existing.plannedQuantity)
+      : String(Math.max(1, Math.round(vinylQty / 10))),
+  );
+
+  const resolvedQty =
+    pctChoice === "other"
+      ? Math.max(
+          0,
+          Math.min(vinylQty, parseInt(otherQtyStr.replace(/[^0-9]/g, ""), 10) || 0),
+        )
+      : vinylQty > 0
+        ? Math.round((vinylQty * parseInt(pctChoice, 10)) / 100)
+        : 0;
+  const resolvedPct =
+    vinylQty > 0 ? Math.round((resolvedQty / vinylQty) * 100) : 0;
+
+  // Per-vendor cost preview, sized to the resolved cert run. Only fires
+  // when the pill is open and we have a positive resolved qty — the
+  // endpoint chokes on runQty=0 and the data is wasted while collapsed.
+  const { data: preview } = useQuery<any>({
+    queryKey: [
+      "/api/admin/albums",
+      albumId,
+      "gooddeed-pricing-preview",
+      resolvedQty || 1,
+    ],
+    queryFn: async () => {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/albums/${albumId}/gooddeed-pricing-preview?runQty=${Math.max(1, resolvedQty)}`,
+      );
+      return r.json();
+    },
+    enabled: open,
+  });
+
+  const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
+  const costCents: number | null =
+    existing?.costCentsSnapshot ??
+    preview?.totalPerUnitCents ??
+    livePlatformCostCents ??
+    null;
+  const earnsCents =
+    priceCents !== null && costCents !== null ? priceCents - costCents : null;
+
+  const storedActive = existing?.active ?? false;
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "12.99";
+  const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
+  const storedQty = existing?.plannedQuantity ?? null;
+  const dirty =
+    active !== storedActive ||
+    priceStr !== storedPrice ||
+    floorStr !== storedFloor ||
+    (resolvedQty || null) !== storedQty;
+
+  // Debounced autosave — same 700ms beat as the SkuRow's own vinyl
+  // autosave so the experience is consistent across the card.
+  useEffect(() => {
+    if (!dirty) return;
+    const t = setTimeout(() => {
+      const cents = parseDollars(priceStr);
+      if (cents === null) return;
+      onSave({
+        priceCents: cents,
+        active,
+        minPriceCents: parseDollars(floorStr) ?? 0,
+        plannedQuantity: resolvedQty > 0 ? resolvedQty : null,
+      });
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, priceStr, floorStr, active, resolvedQty]);
+
+  // Task #393 — collapsed summary shows on/off state explicitly so a
+  // glance at a collapsed pill tells the operator "this is live" vs
+  // "this is dormant", followed by the spec's required
+  // `{pct}% ({resolvedQty} of vinyl qty)` resolved label format.
+  const stateLabel = active ? "On" : "Off";
+  const resolvedLabel =
+    vinylQty > 0
+      ? `${resolvedPct}% (${resolvedQty.toLocaleString()} of ${vinylQty.toLocaleString()})`
+      : "—";
+  const summary = `${stateLabel} · ${resolvedLabel}`;
+
+  return (
+    <div
+      className="rounded-md border border-slate-200 bg-white"
+      data-testid="pill-gooddeed"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 rounded-md transition-colors"
+        aria-expanded={open}
+        data-testid="button-toggle-gooddeed-pill"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[13.5px] font-semibold text-slate-900">
+            GoodDeed® Certificate
+          </span>
+          <span className="text-xs text-slate-500 truncate">{summary}</span>
+        </div>
+        <ChevronDown
+          className={[
+            "w-4 h-4 text-slate-400 transition-transform",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-3 space-y-4 border-t border-slate-100">
+          {/* Inline cert preview — uses the album art on a placeholder
+              cert tile so the artist sees what fans get without leaving
+              the row. Task #393: the tile is a button that opens the
+              same cover-art editor the REQUIRED jacket pencil opens,
+              so artwork stays a single source of truth (`albums.artwork`). */}
+          <div className="flex items-center gap-3">
+            {onEditArtwork ? (
+              <button
+                type="button"
+                onClick={onEditArtwork}
+                aria-label="Edit cover art"
+                title="Edit cover art (syncs with the vinyl jacket)"
+                className="group relative w-14 h-14 rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
+                data-testid="button-gooddeed-edit-artwork"
+              >
+                {artworkUrl ? (
+                  <img
+                    src={artworkUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    data-testid="img-gooddeed-preview"
+                  />
+                ) : (
+                  <span className="text-xs text-slate-400">No art</span>
+                )}
+                <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center">
+                  <Pencil className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                </span>
+              </button>
+            ) : (
+              <div className="w-14 h-14 rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
+                {artworkUrl ? (
+                  <img
+                    src={artworkUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    data-testid="img-gooddeed-preview"
+                  />
+                ) : (
+                  <span className="text-xs text-slate-400">No art</span>
+                )}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-slate-900">
+                Signed, numbered, hologrammed
+              </div>
+              <div className="text-xs text-slate-500">
+                Certificate of authenticity that ships with the vinyl
+              </div>
+            </div>
+          </div>
+
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-[color:var(--brand-blue)] focus:ring-[color:var(--brand-blue)]"
+              data-testid="toggle-gooddeed-active"
+            />
+            <span className="text-sm text-slate-900">
+              Offer GoodDeed® cert on this release
+            </span>
+          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                Price $
+              </div>
+              <input
+                type="text"
+                value={priceStr}
+                onChange={(e) => setPriceStr(e.target.value)}
+                inputMode="decimal"
+                className={fieldClass}
+                data-testid="input-gooddeed-price"
+              />
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                Floor $
+              </div>
+              <input
+                type="text"
+                value={floorStr}
+                onChange={(e) => setFloorStr(e.target.value)}
+                inputMode="decimal"
+                className={fieldClass}
+                data-testid="input-gooddeed-floor"
+              />
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                % of vinyl qty
+              </div>
+              <Select value={pctChoice} onValueChange={setPctChoice}>
+                <SelectTrigger
+                  className="h-8 text-sm"
+                  data-testid="select-gooddeed-pct"
+                  aria-label={`Cert run ratio — currently ${resolvedLabel}`}
+                >
+                  {/* Spec label: `{pct}% ({resolvedQty} of vinyl qty)` */}
+                  <span className="truncate">{resolvedLabel}</span>
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  <SelectItem value="100">100% · one per vinyl</SelectItem>
+                  <SelectItem value="50">50%</SelectItem>
+                  <SelectItem value="25">25%</SelectItem>
+                  <SelectItem value="20">20%</SelectItem>
+                  <SelectItem value="other">Other…</SelectItem>
+                </SelectContent>
+              </Select>
+              {pctChoice === "other" && (
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={otherQtyStr}
+                  onChange={(e) => setOtherQtyStr(e.target.value)}
+                  className={`${fieldClass} mt-1.5`}
+                  placeholder={`max ${vinylQty.toLocaleString()}`}
+                  aria-label={`Cert count — capped at vinyl qty ${vinylQty.toLocaleString()}`}
+                  data-testid="input-gooddeed-other-qty"
+                />
+              )}
+              <div
+                className="text-xs text-slate-500 mt-1 tabular-nums"
+                data-testid="text-gooddeed-resolved-qty"
+              >
+                = {resolvedQty.toLocaleString()} of {vinylQty.toLocaleString()}
+              </div>
+            </div>
+          </div>
+
+          {preview && (
+            <div
+              className="rounded-md bg-slate-50 border border-slate-200 p-2.5 space-y-1"
+              data-testid="block-gooddeed-vendors"
+            >
+              <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                Per-vendor cost
+              </div>
+              {(["printing", "hologram", "insertion"] as const).map((svc) => {
+                const leg = preview.legs?.[svc];
+                if (!leg) {
+                  return (
+                    <div
+                      key={svc}
+                      className="flex items-center justify-between text-xs"
+                      data-testid={`row-gooddeed-leg-${svc}`}
+                    >
+                      <span className="text-slate-600 capitalize">{svc}</span>
+                      <span className="text-slate-400">—</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={svc}
+                    className="flex items-center justify-between text-xs tabular-nums"
+                    data-testid={`row-gooddeed-leg-${svc}`}
+                  >
+                    <span className="text-slate-700">
+                      {leg.vendorName ?? svc}
+                    </span>
+                    <span className="text-slate-900">
+                      {dollars(leg.perUnitCents)}
+                    </span>
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1 mt-1 tabular-nums">
+                <span className="text-slate-700">Wholesale per cert</span>
+                <span
+                  className="text-slate-900"
+                  data-testid="text-gooddeed-wholesale"
+                >
+                  {dollars(preview.totalPerUnitCents)}
+                </span>
+              </div>
+              {/* Task #393 — explicit Total = perUnit × resolvedQty line
+                  so the artist sees what the whole cert run will cost
+                  GoodTunes (not just one unit). Multiplier is shown to
+                  make the math legible at a glance. */}
+              <div className="flex items-center justify-between text-xs font-semibold tabular-nums">
+                <span className="text-slate-700">
+                  Total · {dollars(preview.totalPerUnitCents)} ×{" "}
+                  {resolvedQty.toLocaleString()}
+                </span>
+                <span
+                  className="text-slate-900"
+                  data-testid="text-gooddeed-total"
+                >
+                  {dollars(preview.totalPerUnitCents * resolvedQty)}
+                </span>
+              </div>
+              {earnsCents !== null && (
+                <div className="flex items-center justify-between text-xs tabular-nums">
+                  <span className="text-slate-600">Profit per cert</span>
+                  <span
+                    className={
+                      earnsCents < 0
+                        ? "text-[color:var(--brand-pink)] font-semibold"
+                        : "text-slate-900 font-semibold"
+                    }
+                    data-testid="text-gooddeed-profit"
+                  >
+                    {earnsCents < 0
+                      ? `-${dollars(Math.abs(earnsCents))}`
+                      : dollars(earnsCents)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

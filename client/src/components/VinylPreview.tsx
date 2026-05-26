@@ -25,11 +25,17 @@ export function VinylPreview({
   color,
   jacketUpgrade,
   size = "md",
+  jacketOverlay,
 }: {
   artworkUrl: string | null | undefined;
   color: VinylColorOption;
   jacketUpgrade: JacketUpgrade;
   size?: "sm" | "md" | "lg" | "xl";
+  // Task #393 — optional ReactNode rendered absolutely-positioned
+  // INSIDE the jacket div, so a hover-pencil from the SellPanel format
+  // card can sit on the jacket itself (top-right) without overlapping
+  // the disc peek to the right.
+  jacketOverlay?: React.ReactNode;
 }) {
   // Height drives the scale. The width is derived from the aspect
   // ratio of (jacket footprint + disc peek), so the outer wrapper
@@ -128,6 +134,7 @@ export function VinylPreview({
               aria-hidden="true"
             />
           )}
+          {jacketOverlay}
         </div>
 
         {/* Thin black innersleeve strip — sits just OUTSIDE the
