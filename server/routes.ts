@@ -10397,6 +10397,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (location !== undefined) updates.location = location ? String(location) : null;
+    // Task #489 — structured snapshot persisted next to the free-text
+    // `location`. Pass through as-is so the jsonb column carries the
+    // exact PartnerAddressSnapshot the autocomplete emitted.
+    if (req.body?.locationAddress !== undefined) {
+      updates.locationAddress = req.body.locationAddress ?? null;
+    }
     if (websiteUrl !== undefined) updates.websiteUrl = websiteUrl ? String(websiteUrl) : null;
     if (instagramUrl !== undefined) updates.instagramUrl = instagramUrl ? String(instagramUrl) : null;
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
@@ -10740,6 +10746,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
     if (b.bio !== undefined) u.bio = strOrNull(b.bio);
     if (b.location !== undefined) u.location = strOrNull(b.location);
+    // Task #489 — structured snapshot, pass through as-is.
+    if (b.locationAddress !== undefined) u.locationAddress = b.locationAddress ?? null;
     if (b.websiteUrl !== undefined) u.websiteUrl = strOrNull(b.websiteUrl);
     if (b.contactEmail !== undefined) u.contactEmail = strOrNull(b.contactEmail);
     if (b.contactPhone !== undefined) u.contactPhone = strOrNull(b.contactPhone);
@@ -10953,10 +10961,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
     if (b.bio !== undefined) u.bio = strOrNull(b.bio);
     if (b.location !== undefined) u.location = strOrNull(b.location);
+    // Task #489 — structured snapshots for Location + Shipping address.
+    if (b.locationAddress !== undefined) u.locationAddress = b.locationAddress ?? null;
     if (b.websiteUrl !== undefined) u.websiteUrl = strOrNull(b.websiteUrl);
     if (b.contactEmail !== undefined) u.contactEmail = strOrNull(b.contactEmail);
     if (b.contactPhone !== undefined) u.contactPhone = strOrNull(b.contactPhone);
     if (b.shippingAddress !== undefined) u.shippingAddress = strOrNull(b.shippingAddress);
+    if (b.shippingAddressStruct !== undefined) u.shippingAddressStruct = b.shippingAddressStruct ?? null;
     const f = await storage.updateFulfillmentPartner(String(req.params.id), u);
     if (!f) return res.status(404).json({ message: "Fulfillment partner not found" });
     return res.json(f);
@@ -11662,6 +11673,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (tagline !== undefined) updates.tagline = tagline ? String(tagline) : null;
     if (bio !== undefined) updates.bio = bio ? String(bio) : null;
     if (location !== undefined) updates.location = location ? String(location) : null;
+    // Task #489 — structured snapshot, pass through as-is.
+    if (req.body?.locationAddress !== undefined) {
+      updates.locationAddress = req.body.locationAddress ?? null;
+    }
     if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
     try {
       // Explicit operator Replace from the admin logo editor — bypass

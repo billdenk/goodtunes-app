@@ -386,6 +386,12 @@ function PartnerProfileForm({
   const [contactEmail, setContactEmail] = useState(initial.contactEmail ?? "");
   const [contactPhone, setContactPhone] = useState(initial.contactPhone ?? "");
   const [location, setLocation] = useState(initial.location ?? "");
+  // Task #489 — structured snapshot of the Location, written when the
+  // admin accepts a Places suggestion. Left untouched on plain typing
+  // so a tiny edit doesn't null out a previously-saved struct.
+  const [locationAddress, setLocationAddress] = useState<any>(
+    (initial as any).locationAddress ?? null,
+  );
   const [bio, setBio] = useState(initial.bio ?? "");
   // Task #363 — turnaround is captured as a week range. Pre-fill from
   // the legacy `turnaroundDays` (rounded to ±1 week) when min/max
@@ -425,6 +431,10 @@ function PartnerProfileForm({
       contactEmail: contactEmail.trim() || null,
       contactPhone: contactPhone.trim() || null,
       location: location.trim() || null,
+      // Task #489 — null the struct when the text is blanked; otherwise
+      // pass whatever we have (a freshly-picked snapshot or the existing
+      // one). The PUT route also re-nulls when text is empty.
+      locationAddress: location.trim() === "" ? null : locationAddress,
       bio: bio.trim() || null,
       turnaroundWeeksMin: turnaroundWeeksMin === "" ? null : Number(turnaroundWeeksMin),
       turnaroundWeeksMax: turnaroundWeeksMax === "" ? null : Number(turnaroundWeeksMax),
@@ -443,6 +453,17 @@ function PartnerProfileForm({
           <AddressAutocompleteField
             value={location}
             onChange={setLocation}
+            onAddress={(snap) => {
+              setLocation(snap.formatted || location);
+              setLocationAddress({
+                line1: snap.line1 || null,
+                line2: snap.line2 || null,
+                city: snap.city || null,
+                state: snap.region || null,
+                postalCode: snap.postalCode || null,
+                country: snap.country || null,
+              });
+            }}
             placeholder="Berkeley, CA"
             testId="input-mfr-location"
           />

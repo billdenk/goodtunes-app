@@ -162,6 +162,167 @@ export function registerPlacesRoutes(
     }
   });
 
+  // POST /api/admin/places/backfill-addresses
+  // Task #489 — one-shot job that re-geocodes the existing free-text
+  // `location` (or `shipping_address`) strings on partner tables and
+  // fills the new structured-snapshot jsonb columns. Idempotent: skips
+  // rows that already have a struct and rows whose top suggestion
+  // doesn't confidently match the text (so we never write a wrong
+  // address). Returns a per-table summary the admin can rerun safely.
+  //
+  // Body is optional:
+  //   { tables?: ("labels"|"vendors"|"manufacturers"|"fulfillment_partners")[],
+  //     dryRun?: boolean,
+  //     limit?: number }  // default 200 per call
+  app.post("/api/admin/places/backfill-addresses", requireAdmin, async (req, res) => {
+    const key = getKey();
+    if (!key) return res.status(503).json({ configured: false });
+    const { db } = await import("./db");
+    const { sql } = await import("drizzle-orm");
+    const body = (req.body ?? {}) as {
+      tables?: string[];
+      dryRun?: boolean;
+      limit?: number;
+    };
+    const allow = new Set(
+      body.tables && body.tables.length > 0
+        ? body.tables
+        : ["labels", "vendors", "manufacturers", "fulfillment_partners"],
+    );
+    const limit = Math.min(Math.max(Number(body.limit) || 200, 1), 1000);
+    const dryRun = !!body.dryRun;
+
+    type Target = {
+      table: string;
+      textCol: string;
+      structCol: string;
+    };
+    const targets: Target[] = [
+      { table: "labels", textCol: "location", structCol: "location_address" },
+      { table: "vendors", textCol: "location", structCol: "location_address" },
+      { table: "manufacturers", textCol: "location", structCol: "location_address" },
+      { table: "fulfillment_partners", textCol: "location", structCol: "location_address" },
+      { table: "fulfillment_partners", textCol: "shipping_address", structCol: "shipping_address_struct" },
+    ].filter((t) => allow.has(t.table));
+
+    // Confidence guard: only accept the top suggestion when its
+    // returned `formatted` address starts with (or contains) the
+    // operator-typed free-text after both sides are normalized to
+    // lowercase letters+digits only. That keeps "Berkeley, CA" from
+    // grabbing the first random Berkeley match in the Bay Area while
+    // still letting "1600 Amphitheatre Pkwy, Mountain View, CA"
+    // through.
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+    async function geocodeOne(text: string): Promise<NormalizedAddress | null> {
+      try {
+        const ar = await fetch(AUTOCOMPLETE_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": key as string,
+            "X-Goog-FieldMask": AUTOCOMPLETE_FIELD_MASK,
+          },
+          body: JSON.stringify({ input: text }),
+        });
+        if (!ar.ok) return null;
+        const adata = (await ar.json()) as {
+          suggestions?: Array<{
+            placePrediction?: {
+              placeId: string;
+              text?: { text?: string };
+            };
+          }>;
+        };
+        const top = adata.suggestions?.[0]?.placePrediction;
+        if (!top?.placeId) return null;
+        const dr = await fetch(
+          `${DETAILS_URL}/${encodeURIComponent(top.placeId)}`,
+          {
+            headers: {
+              "X-Goog-Api-Key": key as string,
+              "X-Goog-FieldMask": DETAILS_FIELD_MASK,
+            },
+          },
+        );
+        if (!dr.ok) return null;
+        const ddata = (await dr.json()) as {
+          formattedAddress?: string;
+          addressComponents?: AddressComponent[];
+        };
+        const normalized = normalize(
+          ddata.addressComponents,
+          ddata.formattedAddress ?? "",
+        );
+        // Confidence check on the returned formatted address.
+        const nTyped = norm(text);
+        const nGot = norm(normalized.formatted || "");
+        if (!nGot.includes(nTyped) && !nTyped.includes(nGot)) {
+          // Ambiguous — refuse to write.
+          return null;
+        }
+        return normalized;
+      } catch {
+        return null;
+      }
+    }
+
+    function toStruct(n: NormalizedAddress) {
+      return {
+        line1: n.line1 || null,
+        line2: n.line2 || null,
+        city: n.city || null,
+        state: n.region || null,
+        postalCode: n.postalCode || null,
+        country: n.country || null,
+      };
+    }
+
+    const summary: Record<
+      string,
+      { scanned: number; updated: number; skippedAmbiguous: number; failed: number }
+    > = {};
+
+    let budget = limit;
+    for (const t of targets) {
+      const key = `${t.table}.${t.structCol}`;
+      summary[key] = { scanned: 0, updated: 0, skippedAmbiguous: 0, failed: 0 };
+      if (budget <= 0) break;
+      const rows = (await db.execute(
+        sql.raw(
+          `SELECT id, ${t.textCol} AS txt FROM ${t.table}
+             WHERE ${t.textCol} IS NOT NULL
+               AND ${t.textCol} <> ''
+               AND ${t.structCol} IS NULL
+             ORDER BY id
+             LIMIT ${Math.max(1, budget)}`,
+        ),
+      )) as unknown as { rows: Array<{ id: string; txt: string }> };
+      for (const r of rows.rows) {
+        summary[key].scanned++;
+        budget--;
+        const snap = await geocodeOne(r.txt);
+        if (!snap) {
+          summary[key].skippedAmbiguous++;
+          continue;
+        }
+        if (dryRun) {
+          summary[key].updated++;
+          continue;
+        }
+        try {
+          await db.execute(
+            sql`UPDATE ${sql.raw(t.table)} SET ${sql.raw(t.structCol)} = ${JSON.stringify(toStruct(snap))}::jsonb WHERE id = ${r.id}`,
+          );
+          summary[key].updated++;
+        } catch {
+          summary[key].failed++;
+        }
+      }
+    }
+    res.json({ configured: true, dryRun, summary });
+  });
+
   // GET /api/admin/places/details?placeId=&sessiontoken=
   app.get("/api/admin/places/details", requireAdmin, async (req, res) => {
     const key = getKey();

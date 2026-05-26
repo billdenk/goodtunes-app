@@ -63,6 +63,13 @@ export const labels = pgTable("labels", {
   logoLocked: boolean("logo_locked").notNull().default(false),
   bio: text("bio"),
   location: text("location"),
+  // Task #489 — structured snapshot of the Places-picked Location. The
+  // free-text `location` above stays the source of truth for display
+  // (and is what legacy rows already carry); this jsonb column lets
+  // filters/reports read country/region/postal-code without regexing
+  // the formatted string. Populated by the admin address autocomplete
+  // and by the one-shot backfill job.
+  locationAddress: jsonb("location_address").$type<PartnerAddressSnapshot>(),
   websiteUrl: text("website_url"),
   // Optional Instagram profile URL. Used in admin so the label page can
   // surface a follow link later — not auto-scraped from IG (Instagram blocks
@@ -883,6 +890,9 @@ export const vendors = pgTable("vendors", {
   tagline: text("tagline"),
   bio: text("bio"),
   location: text("location"),
+  // Task #489 — structured snapshot of the Places-picked Location.
+  // See labels.locationAddress for the same column on labels.
+  locationAddress: jsonb("location_address").$type<PartnerAddressSnapshot>(),
   coverUrl: text("cover_url"),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
@@ -1270,6 +1280,23 @@ export const customerMerges = pgTable("customer_merges", {
 // of Stripe's Address object we actually read on receipts + cert prints.
 export type StripeAddressSnapshot = {
   name?: string | null;
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+};
+
+// Task #489 — Structured snapshot persisted alongside the free-text
+// `location` / `shipping_address` columns on every partner table
+// (labels, vendors, manufacturers, fulfillment_partners). Same shape as
+// `StripeAddressSnapshot` minus the customer-name field — partners
+// already carry a `name` column of their own. Written by the admin
+// address autocomplete (Google Places) and the one-shot backfill job;
+// reports/filters that care about country, region, or postal code read
+// from this struct instead of regexing the formatted text.
+export type PartnerAddressSnapshot = {
   line1?: string | null;
   line2?: string | null;
   city?: string | null;
@@ -2482,6 +2509,9 @@ export const manufacturers = pgTable("manufacturers", {
   coverUrl: text("cover_url"),
   bio: text("bio"),
   location: text("location"),
+  // Task #489 — structured snapshot of the Places-picked Location.
+  // See labels.locationAddress for the same column on labels.
+  locationAddress: jsonb("location_address").$type<PartnerAddressSnapshot>(),
   websiteUrl: text("website_url"),
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
@@ -2536,6 +2566,13 @@ export const fulfillmentPartners = pgTable("fulfillment_partners", {
   // Free-text single line (the manufacturer formats it on the carton
   // label themselves). Optional while onboarding.
   shippingAddress: text("shipping_address"),
+  // Task #489 — structured snapshots for both the head-office Location
+  // and the receiving-dock Shipping address. Free-text columns above
+  // stay the source of truth for display; these are what fulfillment
+  // tooling reads to compute ship-zones, country filters, and reliable
+  // carton labels.
+  locationAddress: jsonb("location_address").$type<PartnerAddressSnapshot>(),
+  shippingAddressStruct: jsonb("shipping_address_struct").$type<PartnerAddressSnapshot>(),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 });

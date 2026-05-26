@@ -271,6 +271,15 @@ function FpForm({
   const [contactPhone, setContactPhone] = useState(initial.contactPhone ?? "");
   const [location, setLocation] = useState(initial.location ?? "");
   const [shippingAddress, setShippingAddress] = useState(initial.shippingAddress ?? "");
+  // Task #489 — structured snapshots for both the head-office Location
+  // and the receiving-dock Shipping address. Persisted via the same
+  // PUT as the free-text columns above. Left untouched on plain typing.
+  const [locationAddress, setLocationAddress] = useState<any>(
+    (initial as any).locationAddress ?? null,
+  );
+  const [shippingAddressStruct, setShippingAddressStruct] = useState<any>(
+    (initial as any).shippingAddressStruct ?? null,
+  );
   const [bio, setBio] = useState(initial.bio ?? "");
 
   // Logo is edited via the thumbnail-pencil dialog in the page header,
@@ -307,7 +316,10 @@ function FpForm({
       contactEmail: contactEmail.trim() || null,
       contactPhone: contactPhone.trim() || null,
       location: location.trim() || null,
+      locationAddress: location.trim() === "" ? null : locationAddress,
       shippingAddress: shippingAddress.trim() || null,
+      shippingAddressStruct:
+        shippingAddress.trim() === "" ? null : shippingAddressStruct,
       bio: bio.trim() || null,
     });
   }
@@ -327,6 +339,17 @@ function FpForm({
           <AddressAutocompleteField
             value={location}
             onChange={setLocation}
+            onAddress={(snap) => {
+              setLocation(snap.formatted || location);
+              setLocationAddress({
+                line1: snap.line1 || null,
+                line2: snap.line2 || null,
+                city: snap.city || null,
+                state: snap.region || null,
+                postalCode: snap.postalCode || null,
+                country: snap.country || null,
+              });
+            }}
             testId="input-fp-location"
           />
         </Field>
@@ -368,6 +391,17 @@ function FpForm({
         <AddressAutocompleteField
           value={shippingAddress}
           onChange={setShippingAddress}
+          onAddress={(snap) => {
+            setShippingAddress(snap.formatted || shippingAddress);
+            setShippingAddressStruct({
+              line1: snap.line1 || null,
+              line2: snap.line2 || null,
+              city: snap.city || null,
+              state: snap.region || null,
+              postalCode: snap.postalCode || null,
+              country: snap.country || null,
+            });
+          }}
           placeholder="Receiving dock address, single line"
           testId="input-fp-shipping"
         />

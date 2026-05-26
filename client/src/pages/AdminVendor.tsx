@@ -972,6 +972,7 @@ function OverviewPanel({ vendor }: { vendor: Vendor }) {
           domain: vendor.domain,
           tagline: vendor.tagline,
           location: vendor.location,
+          locationAddress: (vendor as any).locationAddress ?? null,
         }}
         invalidate={invalidate}
         fields={[
@@ -993,6 +994,7 @@ function OverviewPanel({ vendor }: { vendor: Vendor }) {
             key: "location",
             label: "Location",
             type: "address",
+            addressKey: "locationAddress",
             placeholder: "Nashville, TN",
           },
         ]}

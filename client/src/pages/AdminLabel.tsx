@@ -499,6 +499,7 @@ function OverviewPanel({ label }: { label: Label }) {
         values={{
           name: label.name,
           location: label.location,
+          locationAddress: (label as any).locationAddress ?? null,
           bio: label.bio,
         }}
         invalidate={invalidate}
@@ -508,6 +509,7 @@ function OverviewPanel({ label }: { label: Label }) {
             key: "location",
             label: "Location",
             type: "address",
+            addressKey: "locationAddress",
             placeholder: "Brooklyn, NY",
           },
           {

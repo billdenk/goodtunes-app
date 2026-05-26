@@ -1256,3 +1256,31 @@ SQL
 }
 migrate_soft_delete dev  "${DATABASE_URL:-}"
 migrate_soft_delete prod "${PROD_DATABASE_URL:-}"
+
+# Task #489 — Structured partner addresses. Adds a jsonb snapshot
+# column alongside the existing free-text `location` (and, for
+# fulfillment partners, `shipping_address`) on every partner table.
+# The free-text column stays source of truth for display; the
+# struct backs filters/reports. Additive nullable columns only, so
+# this is safe to re-run and never touches existing data.
+migrate_partner_address_snapshots() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping partner-address snapshots migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE labels                ADD COLUMN IF NOT EXISTS location_address         jsonb;
+ALTER TABLE vendors               ADD COLUMN IF NOT EXISTS location_address         jsonb;
+ALTER TABLE manufacturers         ADD COLUMN IF NOT EXISTS location_address         jsonb;
+ALTER TABLE fulfillment_partners  ADD COLUMN IF NOT EXISTS location_address         jsonb;
+ALTER TABLE fulfillment_partners  ADD COLUMN IF NOT EXISTS shipping_address_struct  jsonb;
+SQL
+  then
+    echo "post-merge: partner-address snapshots migration ok on $label"
+  else
+    echo "post-merge: WARNING — partner-address snapshots migration failed on $label (continuing)"
+  fi
+}
+migrate_partner_address_snapshots dev  "${DATABASE_URL:-}"
+migrate_partner_address_snapshots prod "${PROD_DATABASE_URL:-}"

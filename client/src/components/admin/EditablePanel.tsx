@@ -6,7 +6,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ArtistPickerField } from "./ArtistPickerField";
 import { Combobox } from "./Combobox";
-import { AddressAutocompleteField } from "./AddressAutocompleteField";
+import {
+  AddressAutocompleteField,
+  type NormalizedAddress,
+} from "./AddressAutocompleteField";
+import type { PartnerAddressSnapshot } from "@shared/schema";
 
 /**
  * Shared in-place edit panel used across the new admin detail pages
@@ -60,6 +64,15 @@ export interface FieldConfig {
   // value that gets saved as-is (free-text behind the scenes). Used by
   // the album Genre field today.
   optionsEndpoint?: string;
+  // For address fields (Task #489): the sibling key that holds the
+  // structured `PartnerAddressSnapshot`. When the operator picks a
+  // Google Places suggestion the panel writes both keys in one PUT —
+  // `field.key` gets the formatted text, `addressKey` gets the
+  // {line1, line2, city, state, postalCode, country} struct. When the
+  // operator only edits the text (no suggestion accepted), the struct
+  // is left untouched — we'd rather keep the old struct than null it
+  // out from a tiny typo. Blanking the text to empty clears both.
+  addressKey?: string;
 }
 
 /* Format a YYYY-MM-DD (or ISO) date string for read mode. Returns the
@@ -92,8 +105,10 @@ export interface EditablePanelProps {
   testId?: string;
   // PUT endpoint. Must accept `{ [fieldKey]: value }` body shape.
   endpoint: string;
-  // Current source-of-truth values, keyed by field key.
-  values: Record<string, string | null | undefined>;
+  // Current source-of-truth values, keyed by field key. Most keys are
+  // string-shaped; address-snapshot sibling keys (FieldConfig.addressKey)
+  // carry a `PartnerAddressSnapshot` object instead.
+  values: Record<string, string | PartnerAddressSnapshot | null | undefined>;
   fields: FieldConfig[];
   // Query keys to invalidate after a successful save. Each entry is the
   // full TanStack v5 array key. The list query for the entity should
@@ -127,7 +142,11 @@ export function EditablePanel({
   disabledReason,
 }: EditablePanelProps) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Record<string, string>>({});
+  // Draft holds string values for almost every field; address-snapshot
+  // sibling keys (FieldConfig.addressKey) carry an object instead.
+  const [draft, setDraft] = useState<
+    Record<string, string | PartnerAddressSnapshot | null>
+  >({});
   const { toast } = useToast();
   const qc = useQueryClient();
   const firstInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(
@@ -141,10 +160,15 @@ export function EditablePanel({
   // Cancel/Save reset by leaving edit mode and seeding fresh next time.
   useEffect(() => {
     if (editing) {
-      const next: Record<string, string> = {};
+      const next: Record<string, string | PartnerAddressSnapshot | null> = {};
       for (const f of fields) {
-        next[f.key] = values[f.key] ?? "";
-        if (f.idKey) next[f.idKey] = values[f.idKey] ?? "";
+        next[f.key] = (values[f.key] as string | null | undefined) ?? "";
+        if (f.idKey)
+          next[f.idKey] = (values[f.idKey] as string | null | undefined) ?? "";
+        if (f.addressKey)
+          next[f.addressKey] =
+            (values[f.addressKey] as PartnerAddressSnapshot | null | undefined) ??
+            null;
       }
       setDraft(next);
     }
@@ -181,17 +205,31 @@ export function EditablePanel({
     mutationFn: async () => {
       // Only send fields whose draft differs from current. Empty strings
       // are sent as null so blanking a field actually clears it.
-      const body: Record<string, string | null> = {};
+      const body: Record<string, string | PartnerAddressSnapshot | null> = {};
       const diffKey = (k: string) => {
-        const before = values[k] ?? "";
-        const after = draft[k] ?? "";
+        const before = (values[k] as string | null | undefined) ?? "";
+        const after = (draft[k] as string | null | undefined) ?? "";
         if (before !== after) {
-          body[k] = after.trim() === "" ? null : after;
+          body[k] = (after as string).trim() === "" ? null : (after as string);
         }
       };
       for (const f of fields) {
         diffKey(f.key);
         if (f.idKey) diffKey(f.idKey);
+        if (f.addressKey) {
+          // Snapshot diff via JSON equality. Blanking the formatted text
+          // also nulls the snapshot so the two stay coherent.
+          const beforeSnap = values[f.addressKey] ?? null;
+          const afterSnap = draft[f.addressKey] ?? null;
+          const formattedAfter =
+            ((draft[f.key] as string | null | undefined) ?? "").trim();
+          let nextSnap: PartnerAddressSnapshot | null =
+            afterSnap as PartnerAddressSnapshot | null;
+          if (formattedAfter === "") nextSnap = null;
+          if (JSON.stringify(beforeSnap ?? null) !== JSON.stringify(nextSnap ?? null)) {
+            body[f.addressKey] = nextSnap;
+          }
+        }
       }
       if (Object.keys(body).length === 0) return null;
       await apiRequest("PUT", endpoint, body);
@@ -225,7 +263,11 @@ export function EditablePanel({
     e.preventDefault();
     // Light client-side required-field guard. The server still validates.
     for (const f of fields) {
-      if (f.required && !(draft[f.key] ?? "").trim()) {
+      const v = draft[f.key];
+      // Task #489 — addressKey snapshots live in the same draft map but
+      // aren't strings; the required-guard only inspects the free-text
+      // field at f.key, so coerce non-strings to "" defensively.
+      if (f.required && !(typeof v === "string" ? v : "").trim()) {
         toast({
           title: `${f.label} is required`,
           variant: "destructive",
@@ -247,6 +289,13 @@ export function EditablePanel({
   // full-width beneath. Mirrors what the pages had before.
   const shortFields = fields.filter((f) => f.type !== "textarea");
   const longFields = fields.filter((f) => f.type === "textarea");
+
+  // Patch helper passed to EditInput. Address fields use it to write
+  // both the formatted text key and the structured snapshot key in one
+  // tick (no useState race) when an autocomplete suggestion is picked.
+  const patchDraft = (
+    kv: Record<string, string | PartnerAddressSnapshot | null>,
+  ) => setDraft((d) => ({ ...d, ...kv }));
 
   if (editing) {
     return (
@@ -275,12 +324,12 @@ export function EditablePanel({
               <EditInput
                 key={f.key}
                 field={f}
-                value={draft[f.key] ?? ""}
-                idValue={f.idKey ? (draft[f.idKey] ?? "") : ""}
+                value={(draft[f.key] as string | null | undefined) ?? ""}
+                idValue={f.idKey ? ((draft[f.idKey] as string | null | undefined) ?? "") : ""}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, [f.key]: v }))
                 }
-                patch={(kv) => setDraft((d) => ({ ...d, ...kv }))}
+                patch={patchDraft}
                 inputRef={
                   i === 0 && shortFields.length > 0
                     ? (firstInputRef as React.RefObject<HTMLInputElement>)
@@ -294,10 +343,10 @@ export function EditablePanel({
           <EditInput
             key={f.key}
             field={f}
-            value={draft[f.key] ?? ""}
+            value={(draft[f.key] as string | null | undefined) ?? ""}
             idValue=""
             onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
-            patch={(kv) => setDraft((d) => ({ ...d, ...kv }))}
+            patch={patchDraft}
             inputRef={
               shortFields.length === 0 && i === 0
                 ? (firstInputRef as React.RefObject<HTMLTextAreaElement>)
@@ -373,18 +422,21 @@ export function EditablePanel({
             .filter(Boolean)
             .join(" ")}
         >
-          {shortFields.map((f) => (
-            <ReadField
-              key={f.key}
-              field={f}
-              value={values[f.key] ?? null}
-            />
-          ))}
+          {shortFields.map((f) => {
+            // Task #489 — addressKey snapshots co-exist in the values
+            // map but are not displayed; ReadField only ever renders
+            // the free-text at f.key, so coerce non-strings to null.
+            const raw = values[f.key];
+            const v = typeof raw === "string" ? raw : null;
+            return <ReadField key={f.key} field={f} value={v} />;
+          })}
         </dl>
       )}
-      {longFields.map((f) => (
-        <ReadField key={f.key} field={f} value={values[f.key] ?? null} />
-      ))}
+      {longFields.map((f) => {
+        const raw = values[f.key];
+        const v = typeof raw === "string" ? raw : null;
+        return <ReadField key={f.key} field={f} value={v} />;
+      })}
       {readExtras}
     </section>
   );
@@ -488,7 +540,9 @@ function EditInput({
   value: string;
   idValue: string;
   onChange: (next: string) => void;
-  patch: (kv: Record<string, string>) => void;
+  patch: (
+    kv: Record<string, string | PartnerAddressSnapshot | null>,
+  ) => void;
   inputRef?:
     | React.RefObject<HTMLInputElement>
     | React.RefObject<HTMLTextAreaElement>;
@@ -561,6 +615,27 @@ function EditInput({
           ref={inputRef as React.RefObject<HTMLInputElement> | undefined}
           value={value}
           onChange={onChange}
+          onAddress={(snap: NormalizedAddress) => {
+            // Map the Places normalized snapshot to the persisted
+            // PartnerAddressSnapshot shape (Stripe-style `state` rather
+            // than Places' `region`). Write both the formatted text and
+            // the struct in one patch so the panel diff picks both up
+            // and the next PUT sends them together.
+            const next: Record<string, string | PartnerAddressSnapshot | null> = {
+              [field.key]: snap.formatted || value,
+            };
+            if (field.addressKey) {
+              next[field.addressKey] = {
+                line1: snap.line1 || null,
+                line2: snap.line2 || null,
+                city: snap.city || null,
+                state: snap.region || null,
+                postalCode: snap.postalCode || null,
+                country: snap.country || null,
+              };
+            }
+            patch(next);
+          }}
           placeholder={field.placeholder}
           testId={testId}
         />
